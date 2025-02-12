@@ -1,0 +1,16 @@
+[package]
+name = "sol-template-shared"
+version = "0.1.0"
+edition = "2021"
+license = "WTFPL"
+publish = false
+
+[dependencies]
+arrayref = "0.3.6"
+borsh = "0.9.3"
+solana-program = "1.14.*"
+
+[dev-dependencies]
+
+[lib]
+crate-type = ["cdylib", "lib"]
