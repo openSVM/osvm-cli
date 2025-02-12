@@ -1,0 +1,29 @@
+{
+    "extends": "@tsconfig/recommended/tsconfig.json",
+    "compilerOptions": {
+        "module": "commonjs",
+        "target": "es2021",
+        "outDir": ".dist/client",
+        "sourceMap": true,
+        "strict": true,
+        "noImplicitAny": false,
+        "strictNullChecks": false,
+        "baseUrl": ".",
+        "moduleResolution": "node",
+        "esModuleInterop": true,
+        "paths": {
+            "*": [
+                "node_modules/*",
+                "client/@types/*"
+            ]
+        }
+    },
+    "include": [
+        "client/**/*"
+    ],
+    "exclude": [
+        "client/tests/**/*",
+        "node_modules",
+        ".vscode"
+    ]
+}
