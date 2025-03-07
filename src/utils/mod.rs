@@ -2,15 +2,12 @@
 
 use std::{fs::File, io, path::Path};
 
-pub mod account_state;
 pub mod color;
-pub mod keys_db;
 pub mod examples;
 pub mod svm_info;
 pub mod ssh_deploy;
-pub mod txn_utils;
-pub mod dashboard;
 pub mod nodes;
+pub mod dashboard;
 pub mod nodes_dashboard;
 
 /// Loads a yaml file
