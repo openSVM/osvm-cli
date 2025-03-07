@@ -447,20 +447,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Display all examples
                 examples::display_all_examples();
             }
-        }
-        ("ping", Some(_arg_matches)) => {
-            let signature = ping_instruction(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-            )
-            .unwrap_or_else(|err| {
-                eprintln!("error: send transaction: {}", err);
-                exit(1);
-            });
-            println!("Signature: {}", signature);
-        }
-        // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
+        }        // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
         (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
             // This is an SSH deployment command
             let svm_list = matches.value_of("svm").unwrap();
@@ -519,43 +506,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use borsh::{BorshDeserialize, BorshSerialize};
-    use solana_sdk::pubkey::Pubkey;
-
-    use {super::*, solana_test_validator::*};
-
-    #[test]
-    fn test_ping() {
-        let (test_validator, payer) = TestValidatorGenesis::default().start();
-        let rpc_client = test_validator.get_rpc_client();
-
-        assert!(matches!(
-            ping_instruction(&rpc_client, &payer, CommitmentConfig::confirmed()),
-            Ok(_)
-        ));
-    }
-
-    #[test]
-    fn test_borsh() {
-        #[repr(C)]
-        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
-        pub struct UpdateMetadataAccountArgs {
-            pub data: Option<String>,
-            pub update_authority: Option<Pubkey>,
-            pub primary_sale_happened: Option<bool>,
-        }
-        let faux = UpdateMetadataAccountArgs {
-            data: Some(String::from("This")),
-            update_authority: Some(Pubkey::default()),
-            primary_sale_happened: Some(true),
-        };
-        let bout = faux.try_to_vec().unwrap();
-        println!("{:?}", bout);
-        let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
-        println!("{:?}", in_faux);
-    }
 }
