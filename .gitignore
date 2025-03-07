@@ -1,6 +1,8 @@
 /target/
 /program/target/
+.cline/
 .ledger
+notes/
 .vscode/*
 .vscode
 .dist/*

@@ -1,6 +1,6 @@
 [package]
-name = "cli-program-template"
-version = "0.1.5"
+name = "osvm"
+version = "0.1.6"
 edition = "2021"
 license = "WTFPL"
 publish = false
@@ -11,8 +11,6 @@ clap = "2.33.3"
 lazy_static = "1.4.0"
 serde = { version = "1.0.125", features = ["derive"] }
 serde_yaml = "0.8.17"
-solana-cli-template-program-bpf = {path = "program"}
-sol-template-shared = {path = "shared"}
 solana-clap-utils = "1.14.*"
 solana-cli-config = "1.14.*"
 solana-client = "1.14.*"
@@ -20,12 +18,22 @@ solana-logger ="1.14.*"
 solana-remote-wallet = "1.14.*"
 solana-sdk = "1.14.*"
 tokio = { version = "1", features = ["full"] }
+thiserror = "1.0"
+ssh2 = "0.9"
+tabular = "0.2"
+prettytable-rs = "0.10"
+ratatui = "0.25.0"
+crossterm = "0.27.0"
+chrono = "0.4"
+tui-logger = "0.10.0"
+anyhow = "1.0"
+futures = "0.3"
+rand = "0.8"
+colored = "2.0"
+url = "2.4"
+serde_json = "1.0"
+dirs = "5.0"
 
-[workspace]
-members = [
-    "program",
-    "shared",
-]
 [dev-dependencies]
 lazy_static = "1.4.0"
 solana-test-validator = "1.14.*"

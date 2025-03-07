@@ -1,10 +1,8 @@
 //! @brief Transaction utilities
 
-use solana_cli_template_program_bpf::instruction::ProgramInstruction;
-
 use {
     crate::utils::keys_db::PROG_KEY,
-    solana_client::rpc_client::RpcClient,
+   solana_client::rpc_client::RpcClient,
     solana_sdk::{
         account::Account,
         commitment_config::CommitmentConfig,
@@ -113,10 +111,10 @@ fn new_account(
                 program_owner,
             ),
             Instruction::new_with_borsh(
-                *program_owner,
-                &ProgramInstruction::InitializeAccount,
-                vec![
-                    AccountMeta::new(account_pair.pubkey(), false),
+                *program_owner, 
+                &"initialize_account", // Replace ProgramInstruction with string command
+                vec![ 
+                    AccountMeta::new(account_pair.pubkey(), false), 
                     AccountMeta::new(wallet_signer.pubkey(), false),
                 ],
             ),
@@ -201,7 +199,7 @@ pub fn mint_transaction(
 ) -> Result<Signature, Box<dyn std::error::Error>> {
     let instruction = Instruction::new_with_borsh(
         PROG_KEY.pubkey(),
-        &ProgramInstruction::MintToAccount(mint_key.to_string(), mint_value.to_string()),
+        &format!("mint_to_account:{}:{}", mint_key, mint_value), // Replace ProgramInstruction with string command
         accounts.to_vec(),
     );
     submit_transaction(rpc_client, wallet_signer, instruction, commitment_config)
@@ -217,7 +215,7 @@ pub fn transfer_instruction(
 ) -> Result<Signature, Box<dyn std::error::Error>> {
     let instruction = Instruction::new_with_borsh(
         PROG_KEY.pubkey(),
-        &ProgramInstruction::TransferBetweenAccounts(transfer_key.to_string()),
+        &format!("transfer_between_accounts:{}", transfer_key), // Replace ProgramInstruction with string command
         accounts.to_vec(),
     );
     submit_transaction(rpc_client, wallet_signer, instruction, commitment_config)
@@ -233,7 +231,7 @@ pub fn burn_instruction(
 ) -> Result<Signature, Box<dyn std::error::Error>> {
     let instruction = Instruction::new_with_borsh(
         PROG_KEY.pubkey(),
-        &ProgramInstruction::BurnFromAccount(burn_key.to_string()),
+        &format!("burn_from_account:{}", burn_key), // Replace ProgramInstruction with string command
         accounts.to_vec(),
     );
     submit_transaction(rpc_client, wallet_signer, instruction, commitment_config)
