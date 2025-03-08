@@ -148,6 +148,7 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                         )
                 )
         )
+        // Node management commands
         .subcommand(
             SubCommand::with_name("nodes")
                 .about("Manage validator and RPC nodes")
