@@ -1114,13 +1114,22 @@ trait SshClientExt {
 }
 
 impl SshClientExt for crate::utils::ssh_deploy::SshClient {
-    fn stream_command<F>(&mut self, command: &str, callback: F) -> Result<(), Box<dyn Error>>
+    fn stream_command<F>(&mut self, command: &str, mut callback: F) -> Result<(), Box<dyn Error>>
     where 
         F: FnMut(&str) -> bool,
     {
-        // Execute the command and process all output at once as a fallback
+        // First try to execute the command
         let output = self.execute_command(command)?;
-        output.lines().all(callback);
+        
+        // Process each line of the output
+        let mut continue_processing = true;
+        for line in output.lines() {
+            continue_processing = callback(line);
+            if !continue_processing {
+                break;
+            }
+        }
+        
         Ok(())
     }
 }

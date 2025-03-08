@@ -500,8 +500,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         (cmd, _) => {
-            eprintln!("Unknown command: {}", cmd);
-            exit(1);
+            return Err(anyhow::anyhow!("Unknown command: {}", cmd));
         }
     };
 
