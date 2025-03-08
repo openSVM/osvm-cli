@@ -494,10 +494,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 additional_params: std::collections::HashMap::new(),
             };
 
-            if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
-                eprintln!("Deployment error: {}", e);
-                exit(1);
-            }
+            ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
+                .context("Deployment failed")?;
         }
         (cmd, _) => {
             return Err(anyhow::anyhow!("Unknown command: {}", cmd));
