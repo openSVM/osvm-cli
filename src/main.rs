@@ -460,6 +460,59 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
             println!("Signature: {}", signature);
         }
+        ("rpc", Some(rpc_matches)) => {
+            let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
+            match (rpc_sub_command, rpc_sub_matches) {
+                ("sonic", Some(sonic_matches)) => {
+                    // Deploy a Sonic RPC node
+                    let connection_str = sonic_matches.value_of("connection").unwrap();
+                    let network_str = sonic_matches.value_of("network").unwrap();
+                    
+                    // Parse connection string
+                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            eprintln!("Error parsing SSH connection string: {}", e);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Parse network type
+                    let network = match network_str.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network_str);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Create deployment config
+                    let deploy_config = ssh_deploy::DeploymentConfig {
+                        svm_type: "sonic".to_string(),
+                        node_type: "rpc".to_string(),
+                        network,
+                        node_name: "sonic-rpc".to_string(),
+                        rpc_url: None,
+                        additional_params: std::collections::HashMap::new(),
+                    };
+
+                    println!("Deploying Sonic RPC node to {}...", connection_str);
+                    
+                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                        eprintln!("Deployment error: {}", e);
+                        exit(1);
+                    }
+                    
+                    println!("Sonic RPC node deployed successfully!");
+                },
+                _ => {
+                    eprintln!("Unknown RPC type: {}", rpc_sub_command);
+                    exit(1);
+                }
+            }
+        },
         // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
         (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
             // This is an SSH deployment command

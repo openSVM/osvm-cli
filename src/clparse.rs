@@ -418,5 +418,29 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                         )
                 )
         )
+        .subcommand(
+            SubCommand::with_name("rpc")
+                .about("Deploy an RPC node to a remote host")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(
+                    SubCommand::with_name("sonic")
+                        .about("Deploy a Sonic RPC node")
+                        .arg(
+                            Arg::with_name("connection")
+                                .help("SSH connection string (format: user@host[:port])")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::with_name("network")
+                                .long("network")
+                                .value_name("NETWORK")
+                                .takes_value(true)
+                                .possible_values(&["mainnet", "testnet", "devnet"])
+                                .default_value("mainnet")
+                                .help("Network to deploy on")
+                        )
+                )
+        )
         .get_matches()
 }
