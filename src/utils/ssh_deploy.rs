@@ -910,114 +910,95 @@ async fn deploy_sonic(
     deployment_config: &DeploymentConfig,
     progress_callback: Option<&Box<dyn Fn(u8, &str) + Send>>,
 ) -> Result<(), DeploymentError> {
-    // Clone Sonic repository
+    // Clone Sonic RPC repository
     if let Some(callback) = progress_callback {
-        callback(40, "Cloning Sonic repository");
+        callback(40, "Cloning Sonic RPC repository");
     }
     
-    let sonic_dir = format!("{}/sonic", server_config.install_dir);
+    let sonic_dir = format!("{}/sonic-rpc", server_config.install_dir);
     if !client.directory_exists(&sonic_dir)? {
-        client.execute_command(&format!("git clone https://github.com/sonic-labs/sonic.git {}", sonic_dir))?;
+        client.execute_command(&format!("git clone https://github.com/sonicfromnewyoke/solana-rpc.git {}", sonic_dir))?;
     }
     
-    // Build Sonic binary
+    // Install dependencies
     if let Some(callback) = progress_callback {
-        callback(50, "Building Sonic binary");
+        callback(50, "Installing dependencies");
     }
     
-    client.execute_command(&format!("cd {} && cargo build --release", sonic_dir))?;
+    // Install required packages
+    client.execute_command("sudo apt-get update")?;
+    client.execute_command("sudo apt-get install -y build-essential libssl-dev pkg-config curl git jq")?;
     
-    // Generate keypair
+    // Install Node.js if not already installed
+    if !client.is_package_installed("nodejs")? {
+        client.execute_command("curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -")?;
+        client.execute_command("sudo apt-get install -y nodejs")?;
+    }
+    
+    // Install Docker if not already installed
+    if !client.is_package_installed("docker-ce")? {
+        client.execute_command("curl -fsSL https://get.docker.com -o get-docker.sh")?;
+        client.execute_command("sudo sh get-docker.sh")?;
+        client.execute_command("sudo usermod -aG docker $(whoami)")?;
+    }
+    
+    // Install Docker Compose if not already installed
+    if !client.is_package_installed("docker-compose")? {
+        client.execute_command("sudo curl -L \"https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose")?;
+        client.execute_command("sudo chmod +x /usr/local/bin/docker-compose")?;
+    }
+    
+    // Run the setup script
     if let Some(callback) = progress_callback {
-        callback(60, "Generating keypair");
+        callback(70, "Running setup script");
     }
     
-    let keypair_path = format!("{}/validator-keypair.json", sonic_dir);
-    if !client.file_exists(&keypair_path)? {
-        client.execute_command(&format!("cd {} && ./target/release/sonic-keygen new -o {}", sonic_dir, keypair_path))?;
-    }
+    // Navigate to the repository directory and run the setup script
+    client.execute_command(&format!("cd {} && bash setup.sh", sonic_dir))?;
     
-    // Create configuration
+    // Configure network settings
     if let Some(callback) = progress_callback {
-        callback(70, "Creating configuration");
+        callback(80, "Configuring network settings");
     }
     
-    let config_dir = format!("{}/config", sonic_dir);
-    client.create_directory(&config_dir)?;
-    
-    let config_content = match deployment_config.network {
-        NetworkType::Mainnet => "network = \"mainnet\"\nrpc_url = \"https://api.sonic.xyz\"\n",
-        NetworkType::Testnet => "network = \"testnet\"\nrpc_url = \"https://testnet-api.sonic.xyz\"\n",
-        NetworkType::Devnet => "network = \"devnet\"\nrpc_url = \"https://devnet-api.sonic.xyz\"\n",
+    // Set the network configuration based on the deployment config
+    let network_config = match deployment_config.network {
+        NetworkType::Mainnet => "mainnet",
+        NetworkType::Testnet => "testnet",
+        NetworkType::Devnet => "devnet",
     };
     
-    // Create a temporary file with config content
-    let temp_path = std::env::temp_dir().join("sonic-config.toml");
-    let mut temp_file = fs::File::create(&temp_path)?;
-    temp_file.write_all(config_content.as_bytes())?;
+    // Update the configuration file with the selected network
+    client.execute_command(&format!("cd {} && echo 'SOLANA_NETWORK={}' > .env", sonic_dir, network_config))?;
     
-    // Upload the config
-    client.upload_file(&temp_path, &format!("{}/config.toml", config_dir))?;
-    
-    // Delete the temporary file
-    fs::remove_file(temp_path)?;
-    
-    // Create systemd service
+    // Start the RPC node
     if let Some(callback) = progress_callback {
-        callback(80, "Creating systemd service");
+        callback(90, "Starting Sonic RPC node");
     }
     
-    let service_name = format!("sonic-{}-{}", deployment_config.node_type, deployment_config.network);
-    let service_content = match deployment_config.node_type.as_str() {
-        "validator" => format!(
-            "[Unit]\n\
-            Description=Sonic Validator\n\
-            After=network.target\n\
-            \n\
-            [Service]\n\
-            User=$(whoami)\n\
-            ExecStart={}/target/release/sonic-validator \\\n\
-              --identity {} \\\n\
-              --ledger {}/ledger \\\n\
-              --config {}/config.toml\n\
-            Restart=always\n\
-            RestartSec=1\n\
-            \n\
-            [Install]\n\
-            WantedBy=multi-user.target\n",
-            sonic_dir,
-            keypair_path,
-            sonic_dir,
-            config_dir,
-        ),
-        "rpc" => format!(
-            "[Unit]\n\
-            Description=Sonic RPC Node\n\
-            After=network.target\n\
-            \n\
-            [Service]\n\
-            User=$(whoami)\n\
-            ExecStart={}/target/release/sonic-rpc \\\n\
-              --identity {} \\\n\
-              --ledger {}/ledger \\\n\
-              --config {}/config.toml \\\n\
-              --rpc-port 8098\n\
-            Restart=always\n\
-            RestartSec=1\n\
-            \n\
-            [Install]\n\
-            WantedBy=multi-user.target\n",
-            sonic_dir,
-            keypair_path,
-            sonic_dir,
-            config_dir,
-        ),
-        _ => {
-            return Err(DeploymentError::ValidationError(format!(
-                "Unsupported node type: {}", deployment_config.node_type
-            )));
-        }
-    };
+    // Start the services using docker-compose
+    client.execute_command(&format!("cd {} && docker-compose up -d", sonic_dir))?;
+    
+    // Create a systemd service to ensure the RPC node starts on boot
+    let service_name = format!("sonic-rpc-{}", deployment_config.network);
+    let service_content = format!(
+        "[Unit]\n\
+        Description=Sonic RPC Node\n\
+        After=docker.service\n\
+        Requires=docker.service\n\
+        \n\
+        [Service]\n\
+        User=$(whoami)\n\
+        WorkingDirectory={}\n\
+        ExecStart=/usr/local/bin/docker-compose up\n\
+        ExecStop=/usr/local/bin/docker-compose down\n\
+        Restart=always\n\
+        RestartSec=10\n\
+        \n\
+        [Install]\n\
+        WantedBy=multi-user.target\n",
+        sonic_dir
+    );
     
     // Create a temporary file with service content
     let temp_service_path = std::env::temp_dir().join(format!("{}.service", service_name));
@@ -1032,13 +1013,8 @@ async fn deploy_sonic(
     // Delete the temporary file
     fs::remove_file(temp_service_path)?;
     
-    // Start the service
-    if let Some(callback) = progress_callback {
-        callback(90, "Starting service");
-    }
-    
+    // Enable the service to start on boot
     client.execute_command(&format!("sudo systemctl enable {}", service_name))?;
-    client.execute_command(&format!("sudo systemctl start {}", service_name))?;
     
     // Wait for the service to start
     await_service_startup(client, &service_name).await?;
