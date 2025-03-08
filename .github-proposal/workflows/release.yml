@@ -1,0 +1,188 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      
+      - name: Build release binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: osvm-binary
+          path: target/release/osvm
+
+  create-github-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download binary
+        uses: actions/download-artifact@v3
+        with:
+          name: osvm-binary
+          path: ./
+      
+      - name: Make binary executable
+        run: chmod +x ./osvm
+      
+      - name: Create release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./osvm
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-apt:
+    name: Deploy to APT Repository
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Download binary
+        uses: actions/download-artifact@v3
+        with:
+          name: osvm-binary
+          path: ./
+      
+      - name: Make binary executable
+        run: chmod +x ./osvm
+      
+      - name: Set up Debian packaging environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debhelper dh-make devscripts
+      
+      - name: Create Debian package
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          mkdir -p osvm-$VERSION
+          cp ./osvm osvm-$VERSION/
+          cd osvm-$VERSION
+          dh_make -y -s -c mit -e maintainer@example.com -f ../osvm
+          cd ..
+          dpkg-buildpackage -us -uc
+      
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v3
+        with:
+          name: osvm-deb-package
+          path: ../osvm_*.deb
+      
+      - name: Deploy to APT repository
+        run: |
+          # This is a placeholder for the actual APT repository deployment
+          # In a real scenario, you would use a service like Launchpad or a custom APT repository
+          echo "Deploying to APT repository..."
+          # Example: scp ../osvm_*.deb user@apt-repo:/path/to/repo/
+          # Then update the repository index
+
+  deploy-homebrew:
+    name: Deploy to Homebrew
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+      
+      - name: Create Homebrew formula
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          SHA=$(curl -sL https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
+          
+          cat > osvm.rb << EOF
+          class Osvm < Formula
+            desc "OpenSVM CLI tool for managing SVM nodes"
+            homepage "https://github.com/${{ github.repository }}"
+            url "https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz"
+            sha256 "$SHA"
+            version "$VERSION"
+            
+            depends_on "rust" => :build
+            
+            def install
+              system "cargo", "build", "--release"
+              bin.install "target/release/osvm"
+            end
+            
+            test do
+              system "#{bin}/osvm", "--version"
+            end
+          end
+          EOF
+      
+      - name: Upload Homebrew formula
+        uses: actions/upload-artifact@v3
+        with:
+          name: osvm-homebrew-formula
+          path: ./osvm.rb
+      
+      - name: Submit to Homebrew
+        run: |
+          # This is a placeholder for the actual Homebrew submission
+          # In a real scenario, you would create a PR to homebrew-core or a custom tap
+          echo "Submitting to Homebrew..."
+          # Example: Create a PR to homebrew-core with the formula
+
+  deploy-cargo-doc:
+    name: Deploy to cargo doc
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      
+      - name: Generate documentation
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --no-deps --document-private-items
+      
+      - name: Create index.html
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=osvm/index.html">' > target/doc/index.html
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          force_orphan: true

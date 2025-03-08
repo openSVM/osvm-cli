@@ -1,22 +1,55 @@
-//! Module exports for utility modules
+//! Utility modules for the OSVM CLI
+//! 
+//! This directory contains various utility modules that provide the core functionality
+//! for the OSVM CLI, including SVM and node management, SSH deployment, and UI components.
 
 use std::{fs::File, io, path::Path};
+use serde::de::DeserializeOwned;
 
-pub mod account_state;
+// UI and display utilities
+/// Color formatting utilities for terminal output
 pub mod color;
-pub mod keys_db;
+/// Example command utilities for displaying usage examples
 pub mod examples;
-pub mod svm_info;
-pub mod ssh_deploy;
-pub mod txn_utils;
+/// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
-pub mod nodes;
+/// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
 
-/// Loads a yaml file
+// Core functionality
+/// SVM information and management utilities
+pub mod svm_info;
+/// SSH deployment utilities for remote node deployment
+pub mod ssh_deploy;
+/// Node management utilities for monitoring and controlling nodes
+pub mod nodes;
+
+/// Loads a YAML configuration file and deserializes it into the specified type
+///
+/// # Arguments
+///
+/// * `config_file` - Path to the YAML configuration file
+///
+/// # Returns
+///
+/// * `Result<T, io::Error>` - The deserialized configuration or an error
+///
+/// # Examples
+///
+/// ```
+/// use osvm::utils::load_keys_config_file;
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize)]
+/// struct Config {
+///     key: String,
+/// }
+///
+/// let config: Config = load_keys_config_file("config.yml").unwrap();
+/// ```
 pub fn load_keys_config_file<T, P>(config_file: P) -> Result<T, io::Error>
 where
-    T: serde::de::DeserializeOwned,
+    T: DeserializeOwned,
     P: AsRef<Path>,
 {
     let file = File::open(config_file)?;

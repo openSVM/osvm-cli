@@ -648,46 +648,52 @@ fn validate_system_requirements(
     
     // Check CPU cores
     let cpu_cores = system_info.get("cpu_cores")
-        .and_then(|s| s.parse::<u8>().ok())
-        .unwrap_or(0);
-    
+        .ok_or_else(|| DeploymentError::ValidationError("CPU cores information not available".to_string()))?
+        .parse::<u8>()
+        .map_err(|e| DeploymentError::ValidationError(format!("Invalid CPU cores value: {}", e)))?;
+
     if cpu_cores < required_cpu {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient CPU cores: {} (required: {})",
             cpu_cores, required_cpu
         )));
     }
-    
+
     // Check memory
     let memory_gb = system_info.get("memory_gb")
-        .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(0);
-    
+        .ok_or_else(|| DeploymentError::ValidationError("Memory information not available".to_string()))?
+        .parse::<u16>()
+        .map_err(|e| DeploymentError::ValidationError(format!("Invalid memory value: {}", e)))?;
+
     if memory_gb < required_memory {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient memory: {} GB (required: {} GB)",
             memory_gb, required_memory
         )));
     }
-    
+
     // Check available disk space
     let available_disk = system_info.get("disk_available")
-        .and_then(|s| {
-            // Parse disk space - handle different units (G, T)
-            if s.ends_with('G') {
-                s[..s.len()-1].parse::<f64>().ok().map(|v| v as u16)
-            } else if s.ends_with('T') {
-                s[..s.len()-1].parse::<f64>().ok().map(|v| (v * 1024.0) as u16)
-            } else {
-                None
-            }
-        })
-        .unwrap_or(0);
-    
-    if available_disk < required_disk {
+        .ok_or_else(|| DeploymentError::ValidationError("Disk space information not available".to_string()))?;
+
+    // Parse disk space - handle different units (G, T)
+    let available_disk_gb = if available_disk.ends_with('G') {
+        available_disk[..available_disk.len()-1].parse::<f64>()
+            .map_err(|e| DeploymentError::ValidationError(format!("Invalid disk space value: {}", e)))?
+    } else if available_disk.ends_with('T') {
+        available_disk[..available_disk.len()-1].parse::<f64>()
+            .map_err(|e| DeploymentError::ValidationError(format!("Invalid disk space value: {}", e)))?
+            * 1024.0
+    } else {
+        return Err(DeploymentError::ValidationError(format!(
+            "Unrecognized disk space unit: {}", available_disk
+        )));
+    };
+
+    if available_disk_gb as u16 < required_disk {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient disk space: {} GB (required: {} GB)",
-            available_disk, required_disk
+            available_disk_gb, required_disk
         )));
     }
     

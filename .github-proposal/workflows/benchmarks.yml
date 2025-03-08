@@ -1,0 +1,78 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sundays
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmarks:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Install cargo-criterion
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-criterion
+          version: latest
+          use-tool-cache: true
+      
+      - name: Run benchmarks
+        uses: actions-rs/cargo@v1
+        with:
+          command: criterion
+      
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: target/criterion
+      
+      - name: Generate benchmark report
+        run: |
+          mkdir -p benchmark-report
+          cp -r target/criterion/* benchmark-report/
+          echo "# Benchmark Results" > benchmark-report/README.md
+          echo "Generated on $(date)" >> benchmark-report/README.md
+          echo "## Summary" >> benchmark-report/README.md
+          find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound }' >> benchmark-report/README.md
+      
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-report
+          path: benchmark-report
+      
+      - name: Compare with previous benchmarks
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          git checkout FETCH_HEAD
+          cargo criterion --baseline main
+          git checkout ${{ github.sha }}
+          cargo criterion --baseline main

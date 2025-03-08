@@ -14,6 +14,7 @@ pub fn parse_command_line() -> ArgMatches<'static> {
         .version(crate_version!())
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::AllowExternalSubcommands)
+        // Global arguments
         .arg({
             let arg = Arg::with_name("config_file")
                 .short("C")
@@ -87,106 +88,7 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                 .possible_values(&["mainnet", "testnet", "devnet"])
                 .default_value("mainnet")
                 .help("Network to deploy on"),
-        )
-        .subcommand(
-            SubCommand::with_name("balance").about("Get balance").arg(
-                Arg::with_name("address")
-                    .validator(is_valid_pubkey)
-                    .value_name("ADDRESS")
-                    .takes_value(true)
-                    .index(1)
-                    .help("Address to get the balance of"),
-            ),
-        )
-        .subcommand(
-            SubCommand::with_name("mint")
-                .about("Mint a new key/value pair to an account")
-                .arg(
-                    Arg::with_name("to-owner")
-                        .display_order(1)
-                        .long("to-owner")
-                        .short("t")
-                        .required(true)
-                        .takes_value(true)
-                        .help("Owner of accounts")
-                        .possible_values(&["User1", "User2"]),
-                )
-                .arg(
-                    Arg::with_name("key")
-                        .display_order(2)
-                        .long("key")
-                        .short("k")
-                        .required(true)
-                        .takes_value(true)
-                        .help("The key of key/value pair"),
-                )
-                .arg(
-                    Arg::with_name("value")
-                        .display_order(3)
-                        .long("value")
-                        .required(true)
-                        .min_values(1)
-                        .help("The value string of key/value pair"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("transfer")
-                .about("Transfer a key/value pair from one account to another")
-                .arg(
-                    Arg::with_name("from-owner")
-                        .display_order(1)
-                        .long("from-owner")
-                        .short("f")
-                        .required(true)
-                        .takes_value(true)
-                        .help("Owner to transfer from")
-                        .possible_values(&["User1", "User2"]),
-                )
-                .arg(
-                    Arg::with_name("to-owner")
-                        .display_order(2)
-                        .long("to-owner")
-                        .short("t")
-                        .required(true)
-                        .takes_value(true)
-                        .help("Owner to transfer to")
-                        .possible_values(&["User1", "User2"]),
-                )
-                .arg(
-                    Arg::with_name("key")
-                        .display_order(3)
-                        .long("key")
-                        .short("k")
-                        .required(true)
-                        .takes_value(true)
-                        .help("The key of key/value pair to transfer"),
-                ),
-        )
-        .subcommand(
-            SubCommand::with_name("burn")
-                .about("Burn (delete) a key/value pair from an account")
-                .arg(
-                    Arg::with_name("from-owner")
-                        .display_order(1)
-                        .long("from-owner")
-                        .short("f")
-                        .required(true)
-                        .takes_value(true)
-                        .help("Owner to burn key/value from")
-                        .possible_values(&["User1", "User2"]),
-                )
-                .arg(
-                    Arg::with_name("key")
-                        .display_order(2)
-                        .long("key")
-                        .short("k")
-                        .required(true)
-                        .takes_value(true)
-                        .help("The key of key/value pair to burn"),
-                ),
-        )
-        .subcommand(SubCommand::with_name("ping").about("Send a ping transaction"))
-        .subcommand(
+        )        .subcommand(
             SubCommand::with_name("examples")
                 .about("Show usage examples for OSVM CLI commands")
                 .arg(
@@ -246,6 +148,7 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                         )
                 )
         )
+        // Node management commands
         .subcommand(
             SubCommand::with_name("nodes")
                 .about("Manage validator and RPC nodes")
@@ -413,8 +316,16 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                             Arg::with_name("host")
                                 .long("host")
                                 .value_name("HOST")
+                                .required(true)
                                 .takes_value(true)
-                                .help("Remote host to deploy on (format: user@host)")
+                                .help("Remote host to deploy on (format: user@host[:port])")
+                        )
+                        .arg(
+                            Arg::with_name("name")
+                                .long("name")
+                                .value_name("NAME")
+                                .takes_value(true)
+                                .help("Custom name for the node (default: auto-generated)")
                         )
                 )
         )

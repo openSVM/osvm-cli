@@ -6,7 +6,6 @@ license = "WTFPL"
 publish = false
 
 [dependencies]
-borsh = "0.9.3"
 clap = "2.33.3"
 lazy_static = "1.4.0"
 serde = { version = "1.0.125", features = ["derive"] }
@@ -35,6 +34,8 @@ serde_json = "1.0"
 dirs = "5.0"
 
 [dev-dependencies]
-lazy_static = "1.4.0"
-solana-test-validator = "1.14.*"
-solana-streamer = "1.14.*"
+assert_cmd = "2.0"
+predicates = "3.0"
+tempfile = "3.8"
+serial_test = "2.0"
+mockito = "1.2"
