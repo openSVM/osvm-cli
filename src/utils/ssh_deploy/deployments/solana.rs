@@ -144,9 +144,10 @@ async fn create_solana_service(
     );
     
     // Create service content
+    let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let service_content = create_binary_service_content(
         "/home/$(whoami)/.local/share/solana/install/active_release/bin/solana-validator",
-        &args,
+        &args_ref,
         solana_dir,
         &format!("Solana {}", deployment_config.node_type.to_uppercase()),
     );
@@ -170,25 +171,25 @@ async fn create_solana_service(
 ///
 /// # Returns
 /// * `Vec<String>` - Service arguments
-fn get_solana_service_args(
-    deployment_config: &DeploymentConfig,
-    solana_dir: &str,
-    keypair_path: &str,
-) -> Vec<&str> {
+fn get_solana_service_args<'a>(
+    deployment_config: &'a DeploymentConfig,
+    solana_dir: &'a str,
+    keypair_path: &'a str,
+) -> Vec<String> {
     let mut args = vec![
-        &format!("--identity {}", keypair_path),
-        &format!("--ledger {}/ledger", solana_dir),
-        "--rpc-port 8899",
-        "--dynamic-port-range 8000-8020",
-        &format!("--entrypoint entrypoint.{}.solana.com:8001", deployment_config.network),
-        "--expected-genesis-hash GENESIS_HASH",
-        "--wal-recovery-mode skip_any_corrupted_record",
-        "--limit-ledger-size",
+        format!("--identity {}", keypair_path),
+        format!("--ledger {}/ledger", solana_dir),
+        "--rpc-port 8899".to_string(),
+        "--dynamic-port-range 8000-8020".to_string(),
+        format!("--entrypoint entrypoint.{}.solana.com:8001", deployment_config.network),
+        "--expected-genesis-hash GENESIS_HASH".to_string(),
+        "--wal-recovery-mode skip_any_corrupted_record".to_string(),
+        "--limit-ledger-size".to_string(),
     ];
     
     if deployment_config.node_type == "rpc" {
-        args.push("--private-rpc");
-        args.push("--enable-rpc-transaction-history");
+        args.push("--private-rpc".to_string());
+        args.push("--enable-rpc-transaction-history".to_string());
     }
     
     args

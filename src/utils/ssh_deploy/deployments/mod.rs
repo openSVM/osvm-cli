@@ -3,11 +3,11 @@
 // Re-export all public items
 pub use self::solana::*;
 pub use self::sonic::*;
-pub use self::sui::*;
-pub use self::aptos::*;
+pub use self::eclipse::*;
+pub use self::s00n::*;
 
 // Module declarations
 pub mod solana;
 pub mod sonic;
-pub mod sui;
-pub mod aptos;
+pub mod eclipse;
+pub mod s00n;

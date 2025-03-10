@@ -100,16 +100,16 @@ pub async fn deploy_svm_node(
                 progress_callback.as_ref(),
             ).await?;
         },
-        "sui" => {
-            crate::utils::ssh_deploy::deployments::sui::deploy_sui(
+        "eclipse" => {
+            crate::utils::ssh_deploy::deployments::eclipse::deploy_eclipse(
                 &mut client, 
                 &server_config, 
                 &deployment_config, 
                 progress_callback.as_ref(),
             ).await?;
         },
-        "aptos" => {
-            crate::utils::ssh_deploy::deployments::aptos::deploy_aptos(
+        "s00n" => {
+            crate::utils::ssh_deploy::deployments::s00n::deploy_s00n(
                 &mut client, 
                 &server_config, 
                 &deployment_config, 
