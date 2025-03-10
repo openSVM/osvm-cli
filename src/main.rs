@@ -1,10 +1,6 @@
 //! @brief Main entry point for CLI
 
 use {
-    crate::prelude::{
-        burn_instruction, load_account, load_wallet, mint_transaction, ping_instruction,
-        transfer_instruction, unpack_account_data, KEYS_DB, PROG_KEY,
-    },
     clparse::parse_command_line,
     crate::utils::{svm_info, ssh_deploy, dashboard, nodes, examples},
     solana_clap_utils::{
@@ -18,9 +14,8 @@ use {
         instruction::AccountMeta,
         native_token::Sol,
         signature::{Keypair, Signer},
-        system_instruction,
     },
-    std::{process::exit, sync::Arc, env, str::FromStr},
+    std::{process::exit, sync::Arc, env},
 };
 pub mod clparse;
 pub mod prelude;
@@ -35,37 +30,6 @@ struct Config {
     json_rpc_url: String,
     verbose: u8, // 0=normal, 1=verbose (-v), 2=very verbose (-vv), 3=debug (-vvv)
     no_color: bool,
-}
-
-/// Wallet and account verification and load
-///
-/// Will search KEYS_DB for existence of the owner string and return the wallet and account keys
-/// and, optionally, fund the wallet and create and initialize the account if needed
-///
-/// # Example
-/// ```ignore
-/// validate_user_account_and_load(&rpc_client, funding_source, commitment_config, "User1")?;
-/// ```
-fn validate_user_accounts_and_load(
-    rpc_client: &RpcClient,
-    funding_source: &dyn Signer,
-    commitment_config: CommitmentConfig,
-    owner: &str,
-) -> Result<(&'static Keypair, &'static Keypair), Box<dyn std::error::Error>> {
-    // Check in KEYS_DB for owner
-    let (wallet, account) = KEYS_DB.wallet_and_account(owner.to_string())?;
-    // Fund wallet if required
-    load_wallet(rpc_client, wallet, funding_source, commitment_config)?;
-    // Create and initialize account if required
-    load_account(
-        rpc_client,
-        account,
-        wallet,
-        &PROG_KEY.pubkey(),
-        ACCOUNT_STATE_SPACE as u64,
-        commitment_config,
-    )?;
-    Ok((wallet, account))
 }
 
 #[tokio::main]
@@ -157,96 +121,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .get_balance_with_commitment(&address, config.commitment_config)?
                     .value)
             );
-        }
-        ("mint", Some(_arg_matchs)) => {
-            let owner = matches.value_of("to-owner").unwrap();
-            let key = matches.value_of("key").unwrap();
-            let value = {
-                let value: Vec<_> = matches.values_of("value").unwrap().collect();
-                value.join(" ")
-            };
-            // Verify the owner is a valid account
-            let (wallet, account) = validate_user_accounts_and_load(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-                owner,
-            )?;
-            // Execute command
-            mint_transaction(
-                &rpc_client,
-                &[
-                    AccountMeta::new(account.pubkey(), false),
-                    AccountMeta::new(wallet.pubkey(), true),
-                ],
-                wallet,
-                key,
-                &value,
-                config.commitment_config,
-            )?;
-            let (_, btree) = unpack_account_data(&rpc_client, account, config.commitment_config)?;
-            println!("{} to account key/value store {:?}", owner, btree);
-        }
-        ("transfer", Some(_arg_matchs)) => {
-            let from_owner = matches.value_of("from-owner").unwrap();
-            let to_owner = matches.value_of("to-owner").unwrap();
-            let key = matches.value_of("key").unwrap();
-            // Verify that from and to owners are different and both are
-            // valid
-            let (from_wallet, from_account) = validate_user_accounts_and_load(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-                from_owner,
-            )?;
-            let (_, to_account) = validate_user_accounts_and_load(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-                to_owner,
-            )?;
-            // Execute command
-            transfer_instruction(
-                &rpc_client,
-                &[
-                    AccountMeta::new(from_account.pubkey(), false),
-                    AccountMeta::new(to_account.pubkey(), false),
-                    AccountMeta::new(from_wallet.pubkey(), true),
-                ],
-                from_wallet,
-                key,
-                config.commitment_config,
-            )?;
-            let (_, btree) =
-                unpack_account_data(&rpc_client, from_account, config.commitment_config)?;
-            println!("{} from account key/value store {:?}", from_owner, btree);
-            let (_, btree) =
-                unpack_account_data(&rpc_client, to_account, config.commitment_config)?;
-            println!("{} to account key/value store {:?}", to_owner, btree);
-        }
-        ("burn", Some(_arg_matchs)) => {
-            let owner = matches.value_of("from-owner").unwrap();
-            let key = matches.value_of("key").unwrap();
-            // Verify the owner is a valid account
-            let (wallet, account) = validate_user_accounts_and_load(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-                owner,
-            )?;
-            // Execute command
-            burn_instruction(
-                &rpc_client,
-                &[
-                    AccountMeta::new(account.pubkey(), false),
-                    AccountMeta::new(wallet.pubkey(), true),
-                ],
-                wallet,
-                key,
-                config.commitment_config,
-            )?;
-            let (_, btree) = unpack_account_data(&rpc_client, account, config.commitment_config)?;
-            println!("{} from account key/value store {:?}", owner, btree);
         }
         ("svm", Some(svm_matches)) => {
             let (svm_sub_command, svm_sub_matches) = svm_matches.subcommand();
@@ -448,18 +322,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        ("ping", Some(_arg_matches)) => {
-            let signature = ping_instruction(
-                &rpc_client,
-                config.default_signer.as_ref(),
-                config.commitment_config,
-            )
-            .unwrap_or_else(|err| {
-                eprintln!("error: send transaction: {}", err);
-                exit(1);
-            });
-            println!("Signature: {}", signature);
-        }
         ("rpc", Some(rpc_matches)) => {
             let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
             match (rpc_sub_command, rpc_sub_matches) {
@@ -533,7 +395,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let node_type = node_type_str.to_string();
             
             // Parse network type
-            let _network = match network_str.to_lowercase().as_str() {
+            let network = match network_str.to_lowercase().as_str() {
                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
                 "testnet" => ssh_deploy::NetworkType::Testnet,
                 "devnet" => ssh_deploy::NetworkType::Devnet,
@@ -560,11 +422,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 additional_params: std::collections::HashMap::new(),
             };
 
-            ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
-                .context("Deployment failed")?;
+            if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                eprintln!("Deployment failed: {}", e);
+                exit(1);
+            }
         }
         (cmd, _) => {
-            return Err(anyhow::anyhow!("Unknown command: {}", cmd));
+            eprintln!("Unknown command: {}", cmd);
+            exit(1);
         }
     };
 
@@ -578,6 +443,8 @@ mod test {
 
     use {super::*, solana_test_validator::*};
 
+    // Tests commented out as they depend on removed functions
+    /*
     #[test]
     fn test_ping() {
         let (test_validator, payer) = TestValidatorGenesis::default().start();
@@ -588,6 +455,7 @@ mod test {
             Ok(_)
         ));
     }
+    */
 
     #[test]
     fn test_borsh() {
