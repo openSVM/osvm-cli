@@ -4,7 +4,7 @@ use {
     clap::{
         crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand,
     },
-    solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_pubkey, is_valid_signer},
+    solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
 /// Construct the cli input model and parse command line
