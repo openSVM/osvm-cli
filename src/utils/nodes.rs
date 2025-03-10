@@ -968,7 +968,6 @@ pub fn get_node_info(
 /// Get node logs
 ///
 /// # Arguments
-/// * `client` - RPC client
 /// * `node_id` - Node ID
 /// * `lines` - Number of lines to show
 /// * `follow` - Whether to follow the logs
@@ -980,8 +979,8 @@ pub fn get_node_logs(
     lines: usize,
     follow: bool
 ) -> Result<(), Box<dyn Error>> {
-    let db = NodeDatabase::load()?;
-    let node = db.get_node(node_id)?;
+    let db = NodeDatabase::load().map_err(|e| anyhow::anyhow!("Failed to load node database: {}", e))?;
+    let node = db.get_node(node_id).map_err(|e| anyhow::anyhow!("Failed to get node {}: {}", node_id, e))?;
     
     // Create SSH client
     let server_config = ServerConfig {
@@ -998,12 +997,15 @@ pub fn get_node_logs(
     let service_name = format!("{}-{}-{}", node.svm_type, node.node_type, node.network);
     
     // Create runtime for executing SSH client
-    let rt = Runtime::new()?;
+    let rt = Runtime::new().map_err(|e| anyhow::anyhow!("Failed to create async runtime: {}", e))?;
     rt.block_on(async {
         use crate::utils::ssh_deploy::SshClient;
         
-        let mut client = SshClient::new(server_config.clone())?;
-        client.connect()?;
+        let mut client = SshClient::new(server_config.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to create SSH client: {}", e))?;
+        
+        client.connect()
+            .map_err(|e| anyhow::anyhow!("Failed to connect to {}: {}", node.host, e))?;
 
         let command = if follow {
             println!("Note: Log streaming is not fully supported. Displaying current logs...");
@@ -1017,14 +1019,16 @@ pub fn get_node_logs(
             client.stream_command(&command, |line| {
                 println!("{}", line);
                 true // Continue streaming
-            })?;
+            })
+            .map_err(|e| anyhow::anyhow!("Failed to stream logs: {}", e))?;
         } else {
             // For non-follow mode, just execute and print
-            let logs = client.execute_command(&command)?;
+            let logs = client.execute_command(&command)
+                .map_err(|e| anyhow::anyhow!("Failed to execute log command: {}", e))?;
             println!("{}", logs);
         }
         
-        Ok::<_, Box<dyn Error>>(())
+        Ok::<_, anyhow::Error>(())
     })?;
     
     Ok(())
@@ -1114,13 +1118,22 @@ trait SshClientExt {
 }
 
 impl SshClientExt for crate::utils::ssh_deploy::SshClient {
-    fn stream_command<F>(&mut self, command: &str, callback: F) -> Result<(), Box<dyn Error>>
+    fn stream_command<F>(&mut self, command: &str, mut callback: F) -> Result<(), Box<dyn Error>>
     where 
         F: FnMut(&str) -> bool,
     {
-        // Execute the command and process all output at once as a fallback
+        // First try to execute the command
         let output = self.execute_command(command)?;
-        output.lines().all(callback);
+        
+        // Process each line of the output
+        let mut continue_processing = true;
+        for line in output.lines() {
+            continue_processing = callback(line);
+            if !continue_processing {
+                break;
+            }
+        }
+        
         Ok(())
     }
 }
