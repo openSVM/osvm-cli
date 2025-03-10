@@ -447,7 +447,73 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // Display all examples
                 examples::display_all_examples();
             }
-        }        // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
+        }
+        ("ping", Some(_arg_matches)) => {
+            let signature = ping_instruction(
+                &rpc_client,
+                config.default_signer.as_ref(),
+                config.commitment_config,
+            )
+            .unwrap_or_else(|err| {
+                eprintln!("error: send transaction: {}", err);
+                exit(1);
+            });
+            println!("Signature: {}", signature);
+        }
+        ("rpc", Some(rpc_matches)) => {
+            let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
+            match (rpc_sub_command, rpc_sub_matches) {
+                ("sonic", Some(sonic_matches)) => {
+                    // Deploy a Sonic RPC node
+                    let connection_str = sonic_matches.value_of("connection").unwrap();
+                    let network_str = sonic_matches.value_of("network").unwrap();
+                    
+                    // Parse connection string
+                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            eprintln!("Error parsing SSH connection string: {}", e);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Parse network type
+                    let network = match network_str.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network_str);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Create deployment config
+                    let deploy_config = ssh_deploy::DeploymentConfig {
+                        svm_type: "sonic".to_string(),
+                        node_type: "rpc".to_string(),
+                        network,
+                        node_name: "sonic-rpc".to_string(),
+                        rpc_url: None,
+                        additional_params: std::collections::HashMap::new(),
+                    };
+
+                    println!("Deploying Sonic RPC node to {}...", connection_str);
+                    
+                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                        eprintln!("Deployment error: {}", e);
+                        exit(1);
+                    }
+                    
+                    println!("Sonic RPC node deployed successfully!");
+                },
+                _ => {
+                    eprintln!("Unknown RPC type: {}", rpc_sub_command);
+                    exit(1);
+                }
+            }
+        },
+        // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
         (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
             // This is an SSH deployment command
             let svm_list = matches.value_of("svm").unwrap();
@@ -503,4 +569,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use solana_sdk::pubkey::Pubkey;
+
+    use {super::*, solana_test_validator::*};
+
+    #[test]
+    fn test_ping() {
+        let (test_validator, payer) = TestValidatorGenesis::default().start();
+        let rpc_client = test_validator.get_rpc_client();
+
+        assert!(matches!(
+            ping_instruction(&rpc_client, &payer, CommitmentConfig::confirmed()),
+            Ok(_)
+        ));
+    }
+
+    #[test]
+    fn test_borsh() {
+        #[repr(C)]
+        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+        pub struct UpdateMetadataAccountArgs {
+            pub data: Option<String>,
+            pub update_authority: Option<Pubkey>,
+            pub primary_sale_happened: Option<bool>,
+        }
+        let faux = UpdateMetadataAccountArgs {
+            data: Some(String::from("This")),
+            update_authority: Some(Pubkey::default()),
+            primary_sale_happened: Some(true),
+        };
+        let bout = faux.try_to_vec().unwrap();
+        println!("{:?}", bout);
+        let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
+        println!("{:?}", in_faux);
+    }
 }
