@@ -119,14 +119,6 @@ cargo build --release
 sudo cp target/release/osvm /usr/local/bin/
 ```
 
-### From Package Managers
-
-#### Cargo (Rust's Package Manager)
-
-```bash
-cargo install osvm-cli
-```
-
 ## 📊 Dashboard Features
 
 The interactive dashboard provides real-time monitoring of your SVM infrastructure, including:
