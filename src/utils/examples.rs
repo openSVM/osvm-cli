@@ -121,6 +121,12 @@ pub fn get_all_examples() -> Vec<Example> {
             category: ExampleCategory::NodeDeployment,
         },
         Example {
+            title: "Deploy a Sonic RPC node",
+            command: "osvm rpc sonic root@host.example.com --network mainnet",
+            explanation: "Deploys a Sonic RPC node on the mainnet to the specified remote host using the sonicfromnewyoke/solana-rpc repository",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
             title: "Deploy multiple SVMs to a single host",
             command: "osvm user@host.example.com --svm solana,sonic,eclipse --node-type validator --network mainnet",
             explanation: "Deploys validator nodes for multiple SVMs to a single host, all running on mainnet",

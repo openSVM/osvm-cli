@@ -25,7 +25,7 @@ powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/o
 ## 🌟 Key Features
 
 - **SVM Management**: List and inspect Solana Virtual Machines
-- **Node Deployment**: Deploy validator or RPC nodes with a single command
+- **Node Deployment**: Deploy validator or dedicated RPC nodes with a single command
 - **Interactive Dashboard**: Real-time monitoring with a terminal-based UI
 - **Network Configuration**: Configure nodes for mainnet, testnet, or devnet
 - **Performance Metrics**: Track TPS, latency, and system requirements
@@ -72,9 +72,31 @@ osvm user@host --svm sonic --node-type validator --network mainnet
 # Deploy an RPC node to a remote server (testnet)
 osvm user@host --svm sonic --node-type rpc --network testnet
 
+# Deploy a Sonic RPC node to a remote server
+osvm rpc sonic root@host.example.com --network mainnet
+
 # Deploy multiple SVMs to a single server
 osvm user@host --svm sonic,solana,sei --node-type validator --network devnet
 ```
+
+### RPC Node Deployment
+
+```bash
+# Deploy a Sonic RPC node to a remote server (mainnet)
+osvm rpc sonic user@host --network mainnet
+
+# Deploy a Sonic RPC node to a remote server (testnet)
+osvm rpc sonic user@host --network testnet
+
+# Deploy a Sonic RPC node to a remote server (devnet)
+osvm rpc sonic user@host --network devnet
+```
+
+The `rpc` command provides a streamlined way to deploy specific RPC nodes:
+
+- **Sonic RPC**: Deploys a Sonic RPC node using Docker containers from the official repository
+- **Network Selection**: Choose between mainnet, testnet, or devnet environments
+- **Automatic Configuration**: Handles all dependencies and configuration automatically
 
 ## 🔧 Detailed Installation
 
@@ -95,14 +117,6 @@ cargo build --release
 
 # Install the binary
 sudo cp target/release/osvm /usr/local/bin/
-```
-
-### From Package Managers
-
-#### Cargo (Rust's Package Manager)
-
-```bash
-cargo install osvm-cli
 ```
 
 ## 📊 Dashboard Features
