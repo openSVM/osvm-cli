@@ -63,18 +63,6 @@ pub fn get_all_examples() -> Vec<Example> {
     vec![
         // Basic Commands
         Example {
-            title: "Check your balance",
-            command: "osvm balance",
-            explanation: "Displays the SOL balance of your default keypair",
-            category: ExampleCategory::Basic,
-        },
-        Example {
-            title: "Check a specific address balance",
-            command: "osvm balance 5vXNUCLCvfBxLrZcgJnSury7KxZ6niwg3gdMrys4a6Uh",
-            explanation: "Displays the SOL balance of the specified wallet address",
-            category: ExampleCategory::Basic,
-        },
-        Example {
             title: "Run with increased verbosity",
             command: "osvm -v svm list",
             explanation: "Run a command with increased verbosity level. Use -vv or -vvv for even more details",
@@ -82,8 +70,14 @@ pub fn get_all_examples() -> Vec<Example> {
         },
         Example {
             title: "Specify a different RPC URL",
-            command: "osvm --url https://api.mainnet-beta.solana.com balance",
+            command: "osvm --url https://api.mainnet-beta.solana.com svm list",
             explanation: "Run a command using a specific Solana RPC endpoint",
+            category: ExampleCategory::Basic,
+        },
+        Example {
+            title: "Disable colored output",
+            command: "osvm --no-color svm list",
+            explanation: "Run a command with colored output disabled",
             category: ExampleCategory::Basic,
         },
         
