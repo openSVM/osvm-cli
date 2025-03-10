@@ -40,61 +40,50 @@ fi
 
 echo "${BLUE}Installing OSVM CLI...${NC}"
 
-# Install from crates.io
-cargo install osvm
+# Install directly from GitHub repository
+echo "${BLUE}Installing from GitHub repository...${NC}"
 
-# Check if installation was successful
+# Create a temporary directory
+TMP_DIR=$(mktemp -d)
+cd "$TMP_DIR"
+
+# Clone the repository
+git clone https://github.com/opensvm/osvm-cli.git
+cd osvm-cli
+
+# Build and install
+cargo build --release
+
+# Determine install location based on platform
+if [ "$(uname)" = "Darwin" ]; then
+    # macOS
+    INSTALL_DIR="/usr/local/bin"
+else
+    # Linux
+    INSTALL_DIR="/usr/local/bin"
+fi
+
+# Copy binary to install location
+if [ -w "$INSTALL_DIR" ]; then
+    cp target/release/osvm "$INSTALL_DIR/"
+else
+    echo "${YELLOW}Copying binary to $INSTALL_DIR requires sudo permission${NC}"
+    sudo cp target/release/osvm "$INSTALL_DIR/"
+fi
+
+# Clean up
+cd
+rm -rf "$TMP_DIR"
+
+# Final check
 if command -v osvm >/dev/null 2>&1; then
     echo "${GREEN}OSVM CLI installed successfully!${NC}"
     echo ""
     echo "You can now use the OSVM CLI with the 'osvm' command."
     echo "Try 'osvm --help' to get started."
 else
-    # If not in PATH, try installing from the repository
-    echo "${YELLOW}Installing from GitHub repository...${NC}"
-    
-    # Create a temporary directory
-    TMP_DIR=$(mktemp -d)
-    cd "$TMP_DIR"
-    
-    # Clone the repository
-    git clone https://github.com/opensvm/osvm-cli.git
-    cd osvm-cli
-    
-    # Build and install
-    cargo build --release
-    
-    # Determine install location based on platform
-    if [ "$(uname)" = "Darwin" ]; then
-        # macOS
-        INSTALL_DIR="/usr/local/bin"
-    else
-        # Linux
-        INSTALL_DIR="/usr/local/bin"
-    fi
-    
-    # Copy binary to install location
-    if [ -w "$INSTALL_DIR" ]; then
-        cp target/release/osvm "$INSTALL_DIR/"
-    else
-        echo "${YELLOW}Copying binary to $INSTALL_DIR requires sudo permission${NC}"
-        sudo cp target/release/osvm "$INSTALL_DIR/"
-    fi
-    
-    # Clean up
-    cd
-    rm -rf "$TMP_DIR"
-    
-    # Final check
-    if command -v osvm >/dev/null 2>&1; then
-        echo "${GREEN}OSVM CLI installed successfully!${NC}"
-        echo ""
-        echo "You can now use the OSVM CLI with the 'osvm' command."
-        echo "Try 'osvm --help' to get started."
-    else
-        echo "${RED}Installation failed. Please try installing manually:${NC}"
-        echo "1. Clone the repository: git clone https://github.com/opensvm/osvm-cli.git"
-        echo "2. Build the project: cd osvm-cli && cargo build --release"
-        echo "3. Install the binary: sudo cp target/release/osvm /usr/local/bin/"
-    fi
+    echo "${RED}Installation failed. Please try installing manually:${NC}"
+    echo "1. Clone the repository: git clone https://github.com/opensvm/osvm-cli.git"
+    echo "2. Build the project: cd osvm-cli && cargo build --release"
+    echo "3. Install the binary: sudo cp target/release/osvm /usr/local/bin/"
 fi
