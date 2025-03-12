@@ -746,8 +746,11 @@ mod test {
             update_authority: Some(Pubkey::default()),
             primary_sale_happened: Some(true),
         };
-        let bout = faux.try_to_vec().unwrap();
-        let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
+        // With borsh 1.5.5, we need to use BorshSerialize in a different way
+        let mut bout = Vec::new();
+        faux.serialize(&mut bout).unwrap();
+        // With borsh 1.5.5, use the BorshDeserialize trait method
+        let in_faux = UpdateMetadataAccountArgs::deserialize(&mut &bout[..]).unwrap();
 
         // Assert that the deserialized data matches the original
         assert_eq!(faux, in_faux);
