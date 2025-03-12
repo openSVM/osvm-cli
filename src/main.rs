@@ -729,8 +729,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod test {
-    use solana_sdk::borsh::try_from_slice_unchecked;
     use borsh::{BorshDeserialize, BorshSerialize};
+    use solana_sdk::borsh::try_from_slice_unchecked;
     use solana_sdk::pubkey::Pubkey;
 
     #[test]
