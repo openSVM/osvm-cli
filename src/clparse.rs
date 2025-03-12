@@ -308,7 +308,7 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                             Arg::with_name("network")
                                 .long("network")
                                 .value_name("NETWORK")
-                                .takes_value(true)
+                                takes_value(true)
                                 .possible_values(&["mainnet", "testnet", "devnet"])
                                 .default_value("mainnet")
                                 .help("Network to deploy on")
@@ -504,4 +504,5 @@ pub fn parse_command_line() -> ArgMatches<'static> {
         )
         .get_matches()
 }
+
 

@@ -1,4 +1,4 @@
-//! End-to-end tests for node-related commands
+#![End-to-end tests for node-related commands
 
 use crate::tests::e2e::common::{run_osvm_command, run_osvm_command_string, output_contains, create_temp_dir, create_mock_config, MockServer};
 use predicates::prelude::*;
@@ -8,15 +8,15 @@ use serial_test::serial;
 #[serial]
 fn test_nodes_list() {
     let output = run_osvm_command_string(&["nodes", "list"]);
-    
+
     // Verify the output contains expected headers
     assert!(output_contains(&output, "OSVM - Node Management"));
     assert!(output_contains(&output, "Managed SVM Nodes:"));
-    
+
     // The output might show "No nodes are currently managed" if no nodes are configured
     // or it might show a list of nodes if some are configured
     assert!(
-        output_contains(&output, "No nodes are currently managed") || 
+        output_contains(&output, "No nodes are currently managed") ||
         output_contains(&output, "ID") && output_contains(&output, "SVM") && output_contains(&output, "TYPE")
     );
 }
@@ -27,15 +27,15 @@ fn test_nodes_list_with_filters() {
     // Test with network filter
     let output = run_osvm_command_string(&["nodes", "list", "--network", "mainnet"]);
     assert!(output_contains(&output, "OSVM - Node Management"));
-    
+
     // Test with type filter
     let output = run_osvm_command_string(&["nodes", "list", "--type", "validator"]);
     assert!(output_contains(&output, "OSVM - Node Management"));
-    
+
     // Test with status filter
     let output = run_osvm_command_string(&["nodes", "list", "--status", "running"]);
     assert!(output_contains(&output, "OSVM - Node Management"));
-    
+
     // Test with JSON output
     let output = run_osvm_command_string(&["nodes", "list", "--json"]);
     // JSON output should start with a curly brace or square bracket
@@ -50,7 +50,7 @@ fn test_nodes_dashboard() {
     let assert = run_osvm_command()
         .args(&["nodes", "dashboard"])
         .assert();
-    
+
     // The dashboard might not work in a test environment, so we're just checking
     // that the command is recognized
     assert.stderr(predicate::str::contains("Unknown command").not());
@@ -62,7 +62,7 @@ fn test_nodes_get_invalid() {
     let assert = run_osvm_command()
         .args(&["nodes", "get", "invalid_node_id"])
         .assert();
-    
+
     // Verify the command fails with a non-zero exit code
     assert.failure()
         .stderr(predicate::str::contains("Node not found").or(predicate::str::contains("Error:")));
@@ -73,16 +73,16 @@ fn test_nodes_get_invalid() {
 fn test_examples_command() {
     // Test the examples command
     let output = run_osvm_command_string(&["examples"]);
-    
+
     // Verify the output contains examples
-    assert!(output_contains(&output, "OSVM CLI Examples") || 
+    assert!(output_contains(&output, "OSVM CLI Examples") ||
             output_contains(&output, "Available SVMs in the chain:") ||
             output_contains(&output, "Basic Commands"));
-    
+
     // Test examples with category filter
     let output = run_osvm_command_string(&["examples", "--category", "basic"]);
     assert!(output_contains(&output, "Basic Commands"));
-    
+
     // Test listing categories
     let output = run_osvm_command_string(&["examples", "--list-categories"]);
     assert!(output_contains(&output, "Available example categories:"));
@@ -93,16 +93,16 @@ fn test_examples_command() {
 fn test_verbose_output() {
     // Test with verbose flag
     let output = run_osvm_command_string(&["--verbose", "svm", "list"]);
-    
+
     // Verbose output should include JSON RPC URL or other verbose information
-    assert!(output_contains(&output, "JSON RPC URL:") || 
+    assert!(output_contains(&output, "JSON RPC URL:") ||
             output_contains(&output, "Available SVMs in the chain:"));
-    
+
     // Test with very verbose flag
     let output = run_osvm_command_string(&["-vv", "svm", "list"]);
-    
+
     // Very verbose output should include keypair info or other very verbose information
-    assert!(output_contains(&output, "Using keypair:") || 
+    assert!(output_contains(&output, "Using keypair:") ||
             output_contains(&output, "Available SVMs in the chain:"));
 }
 
@@ -111,7 +111,7 @@ fn test_verbose_output() {
 fn test_no_color_flag() {
     // Test with no-color flag
     let output = run_osvm_command_string(&["--no-color", "svm", "list"]);
-    
+
     // Output should still contain the expected text, but without color codes
     assert!(output_contains(&output, "Available SVMs in the chain:"));
 }
@@ -122,10 +122,10 @@ fn test_with_custom_config() {
     // Create a temporary directory and config file
     let temp_dir = create_temp_dir();
     let config_path = create_mock_config(&temp_dir);
-    
+
     // Run the command with the config file
     let output = run_osvm_command_string(&["-C", config_path.to_str().unwrap(), "nodes", "list"]);
-    
+
     // Verify the output contains expected headers
     assert!(output_contains(&output, "OSVM - Node Management"));
 }
@@ -137,7 +137,7 @@ fn test_help_command() {
     let assert = run_osvm_command()
         .arg("--help")
         .assert();
-    
+
     // Verify the output contains help information
     assert.success()
         .stdout(predicate::str::contains("USAGE:"))
