@@ -11,7 +11,7 @@ use crate::utils::ssh_deploy::{
         await_service_startup, create_binary_service_content, create_systemd_service,
         enable_and_start_service,
     },
-    types::{DeploymentConfig, DiskConfig, NetworkType, ServerConfig},
+    types::{DeploymentConfig, NetworkType, ServerConfig},
 };
 
 /// Deploy Solana node with enhanced features from Validator Jumpstart
@@ -183,7 +183,7 @@ fn install_solana_cli(
         }
         Some("agave") => {
             // Install Agave client
-            let agave_version = if version.contains("agave") {
+            let _agave_version = if version.contains("agave") {
                 version.to_string()
             } else {
                 format!("{}-agave", version)

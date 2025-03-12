@@ -523,6 +523,11 @@ pub async fn deploy_node(
         node_name: name.to_string(),
         rpc_url: None, // Will be set by the deployment process
         additional_params: HashMap::new(),
+        version: None,
+        client_type: None,
+        hot_swap_enabled: false,
+        metrics_config: None,
+        disk_config: None,
     };
 
     // Deploy the node
@@ -1247,10 +1252,10 @@ impl SshClientExt for crate::utils::ssh_deploy::SshClient {
         let output = self.execute_command(command)?;
 
         // Process each line of the output
-        let mut continue_processing = true;
+        let mut _continue_processing = true;
         for line in output.lines() {
-            continue_processing = callback(line);
-            if !continue_processing {
+            _continue_processing = callback(line);
+            if !_continue_processing {
                 break;
             }
         }

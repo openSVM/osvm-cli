@@ -2,7 +2,7 @@
 
 use {
     crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError},
-    std::{fs, io::Write, path::Path, time::Duration},
+    std::{fs, io::Write, time::Duration},
     tokio::time,
 };
 
