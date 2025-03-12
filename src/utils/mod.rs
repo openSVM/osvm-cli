@@ -1,28 +1,28 @@
 //! Utility modules for the OSVM CLI
-//! 
+//!
 //! This directory contains various utility modules that provide the core functionality
 //! for the OSVM CLI, including SVM and node management, SSH deployment, and UI components.
 
-use std::{fs::File, io, path::Path};
 use serde::de::DeserializeOwned;
+use std::{fs::File, io, path::Path};
 
 // UI and display utilities
 /// Color formatting utilities for terminal output
 pub mod color;
-/// Example command utilities for displaying usage examples
-pub mod examples;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
+/// Example command utilities for displaying usage examples
+pub mod examples;
 /// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
 
 // Core functionality
-/// SVM information and management utilities
-pub mod svm_info;
-/// SSH deployment utilities for remote node deployment
-pub mod ssh_deploy;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
+/// SSH deployment utilities for remote node deployment
+pub mod ssh_deploy;
+/// SVM information and management utilities
+pub mod svm_info;
 
 /// Loads a YAML configuration file and deserializes it into the specified type
 ///

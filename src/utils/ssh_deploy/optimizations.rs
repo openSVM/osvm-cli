@@ -1,11 +1,6 @@
 //! System optimization utilities for Solana validator/RPC deployment
 
-use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-    },
-};
+use crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError};
 
 /// Apply recommended system optimizations for Solana validator/RPC
 ///
@@ -14,18 +9,16 @@ use {
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-pub fn apply_system_optimizations(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+pub fn apply_system_optimizations(client: &mut SshClient) -> Result<(), DeploymentError> {
     // Apply kernel and network parameter optimizations
     apply_sysctl_settings(client)?;
-    
+
     // Set CPU governor to performance mode
     set_cpu_performance(client)?;
-    
+
     // Configure file descriptor limits
     configure_file_limits(client)?;
-    
+
     Ok(())
 }
 
@@ -36,9 +29,7 @@ pub fn apply_system_optimizations(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn apply_sysctl_settings(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+fn apply_sysctl_settings(client: &mut SshClient) -> Result<(), DeploymentError> {
     let sysctl_content = r#"
 # TCP Buffer Sizes (10k min, 87.38k default, 12M max)
 net.ipv4.tcp_rmem=10240 87380 12582912
@@ -79,8 +70,11 @@ net.core.wmem_default=134217728
 
     // Write settings to a temporary file
     let temp_path = "/tmp/solana_sysctl.conf";
-    client.execute_command(&format!("cat > {} << 'EOL'\n{}\nEOL", temp_path, sysctl_content))?;
-    
+    client.execute_command(&format!(
+        "cat > {} << 'EOL'\n{}\nEOL",
+        temp_path, sysctl_content
+    ))?;
+
     // Append settings to sysctl.conf if they don't already exist
     client.execute_command(&format!(
         r#"
@@ -92,13 +86,13 @@ net.core.wmem_default=134217728
         "#,
         temp_path
     ))?;
-    
+
     // Apply the settings
     client.execute_command("sudo sysctl -p")?;
-    
+
     // Clean up
     client.execute_command(&format!("rm {}", temp_path))?;
-    
+
     Ok(())
 }
 
@@ -109,18 +103,17 @@ net.core.wmem_default=134217728
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn set_cpu_performance(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+fn set_cpu_performance(client: &mut SshClient) -> Result<(), DeploymentError> {
     // Install cpufrequtils if not already installed
     client.execute_command("sudo apt-get update && sudo apt-get install -y cpufrequtils")?;
-    
+
     // Set default governor to performance
-    client.execute_command("echo 'GOVERNOR=\"performance\"' | sudo tee /etc/default/cpufrequtils")?;
-    
+    client
+        .execute_command("echo 'GOVERNOR=\"performance\"' | sudo tee /etc/default/cpufrequtils")?;
+
     // Apply to all CPUs (handle both success and failure)
     client.execute_command("echo \"performance\" | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor || true")?;
-    
+
     Ok(())
 }
 
@@ -131,36 +124,34 @@ fn set_cpu_performance(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn configure_file_limits(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+fn configure_file_limits(client: &mut SshClient) -> Result<(), DeploymentError> {
     // Create systemd directory if it doesn't exist
     client.execute_command("sudo mkdir -p /etc/systemd/system.conf.d")?;
-    
+
     // Add file descriptor limits to systemd
     let limits_content = "[Manager]\nDefaultLimitNOFILE=1000000\n";
     client.execute_command(&format!(
         "echo '{}' | sudo tee /etc/systemd/system.conf.d/10-solana-limits.conf",
         limits_content
     ))?;
-    
+
     // Also add to specific service settings
     let service_limits = "[Service]\nLimitNOFILE=1000000\n";
     client.execute_command(&format!(
         "echo '{}' | sudo tee /etc/systemd/system/solana-validator.service.d/limits.conf",
         service_limits
     ))?;
-    
+
     // Reload systemd
     client.execute_command("sudo systemctl daemon-reload")?;
-    
+
     // Update system limits in /etc/security/limits.conf
     let limits_entry = "* soft nofile 1000000\n* hard nofile 1000000";
     client.execute_command(&format!(
         "grep -q 'nofile 1000000' /etc/security/limits.conf || echo '{}' | sudo tee -a /etc/security/limits.conf",
         limits_entry
     ))?;
-    
+
     Ok(())
 }
 
@@ -172,28 +163,25 @@ fn configure_file_limits(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-pub fn configure_firewall(
-    client: &mut SshClient,
-    is_rpc: bool,
-) -> Result<(), DeploymentError> {
+pub fn configure_firewall(client: &mut SshClient, is_rpc: bool) -> Result<(), DeploymentError> {
     // Install UFW if not already installed
     client.execute_command("sudo apt-get update && sudo apt-get install -y ufw")?;
-    
+
     // Allow SSH first to prevent lockout
     client.execute_command("sudo ufw allow OpenSSH")?;
-    
+
     // Allow gossip ports
     client.execute_command("sudo ufw allow 8000:8020/tcp")?;
     client.execute_command("sudo ufw allow 8000:8020/udp")?;
-    
+
     // If RPC node, allow RPC port
     if is_rpc {
         client.execute_command("sudo ufw allow 8899/tcp")?;
     }
-    
+
     // Enable firewall
     client.execute_command("echo 'y' | sudo ufw enable")?;
-    
+
     Ok(())
 }
 
@@ -204,9 +192,7 @@ pub fn configure_firewall(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-pub fn setup_log_rotation(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+pub fn setup_log_rotation(client: &mut SshClient) -> Result<(), DeploymentError> {
     let logrotate_content = r#"/home/$(whoami)/solana-validator.log {
     rotate 7
     daily
@@ -221,9 +207,9 @@ pub fn setup_log_rotation(
         "echo '{}' | sudo tee /etc/logrotate.d/solana",
         logrotate_content
     ))?;
-    
+
     // Restart logrotate service
     client.execute_command("sudo systemctl restart logrotate.service")?;
-    
+
     Ok(())
 }
