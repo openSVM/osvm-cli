@@ -33,8 +33,6 @@ pub fn validate_system_requirements(
     Ok(())
 }
 
-
-
 /// Get required resources based on SVM and node type
 ///
 /// # Arguments
@@ -133,9 +131,9 @@ pub fn validate_disk_space(
         .get("disk_available")
         .and_then(|s| {
             // Parse disk space - handle different units (G, T)
-            if s.ends_with('G') {
+            if s.ends_with("G") {
                 s[..s.len() - 1].parse::<f64>().ok().map(|v| v as u16)
-            } else if s.ends_with('T') {
+            } else if s.ends_with("T") {
                 s[..s.len() - 1]
                     .parse::<f64>()
                     .ok()
