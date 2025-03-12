@@ -2,81 +2,73 @@ name: Benchmarks
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 0 * * 0'  # Run weekly on Sundays
-
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
+    branches:
+      - main
 
 jobs:
-  benchmarks:
-    name: Run Benchmarks
+  benchmark:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
+    - name: Set environment variables
+      run: |
+        export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+        export LD_LIBRARY_PATH=/usr/local/lib
+
+    - name: Run benchmarks
+      run: |
+        export RUST_BACKTRACE=full
+        cargo bench
       
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Install cargo-criterion
-        run: cargo install cargo-criterion
-        working-directory: .
-      
-      - name: Run benchmarks
-        run: cargo criterion
-        working-directory: .
-      
-      - name: Create benchmark results directory
-        run: mkdir -p target/criterion
-        working-directory: .
+    - name: Create benchmark results directory
+      run: mkdir -p target/criterion
+      working-directory: .
         
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results
-          path: target/criterion
-          if-no-files-found: warn
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: target/criterion
+        if-no-files-found: warn
       
-      - name: Generate benchmark report
-        run: |
-          mkdir -p benchmark-report
-          cp -r target/criterion/* benchmark-report/ || true
-          echo "# Benchmark Results" > benchmark-report/README.md
-          echo "Generated on $(date)" >> benchmark-report/README.md
-          echo "## Summary" >> benchmark-report/README.md
-          find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound }' >> benchmark-report/README.md || echo "No benchmark results found" >> benchmark-report/README.md
+    - name: Generate benchmark report
+      run: |
+        mkdir -p benchmark-report
+        cp -r target/criterion/* benchmark-report/ || true
+        echo "# Benchmark Results" > benchmark-report/README.md
+        echo "Generated on $(date)" >> benchmark-report/README.md
+        echo "## Summary" >> benchmark-report/README.md
+        find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound }' >> benchmark-report/README.md || echo "No benchmark results found" >> benchmark-report/README.md
         working-directory: .
       
-      - name: Upload benchmark report
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-report
-          path: benchmark-report
-          if-no-files-found: warn
+    - name: Upload benchmark report
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-report
+        path: benchmark-report
+        if-no-files-found: warn
       
-      - name: Compare with previous benchmarks
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch origin ${{ github.base_ref }}
-          git checkout FETCH_HEAD
-          cargo criterion --baseline main
-          git checkout ${{ github.sha }}
-          cargo criterion --baseline main
+    - name: Compare with previous benchmarks
+      if: github.event_name == 'pull_request'
+      run: |
+        git fetch origin ${{ github.base_ref }}
+        git checkout FETCH_HEAD
+        cargo criterion --baseline main
+        git checkout ${{ github.sha }}
+        cargo criterion --baseline main
         working-directory: .
