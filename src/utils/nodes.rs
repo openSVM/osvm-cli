@@ -474,7 +474,14 @@ impl std::fmt::Debug for DeployNodeConfig {
             .field("port", &self.port)
             .field("auth_method", &self.auth_method)
             .field("install_dir", &self.install_dir)
-            .field("progress_callback", &if self.progress_callback.is_some() { "Some(ProgressCallback)" } else { "None" })
+            .field(
+                "progress_callback",
+                &if self.progress_callback.is_some() {
+                    "Some(ProgressCallback)"
+                } else {
+                    "None"
+                },
+            )
             .finish()
     }
 }
@@ -613,11 +620,19 @@ pub async fn deploy_node(
     };
 
     // Deploy the node
-    deploy_svm_node(server_config.clone(), deployment_config, config.progress_callback).await?;
+    deploy_svm_node(
+        server_config.clone(),
+        deployment_config,
+        config.progress_callback,
+    )
+    .await?;
 
     // Create node information
     let node_info = NodeInfo {
-        id: format!("{}-{}-{}-{}", config.svm_type, config.node_type, config.network, config.host),
+        id: format!(
+            "{}-{}-{}-{}",
+            config.svm_type, config.node_type, config.network, config.host
+        ),
         system_metrics: None,
         svm_type: config.svm_type.clone(),
         node_type: config.node_type.clone(),

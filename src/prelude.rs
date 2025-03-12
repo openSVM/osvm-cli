@@ -17,7 +17,7 @@ pub use crate::utils::examples;
 pub use crate::utils::color;
 
 /// Type alias for progress callback functions
-/// 
+///
 /// This type is used throughout the codebase for functions that report progress
 /// with a percentage (0-100) and a status message.
 pub type ProgressCallback = Box<dyn Fn(u8, &str) + Send>;
