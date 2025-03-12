@@ -9,11 +9,7 @@ use {
     },
     solana_client::rpc_client::RpcClient,
     solana_remote_wallet::remote_wallet::RemoteWalletManager,
-    solana_sdk::{
-        commitment_config::CommitmentConfig,
-        native_token::Sol,
-        signature::Signer,
-    },
+    solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
     std::{env, process::exit, sync::Arc},
 };
 pub mod clparse;
@@ -739,7 +735,7 @@ mod test {
         };
         let bout = faux.try_to_vec().unwrap();
         let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
-        
+
         // Assert that the deserialized data matches the original
         assert_eq!(faux, in_faux);
     }
