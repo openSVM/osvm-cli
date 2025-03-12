@@ -4,7 +4,6 @@
 mod tests {
     use {
         crate::utils::ssh_deploy::{
-            errors::DeploymentError,
             services::{create_binary_service_content, create_docker_service_content},
             types::{AuthMethod, DeploymentConfig, NetworkType, ServerConfig},
             validators::{
