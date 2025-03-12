@@ -44,7 +44,7 @@ pub fn deploy_node(
 pub async fn deploy_svm_node(
     server_config: ServerConfig,
     deployment_config: DeploymentConfig,
-    progress_callback: Option<Box<dyn Fn(u8, &str) + Send>>,
+    progress_callback: Option<crate::prelude::ProgressCallback>,
 ) -> Result<(), Box<dyn Error>> {
     // Create SSH client and connect
     let mut client = SshClient::new(server_config.clone())?;

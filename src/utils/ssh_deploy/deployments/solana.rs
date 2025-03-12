@@ -28,7 +28,7 @@ pub async fn deploy_solana(
     client: &mut SshClient,
     server_config: &ServerConfig,
     deployment_config: &DeploymentConfig,
-    progress_callback: Option<&Box<dyn Fn(u8, &str) + Send>>,
+    progress_callback: Option<&crate::prelude::ProgressCallback>,
 ) -> Result<(), DeploymentError> {
     // Set up disk storage if disk configuration is provided
     if let Some(disk_config) = &deployment_config.disk_config {

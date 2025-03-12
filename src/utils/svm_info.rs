@@ -700,7 +700,7 @@ pub fn display_svm_list(svms: &HashMap<String, SvmInfo>) {
         "------------------------------------------------------------------------".bright_black()
     );
 
-    for (_, info) in svms {
+    for info in svms.values() {
         let install_status = match (info.can_install_validator, info.can_install_rpc) {
             (true, true) => "Validator, RPC".green(),
             (true, false) => "Validator".green(),

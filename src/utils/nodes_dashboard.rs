@@ -142,8 +142,8 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
 
     // Header
     let current_time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    html.push_str(&format!("<div class=\"header\">\n"));
-    html.push_str(&format!("    <h1>OSVM Node Monitoring Dashboard</h1>\n"));
+    html.push_str("<div class=\"header\">\n");
+    html.push_str("    <h1>OSVM Node Monitoring Dashboard</h1>\n");
     html.push_str(&format!(
         "    <div class=\"last-update\">Last updated: {}</div>\n",
         current_time
@@ -151,16 +151,14 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
 
     // Add verbosity indicator if debug level
     if verbosity >= 3 {
-        html.push_str(&format!(
-            "    <div style=\"margin-left: 20px; color: #888;\">\n"
-        ));
+        html.push_str("    <div style=\"margin-left: 20px; color: #888;\">\n");
         html.push_str(&format!(
             "        <small>Debug mode: Verbosity level {}</small>\n",
             verbosity
         ));
-        html.push_str(&format!("    </div>\n"));
+        html.push_str("    </div>\n");
     }
-    html.push_str(&format!("</div>\n"));
+    html.push_str("</div>\n");
 
     // Summary statistics
     let mut running = 0;
@@ -182,63 +180,45 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
     html.push_str("        <h2>Node Status Summary</h2>\n");
     html.push_str("        <div class=\"stat-grid\">\n");
 
-    html.push_str(&format!("            <div class=\"stat-box\">\n"));
+    html.push_str("            <div class=\"stat-box\">\n");
     html.push_str(&format!(
         "                <div class=\"stat-value\">{}</div>\n",
         nodes.len()
     ));
-    html.push_str(&format!(
-        "                <div class=\"stat-label\">Total Nodes</div>\n"
-    ));
-    html.push_str(&format!("            </div>\n"));
+    html.push_str("                <div class=\"stat-label\">Total Nodes</div>\n");
+    html.push_str("            </div>\n");
 
-    html.push_str(&format!(
-        "            <div class=\"stat-box\" style=\"background-color: #e6f4ea;\">\n"
-    ));
+    html.push_str("            <div class=\"stat-box\" style=\"background-color: #e6f4ea;\">\n");
     html.push_str(&format!(
         "                <div class=\"stat-value\" style=\"color: #34a853;\">{}</div>\n",
         running
     ));
-    html.push_str(&format!(
-        "                <div class=\"stat-label\">Running</div>\n"
-    ));
-    html.push_str(&format!("            </div>\n"));
+    html.push_str("                <div class=\"stat-label\">Running</div>\n");
+    html.push_str("            </div>\n");
 
-    html.push_str(&format!(
-        "            <div class=\"stat-box\" style=\"background-color: #fef7e0;\">\n"
-    ));
+    html.push_str("            <div class=\"stat-box\" style=\"background-color: #fef7e0;\">\n");
     html.push_str(&format!(
         "                <div class=\"stat-value\" style=\"color: #fbbc05;\">{}</div>\n",
         stopped
     ));
-    html.push_str(&format!(
-        "                <div class=\"stat-label\">Stopped</div>\n"
-    ));
-    html.push_str(&format!("            </div>\n"));
+    html.push_str("                <div class=\"stat-label\">Stopped</div>\n");
+    html.push_str("            </div>\n");
 
-    html.push_str(&format!(
-        "            <div class=\"stat-box\" style=\"background-color: #fce8e6;\">\n"
-    ));
+    html.push_str("            <div class=\"stat-box\" style=\"background-color: #fce8e6;\">\n");
     html.push_str(&format!(
         "                <div class=\"stat-value\" style=\"color: #ea4335;\">{}</div>\n",
         error
     ));
-    html.push_str(&format!(
-        "                <div class=\"stat-label\">Error</div>\n"
-    ));
-    html.push_str(&format!("            </div>\n"));
+    html.push_str("                <div class=\"stat-label\">Error</div>\n");
+    html.push_str("            </div>\n");
 
-    html.push_str(&format!(
-        "            <div class=\"stat-box\" style=\"background-color: #f1f3f4;\">\n"
-    ));
+    html.push_str("            <div class=\"stat-box\" style=\"background-color: #f1f3f4;\">\n");
     html.push_str(&format!(
         "                <div class=\"stat-value\" style=\"color: #9aa0a6;\">{}</div>\n",
         unknown
     ));
-    html.push_str(&format!(
-        "                <div class=\"stat-label\">Unknown</div>\n"
-    ));
-    html.push_str(&format!("            </div>\n"));
+    html.push_str("                <div class=\"stat-label\">Unknown</div>\n");
+    html.push_str("            </div>\n");
     html.push_str("        </div>\n");
     html.push_str("    </div>\n");
 
@@ -263,14 +243,14 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
 
         for (svm_type, count) in svm_counts {
             let percentage = (count as f64 / nodes.len() as f64) * 100.0;
-            html.push_str(&format!("                <tr>\n"));
+            html.push_str("                <tr>\n");
             html.push_str(&format!("                    <td>{}</td>\n", svm_type));
             html.push_str(&format!("                    <td>{}</td>\n", count));
             html.push_str(&format!(
                 "                    <td>{:.1}%</td>\n",
                 percentage
             ));
-            html.push_str(&format!("                </tr>\n"));
+            html.push_str("                </tr>\n");
         }
 
         html.push_str("            </tbody>\n");
@@ -322,7 +302,7 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
             NodeStatus::Unknown => "? Unknown",
         };
 
-        html.push_str(&format!("            <tr>\n"));
+        html.push_str("            <tr>\n");
         html.push_str(&format!("                <td>{}</td>\n", node.id));
         html.push_str(&format!("                <td>{}</td>\n", node.name));
         html.push_str(&format!("                <td>{}</td>\n", node.svm_type));
@@ -346,7 +326,7 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
             "                <td class=\"{}\">{}</td>\n",
             status_class, status_text
         ));
-        html.push_str(&format!("                <td class=\"actions\">\n"));
+        html.push_str("                <td class=\"actions\">\n");
 
         // Add action buttons based on status
         match node.status {
@@ -402,10 +382,7 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
         _ => {
             html.push_str("    console.log('Dashboard loaded in debug mode');\n");
             html.push_str("    console.log('Nodes:', ");
-            html.push_str(&format!(
-                "{}); // This would normally show node details\n",
-                nodes.len()
-            ));
+            html.push_str(&format!("{}); // This would normally show node details\n", nodes.len()));
         }
     }
 
