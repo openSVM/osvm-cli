@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }),
             #[cfg(not(feature = "remote-wallet"))]
             default_signer: default_signer
-                .signer_from_path(matches, &None)
+                .signer_from_path(matches, &mut None)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);

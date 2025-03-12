@@ -26,7 +26,7 @@ pub fn create_systemd_service(
     temp_file.write_all(service_content.as_bytes())?;
 
     // Upload and install the service
-    client.upload_file(&temp_path, &format!("/tmp/{}.service", service_name))?;
+    client.upload_file(&temp_path, format!("/tmp/{}.service", service_name))?;
     client.execute_command(&format!(
         "sudo mv /tmp/{}.service /etc/systemd/system/{}.service",
         service_name, service_name

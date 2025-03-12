@@ -206,8 +206,8 @@ impl DashboardManager {
             }
             2 => {
                 println!(
-                    "Monitoring {} nodes with refresh rate of {} seconds",
-                    "[node_count]", 5
+                    "Monitoring [node_count] nodes with refresh rate of {} seconds",
+                    5
                 );
                 Ok(())
             }

@@ -376,7 +376,7 @@ impl SshClient {
     ) -> Result<(), DeploymentError> {
         // Get disk information
         let disk_info = self.execute_command("df -h / | tail -1 | awk '{print $2,$4}'")?;
-        let disk_parts: Vec<&str> = disk_info.trim().split_whitespace().collect();
+        let disk_parts: Vec<&str> = disk_info.split_whitespace().collect();
 
         if disk_parts.len() >= 2 {
             info.insert("disk_total".to_string(), disk_parts[0].to_string());
