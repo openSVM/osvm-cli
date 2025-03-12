@@ -8,10 +8,12 @@ use {
         keypair::DefaultSigner,
     },
     solana_client::rpc_client::RpcClient,
-    solana_remote_wallet::remote_wallet::RemoteWalletManager,
     solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
     std::{env, process::exit, sync::Arc},
 };
+
+#[cfg(feature = "remote-wallet")]
+use solana_remote_wallet::remote_wallet::RemoteWalletManager;
 pub mod clparse;
 pub mod prelude;
 pub mod utils;
@@ -29,7 +31,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
     let (sub_command, sub_matches) = app_matches.subcommand();
     let matches = sub_matches.unwrap();
+
+    #[cfg(feature = "remote-wallet")]
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
+
+    #[cfg(not(feature = "remote-wallet"))]
+    let wallet_manager = None;
 
     // Check if colors should be disabled (via flag or environment variable)
     let no_color = matches.is_present("no_color") || env::var("NO_COLOR").is_ok();
@@ -60,8 +67,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or(&cli_config.json_rpc_url)
                     .to_string(),
             ),
+            #[cfg(feature = "remote-wallet")]
             default_signer: default_signer
                 .signer_from_path(matches, &mut wallet_manager)
+                .unwrap_or_else(|err| {
+                    eprintln!("error: {}", err);
+                    exit(1);
+                }),
+            #[cfg(not(feature = "remote-wallet"))]
+            default_signer: default_signer
+                .signer_from_path(matches, &None)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);
