@@ -17,17 +17,17 @@ jobs:
     name: Run Benchmarks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           toolchain: stable
           override: true
       
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -36,22 +36,19 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Install cargo-criterion
-        uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-criterion
-          version: latest
-          use-tool-cache: true
+        run: cargo install cargo-criterion
+        working-directory: .
       
       - name: Run benchmarks
-        uses: actions-rs/cargo@v1
-        with:
-          command: criterion
+        run: cargo criterion
+        working-directory: .
       
       - name: Create benchmark results directory
         run: mkdir -p target/criterion
+        working-directory: .
         
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
           path: target/criterion
@@ -65,9 +62,10 @@ jobs:
           echo "Generated on $(date)" >> benchmark-report/README.md
           echo "## Summary" >> benchmark-report/README.md
           find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound }' >> benchmark-report/README.md || echo "No benchmark results found" >> benchmark-report/README.md
+        working-directory: .
       
       - name: Upload benchmark report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: benchmark-report
           path: benchmark-report
@@ -81,3 +79,4 @@ jobs:
           cargo criterion --baseline main
           git checkout ${{ github.sha }}
           cargo criterion --baseline main
+        working-directory: .

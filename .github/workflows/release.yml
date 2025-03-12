@@ -14,23 +14,21 @@ jobs:
     name: Build Release Binaries
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           toolchain: stable
           override: true
       
       - name: Build release binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
+        run: cargo build --release
+        working-directory: .
       
       - name: Upload binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: osvm-binary
           path: target/release/osvm
@@ -40,10 +38,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Download binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: osvm-binary
           path: ./
@@ -67,10 +65,10 @@ jobs:
     needs: create-github-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Download binary
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: osvm-binary
           path: ./
@@ -94,7 +92,7 @@ jobs:
           dpkg-buildpackage -us -uc
       
       - name: Upload Debian package
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: osvm-deb-package
           path: ../osvm_*.deb
@@ -112,7 +110,7 @@ jobs:
     needs: create-github-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@master
@@ -144,7 +142,7 @@ jobs:
           EOF
       
       - name: Upload Homebrew formula
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: osvm-homebrew-formula
           path: ./osvm.rb
@@ -161,27 +159,25 @@ jobs:
     needs: create-github-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           toolchain: stable
           override: true
       
       - name: Generate documentation
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --no-deps --document-private-items
+        run: cargo doc --no-deps --document-private-items
+        working-directory: .
       
       - name: Create index.html
         run: |
           echo '<meta http-equiv="refresh" content="0; url=osvm/index.html">' > target/doc/index.html
       
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./target/doc

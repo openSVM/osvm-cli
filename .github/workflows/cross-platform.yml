@@ -18,17 +18,17 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           toolchain: stable
           override: true
       
       - name: Cache dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
@@ -37,19 +37,14 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
+        run: cargo build
+        working-directory: .
       
       - name: Run unit tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --lib --bins
+        run: cargo test --lib --bins
+        working-directory: .
       
       - name: Run e2e tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --test "*"
+        run: cargo test --test "*"
+        working-directory: .
         continue-on-error: true
