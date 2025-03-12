@@ -1,4 +1,4 @@
-//! End-to-end tests for SVM-related commands
+#![End-to-end tests for SVM-related commands]
 
 use crate::tests::e2e::common::{run_osvm_command, run_osvm_command_string, output_contains};
 

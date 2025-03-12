@@ -1,5 +1,4 @@
-//! @brief Command line setup and parse
-
+#![allow(unused_imports)]
 use {
     clap::{
         crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand,
@@ -88,7 +87,8 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                 .possible_values(&["mainnet", "testnet", "devnet"])
                 .default_value("mainnet")
                 .help("Network to deploy on"),
-        )        .subcommand(
+        )
+        .subcommand(
             SubCommand::with_name("examples")
                 .about("Show usage examples for OSVM CLI commands")
                 .arg(
@@ -500,5 +500,6 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                                 .help("Enable transaction history (increases storage requirements)")
                         )
                 )
+        )
         .get_matches()
 }
