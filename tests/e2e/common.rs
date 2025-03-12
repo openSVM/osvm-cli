@@ -1,8 +1,7 @@
 //! Common utilities for e2e tests
 
 use assert_cmd::prelude::*;
-use mockito::Server;
-use predicates::prelude::*;
+use mockito::ServerGuard;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -57,7 +56,7 @@ pub fn create_mock_config(dir: &TempDir) -> PathBuf {
 
 /// Mock server for testing SSH deployment
 pub struct MockServer {
-    pub server: Server,
+    pub server: mockito::ServerGuard,
 }
 
 impl MockServer {
@@ -74,7 +73,7 @@ impl MockServer {
     }
 
     /// Mock an SVM list endpoint
-    pub fn mock_svm_list(&self) -> mockito::Mock {
+    pub fn mock_svm_list(&mut self) -> mockito::Mock {
         self.server.mock("GET", "/api/svms")
             .with_status(200)
             .with_header("content-type", "application/json")
@@ -83,8 +82,8 @@ impl MockServer {
     }
 
     /// Mock an SVM get endpoint
-    pub fn mock_svm_get(&self, svm_name: &str) -> mockito::Mock {
-        self.server.mock("GET", &format!("/api/svms/{}", svm_name))
+    pub fn mock_svm_get(&mut self, svm_name: &str) -> mockito::Mock {
+        self.server.mock("GET", format!("/api/svms/{}", svm_name).as_str())
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(format!(r#"{{"name":"{}","display_name":"{}","token_symbol":"TEST","token_price_usd":1.0}}"#, svm_name, svm_name.to_uppercase()))
@@ -92,9 +91,9 @@ impl MockServer {
     }
 
     /// Mock an SVM get endpoint with 404 response
-    pub fn mock_svm_get_not_found(&self, svm_name: &str) -> mockito::Mock {
+    pub fn mock_svm_get_not_found(&mut self, svm_name: &str) -> mockito::Mock {
         self.server
-            .mock("GET", &format!("/api/svms/{}", svm_name))
+            .mock("GET", format!("/api/svms/{}", svm_name).as_str())
             .with_status(404)
             .with_header("content-type", "application/json")
             .with_body(format!(r#"{{"error":"SVM not found: {}"}}"#, svm_name))

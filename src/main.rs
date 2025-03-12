@@ -8,27 +8,22 @@ use {
         keypair::DefaultSigner,
     },
     solana_client::rpc_client::RpcClient,
-    solana_remote_wallet::remote_wallet::RemoteWalletManager,
-    solana_sdk::{
-        commitment_config::CommitmentConfig,
-        instruction::AccountMeta,
-        native_token::Sol,
-        signature::{Keypair, Signer},
-    },
-    std::{env, process::exit, sync::Arc},
+    solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
+    std::{env, process::exit},
 };
+
+#[cfg(feature = "remote-wallet")]
+use solana_remote_wallet::remote_wallet::RemoteWalletManager;
 pub mod clparse;
 pub mod prelude;
 pub mod utils;
-
-/// Space allocated for account state
-const ACCOUNT_STATE_SPACE: usize = 1024;
 
 struct Config {
     commitment_config: CommitmentConfig,
     default_signer: Box<dyn Signer>,
     json_rpc_url: String,
     verbose: u8, // 0=normal, 1=verbose (-v), 2=very verbose (-vv), 3=debug (-vvv)
+    #[allow(dead_code)]
     no_color: bool,
 }
 
@@ -37,7 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
     let (sub_command, sub_matches) = app_matches.subcommand();
     let matches = sub_matches.unwrap();
+
+    #[cfg(feature = "remote-wallet")]
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
+
+    #[cfg(not(feature = "remote-wallet"))]
+    let mut wallet_manager = None;
 
     // Check if colors should be disabled (via flag or environment variable)
     let no_color = matches.is_present("no_color") || env::var("NO_COLOR").is_ok();
@@ -54,9 +54,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let default_signer = DefaultSigner::new(
-            "keypair".to_string(),
+            "keypair",
             matches
-                .value_of(&"keypair")
+                .value_of("keypair")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| cli_config.keypair_path.clone()),
         );
@@ -65,9 +65,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             json_rpc_url: normalize_to_url_if_moniker(
                 matches
                     .value_of("json_rpc_url")
-                    .unwrap_or(&cli_config.json_rpc_url)
-                    .to_string(),
+                    .unwrap_or(&cli_config.json_rpc_url),
             ),
+            #[cfg(feature = "remote-wallet")]
+            default_signer: default_signer
+                .signer_from_path(matches, &mut wallet_manager)
+                .unwrap_or_else(|err| {
+                    eprintln!("error: {}", err);
+                    exit(1);
+                }),
+            #[cfg(not(feature = "remote-wallet"))]
             default_signer: default_signer
                 .signer_from_path(matches, &mut wallet_manager)
                 .unwrap_or_else(|err| {
@@ -725,22 +732,6 @@ mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
     use solana_sdk::pubkey::Pubkey;
 
-    use {super::*, solana_test_validator::*};
-
-    // Tests commented out as they depend on removed functions
-    /*
-    #[test]
-    fn test_ping() {
-        let (test_validator, payer) = TestValidatorGenesis::default().start();
-        let rpc_client = test_validator.get_rpc_client();
-
-        assert!(matches!(
-            ping_instruction(&rpc_client, &payer, CommitmentConfig::confirmed()),
-            Ok(_)
-        ));
-    }
-    */
-
     #[test]
     fn test_borsh() {
         #[repr(C)]
@@ -755,9 +746,13 @@ mod test {
             update_authority: Some(Pubkey::default()),
             primary_sale_happened: Some(true),
         };
-        let bout = faux.try_to_vec().unwrap();
-        println!("{:?}", bout);
-        let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
-        println!("{:?}", in_faux);
+        // With borsh 1.5.5, we need to use BorshSerialize in a different way
+        let mut bout = Vec::new();
+        faux.serialize(&mut bout).unwrap();
+        // With borsh 1.5.5, use the BorshDeserialize trait method
+        let in_faux = UpdateMetadataAccountArgs::deserialize(&mut &bout[..]).unwrap();
+
+        // Assert that the deserialized data matches the original
+        assert_eq!(faux, in_faux);
     }
 }

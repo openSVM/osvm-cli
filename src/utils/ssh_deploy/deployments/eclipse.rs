@@ -24,7 +24,7 @@ pub async fn deploy_eclipse(
     client: &mut SshClient,
     server_config: &ServerConfig,
     deployment_config: &DeploymentConfig,
-    progress_callback: Option<&Box<dyn Fn(u8, &str) + Send>>,
+    progress_callback: Option<&crate::prelude::ProgressCallback>,
 ) -> Result<(), DeploymentError> {
     // Clone Eclipse repository
     if let Some(callback) = progress_callback {

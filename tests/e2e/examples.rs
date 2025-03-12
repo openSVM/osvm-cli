@@ -1,9 +1,10 @@
 //! Example tests to demonstrate how to write e2e tests
 
-use crate::tests::e2e::common::{
+use crate::e2e::common::{
     create_mock_config, create_temp_dir, output_contains, run_osvm_command,
     run_osvm_command_string, MockServer,
 };
+use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use serial_test::serial;
 
@@ -40,7 +41,7 @@ fn example_test_with_assert_cmd() {
 #[serial]
 fn example_test_with_mock_server() {
     // Create a mock server
-    let mock_server = MockServer::new();
+    let mut mock_server = MockServer::new();
 
     // Set up a mock endpoint
     let _mock = mock_server.mock_svm_list();

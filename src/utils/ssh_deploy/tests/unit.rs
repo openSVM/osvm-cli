@@ -4,7 +4,6 @@
 mod tests {
     use {
         crate::utils::ssh_deploy::{
-            errors::DeploymentError,
             services::{create_binary_service_content, create_docker_service_content},
             types::{AuthMethod, DeploymentConfig, NetworkType, ServerConfig},
             validators::{
@@ -191,6 +190,11 @@ mod tests {
             node_name: "test-node".to_string(),
             rpc_url: None,
             additional_params: HashMap::new(),
+            version: None,
+            client_type: None,
+            hot_swap_enabled: false,
+            metrics_config: None,
+            disk_config: None,
         };
 
         // Test valid system requirements
