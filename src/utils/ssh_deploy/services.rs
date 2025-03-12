@@ -2,7 +2,7 @@
 
 use {
     crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError},
-    std::{fs, io::Write, path::Path, time::Duration},
+    std::{fs, io::Write, time::Duration},
     tokio::time,
 };
 
@@ -26,7 +26,7 @@ pub fn create_systemd_service(
     temp_file.write_all(service_content.as_bytes())?;
 
     // Upload and install the service
-    client.upload_file(&temp_path, &format!("/tmp/{}.service", service_name))?;
+    client.upload_file(&temp_path, format!("/tmp/{}.service", service_name))?;
     client.execute_command(&format!(
         "sudo mv /tmp/{}.service /etc/systemd/system/{}.service",
         service_name, service_name
@@ -107,7 +107,7 @@ pub async fn await_service_startup(
 /// # Returns
 /// * `String` - Service content
 pub fn create_docker_service_content(
-    service_name: &str,
+    _service_name: &str,
     working_dir: &str,
     description: &str,
 ) -> String {

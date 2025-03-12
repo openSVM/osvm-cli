@@ -80,7 +80,7 @@ fn format_and_mount_disk(
     }
 
     // Format the disk (with confirmation to avoid data loss)
-    let confirmation =
+    let _confirmation =
         client.execute_command(&format!("echo \"y\" | sudo mkfs -t ext4 {}", disk))?;
 
     // Mount the disk
@@ -88,7 +88,7 @@ fn format_and_mount_disk(
 
     // Add to fstab for persistence across reboots
     let fstab_entry = format!("{} {} ext4 defaults,noatime 0 2", disk, mount_point);
-    let fstab_check = client.execute_command(&format!(
+    let _fstab_check = client.execute_command(&format!(
         "grep -q '{}' /etc/fstab || echo '{}' | sudo tee -a /etc/fstab",
         disk, fstab_entry
     ))?;

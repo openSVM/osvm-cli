@@ -1,6 +1,12 @@
 //! End-to-end tests for SVM-related commands
 
-use crate::tests::e2e::common::{output_contains, run_osvm_command, run_osvm_command_string};
+use crate::e2e::common::{
+    create_mock_config, create_temp_dir, output_contains, run_osvm_command,
+    run_osvm_command_string, MockServer,
+};
+use assert_cmd::assert::OutputAssertExt;
+use predicates::prelude::*;
+use serial_test::serial;
 
 #[test]
 fn test_svm_list() {
@@ -39,14 +45,15 @@ fn test_svm_get_solana() {
 
 #[test]
 fn test_svm_get_invalid() {
-    let output = run_osvm_command(&["svm", "get", "invalid_svm"]);
+    // Use assert_cmd to run a command and make assertions about the output
+    let assert = run_osvm_command()
+        .args(&["svm", "get", "invalid_svm"])
+        .assert();
 
     // Verify the command fails with a non-zero exit code
-    assert!(!output.status.success());
-
-    // Verify the error message
-    let error = String::from_utf8_lossy(&output.stderr);
-    assert!(error.contains("SVM not found") || error.contains("Error:"));
+    assert
+        .failure()
+        .stderr(predicate::str::contains("SVM not found").or(predicate::str::contains("Error:")));
 }
 
 #[test]
@@ -79,7 +86,7 @@ fn test_svm_with_config_file() {
 #[serial]
 fn test_svm_with_url() {
     // Create a mock server
-    let mock_server = MockServer::new();
+    let mut mock_server = MockServer::new();
     let _mock = mock_server.mock_svm_list();
 
     // Run the command with a custom URL

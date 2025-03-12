@@ -403,26 +403,17 @@ pub fn list_all_nodes(
 
     // Apply SVM filter if provided
     if let Some(svm) = svm_filter {
-        nodes = nodes
-            .into_iter()
-            .filter(|node| node.svm_type == svm)
-            .collect();
+        nodes.retain(|node| node.svm_type == svm);
     }
 
     // Apply network filter if not "all"
     if network_filter != "all" {
-        nodes = nodes
-            .into_iter()
-            .filter(|node| node.network.to_string() == network_filter)
-            .collect();
+        nodes.retain(|node| node.network.to_string() == network_filter);
     }
 
     // Apply node type filter if not "all"
     if node_type_filter != "all" {
-        nodes = nodes
-            .into_iter()
-            .filter(|node| node.node_type == node_type_filter)
-            .collect();
+        nodes.retain(|node| node.node_type == node_type_filter);
     }
 
     // Apply status filter if not "all"
@@ -435,10 +426,7 @@ pub fn list_all_nodes(
             _ => NodeStatus::Running, // Default to running if invalid
         };
 
-        nodes = nodes
-            .into_iter()
-            .filter(|node| node.status == status)
-            .collect();
+        nodes.retain(|node| node.status == status);
     }
 
     // Sort nodes by SVM type by default
@@ -453,39 +441,140 @@ pub fn list_all_nodes(
     Ok(nodes)
 }
 
+/// Configuration for deploying a node
+pub struct DeployNodeConfig {
+    /// SVM type
+    pub svm_type: String,
+    /// Node type (validator or RPC)
+    pub node_type: String,
+    /// Network type
+    pub network: NetworkType,
+    /// Node name
+    pub name: String,
+    /// Host
+    pub host: String,
+    /// Port
+    pub port: u16,
+    /// Authentication method
+    pub auth_method: AuthMethod,
+    /// Installation directory
+    pub install_dir: String,
+    /// Progress callback function
+    pub progress_callback: Option<crate::prelude::ProgressCallback>,
+}
+
+impl std::fmt::Debug for DeployNodeConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DeployNodeConfig")
+            .field("svm_type", &self.svm_type)
+            .field("node_type", &self.node_type)
+            .field("network", &self.network)
+            .field("name", &self.name)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("auth_method", &self.auth_method)
+            .field("install_dir", &self.install_dir)
+            .field(
+                "progress_callback",
+                &if self.progress_callback.is_some() {
+                    "Some(ProgressCallback)"
+                } else {
+                    "None"
+                },
+            )
+            .finish()
+    }
+}
+
+impl Clone for DeployNodeConfig {
+    fn clone(&self) -> Self {
+        Self {
+            svm_type: self.svm_type.clone(),
+            node_type: self.node_type.clone(),
+            network: self.network,
+            name: self.name.clone(),
+            host: self.host.clone(),
+            port: self.port,
+            auth_method: self.auth_method.clone(),
+            install_dir: self.install_dir.clone(),
+            progress_callback: None, // Progress callback can't be cloned, so we set it to None
+        }
+    }
+}
+
+impl DeployNodeConfig {
+    /// Create a new deploy node configuration with minimal required parameters
+    pub fn new(svm_type: &str, node_type: &str, network: NetworkType) -> Self {
+        Self {
+            svm_type: svm_type.to_string(),
+            node_type: node_type.to_string(),
+            network,
+            name: format!("{}-{}-{}", svm_type, node_type, network),
+            host: "localhost".to_string(),
+            port: 22,
+            auth_method: AuthMethod::Password {
+                username: "root".to_string(),
+                password: "".to_string(),
+            },
+            install_dir: "/opt/osvm".to_string(),
+            progress_callback: None,
+        }
+    }
+
+    /// Set node name
+    pub fn with_name(mut self, name: &str) -> Self {
+        self.name = name.to_string();
+        self
+    }
+
+    /// Set host
+    pub fn with_host(mut self, host: &str) -> Self {
+        self.host = host.to_string();
+        self
+    }
+
+    /// Set port
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
+    /// Set authentication method
+    pub fn with_auth_method(mut self, auth_method: AuthMethod) -> Self {
+        self.auth_method = auth_method;
+        self
+    }
+
+    /// Set installation directory
+    pub fn with_install_dir(mut self, install_dir: &str) -> Self {
+        self.install_dir = install_dir.to_string();
+        self
+    }
+
+    /// Set progress callback
+    pub fn with_progress_callback(mut self, callback: crate::prelude::ProgressCallback) -> Self {
+        self.progress_callback = Some(callback);
+        self
+    }
+}
+
 /// Deploy a new node
 ///
 /// # Arguments
 /// * `client` - RPC client
-/// * `svm_type` - SVM type
-/// * `node_type` - Node type (validator or RPC)
-/// * `network` - Network type
-/// * `name` - Node name
-/// * `host` - Host
-/// * `port` - Port
-/// * `auth_method` - Authentication method
-/// * `install_dir` - Installation directory
-/// * `progress_callback` - Progress callback function
+/// * `config` - Deployment configuration
 ///
 /// # Returns
 /// * `Result<NodeInfo, Box<dyn Error>>` - Node information or error
 pub async fn deploy_node(
     client: &RpcClient,
-    svm_type: &str,
-    node_type: &str,
-    network: NetworkType,
-    name: &str,
-    host: &str,
-    port: u16,
-    auth_method: AuthMethod,
-    install_dir: &str,
-    progress_callback: Option<Box<dyn Fn(u8, &str) + Send>>,
+    config: DeployNodeConfig,
 ) -> Result<NodeInfo, Box<dyn Error>> {
     // Get SVM information
-    let svm_info = get_svm_info(client, svm_type, CommitmentConfig::confirmed())?;
+    let svm_info = get_svm_info(client, &config.svm_type, CommitmentConfig::confirmed())?;
 
     // Check if the SVM supports the requested node type
-    let can_install = match node_type {
+    let can_install = match config.node_type.as_str() {
         "validator" => svm_info.can_install_validator,
         "rpc" => svm_info.can_install_rpc,
         _ => false,
@@ -494,52 +583,65 @@ pub async fn deploy_node(
     if !can_install {
         return Err(Box::new(NodeError::InvalidConfig(format!(
             "SVM '{}' does not support installing a {} node",
-            svm_type, node_type
+            config.svm_type, config.node_type
         ))));
     }
 
     // Check if the network exists for this SVM
-    let network_name = network.to_string();
+    let network_name = config.network.to_string();
     if !svm_info.networks.contains_key(&network_name) {
         return Err(Box::new(NodeError::InvalidConfig(format!(
             "Network '{}' does not exist for SVM '{}'",
-            network_name, svm_type
+            network_name, config.svm_type
         ))));
     }
 
     // Create server configuration
     let server_config = ServerConfig {
-        host: host.to_string(),
-        port,
-        auth: auth_method,
-        install_dir: install_dir.to_string(),
+        host: config.host.clone(),
+        port: config.port,
+        auth: config.auth_method,
+        install_dir: config.install_dir.clone(),
     };
 
     // Create deployment configuration
     let deployment_config = DeploymentConfig {
-        svm_type: svm_type.to_string(),
-        node_type: node_type.to_string(),
-        network,
-        node_name: name.to_string(),
+        svm_type: config.svm_type.clone(),
+        node_type: config.node_type.clone(),
+        network: config.network,
+        node_name: config.name.clone(),
         rpc_url: None, // Will be set by the deployment process
         additional_params: HashMap::new(),
+        version: None,
+        client_type: None,
+        hot_swap_enabled: false,
+        metrics_config: None,
+        disk_config: None,
     };
 
     // Deploy the node
-    deploy_svm_node(server_config.clone(), deployment_config, progress_callback).await?;
+    deploy_svm_node(
+        server_config.clone(),
+        deployment_config,
+        config.progress_callback,
+    )
+    .await?;
 
     // Create node information
     let node_info = NodeInfo {
-        id: format!("{}-{}-{}-{}", svm_type, node_type, network, host),
+        id: format!(
+            "{}-{}-{}-{}",
+            config.svm_type, config.node_type, config.network, config.host
+        ),
         system_metrics: None,
-        svm_type: svm_type.to_string(),
-        node_type: node_type.to_string(),
-        network,
-        name: name.to_string(),
-        host: host.to_string(),
+        svm_type: config.svm_type.clone(),
+        node_type: config.node_type.clone(),
+        network: config.network,
+        name: config.name.clone(),
+        host: config.host.clone(),
         status: NodeStatus::Running,
-        rpc_url: if node_type == "rpc" {
-            Some(format!("http://{}:8899", host))
+        rpc_url: if config.node_type == "rpc" {
+            Some(format!("http://{}:8899", config.host))
         } else {
             None
         },
@@ -1186,7 +1288,7 @@ pub fn display_node_status(node_id: &str, status: &NodeStatus, verbosity: u8) {
         println!("{}", "--------------------".blue());
         println!(
             "  Status check performed at: {}",
-            chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string()
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
         );
     }
 }
@@ -1247,10 +1349,10 @@ impl SshClientExt for crate::utils::ssh_deploy::SshClient {
         let output = self.execute_command(command)?;
 
         // Process each line of the output
-        let mut continue_processing = true;
+        let mut _continue_processing = true;
         for line in output.lines() {
-            continue_processing = callback(line);
-            if !continue_processing {
+            _continue_processing = callback(line);
+            if !_continue_processing {
                 break;
             }
         }

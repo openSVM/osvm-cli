@@ -262,6 +262,11 @@ mod tests {
             node_name: "sonic-rpc".to_string(),
             rpc_url: None,
             additional_params: HashMap::new(),
+            version: None,
+            client_type: None,
+            hot_swap_enabled: false,
+            metrics_config: None,
+            disk_config: None,
         };
 
         // Deploy Sonic RPC node

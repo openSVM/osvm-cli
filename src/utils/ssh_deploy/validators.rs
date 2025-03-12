@@ -41,7 +41,7 @@ pub fn validate_system_requirements(
 ///
 /// # Returns
 /// * `Result<(u8, u16, u16), DeploymentError>` - Required CPU, memory, and disk
-fn get_required_resources(
+pub fn get_required_resources(
     svm_type: &str,
     node_type: &str,
 ) -> Result<(u8, u16, u16), DeploymentError> {
@@ -69,7 +69,7 @@ fn get_required_resources(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn validate_cpu_cores(
+pub fn validate_cpu_cores(
     system_info: &HashMap<String, String>,
     required_cpu: u8,
 ) -> Result<(), DeploymentError> {
@@ -96,7 +96,7 @@ fn validate_cpu_cores(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn validate_memory(
+pub fn validate_memory(
     system_info: &HashMap<String, String>,
     required_memory: u16,
 ) -> Result<(), DeploymentError> {
@@ -123,7 +123,7 @@ fn validate_memory(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn validate_disk_space(
+pub fn validate_disk_space(
     system_info: &HashMap<String, String>,
     required_disk: u16,
 ) -> Result<(), DeploymentError> {
@@ -131,9 +131,9 @@ fn validate_disk_space(
         .get("disk_available")
         .and_then(|s| {
             // Parse disk space - handle different units (G, T)
-            if s.ends_with('G') {
+            if s.ends_with("G") {
                 s[..s.len() - 1].parse::<f64>().ok().map(|v| v as u16)
-            } else if s.ends_with('T') {
+            } else if s.ends_with("T") {
                 s[..s.len() - 1]
                     .parse::<f64>()
                     .ok()
