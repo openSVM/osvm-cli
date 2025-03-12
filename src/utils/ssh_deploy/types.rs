@@ -132,4 +132,25 @@ pub struct DeploymentConfig {
     pub rpc_url: Option<String>,
     /// Additional config parameters
     pub additional_params: std::collections::HashMap<String, String>,
+    
+    // New fields for enhanced Solana validator configuration
+    /// Solana client version
+    pub version: Option<String>,
+    /// Solana client type (standard, jito, agave)
+    pub client_type: Option<String>,
+    /// Enable hot-swap capability
+    pub hot_swap_enabled: bool,
+    /// Metrics configuration
+    pub metrics_config: Option<String>,
+    /// Disk configuration for dedicated storage
+    pub disk_config: Option<DiskConfig>,
+}
+
+/// Disk configuration for Solana validator/RPC
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiskConfig {
+    /// Ledger disk device path (e.g., "/dev/nvme0n1")
+    pub ledger_disk: String,
+    /// Accounts disk device path (e.g., "/dev/nvme1n1")
+    pub accounts_disk: String,
 }

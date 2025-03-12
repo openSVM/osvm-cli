@@ -322,6 +322,177 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
+        ("solana", Some(solana_matches)) => {
+            let (solana_sub_command, solana_sub_matches) = solana_matches.subcommand();
+            match (solana_sub_command, solana_sub_matches) {
+                ("validator", Some(validator_matches)) => {
+                    // Deploy a Solana validator with enhanced features
+                    let connection_str = validator_matches.value_of("connection").unwrap();
+                    let network_str = validator_matches.value_of("network").unwrap_or("mainnet");
+                    let version = validator_matches.value_of("version").map(|s| s.to_string());
+                    let client_type = validator_matches.value_of("client-type").map(|s| s.to_string());
+                    let hot_swap_enabled = validator_matches.is_present("hot-swap");
+                    let metrics_config = validator_matches.value_of("metrics-config").map(|s| s.to_string());
+                    
+                    // Parse connection string
+                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            eprintln!("Error parsing SSH connection string: {}", e);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Parse network type
+                    let network = match network_str.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network_str);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Create disk configuration if both disk params are provided
+                    let disk_config = if validator_matches.is_present("ledger-disk") && validator_matches.is_present("accounts-disk") {
+                        Some(ssh_deploy::DiskConfig {
+                            ledger_disk: validator_matches.value_of("ledger-disk").unwrap().to_string(),
+                            accounts_disk: validator_matches.value_of("accounts-disk").unwrap().to_string(),
+                        })
+                    } else {
+                        None
+                    };
+                    
+                    // Create deployment config with enhanced features
+                    let deploy_config = ssh_deploy::DeploymentConfig {
+                        svm_type: "solana".to_string(),
+                        node_type: "validator".to_string(),
+                        network,
+                        node_name: format!("solana-validator-{}", network_str),
+                        rpc_url: None,
+                        additional_params: std::collections::HashMap::new(),
+                        version,
+                        client_type,
+                        hot_swap_enabled,
+                        metrics_config,
+                        disk_config,
+                    };
+
+                    println!("Deploying Solana validator node to {}...", connection_str);
+                    println!("Network: {}", network_str);
+                    if let Some(ver) = &deploy_config.version {
+                        println!("Version: {}", ver);
+                    }
+                    if let Some(client) = &deploy_config.client_type {
+                        println!("Client type: {}", client);
+                    }
+                    if deploy_config.hot_swap_enabled {
+                        println!("Hot-swap capability: Enabled");
+                    }
+                    if let Some(disks) = &deploy_config.disk_config {
+                        println!("Disk configuration:");
+                        println!("  Ledger disk: {}", disks.ledger_disk);
+                        println!("  Accounts disk: {}", disks.accounts_disk);
+                    }
+                    
+                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                        eprintln!("Deployment error: {}", e);
+                        exit(1);
+                    }
+                    
+                    println!("Solana validator node deployed successfully!");
+                },
+                ("rpc", Some(rpc_matches)) => {
+                    // Deploy a Solana RPC node with enhanced features
+                    let connection_str = rpc_matches.value_of("connection").unwrap();
+                    let network_str = rpc_matches.value_of("network").unwrap_or("mainnet");
+                    let version = rpc_matches.value_of("version").map(|s| s.to_string());
+                    let client_type = rpc_matches.value_of("client-type").map(|s| s.to_string());
+                    let enable_history = rpc_matches.is_present("enable-history");
+                    let metrics_config = rpc_matches.value_of("metrics-config").map(|s| s.to_string());
+                    
+                    // Parse connection string
+                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            eprintln!("Error parsing SSH connection string: {}", e);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Parse network type
+                    let network = match network_str.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network_str);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Create disk configuration if both disk params are provided
+                    let disk_config = if rpc_matches.is_present("ledger-disk") && rpc_matches.is_present("accounts-disk") {
+                        Some(ssh_deploy::DiskConfig {
+                            ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
+                            accounts_disk: rpc_matches.value_of("accounts-disk").unwrap().to_string(),
+                        })
+                    } else {
+                        None
+                    };
+                    
+                    // Create additional params for RPC-specific options
+                    let mut additional_params = std::collections::HashMap::new();
+                    if enable_history {
+                        additional_params.insert("enable_history".to_string(), "true".to_string());
+                    }
+                    
+                    // Create deployment config with enhanced features
+                    let deploy_config = ssh_deploy::DeploymentConfig {
+                        svm_type: "solana".to_string(),
+                        node_type: "rpc".to_string(),
+                        network,
+                        node_name: format!("solana-rpc-{}", network_str),
+                        rpc_url: None,
+                        additional_params,
+                        version,
+                        client_type,
+                        hot_swap_enabled: false, // Not needed for RPC nodes
+                        metrics_config,
+                        disk_config,
+                    };
+
+                    println!("Deploying Solana RPC node to {}...", connection_str);
+                    println!("Network: {}", network_str);
+                    if let Some(ver) = &deploy_config.version {
+                        println!("Version: {}", ver);
+                    }
+                    if let Some(client) = &deploy_config.client_type {
+                        println!("Client type: {}", client);
+                    }
+                    if enable_history {
+                        println!("Transaction history: Enabled");
+                    }
+                    if let Some(disks) = &deploy_config.disk_config {
+                        println!("Disk configuration:");
+                        println!("  Ledger disk: {}", disks.ledger_disk);
+                        println!("  Accounts disk: {}", disks.accounts_disk);
+                    }
+                    
+                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                        eprintln!("Deployment error: {}", e);
+                        exit(1);
+                    }
+                    
+                    println!("Solana RPC node deployed successfully!");
+                },
+                _ => {
+                    eprintln!("Unknown Solana command: {}", solana_sub_command);
+                    exit(1);
+                }
+            }
+        },
         ("rpc", Some(rpc_matches)) => {
             let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
             match (rpc_sub_command, rpc_sub_matches) {
@@ -358,6 +529,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         node_name: "sonic-rpc".to_string(),
                         rpc_url: None,
                         additional_params: std::collections::HashMap::new(),
+                        version: None,
+                        client_type: None,
+                        hot_swap_enabled: false,
+                        metrics_config: None,
+                        disk_config: None,
                     };
 
                     println!("Deploying Sonic RPC node to {}...", connection_str);
@@ -368,6 +544,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     
                     println!("Sonic RPC node deployed successfully!");
+                },
+                ("solana", Some(solana_matches)) => {
+                    // Use the enhanced Solana deployment via rpc subcommand
+                    let connection_str = solana_matches.value_of("connection").unwrap();
+                    let network_str = solana_matches.value_of("network").unwrap_or("mainnet");
+                    
+                    // Parse connection string
+                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                        Ok(conn) => conn,
+                        Err(e) => {
+                            eprintln!("Error parsing SSH connection string: {}", e);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Parse network type
+                    let network = match network_str.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network_str);
+                            exit(1);
+                        }
+                    };
+                    
+                    // Create deployment config
+                    let deploy_config = ssh_deploy::DeploymentConfig {
+                        svm_type: "solana".to_string(),
+                        node_type: "rpc".to_string(),
+                        network,
+                        node_name: format!("solana-rpc-{}", network_str),
+                        rpc_url: None,
+                        additional_params: std::collections::HashMap::new(),
+                        version: None,
+                        client_type: None,
+                        hot_swap_enabled: false,
+                        metrics_config: None,
+                        disk_config: None,
+                    };
+
+                    println!("Deploying Solana RPC node to {}...", connection_str);
+                    
+                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+                        eprintln!("Deployment error: {}", e);
+                        exit(1);
+                    }
+                    
+                    println!("Solana RPC node deployed successfully!");
                 },
                 _ => {
                     eprintln!("Unknown RPC type: {}", rpc_sub_command);
@@ -416,10 +641,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let deploy_config = ssh_deploy::DeploymentConfig {
                 svm_type: svm_types[0].clone(),
                 node_type: node_type.to_string(),
-                network: ssh_deploy::NetworkType::Mainnet,
+                network,
                 node_name: "default".to_string(),
                 rpc_url: None,
                 additional_params: std::collections::HashMap::new(),
+                version: None,
+                client_type: None,
+                hot_swap_enabled: false,
+                metrics_config: None,
+                disk_config: None,
             };
 
             if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {

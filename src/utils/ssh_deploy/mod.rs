@@ -10,6 +10,10 @@ pub use self::validators::*;
 pub use self::dependencies::*;
 pub use self::services::*;
 pub use self::deployments::*;
+pub use self::disk_management::*;
+pub use self::optimizations::*;
+pub use self::hot_swap::*;
+pub use self::monitoring::*;
 
 // Module declarations
 mod types;
@@ -20,6 +24,10 @@ mod validators;
 mod dependencies;
 mod services;
 mod deployments;
+mod disk_management;
+mod optimizations;
+mod hot_swap;
+mod monitoring;
 
 #[cfg(test)]
 mod tests;
