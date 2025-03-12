@@ -1,12 +1,13 @@
 //! s00n SVM deployment implementation
 
-use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-        types::{ServerConfig, DeploymentConfig, NetworkType},
-        services::{create_systemd_service, enable_and_start_service, await_service_startup, create_binary_service_content},
+use crate::utils::ssh_deploy::{
+    client::SshClient,
+    errors::DeploymentError,
+    services::{
+        await_service_startup, create_binary_service_content, create_systemd_service,
+        enable_and_start_service,
     },
+    types::{DeploymentConfig, NetworkType, ServerConfig},
 };
 
 /// Deploy s00n node
@@ -29,31 +30,31 @@ pub async fn deploy_s00n(
     if let Some(callback) = progress_callback {
         callback(40, "Cloning s00n repository");
     }
-    
+
     let s00n_dir = format!("{}/s00n", server_config.install_dir);
     clone_s00n_repository(client, &s00n_dir)?;
-    
+
     // Build s00n binary
     if let Some(callback) = progress_callback {
         callback(50, "Building s00n binary");
     }
-    
+
     build_s00n_binary(client, &s00n_dir)?;
-    
+
     // Create configuration
     if let Some(callback) = progress_callback {
         callback(70, "Creating configuration");
     }
-    
+
     create_s00n_configuration(client, &s00n_dir, deployment_config.network)?;
-    
+
     // Create systemd service
     if let Some(callback) = progress_callback {
         callback(80, "Creating systemd service");
     }
-    
+
     create_s00n_service(client, deployment_config, &s00n_dir).await?;
-    
+
     Ok(())
 }
 
@@ -65,14 +66,14 @@ pub async fn deploy_s00n(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn clone_s00n_repository(
-    client: &mut SshClient,
-    s00n_dir: &str,
-) -> Result<(), DeploymentError> {
+fn clone_s00n_repository(client: &mut SshClient, s00n_dir: &str) -> Result<(), DeploymentError> {
     if !client.directory_exists(s00n_dir)? {
-        client.execute_command(&format!("git clone https://github.com/s00n-protocol/s00n-svm.git {}", s00n_dir))?;
+        client.execute_command(&format!(
+            "git clone https://github.com/s00n-protocol/s00n-svm.git {}",
+            s00n_dir
+        ))?;
     }
-    
+
     Ok(())
 }
 
@@ -84,12 +85,9 @@ fn clone_s00n_repository(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn build_s00n_binary(
-    client: &mut SshClient,
-    s00n_dir: &str,
-) -> Result<(), DeploymentError> {
+fn build_s00n_binary(client: &mut SshClient, s00n_dir: &str) -> Result<(), DeploymentError> {
     client.execute_command(&format!("cd {} && cargo build --release", s00n_dir))?;
-    
+
     Ok(())
 }
 
@@ -109,19 +107,18 @@ fn create_s00n_configuration(
 ) -> Result<(), DeploymentError> {
     let config_dir = format!("{}/config", s00n_dir);
     client.create_directory(&config_dir)?;
-    
+
     let network_name = match network {
         NetworkType::Mainnet => "mainnet",
         NetworkType::Testnet => "testnet",
         NetworkType::Devnet => "devnet",
     };
-    
+
     client.execute_command(&format!(
         "cd {} && ./target/release/s00n-node setup --network {}",
-        s00n_dir,
-        network_name
+        s00n_dir, network_name
     ))?;
-    
+
     Ok(())
 }
 
@@ -139,14 +136,14 @@ async fn create_s00n_service(
     deployment_config: &DeploymentConfig,
     s00n_dir: &str,
 ) -> Result<(), DeploymentError> {
-    let service_name = format!("s00n-{}-{}", deployment_config.node_type, deployment_config.network);
-    
-    // Get service arguments
-    let args = get_s00n_service_args(
-        deployment_config,
-        s00n_dir,
+    let service_name = format!(
+        "s00n-{}-{}",
+        deployment_config.node_type, deployment_config.network
     );
-    
+
+    // Get service arguments
+    let args = get_s00n_service_args(deployment_config, s00n_dir);
+
     // Create service content
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let service_content = create_binary_service_content(
@@ -155,14 +152,14 @@ async fn create_s00n_service(
         s00n_dir,
         "s00n SVM Node",
     );
-    
+
     // Create and start the service
     create_systemd_service(client, &service_name, &service_content)?;
     enable_and_start_service(client, &service_name)?;
-    
+
     // Wait for the service to start
     await_service_startup(client, &service_name).await?;
-    
+
     Ok(())
 }
 
@@ -174,16 +171,13 @@ async fn create_s00n_service(
 ///
 /// # Returns
 /// * `Vec<String>` - Service arguments
-fn get_s00n_service_args(
-    deployment_config: &DeploymentConfig,
-    s00n_dir: &str,
-) -> Vec<String> {
+fn get_s00n_service_args(deployment_config: &DeploymentConfig, s00n_dir: &str) -> Vec<String> {
     let mut args = vec![
         "start".to_string(),
         format!("--config-path {}/config/node.yaml", s00n_dir),
         format!("--network {}", deployment_config.network),
     ];
-    
+
     if deployment_config.node_type == "validator" {
         args.push("--validator".to_string());
         args.push(format!("--stake-key {}/config/stake-key.json", s00n_dir));
@@ -191,6 +185,6 @@ fn get_s00n_service_args(
         args.push("--rpc-port 8899".to_string());
         args.push("--public-rpc".to_string());
     }
-    
+
     args
 }

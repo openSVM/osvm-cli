@@ -1,10 +1,7 @@
 //! Hot-swap capability for Solana validators
 
 use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-    },
+    crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError},
     std::path::Path,
 };
 
@@ -23,25 +20,36 @@ pub fn configure_hot_swap(
     // Create keypair directory
     let keypair_dir = format!("{}/keypairs", install_dir);
     client.execute_command(&format!("mkdir -p {}", keypair_dir))?;
-    
+
     // Generate staked keypair if it doesn't exist
     let staked_keypair_path = format!("{}/staked.json", keypair_dir);
     if !client.file_exists(&staked_keypair_path)? {
-        client.execute_command(&format!("solana-keygen new -o {} --no-passphrase", staked_keypair_path))?;
+        client.execute_command(&format!(
+            "solana-keygen new -o {} --no-passphrase",
+            staked_keypair_path
+        ))?;
     }
-    
+
     // Generate unstaked keypair if it doesn't exist
     let unstaked_keypair_path = format!("{}/unstaked.json", keypair_dir);
     if !client.file_exists(&unstaked_keypair_path)? {
-        client.execute_command(&format!("solana-keygen new -o {} --no-passphrase", unstaked_keypair_path))?;
+        client.execute_command(&format!(
+            "solana-keygen new -o {} --no-passphrase",
+            unstaked_keypair_path
+        ))?;
     }
-    
+
     // Create identity transition script
-    create_identity_transition_script(client, &keypair_dir, &staked_keypair_path, &unstaked_keypair_path)?;
-    
+    create_identity_transition_script(
+        client,
+        &keypair_dir,
+        &staked_keypair_path,
+        &unstaked_keypair_path,
+    )?;
+
     // Set up monitoring for automatic failover
     setup_failover_monitoring(client, &keypair_dir)?;
-    
+
     Ok((staked_keypair_path, unstaked_keypair_path))
 }
 
@@ -61,7 +69,8 @@ fn create_identity_transition_script(
     staked_keypair_path: &str,
     unstaked_keypair_path: &str,
 ) -> Result<(), DeploymentError> {
-    let script_content = format!(r#"#!/bin/bash
+    let script_content = format!(
+        r#"#!/bin/bash
 # Script for transitioning between validator identities
 # Based on the Identity Transition methodology by Pumpkin
 
@@ -101,7 +110,9 @@ esac
 # Verify switch was successful
 sleep 5
 sudo systemctl status $SERVICE_NAME
-"#, staked_keypair_path, unstaked_keypair_path);
+"#,
+        staked_keypair_path, unstaked_keypair_path
+    );
 
     let script_path = format!("{}/switch-identity.sh", keypair_dir);
     client.execute_command(&format!(
@@ -109,7 +120,7 @@ sudo systemctl status $SERVICE_NAME
         script_path, script_content
     ))?;
     client.execute_command(&format!("chmod +x {}", script_path))?;
-    
+
     Ok(())
 }
 
@@ -178,14 +189,14 @@ fi
         monitor_script_path, monitor_script_content
     ))?;
     client.execute_command(&format!("chmod +x {}", monitor_script_path))?;
-    
+
     // Create cron job to run monitoring every 5 minutes
     let cron_entry = format!("*/5 * * * * {}", monitor_script_path);
     client.execute_command(&format!(
         "(crontab -l 2>/dev/null | grep -v '{}' ; echo '{}') | crontab -",
         monitor_script_path, cron_entry
     ))?;
-    
+
     Ok(())
 }
 
@@ -196,9 +207,7 @@ fi
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-pub fn configure_log_rotation(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+pub fn configure_log_rotation(client: &mut SshClient) -> Result<(), DeploymentError> {
     let logrotate_content = r#"/home/$(whoami)/solana-validator.log {
     rotate 7
     daily
@@ -215,9 +224,9 @@ pub fn configure_log_rotation(
     ))?;
     client.execute_command("sudo cp /tmp/solana-logrotate /etc/logrotate.d/solana")?;
     client.execute_command("rm /tmp/solana-logrotate")?;
-    
+
     // Restart logrotate service
     client.execute_command("sudo systemctl restart logrotate.service")?;
-    
+
     Ok(())
 }

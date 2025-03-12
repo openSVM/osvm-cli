@@ -1,5 +1,5 @@
 //! Color utility functions for consistent CLI output formatting
-//! 
+//!
 //! This module provides standardized colors and formatting for different types of CLI output
 //! such as success messages, warnings, errors, and information. It centralizes color schemes
 //! to ensure consistent user experience across all commands.
@@ -72,7 +72,11 @@ pub fn node_status(status: &str) -> colored::ColoredString {
 }
 
 /// Format numeric value with appropriate color based on threshold
-pub fn numeric_value(value: f64, warning_threshold: f64, error_threshold: f64) -> colored::ColoredString {
+pub fn numeric_value(
+    value: f64,
+    warning_threshold: f64,
+    error_threshold: f64,
+) -> colored::ColoredString {
     if value >= error_threshold {
         format!("{:.1}", value).red()
     } else if value >= warning_threshold {
@@ -89,7 +93,8 @@ pub fn table_header(text: &str) -> colored::ColoredString {
 
 /// Format separator line (bright black)
 pub fn separator() -> colored::ColoredString {
-    "---------------------------------------------------------------------------------".bright_black()
+    "---------------------------------------------------------------------------------"
+        .bright_black()
 }
 
 /// Format text with custom color

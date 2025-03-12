@@ -1,8 +1,8 @@
 //! @brief Main entry point for CLI
 
 use {
+    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
-    crate::utils::{svm_info, ssh_deploy, dashboard, nodes, examples},
     solana_clap_utils::{
         input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
         keypair::DefaultSigner,
@@ -15,7 +15,7 @@ use {
         native_token::Sol,
         signature::{Keypair, Signer},
     },
-    std::{process::exit, sync::Arc, env},
+    std::{env, process::exit, sync::Arc},
 };
 pub mod clparse;
 pub mod prelude;
@@ -92,17 +92,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Display information based on verbosity level
     if config.verbose > 0 {
         println!("JSON RPC URL: {}", config.json_rpc_url);
-        
+
         if config.verbose >= 2 {
             println!("Using keypair: {}", config.default_signer.pubkey());
-            println!("Commitment level: {:?}", config.commitment_config.commitment);
-            
+            println!(
+                "Commitment level: {:?}",
+                config.commitment_config.commitment
+            );
+
             if config.verbose >= 3 {
                 // Most detailed level - show configuration details
                 let rpc_client = RpcClient::new(config.json_rpc_url.clone());
                 let balance = rpc_client.get_balance_with_commitment(
                     &config.default_signer.pubkey(),
-                    config.commitment_config
+                    config.commitment_config,
                 )?;
                 println!("Wallet balance: {} SOL", Sol(balance.value));
             }
@@ -127,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match (svm_sub_command, svm_sub_matches) {
                 ("list", _) => {
                     // List all SVMs
-                    let svms = svm_info::list_all_svms(&rpc_client, config.commitment_config)?;  
+                    let svms = svm_info::list_all_svms(&rpc_client, config.commitment_config)?;
                     svm_info::display_svm_list(&svms);
                 }
                 ("dashboard", _) => {
@@ -155,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Install an SVM on a remote host
                     let svm_name = install_matches.value_of("name").unwrap();
                     let host = install_matches.value_of("host").unwrap();
-                    
+
                     // First get SVM info to verify it exists and can be installed
                     match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
                         Ok(info) => {
@@ -163,18 +166,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 eprintln!("SVM '{}' cannot be installed", svm_name);
                                 exit(1);
                             }
-                            
+
                             // Default to installing as validator on mainnet
                             match ssh_deploy::deploy_node(
-                                host, 
+                                host,
                                 svm_name,
                                 "validator",
-                                ssh_deploy::NetworkType::Mainnet
+                                ssh_deploy::NetworkType::Mainnet,
                             ) {
-                                Ok(node_id) => println!("Successfully installed {} as node {}", svm_name, node_id),
+                                Ok(node_id) => println!(
+                                    "Successfully installed {} as node {}",
+                                    svm_name, node_id
+                                ),
                                 Err(e) => eprintln!("Installation failed: {}", e),
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Error: {}", e);
                             exit(1);
@@ -194,36 +200,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let status = list_matches.value_of("status").unwrap_or("all");
                     let svm = list_matches.value_of("svm");
                     let json_output = list_matches.is_present("json");
-                    
-                    match nodes::list_all_nodes(&rpc_client, network, svm, node_type, status, config.commitment_config, config.verbose) {
+
+                    match nodes::list_all_nodes(
+                        &rpc_client,
+                        network,
+                        svm,
+                        node_type,
+                        status,
+                        config.commitment_config,
+                        config.verbose,
+                    ) {
                         Ok(node_list) => {
                             if json_output {
                                 println!("{}", serde_json::to_string_pretty(&node_list).unwrap());
                             } else {
                                 nodes::display_node_list(&node_list, config.verbose);
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Error listing nodes: {}", e);
                             exit(1);
                         }
                     }
-                },
+                }
                 ("dashboard", _) => {
                     // Launch node monitoring dashboard
-                    match nodes::run_dashboard(&rpc_client, config.commitment_config, config.verbose) {
+                    match nodes::run_dashboard(
+                        &rpc_client,
+                        config.commitment_config,
+                        config.verbose,
+                    ) {
                         Ok(_) => println!("Node dashboard closed"),
                         Err(e) => {
                             eprintln!("Error running node dashboard: {}", e);
                             exit(1);
                         }
                     }
-                },
+                }
                 ("status", Some(status_matches)) => {
                     // Check node status
                     let node_id = status_matches.value_of("node-id").unwrap();
                     let json_output = status_matches.is_present("json");
-                    
+
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
                             if json_output {
@@ -231,18 +249,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             } else {
                                 nodes::display_node_status(node_id, &status, config.verbose);
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Error getting node status: {}", e);
                             exit(1);
                         }
                     }
-                },
+                }
                 ("get", Some(get_matches)) => {
                     // Get detailed node information
                     let node_id = get_matches.value_of("node-id").unwrap();
                     let json_output = get_matches.is_present("json");
-                    
+
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
                             if json_output {
@@ -250,13 +268,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             } else {
                                 nodes::display_node_info(&info, config.verbose);
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Error getting node info: {}", e);
                             exit(1);
                         }
                     }
-                },
+                }
                 ("restart", Some(restart_matches)) => {
                     // Restart a node
                     let node_id = restart_matches.value_of("node-id").unwrap();
@@ -267,7 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     }
-                },
+                }
                 ("stop", Some(stop_matches)) => {
                     // Stop a node
                     let node_id = stop_matches.value_of("node-id").unwrap();
@@ -278,26 +296,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     }
-                },
+                }
                 ("logs", Some(logs_matches)) => {
                     // View node logs
                     let node_id = logs_matches.value_of("node-id").unwrap();
-                    let lines = logs_matches.value_of("lines").unwrap().parse::<usize>().unwrap_or(100);
+                    let lines = logs_matches
+                        .value_of("lines")
+                        .unwrap()
+                        .parse::<usize>()
+                        .unwrap_or(100);
                     let follow = logs_matches.is_present("follow");
-                    
+
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
                             if follow {
                                 // For follow mode, the function won't return until user interrupts
                                 println!("Log streaming ended");
                             }
-                        },
+                        }
                         Err(e) => {
                             eprintln!("Error getting node logs: {}", e);
                             exit(1);
                         }
                     }
-                },
+                }
                 _ => unreachable!(),
             }
         }
@@ -312,12 +334,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  monitoring  - Node Monitoring and Management");
                 println!("  workflow    - Common Workflows");
                 println!("\nUse 'osvm examples --category <name>' to show examples for a specific category.");
-            } 
-            else if let Some(category) = examples_matches.value_of("category") {
+            } else if let Some(category) = examples_matches.value_of("category") {
                 // Display examples for a specific category
                 examples::display_category_by_name(category);
-            } 
-            else {
+            } else {
                 // Display all examples
                 examples::display_all_examples();
             }
@@ -330,19 +350,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let connection_str = validator_matches.value_of("connection").unwrap();
                     let network_str = validator_matches.value_of("network").unwrap_or("mainnet");
                     let version = validator_matches.value_of("version").map(|s| s.to_string());
-                    let client_type = validator_matches.value_of("client-type").map(|s| s.to_string());
+                    let client_type = validator_matches
+                        .value_of("client-type")
+                        .map(|s| s.to_string());
                     let hot_swap_enabled = validator_matches.is_present("hot-swap");
-                    let metrics_config = validator_matches.value_of("metrics-config").map(|s| s.to_string());
-                    
+                    let metrics_config = validator_matches
+                        .value_of("metrics-config")
+                        .map(|s| s.to_string());
+
                     // Parse connection string
-                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-                        Ok(conn) => conn,
-                        Err(e) => {
-                            eprintln!("Error parsing SSH connection string: {}", e);
-                            exit(1);
-                        }
-                    };
-                    
+                    let connection =
+                        match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                eprintln!("Error parsing SSH connection string: {}", e);
+                                exit(1);
+                            }
+                        };
+
                     // Parse network type
                     let network = match network_str.to_lowercase().as_str() {
                         "mainnet" => ssh_deploy::NetworkType::Mainnet,
@@ -353,17 +378,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     };
-                    
+
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if validator_matches.is_present("ledger-disk") && validator_matches.is_present("accounts-disk") {
+                    let disk_config = if validator_matches.is_present("ledger-disk")
+                        && validator_matches.is_present("accounts-disk")
+                    {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: validator_matches.value_of("ledger-disk").unwrap().to_string(),
-                            accounts_disk: validator_matches.value_of("accounts-disk").unwrap().to_string(),
+                            ledger_disk: validator_matches
+                                .value_of("ledger-disk")
+                                .unwrap()
+                                .to_string(),
+                            accounts_disk: validator_matches
+                                .value_of("accounts-disk")
+                                .unwrap()
+                                .to_string(),
                         })
                     } else {
                         None
                     };
-                    
+
                     // Create deployment config with enhanced features
                     let deploy_config = ssh_deploy::DeploymentConfig {
                         svm_type: "solana".to_string(),
@@ -395,14 +428,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("  Ledger disk: {}", disks.ledger_disk);
                         println!("  Accounts disk: {}", disks.accounts_disk);
                     }
-                    
-                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+
+                    if let Err(e) =
+                        ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
+                    {
                         eprintln!("Deployment error: {}", e);
                         exit(1);
                     }
-                    
+
                     println!("Solana validator node deployed successfully!");
-                },
+                }
                 ("rpc", Some(rpc_matches)) => {
                     // Deploy a Solana RPC node with enhanced features
                     let connection_str = rpc_matches.value_of("connection").unwrap();
@@ -410,17 +445,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let version = rpc_matches.value_of("version").map(|s| s.to_string());
                     let client_type = rpc_matches.value_of("client-type").map(|s| s.to_string());
                     let enable_history = rpc_matches.is_present("enable-history");
-                    let metrics_config = rpc_matches.value_of("metrics-config").map(|s| s.to_string());
-                    
+                    let metrics_config = rpc_matches
+                        .value_of("metrics-config")
+                        .map(|s| s.to_string());
+
                     // Parse connection string
-                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-                        Ok(conn) => conn,
-                        Err(e) => {
-                            eprintln!("Error parsing SSH connection string: {}", e);
-                            exit(1);
-                        }
-                    };
-                    
+                    let connection =
+                        match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                eprintln!("Error parsing SSH connection string: {}", e);
+                                exit(1);
+                            }
+                        };
+
                     // Parse network type
                     let network = match network_str.to_lowercase().as_str() {
                         "mainnet" => ssh_deploy::NetworkType::Mainnet,
@@ -431,23 +469,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     };
-                    
+
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if rpc_matches.is_present("ledger-disk") && rpc_matches.is_present("accounts-disk") {
+                    let disk_config = if rpc_matches.is_present("ledger-disk")
+                        && rpc_matches.is_present("accounts-disk")
+                    {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
-                            accounts_disk: rpc_matches.value_of("accounts-disk").unwrap().to_string(),
+                            accounts_disk: rpc_matches
+                                .value_of("accounts-disk")
+                                .unwrap()
+                                .to_string(),
                         })
                     } else {
                         None
                     };
-                    
+
                     // Create additional params for RPC-specific options
                     let mut additional_params = std::collections::HashMap::new();
                     if enable_history {
                         additional_params.insert("enable_history".to_string(), "true".to_string());
                     }
-                    
+
                     // Create deployment config with enhanced features
                     let deploy_config = ssh_deploy::DeploymentConfig {
                         svm_type: "solana".to_string(),
@@ -479,20 +522,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("  Ledger disk: {}", disks.ledger_disk);
                         println!("  Accounts disk: {}", disks.accounts_disk);
                     }
-                    
-                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+
+                    if let Err(e) =
+                        ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
+                    {
                         eprintln!("Deployment error: {}", e);
                         exit(1);
                     }
-                    
+
                     println!("Solana RPC node deployed successfully!");
-                },
+                }
                 _ => {
                     eprintln!("Unknown Solana command: {}", solana_sub_command);
                     exit(1);
                 }
             }
-        },
+        }
         ("rpc", Some(rpc_matches)) => {
             let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
             match (rpc_sub_command, rpc_sub_matches) {
@@ -500,16 +545,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Deploy a Sonic RPC node
                     let connection_str = sonic_matches.value_of("connection").unwrap();
                     let network_str = sonic_matches.value_of("network").unwrap();
-                    
+
                     // Parse connection string
-                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-                        Ok(conn) => conn,
-                        Err(e) => {
-                            eprintln!("Error parsing SSH connection string: {}", e);
-                            exit(1);
-                        }
-                    };
-                    
+                    let connection =
+                        match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                eprintln!("Error parsing SSH connection string: {}", e);
+                                exit(1);
+                            }
+                        };
+
                     // Parse network type
                     let network = match network_str.to_lowercase().as_str() {
                         "mainnet" => ssh_deploy::NetworkType::Mainnet,
@@ -520,7 +566,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     };
-                    
+
                     // Create deployment config
                     let deploy_config = ssh_deploy::DeploymentConfig {
                         svm_type: "sonic".to_string(),
@@ -537,28 +583,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     println!("Deploying Sonic RPC node to {}...", connection_str);
-                    
-                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+
+                    if let Err(e) =
+                        ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
+                    {
                         eprintln!("Deployment error: {}", e);
                         exit(1);
                     }
-                    
+
                     println!("Sonic RPC node deployed successfully!");
-                },
+                }
                 ("solana", Some(solana_matches)) => {
                     // Use the enhanced Solana deployment via rpc subcommand
                     let connection_str = solana_matches.value_of("connection").unwrap();
                     let network_str = solana_matches.value_of("network").unwrap_or("mainnet");
-                    
+
                     // Parse connection string
-                    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-                        Ok(conn) => conn,
-                        Err(e) => {
-                            eprintln!("Error parsing SSH connection string: {}", e);
-                            exit(1);
-                        }
-                    };
-                    
+                    let connection =
+                        match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+                            Ok(conn) => conn,
+                            Err(e) => {
+                                eprintln!("Error parsing SSH connection string: {}", e);
+                                exit(1);
+                            }
+                        };
+
                     // Parse network type
                     let network = match network_str.to_lowercase().as_str() {
                         "mainnet" => ssh_deploy::NetworkType::Mainnet,
@@ -569,7 +618,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             exit(1);
                         }
                     };
-                    
+
                     // Create deployment config
                     let deploy_config = ssh_deploy::DeploymentConfig {
                         svm_type: "solana".to_string(),
@@ -586,27 +635,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     println!("Deploying Solana RPC node to {}...", connection_str);
-                    
-                    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+
+                    if let Err(e) =
+                        ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
+                    {
                         eprintln!("Deployment error: {}", e);
                         exit(1);
                     }
-                    
+
                     println!("Solana RPC node deployed successfully!");
-                },
+                }
                 _ => {
                     eprintln!("Unknown RPC type: {}", rpc_sub_command);
                     exit(1);
                 }
             }
-        },
+        }
         // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
         (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
             // This is an SSH deployment command
             let svm_list = matches.value_of("svm").unwrap();
             let node_type_str = matches.value_of("node-type").unwrap();
             let network_str = matches.value_of("network").unwrap();
-            
+
             // Parse connection string
             let connection = match ssh_deploy::ServerConfig::from_connection_string(conn_str) {
                 Ok(conn) => conn,
@@ -615,10 +666,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     exit(1);
                 }
             };
-            
+
             // Parse node type
             let node_type = node_type_str.to_string();
-            
+
             // Parse network type
             let network = match network_str.to_lowercase().as_str() {
                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
@@ -629,14 +680,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     exit(1);
                 }
             };
-            
+
             // Parse SVM list
-            let svm_types = svm_list.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>();
+            let svm_types = svm_list
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<_>>();
             if svm_types.is_empty() {
                 eprintln!("No SVMs specified");
                 exit(1);
             }
-            
+
             // Create deployment config
             let deploy_config = ssh_deploy::DeploymentConfig {
                 svm_type: svm_types[0].clone(),

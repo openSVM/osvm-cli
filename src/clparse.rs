@@ -500,5 +500,6 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                                 .help("Enable transaction history (increases storage requirements)")
                         )
                 )
+        )
         .get_matches()
 }

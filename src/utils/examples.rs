@@ -1,5 +1,5 @@
 //! CLI examples module
-//! 
+//!
 //! This module provides practical usage examples for OSVM CLI commands,
 //! organized by category to help users learn common workflows and best practices.
 
@@ -32,14 +32,20 @@ impl ExampleCategory {
             ExampleCategory::Workflow => "Common Workflows",
         }
     }
-    
+
     /// Get a description for a category
     pub fn description(&self) -> &'static str {
         match self {
             ExampleCategory::Basic => "Fundamental commands to get started with OSVM CLI",
-            ExampleCategory::SvmManagement => "Commands for managing and inspecting SVMs (Solana Virtual Machines)",
-            ExampleCategory::NodeDeployment => "Commands for deploying validator and RPC nodes to servers",
-            ExampleCategory::NodeMonitoring => "Commands for monitoring and managing deployed nodes",
+            ExampleCategory::SvmManagement => {
+                "Commands for managing and inspecting SVMs (Solana Virtual Machines)"
+            }
+            ExampleCategory::NodeDeployment => {
+                "Commands for deploying validator and RPC nodes to servers"
+            }
+            ExampleCategory::NodeMonitoring => {
+                "Commands for monitoring and managing deployed nodes"
+            }
             ExampleCategory::Workflow => "Multi-step command sequences for common operations",
         }
     }
@@ -80,7 +86,6 @@ pub fn get_all_examples() -> Vec<Example> {
             explanation: "Run a command with colored output disabled",
             category: ExampleCategory::Basic,
         },
-        
         // SVM Management
         Example {
             title: "List all available SVMs",
@@ -106,7 +111,6 @@ pub fn get_all_examples() -> Vec<Example> {
             explanation: "Installs the specified SVM on the remote host as a validator node on mainnet (default settings)",
             category: ExampleCategory::SvmManagement,
         },
-        
         // Node Deployment
         Example {
             title: "Deploy a validator node",
@@ -175,7 +179,6 @@ pub fn get_all_examples() -> Vec<Example> {
             explanation: "Deploys a Solana RPC node with transaction history enabled (increases storage requirements)",
             category: ExampleCategory::NodeDeployment,
         },
-        
         // Node Monitoring
         Example {
             title: "List all deployed nodes",
@@ -237,7 +240,6 @@ pub fn get_all_examples() -> Vec<Example> {
             explanation: "Safely stops the specified node",
             category: ExampleCategory::NodeMonitoring,
         },
-        
         // Workflow Examples
         Example {
             title: "Set up a new validator node (full workflow)",
@@ -257,14 +259,14 @@ pub fn get_all_examples() -> Vec<Example> {
 /// Get examples by category
 pub fn get_examples_by_category() -> HashMap<ExampleCategory, Vec<Example>> {
     let mut categories = HashMap::new();
-    
+
     for example in get_all_examples() {
         categories
             .entry(example.category)
             .or_insert_with(Vec::new)
             .push(example);
     }
-    
+
     categories
 }
 
@@ -272,12 +274,15 @@ pub fn get_examples_by_category() -> HashMap<ExampleCategory, Vec<Example>> {
 pub fn display_all_examples() {
     println!("\n{}", color::heading("OSVM CLI Examples"));
     println!("{}", color::subheading("================="));
-    
+
     println!("\n{}", color::important("This command provides examples of common OSVM CLI usage patterns organized by category."));
-    println!("Use the {} flag to see examples from a specific category.", color::command("--category"));
-    
+    println!(
+        "Use the {} flag to see examples from a specific category.",
+        color::command("--category")
+    );
+
     let categories = get_examples_by_category();
-    
+
     // Determine the correct order to display categories in
     let category_order = [
         ExampleCategory::Basic,
@@ -286,35 +291,49 @@ pub fn display_all_examples() {
         ExampleCategory::NodeMonitoring,
         ExampleCategory::Workflow,
     ];
-    
+
     for category in category_order.iter() {
         if let Some(examples) = categories.get(category) {
             display_category(*category, examples);
         }
     }
-    
-    println!("\n{}", color::important("TIP: Add the -v flag to any command to see more detailed output."));
+
+    println!(
+        "\n{}",
+        color::important("TIP: Add the -v flag to any command to see more detailed output.")
+    );
 }
 
 /// Display examples for a specific category
 pub fn display_category(category: ExampleCategory, examples: &[Example]) {
     println!("\n{}", color::heading(category.display_name()));
-    println!("{}", color::secondary(&"-".repeat(category.display_name().len())));
+    println!(
+        "{}",
+        color::secondary(&"-".repeat(category.display_name().len()))
+    );
     println!("{}", color::important(category.description()));
     println!();
-    
+
     for (i, example) in examples.iter().enumerate() {
-        println!("{} {}", color::key(&format!("{}.", i + 1)), color::bold(example.title));
-        
+        println!(
+            "{} {}",
+            color::key(&format!("{}.", i + 1)),
+            color::bold(example.title)
+        );
+
         // For workflow examples, split multi-line commands
         if category == ExampleCategory::Workflow {
             for (i, cmd) in example.command.split('\n').enumerate() {
-                println!("   {}: {}", color::secondary(&format!("Step {}", i + 1)), color::command(cmd));
+                println!(
+                    "   {}: {}",
+                    color::secondary(&format!("Step {}", i + 1)),
+                    color::command(cmd)
+                );
             }
         } else {
             println!("   {}", color::command(example.command));
         }
-        
+
         println!("   {}", color::secondary(example.explanation));
         println!();
     }
@@ -329,19 +348,28 @@ pub fn display_category_by_name(category_name: &str) {
         "monitoring" | "nodemonitoring" => ExampleCategory::NodeMonitoring,
         "workflow" | "workflows" => ExampleCategory::Workflow,
         _ => {
-            println!("\n{}", color::error(&format!("Unknown category: {}", category_name)));
+            println!(
+                "\n{}",
+                color::error(&format!("Unknown category: {}", category_name))
+            );
             println!("Available categories: basic, svm, node, monitoring, workflow");
             return;
         }
     };
-    
+
     let categories = get_examples_by_category();
-    
+
     if let Some(examples) = categories.get(&category) {
         println!("\n{}", color::heading("OSVM CLI Examples"));
         println!("{}", color::subheading("================="));
         display_category(category, examples);
     } else {
-        println!("\n{}", color::error(&format!("No examples found for category: {}", category_name)));
+        println!(
+            "\n{}",
+            color::error(&format!(
+                "No examples found for category: {}",
+                category_name
+            ))
+        );
     }
 }

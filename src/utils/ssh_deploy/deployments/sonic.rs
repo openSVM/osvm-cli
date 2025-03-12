@@ -1,13 +1,14 @@
 //! Sonic deployment implementation
 
-use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-        types::{ServerConfig, DeploymentConfig, NetworkType},
-        dependencies::{install_docker_if_needed, install_nodejs_if_needed},
-        services::{create_systemd_service, enable_service, await_service_startup, create_docker_service_content},
+use crate::utils::ssh_deploy::{
+    client::SshClient,
+    dependencies::{install_docker_if_needed, install_nodejs_if_needed},
+    errors::DeploymentError,
+    services::{
+        await_service_startup, create_docker_service_content, create_systemd_service,
+        enable_service,
     },
+    types::{DeploymentConfig, NetworkType, ServerConfig},
 };
 
 /// Deploy Sonic node
@@ -30,39 +31,39 @@ pub async fn deploy_sonic(
     if let Some(callback) = progress_callback {
         callback(40, "Cloning Sonic RPC repository");
     }
-    
+
     let sonic_dir = format!("{}/sonic-rpc", server_config.install_dir);
     clone_sonic_repository(client, &sonic_dir)?;
-    
+
     // Install dependencies
     if let Some(callback) = progress_callback {
         callback(50, "Installing dependencies");
     }
-    
+
     install_sonic_dependencies(client)?;
-    
+
     // Run the setup script
     if let Some(callback) = progress_callback {
         callback(70, "Running setup script");
     }
-    
+
     // Navigate to the repository directory and run the setup script
     client.execute_command(&format!("cd {} && bash setup.sh", sonic_dir))?;
-    
+
     // Configure network settings
     if let Some(callback) = progress_callback {
         callback(80, "Configuring network settings");
     }
-    
+
     configure_sonic_network(client, &sonic_dir, deployment_config.network)?;
-    
+
     // Start the RPC node
     if let Some(callback) = progress_callback {
         callback(90, "Starting Sonic RPC node");
     }
-    
+
     start_sonic_node(client, &sonic_dir, deployment_config).await?;
-    
+
     Ok(())
 }
 
@@ -74,14 +75,14 @@ pub async fn deploy_sonic(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn clone_sonic_repository(
-    client: &mut SshClient,
-    sonic_dir: &str,
-) -> Result<(), DeploymentError> {
+fn clone_sonic_repository(client: &mut SshClient, sonic_dir: &str) -> Result<(), DeploymentError> {
     if !client.directory_exists(sonic_dir)? {
-        client.execute_command(&format!("git clone https://github.com/sonicfromnewyoke/solana-rpc.git {}", sonic_dir))?;
+        client.execute_command(&format!(
+            "git clone https://github.com/sonicfromnewyoke/solana-rpc.git {}",
+            sonic_dir
+        ))?;
     }
-    
+
     Ok(())
 }
 
@@ -92,19 +93,19 @@ fn clone_sonic_repository(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn install_sonic_dependencies(
-    client: &mut SshClient,
-) -> Result<(), DeploymentError> {
+fn install_sonic_dependencies(client: &mut SshClient) -> Result<(), DeploymentError> {
     // Install required packages
     client.execute_command("sudo apt-get update")?;
-    client.execute_command("sudo apt-get install -y build-essential libssl-dev pkg-config curl git jq")?;
-    
+    client.execute_command(
+        "sudo apt-get install -y build-essential libssl-dev pkg-config curl git jq",
+    )?;
+
     // Install Node.js if not already installed
     install_nodejs_if_needed(client)?;
-    
+
     // Install Docker and Docker Compose if not already installed
     install_docker_if_needed(client)?;
-    
+
     Ok(())
 }
 
@@ -128,10 +129,13 @@ fn configure_sonic_network(
         NetworkType::Testnet => "testnet",
         NetworkType::Devnet => "devnet",
     };
-    
+
     // Update the configuration file with the selected network
-    client.execute_command(&format!("cd {} && echo 'SOLANA_NETWORK={}' > .env", sonic_dir, network_config))?;
-    
+    client.execute_command(&format!(
+        "cd {} && echo 'SOLANA_NETWORK={}' > .env",
+        sonic_dir, network_config
+    ))?;
+
     Ok(())
 }
 
@@ -151,21 +155,17 @@ async fn start_sonic_node(
 ) -> Result<(), DeploymentError> {
     // Start the services using docker-compose
     client.execute_command(&format!("cd {} && docker-compose up -d", sonic_dir))?;
-    
+
     // Create a systemd service to ensure the RPC node starts on boot
     let service_name = format!("sonic-rpc-{}", deployment_config.network);
-    let service_content = create_docker_service_content(
-        &service_name,
-        sonic_dir,
-        "Sonic RPC Node",
-    );
-    
+    let service_content = create_docker_service_content(&service_name, sonic_dir, "Sonic RPC Node");
+
     // Create and enable the service
     create_systemd_service(client, &service_name, &service_content)?;
     enable_service(client, &service_name)?;
-    
+
     // Wait for the service to start
     await_service_startup(client, &service_name).await?;
-    
+
     Ok(())
 }

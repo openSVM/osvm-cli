@@ -2,11 +2,11 @@
 
 use {
     crate::utils::ssh_deploy::{
-        errors::DeploymentError,
         client::SshClient,
-        types::{ServerConfig, DeploymentConfig, NetworkType},
-        validators::validate_system_requirements,
         dependencies::install_dependencies,
+        errors::DeploymentError,
+        types::{DeploymentConfig, NetworkType, ServerConfig},
+        validators::validate_system_requirements,
     },
     std::error::Error,
 };
@@ -49,87 +49,92 @@ pub async fn deploy_svm_node(
     // Create SSH client and connect
     let mut client = SshClient::new(server_config.clone())?;
     client.connect()?;
-    
+
     // Send initial progress update
     if let Some(callback) = &progress_callback {
         callback(0, "Connected to server");
     }
-    
+
     // Get system information
     let system_info = client.get_system_info()?;
-    
+
     // Send progress update
     if let Some(callback) = &progress_callback {
         callback(5, "Retrieved system information");
     }
-    
+
     // Check system requirements based on the SVM type and node type
     validate_system_requirements(&system_info, &deployment_config)?;
-    
+
     // Send progress update
     if let Some(callback) = &progress_callback {
         callback(10, "Validated system requirements");
     }
-    
+
     // Install dependencies
     install_dependencies(&mut client, &deployment_config)?;
-    
+
     // Send progress update
     if let Some(callback) = &progress_callback {
         callback(30, "Installed dependencies");
     }
-    
+
     // Create installation directory
     client.create_directory(&server_config.install_dir)?;
-    
+
     // Deploy based on SVM type
     match deployment_config.svm_type.as_str() {
         "solana" => {
             crate::utils::ssh_deploy::deployments::solana::deploy_solana(
-                &mut client, 
-                &server_config, 
-                &deployment_config, 
+                &mut client,
+                &server_config,
+                &deployment_config,
                 progress_callback.as_ref(),
-            ).await?;
-        },
+            )
+            .await?;
+        }
         "sonic" => {
             crate::utils::ssh_deploy::deployments::sonic::deploy_sonic(
-                &mut client, 
-                &server_config, 
-                &deployment_config, 
+                &mut client,
+                &server_config,
+                &deployment_config,
                 progress_callback.as_ref(),
-            ).await?;
-        },
+            )
+            .await?;
+        }
         "eclipse" => {
             crate::utils::ssh_deploy::deployments::eclipse::deploy_eclipse(
-                &mut client, 
-                &server_config, 
-                &deployment_config, 
+                &mut client,
+                &server_config,
+                &deployment_config,
                 progress_callback.as_ref(),
-            ).await?;
-        },
+            )
+            .await?;
+        }
         "s00n" => {
             crate::utils::ssh_deploy::deployments::s00n::deploy_s00n(
-                &mut client, 
-                &server_config, 
-                &deployment_config, 
+                &mut client,
+                &server_config,
+                &deployment_config,
                 progress_callback.as_ref(),
-            ).await?;
-        },
+            )
+            .await?;
+        }
         _ => {
             return Err(Box::new(DeploymentError::ValidationError(format!(
-                "Unsupported SVM type: {}", deployment_config.svm_type
+                "Unsupported SVM type: {}",
+                deployment_config.svm_type
             ))));
         }
     }
-    
+
     // Send final progress update
     if let Some(callback) = &progress_callback {
         callback(100, "Deployment completed successfully");
     }
-    
+
     // Close SSH connection
     client.close();
-    
+
     Ok(())
 }
