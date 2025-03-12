@@ -11,18 +11,14 @@ use {
     solana_remote_wallet::remote_wallet::RemoteWalletManager,
     solana_sdk::{
         commitment_config::CommitmentConfig,
-        instruction::AccountMeta,
         native_token::Sol,
-        signature::{Keypair, Signer},
+        signature::Signer,
     },
     std::{env, process::exit, sync::Arc},
 };
 pub mod clparse;
 pub mod prelude;
 pub mod utils;
-
-/// Space allocated for account state
-const ACCOUNT_STATE_SPACE: usize = 1024;
 
 struct Config {
     commitment_config: CommitmentConfig,
@@ -727,20 +723,6 @@ mod test {
 
     use {super::*, solana_test_validator::*};
 
-    // Tests commented out as they depend on removed functions
-    /*
-    #[test]
-    fn test_ping() {
-        let (test_validator, payer) = TestValidatorGenesis::default().start();
-        let rpc_client = test_validator.get_rpc_client();
-
-        assert!(matches!(
-            ping_instruction(&rpc_client, &payer, CommitmentConfig::confirmed()),
-            Ok(_)
-        ));
-    }
-    */
-
     #[test]
     fn test_borsh() {
         #[repr(C)]
@@ -756,8 +738,9 @@ mod test {
             primary_sale_happened: Some(true),
         };
         let bout = faux.try_to_vec().unwrap();
-        println!("{:?}", bout);
         let in_faux = UpdateMetadataAccountArgs::try_from_slice(&bout).unwrap();
-        println!("{:?}", in_faux);
+        
+        // Assert that the deserialized data matches the original
+        assert_eq!(faux, in_faux);
     }
 }
