@@ -107,7 +107,7 @@ pub async fn await_service_startup(
 /// # Returns
 /// * `String` - Service content
 pub fn create_docker_service_content(
-    service_name: &str,
+    _service_name: &str,
     working_dir: &str,
     description: &str,
 ) -> String {
