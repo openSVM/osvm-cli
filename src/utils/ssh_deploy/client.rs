@@ -8,7 +8,7 @@ use {
     ssh2::Session,
     std::{
         fs,
-        io::{self, Read, Write},
+        io::{Read, Write},
         path::Path,
     },
 };

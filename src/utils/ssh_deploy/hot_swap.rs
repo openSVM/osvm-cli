@@ -1,9 +1,6 @@
 //! Hot-swap capability for Solana validators
 
-use {
-    crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError},
-    std::path::Path,
-};
+use crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError};
 
 /// Configure hot-swap capability for Solana validator
 ///
