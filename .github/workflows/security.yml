@@ -57,11 +57,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+        
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: rust
+        env:
+          CODEQL_ENABLE_EXPERIMENTAL_FEATURES: true
       
       - name: Build
         run: cargo build
