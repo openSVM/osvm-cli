@@ -382,7 +382,10 @@ pub fn generate_monitoring_dashboard(nodes: &[NodeInfo], verbosity: u8) -> Strin
         _ => {
             html.push_str("    console.log('Dashboard loaded in debug mode');\n");
             html.push_str("    console.log('Nodes:', ");
-            html.push_str(&format!("{}); // This would normally show node details\n", nodes.len()));
+            html.push_str(&format!(
+                "{}); // This would normally show node details\n",
+                nodes.len()
+            ));
         }
     }
 

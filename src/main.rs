@@ -9,7 +9,7 @@ use {
     },
     solana_client::rpc_client::RpcClient,
     solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
-    std::{env, process::exit, sync::Arc},
+    std::{env, process::exit},
 };
 
 #[cfg(feature = "remote-wallet")]
@@ -23,6 +23,7 @@ struct Config {
     default_signer: Box<dyn Signer>,
     json_rpc_url: String,
     verbose: u8, // 0=normal, 1=verbose (-v), 2=very verbose (-vv), 3=debug (-vvv)
+    #[allow(dead_code)]
     no_color: bool,
 }
 
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
-    let wallet_manager = None;
+    let mut wallet_manager = None;
 
     // Check if colors should be disabled (via flag or environment variable)
     let no_color = matches.is_present("no_color") || env::var("NO_COLOR").is_ok();
@@ -53,9 +54,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let default_signer = DefaultSigner::new(
-            "keypair".to_string(),
+            "keypair",
             matches
-                .value_of(&"keypair")
+                .value_of("keypair")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| cli_config.keypair_path.clone()),
         );
@@ -64,8 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             json_rpc_url: normalize_to_url_if_moniker(
                 matches
                     .value_of("json_rpc_url")
-                    .unwrap_or(&cli_config.json_rpc_url)
-                    .to_string(),
+                    .unwrap_or(&cli_config.json_rpc_url),
             ),
             #[cfg(feature = "remote-wallet")]
             default_signer: default_signer
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }),
             #[cfg(not(feature = "remote-wallet"))]
             default_signer: default_signer
-                .signer_from_path(matches, &mut None)
+                .signer_from_path(matches, &mut wallet_manager)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);
