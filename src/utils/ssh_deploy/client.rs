@@ -35,12 +35,14 @@ impl SshClient {
         let tcp = std::net::TcpStream::connect(format!("{}:{}", config.host, config.port))
             .map_err(|e| DeploymentError::ConnectionError(format!("Failed to connect: {}", e)))?;
 
-        let mut session = Session::new()
-            .map_err(|e| DeploymentError::ConnectionError(format!("Failed to create session: {}", e)))?;
+        let mut session = Session::new().map_err(|e| {
+            DeploymentError::ConnectionError(format!("Failed to create session: {}", e))
+        })?;
 
         session.set_tcp_stream(tcp);
-        session.handshake()
-            .map_err(|e| DeploymentError::ConnectionError(format!("SSH handshake failed: {}", e)))?;
+        session.handshake().map_err(|e| {
+            DeploymentError::ConnectionError(format!("SSH handshake failed: {}", e))
+        })?;
 
         Ok(SshClient {
             session,
@@ -60,24 +62,34 @@ impl SshClient {
 
         match &self.config.auth {
             AuthMethod::Password { username, password } => {
-                self.session.userauth_password(username, password)
-                    .map_err(|e| DeploymentError::AuthError(format!("Password authentication failed: {}", e)))?;
+                self.session
+                    .userauth_password(username, password)
+                    .map_err(|e| {
+                        DeploymentError::AuthError(format!("Password authentication failed: {}", e))
+                    })?;
             }
-            AuthMethod::Key { username, key_path, passphrase } => {
-                let mut key_file = fs::File::open(key_path)
-                    .map_err(|e| DeploymentError::AuthError(format!("Failed to open key file {}: {}", key_path, e)))?;
-                
+            AuthMethod::Key {
+                username,
+                key_path,
+                passphrase,
+            } => {
+                let mut key_file = fs::File::open(key_path).map_err(|e| {
+                    DeploymentError::AuthError(format!(
+                        "Failed to open key file {}: {}",
+                        key_path, e
+                    ))
+                })?;
+
                 let mut key_contents = String::new();
-                key_file.read_to_string(&mut key_contents)
-                    .map_err(|e| DeploymentError::AuthError(format!("Failed to read key file: {}", e)))?;
-                
-                self.session.userauth_pubkey_memory(
-                    username,
-                    None,
-                    &key_contents,
-                    passphrase.as_deref(),
-                )
-                .map_err(|e| DeploymentError::AuthError(format!("Key authentication failed: {}", e)))?;
+                key_file.read_to_string(&mut key_contents).map_err(|e| {
+                    DeploymentError::AuthError(format!("Failed to read key file: {}", e))
+                })?;
+
+                self.session
+                    .userauth_pubkey_memory(username, None, &key_contents, passphrase.as_deref())
+                    .map_err(|e| {
+                        DeploymentError::AuthError(format!("Key authentication failed: {}", e))
+                    })?;
             }
         }
 
@@ -97,21 +109,26 @@ impl SshClient {
             self.connect()?;
         }
 
-        let mut channel = self.session.channel_session()
-            .map_err(|e| DeploymentError::CommandError(format!("Failed to create channel: {}", e)))?;
+        let mut channel = self.session.channel_session().map_err(|e| {
+            DeploymentError::CommandError(format!("Failed to create channel: {}", e))
+        })?;
 
-        channel.exec(command)
-            .map_err(|e| DeploymentError::CommandError(format!("Failed to execute command: {}", e)))?;
+        channel.exec(command).map_err(|e| {
+            DeploymentError::CommandError(format!("Failed to execute command: {}", e))
+        })?;
 
         let mut output = String::new();
-        channel.read_to_string(&mut output)
-            .map_err(|e| DeploymentError::CommandError(format!("Failed to read command output: {}", e)))?;
+        channel.read_to_string(&mut output).map_err(|e| {
+            DeploymentError::CommandError(format!("Failed to read command output: {}", e))
+        })?;
 
-        channel.wait_close()
-            .map_err(|e| DeploymentError::CommandError(format!("Failed to close channel: {}", e)))?;
+        channel.wait_close().map_err(|e| {
+            DeploymentError::CommandError(format!("Failed to close channel: {}", e))
+        })?;
 
-        let exit_status = channel.exit_status()
-            .map_err(|e| DeploymentError::CommandError(format!("Failed to get exit status: {}", e)))?;
+        let exit_status = channel.exit_status().map_err(|e| {
+            DeploymentError::CommandError(format!("Failed to get exit status: {}", e))
+        })?;
 
         if exit_status != 0 {
             return Err(DeploymentError::CommandError(format!(
@@ -143,27 +160,31 @@ impl SshClient {
         let local_path = local_path.as_ref();
         let remote_path = remote_path.as_ref();
 
-        let mut local_file = fs::File::open(local_path)
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to open local file {}: {}", 
-                local_path.display(), e
-            )))?;
+        let mut local_file = fs::File::open(local_path).map_err(|e| {
+            DeploymentError::FileTransferError(format!(
+                "Failed to open local file {}: {}",
+                local_path.display(),
+                e
+            ))
+        })?;
 
-        let file_size = local_file.metadata()
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to get file metadata: {}", e
-            )))?.len();
+        let file_size = local_file
+            .metadata()
+            .map_err(|e| {
+                DeploymentError::FileTransferError(format!("Failed to get file metadata: {}", e))
+            })?
+            .len();
 
-        let mut remote_file = self.session.scp_send(
-            remote_path,
-            0o644,
-            file_size,
-            None,
-        )
-        .map_err(|e| DeploymentError::FileTransferError(format!(
-            "Failed to initiate SCP transfer to {}: {}", 
-            remote_path.display(), e
-        )))?;
+        let mut remote_file = self
+            .session
+            .scp_send(remote_path, 0o644, file_size, None)
+            .map_err(|e| {
+                DeploymentError::FileTransferError(format!(
+                    "Failed to initiate SCP transfer to {}: {}",
+                    remote_path.display(),
+                    e
+                ))
+            })?;
 
         self.upload_file_content(&mut local_file, &mut remote_file)
     }
@@ -187,38 +208,43 @@ impl SshClient {
             match local_file.read(&mut buffer) {
                 Ok(0) => break, // EOF
                 Ok(n) => {
-                    remote_file.write_all(&buffer[..n])
-                        .map_err(|e| DeploymentError::FileTransferError(format!(
-                            "Failed to write data to remote file: {}", e
-                        )))?;
+                    remote_file.write_all(&buffer[..n]).map_err(|e| {
+                        DeploymentError::FileTransferError(format!(
+                            "Failed to write data to remote file: {}",
+                            e
+                        ))
+                    })?;
                 }
                 Err(e) => {
                     return Err(DeploymentError::FileTransferError(format!(
-                        "Failed to read from local file: {}", e
+                        "Failed to read from local file: {}",
+                        e
                     )));
                 }
             }
         }
 
-        remote_file.send_eof()
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to signal EOF: {}", e
-            )))?;
+        remote_file.send_eof().map_err(|e| {
+            DeploymentError::FileTransferError(format!("Failed to signal EOF: {}", e))
+        })?;
 
-        remote_file.wait_eof()
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to wait for EOF confirmation: {}", e
-            )))?;
+        remote_file.wait_eof().map_err(|e| {
+            DeploymentError::FileTransferError(format!(
+                "Failed to wait for EOF confirmation: {}",
+                e
+            ))
+        })?;
 
-        remote_file.close()
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to close remote file: {}", e
-            )))?;
+        remote_file.close().map_err(|e| {
+            DeploymentError::FileTransferError(format!("Failed to close remote file: {}", e))
+        })?;
 
-        remote_file.wait_close()
-            .map_err(|e| DeploymentError::FileTransferError(format!(
-                "Failed to wait for confirmation of file close: {}", e
-            )))?;
+        remote_file.wait_close().map_err(|e| {
+            DeploymentError::FileTransferError(format!(
+                "Failed to wait for confirmation of file close: {}",
+                e
+            ))
+        })?;
 
         Ok(())
     }
@@ -243,7 +269,10 @@ impl SshClient {
     /// # Returns
     /// * `Result<bool, DeploymentError>` - Whether the file exists
     pub fn file_exists(&mut self, path: &str) -> Result<bool, DeploymentError> {
-        let output = self.execute_command(&format!("test -f {} && echo 'EXISTS' || echo 'NOT_EXISTS'", path))?;
+        let output = self.execute_command(&format!(
+            "test -f {} && echo 'EXISTS' || echo 'NOT_EXISTS'",
+            path
+        ))?;
         Ok(output.trim() == "EXISTS")
     }
 
@@ -255,7 +284,10 @@ impl SshClient {
     /// # Returns
     /// * `Result<bool, DeploymentError>` - Whether the directory exists
     pub fn directory_exists(&mut self, path: &str) -> Result<bool, DeploymentError> {
-        let output = self.execute_command(&format!("test -d {} && echo 'EXISTS' || echo 'NOT_EXISTS'", path))?;
+        let output = self.execute_command(&format!(
+            "test -d {} && echo 'EXISTS' || echo 'NOT_EXISTS'",
+            path
+        ))?;
         Ok(output.trim() == "EXISTS")
     }
 
@@ -276,7 +308,7 @@ impl SshClient {
              echo 'INSTALLED' || echo 'NOT_INSTALLED'; fi",
             package, package, package
         );
-        
+
         let output = self.execute_command(&cmd)?;
         Ok(output.trim() == "INSTALLED")
     }
@@ -285,23 +317,25 @@ impl SshClient {
     ///
     /// # Returns
     /// * `Result<std::collections::HashMap<String, String>, DeploymentError>` - System information
-    pub fn get_system_info(&mut self) -> Result<std::collections::HashMap<String, String>, DeploymentError> {
+    pub fn get_system_info(
+        &mut self,
+    ) -> Result<std::collections::HashMap<String, String>, DeploymentError> {
         let mut info = std::collections::HashMap::new();
-        
+
         // Get OS information
         self.get_os_info(&mut info)?;
-        
+
         // Get CPU information
         let cpu_info = self.execute_command("cat /proc/cpuinfo | grep -c processor")?;
         info.insert("cpu_cores".to_string(), cpu_info.trim().to_string());
-        
+
         // Get memory information
         let mem_info = self.execute_command("free -g | grep Mem | awk '{print $2}'")?;
         info.insert("memory_gb".to_string(), mem_info.trim().to_string());
-        
+
         // Get disk and kernel information
         self.get_disk_and_kernel_info(&mut info)?;
-        
+
         Ok(info)
     }
 
@@ -312,15 +346,20 @@ impl SshClient {
     ///
     /// # Returns
     /// * `Result<(), DeploymentError>` - Success/failure
-    fn get_os_info(&mut self, info: &mut std::collections::HashMap<String, String>) -> Result<(), DeploymentError> {
-        let os_info = self.execute_command("cat /etc/os-release | grep -E '^(NAME|VERSION_ID)' | sed 's/.*=//' | tr -d '\"'")?;
+    fn get_os_info(
+        &mut self,
+        info: &mut std::collections::HashMap<String, String>,
+    ) -> Result<(), DeploymentError> {
+        let os_info = self.execute_command(
+            "cat /etc/os-release | grep -E '^(NAME|VERSION_ID)' | sed 's/.*=//' | tr -d '\"'",
+        )?;
         let os_lines: Vec<&str> = os_info.trim().split('\n').collect();
-        
+
         if os_lines.len() >= 2 {
             info.insert("os_name".to_string(), os_lines[0].to_string());
             info.insert("os_version".to_string(), os_lines[1].to_string());
         }
-        
+
         Ok(())
     }
 
@@ -331,26 +370,31 @@ impl SshClient {
     ///
     /// # Returns
     /// * `Result<(), DeploymentError>` - Success/failure
-    fn get_disk_and_kernel_info(&mut self, info: &mut std::collections::HashMap<String, String>) -> Result<(), DeploymentError> {
+    fn get_disk_and_kernel_info(
+        &mut self,
+        info: &mut std::collections::HashMap<String, String>,
+    ) -> Result<(), DeploymentError> {
         // Get disk information
         let disk_info = self.execute_command("df -h / | tail -1 | awk '{print $2,$4}'")?;
         let disk_parts: Vec<&str> = disk_info.trim().split_whitespace().collect();
-        
+
         if disk_parts.len() >= 2 {
             info.insert("disk_total".to_string(), disk_parts[0].to_string());
             info.insert("disk_available".to_string(), disk_parts[1].to_string());
         }
-        
+
         // Get kernel information
         let kernel_info = self.execute_command("uname -r")?;
         info.insert("kernel".to_string(), kernel_info.trim().to_string());
-        
+
         Ok(())
     }
 
     /// Close the SSH connection
     pub fn close(&mut self) {
-        self.session.disconnect(None, "Closing connection", None).ok();
+        self.session
+            .disconnect(None, "Closing connection", None)
+            .ok();
         self.connected = false;
     }
 }

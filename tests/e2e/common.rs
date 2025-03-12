@@ -1,12 +1,12 @@
 //! Common utilities for e2e tests
 
-use std::process::Command;
-use std::path::PathBuf;
-use std::env;
 use assert_cmd::prelude::*;
-use predicates::prelude::*;
-use tempfile::TempDir;
 use mockito::Server;
+use predicates::prelude::*;
+use std::env;
+use std::path::PathBuf;
+use std::process::Command;
+use tempfile::TempDir;
 
 /// Path to the osvm binary
 pub fn osvm_bin_path() -> PathBuf {
@@ -30,7 +30,7 @@ pub fn run_osvm_command_string(args: &[&str]) -> String {
         .args(args)
         .output()
         .expect("Failed to execute osvm command");
-    
+
     String::from_utf8_lossy(&output.stdout).to_string()
 }
 
@@ -47,7 +47,11 @@ pub fn create_temp_dir() -> TempDir {
 /// Create a mock config file in the given directory
 pub fn create_mock_config(dir: &TempDir) -> PathBuf {
     let config_path = dir.path().join("config.yml");
-    std::fs::write(&config_path, "json_rpc_url: http://localhost:8899\nkeypair_path: ~/.config/osvm/id.json\n").expect("Failed to write config file");
+    std::fs::write(
+        &config_path,
+        "json_rpc_url: http://localhost:8899\nkeypair_path: ~/.config/osvm/id.json\n",
+    )
+    .expect("Failed to write config file");
     config_path
 }
 
@@ -89,7 +93,8 @@ impl MockServer {
 
     /// Mock an SVM get endpoint with 404 response
     pub fn mock_svm_get_not_found(&self, svm_name: &str) -> mockito::Mock {
-        self.server.mock("GET", &format!("/api/svms/{}", svm_name))
+        self.server
+            .mock("GET", &format!("/api/svms/{}", svm_name))
             .with_status(404)
             .with_header("content-type", "application/json")
             .with_body(format!(r#"{{"error":"SVM not found: {}"}}"#, svm_name))

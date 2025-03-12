@@ -4,7 +4,7 @@
 use {
     colored::Colorize,
     serde::{Deserialize, Serialize},
-    solana_client::rpc_client::RpcClient, 
+    solana_client::rpc_client::RpcClient,
     solana_sdk::commitment_config::CommitmentConfig,
     std::{collections::HashMap, error::Error, fmt},
 };
@@ -134,9 +134,9 @@ pub fn list_all_svms(
 ) -> Result<HashMap<String, SvmInfo>, Box<dyn Error>> {
     // In a real implementation, this would query the blockchain for SVM information
     // For this prototype, we'll return a static list
-    
+
     let mut svms = HashMap::new();
-    
+
     // Add Solana
     let solana_info = SvmInfo {
         name: "solana".to_string(),
@@ -153,74 +153,79 @@ pub fn list_all_svms(
         token_price_usd: 142.78,
         networks: {
             let mut networks = HashMap::new();
-            
+
             // Mainnet
-            networks.insert("mainnet".to_string(), NetworkInfo {
-                name: "mainnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
-                        url: "https://api.mainnet-beta.solana.com".to_string(),
-                        is_official: true,
-                        tps: 2450.0,
-                        response_time_ms: 85.3,
-                        location: "US West".to_string(),
-                    },
-                    RpcNodeInfo {
-                        url: "https://solana-api.projectserum.com".to_string(),
-                        is_official: false,
-                        tps: 2430.0,
-                        response_time_ms: 92.7,
-                        location: "US East".to_string(),
-                    },
-                ],
-                validator_count: 1654,
-                current_tps: 2458.7,
-                version: "1.16.0".to_string(),
-                block_height: 225_450_000,
-                total_supply: 560_000_000,
-                staked_tokens: 372_000_000,
-            });
-            
+            networks.insert(
+                "mainnet".to_string(),
+                NetworkInfo {
+                    name: "mainnet".to_string(),
+                    rpc_nodes: vec![
+                        RpcNodeInfo {
+                            url: "https://api.mainnet-beta.solana.com".to_string(),
+                            is_official: true,
+                            tps: 2450.0,
+                            response_time_ms: 85.3,
+                            location: "US West".to_string(),
+                        },
+                        RpcNodeInfo {
+                            url: "https://solana-api.projectserum.com".to_string(),
+                            is_official: false,
+                            tps: 2430.0,
+                            response_time_ms: 92.7,
+                            location: "US East".to_string(),
+                        },
+                    ],
+                    validator_count: 1654,
+                    current_tps: 2458.7,
+                    version: "1.16.0".to_string(),
+                    block_height: 225_450_000,
+                    total_supply: 560_000_000,
+                    staked_tokens: 372_000_000,
+                },
+            );
+
             // Testnet
-            networks.insert("testnet".to_string(), NetworkInfo {
-                name: "testnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "testnet".to_string(),
+                NetworkInfo {
+                    name: "testnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://api.testnet.solana.com".to_string(),
                         is_official: true,
                         tps: 1850.0,
                         response_time_ms: 75.1,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 245,
-                current_tps: 750.5,
-                version: "1.16.0".to_string(),
-                block_height: 189_750_000,
-                total_supply: 560_000_000,
-                staked_tokens: 15_000_000,
-            });
-            
+                    }],
+                    validator_count: 245,
+                    current_tps: 750.5,
+                    version: "1.16.0".to_string(),
+                    block_height: 189_750_000,
+                    total_supply: 560_000_000,
+                    staked_tokens: 15_000_000,
+                },
+            );
+
             // Devnet
-            networks.insert("devnet".to_string(), NetworkInfo {
-                name: "devnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "devnet".to_string(),
+                NetworkInfo {
+                    name: "devnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://api.devnet.solana.com".to_string(),
                         is_official: true,
                         tps: 1500.0,
                         response_time_ms: 68.4,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 95,
-                current_tps: 325.2,
-                version: "1.16.0".to_string(),
-                block_height: 205_850_000,
-                total_supply: 560_000_000,
-                staked_tokens: 5_000_000,
-            });
-            
+                    }],
+                    validator_count: 95,
+                    current_tps: 325.2,
+                    version: "1.16.0".to_string(),
+                    block_height: 205_850_000,
+                    total_supply: 560_000_000,
+                    staked_tokens: 5_000_000,
+                },
+            );
+
             networks
         },
         validator_requirements: SystemRequirements {
@@ -240,7 +245,7 @@ pub fn list_all_svms(
             estimated_monthly_cost: 1500.0,
         },
     };
-    
+
     // Add Sonic
     let sonic_info = SvmInfo {
         name: "sonic".to_string(),
@@ -257,74 +262,79 @@ pub fn list_all_svms(
         token_price_usd: 8.45,
         networks: {
             let mut networks = HashMap::new();
-            
+
             // Mainnet
-            networks.insert("mainnet".to_string(), NetworkInfo {
-                name: "mainnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
-                        url: "https://api.sonic.xyz".to_string(),
-                        is_official: true,
-                        tps: 4800.0,
-                        response_time_ms: 45.3,
-                        location: "US West".to_string(),
-                    },
-                    RpcNodeInfo {
-                        url: "https://rpc.sonic.community".to_string(),
-                        is_official: false,
-                        tps: 4750.0,
-                        response_time_ms: 52.4,
-                        location: "EU Central".to_string(),
-                    },
-                ],
-                validator_count: 120,
-                current_tps: 4820.5,
-                version: "0.9.2".to_string(),
-                block_height: 15_250_000,
-                total_supply: 100_000_000,
-                staked_tokens: 45_000_000,
-            });
-            
+            networks.insert(
+                "mainnet".to_string(),
+                NetworkInfo {
+                    name: "mainnet".to_string(),
+                    rpc_nodes: vec![
+                        RpcNodeInfo {
+                            url: "https://api.sonic.xyz".to_string(),
+                            is_official: true,
+                            tps: 4800.0,
+                            response_time_ms: 45.3,
+                            location: "US West".to_string(),
+                        },
+                        RpcNodeInfo {
+                            url: "https://rpc.sonic.community".to_string(),
+                            is_official: false,
+                            tps: 4750.0,
+                            response_time_ms: 52.4,
+                            location: "EU Central".to_string(),
+                        },
+                    ],
+                    validator_count: 120,
+                    current_tps: 4820.5,
+                    version: "0.9.2".to_string(),
+                    block_height: 15_250_000,
+                    total_supply: 100_000_000,
+                    staked_tokens: 45_000_000,
+                },
+            );
+
             // Testnet
-            networks.insert("testnet".to_string(), NetworkInfo {
-                name: "testnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "testnet".to_string(),
+                NetworkInfo {
+                    name: "testnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://testnet-api.sonic.xyz".to_string(),
                         is_official: true,
                         tps: 4500.0,
                         response_time_ms: 48.2,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 35,
-                current_tps: 2250.8,
-                version: "0.9.2".to_string(),
-                block_height: 8_750_000,
-                total_supply: 100_000_000,
-                staked_tokens: 8_000_000,
-            });
-            
+                    }],
+                    validator_count: 35,
+                    current_tps: 2250.8,
+                    version: "0.9.2".to_string(),
+                    block_height: 8_750_000,
+                    total_supply: 100_000_000,
+                    staked_tokens: 8_000_000,
+                },
+            );
+
             // Devnet
-            networks.insert("devnet".to_string(), NetworkInfo {
-                name: "devnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "devnet".to_string(),
+                NetworkInfo {
+                    name: "devnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://devnet-api.sonic.xyz".to_string(),
                         is_official: true,
                         tps: 4200.0,
                         response_time_ms: 51.0,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 18,
-                current_tps: 950.4,
-                version: "0.9.3-dev".to_string(),
-                block_height: 5_350_000,
-                total_supply: 100_000_000,
-                staked_tokens: 2_000_000,
-            });
-            
+                    }],
+                    validator_count: 18,
+                    current_tps: 950.4,
+                    version: "0.9.3-dev".to_string(),
+                    block_height: 5_350_000,
+                    total_supply: 100_000_000,
+                    staked_tokens: 2_000_000,
+                },
+            );
+
             networks
         },
         validator_requirements: SystemRequirements {
@@ -344,7 +354,7 @@ pub fn list_all_svms(
             estimated_monthly_cost: 800.0,
         },
     };
-    
+
     // Add Eclipse SVM
     let eclipse_info = SvmInfo {
         name: "eclipse".to_string(),
@@ -361,74 +371,79 @@ pub fn list_all_svms(
         token_price_usd: 3.27,
         networks: {
             let mut networks = HashMap::new();
-            
+
             // Mainnet
-            networks.insert("mainnet".to_string(), NetworkInfo {
-                name: "mainnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
-                        url: "https://api.eclipse.xyz".to_string(),
-                        is_official: true,
-                        tps: 5200.0,
-                        response_time_ms: 38.7,
-                        location: "US West".to_string(),
-                    },
-                    RpcNodeInfo {
-                        url: "https://eclipse-api.stakingcrypto.xyz".to_string(),
-                        is_official: false,
-                        tps: 5150.0,
-                        response_time_ms: 42.3,
-                        location: "EU Central".to_string(),
-                    },
-                ],
-                validator_count: 85,
-                current_tps: 5180.2,
-                version: "0.7.1".to_string(),
-                block_height: 12_350_000,
-                total_supply: 1_000_000_000,
-                staked_tokens: 280_000_000,
-            });
-            
+            networks.insert(
+                "mainnet".to_string(),
+                NetworkInfo {
+                    name: "mainnet".to_string(),
+                    rpc_nodes: vec![
+                        RpcNodeInfo {
+                            url: "https://api.eclipse.xyz".to_string(),
+                            is_official: true,
+                            tps: 5200.0,
+                            response_time_ms: 38.7,
+                            location: "US West".to_string(),
+                        },
+                        RpcNodeInfo {
+                            url: "https://eclipse-api.stakingcrypto.xyz".to_string(),
+                            is_official: false,
+                            tps: 5150.0,
+                            response_time_ms: 42.3,
+                            location: "EU Central".to_string(),
+                        },
+                    ],
+                    validator_count: 85,
+                    current_tps: 5180.2,
+                    version: "0.7.1".to_string(),
+                    block_height: 12_350_000,
+                    total_supply: 1_000_000_000,
+                    staked_tokens: 280_000_000,
+                },
+            );
+
             // Testnet
-            networks.insert("testnet".to_string(), NetworkInfo {
-                name: "testnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "testnet".to_string(),
+                NetworkInfo {
+                    name: "testnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://testnet-api.eclipse.xyz".to_string(),
                         is_official: true,
                         tps: 5000.0,
                         response_time_ms: 35.2,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 28,
-                current_tps: 1850.5,
-                version: "0.7.2".to_string(),
-                block_height: 6_750_000,
-                total_supply: 1_000_000_000,
-                staked_tokens: 65_000_000,
-            });
-            
+                    }],
+                    validator_count: 28,
+                    current_tps: 1850.5,
+                    version: "0.7.2".to_string(),
+                    block_height: 6_750_000,
+                    total_supply: 1_000_000_000,
+                    staked_tokens: 65_000_000,
+                },
+            );
+
             // Devnet
-            networks.insert("devnet".to_string(), NetworkInfo {
-                name: "devnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "devnet".to_string(),
+                NetworkInfo {
+                    name: "devnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://devnet-api.eclipse.xyz".to_string(),
                         is_official: true,
                         tps: 4800.0,
                         response_time_ms: 32.8,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 12,
-                current_tps: 820.3,
-                version: "0.7.3-dev".to_string(),
-                block_height: 3_250_000,
-                total_supply: 1_000_000_000,
-                staked_tokens: 25_000_000,
-            });
-            
+                    }],
+                    validator_count: 12,
+                    current_tps: 820.3,
+                    version: "0.7.3-dev".to_string(),
+                    block_height: 3_250_000,
+                    total_supply: 1_000_000_000,
+                    staked_tokens: 25_000_000,
+                },
+            );
+
             networks
         },
         validator_requirements: SystemRequirements {
@@ -448,7 +463,7 @@ pub fn list_all_svms(
             estimated_monthly_cost: 1200.0,
         },
     };
-    
+
     // Add Soon SVM
     let soon_info = SvmInfo {
         name: "soon".to_string(),
@@ -465,47 +480,49 @@ pub fn list_all_svms(
         token_price_usd: 5.12,
         networks: {
             let mut networks = HashMap::new();
-            
+
             // Mainnet
-            networks.insert("mainnet".to_string(), NetworkInfo {
-                name: "mainnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "mainnet".to_string(),
+                NetworkInfo {
+                    name: "mainnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://api.soon.network".to_string(),
                         is_official: true,
                         tps: 3850.0,
                         response_time_ms: 49.2,
                         location: "US East".to_string(),
-                    },
-                ],
-                validator_count: 65,
-                current_tps: 3780.5,
-                version: "0.5.2".to_string(),
-                block_height: 8_450_000,
-                total_supply: 500_000_000,
-                staked_tokens: 175_000_000,
-            });
-            
+                    }],
+                    validator_count: 65,
+                    current_tps: 3780.5,
+                    version: "0.5.2".to_string(),
+                    block_height: 8_450_000,
+                    total_supply: 500_000_000,
+                    staked_tokens: 175_000_000,
+                },
+            );
+
             // Testnet
-            networks.insert("testnet".to_string(), NetworkInfo {
-                name: "testnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "testnet".to_string(),
+                NetworkInfo {
+                    name: "testnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://testnet-api.soon.network".to_string(),
                         is_official: true,
                         tps: 3700.0,
                         response_time_ms: 45.1,
                         location: "US East".to_string(),
-                    },
-                ],
-                validator_count: 22,
-                current_tps: 1580.2,
-                version: "0.5.3".to_string(),
-                block_height: 4_250_000,
-                total_supply: 500_000_000,
-                staked_tokens: 45_000_000,
-            });
-            
+                    }],
+                    validator_count: 22,
+                    current_tps: 1580.2,
+                    version: "0.5.3".to_string(),
+                    block_height: 4_250_000,
+                    total_supply: 500_000_000,
+                    staked_tokens: 45_000_000,
+                },
+            );
+
             networks
         },
         validator_requirements: SystemRequirements {
@@ -525,12 +542,13 @@ pub fn list_all_svms(
             estimated_monthly_cost: 1100.0,
         },
     };
-    
+
     // Add OpenSVM
     let opensvm_info = SvmInfo {
         name: "opensvm".to_string(),
         display_name: "OpenSVM".to_string(),
-        description: "Community-driven open Solana Virtual Machine with enhanced privacy features".to_string(),
+        description: "Community-driven open Solana Virtual Machine with enhanced privacy features"
+            .to_string(),
         website: "https://opensvm.org".to_string(),
         documentation_url: "https://docs.opensvm.org".to_string(),
         explorer_url: "https://explorer.opensvm.org".to_string(),
@@ -542,54 +560,58 @@ pub fn list_all_svms(
         token_price_usd: 2.34,
         networks: {
             let mut networks = HashMap::new();
-            
+
             // Mainnet
-            networks.insert("mainnet".to_string(), NetworkInfo {
-                name: "mainnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
-                        url: "https://api.opensvm.org".to_string(),
-                        is_official: true,
-                        tps: 3200.0,
-                        response_time_ms: 55.4,
-                        location: "US West".to_string(),
-                    },
-                    RpcNodeInfo {
-                        url: "https://opensvm.chainflow.io".to_string(),
-                        is_official: false,
-                        tps: 3150.0,
-                        response_time_ms: 58.7,
-                        location: "EU Central".to_string(),
-                    },
-                ],
-                validator_count: 78,
-                current_tps: 3180.5,
-                version: "0.8.3".to_string(),
-                block_height: 10_250_000,
-                total_supply: 200_000_000,
-                staked_tokens: 95_000_000,
-            });
-            
+            networks.insert(
+                "mainnet".to_string(),
+                NetworkInfo {
+                    name: "mainnet".to_string(),
+                    rpc_nodes: vec![
+                        RpcNodeInfo {
+                            url: "https://api.opensvm.org".to_string(),
+                            is_official: true,
+                            tps: 3200.0,
+                            response_time_ms: 55.4,
+                            location: "US West".to_string(),
+                        },
+                        RpcNodeInfo {
+                            url: "https://opensvm.chainflow.io".to_string(),
+                            is_official: false,
+                            tps: 3150.0,
+                            response_time_ms: 58.7,
+                            location: "EU Central".to_string(),
+                        },
+                    ],
+                    validator_count: 78,
+                    current_tps: 3180.5,
+                    version: "0.8.3".to_string(),
+                    block_height: 10_250_000,
+                    total_supply: 200_000_000,
+                    staked_tokens: 95_000_000,
+                },
+            );
+
             // Testnet
-            networks.insert("testnet".to_string(), NetworkInfo {
-                name: "testnet".to_string(),
-                rpc_nodes: vec![
-                    RpcNodeInfo {
+            networks.insert(
+                "testnet".to_string(),
+                NetworkInfo {
+                    name: "testnet".to_string(),
+                    rpc_nodes: vec![RpcNodeInfo {
                         url: "https://testnet-api.opensvm.org".to_string(),
                         is_official: true,
                         tps: 3100.0,
                         response_time_ms: 52.3,
                         location: "US West".to_string(),
-                    },
-                ],
-                validator_count: 24,
-                current_tps: 1350.7,
-                version: "0.8.4".to_string(),
-                block_height: 6_850_000,
-                total_supply: 200_000_000,
-                staked_tokens: 35_000_000,
-            });
-            
+                    }],
+                    validator_count: 24,
+                    current_tps: 1350.7,
+                    version: "0.8.4".to_string(),
+                    block_height: 6_850_000,
+                    total_supply: 200_000_000,
+                    staked_tokens: 35_000_000,
+                },
+            );
+
             networks
         },
         validator_requirements: SystemRequirements {
@@ -609,14 +631,14 @@ pub fn list_all_svms(
             estimated_monthly_cost: 750.0,
         },
     };
-    
+
     // Add to map
     svms.insert("solana".to_string(), solana_info);
     svms.insert("sonic".to_string(), sonic_info);
     svms.insert("eclipse".to_string(), eclipse_info);
     svms.insert("soon".to_string(), soon_info);
     svms.insert("opensvm".to_string(), opensvm_info);
-    
+
     Ok(svms)
 }
 
@@ -636,11 +658,10 @@ pub fn get_svm_info(
 ) -> Result<SvmInfo, Box<dyn Error>> {
     // Get all SVMs and find the requested one
     let svms = list_all_svms(client, commitment_config)?;
-    
-    svms
-        .get(name)
-        .cloned()
-        .ok_or_else(|| Box::new(SvmError::NotFound(format!("SVM '{}' not found", name))) as Box<dyn Error>)
+
+    svms.get(name).cloned().ok_or_else(|| {
+        Box::new(SvmError::NotFound(format!("SVM '{}' not found", name))) as Box<dyn Error>
+    })
 }
 
 /// Display a list of all SVMs
@@ -648,29 +669,37 @@ pub fn get_svm_info(
 /// # Arguments
 /// * `svms` - Map of SVM names to info
 pub fn display_svm_list(svms: &HashMap<String, SvmInfo>) {
-    println!("\n{}", "OSVM - Solana Virtual Machine Management".cyan().bold());
+    println!(
+        "\n{}",
+        "OSVM - Solana Virtual Machine Management".cyan().bold()
+    );
     println!("{}", "Available SVMs in the chain:".green().bold());
     println!("{}", "==============".green());
-    
+
     if svms.is_empty() {
         println!("{}", "No SVMs are available.".yellow());
         return;
     }
-    
-    println!("{:<10} {:<20} {:<10} {:<15} {:<15}",
+
+    println!(
+        "{:<10} {:<20} {:<10} {:<15} {:<15}",
         "NAME".blue().bold(),
         "DISPLAY NAME".blue().bold(),
         "TOKEN".blue().bold(),
         "INSTALLABLE".blue().bold(),
         "PRICE (USD)".blue().bold()
     );
-    
-    println!("{:<10} {:<20} {:<10} {:<15} {:<15}",
+
+    println!(
+        "{:<10} {:<20} {:<10} {:<15} {:<15}",
         "----", "------------", "-----", "----------", "----------"
     );
-    
-    println!("{}", "------------------------------------------------------------------------".bright_black());
-    
+
+    println!(
+        "{}",
+        "------------------------------------------------------------------------".bright_black()
+    );
+
     for (_, info) in svms {
         let install_status = match (info.can_install_validator, info.can_install_rpc) {
             (true, true) => "Validator, RPC".green(),
@@ -678,19 +707,18 @@ pub fn display_svm_list(svms: &HashMap<String, SvmInfo>) {
             (false, true) => "RPC".green(),
             (false, false) => "No".red(),
         };
-        
-        println!("{:<10} {:<20} {:<10} {:<15} ${:<14.2}",
-            info.name,
-            info.display_name,
-            info.token_symbol,
-            install_status,
-            info.token_price_usd
+
+        println!(
+            "{:<10} {:<20} {:<10} {:<15} ${:<14.2}",
+            info.name, info.display_name, info.token_symbol, install_status, info.token_price_usd
         );
     }
-    
-    println!("\n{} Use '{}' to get detailed information about a specific SVM", 
+
+    println!(
+        "\n{} Use '{}' to get detailed information about a specific SVM",
         "TIP:".yellow().bold(),
-        "osvm svm get <name>".cyan());
+        "osvm svm get <name>".cyan()
+    );
 }
 
 /// Display detailed information about a specific SVM
@@ -698,85 +726,151 @@ pub fn display_svm_list(svms: &HashMap<String, SvmInfo>) {
 /// # Arguments
 /// * `info` - SVM information
 pub fn display_svm_info(info: &SvmInfo) {
-    println!("\n{}", "OSVM - Solana Virtual Machine Management".cyan().bold());
-    println!("{} {}", "SVM Information:".green().bold(), info.display_name.cyan().bold());
+    println!(
+        "\n{}",
+        "OSVM - Solana Virtual Machine Management".cyan().bold()
+    );
+    println!(
+        "{} {}",
+        "SVM Information:".green().bold(),
+        info.display_name.cyan().bold()
+    );
     println!("{}", "=====================".green());
-    
+
     println!("\n{}", "General Information".blue().bold());
     println!("{}", "-------------------".blue());
     println!("  Name: {}", info.name.yellow());
     println!("  Description: {}", info.description.yellow());
-    println!("  Token: {} (${:.2})", info.token_symbol.yellow(), info.token_price_usd);
-    println!("  Installation: {}{}", 
-        if info.can_install_validator || info.can_install_rpc { "Available as ".green() } else { "Not available".red() },
-        if info.can_install_validator && info.can_install_rpc { "Validator, RPC".green() } 
-        else if info.can_install_validator { "Validator".green() } 
-        else if info.can_install_rpc { "RPC".green() } 
-        else { "".red() });
-    
+    println!(
+        "  Token: {} (${:.2})",
+        info.token_symbol.yellow(),
+        info.token_price_usd
+    );
+    println!(
+        "  Installation: {}{}",
+        if info.can_install_validator || info.can_install_rpc {
+            "Available as ".green()
+        } else {
+            "Not available".red()
+        },
+        if info.can_install_validator && info.can_install_rpc {
+            "Validator, RPC".green()
+        } else if info.can_install_validator {
+            "Validator".green()
+        } else if info.can_install_rpc {
+            "RPC".green()
+        } else {
+            "".red()
+        }
+    );
+
     println!("\n{}", "Links".blue().bold());
     println!("{}", "-----".blue());
     println!("  Website: {}", info.website.cyan().underline());
-    println!("  Documentation: {}", info.documentation_url.cyan().underline());
+    println!(
+        "  Documentation: {}",
+        info.documentation_url.cyan().underline()
+    );
     println!("  Explorer: {}", info.explorer_url.cyan().underline());
-    println!("  GitHub: {}", info.github_url.cyan().underline()); 
+    println!("  GitHub: {}", info.github_url.cyan().underline());
 
     println!("\n{}", "Network Information".blue().bold());
     println!("{}", "------------------".blue());
-    
+
     println!("\n{}", "Networks".blue().bold());
     println!("{}", "--------".blue());
-    
+
     for (network_name, network) in &info.networks {
-        println!("  {} {}:", network_name.to_uppercase().yellow().bold(), "Network".yellow().bold());
+        println!(
+            "  {} {}:",
+            network_name.to_uppercase().yellow().bold(),
+            "Network".yellow().bold()
+        );
         println!("    Version: {}", network.version);
         println!("    Validators: {}", network.validator_count);
         println!("    Current TPS: {:.1} tx/sec", network.current_tps);
         println!("    Block Height: {} blocks", network.block_height);
         println!("    Total Supply: {} tokens", network.total_supply);
-        println!("    Staked Tokens: {} tokens ({:.1}%)", 
-            network.staked_tokens, 
-            (network.staked_tokens as f64 / network.total_supply as f64) * 100.0);
-        
+        println!(
+            "    Staked Tokens: {} tokens ({:.1}%)",
+            network.staked_tokens,
+            (network.staked_tokens as f64 / network.total_supply as f64) * 100.0
+        );
+
         println!("    {} RPC Nodes:", network.rpc_nodes.len());
         for node in &network.rpc_nodes {
-            println!("      - {} ({}, {}) [TPS: {:.1}, Response: {:.1} ms]", 
-                node.url.cyan(), 
-                if node.is_official { "Official".green() } else { "Community".bright_black() },
+            println!(
+                "      - {} ({}, {}) [TPS: {:.1}, Response: {:.1} ms]",
+                node.url.cyan(),
+                if node.is_official {
+                    "Official".green()
+                } else {
+                    "Community".bright_black()
+                },
                 node.location.bright_white(),
-                node.tps, 
+                node.tps,
                 node.response_time_ms
-            ); 
+            );
         }
         println!();
     }
-    
+
     println!("{}", "System Requirements".blue().bold());
     println!("{}", "------------------".blue());
-    
+
     println!("  {}:", "Validator Requirements".yellow().bold());
     println!("    CPU: {} cores", info.validator_requirements.cpu_cores);
     println!("    RAM: {} GB", info.validator_requirements.ram_gb);
     println!("    Storage: {} GB", info.validator_requirements.storage_gb);
-    println!("    Bandwidth: {} Mbps", info.validator_requirements.bandwidth_mbps);
-    println!("    Recommended Instance: {}", info.validator_requirements.recommended_instance);
-    println!("    Est. Monthly Cost: ${:.2}", info.validator_requirements.estimated_monthly_cost);
-    
+    println!(
+        "    Bandwidth: {} Mbps",
+        info.validator_requirements.bandwidth_mbps
+    );
+    println!(
+        "    Recommended Instance: {}",
+        info.validator_requirements.recommended_instance
+    );
+    println!(
+        "    Est. Monthly Cost: ${:.2}",
+        info.validator_requirements.estimated_monthly_cost
+    );
+
     println!("\n  {}:", "RPC Node Requirements".yellow().bold());
     println!("    CPU: {} cores", info.rpc_requirements.cpu_cores);
     println!("    RAM: {} GB", info.rpc_requirements.ram_gb);
     println!("    Storage: {} GB", info.rpc_requirements.storage_gb);
-    println!("    Bandwidth: {} Mbps", info.rpc_requirements.bandwidth_mbps);
-    println!("    Recommended Instance: {}", info.rpc_requirements.recommended_instance);
-    println!("    Est. Monthly Cost: ${:.2}", info.rpc_requirements.estimated_monthly_cost);
-    
+    println!(
+        "    Bandwidth: {} Mbps",
+        info.rpc_requirements.bandwidth_mbps
+    );
+    println!(
+        "    Recommended Instance: {}",
+        info.rpc_requirements.recommended_instance
+    );
+    println!(
+        "    Est. Monthly Cost: ${:.2}",
+        info.rpc_requirements.estimated_monthly_cost
+    );
+
     if info.can_install_validator || info.can_install_rpc {
         println!("\n{}", "Installation".blue().bold());
         println!("{}", "------------".blue());
-        println!("  {}: Install this SVM on a remote host with:", "TIP".yellow().bold());
-        
-        println!("    {}", format!("osvm svm install {} --host user@your-server-ip", info.name).cyan());
-        println!("    {}", format!("osvm user@your-server-ip --svm {} --node-type validator --network mainnet", info.name).cyan());
-    }
-    }
+        println!(
+            "  {}: Install this SVM on a remote host with:",
+            "TIP".yellow().bold()
+        );
 
+        println!(
+            "    {}",
+            format!("osvm svm install {} --host user@your-server-ip", info.name).cyan()
+        );
+        println!(
+            "    {}",
+            format!(
+                "osvm user@your-server-ip --svm {} --node-type validator --network mainnet",
+                info.name
+            )
+            .cyan()
+        );
+    }
+}

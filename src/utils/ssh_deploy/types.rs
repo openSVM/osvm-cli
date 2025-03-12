@@ -1,9 +1,9 @@
 //! Type definitions for SSH deployment
 
 use {
+    crate::utils::ssh_deploy::errors::DeploymentError,
     serde::{Deserialize, Serialize},
     std::{fmt, str::FromStr},
-    crate::utils::ssh_deploy::errors::DeploymentError,
 };
 
 /// Network type
@@ -92,26 +92,29 @@ impl ServerConfig {
     pub fn from_connection_string(conn_str: &str) -> Result<Self, DeploymentError> {
         let parts: Vec<&str> = conn_str.split('@').collect();
         if parts.len() != 2 {
-            return Err(DeploymentError::InvalidConfig(format!("Invalid connection string: {}", conn_str)));
+            return Err(DeploymentError::InvalidConfig(format!(
+                "Invalid connection string: {}",
+                conn_str
+            )));
         }
-        
+
         let username = parts[0].to_string();
         let host_parts: Vec<&str> = parts[1].split(':').collect();
         let host = host_parts[0].to_string();
-        let port = if host_parts.len() > 1 { 
-            host_parts[1].parse().unwrap_or(22) 
-        } else { 
-            22 
+        let port = if host_parts.len() > 1 {
+            host_parts[1].parse().unwrap_or(22)
+        } else {
+            22
         };
-        
+
         Ok(ServerConfig {
-            host, 
-            port, 
-            auth: AuthMethod::Key { 
-                username, 
-                key_path: "~/.ssh/id_rsa".to_string(), 
-                passphrase: None 
-            }, 
+            host,
+            port,
+            auth: AuthMethod::Key {
+                username,
+                key_path: "~/.ssh/id_rsa".to_string(),
+                passphrase: None,
+            },
             install_dir: "/opt/osvm".to_string(),
         })
     }
@@ -132,7 +135,7 @@ pub struct DeploymentConfig {
     pub rpc_url: Option<String>,
     /// Additional config parameters
     pub additional_params: std::collections::HashMap<String, String>,
-    
+
     // New fields for enhanced Solana validator configuration
     /// Solana client version
     pub version: Option<String>,

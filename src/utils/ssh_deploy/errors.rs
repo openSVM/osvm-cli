@@ -1,8 +1,8 @@
 //! Error definitions for SSH deployment
 
 use {
-    std::{error::Error, fmt, io},
     ssh2,
+    std::{error::Error, fmt, io},
 };
 
 /// Deployment error types
