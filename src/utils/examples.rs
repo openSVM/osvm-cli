@@ -132,6 +132,49 @@ pub fn get_all_examples() -> Vec<Example> {
             explanation: "Deploys validator nodes for multiple SVMs to a single host, all running on mainnet",
             category: ExampleCategory::NodeDeployment,
         },
+        // Enhanced Solana Validator Deployment Examples
+        Example {
+            title: "Deploy an enhanced Solana validator node",
+            command: "osvm solana validator user@host.example.com --network mainnet",
+            explanation: "Deploys a Solana validator node with enhanced features on the mainnet",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy Solana validator with disk configuration",
+            command: "osvm solana validator user@host.example.com --network mainnet --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1",
+            explanation: "Deploys a Solana validator with optimized 3-disk configuration (OS, Ledger, Accounts/Snapshots)",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy Solana validator with Jito client",
+            command: "osvm solana validator user@host.example.com --network mainnet --client-type jito --version v1.18.23-jito",
+            explanation: "Deploys a Solana validator using the Jito client with a specific version",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy Solana validator with hot-swap capability",
+            command: "osvm solana validator user@host.example.com --network mainnet --hot-swap",
+            explanation: "Deploys a Solana validator with hot-swap capability for high availability",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy fully-optimized Solana validator",
+            command: "osvm solana validator user@host.example.com --network mainnet --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1 --client-type jito --hot-swap --metrics-config \"host=https://metrics.solana.com:8086,db=mainnet-beta\"",
+            explanation: "Deploys a Solana validator with all optimizations: disk configuration, Jito client, hot-swap capability, and metrics",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy enhanced Solana RPC node",
+            command: "osvm solana rpc user@host.example.com --network mainnet --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1",
+            explanation: "Deploys a Solana RPC node with optimized disk configuration",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy Solana RPC node with transaction history",
+            command: "osvm solana rpc user@host.example.com --network mainnet --enable-history",
+            explanation: "Deploys a Solana RPC node with transaction history enabled (increases storage requirements)",
+            category: ExampleCategory::NodeDeployment,
+        },
         
         // Node Monitoring
         Example {

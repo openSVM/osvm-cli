@@ -4,12 +4,16 @@ use {
     crate::utils::ssh_deploy::{
         client::SshClient,
         errors::DeploymentError,
-        types::{ServerConfig, DeploymentConfig, NetworkType},
+        types::{ServerConfig, DeploymentConfig, NetworkType, DiskConfig},
         services::{create_systemd_service, enable_and_start_service, await_service_startup, create_binary_service_content},
+        disk_management::{setup_disk_storage, validate_disk_requirements},
+        optimizations::{apply_system_optimizations, configure_firewall, setup_log_rotation},
+        hot_swap::{configure_hot_swap, configure_log_rotation as configure_hs_log_rotation},
+        monitoring::{setup_monitoring, install_monitoring_stack},
     },
 };
 
-/// Deploy Solana node
+/// Deploy Solana node with enhanced features from Validator Jumpstart
 ///
 /// # Arguments
 /// * `client` - SSH client
@@ -25,12 +29,46 @@ pub async fn deploy_solana(
     deployment_config: &DeploymentConfig,
     progress_callback: Option<&Box<dyn Fn(u8, &str) + Send>>,
 ) -> Result<(), DeploymentError> {
+    // Set up disk storage if disk configuration is provided
+    if let Some(disk_config) = &deployment_config.disk_config {
+        if let Some(callback) = progress_callback {
+            callback(10, "Validating disk requirements");
+        }
+        
+        validate_disk_requirements(client, &disk_config.ledger_disk, &disk_config.accounts_disk)?;
+        
+        if let Some(callback) = progress_callback {
+            callback(20, "Setting up disk storage");
+        }
+        
+        setup_disk_storage(client, &disk_config.ledger_disk, &disk_config.accounts_disk)?;
+    }
+    
+    // Apply system optimizations
+    if let Some(callback) = progress_callback {
+        callback(30, "Applying system optimizations");
+    }
+    
+    apply_system_optimizations(client)?;
+    
+    // Configure firewall
+    if let Some(callback) = progress_callback {
+        callback(35, "Configuring firewall");
+    }
+    
+    let is_rpc = deployment_config.node_type.to_lowercase() == "rpc";
+    configure_firewall(client, is_rpc)?;
+    
     // Install Solana CLI
     if let Some(callback) = progress_callback {
         callback(40, "Installing Solana CLI");
     }
     
-    install_solana_cli(client)?;
+    install_solana_cli(
+        client, 
+        deployment_config.version.as_deref(), 
+        deployment_config.client_type.as_deref()
+    )?;
     
     // Create Solana directory and generate keypair
     let solana_dir = format!("{}/solana", server_config.install_dir);
@@ -49,28 +87,120 @@ pub async fn deploy_solana(
     
     configure_solana_network(client, deployment_config.network)?;
     
+    // Set up hot-swap capability if enabled
+    let mut hot_swap_keypairs = None;
+    if deployment_config.hot_swap_enabled {
+        if let Some(callback) = progress_callback {
+            callback(65, "Setting up hot-swap capability");
+        }
+        
+        hot_swap_keypairs = Some(configure_hot_swap(client, &solana_dir)?);
+        configure_hs_log_rotation(client)?;
+    } else {
+        // Set up regular log rotation
+        setup_log_rotation(client)?;
+    }
+    
     // Create systemd service
     if let Some(callback) = progress_callback {
         callback(70, "Creating systemd service");
     }
     
-    create_solana_service(client, deployment_config, &solana_dir, &keypair_path).await?;
+    // Use hot-swap keypairs if available, otherwise use the standard keypair
+    let service_keypair = if let Some((staked_keypair, _)) = &hot_swap_keypairs {
+        staked_keypair
+    } else {
+        &keypair_path
+    };
+    
+    create_solana_service(client, deployment_config, &solana_dir, service_keypair).await?;
+    
+    // Set up monitoring
+    if let Some(callback) = progress_callback {
+        callback(80, "Setting up monitoring");
+    }
+    
+    let metrics_config = deployment_config.metrics_config.as_deref().unwrap_or("");
+    setup_monitoring(client, &solana_dir, metrics_config, &deployment_config.node_type)?;
+    
+    // Install monitoring stack (optional)
+    if let Some(callback) = progress_callback {
+        callback(90, "Preparing monitoring stack");
+    }
+    
+    install_monitoring_stack(client, &solana_dir)?;
+    
+    if let Some(callback) = progress_callback {
+        callback(100, "Deployment completed successfully");
+    }
     
     Ok(())
 }
 
-/// Install Solana CLI
+/// Install Solana CLI with version selection
 ///
 /// # Arguments
 /// * `client` - SSH client
+/// * `version` - Optional Solana version
+/// * `client_type` - Optional client type (standard, jito, agave)
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
 fn install_solana_cli(
     client: &mut SshClient,
+    version: Option<&str>,
+    client_type: Option<&str>,
 ) -> Result<(), DeploymentError> {
-    client.execute_command("sh -c \"$(curl -sSfL https://release.solana.com/v1.16.0/install)\"")?;
+    // Default version
+    let version = version.unwrap_or("v1.16.0");
+    
+    // Handle different client types
+    match client_type {
+        Some("jito") => {
+            // Install Jito client
+            let jito_version = if version.contains("jito") {
+                version.to_string() 
+            } else {
+                format!("{}-jito", version)
+            };
+            
+            client.execute_command(&format!(
+                "sh -c \"$(curl -sSfL https://release.solana.com/{}/install)\"",
+                jito_version
+            ))?;
+            
+            // Create symlink for Jito client
+            client.execute_command(&format!(
+                "ln -sf /home/$(whoami)/.local/share/solana/install/releases/{}/bin /home/$(whoami)/.local/share/solana/install/active_release/",
+                jito_version
+            ))?;
+        },
+        Some("agave") => {
+            // Install Agave client
+            let agave_version = if version.contains("agave") {
+                version.to_string() 
+            } else {
+                format!("{}-agave", version)
+            };
+            
+            client.execute_command("curl -sSf https://raw.githubusercontent.com/agave-blockchain/releases/main/install.sh | sh")?;
+        },
+        _ => {
+            // Install standard Solana client
+            client.execute_command(&format!(
+                "sh -c \"$(curl -sSfL https://release.solana.com/{}/install)\"",
+                version
+            ))?;
+        }
+    }
+    
+    // Add Solana to PATH
+    client.execute_command("echo 'export PATH=\"/home/$(whoami)/.local/share/solana/install/active_release/bin:$PATH\"' >> ~/.bashrc")?;
     client.execute_command("export PATH=\"/home/$(whoami)/.local/share/solana/install/active_release/bin:$PATH\"")?;
+    
+    // Verify installation
+    let solana_version = client.execute_command("solana --version")?;
+    println!("Installed Solana version: {}", solana_version);
     
     Ok(())
 }
