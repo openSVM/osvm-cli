@@ -6,7 +6,92 @@
 
 A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks. Monitor, deploy, and manage your SVM infrastructure with a single tool.
 
-![OSVM CLI Dashboard](images/dashboard-screenshot.png)
+```mermaid
+graph TB
+    User((User))
+
+    subgraph "OSVM CLI System"
+        subgraph "CLI Interface"
+            MainCLI["Main CLI<br>Rust/Clap"]
+            CommandParser["Command Parser<br>Clap"]
+            
+            subgraph "Core Commands"
+                SVMCommands["SVM Commands<br>Rust"]
+                NodeCommands["Node Commands<br>Rust"]
+                SolanaCommands["Solana Commands<br>Rust"]
+                RPCCommands["RPC Commands<br>Rust"]
+            end
+        end
+        
+        subgraph "Node Management"
+            NodeManager["Node Manager<br>Rust"]
+            
+            subgraph "Node Components"
+                NodeDB["Node Database<br>JSON"]
+                NodeMonitor["Node Monitor<br>Rust"]
+                NodeDashboard["Node Dashboard<br>Ratatui"]
+                NodeMetrics["Node Metrics<br>Rust"]
+                NodeLogs["Log Manager<br>Rust"]
+            end
+        end
+        
+        subgraph "SSH Deployment"
+            SSHManager["SSH Manager<br>SSH2"]
+            
+            subgraph "Deployment Components"
+                DeployConfig["Deployment Config<br>Rust"]
+                DiskManager["Disk Manager<br>Rust"]
+                ServiceManager["Service Manager<br>Rust"]
+                HotSwap["Hot Swap Manager<br>Rust"]
+                Dependencies["Dependency Manager<br>Rust"]
+            end
+        end
+        
+        subgraph "Utilities"
+            Logger["Logger<br>env_logger"]
+            Config["Config Manager<br>YAML"]
+            Dashboard["Dashboard Generator<br>HTML/CSS"]
+            Examples["Examples Manager<br>Rust"]
+        end
+    end
+
+    subgraph "External Systems"
+        SolanaNode["Solana Node<br>Rust"]
+        RPCNode["RPC Node<br>JSON-RPC"]
+        RemoteServer["Remote Server<br>Linux"]
+    end
+
+    User -->|Uses| MainCLI
+    MainCLI -->|Parses| CommandParser
+    CommandParser -->|Executes| SVMCommands
+    CommandParser -->|Executes| NodeCommands
+    CommandParser -->|Executes| SolanaCommands
+    CommandParser -->|Executes| RPCCommands
+
+    NodeCommands -->|Manages| NodeManager
+    NodeManager -->|Stores| NodeDB
+    NodeManager -->|Monitors| NodeMonitor
+    NodeMonitor -->|Displays| NodeDashboard
+    NodeMonitor -->|Collects| NodeMetrics
+    NodeManager -->|Manages| NodeLogs
+
+    SolanaCommands -->|Deploys| SSHManager
+    RPCCommands -->|Deploys| SSHManager
+    SSHManager -->|Uses| DeployConfig
+    SSHManager -->|Manages| DiskManager
+    SSHManager -->|Controls| ServiceManager
+    SSHManager -->|Handles| HotSwap
+    SSHManager -->|Installs| Dependencies
+
+    MainCLI -->|Uses| Logger
+    MainCLI -->|Reads| Config
+    NodeDashboard -->|Generates| Dashboard
+    MainCLI -->|Shows| Examples
+
+    SSHManager -->|Connects to| RemoteServer
+    NodeMonitor -->|Monitors| SolanaNode
+    NodeMonitor -->|Monitors| RPCNode
+```
 
 ## ⚡ One-Line Installation
 
