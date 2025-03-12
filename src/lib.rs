@@ -1,5 +1,5 @@
 //! OSVM CLI Library
-//! 
+//!
 //! This library provides the core functionality for the OSVM CLI.
 //! It includes utilities for managing SVMs, nodes, and SSH deployments.
 //!
@@ -18,6 +18,6 @@
 //! - `clparse`: Command-line parsing and argument definitions
 //! - `main`: Main entry point and command handlers
 
-pub mod utils;
 pub mod clparse;
 pub mod prelude;
+pub mod utils;

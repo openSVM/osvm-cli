@@ -1,11 +1,6 @@
 //! Monitoring and metrics utilities for Solana validator/RPC deployment
 
-use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-    },
-};
+use crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError};
 
 /// Set up monitoring for Solana validator/RPC
 ///
@@ -26,18 +21,18 @@ pub fn setup_monitoring(
     // Create directory for monitoring scripts
     let monitoring_dir = format!("{}/monitoring", install_dir);
     client.execute_command(&format!("mkdir -p {}", monitoring_dir))?;
-    
+
     // Configure Solana metrics if provided
     if !metrics_config.is_empty() {
         configure_solana_metrics(client, metrics_config)?;
     }
-    
+
     // Set up basic monitoring script
     setup_basic_monitoring(client, &monitoring_dir, node_type)?;
-    
+
     // Set up alerts for critical issues
     setup_alert_system(client, &monitoring_dir)?;
-    
+
     Ok(())
 }
 
@@ -54,17 +49,14 @@ fn configure_solana_metrics(
     metrics_config: &str,
 ) -> Result<(), DeploymentError> {
     // Add metrics config to .bashrc
-    let bashrc_entry = format!(
-        "export SOLANA_METRICS_CONFIG=\"{}\"", 
-        metrics_config
-    );
-    
+    let bashrc_entry = format!("export SOLANA_METRICS_CONFIG=\"{}\"", metrics_config);
+
     // Add to .bashrc if not already present
     client.execute_command(&format!(
         r#"grep -q "SOLANA_METRICS_CONFIG" ~/.bashrc || echo '{}' >> ~/.bashrc"#,
         bashrc_entry
     ))?;
-    
+
     Ok(())
 }
 
@@ -82,7 +74,8 @@ fn setup_basic_monitoring(
     monitoring_dir: &str,
     node_type: &str,
 ) -> Result<(), DeploymentError> {
-    let monitor_script_content = format!(r#"#!/bin/bash
+    let monitor_script_content = format!(
+        r#"#!/bin/bash
 # Solana {} monitoring script
 
 SERVICE_NAME="solana-validator.service"
@@ -116,7 +109,9 @@ fi
 
 # Clean up old monitor logs (keep last 7 days)
 find "$(dirname "$MONITOR_LOG")" -name "*.log" -type f -mtime +7 -delete
-"#, node_type, monitoring_dir);
+"#,
+        node_type, monitoring_dir
+    );
 
     // Create monitoring script
     let monitor_script_path = format!("{}/monitor.sh", monitoring_dir);
@@ -125,14 +120,14 @@ find "$(dirname "$MONITOR_LOG")" -name "*.log" -type f -mtime +7 -delete
         monitor_script_path, monitor_script_content
     ))?;
     client.execute_command(&format!("chmod +x {}", monitor_script_path))?;
-    
+
     // Set up cron job to run monitoring every 15 minutes
     let cron_entry = format!("*/15 * * * * {}", monitor_script_path);
     client.execute_command(&format!(
         "(crontab -l 2>/dev/null | grep -v '{}' ; echo '{}') | crontab -",
         monitor_script_path, cron_entry
     ))?;
-    
+
     Ok(())
 }
 
@@ -144,10 +139,7 @@ find "$(dirname "$MONITOR_LOG")" -name "*.log" -type f -mtime +7 -delete
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn setup_alert_system(
-    client: &mut SshClient,
-    monitoring_dir: &str,
-) -> Result<(), DeploymentError> {
+fn setup_alert_system(client: &mut SshClient, monitoring_dir: &str) -> Result<(), DeploymentError> {
     let alert_script_content = r#"#!/bin/bash
 # Alert script for Solana validator critical issues
 
@@ -212,14 +204,14 @@ fi
         alert_script_path, alert_script_content
     ))?;
     client.execute_command(&format!("chmod +x {}", alert_script_path))?;
-    
+
     // Set up cron job to run alerts every 30 minutes
     let cron_entry = format!("*/30 * * * * {}", alert_script_path);
     client.execute_command(&format!(
         "(crontab -l 2>/dev/null | grep -v '{}' ; echo '{}') | crontab -",
         alert_script_path, cron_entry
     ))?;
-    
+
     Ok(())
 }
 
@@ -238,7 +230,7 @@ pub fn install_monitoring_stack(
     // Create directory for monitoring stack
     let stack_dir = format!("{}/monitoring-stack", install_dir);
     client.execute_command(&format!("mkdir -p {}", stack_dir))?;
-    
+
     // Create docker-compose file for monitoring stack
     let docker_compose_content = r#"version: '3'
 services:
@@ -278,7 +270,7 @@ volumes:
         "cat > {} << 'EOL'\n{}\nEOL",
         docker_compose_path, docker_compose_content
     ))?;
-    
+
     // Create script to install Docker and Docker Compose if needed
     let setup_script_content = r#"#!/bin/bash
 # Setup script for Grafana + InfluxDB monitoring stack
@@ -320,12 +312,12 @@ echo "Password: admin"
         setup_script_path, setup_script_content
     ))?;
     client.execute_command(&format!("chmod +x {}", setup_script_path))?;
-    
+
     // Don't automatically install - just provide the scripts
     client.execute_command(&format!(
         "echo 'Monitoring stack setup script created at {}. Run this script to install Grafana + InfluxDB.'",
         setup_script_path
     ))?;
-    
+
     Ok(())
 }

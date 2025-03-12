@@ -1,16 +1,8 @@
 //! Service management utilities for SSH deployment
 
 use {
-    crate::utils::ssh_deploy::{
-        errors::DeploymentError,
-        client::SshClient,
-    },
-    std::{
-        fs,
-        io::Write,
-        path::Path,
-        time::Duration,
-    },
+    crate::utils::ssh_deploy::{client::SshClient, errors::DeploymentError},
+    std::{fs, io::Write, path::Path, time::Duration},
     tokio::time,
 };
 
@@ -32,15 +24,18 @@ pub fn create_systemd_service(
     let temp_path = std::env::temp_dir().join(format!("{}.service", service_name));
     let mut temp_file = fs::File::create(&temp_path)?;
     temp_file.write_all(service_content.as_bytes())?;
-    
+
     // Upload and install the service
     client.upload_file(&temp_path, &format!("/tmp/{}.service", service_name))?;
-    client.execute_command(&format!("sudo mv /tmp/{}.service /etc/systemd/system/{}.service", service_name, service_name))?;
+    client.execute_command(&format!(
+        "sudo mv /tmp/{}.service /etc/systemd/system/{}.service",
+        service_name, service_name
+    ))?;
     client.execute_command("sudo systemctl daemon-reload")?;
-    
+
     // Delete the temporary file
     fs::remove_file(temp_path)?;
-    
+
     Ok(())
 }
 
@@ -58,7 +53,7 @@ pub fn enable_and_start_service(
 ) -> Result<(), DeploymentError> {
     client.execute_command(&format!("sudo systemctl enable {}", service_name))?;
     client.execute_command(&format!("sudo systemctl start {}", service_name))?;
-    
+
     Ok(())
 }
 
@@ -70,12 +65,9 @@ pub fn enable_and_start_service(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-pub fn enable_service(
-    client: &mut SshClient,
-    service_name: &str,
-) -> Result<(), DeploymentError> {
+pub fn enable_service(client: &mut SshClient, service_name: &str) -> Result<(), DeploymentError> {
     client.execute_command(&format!("sudo systemctl enable {}", service_name))?;
-    
+
     Ok(())
 }
 
@@ -98,9 +90,10 @@ pub async fn await_service_startup(
         }
         time::sleep(Duration::from_secs(2)).await;
     }
-    
+
     Err(DeploymentError::DeploymentError(format!(
-        "Service did not start within the expected time: {}", service_name
+        "Service did not start within the expected time: {}",
+        service_name
     )))
 }
 
@@ -134,8 +127,7 @@ pub fn create_docker_service_content(
         \n\
         [Install]\n\
         WantedBy=multi-user.target\n",
-        description,
-        working_dir
+        description, working_dir
     )
 }
 
@@ -156,7 +148,7 @@ pub fn create_binary_service_content(
     description: &str,
 ) -> String {
     let args_str = args.join(" \\\n  ");
-    
+
     format!(
         "[Unit]\n\
         Description={}\n\
@@ -172,9 +164,6 @@ pub fn create_binary_service_content(
         \n\
         [Install]\n\
         WantedBy=multi-user.target\n",
-        description,
-        working_dir,
-        binary_path,
-        args_str
+        description, working_dir, binary_path, args_str
     )
 }

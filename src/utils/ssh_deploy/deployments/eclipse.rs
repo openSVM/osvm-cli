@@ -1,12 +1,13 @@
 //! Eclipse SVM deployment implementation
 
-use {
-    crate::utils::ssh_deploy::{
-        client::SshClient,
-        errors::DeploymentError,
-        types::{ServerConfig, DeploymentConfig, NetworkType},
-        services::{create_systemd_service, enable_and_start_service, await_service_startup, create_binary_service_content},
+use crate::utils::ssh_deploy::{
+    client::SshClient,
+    errors::DeploymentError,
+    services::{
+        await_service_startup, create_binary_service_content, create_systemd_service,
+        enable_and_start_service,
     },
+    types::{DeploymentConfig, NetworkType, ServerConfig},
 };
 
 /// Deploy Eclipse node
@@ -29,31 +30,31 @@ pub async fn deploy_eclipse(
     if let Some(callback) = progress_callback {
         callback(40, "Cloning Eclipse repository");
     }
-    
+
     let eclipse_dir = format!("{}/eclipse", server_config.install_dir);
     clone_eclipse_repository(client, &eclipse_dir)?;
-    
+
     // Build Eclipse binary
     if let Some(callback) = progress_callback {
         callback(50, "Building Eclipse binary");
     }
-    
+
     build_eclipse_binary(client, &eclipse_dir)?;
-    
+
     // Create configuration
     if let Some(callback) = progress_callback {
         callback(70, "Creating configuration");
     }
-    
+
     create_eclipse_configuration(client, &eclipse_dir, deployment_config.network)?;
-    
+
     // Create systemd service
     if let Some(callback) = progress_callback {
         callback(80, "Creating systemd service");
     }
-    
+
     create_eclipse_service(client, deployment_config, &eclipse_dir).await?;
-    
+
     Ok(())
 }
 
@@ -70,9 +71,12 @@ fn clone_eclipse_repository(
     eclipse_dir: &str,
 ) -> Result<(), DeploymentError> {
     if !client.directory_exists(eclipse_dir)? {
-        client.execute_command(&format!("git clone https://github.com/Eclipse-Laboratories-Inc/eclipse.git {}", eclipse_dir))?;
+        client.execute_command(&format!(
+            "git clone https://github.com/Eclipse-Laboratories-Inc/eclipse.git {}",
+            eclipse_dir
+        ))?;
     }
-    
+
     Ok(())
 }
 
@@ -84,12 +88,9 @@ fn clone_eclipse_repository(
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
-fn build_eclipse_binary(
-    client: &mut SshClient,
-    eclipse_dir: &str,
-) -> Result<(), DeploymentError> {
+fn build_eclipse_binary(client: &mut SshClient, eclipse_dir: &str) -> Result<(), DeploymentError> {
     client.execute_command(&format!("cd {} && cargo build --release", eclipse_dir))?;
-    
+
     Ok(())
 }
 
@@ -109,19 +110,18 @@ fn create_eclipse_configuration(
 ) -> Result<(), DeploymentError> {
     let config_dir = format!("{}/config", eclipse_dir);
     client.create_directory(&config_dir)?;
-    
+
     let network_name = match network {
         NetworkType::Mainnet => "mainnet",
         NetworkType::Testnet => "testnet",
         NetworkType::Devnet => "devnet",
     };
-    
+
     client.execute_command(&format!(
         "cd {} && ./target/release/eclipse-node init --network {}",
-        eclipse_dir,
-        network_name
+        eclipse_dir, network_name
     ))?;
-    
+
     Ok(())
 }
 
@@ -139,14 +139,14 @@ async fn create_eclipse_service(
     deployment_config: &DeploymentConfig,
     eclipse_dir: &str,
 ) -> Result<(), DeploymentError> {
-    let service_name = format!("eclipse-{}-{}", deployment_config.node_type, deployment_config.network);
-    
-    // Get service arguments
-    let args = get_eclipse_service_args(
-        deployment_config,
-        eclipse_dir,
+    let service_name = format!(
+        "eclipse-{}-{}",
+        deployment_config.node_type, deployment_config.network
     );
-    
+
+    // Get service arguments
+    let args = get_eclipse_service_args(deployment_config, eclipse_dir);
+
     // Create service content
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let service_content = create_binary_service_content(
@@ -155,14 +155,14 @@ async fn create_eclipse_service(
         eclipse_dir,
         "Eclipse SVM Node",
     );
-    
+
     // Create and start the service
     create_systemd_service(client, &service_name, &service_content)?;
     enable_and_start_service(client, &service_name)?;
-    
+
     // Wait for the service to start
     await_service_startup(client, &service_name).await?;
-    
+
     Ok(())
 }
 
@@ -183,12 +183,12 @@ fn get_eclipse_service_args(
         format!("--config {}/config/node-config.yaml", eclipse_dir),
         format!("--network {}", deployment_config.network),
     ];
-    
+
     if deployment_config.node_type == "validator" {
         args.push("--validator".to_string());
     } else if deployment_config.node_type == "rpc" {
         args.push("--rpc-port 8899".to_string());
     }
-    
+
     args
 }

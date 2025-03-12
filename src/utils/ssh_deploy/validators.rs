@@ -1,10 +1,7 @@
 //! System validation utilities for SSH deployment
 
 use {
-    crate::utils::ssh_deploy::{
-        errors::DeploymentError,
-        types::DeploymentConfig,
-    },
+    crate::utils::ssh_deploy::{errors::DeploymentError, types::DeploymentConfig},
     std::collections::HashMap,
 };
 
@@ -21,20 +18,18 @@ pub fn validate_system_requirements(
     deployment_config: &DeploymentConfig,
 ) -> Result<(), DeploymentError> {
     // Get required resources based on SVM and node type
-    let (required_cpu, required_memory, required_disk) = get_required_resources(
-        &deployment_config.svm_type,
-        &deployment_config.node_type,
-    )?;
-    
+    let (required_cpu, required_memory, required_disk) =
+        get_required_resources(&deployment_config.svm_type, &deployment_config.node_type)?;
+
     // Validate CPU cores
     validate_cpu_cores(system_info, required_cpu)?;
-    
+
     // Validate memory
     validate_memory(system_info, required_memory)?;
-    
+
     // Validate disk space
     validate_disk_space(system_info, required_disk)?;
-    
+
     Ok(())
 }
 
@@ -59,12 +54,10 @@ fn get_required_resources(
         ("sui", "rpc") => Ok((16, 64, 2048)),
         ("aptos", "validator") => Ok((8, 32, 1024)),
         ("aptos", "rpc") => Ok((16, 64, 2048)),
-        _ => {
-            Err(DeploymentError::ValidationError(format!(
-                "Unsupported SVM type or node type: {}/{}",
-                svm_type, node_type
-            )))
-        }
+        _ => Err(DeploymentError::ValidationError(format!(
+            "Unsupported SVM type or node type: {}/{}",
+            svm_type, node_type
+        ))),
     }
 }
 
@@ -80,17 +73,18 @@ fn validate_cpu_cores(
     system_info: &HashMap<String, String>,
     required_cpu: u8,
 ) -> Result<(), DeploymentError> {
-    let cpu_cores = system_info.get("cpu_cores")
+    let cpu_cores = system_info
+        .get("cpu_cores")
         .and_then(|s| s.parse::<u8>().ok())
         .unwrap_or(0);
-    
+
     if cpu_cores < required_cpu {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient CPU cores: {} (required: {})",
             cpu_cores, required_cpu
         )));
     }
-    
+
     Ok(())
 }
 
@@ -106,17 +100,18 @@ fn validate_memory(
     system_info: &HashMap<String, String>,
     required_memory: u16,
 ) -> Result<(), DeploymentError> {
-    let memory_gb = system_info.get("memory_gb")
+    let memory_gb = system_info
+        .get("memory_gb")
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(0);
-    
+
     if memory_gb < required_memory {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient memory: {} GB (required: {} GB)",
             memory_gb, required_memory
         )));
     }
-    
+
     Ok(())
 }
 
@@ -132,25 +127,29 @@ fn validate_disk_space(
     system_info: &HashMap<String, String>,
     required_disk: u16,
 ) -> Result<(), DeploymentError> {
-    let available_disk = system_info.get("disk_available")
+    let available_disk = system_info
+        .get("disk_available")
         .and_then(|s| {
             // Parse disk space - handle different units (G, T)
             if s.ends_with('G') {
-                s[..s.len()-1].parse::<f64>().ok().map(|v| v as u16)
+                s[..s.len() - 1].parse::<f64>().ok().map(|v| v as u16)
             } else if s.ends_with('T') {
-                s[..s.len()-1].parse::<f64>().ok().map(|v| (v * 1024.0) as u16)
+                s[..s.len() - 1]
+                    .parse::<f64>()
+                    .ok()
+                    .map(|v| (v * 1024.0) as u16)
             } else {
                 None
             }
         })
         .unwrap_or(0);
-    
+
     if available_disk < required_disk {
         return Err(DeploymentError::ValidationError(format!(
             "Insufficient disk space: {} GB (required: {} GB)",
             available_disk, required_disk
         )));
     }
-    
+
     Ok(())
 }
