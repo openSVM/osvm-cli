@@ -1,10 +1,9 @@
 //! End-to-end tests for node-related commands
 
-use assert_cmd::assert::OutputAssertExt;
 use crate::e2e::common::{
-    create_mock_config, create_temp_dir, output_contains, run_osvm_command,
-    run_osvm_command_string,
+    create_mock_config, create_temp_dir, output_contains, run_osvm_command, run_osvm_command_string,
 };
+use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use serial_test::serial;
 
