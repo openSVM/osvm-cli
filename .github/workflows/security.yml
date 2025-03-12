@@ -13,31 +13,26 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           profile: minimal
           toolchain: stable
           override: true
       
       - name: Install cargo-audit
-        uses: actions-rs/install@v0.1
-        with:
-          crate: cargo-audit
-          version: latest
-          use-tool-cache: true
+        run: cargo install cargo-audit
+        working-directory: .
       
       - name: Run cargo-audit
-        uses: actions-rs/cargo@v1
-        with:
-          command: audit
+        run: cargo audit
+        working-directory: .
       
       - name: Run cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check advisories
+        run: cargo deny check advisories
+        working-directory: .
 
   dependency-review:
     name: Dependency Review
@@ -45,10 +40,10 @@ jobs:
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Dependency Review
-        uses: actions/dependency-review-action@v3
+        uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
 
@@ -61,17 +56,16 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v2
+        uses: github/codeql-action/init@v3
         with:
           languages: rust
       
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
+        run: cargo build
+        working-directory: .
       
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v2
+        uses: github/codeql-action/analyze@v3
