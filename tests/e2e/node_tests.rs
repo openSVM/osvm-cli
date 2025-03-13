@@ -155,3 +155,13 @@ fn test_help_command() {
         .stdout(predicate::str::contains("FLAGS:"))
         .stdout(predicate::str::contains("SUBCOMMANDS:"));
 }
+
+#[test]
+#[serial]
+fn test_new_feature() {
+    // Test the new feature
+    let output = run_osvm_command_string(&["new_feature_command"]);
+
+    // Verify the output contains expected results
+    assert!(output_contains(&output, "Expected output for new feature"));
+}
