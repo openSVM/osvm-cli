@@ -70,6 +70,10 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
+      - name: Generate default signer
+        run: |
+          solana-keygen new -o $HOME/.config/solana/id.json
+      
       - name: Run unit tests
         run: cargo test --lib --bins
         working-directory: .
