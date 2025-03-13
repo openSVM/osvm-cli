@@ -1,5 +1,3 @@
-//! End-to-end tests for node-related commands
-
 use crate::e2e::common::{
     create_mock_config, create_temp_dir, output_contains, run_osvm_command, run_osvm_command_string,
 };
@@ -156,4 +154,14 @@ fn test_help_command() {
         .stdout(predicate::str::contains("USAGE:"))
         .stdout(predicate::str::contains("FLAGS:"))
         .stdout(predicate::str::contains("SUBCOMMANDS:"));
+}
+
+#[test]
+#[serial]
+fn test_new_feature() {
+    // Test the new feature
+    let output = run_osvm_command_string(&["new_feature_command"]);
+
+    // Verify the output contains expected results
+    assert!(output_contains(&output, "Expected output for new feature"));
 }

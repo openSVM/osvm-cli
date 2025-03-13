@@ -1,5 +1,3 @@
-//! @brief Command line setup and parse
-
 use {
     clap::{
         crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand,

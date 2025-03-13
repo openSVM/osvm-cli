@@ -1,6 +1,3 @@
-//! Node management utilities
-//! Provides functionality for managing SVM nodes
-
 use {
     crate::utils::{
         ssh_deploy::{deploy_svm_node, AuthMethod, DeploymentConfig, NetworkType, ServerConfig},

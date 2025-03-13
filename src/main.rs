@@ -1,5 +1,3 @@
-//! @brief Main entry point for CLI
-
 use {
     crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
@@ -323,6 +321,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         Err(e) => {
                             eprintln!("Error getting node logs: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                ("deploy", Some(deploy_matches)) => {
+                    // Deploy a new node
+                    let svm = deploy_matches.value_of("svm").unwrap();
+                    let node_type = deploy_matches.value_of("type").unwrap_or("validator");
+                    let network = deploy_matches.value_of("network").unwrap_or("mainnet");
+                    let host = deploy_matches.value_of("host").unwrap();
+                    let name = deploy_matches.value_of("name").unwrap_or("default");
+
+                    let deploy_config = nodes::DeployNodeConfig::new(svm, node_type, network)
+                        .with_name(name)
+                        .with_host(host);
+
+                    match nodes::deploy_node(&rpc_client, deploy_config).await {
+                        Ok(node_info) => {
+                            println!("Node deployed successfully: {:?}", node_info);
+                        }
+                        Err(e) => {
+                            eprintln!("Error deploying node: {}", e);
                             exit(1);
                         }
                     }
