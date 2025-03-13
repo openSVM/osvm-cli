@@ -70,6 +70,9 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
+      - name: Install Solana CLI tools
+        run: sh -c "$(curl -sSfL https://release.solana.com/v1.14.29/install)"
+      
       - name: Generate default signer
         run: |
           solana-keygen new -o $HOME/.config/solana/id.json
