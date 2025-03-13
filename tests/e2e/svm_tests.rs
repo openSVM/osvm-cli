@@ -98,3 +98,26 @@ fn test_svm_with_url() {
     // Verify the output contains expected headers
     assert!(output_contains(&output, "Available SVMs in the chain:"));
 }
+
+#[test]
+fn test_svm_install() {
+    let output = run_osvm_command_string(&["svm", "install", "solana", "--host", "user@host"]);
+
+    // Verify the output contains expected installation message
+    assert!(output_contains(&output, "Installing SVM: solana"));
+    assert!(output_contains(&output, "Host: user@host"));
+    assert!(output_contains(&output, "Installation complete"));
+}
+
+#[test]
+fn test_svm_install_invalid() {
+    // Use assert_cmd to run a command and make assertions about the output
+    let assert = run_osvm_command()
+        .args(&["svm", "install", "invalid_svm", "--host", "user@host"])
+        .assert();
+
+    // Verify the command fails with a non-zero exit code
+    assert
+        .failure()
+        .stderr(predicate::str::contains("SVM not found").or(predicate::str::contains("Error:")));
+}
