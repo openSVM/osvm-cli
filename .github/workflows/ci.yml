@@ -78,7 +78,7 @@ jobs:
 
       - name: Generate default signer
         run: |
-          solana-keygen new -o $HOME/.config/solana/id.json
+          solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
       
       - name: Run unit tests
         run: cargo test --lib --bins
