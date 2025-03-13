@@ -37,7 +37,6 @@ jobs:
       
     - name: Create benchmark results directory
       run: mkdir -p target/criterion
-      working-directory: .
         
     - name: Upload benchmark results
       uses: actions/upload-artifact@v4
@@ -49,12 +48,13 @@ jobs:
     - name: Generate benchmark report
       run: |
         mkdir -p benchmark-report
-        cp -r target/criterion/* benchmark-report/ || true
+        if [ -d "target/criterion" ]; then
+          cp -r target/criterion/* benchmark-report/ || true
+        fi
         echo "# Benchmark Results" > benchmark-report/README.md
         echo "Generated on $(date)" >> benchmark-report/README.md
         echo "## Summary" >> benchmark-report/README.md
-        find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound }' >> benchmark-report/README.md || echo "No benchmark results found" >> benchmark-report/README.md
-        working-directory: .
+        find target/criterion -name "*/new/estimates.json" -exec cat {} \; | jq -r '.mean | { command: .point_estimate, lower_bound: .confidence_interval.lower_bound, upper_bound: .confidence_interval.upper_bound}' >> benchmark-report/README.md
       
     - name: Upload benchmark report
       uses: actions/upload-artifact@v4
@@ -71,4 +71,3 @@ jobs:
         cargo criterion --baseline main
         git checkout ${{ github.sha }}
         cargo criterion --baseline main
-        working-directory: .
