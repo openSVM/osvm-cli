@@ -74,7 +74,8 @@ jobs:
         run: |
           sh -c "$(curl -sSfL https://release.solana.com/v1.14.29/install)"
           export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-      
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
       - name: Generate default signer
         run: |
           solana-keygen new -o $HOME/.config/solana/id.json
