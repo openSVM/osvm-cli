@@ -90,7 +90,7 @@ jobs:
           mkdir -p osvm-$VERSION
           cp ./osvm osvm-$VERSION/
           cd osvm-$VERSION
-          dh_make -y -s -c mit -e maintainer@example.com -f ../osvm
+          dh_make -y -s -c apache -e rin@opensvm.com -f ../osvm
           cd ..
           dpkg-buildpackage -us -uc
       
