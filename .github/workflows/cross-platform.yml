@@ -19,6 +19,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -48,3 +53,10 @@ jobs:
         run: cargo test --test "*"
         working-directory: .
         continue-on-error: true
+
+      - name: Rust Release binary
+  # You may pin to the exact commit or the version.
+  # uses: rust-build/rust-build.action@6febf1b0ed6499a46610b58ef9d810398e75f3c2
+        uses: rust-build/rust-build.action@v1.4.5
+        with:
+          RUSTTARGET: "osvm"
