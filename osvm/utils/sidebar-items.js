@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["load_keys_config_file"],"mod":["color","dashboard","examples","nodes","nodes_dashboard","ssh_deploy","svm_info"]};

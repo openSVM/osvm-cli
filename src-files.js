@@ -1,0 +1,3 @@
+var srcIndex = new Map(JSON.parse('[["osvm",["",[["utils",[["ssh_deploy",[["deployments",[],["eclipse.rs","mod.rs","s00n.rs","solana.rs","sonic.rs"]]],["client.rs","dependencies.rs","deploy.rs","disk_management.rs","errors.rs","hot_swap.rs","mod.rs","monitoring.rs","optimizations.rs","services.rs","types.rs","validators.rs"]]],["color.rs","dashboard.rs","examples.rs","mod.rs","nodes.rs","nodes_dashboard.rs","svm_info.rs"]]],["clparse.rs","lib.rs","prelude.rs"]]]]'));
+createSrcSidebar();
+//{"start":36,"fragment_lengths":[430]}
