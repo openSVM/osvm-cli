@@ -372,6 +372,10 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                 )
         )
         .subcommand(
+            SubCommand::with_name("new_feature_command")
+                .about("New feature for testing")
+        )
+        .subcommand(
             SubCommand::with_name("solana")
                 .about("Deploy and manage Solana validators")
                 .setting(AppSettings::SubcommandRequiredElseHelp)
