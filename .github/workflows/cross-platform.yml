@@ -66,13 +66,15 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           choco install openssl
-          echo "##[set-env name=OPENSSL_DIR]=$(choco info openssl | Select-String -Pattern '^Location' | ForEach-Object { $_.ToString().Split(':')[1].Trim() })"
+          echo "OPENSSL_DIR=C:\\Program Files\\OpenSSL-Win64" >> $GITHUB_ENV
 
       - name: Run unit tests
         run: |
           # Allow unit tests to continue despite the webpki trait bound issue
           cargo test --lib --bins || echo "Unit tests completed with known webpki::Error trait bound issues"
         working-directory: .
+        env:
+          OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
       
       - name: Run e2e tests
         run: |
