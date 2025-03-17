@@ -62,6 +62,12 @@ jobs:
           mkdir -p $HOME/.config/solana
           solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
 
+      - name: Set up OpenSSL
+        if: runner.os == 'Windows'
+        run: |
+          choco install openssl
+          echo "##[set-env name=OPENSSL_DIR]=$(choco info openssl | Select-String -Pattern '^Location' | ForEach-Object { $_.ToString().Split(':')[1].Trim() })"
+
       - name: Run unit tests
         run: |
           # Allow unit tests to continue despite the webpki trait bound issue
