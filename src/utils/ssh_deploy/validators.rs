@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 //! System validation utilities for SSH deployment
 
 use {
