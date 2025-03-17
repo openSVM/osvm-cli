@@ -1,5 +1,3 @@
-//! Main deployment functions for SSH deployment
-
 use {
     crate::utils::ssh_deploy::{
         client::SshClient,

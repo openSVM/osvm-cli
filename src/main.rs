@@ -195,7 +195,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // First get SVM info to verify it exists and can be installed
                     match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
                         Ok(info) => {
-                            if !info.can_install_validator && !info.can_install_rpc {
+                            if (!info.can_install_validator && !info.can_install_rpc) {
                                 eprintln!("SVM '{}' cannot be installed", svm_name);
                                 exit(1);
                             }
@@ -247,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.verbose,
                     ) {
                         Ok(node_list) => {
-                            if json_output {
+                            if (json_output) {
                                 println!("{}", serde_json::to_string_pretty(&node_list).unwrap());
                             } else {
                                 nodes::display_node_list(&node_list, config.verbose);
@@ -280,7 +280,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
-                            if json_output {
+                            if (json_output) {
                                 println!("{}", serde_json::to_string_pretty(&status).unwrap());
                             } else {
                                 nodes::display_node_status(node_id, &status, config.verbose);
@@ -299,7 +299,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
-                            if json_output {
+                            if (json_output) {
                                 println!("{}", serde_json::to_string_pretty(&info).unwrap());
                             } else {
                                 nodes::display_node_info(&info, config.verbose);
@@ -345,7 +345,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
-                            if follow {
+                            if (follow) {
                                 // For follow mode, the function won't return until user interrupts
                                 println!("Log streaming ended");
                             }
@@ -394,7 +394,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         ("examples", Some(examples_matches)) => {
             // Handle the examples command
-            if examples_matches.is_present("list_categories") {
+            if (examples_matches.is_present("list_categories")) {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -449,8 +449,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if validator_matches.is_present("ledger-disk")
-                        && validator_matches.is_present("accounts-disk")
+                    let disk_config = if (validator_matches.is_present("ledger-disk")
+                        && validator_matches.is_present("accounts-disk"))
                     {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: validator_matches
@@ -489,7 +489,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if deploy_config.hot_swap_enabled {
+                    if (deploy_config.hot_swap_enabled) {
                         println!("Hot-swap capability: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -540,8 +540,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if rpc_matches.is_present("ledger-disk")
-                        && rpc_matches.is_present("accounts-disk")
+                    let disk_config = if (rpc_matches.is_present("ledger-disk")
+                        && rpc_matches.is_present("accounts-disk"))
                     {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
@@ -556,7 +556,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Create additional params for RPC-specific options
                     let mut additional_params = std::collections::HashMap::new();
-                    if enable_history {
+                    if (enable_history) {
                         additional_params.insert("enable_history".to_string(), "true".to_string());
                     }
 
@@ -583,7 +583,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if enable_history {
+                    if (enable_history) {
                         println!("Transaction history: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -755,7 +755,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect::<Vec<_>>();
-            if svm_types.is_empty() {
+            if (svm_types.is_empty()) {
                 eprintln!("No SVMs specified");
                 exit(1);
             }
