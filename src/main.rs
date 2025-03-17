@@ -25,6 +25,17 @@ struct Config {
     no_color: bool,
 }
 
+#[derive(Debug)]
+struct WebPkiError(webpki::Error);
+
+impl std::fmt::Display for WebPkiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "WebPkiError: {:?}", self.0)
+    }
+}
+
+impl std::error::Error for WebPkiError {}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
