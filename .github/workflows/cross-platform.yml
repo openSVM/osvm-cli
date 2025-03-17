@@ -46,6 +46,19 @@ jobs:
         run: cargo build
         working-directory: .
       
+      - name: Install Solana CLI (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Generate default signer (Linux and macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p $HOME/.config/solana
+          solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
+
       - name: Run unit tests
         run: cargo test --lib --bins
         working-directory: .
@@ -77,4 +90,3 @@ jobs:
         with:
           RUSTTARGET: ${{ matrix.target }}
           ARCHIVE_TYPES: ${{ matrix.archive }}
-

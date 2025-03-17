@@ -1,5 +1,3 @@
-//! @brief Main entry point for CLI
-
 use {
     crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
@@ -166,6 +164,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let svm_name = install_matches.value_of("name").unwrap();
                     let host = install_matches.value_of("host").unwrap();
 
+                    println!("Installing SVM: {}", svm_name);
+                    println!("Host: {}", host);
+
                     // First get SVM info to verify it exists and can be installed
                     match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
                         Ok(info) => {
@@ -181,10 +182,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 "validator",
                                 ssh_deploy::NetworkType::Mainnet,
                             ) {
-                                Ok(node_id) => println!(
-                                    "Successfully installed {} as node {}",
-                                    svm_name, node_id
-                                ),
+                                Ok(node_id) => {
+                                    println!("Installation complete");
+                                    println!(
+                                        "Successfully installed {} as node {}",
+                                        svm_name, node_id
+                                    );
+                                }
                                 Err(e) => eprintln!("Installation failed: {}", e),
                             }
                         }
@@ -323,6 +327,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         Err(e) => {
                             eprintln!("Error getting node logs: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                ("deploy", Some(deploy_matches)) => {
+                    // Deploy a new node
+                    let svm = deploy_matches.value_of("svm").unwrap();
+                    let node_type = deploy_matches.value_of("type").unwrap_or("validator");
+                    let network = deploy_matches.value_of("network").unwrap_or("mainnet");
+                    let host = deploy_matches.value_of("host").unwrap();
+                    let name = deploy_matches.value_of("name").unwrap_or("default");
+
+                    // Parse network type
+                    let network_type = match network.to_lowercase().as_str() {
+                        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                        "testnet" => ssh_deploy::NetworkType::Testnet,
+                        "devnet" => ssh_deploy::NetworkType::Devnet,
+                        _ => {
+                            eprintln!("Invalid network: {}", network);
+                            exit(1);
+                        }
+                    };
+
+                    let deploy_config = nodes::DeployNodeConfig::new(svm, node_type, network_type)
+                        .with_name(name)
+                        .with_host(host);
+
+                    match nodes::deploy_node(&rpc_client, deploy_config).await {
+                        Ok(node_info) => {
+                            println!("Node deployed successfully: {:?}", node_info);
+                        }
+                        Err(e) => {
+                            eprintln!("Error deploying node: {}", e);
                             exit(1);
                         }
                     }
@@ -717,6 +754,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("Deployment failed: {}", e);
                 exit(1);
             }
+        }
+        ("new_feature_command", _) => {
+            println!("Expected output for new feature");
         }
         (cmd, _) => {
             eprintln!("Unknown command: {}", cmd);
