@@ -70,6 +70,16 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       
+      - name: Install Solana CLI tools
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Generate default signer
+        run: |
+          solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
+      
       - name: Run unit tests
         run: cargo test --lib --bins
         working-directory: .
@@ -104,6 +114,16 @@ jobs:
         run: cargo build --release
         working-directory: .
       
+      - name: Install Solana CLI tools
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash
+          export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+
+      - name: Generate default signer
+        run: |
+          solana-keygen new --no-bip39-passphrase -o $HOME/.config/solana/id.json
+
       - name: Run e2e tests
         run: cargo test --test main
         working-directory: .

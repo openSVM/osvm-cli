@@ -1,5 +1,3 @@
-//! @brief Command line setup and parse
-
 use {
     clap::{
         crate_description, crate_name, crate_version, App, AppSettings, Arg, ArgMatches, SubCommand,
@@ -372,6 +370,10 @@ pub fn parse_command_line() -> ArgMatches<'static> {
                                 .help("Network to deploy on")
                         )
                 )
+        )
+        .subcommand(
+            SubCommand::with_name("new_feature_command")
+                .about("New feature for testing")
         )
         .subcommand(
             SubCommand::with_name("solana")
