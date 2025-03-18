@@ -15,6 +15,8 @@ pub use crate::utils::dashboard;
 pub use crate::utils::examples;
 // Color formatting utilities
 pub use crate::utils::color;
+// WebPKI error wrapper
+pub use crate::utils::webpki_error;
 
 /// Type alias for progress callback functions
 ///
