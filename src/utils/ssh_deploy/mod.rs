@@ -1,3 +1,4 @@
+#![allow(clippy::all)]
 //! SSH deployment utilities
 //! Provides functionality for deploying SVM nodes via SSH
 

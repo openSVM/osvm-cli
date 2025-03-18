@@ -1,5 +1,3 @@
-//! Dependency installation utilities for SSH deployment
-
 use crate::utils::ssh_deploy::{
     client::SshClient, errors::DeploymentError, types::DeploymentConfig,
 };
