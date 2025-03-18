@@ -2,6 +2,7 @@
 //!
 //! This directory contains various utility modules that provide the core functionality
 //! for the OSVM CLI, including SVM and node management, SSH deployment, and UI components.
+//! Also includes utility wrappers for external dependencies.
 
 use serde::de::DeserializeOwned;
 use std::{fs::File, io, path::Path};
@@ -23,6 +24,10 @@ pub mod nodes;
 pub mod ssh_deploy;
 /// SVM information and management utilities
 pub mod svm_info;
+
+// External dependency wrappers
+/// Wrapper for webpki::Error to implement std::error::Error trait
+pub mod webpki_error;
 
 /// Loads a YAML configuration file and deserializes it into the specified type
 ///
