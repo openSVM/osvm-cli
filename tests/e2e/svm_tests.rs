@@ -46,7 +46,8 @@ fn test_svm_get_invalid() {
     let output = run_command("osvm", "svm", "get", "invalid_svm");
     assert!(
         output.contains("Error reading keypair file") || output.contains("SVM not found"),
-        "Unexpected stderr: {}", output
+        "Unexpected stderr: {}",
+        output
     );
 }
 
