@@ -1,5 +1,5 @@
 use {
-    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info, webpki_error::WebPkiError},
     clparse::parse_command_line,
     solana_clap_utils::{
         input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
@@ -25,35 +25,18 @@ struct Config {
     no_color: bool,
 }
 
-#[derive(Debug)]
-struct WebPkiError(webpki::Error);
-
-impl std::fmt::Display for WebPkiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WebPkiError: {:?}", self.0)
-    }
-}
-
-impl std::error::Error for WebPkiError {}
-
-impl std::fmt::Debug for webpki::Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::fmt::Display for webpki::Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl std::error::Error for webpki::Error {}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
-    let (sub_command, sub_matches) = app_matches.subcommand();
+    let sub_command_opt = app_matches.subcommand();
+    
+    // Handle the case where there's no subcommand
+    if sub_command_opt.is_none() {
+        eprintln!("No subcommand provided");
+        exit(1);
+    }
+    
+    let (sub_command, sub_matches) = sub_command_opt.unwrap();
     let matches = sub_matches.unwrap();
 
     #[cfg(feature = "remote-wallet")]
@@ -780,10 +763,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
         }
-        ("new_feature_command", _) => {
+        "new_feature_command" => {
             println!("Expected output for new feature");
         }
-        (cmd, _) => {
+        cmd => {
             eprintln!("Unknown command: {}", cmd);
             exit(1);
         }
