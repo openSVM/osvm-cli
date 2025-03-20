@@ -36,6 +36,8 @@ impl std::fmt::Display for WebPkiError {
 
 impl std::error::Error for WebPkiError {}
 
+// The following implementations are needed because webpki::Error doesn't implement
+// std::error::Error trait by default in the webpki crate
 impl std::fmt::Debug for webpki::Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
