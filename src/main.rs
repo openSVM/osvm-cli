@@ -209,15 +209,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("nodes", Some(nodes_matches)) => {
             let (node_sub_command, node_sub_matches) = nodes_matches.subcommand();
             match (node_sub_command, node_sub_matches) {
-                "list" => {
+                ("list", Some(list_matches)) => {
                     // List all nodes
-                    let network =
-                        clap_compat::value_of(node_sub_matches, "network").unwrap_or("all");
-                    let node_type =
-                        clap_compat::value_of(node_sub_matches, "type").unwrap_or("all");
-                    let status = clap_compat::value_of(node_sub_matches, "status").unwrap_or("all");
-                    let svm = clap_compat::value_of(node_sub_matches, "svm");
-                    let json_output = clap_compat::is_present(node_sub_matches, "json");
+                    let network = clap_compat::value_of(list_matches, "network").unwrap_or("all");
+                    let node_type = clap_compat::value_of(list_matches, "type").unwrap_or("all");
+                    let status = clap_compat::value_of(list_matches, "status").unwrap_or("all");
+                    let svm = clap_compat::value_of(list_matches, "svm");
+                    let json_output = clap_compat::is_present(list_matches, "json");
 
                     match nodes::list_all_nodes(
                         &rpc_client,
@@ -384,7 +382,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  node        - Node Deployment");
                 println!("  monitoring  - Node Monitoring and Management");
                 println!("  workflow    - Common Workflows");
-                println!("\nUse 'osvm examples --category <name>' to show examples for a specific category.");
+                println!(
+                    "
+Use 'osvm examples --category <name>' to show examples for a specific category."
+                );
             } else if let Some(category) = examples_matches.value_of("category") {
                 // Display examples for a specific category
                 examples::display_category_by_name(category);

@@ -15,7 +15,17 @@ pub fn is_present(matches: &ArgMatches, name: &str) -> bool {
 
 /// Get the number of occurrences of a flag (compatibility with older Clap API)
 pub fn occurrences_of(matches: &ArgMatches, name: &str) -> u8 {
-    matches.get_count(name) as u8
+    // Get the count
+    let count = matches.get_count(name);
+
+    // Convert to u8 with a cap
+    // Both sides of the comparison are the same type
+    if count > 255 {
+        255
+    } else {
+        // Safe to cast because we've checked the upper bound
+        count as u8
+    }
 }
 
 /// Get a value from ArgMatches and unwrap it (compatibility with older Clap API)
