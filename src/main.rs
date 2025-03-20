@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
-    let mut wallet_manager: Option<()> = None;
+    let _wallet_manager: Option<()> = None;
 
     let config = {
         let cli_config = if let Some(config_file) =
@@ -378,7 +378,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap();
                     let lines = node_sub_matches
                         .get_one::<String>("lines")
-                        .map(|s| s.parse::<usize>().unwrap_or(100))
+                        .and_then(|s| s.parse::<usize>().ok())
                         .unwrap_or(100);
                     let follow = node_sub_matches.contains_id("follow");
 
@@ -492,10 +492,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map(|s| s.to_string());
                     let client_type = solana_sub_matches
                         .get_one::<String>("client-type")
+                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
                     let hot_swap_enabled = solana_sub_matches.contains_id("hot-swap");
                     let metrics_config = solana_sub_matches
                         .get_one::<String>("metrics-config")
+                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
 
                     // Parse connection string
