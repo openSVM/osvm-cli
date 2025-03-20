@@ -58,14 +58,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let matches = sub_matches;
 
-    let mut wallet_manager = None;
-
     // Check if colors should be disabled (via flag or environment variable)
     let no_color = matches.contains_id("no_color") || env::var("NO_COLOR").is_ok();
     if no_color {
         // Disable colored output globally for the colored crate
         colored::control::set_override(false);
     }
+
+    #[cfg(feature = "remote-wallet")]
+    let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
+
+    #[cfg(not(feature = "remote-wallet"))]
+    let mut wallet_manager = None;
 
     let config = {
         let cli_config = if let Some(config_file) =
