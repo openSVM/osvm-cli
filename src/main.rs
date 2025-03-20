@@ -123,8 +123,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let rpc_client = RpcClient::new(config.json_rpc_url.clone());
 
-    match (sub_command, sub_matches) {
-        ("balance", Some(arg_matches)) => {
+    match sub_command {
+        "balance" => {
             let address =
                 pubkey_of(arg_matches, "address").unwrap_or_else(|| config.default_signer.pubkey());
             println!(
@@ -596,7 +596,8 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                 }
             }
         }
-        ("rpc", Some(rpc_matches)) => {
+        "rpc" => {
+            let rpc_matches = sub_matches;
             let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
             match (rpc_sub_command, rpc_sub_matches) {
                 ("sonic", Some(sonic_matches)) => {
@@ -717,7 +718,7 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
             }
         }
         // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
-        (conn_str, _) if conn_str.contains('@') && clap_compat::is_present(matches, "svm") => {
+        conn_str if conn_str.contains('@') && clap_compat::is_present(matches, "svm") => {
             // This is an SSH deployment command
             let svm_list = clap_compat::value_of(matches, "svm").unwrap();
             let node_type_str = clap_compat::value_of(matches, "node-type").unwrap();
@@ -779,7 +780,7 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
         "new_feature_command" => {
             println!("Expected output for new feature");
         }
-        (cmd, _) => {
+        cmd => {
             eprintln!("Unknown command: {}", cmd);
             exit(1);
         }
