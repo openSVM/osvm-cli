@@ -25,6 +25,17 @@ fn test_nodes_list() {
 }
 
 #[test]
+fn test_nodes_list_with_filters() {
+    let output = run_command("osvm", "node", "list", "--filter", "active");
+    assert!(output_contains(&output, "OSVM - Node Management"), 
+            "Output did not contain expected text: OSVM - Node Management");
+}
+
+fn output_contains(output: &str, expected: &str) -> bool {
+    output.contains(expected)
+}
+
+#[test]
 #[serial]
 fn test_nodes_list_with_filters() {
     // Test with network filter
