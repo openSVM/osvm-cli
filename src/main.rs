@@ -1,5 +1,5 @@
 use {
-    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info, webpki_error::WebPkiError},
+    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_clap_utils::{
         input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     let (sub_command, sub_matches) = sub_command_opt.unwrap();
-    let matches = sub_matches.unwrap();
+    let matches = sub_matches;
 
     #[cfg(feature = "remote-wallet")]
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
