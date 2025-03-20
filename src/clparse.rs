@@ -1,5 +1,5 @@
 use {
-    clap::{arg, command, value_parser, Arg, ArgAction, Command},
+    clap::{command, Arg, ArgAction, Command},
     solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
@@ -17,7 +17,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .help("Configuration file to use")
                 .global(true);
             if let Some(ref config_file) = *solana_cli_config::CONFIG_FILE {
-                arg = arg.default_value(config_file);
+                arg = arg.default_value(config_file.as_str());
             }
             arg
         })
@@ -25,7 +25,9 @@ pub fn parse_command_line() -> clap::ArgMatches {
             Arg::new("keypair")
                 .long("keypair")
                 .value_name("KEYPAIR")
-                .value_parser(is_valid_signer)
+                .value_parser(clap::builder::ValueParser::new(|s: &str| {
+                    is_valid_signer(s).map(|_| s.to_string())
+                }))
                 .global(true)
                 .help("Filepath or URL to a keypair [default: client keypair]"),
         )
@@ -50,7 +52,9 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .long("url")
                 .value_name("URL")
                 .global(true)
-                .value_parser(is_url_or_moniker)
+                .value_parser(clap::builder::ValueParser::new(|s: &str| {
+                    is_url_or_moniker(s).map(|_| s.to_string())
+                }))
                 .help("JSON RPC URL for the cluster [default: value from configuration file]"),
         )
         .arg(
