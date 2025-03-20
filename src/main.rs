@@ -125,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match sub_command {
         "balance" => {
+            let arg_matches = sub_matches;
             let address =
                 pubkey_of(arg_matches, "address").unwrap_or_else(|| config.default_signer.pubkey());
             println!(
@@ -135,15 +136,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .value)
             );
         }
-        ("svm", Some(svm_matches)) => {
-            let (svm_sub_command, svm_sub_matches) = svm_matches.subcommand();
-            match (svm_sub_command, svm_sub_matches) {
-                ("list", _) => {
+        "svm" => {
+            let svm_matches = sub_matches;
+            let Some((svm_sub_command, svm_sub_matches)) = svm_matches.subcommand() else {
+                eprintln!("No SVM subcommand provided");
+                exit(1);
+            };
+            match svm_sub_command {
+                "list" => {
                     // List all SVMs
                     let svms = svm_info::list_all_svms(&rpc_client, config.commitment_config)?;
                     svm_info::display_svm_list(&svms);
                 }
-                ("dashboard", _) => {
+                "dashboard" => {
                     // Launch the interactive dashboard
                     match dashboard::run_dashboard(&rpc_client, config.commitment_config) {
                         Ok(_) => println!("Dashboard closed"),
@@ -153,7 +158,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("get", Some(get_matches)) => {
+                "get" => {
+                    let get_matches = svm_sub_matches;
                     // Get details for a specific SVM
                     let name = clap_compat::value_of(get_matches, "name").unwrap();
                     match svm_info::get_svm_info(&rpc_client, name, config.commitment_config) {
@@ -164,7 +170,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("install", Some(install_matches)) => {
+                "install" => {
+                    let install_matches = svm_sub_matches;
                     // Install an SVM on a remote host
                     let svm_name = clap_compat::value_of(install_matches, "name").unwrap();
                     let host = clap_compat::value_of(install_matches, "host").unwrap();
@@ -206,10 +213,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => unreachable!(),
             }
         }
-        ("nodes", Some(nodes_matches)) => {
-            let (node_sub_command, node_sub_matches) = nodes_matches.subcommand();
-            match (node_sub_command, node_sub_matches) {
-                ("list", Some(list_matches)) => {
+        "nodes" => {
+            let nodes_matches = sub_matches;
+            let Some((node_sub_command, node_sub_matches)) = nodes_matches.subcommand() else {
+                eprintln!("No nodes subcommand provided");
+                exit(1);
+            };
+            match node_sub_command {
+                "list" => {
+                    let list_matches = node_sub_matches;
                     // List all nodes
                     let network = clap_compat::value_of(list_matches, "network").unwrap_or("all");
                     let node_type = clap_compat::value_of(list_matches, "type").unwrap_or("all");
@@ -239,7 +251,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("dashboard", _) => {
+                "dashboard" => {
                     // Launch node monitoring dashboard
                     match nodes::run_dashboard(
                         &rpc_client,
@@ -253,7 +265,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("status", Some(status_matches)) => {
+                "status" => {
+                    let status_matches = node_sub_matches;
                     // Check node status
                     let node_id = clap_compat::value_of(status_matches, "node-id").unwrap();
                     let json_output = clap_compat::is_present(status_matches, "json");
@@ -272,7 +285,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("get", Some(get_matches)) => {
+                "get" => {
+                    let get_matches = node_sub_matches;
                     // Get detailed node information
                     let node_id = clap_compat::value_of(get_matches, "node-id").unwrap();
                     let json_output = clap_compat::is_present(get_matches, "json");
@@ -291,7 +305,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("restart", Some(restart_matches)) => {
+                "restart" => {
+                    let restart_matches = node_sub_matches;
                     // Restart a node
                     let node_id = clap_compat::value_of(restart_matches, "node-id").unwrap();
                     match nodes::restart_node(node_id) {
@@ -302,7 +317,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("stop", Some(stop_matches)) => {
+                "stop" => {
+                    let stop_matches = node_sub_matches;
                     // Stop a node
                     let node_id = clap_compat::value_of(stop_matches, "node-id").unwrap();
                     match nodes::stop_node(node_id) {
@@ -313,7 +329,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("logs", Some(logs_matches)) => {
+                "logs" => {
+                    let logs_matches = node_sub_matches;
                     // View node logs
                     let node_id = clap_compat::value_of(logs_matches, "node-id").unwrap();
                     let lines = clap_compat::value_of(logs_matches, "lines")
@@ -335,7 +352,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("deploy", Some(deploy_matches)) => {
+                "deploy" => {
+                    let deploy_matches = node_sub_matches;
                     // Deploy a new node
                     let svm = clap_compat::value_of(deploy_matches, "svm").unwrap();
                     let node_type =
@@ -373,7 +391,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => unreachable!(),
             }
         }
-        ("examples", Some(examples_matches)) => {
+        "examples" => {
+            let examples_matches = sub_matches;
             // Handle the examples command
             if clap_compat::is_present(examples_matches, "list_categories") {
                 // List all available example categories
@@ -395,8 +414,12 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                 examples::display_all_examples();
             }
         }
-        ("solana", Some(solana_matches)) => {
-            let (solana_sub_command, solana_sub_matches) = solana_matches.subcommand();
+        "solana" => {
+            let solana_matches = sub_matches;
+            let Some((solana_sub_command, solana_sub_matches)) = solana_matches.subcommand() else {
+                eprintln!("No Solana subcommand provided");
+                exit(1);
+            };
             match (solana_sub_command, solana_sub_matches) {
                 ("validator", Some(validator_matches)) => {
                     // Deploy a Solana validator with enhanced features
@@ -598,7 +621,10 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
         }
         "rpc" => {
             let rpc_matches = sub_matches;
-            let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
+            let Some((rpc_sub_command, rpc_sub_matches)) = rpc_matches.subcommand() else {
+                eprintln!("No RPC subcommand provided");
+                exit(1);
+            };
             match (rpc_sub_command, rpc_sub_matches) {
                 ("sonic", Some(sonic_matches)) => {
                     // Deploy a Sonic RPC node
