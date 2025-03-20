@@ -1,10 +1,7 @@
 use {
     crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
-    solana_clap_utils::{
-        input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
-        keypair::DefaultSigner,
-    },
+    solana_clap_utils::input_validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
     solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
     std::{env, process::exit, str::FromStr},
@@ -61,10 +58,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let matches = sub_matches;
 
-    #[cfg(feature = "remote-wallet")]
-    let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
-
-    #[cfg(not(feature = "remote-wallet"))]
     let mut wallet_manager = None;
 
     // Check if colors should be disabled (via flag or environment variable)
@@ -83,20 +76,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             solana_cli_config::Config::load("~/.config/osvm/config.yml").unwrap_or_default()
         };
 
-        let default_signer = DefaultSigner::new(
-            "keypair",
-            matches
-                .get_one::<String>("keypair")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| cli_config.keypair_path.clone()),
-        );
+        let keypair_path = matches
+            .get_one::<String>("keypair")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| cli_config.keypair_path.clone());
 
-        // Create a compatibility wrapper for solana-clap-utils
-        let matches_compat = unsafe {
-            // This is safe because we're just reinterpreting the reference
-            // and the ArgMatchesExt struct is a transparent wrapper around ArgMatches
-            std::mem::transmute::<&clap::ArgMatches, &solana_clap_utils::ArgMatches>(matches)
-        };
+        // Create a signer directly from the keypair path
+        let signer = solana_sdk::signature::read_keypair_file(&keypair_path)
+            .unwrap_or_else(|err| {
+                eprintln!("Error reading keypair file {}: {}", keypair_path, err);
+                exit(1);
+            });
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
@@ -105,20 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|s| s.as_str())
                     .unwrap_or(&cli_config.json_rpc_url),
             ),
-            #[cfg(feature = "remote-wallet")]
-            default_signer: default_signer
-                .signer_from_path(matches_compat, &mut wallet_manager)
-                .unwrap_or_else(|err| {
-                    eprintln!("error: {}", err);
-                    exit(1);
-                }),
-            #[cfg(not(feature = "remote-wallet"))]
-            default_signer: default_signer
-                .signer_from_path(matches_compat, &mut wallet_manager)
-                .unwrap_or_else(|err| {
-                    eprintln!("error: {}", err);
-                    exit(1);
-                }),
+            default_signer: Box::new(signer),
             // Count occurrences of the verbose flag to determine verbosity level
             verbose: matches.get_count("verbose") as u8,
             no_color,
@@ -160,12 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match sub_command {
         "balance" => {
-            // Create a compatibility wrapper for solana-clap-utils
-            let matches_compat = unsafe {
-                std::mem::transmute::<&clap::ArgMatches, &solana_clap_utils::ArgMatches>(matches)
-            };
-
-            let address = pubkey_of(matches_compat, "address")
+            let address = pubkey_of_checked(matches, "address")
                 .unwrap_or_else(|| config.default_signer.pubkey());
 
             println!(
@@ -260,25 +232,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => unreachable!(),
             }
         }
-        ("nodes", Some(nodes_matches)) => {
-            let (node_sub_command, node_sub_matches) = nodes_matches.subcommand();
-            match (node_sub_command, node_sub_matches) {
-                ("list", Some(list_matches)) => {
+        "nodes" => {
+            let Some((node_sub_command, node_sub_matches)) = matches.subcommand() else {
+                eprintln!("No node subcommand provided");
+                exit(1);
+            };
+            
+            match node_sub_command {
+                "list" => {
                     // List all nodes
-                    let network = list_matches
+                    let network = node_sub_matches
                         .get_one::<String>("network")
                         .map(|s| s.as_str())
                         .unwrap_or("all");
-                    let node_type = list_matches
+                    let node_type = node_sub_matches
                         .get_one::<String>("type")
                         .map(|s| s.as_str())
                         .unwrap_or("all");
-                    let status = list_matches
+                    let status = node_sub_matches
                         .get_one::<String>("status")
                         .map(|s| s.as_str())
                         .unwrap_or("all");
-                    let svm = list_matches.get_one::<String>("svm").map(|s| s.as_str());
-                    let json_output = list_matches.contains_id("json");
+                    let svm = node_sub_matches.get_one::<String>("svm").map(|s| s.as_str());
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::list_all_nodes(
                         &rpc_client,
@@ -302,7 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("dashboard", _) => {
+                "dashboard" => {
                     // Launch node monitoring dashboard
                     match nodes::run_dashboard(
                         &rpc_client,
@@ -316,13 +292,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("status", Some(status_matches)) => {
+                "status" => {
                     // Check node status
-                    let node_id = status_matches
+                    let node_id = node_sub_matches
                         .get_one::<String>("node-id")
                         .map(|s| s.as_str())
                         .unwrap();
-                    let json_output = status_matches.contains_id("json");
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
@@ -338,13 +314,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("get", Some(get_matches)) => {
+                "get" => {
                     // Get detailed node information
-                    let node_id = get_matches
+                    let node_id = node_sub_matches
                         .get_one::<String>("node-id")
                         .map(|s| s.as_str())
                         .unwrap();
-                    let json_output = get_matches.contains_id("json");
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
@@ -360,9 +336,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("restart", Some(restart_matches)) => {
+                "restart" => {
                     // Restart a node
-                    let node_id = restart_matches
+                    let node_id = node_sub_matches
                         .get_one::<String>("node-id")
                         .map(|s| s.as_str())
                         .unwrap();
@@ -374,9 +350,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("stop", Some(stop_matches)) => {
+                "stop" => {
                     // Stop a node
-                    let node_id = stop_matches
+                    let node_id = node_sub_matches
                         .get_one::<String>("node-id")
                         .map(|s| s.as_str())
                         .unwrap();
@@ -388,17 +364,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("logs", Some(logs_matches)) => {
+                "logs" => {
                     // View node logs
-                    let node_id = logs_matches
+                    let node_id = node_sub_matches
                         .get_one::<String>("node-id")
                         .map(|s| s.as_str())
                         .unwrap();
-                    let lines = logs_matches
+                    let lines = node_sub_matches
                         .get_one::<String>("lines")
                         .map(|s| s.parse::<usize>().unwrap_or(100))
                         .unwrap_or(100);
-                    let follow = logs_matches.contains_id("follow");
+                    let follow = node_sub_matches.contains_id("follow");
 
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
@@ -413,25 +389,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("deploy", Some(deploy_matches)) => {
+                "deploy" => {
                     // Deploy a new node
-                    let svm = deploy_matches
+                    let svm = node_sub_matches
                         .get_one::<String>("svm")
                         .map(|s| s.as_str())
                         .unwrap();
-                    let node_type = deploy_matches
+                    let node_type = node_sub_matches
                         .get_one::<String>("type")
                         .map(|s| s.as_str())
                         .unwrap_or("validator");
-                    let network = deploy_matches
+                    let network = node_sub_matches
                         .get_one::<String>("network")
                         .map(|s| s.as_str())
                         .unwrap_or("mainnet");
-                    let host = deploy_matches
+                    let host = node_sub_matches
                         .get_one::<String>("host")
                         .map(|s| s.as_str())
                         .unwrap();
-                    let name = deploy_matches
+                    let name = node_sub_matches
                         .get_one::<String>("name")
                         .map(|s| s.as_str())
                         .unwrap_or("default");
