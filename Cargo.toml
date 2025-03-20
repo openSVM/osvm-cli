@@ -43,10 +43,6 @@ serial_test = "3.2.0"
 mockito = "1.7.0"
 criterion = "0.5.1"
 
-[patch.crates-io]
-curve25519-dalek = { version = "=3.2.1" }
-solana-feature-set = { version = "2.2.4" }
-
 [features]
 default = []
 remote-wallet = ["solana-remote-wallet"]

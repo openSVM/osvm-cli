@@ -7,22 +7,12 @@ set -e
 
 echo "Updating transitive dependencies..."
 
-# Add the dependencies to Cargo.toml
-echo "Adding dependencies to Cargo.toml..."
-cat >> Cargo.toml << EOF
+# Update curve25519-dalek to version 3.2.1
+echo "Updating curve25519-dalek to version 3.2.1..."
+cargo update curve25519-dalek@3.2.0 --precise 3.2.1 || echo "Failed to update curve25519-dalek, it may already be at the desired version or there may be a dependency conflict."
 
-# Temporary dependencies to force specific versions of transitive dependencies
-# These will be removed after cargo update
-curve25519-dalek = "3.2.1"
-solana-feature-set = "2.2.4"
-EOF
-
-# Update the dependencies
-echo "Running cargo update..."
-cargo update
-
-# Remove the temporary dependencies from Cargo.toml
-echo "Removing temporary dependencies from Cargo.toml..."
-sed -i '/# Temporary dependencies/,/solana-feature-set/d' Cargo.toml
+# Update solana-feature-set to version 2.2.4
+echo "Updating solana-feature-set to version 2.2.4..."
+cargo update solana-feature-set --precise 2.2.4 || echo "Failed to update solana-feature-set, it may already be at the desired version or there may be a dependency conflict."
 
 echo "Done!"
