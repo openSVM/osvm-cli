@@ -26,6 +26,8 @@ pub mod ssh_deploy;
 pub mod svm_info;
 
 // External dependency wrappers
+/// Compatibility layer for Clap API changes
+pub mod clap_compat;
 /// Wrapper for webpki::Error to implement std::error::Error trait
 pub mod webpki_error;
 

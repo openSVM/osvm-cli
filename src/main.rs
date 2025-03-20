@@ -1,5 +1,5 @@
 use {
-    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::{clap_compat, dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_clap_utils::{
         input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
@@ -46,14 +46,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut wallet_manager = None;
 
     // Check if colors should be disabled (via flag or environment variable)
-    let no_color = matches.is_present("no_color") || env::var("NO_COLOR").is_ok();
+    let no_color = clap_compat::is_present(matches, "no_color") || env::var("NO_COLOR").is_ok();
     if no_color {
         // Disable colored output globally for the colored crate
         colored::control::set_override(false);
     }
 
     let config = {
-        let cli_config = if let Some(config_file) = matches.value_of("config_file") {
+        let cli_config = if let Some(config_file) = clap_compat::value_of(matches, "config_file") {
             solana_cli_config::Config::load(config_file).unwrap_or_default()
         } else {
             solana_cli_config::Config::load("~/.config/osvm/config.yml").unwrap_or_default()
@@ -61,17 +61,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let default_signer = DefaultSigner::new(
             "keypair",
-            matches
-                .value_of("keypair")
+            clap_compat::value_of(matches, "keypair")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| cli_config.keypair_path.clone()),
         );
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
-                matches
-                    .value_of("json_rpc_url")
-                    .unwrap_or(&cli_config.json_rpc_url),
+                clap_compat::value_of(matches, "json_rpc_url").unwrap_or(&cli_config.json_rpc_url),
             ),
             #[cfg(feature = "remote-wallet")]
             default_signer: default_signer
@@ -88,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     exit(1);
                 }),
             // Count occurrences of the verbose flag to determine verbosity level
-            verbose: matches.occurrences_of("verbose") as u8,
+            verbose: clap_compat::occurrences_of(matches, "verbose"),
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
         }
@@ -178,7 +175,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // First get SVM info to verify it exists and can be installed
                     match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
                         Ok(info) => {
-                            if (!info.can_install_validator && !info.can_install_rpc) {
+                            if !info.can_install_validator && !info.can_install_rpc {
                                 eprintln!("SVM '{}' cannot be installed", svm_name);
                                 exit(1);
                             }
@@ -212,13 +209,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("nodes", Some(nodes_matches)) => {
             let (node_sub_command, node_sub_matches) = nodes_matches.subcommand();
             match (node_sub_command, node_sub_matches) {
-                ("list", Some(list_matches)) => {
+                "list" => {
                     // List all nodes
-                    let network = list_matches.value_of("network").unwrap_or("all");
-                    let node_type = list_matches.value_of("type").unwrap_or("all");
-                    let status = list_matches.value_of("status").unwrap_or("all");
-                    let svm = list_matches.value_of("svm");
-                    let json_output = list_matches.is_present("json");
+                    let network =
+                        clap_compat::value_of(node_sub_matches, "network").unwrap_or("all");
+                    let node_type =
+                        clap_compat::value_of(node_sub_matches, "type").unwrap_or("all");
+                    let status = clap_compat::value_of(node_sub_matches, "status").unwrap_or("all");
+                    let svm = clap_compat::value_of(node_sub_matches, "svm");
+                    let json_output = clap_compat::is_present(node_sub_matches, "json");
 
                     match nodes::list_all_nodes(
                         &rpc_client,
@@ -230,7 +229,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.verbose,
                     ) {
                         Ok(node_list) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&node_list).unwrap());
                             } else {
                                 nodes::display_node_list(&node_list, config.verbose);
@@ -263,7 +262,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&status).unwrap());
                             } else {
                                 nodes::display_node_status(node_id, &status, config.verbose);
@@ -282,7 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&info).unwrap());
                             } else {
                                 nodes::display_node_info(&info, config.verbose);
@@ -328,7 +327,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
-                            if (follow) {
+                            if follow {
                                 // For follow mode, the function won't return until user interrupts
                                 println!("Log streaming ended");
                             }
@@ -377,7 +376,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         ("examples", Some(examples_matches)) => {
             // Handle the examples command
-            if (examples_matches.is_present("list_categories")) {
+            if examples_matches.is_present("list_categories") {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -432,8 +431,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if (validator_matches.is_present("ledger-disk")
-                        && validator_matches.is_present("accounts-disk"))
+                    let disk_config = if validator_matches
+                        .is_present("ledger-disk" && validator_matches.is_present("accounts-disk"))
                     {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: validator_matches
@@ -472,7 +471,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if (deploy_config.hot_swap_enabled) {
+                    if deploy_config.hot_swap_enabled {
                         println!("Hot-swap capability: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -523,8 +522,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if (rpc_matches.is_present("ledger-disk")
-                        && rpc_matches.is_present("accounts-disk"))
+                    let disk_config = if rpc_matches
+                        .is_present("ledger-disk" && rpc_matches.is_present("accounts-disk"))
                     {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
@@ -539,7 +538,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Create additional params for RPC-specific options
                     let mut additional_params = std::collections::HashMap::new();
-                    if (enable_history) {
+                    if enable_history {
                         additional_params.insert("enable_history".to_string(), "true".to_string());
                     }
 
@@ -566,7 +565,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if (enable_history) {
+                    if enable_history {
                         println!("Transaction history: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -645,10 +644,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("Sonic RPC node deployed successfully!");
                 }
-                ("solana", Some(solana_matches)) => {
+                "solana" => {
                     // Use the enhanced Solana deployment via rpc subcommand
-                    let connection_str = solana_matches.value_of("connection").unwrap();
-                    let network_str = solana_matches.value_of("network").unwrap_or("mainnet");
+                    let connection_str = rpc_sub_matches
+                        .get_one::<String>("connection")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let network_str = rpc_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
 
                     // Parse connection string
                     let connection =
@@ -738,7 +743,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect::<Vec<_>>();
-            if (svm_types.is_empty()) {
+            if svm_types.is_empty() {
                 eprintln!("No SVMs specified");
                 exit(1);
             }
