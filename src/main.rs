@@ -86,8 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| cli_config.keypair_path.clone());
 
         // Create a signer directly from the keypair path
-        let signer = solana_sdk::signature::read_keypair_file(&keypair_path)
-            .unwrap_or_else(|err| {
+        let signer =
+            solana_sdk::signature::read_keypair_file(&keypair_path).unwrap_or_else(|err| {
                 eprintln!("Error reading keypair file {}: {}", keypair_path, err);
                 exit(1);
             });
@@ -241,7 +241,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("No node subcommand provided");
                 exit(1);
             };
-            
+
             match node_sub_command {
                 "list" => {
                     // List all nodes
@@ -257,7 +257,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .get_one::<String>("status")
                         .map(|s| s.as_str())
                         .unwrap_or("all");
-                    let svm = node_sub_matches.get_one::<String>("svm").map(|s| s.as_str());
+                    let svm = node_sub_matches
+                        .get_one::<String>("svm")
+                        .map(|s| s.as_str());
                     let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::list_all_nodes(
