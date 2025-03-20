@@ -29,13 +29,13 @@ struct Config {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
     let sub_command_opt = app_matches.subcommand();
-    
+
     // Handle the case where there's no subcommand
     if sub_command_opt.is_none() {
         eprintln!("No subcommand provided");
         exit(1);
     }
-    
+
     let (sub_command, sub_matches) = sub_command_opt.unwrap();
     let matches = sub_matches;
 
