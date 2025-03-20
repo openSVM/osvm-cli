@@ -155,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("get", Some(get_matches)) => {
                     // Get details for a specific SVM
-                    let name = get_matches.value_of("name").unwrap();
+                    let name = clap_compat::value_of(get_matches, "name").unwrap();
                     match svm_info::get_svm_info(&rpc_client, name, config.commitment_config) {
                         Ok(info) => svm_info::display_svm_info(&info),
                         Err(e) => {
@@ -166,8 +166,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("install", Some(install_matches)) => {
                     // Install an SVM on a remote host
-                    let svm_name = install_matches.value_of("name").unwrap();
-                    let host = install_matches.value_of("host").unwrap();
+                    let svm_name = clap_compat::value_of(install_matches, "name").unwrap();
+                    let host = clap_compat::value_of(install_matches, "host").unwrap();
 
                     println!("Installing SVM: {}", svm_name);
                     println!("Host: {}", host);
@@ -255,8 +255,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("status", Some(status_matches)) => {
                     // Check node status
-                    let node_id = status_matches.value_of("node-id").unwrap();
-                    let json_output = status_matches.is_present("json");
+                    let node_id = clap_compat::value_of(status_matches, "node-id").unwrap();
+                    let json_output = clap_compat::is_present(status_matches, "json");
 
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
@@ -274,8 +274,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("get", Some(get_matches)) => {
                     // Get detailed node information
-                    let node_id = get_matches.value_of("node-id").unwrap();
-                    let json_output = get_matches.is_present("json");
+                    let node_id = clap_compat::value_of(get_matches, "node-id").unwrap();
+                    let json_output = clap_compat::is_present(get_matches, "json");
 
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
@@ -293,7 +293,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("restart", Some(restart_matches)) => {
                     // Restart a node
-                    let node_id = restart_matches.value_of("node-id").unwrap();
+                    let node_id = clap_compat::value_of(restart_matches, "node-id").unwrap();
                     match nodes::restart_node(node_id) {
                         Ok(_) => println!("Node {} restarted successfully", node_id),
                         Err(e) => {
@@ -304,7 +304,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("stop", Some(stop_matches)) => {
                     // Stop a node
-                    let node_id = stop_matches.value_of("node-id").unwrap();
+                    let node_id = clap_compat::value_of(stop_matches, "node-id").unwrap();
                     match nodes::stop_node(node_id) {
                         Ok(_) => println!("Node {} stopped successfully", node_id),
                         Err(e) => {
@@ -315,13 +315,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("logs", Some(logs_matches)) => {
                     // View node logs
-                    let node_id = logs_matches.value_of("node-id").unwrap();
-                    let lines = logs_matches
-                        .value_of("lines")
+                    let node_id = clap_compat::value_of(logs_matches, "node-id").unwrap();
+                    let lines = clap_compat::value_of(logs_matches, "lines")
                         .unwrap()
                         .parse::<usize>()
                         .unwrap_or(100);
-                    let follow = logs_matches.is_present("follow");
+                    let follow = clap_compat::is_present(logs_matches, "follow");
 
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
@@ -338,11 +337,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 ("deploy", Some(deploy_matches)) => {
                     // Deploy a new node
-                    let svm = deploy_matches.value_of("svm").unwrap();
-                    let node_type = deploy_matches.value_of("type").unwrap_or("validator");
-                    let network = deploy_matches.value_of("network").unwrap_or("mainnet");
-                    let host = deploy_matches.value_of("host").unwrap();
-                    let name = deploy_matches.value_of("name").unwrap_or("default");
+                    let svm = clap_compat::value_of(deploy_matches, "svm").unwrap();
+                    let node_type =
+                        clap_compat::value_of(deploy_matches, "type").unwrap_or("validator");
+                    let network =
+                        clap_compat::value_of(deploy_matches, "network").unwrap_or("mainnet");
+                    let host = clap_compat::value_of(deploy_matches, "host").unwrap();
+                    let name = clap_compat::value_of(deploy_matches, "name").unwrap_or("default");
 
                     // Parse network type
                     let network_type = match network.to_lowercase().as_str() {
@@ -374,7 +375,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         ("examples", Some(examples_matches)) => {
             // Handle the examples command
-            if examples_matches.is_present("list_categories") {
+            if clap_compat::is_present(examples_matches, "list_categories") {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -386,7 +387,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "
 Use 'osvm examples --category <name>' to show examples for a specific category."
                 );
-            } else if let Some(category) = examples_matches.value_of("category") {
+            } else if let Some(category) = clap_compat::value_of(examples_matches, "category") {
                 // Display examples for a specific category
                 examples::display_category_by_name(category);
             } else {
@@ -399,15 +400,16 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
             match (solana_sub_command, solana_sub_matches) {
                 ("validator", Some(validator_matches)) => {
                     // Deploy a Solana validator with enhanced features
-                    let connection_str = validator_matches.value_of("connection").unwrap();
-                    let network_str = validator_matches.value_of("network").unwrap_or("mainnet");
-                    let version = validator_matches.value_of("version").map(|s| s.to_string());
-                    let client_type = validator_matches
-                        .value_of("client-type")
+                    let connection_str =
+                        clap_compat::value_of(validator_matches, "connection").unwrap();
+                    let network_str =
+                        clap_compat::value_of(validator_matches, "network").unwrap_or("mainnet");
+                    let version =
+                        clap_compat::value_of(validator_matches, "version").map(|s| s.to_string());
+                    let client_type = clap_compat::value_of(validator_matches, "client-type")
                         .map(|s| s.to_string());
-                    let hot_swap_enabled = validator_matches.is_present("hot-swap");
-                    let metrics_config = validator_matches
-                        .value_of("metrics-config")
+                    let hot_swap_enabled = clap_compat::is_present(validator_matches, "hot-swap");
+                    let metrics_config = clap_compat::value_of(validator_matches, "metrics-config")
                         .map(|s| s.to_string());
 
                     // Parse connection string
@@ -432,18 +434,19 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if validator_matches
-                        .is_present("ledger-disk" && validator_matches.is_present("accounts-disk"))
+                    let disk_config = if clap_compat::is_present(validator_matches, "ledger-disk")
+                        && clap_compat::is_present(validator_matches, "accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: validator_matches
-                                .value_of("ledger-disk")
+                            ledger_disk: clap_compat::value_of(validator_matches, "ledger-disk")
                                 .unwrap()
                                 .to_string(),
-                            accounts_disk: validator_matches
-                                .value_of("accounts-disk")
-                                .unwrap()
-                                .to_string(),
+                            accounts_disk: clap_compat::value_of(
+                                validator_matches,
+                                "accounts-disk",
+                            )
+                            .unwrap()
+                            .to_string(),
                         })
                     } else {
                         None
@@ -492,14 +495,16 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                 }
                 ("rpc", Some(rpc_matches)) => {
                     // Deploy a Solana RPC node with enhanced features
-                    let connection_str = rpc_matches.value_of("connection").unwrap();
-                    let network_str = rpc_matches.value_of("network").unwrap_or("mainnet");
-                    let version = rpc_matches.value_of("version").map(|s| s.to_string());
-                    let client_type = rpc_matches.value_of("client-type").map(|s| s.to_string());
-                    let enable_history = rpc_matches.is_present("enable-history");
-                    let metrics_config = rpc_matches
-                        .value_of("metrics-config")
-                        .map(|s| s.to_string());
+                    let connection_str = clap_compat::value_of(rpc_matches, "connection").unwrap();
+                    let network_str =
+                        clap_compat::value_of(rpc_matches, "network").unwrap_or("mainnet");
+                    let version =
+                        clap_compat::value_of(rpc_matches, "version").map(|s| s.to_string());
+                    let client_type =
+                        clap_compat::value_of(rpc_matches, "client-type").map(|s| s.to_string());
+                    let enable_history = clap_compat::is_present(rpc_matches, "enable-history");
+                    let metrics_config =
+                        clap_compat::value_of(rpc_matches, "metrics-config").map(|s| s.to_string());
 
                     // Parse connection string
                     let connection =
@@ -523,13 +528,14 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if rpc_matches.is_present("ledger-disk")
-                        && rpc_matches.is_present("accounts-disk")
+                    let disk_config = if clap_compat::is_present(rpc_matches, "ledger-disk")
+                        && clap_compat::is_present(rpc_matches, "accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
-                            accounts_disk: rpc_matches
-                                .value_of("accounts-disk")
+                            ledger_disk: clap_compat::value_of(rpc_matches, "ledger-disk")
+                                .unwrap()
+                                .to_string(),
+                            accounts_disk: clap_compat::value_of(rpc_matches, "accounts-disk")
                                 .unwrap()
                                 .to_string(),
                         })
@@ -595,8 +601,9 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
             match (rpc_sub_command, rpc_sub_matches) {
                 ("sonic", Some(sonic_matches)) => {
                     // Deploy a Sonic RPC node
-                    let connection_str = sonic_matches.value_of("connection").unwrap();
-                    let network_str = sonic_matches.value_of("network").unwrap();
+                    let connection_str =
+                        clap_compat::value_of(sonic_matches, "connection").unwrap();
+                    let network_str = clap_compat::value_of(sonic_matches, "network").unwrap();
 
                     // Parse connection string
                     let connection =
@@ -710,11 +717,11 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
             }
         }
         // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
-        (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
+        (conn_str, _) if conn_str.contains('@') && clap_compat::is_present(matches, "svm") => {
             // This is an SSH deployment command
-            let svm_list = matches.value_of("svm").unwrap();
-            let node_type_str = matches.value_of("node-type").unwrap();
-            let network_str = matches.value_of("network").unwrap();
+            let svm_list = clap_compat::value_of(matches, "svm").unwrap();
+            let node_type_str = clap_compat::value_of(matches, "node-type").unwrap();
+            let network_str = clap_compat::value_of(matches, "network").unwrap();
 
             // Parse connection string
             let connection = match ssh_deploy::ServerConfig::from_connection_string(conn_str) {
@@ -769,7 +776,7 @@ Use 'osvm examples --category <name>' to show examples for a specific category."
                 exit(1);
             }
         }
-        ("new_feature_command", _) => {
+        "new_feature_command" => {
             println!("Expected output for new feature");
         }
         (cmd, _) => {
