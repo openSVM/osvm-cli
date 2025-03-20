@@ -17,7 +17,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .help("Configuration file to use")
                 .global(true);
             if let Some(ref config_file) = *solana_cli_config::CONFIG_FILE {
-                arg = arg.default_value(config_file);
+                arg = arg.default_value(config_file.as_str());
             }
             arg
         })
@@ -278,7 +278,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("type")
                                 .long("type")
                                 .value_name("NODE_TYPE")
-                                .value_parser(["validator", "rpc"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["validator", "rpc"]))
                                 .default_value("validator")
                                 .help("Type of node to deploy")
                         )
@@ -286,7 +286,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("network")
                                 .long("network")
                                 .value_name("NETWORK")
-                                .value_parser(["mainnet", "testnet", "devnet"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
                                 .default_value("mainnet")
                                 .help("Network to deploy on")
                         )
@@ -322,7 +322,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("network")
                                 .long("network")
                                 .value_name("NETWORK")
-                                .value_parser(["mainnet", "testnet", "devnet"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
                                 .default_value("mainnet")
                                 .help("Network to deploy on")
                         )
@@ -340,7 +340,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("network")
                                 .long("network")
                                 .value_name("NETWORK")
-                                .value_parser(["mainnet", "testnet", "devnet"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
                                 .default_value("mainnet")
                                 .help("Network to deploy on")
                         )
@@ -367,7 +367,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("network")
                                 .long("network")
                                 .value_name("NETWORK")
-                                .value_parser(["mainnet", "testnet", "devnet"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
                                 .default_value("mainnet")
                                 .help("Network to deploy on")
                         )
@@ -381,7 +381,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("client-type")
                                 .long("client-type")
                                 .value_name("TYPE")
-                                .value_parser(["standard", "jito", "agave"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave"]))
                                 .default_value("standard")
                                 .help("Solana client type (standard, jito, agave)")
                         )
@@ -437,7 +437,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("client-type")
                                 .long("client-type")
                                 .value_name("TYPE")
-                                .value_parser(["standard", "jito", "agave"])
+                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave"]))
                                 .default_value("standard")
                                 .help("Solana client type (standard, jito, agave)")
                         )
