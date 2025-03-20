@@ -4,7 +4,7 @@
 use clap::ArgMatches;
 
 /// Get a string value from ArgMatches (compatibility with older Clap API)
-pub fn value_of(matches: &ArgMatches, name: &str) -> Option<&str> {
+pub fn value_of<'a>(matches: &'a ArgMatches, name: &str) -> Option<&'a str> {
     matches.get_one::<String>(name).map(|s| s.as_str())
 }
 
@@ -19,12 +19,12 @@ pub fn occurrences_of(matches: &ArgMatches, name: &str) -> u8 {
 }
 
 /// Get a value from ArgMatches and unwrap it (compatibility with older Clap API)
-pub fn value_of_unwrap(matches: &ArgMatches, name: &str) -> &str {
+pub fn value_of_unwrap<'a>(matches: &'a ArgMatches, name: &str) -> &'a str {
     value_of(matches, name).unwrap()
 }
 
 /// Get a value from ArgMatches with a default (compatibility with older Clap API)
-pub fn value_of_or<'a, 'b>(matches: &'a ArgMatches, name: &str, default: &'b str) -> &'a str 
+pub fn value_of_or<'a, 'b>(matches: &'a ArgMatches, name: &str, default: &'b str) -> &'a str
 where
     'b: 'a,
 {

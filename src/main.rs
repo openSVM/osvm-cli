@@ -522,8 +522,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if rpc_matches
-                        .is_present("ledger-disk" && rpc_matches.is_present("accounts-disk"))
+                    let disk_config = if rpc_matches.is_present("ledger-disk")
+                        && rpc_matches.is_present("accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
                             ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
@@ -644,7 +644,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("Sonic RPC node deployed successfully!");
                 }
-                "solana" => {
+                ("solana", Some(rpc_sub_matches)) => {
                     // Use the enhanced Solana deployment via rpc subcommand
                     let connection_str = rpc_sub_matches
                         .get_one::<String>("connection")
@@ -768,10 +768,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
         }
-        "new_feature_command" => {
+        ("new_feature_command", _) => {
             println!("Expected output for new feature");
         }
-        cmd => {
+        (cmd, _) => {
             eprintln!("Unknown command: {}", cmd);
             exit(1);
         }
