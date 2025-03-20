@@ -11,6 +11,9 @@ use {
 };
 
 #[cfg(feature = "remote-wallet")]
+use std::rc::Rc;
+
+#[cfg(feature = "remote-wallet")]
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
 pub mod clparse;
 pub mod prelude;
@@ -45,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let matches = sub_matches;
 
     #[cfg(feature = "remote-wallet")]
-    let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
+    let mut wallet_manager: Option<Rc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
     let mut wallet_manager = None;
@@ -79,6 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|s| s.as_str())
                     .unwrap_or(&cli_config.json_rpc_url),
             ),
+            // Create the signer - with or without remote wallet support based on feature flag
             #[cfg(feature = "remote-wallet")]
             default_signer: default_signer
                 .signer_from_path(matches, &mut wallet_manager)
@@ -88,13 +92,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }),
             #[cfg(not(feature = "remote-wallet"))]
             default_signer: default_signer
-                .signer_from_path(matches, &mut wallet_manager)
+                .signer_from_path(matches, &mut None)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);
                 }),
             // Count occurrences of the verbose flag to determine verbosity level
-            verbose: matches.occurrences_of("verbose") as u8,
+            verbose: matches.get_count("verbose") as u8,
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
         }
@@ -220,9 +224,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match (node_sub_command, node_sub_matches) {
                 ("list", Some(list_matches)) => {
                     // List all nodes
-                    let network = list_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("all");
-                    let node_type = list_matches.get_one::<String>("type").map(|s| s.as_str()).unwrap_or("all");
-                    let status = list_matches.get_one::<String>("status").map(|s| s.as_str()).unwrap_or("all");
+                    let network = list_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
+                    let node_type = list_matches
+                        .get_one::<String>("type")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
+                    let status = list_matches
+                        .get_one::<String>("status")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
                     let svm = list_matches.get_one::<String>("svm").map(|s| s.as_str());
                     let json_output = list_matches.get_flag("json");
 
@@ -348,10 +361,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ("deploy", Some(deploy_matches)) => {
                     // Deploy a new node
                     let svm = deploy_matches.get_one::<String>("svm").unwrap();
-                    let node_type = deploy_matches.get_one::<String>("type").map(|s| s.as_str()).unwrap_or("validator");
-                    let network = deploy_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
+                    let node_type = deploy_matches
+                        .get_one::<String>("type")
+                        .map(|s| s.as_str())
+                        .unwrap_or("validator");
+                    let network = deploy_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
                     let host = deploy_matches.get_one::<String>("host").unwrap();
-                    let name = deploy_matches.get_one::<String>("name").map(|s| s.as_str()).unwrap_or("default");
+                    let name = deploy_matches
+                        .get_one::<String>("name")
+                        .map(|s| s.as_str())
+                        .unwrap_or("default");
 
                     // Parse network type
                     let network_type = match network.to_lowercase().as_str() {
@@ -406,11 +428,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ("validator", Some(validator_matches)) => {
                     // Deploy a Solana validator with enhanced features
                     let connection_str = validator_matches.get_one::<String>("connection").unwrap();
-                    let network_str = validator_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
+                    let network_str = validator_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
                     let version = validator_matches.get_one::<String>("version").cloned();
-                    let client_type = validator_matches
-                        .get_one::<String>("client-type")
-                        .cloned();
+                    let client_type = validator_matches.get_one::<String>("client-type").cloned();
                     let hot_swap_enabled = validator_matches.get_flag("hot-swap");
                     let metrics_config = validator_matches
                         .get_one::<String>("metrics-config")
@@ -499,13 +522,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ("rpc", Some(rpc_matches)) => {
                     // Deploy a Solana RPC node with enhanced features
                     let connection_str = rpc_matches.get_one::<String>("connection").unwrap();
-                    let network_str = rpc_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
+                    let network_str = rpc_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
                     let version = rpc_matches.get_one::<String>("version").cloned();
                     let client_type = rpc_matches.get_one::<String>("client-type").cloned();
                     let enable_history = rpc_matches.get_flag("enable-history");
-                    let metrics_config = rpc_matches
-                        .get_one::<String>("metrics-config")
-                        .cloned();
+                    let metrics_config = rpc_matches.get_one::<String>("metrics-config").cloned();
 
                     // Parse connection string
                     let connection =
@@ -533,7 +557,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         && rpc_matches.contains_id("accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: rpc_matches.get_one::<String>("ledger-disk").unwrap().to_string(),
+                            ledger_disk: rpc_matches
+                                .get_one::<String>("ledger-disk")
+                                .unwrap()
+                                .to_string(),
                             accounts_disk: rpc_matches
                                 .get_one::<String>("accounts-disk")
                                 .unwrap()
@@ -654,7 +681,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ("solana", Some(solana_matches)) => {
                     // Use the enhanced Solana deployment via rpc subcommand
                     let connection_str = solana_matches.get_one::<String>("connection").unwrap();
-                    let network_str = solana_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
+                    let network_str = solana_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
 
                     // Parse connection string
                     let connection =
