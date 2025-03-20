@@ -46,3 +46,7 @@ criterion = "0.5.1"
 [features]
 default = []
 remote-wallet = ["solana-remote-wallet"]
+
+[patch.crates-io]
+curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }
+solana-feature-set = { git = "https://github.com/solana-labs/solana", tag = "v2.2.4" }
