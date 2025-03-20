@@ -17,6 +17,30 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<solana_sd
         .and_then(|s| solana_sdk::pubkey::Pubkey::from_str(s).ok())
 }
 
+// Helper function to handle the signer_from_path with clap v4 ArgMatches
+fn signer_from_path_checked(
+    default_signer: &DefaultSigner,
+    matches: &clap::ArgMatches,
+    wallet_manager: &mut Option<
+        #[cfg(feature = "remote-wallet")]
+        Arc<RemoteWalletManager>,
+        #[cfg(not(feature = "remote-wallet"))]
+        RemoteWalletManager,
+    >,
+) -> Result<Box<dyn Signer>, Box<dyn std::error::Error>> {
+    let keypair_path = matches
+        .get_one::<String>("keypair")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| default_signer.path.clone());
+    
+    // Use the DefaultSigner's signer_from_path method
+    default_signer.signer_from_path_with_config(
+        &keypair_path,
+        wallet_manager,
+        &SignerFromPathConfig::default(),
+    )
+}
+
 #[cfg(feature = "remote-wallet")]
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
 pub mod clparse;
@@ -103,15 +127,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or(&cli_config.json_rpc_url),
             ),
             #[cfg(feature = "remote-wallet")]
-            default_signer: default_signer
-                .signer_from_path(matches_compat, &mut wallet_manager)
+            default_signer: signer_from_path_checked(&default_signer, matches, &mut wallet_manager)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);
                 }),
             #[cfg(not(feature = "remote-wallet"))]
-            default_signer: default_signer
-                .signer_from_path(matches_compat, &mut wallet_manager)
+            default_signer: signer_from_path_checked(&default_signer, matches, &mut wallet_manager)
                 .unwrap_or_else(|err| {
                     eprintln!("error: {}", err);
                     exit(1);
@@ -435,22 +457,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        ("solana", Some(solana_matches)) => {
-            let (solana_sub_command, solana_sub_matches) = solana_matches.subcommand();
-            match (solana_sub_command, solana_sub_matches) {
-                ("validator", Some(validator_matches)) => {
+        "solana" => {
+            let Some((solana_sub_command, solana_sub_matches)) = matches.subcommand() else {
+                eprintln!("No solana subcommand provided");
+                exit(1);
+            };
+            
+            match solana_sub_command {
+                "validator" => {
                     // Deploy a Solana validator with enhanced features
-                    let connection_str = validator_matches.get_one::<String>("connection").map(|s| s.as_str()).unwrap();
-                    let network_str = validator_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
-                    let version = validator_matches.get_one::<String>("version").map(|s| s.as_str()).map(|s| s.to_string());
-                    let client_type = validator_matches
+                    let connection_str = solana_sub_matches.get_one::<String>("connection").map(|s| s.as_str()).unwrap();
+                    let network_str = solana_sub_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
+                    let version = solana_sub_matches.get_one::<String>("version").map(|s| s.as_str()).map(|s| s.to_string());
+                    let client_type = solana_sub_matches
                         .get_one::<String>("client-type")
-                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
-                    let hot_swap_enabled = validator_matches.contains_id("hot-swap");
-                    let metrics_config = validator_matches
+                    let hot_swap_enabled = solana_sub_matches.contains_id("hot-swap");
+                    let metrics_config = solana_sub_matches
                         .get_one::<String>("metrics-config")
-                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
 
                     // Parse connection string
@@ -475,16 +499,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if validator_matches.contains_id("ledger-disk")
-                        && validator_matches.contains_id("accounts-disk")
+                    let disk_config = if solana_sub_matches.contains_id("ledger-disk")
+                        && solana_sub_matches.contains_id("accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: validator_matches
+                            ledger_disk: solana_sub_matches
                                 .get_one::<String>("ledger-disk")
                                 .map(|s| s.as_str())
                                 .unwrap()
                                 .to_string(),
-                            accounts_disk: validator_matches
+                            accounts_disk: solana_sub_matches
                                 .get_one::<String>("accounts-disk")
                                 .map(|s| s.as_str())
                                 .unwrap()
@@ -536,6 +560,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Solana validator node deployed successfully!");
                 }
                 "rpc" => {
+                    let solana_sub_matches = solana_sub_matches;
                     // Deploy a Solana RPC node with enhanced features
                     let connection_str = solana_sub_matches.get_one::<String>("connection").map(|s| s.as_str()).unwrap();
                     let network_str = solana_sub_matches.get_one::<String>("network").map(|s| s.as_str()).unwrap_or("mainnet");
