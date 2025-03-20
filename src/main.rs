@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
-    let mut wallet_manager = None;
+    let mut wallet_manager: Option<()> = None;
 
     let config = {
         let cli_config = if let Some(config_file) =
