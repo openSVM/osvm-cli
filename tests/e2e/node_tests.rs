@@ -115,15 +115,19 @@ fn test_examples_command() {
 #[serial]
 fn test_verbose_output() {
     // Test with normal output (without verbose flag)
-    let output = run_osvm_command_string(&["svm", "list"]);
+    let output = run_osvm_command_string(&["node"]);
 
-    // Normal output should include "Available SVMs" text
+    // Normal output should not include verbose details
+    assert!(!output_contains(&output, "Available SVMs in the chain:"));
+
+    // Test with verbose flag
+    let output = run_osvm_command_string(&["node", "--verbose"]);
+    
+    // Verbose output should include "Available SVMs in the chain:"
     assert!(output_contains(&output, "Available SVMs in the chain:"));
-
-    // Instead of testing specific verbosity flags that may change,
-    // we'll check the basic list command works properly
-    assert!(output_contains(&output, "NAME"));
-    assert!(output_contains(&output, "TOKEN"));
+    
+    // Additional assertions for verbose output
+    assert!(output_contains(&output, "OSVM - Node Management"));
 }
 
 #[test]
