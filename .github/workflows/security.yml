@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
@@ -23,18 +23,16 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
-      
+
       - name: Install cargo-audit
         run: cargo install cargo-audit
         working-directory: .
-      
+
       - name: Run cargo-audit
         run: cargo audit
         working-directory: .
-      
+
       - name: Run cargo-deny
         run: cargo deny check advisories
         working-directory: .
@@ -46,7 +44,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
@@ -59,25 +57,56 @@ jobs:
       security-events: write
       actions: read
       contents: read
+    # Add timeout to entire job
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        language: [javascript, python, ruby, rust]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install libudev-dev
-        
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: rust
         env:
           CODEQL_ENABLE_EXPERIMENTAL_FEATURES: true
-      
+
       - name: Build
         run: cargo build
         working-directory: .
-      
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+        with:
+          # Configure upload timeout and chunking
+          upload-size: "100m"
+          upload-timeout: "300"
+          # Enable retries on network errors
+          upload-retries: 3
+          category: ${{ matrix.language }}-analysis
+        continue-on-error: true
+        id: codeql_analyze
+
+      - name: Retry CodeQL Analysis on Failure
+        if: steps.codeql_analyze.outcome == 'failure'
+        uses: github/codeql-action/analyze@v3
+        with:
+          upload-size: "50m"
+          upload-timeout: "600"
+          upload-retries: 5
+          category: ${{ matrix.language }}-analysis-retry
+
+      - name: Debug Information
+        run: |
+          echo "CodeQL analysis completed"
+          ls -la /home/runner/work/_temp/codeql_databases/ || echo "Cannot access CodeQL database"
+          echo "Checking SARIF results size:"
+          du -h /home/runner/work/osvm-cli/results/rust.sarif || echo "Cannot access SARIF file"
+          cat /home/runner/work/_temp/codeql_databases/log/database-export-diagnostics-*.log || echo "No diagnostics log found"

@@ -22,9 +22,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
       
       - name: Build release binary
         run: cargo build --release
@@ -172,8 +170,6 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-          override: true
-      
       - name: Generate documentation
         run: cargo doc --no-deps --document-private-items
         working-directory: .
