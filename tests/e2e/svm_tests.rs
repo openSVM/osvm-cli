@@ -2,11 +2,11 @@ use crate::e2e::common::{
     create_mock_config, create_temp_dir, output_contains, run_osvm_command,
     run_osvm_command_string, MockServer,
 };
+use crate::e2e::test_utils::setup_test_environment;
 use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use serial_test::serial;
 use std::process::Command;
-use crate::e2e::test_utils::setup_test_environment;
 
 #[allow(dead_code)]
 fn run_command(program: &str, subcommand: &str, action: &str, argument: &str) -> String {
@@ -23,15 +23,17 @@ fn run_command(program: &str, subcommand: &str, action: &str, argument: &str) ->
 #[test]
 fn test_svm_list() {
     setup_test_environment();
-    
+
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["svm", "list"])
         .output()
         .expect("Failed to execute command");
 
-    assert!(output_contains(&output, "Available SVMs") || 
-            output_contains(&output, "SVM List") ||
-            output_contains(&output, "No SVMs found"));
+    assert!(
+        output_contains(&output, "Available SVMs")
+            || output_contains(&output, "SVM List")
+            || output_contains(&output, "No SVMs found")
+    );
 }
 
 #[test]
@@ -56,7 +58,7 @@ fn test_svm_get_solana() {
 #[test]
 fn test_svm_get_invalid() {
     setup_test_environment();
-    
+
     let result = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["svm", "get", "invalid_svm"])
         .output();
@@ -64,14 +66,16 @@ fn test_svm_get_invalid() {
     if let Err(e) = &result {
         panic!("Failed to execute command: {}", e);
     }
-    
+
     let output = result.expect("Failed to execute command");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    
-    assert!(!output.status.success() || 
-            stderr.contains("SVM not found") || 
-            stderr.contains("Error:") ||
-            stderr.contains("not found"));
+
+    assert!(
+        !output.status.success()
+            || stderr.contains("SVM not found")
+            || stderr.contains("Error:")
+            || stderr.contains("not found")
+    );
 }
 
 #[test]

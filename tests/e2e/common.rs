@@ -1,12 +1,12 @@
 //! Common utilities for E2E tests
 
 use mockito::{self, Server};
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use tempfile::TempDir;
-use std::env;
 
 /// Path to the osvm binary
 #[allow(dead_code)]
@@ -80,7 +80,8 @@ impl MockServer {
 
     /// Mock the SVM list endpoint
     pub fn mock_svm_list(&mut self) -> mockito::Mock {
-        self.server.mock("GET", "/api/svms")
+        self.server
+            .mock("GET", "/api/svms")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(
