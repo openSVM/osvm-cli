@@ -23,9 +23,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - name: Install cargo-audit
         run: cargo install cargo-audit
