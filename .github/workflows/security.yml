@@ -59,6 +59,9 @@ jobs:
       contents: read
     # Add timeout to entire job
     timeout-minutes: 60
+    strategy:
+      matrix:
+        language: [javascript, python, ruby, rust]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -87,6 +90,7 @@ jobs:
           upload-timeout: "300"
           # Enable retries on network errors
           upload-retries: 3
+          category: ${{ matrix.language }}-analysis
         continue-on-error: true
         id: codeql_analyze
 
@@ -97,11 +101,12 @@ jobs:
           upload-size: "50m"
           upload-timeout: "600"
           upload-retries: 5
+          category: ${{ matrix.language }}-analysis-retry
 
       - name: Debug Information
         run: |
           echo "CodeQL analysis completed"
-          ls -la /home/runner/work/_temp/codeql_databases/
-          cat /home/runner/work/_temp/codeql_databases/log/database-export-diagnostics-*.log || echo "No diagnostics log found"
+          ls -la /home/runner/work/_temp/codeql_databases/ || echo "Cannot access CodeQL database"
           echo "Checking SARIF results size:"
           du -h /home/runner/work/osvm-cli/results/rust.sarif || echo "Cannot access SARIF file"
+          cat /home/runner/work/_temp/codeql_databases/log/database-export-diagnostics-*.log || echo "No diagnostics log found"
