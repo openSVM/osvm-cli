@@ -1,13 +1,15 @@
-//! Common utilities for e2e tests
+//! Common utilities for E2E tests
 
-use assert_cmd::prelude::*;
-use mockito::ServerGuard;
-use std::env;
+use mockito::{self, Server};
+use std::fs::File;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Output};
 use tempfile::TempDir;
+use std::env;
 
 /// Path to the osvm binary
+#[allow(dead_code)]
 pub fn osvm_bin_path() -> PathBuf {
     // In a real environment, this would be the path to the installed binary
     // For testing, we'll use the debug build in the target directory
@@ -18,43 +20,52 @@ pub fn osvm_bin_path() -> PathBuf {
     path
 }
 
-/// Run an OSVM command and return the command for further assertions
+/// Run an osvm command and return the output
 pub fn run_osvm_command() -> Command {
-    Command::cargo_bin("osvm").expect("Failed to find osvm binary")
+    Command::new(env!("CARGO_BIN_EXE_osvm"))
 }
 
-/// Run an OSVM command with arguments and return the output as a string
-pub fn run_osvm_command_string(args: &[&str]) -> String {
+/// Run an osvm command with the given arguments and return the output as a process::Output
+pub fn run_osvm_command_string(args: &[&str]) -> Output {
     let output = run_osvm_command()
         .args(args)
         .output()
-        .expect("Failed to execute osvm command");
-
-    String::from_utf8_lossy(&output.stdout).to_string()
+        .expect("Failed to execute command");
+    output
 }
 
-/// Check if the output contains the expected text
-pub fn output_contains(output: &str, expected: &str) -> bool {
-    output.contains(expected)
+/// Check if the output contains a specific string
+pub fn output_contains(output: &std::process::Output, expected: &str) -> bool {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.contains(expected)
 }
 
-/// Create a temporary directory for test files
+/// Create a temporary directory for testing
 pub fn create_temp_dir() -> TempDir {
-    TempDir::new().expect("Failed to create temporary directory")
+    tempfile::tempdir().expect("Failed to create temp directory")
 }
 
-/// Create a mock config file in the given directory
-pub fn create_mock_config(dir: &TempDir) -> PathBuf {
-    let config_path = dir.path().join("config.yml");
-    std::fs::write(
-        &config_path,
-        "json_rpc_url: http://localhost:8899\nkeypair_path: ~/.config/osvm/id.json\n",
+/// Create a mock configuration file for testing
+pub fn create_mock_config(temp_dir: &TempDir) -> PathBuf {
+    let config_path = temp_dir.path().join("config.yml");
+    let mut config_file = File::create(&config_path).expect("Failed to create config file");
+
+    writeln!(
+        config_file,
+        r#"---
+json_rpc_url: "http://localhost:8899"
+websocket_url: ""
+keypair_path: ""
+address_labels:
+  "11111111111111111111111111111111": "System Program"
+"#
     )
-    .expect("Failed to write config file");
+    .expect("Failed to write to config file");
+
     config_path
 }
 
-/// Mock server for testing SSH deployment
+/// Struct for managing mock server instances
 pub struct MockServer {
     pub server: mockito::ServerGuard,
 }
@@ -63,40 +74,25 @@ impl MockServer {
     /// Create a new mock server
     pub fn new() -> Self {
         MockServer {
-            server: mockito::Server::new(),
+            server: Server::new(),
         }
     }
 
-    /// Get the connection string for the mock server
-    pub fn connection_string(&self) -> String {
-        format!("test@{}", self.server.host_with_port())
-    }
-
-    /// Mock an SVM list endpoint
+    /// Mock the SVM list endpoint
     pub fn mock_svm_list(&mut self) -> mockito::Mock {
         self.server.mock("GET", "/api/svms")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{"solana":{"name":"solana","display_name":"Solana"},"sonic":{"name":"sonic","display_name":"Sonic"}}"#)
-            .create()
-    }
-
-    /// Mock an SVM get endpoint
-    pub fn mock_svm_get(&mut self, svm_name: &str) -> mockito::Mock {
-        self.server.mock("GET", format!("/api/svms/{}", svm_name).as_str())
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(format!(r#"{{"name":"{}","display_name":"{}","token_symbol":"TEST","token_price_usd":1.0}}"#, svm_name, svm_name.to_uppercase()))
-            .create()
-    }
-
-    /// Mock an SVM get endpoint with 404 response
-    pub fn mock_svm_get_not_found(&mut self, svm_name: &str) -> mockito::Mock {
-        self.server
-            .mock("GET", format!("/api/svms/{}", svm_name).as_str())
-            .with_status(404)
-            .with_header("content-type", "application/json")
-            .with_body(format!(r#"{{"error":"SVM not found: {}"}}"#, svm_name))
+            .with_body(
+                r#"
+                {
+                    "svms": [
+                        {"name": "solana", "version": "1.16.0", "status": "active"},
+                        {"name": "ethereum", "version": "2.0", "status": "inactive"}
+                    ]
+                }
+                "#,
+            )
             .create()
     }
 }
