@@ -5,6 +5,18 @@ use crate::e2e::common::{
 use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use serial_test::serial;
+use std::process::Command;
+
+fn run_command(program: &str, subcommand: &str, action: &str, argument: &str) -> String {
+    let output = Command::new(program)
+        .arg(subcommand)
+        .arg(action)
+        .arg(argument)
+        .output()
+        .expect("Failed to execute command");
+
+    String::from_utf8_lossy(&output.stdout).to_string()
+}
 
 #[test]
 fn test_svm_list() {
