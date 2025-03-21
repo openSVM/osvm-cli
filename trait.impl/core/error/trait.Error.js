@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["osvm",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.85.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"osvm/utils/dashboard/enum.DashboardError.html\" title=\"enum osvm::utils::dashboard::DashboardError\">DashboardError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.85.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"osvm/utils/nodes/enum.NodeError.html\" title=\"enum osvm::utils::nodes::NodeError\">NodeError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.85.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"osvm/utils/ssh_deploy/enum.DeploymentError.html\" title=\"enum osvm::utils::ssh_deploy::DeploymentError\">DeploymentError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.85.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"enum\" href=\"osvm/utils/svm_info/enum.SvmError.html\" title=\"enum osvm::utils::svm_info::SvmError\">SvmError</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/1.85.1/core/error/trait.Error.html\" title=\"trait core::error::Error\">Error</a> for <a class=\"struct\" href=\"osvm/utils/webpki_error/struct.WebPkiError.html\" title=\"struct osvm::utils::webpki_error::WebPkiError\">WebPkiError</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1440]}

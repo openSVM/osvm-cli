@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["configure_solana_metrics","install_monitoring_stack","setup_alert_system","setup_basic_monitoring","setup_monitoring"]};
