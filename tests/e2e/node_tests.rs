@@ -1,55 +1,61 @@
 use crate::e2e::common::{
     create_mock_config, create_temp_dir, output_contains, run_osvm_command, run_osvm_command_string,
 };
+use crate::e2e::test_utils::setup_test_environment;
 use assert_cmd::assert::OutputAssertExt;
 use predicates::prelude::*;
 use serial_test::serial;
 use std::process::Command;
-use crate::e2e::test_utils::setup_test_environment;
 
 #[test]
 #[serial]
 fn test_nodes_list() {
     setup_test_environment();
-    
+
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["nodes", "list"])
         .output()
         .expect("Failed to execute command");
 
-    assert!(output_contains(&output, "OSVM - Node Management") || 
-            output_contains(&output, "Node List") || 
-            output_contains(&output, "No nodes found"));
+    assert!(
+        output_contains(&output, "OSVM - Node Management")
+            || output_contains(&output, "Node List")
+            || output_contains(&output, "No nodes found")
+    );
 }
 
 #[test]
 #[serial]
 fn test_nodes_list_with_filters_basic() {
     setup_test_environment();
-    
+
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["nodes", "list", "--status", "active"])
         .output()
         .expect("Failed to execute command");
 
-    assert!(output_contains(&output, "OSVM - Node Management") || 
-            output_contains(&output, "Node List") ||
-            output_contains(&output, "No nodes found"));
+    assert!(
+        output_contains(&output, "OSVM - Node Management")
+            || output_contains(&output, "Node List")
+            || output_contains(&output, "No nodes found")
+    );
 }
 
 #[test]
 #[serial]
 fn test_nodes_list_with_filters() {
     setup_test_environment();
-    
+
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["nodes", "list", "--status", "active", "--type", "validator"])
         .output()
         .expect("Failed to execute command");
 
-    assert!(output_contains(&output, "OSVM - Node Management") || 
-            output_contains(&output, "Node List") ||
-            output_contains(&output, "No nodes found"));
+    assert!(
+        output_contains(&output, "OSVM - Node Management")
+            || output_contains(&output, "Node List")
+            || output_contains(&output, "No nodes found")
+    );
 }
 
 #[test]
@@ -68,17 +74,19 @@ fn test_nodes_dashboard() {
 #[serial]
 fn test_nodes_get_invalid() {
     setup_test_environment();
-    
+
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
         .args(&["nodes", "get", "invalid_node_id"])
         .output()
         .expect("Failed to execute command");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Node not found") || 
-            stderr.contains("Error:") || 
-            stderr.contains("not found") ||
-            !output.status.success());
+    assert!(
+        stderr.contains("Node not found")
+            || stderr.contains("Error:")
+            || stderr.contains("not found")
+            || !output.status.success()
+    );
 }
 
 #[test]
@@ -150,9 +158,11 @@ fn test_help_command() {
         .output()
         .expect("Failed to execute command");
 
-    assert!(output_contains(&output, "Usage:") || 
-            output_contains(&output, "USAGE:") || 
-            output_contains(&output, "Commands:"));
+    assert!(
+        output_contains(&output, "Usage:")
+            || output_contains(&output, "USAGE:")
+            || output_contains(&output, "Commands:")
+    );
 }
 
 #[test]
