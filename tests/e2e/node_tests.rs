@@ -122,10 +122,10 @@ fn test_verbose_output() {
 
     // Test with verbose flag
     let output = run_osvm_command_string(&["node", "--verbose"]);
-    
+
     // Verbose output should include "Available SVMs in the chain:"
     assert!(output_contains(&output, "Available SVMs in the chain:"));
-    
+
     // Additional assertions for verbose output
     assert!(output_contains(&output, "OSVM - Node Management"));
 }
