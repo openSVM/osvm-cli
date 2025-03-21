@@ -1,14 +1,19 @@
 use {
     crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
-    solana_clap_utils::{
-        input_parsers::pubkey_of, input_validators::normalize_to_url_if_moniker,
-        keypair::DefaultSigner,
-    },
+    solana_clap_utils::input_validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
     solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
-    std::{env, process::exit},
+    std::{env, process::exit, str::FromStr},
 };
+
+// Helper function to handle the type mismatch between clap v2 and v4
+fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<solana_sdk::pubkey::Pubkey> {
+    matches
+        .get_one::<String>(name)
+        .map(|s| s.as_str())
+        .and_then(|s| solana_sdk::pubkey::Pubkey::from_str(s).ok())
+}
 
 #[cfg(feature = "remote-wallet")]
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
@@ -25,6 +30,7 @@ struct Config {
     no_color: bool,
 }
 
+// Wrapper type for webpki::Error to implement traits
 #[derive(Debug)]
 struct WebPkiError(webpki::Error);
 
@@ -36,76 +42,66 @@ impl std::fmt::Display for WebPkiError {
 
 impl std::error::Error for WebPkiError {}
 
-impl std::fmt::Debug for webpki::Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+// Convert from webpki::Error to WebPkiError
+impl From<webpki::Error> for WebPkiError {
+    fn from(error: webpki::Error) -> Self {
+        WebPkiError(error)
     }
 }
-
-impl std::fmt::Display for webpki::Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl std::error::Error for webpki::Error {}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
-    let (sub_command, sub_matches) = app_matches.subcommand();
-    let matches = sub_matches.unwrap();
-
-    #[cfg(feature = "remote-wallet")]
-    let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
-
-    #[cfg(not(feature = "remote-wallet"))]
-    let mut wallet_manager = None;
+    let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
+        eprintln!("No subcommand provided");
+        exit(1);
+    };
+    let matches = sub_matches;
 
     // Check if colors should be disabled (via flag or environment variable)
-    let no_color = matches.is_present("no_color") || env::var("NO_COLOR").is_ok();
+    let no_color = matches.contains_id("no_color") || env::var("NO_COLOR").is_ok();
     if no_color {
         // Disable colored output globally for the colored crate
         colored::control::set_override(false);
     }
 
+    #[cfg(feature = "remote-wallet")]
+    let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
+
+    #[cfg(not(feature = "remote-wallet"))]
+    let _wallet_manager: Option<()> = None;
+
     let config = {
-        let cli_config = if let Some(config_file) = matches.value_of("config_file") {
+        let cli_config = if let Some(config_file) =
+            matches.get_one::<String>("config_file").map(|s| s.as_str())
+        {
             solana_cli_config::Config::load(config_file).unwrap_or_default()
         } else {
             solana_cli_config::Config::load("~/.config/osvm/config.yml").unwrap_or_default()
         };
 
-        let default_signer = DefaultSigner::new(
-            "keypair",
-            matches
-                .value_of("keypair")
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| cli_config.keypair_path.clone()),
-        );
+        let keypair_path = matches
+            .get_one::<String>("keypair")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| cli_config.keypair_path.clone());
+
+        // Create a signer directly from the keypair path
+        let signer =
+            solana_sdk::signature::read_keypair_file(&keypair_path).unwrap_or_else(|err| {
+                eprintln!("Error reading keypair file {}: {}", keypair_path, err);
+                exit(1);
+            });
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
                 matches
-                    .value_of("json_rpc_url")
+                    .get_one::<String>("json_rpc_url")
+                    .map(|s| s.as_str())
                     .unwrap_or(&cli_config.json_rpc_url),
             ),
-            #[cfg(feature = "remote-wallet")]
-            default_signer: default_signer
-                .signer_from_path(matches, &mut wallet_manager)
-                .unwrap_or_else(|err| {
-                    eprintln!("error: {}", err);
-                    exit(1);
-                }),
-            #[cfg(not(feature = "remote-wallet"))]
-            default_signer: default_signer
-                .signer_from_path(matches, &mut wallet_manager)
-                .unwrap_or_else(|err| {
-                    eprintln!("error: {}", err);
-                    exit(1);
-                }),
+            default_signer: Box::new(signer),
             // Count occurrences of the verbose flag to determine verbosity level
-            verbose: matches.occurrences_of("verbose") as u8,
+            verbose: matches.get_count("verbose") as u8,
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
         }
@@ -143,10 +139,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let rpc_client = RpcClient::new(config.json_rpc_url.clone());
 
-    match (sub_command, sub_matches) {
-        ("balance", Some(arg_matches)) => {
-            let address =
-                pubkey_of(arg_matches, "address").unwrap_or_else(|| config.default_signer.pubkey());
+    match sub_command {
+        "balance" => {
+            let address = pubkey_of_checked(matches, "address")
+                .unwrap_or_else(|| config.default_signer.pubkey());
+
             println!(
                 "{} has a balance of {}",
                 address,
@@ -155,15 +152,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .value)
             );
         }
-        ("svm", Some(svm_matches)) => {
-            let (svm_sub_command, svm_sub_matches) = svm_matches.subcommand();
-            match (svm_sub_command, svm_sub_matches) {
-                ("list", _) => {
+        "svm" => {
+            let Some((svm_sub_command, svm_sub_matches)) = matches.subcommand() else {
+                eprintln!("No SVM subcommand provided");
+                exit(1);
+            };
+
+            match svm_sub_command {
+                "list" => {
                     // List all SVMs
                     let svms = svm_info::list_all_svms(&rpc_client, config.commitment_config)?;
                     svm_info::display_svm_list(&svms);
                 }
-                ("dashboard", _) => {
+                "dashboard" => {
                     // Launch the interactive dashboard
                     match dashboard::run_dashboard(&rpc_client, config.commitment_config) {
                         Ok(_) => println!("Dashboard closed"),
@@ -173,9 +174,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("get", Some(get_matches)) => {
+                "get" => {
                     // Get details for a specific SVM
-                    let name = get_matches.value_of("name").unwrap();
+                    let name = svm_sub_matches
+                        .get_one::<String>("name")
+                        .map(|s| s.as_str())
+                        .unwrap();
                     match svm_info::get_svm_info(&rpc_client, name, config.commitment_config) {
                         Ok(info) => svm_info::display_svm_info(&info),
                         Err(e) => {
@@ -184,10 +188,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("install", Some(install_matches)) => {
+                "install" => {
                     // Install an SVM on a remote host
-                    let svm_name = install_matches.value_of("name").unwrap();
-                    let host = install_matches.value_of("host").unwrap();
+                    let svm_name = svm_sub_matches
+                        .get_one::<String>("name")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let host = svm_sub_matches
+                        .get_one::<String>("host")
+                        .map(|s| s.as_str())
+                        .unwrap();
 
                     println!("Installing SVM: {}", svm_name);
                     println!("Host: {}", host);
@@ -195,7 +205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // First get SVM info to verify it exists and can be installed
                     match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
                         Ok(info) => {
-                            if (!info.can_install_validator && !info.can_install_rpc) {
+                            if !info.can_install_validator && !info.can_install_rpc {
                                 eprintln!("SVM '{}' cannot be installed", svm_name);
                                 exit(1);
                             }
@@ -226,16 +236,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 _ => unreachable!(),
             }
         }
-        ("nodes", Some(nodes_matches)) => {
-            let (node_sub_command, node_sub_matches) = nodes_matches.subcommand();
-            match (node_sub_command, node_sub_matches) {
-                ("list", Some(list_matches)) => {
+        "nodes" => {
+            let Some((node_sub_command, node_sub_matches)) = matches.subcommand() else {
+                eprintln!("No node subcommand provided");
+                exit(1);
+            };
+
+            match node_sub_command {
+                "list" => {
                     // List all nodes
-                    let network = list_matches.value_of("network").unwrap_or("all");
-                    let node_type = list_matches.value_of("type").unwrap_or("all");
-                    let status = list_matches.value_of("status").unwrap_or("all");
-                    let svm = list_matches.value_of("svm");
-                    let json_output = list_matches.is_present("json");
+                    let network = node_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
+                    let node_type = node_sub_matches
+                        .get_one::<String>("type")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
+                    let status = node_sub_matches
+                        .get_one::<String>("status")
+                        .map(|s| s.as_str())
+                        .unwrap_or("all");
+                    let svm = node_sub_matches
+                        .get_one::<String>("svm")
+                        .map(|s| s.as_str());
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::list_all_nodes(
                         &rpc_client,
@@ -247,7 +272,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         config.verbose,
                     ) {
                         Ok(node_list) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&node_list).unwrap());
                             } else {
                                 nodes::display_node_list(&node_list, config.verbose);
@@ -259,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("dashboard", _) => {
+                "dashboard" => {
                     // Launch node monitoring dashboard
                     match nodes::run_dashboard(
                         &rpc_client,
@@ -273,14 +298,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("status", Some(status_matches)) => {
+                "status" => {
                     // Check node status
-                    let node_id = status_matches.value_of("node-id").unwrap();
-                    let json_output = status_matches.is_present("json");
+                    let node_id = node_sub_matches
+                        .get_one::<String>("node-id")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::get_node_status(node_id) {
                         Ok(status) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&status).unwrap());
                             } else {
                                 nodes::display_node_status(node_id, &status, config.verbose);
@@ -292,14 +320,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("get", Some(get_matches)) => {
+                "get" => {
                     // Get detailed node information
-                    let node_id = get_matches.value_of("node-id").unwrap();
-                    let json_output = get_matches.is_present("json");
+                    let node_id = node_sub_matches
+                        .get_one::<String>("node-id")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let json_output = node_sub_matches.contains_id("json");
 
                     match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
                         Ok(info) => {
-                            if (json_output) {
+                            if json_output {
                                 println!("{}", serde_json::to_string_pretty(&info).unwrap());
                             } else {
                                 nodes::display_node_info(&info, config.verbose);
@@ -311,9 +342,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("restart", Some(restart_matches)) => {
+                "restart" => {
                     // Restart a node
-                    let node_id = restart_matches.value_of("node-id").unwrap();
+                    let node_id = node_sub_matches
+                        .get_one::<String>("node-id")
+                        .map(|s| s.as_str())
+                        .unwrap();
                     match nodes::restart_node(node_id) {
                         Ok(_) => println!("Node {} restarted successfully", node_id),
                         Err(e) => {
@@ -322,9 +356,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("stop", Some(stop_matches)) => {
+                "stop" => {
                     // Stop a node
-                    let node_id = stop_matches.value_of("node-id").unwrap();
+                    let node_id = node_sub_matches
+                        .get_one::<String>("node-id")
+                        .map(|s| s.as_str())
+                        .unwrap();
                     match nodes::stop_node(node_id) {
                         Ok(_) => println!("Node {} stopped successfully", node_id),
                         Err(e) => {
@@ -333,19 +370,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("logs", Some(logs_matches)) => {
+                "logs" => {
                     // View node logs
-                    let node_id = logs_matches.value_of("node-id").unwrap();
-                    let lines = logs_matches
-                        .value_of("lines")
-                        .unwrap()
-                        .parse::<usize>()
+                    let node_id = node_sub_matches
+                        .get_one::<String>("node-id")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let lines = node_sub_matches
+                        .get_one::<String>("lines")
+                        .and_then(|s| s.parse::<usize>().ok())
                         .unwrap_or(100);
-                    let follow = logs_matches.is_present("follow");
+                    let follow = node_sub_matches.contains_id("follow");
 
                     match nodes::get_node_logs(node_id, lines, follow) {
                         Ok(_) => {
-                            if (follow) {
+                            if follow {
                                 // For follow mode, the function won't return until user interrupts
                                 println!("Log streaming ended");
                             }
@@ -356,13 +395,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                ("deploy", Some(deploy_matches)) => {
+                "deploy" => {
                     // Deploy a new node
-                    let svm = deploy_matches.value_of("svm").unwrap();
-                    let node_type = deploy_matches.value_of("type").unwrap_or("validator");
-                    let network = deploy_matches.value_of("network").unwrap_or("mainnet");
-                    let host = deploy_matches.value_of("host").unwrap();
-                    let name = deploy_matches.value_of("name").unwrap_or("default");
+                    let svm = node_sub_matches
+                        .get_one::<String>("svm")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let node_type = node_sub_matches
+                        .get_one::<String>("type")
+                        .map(|s| s.as_str())
+                        .unwrap_or("validator");
+                    let network = node_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
+                    let host = node_sub_matches
+                        .get_one::<String>("host")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let name = node_sub_matches
+                        .get_one::<String>("name")
+                        .map(|s| s.as_str())
+                        .unwrap_or("default");
 
                     // Parse network type
                     let network_type = match network.to_lowercase().as_str() {
@@ -389,12 +443,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                _ => unreachable!(),
+                _ => {
+                    eprintln!("Unknown node command: {}", node_sub_command);
+                    exit(1);
+                }
             }
         }
-        ("examples", Some(examples_matches)) => {
+        "examples" => {
             // Handle the examples command
-            if (examples_matches.is_present("list_categories")) {
+            if matches.contains_id("list_categories") {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -403,7 +460,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  monitoring  - Node Monitoring and Management");
                 println!("  workflow    - Common Workflows");
                 println!("\nUse 'osvm examples --category <name>' to show examples for a specific category.");
-            } else if let Some(category) = examples_matches.value_of("category") {
+            } else if let Some(category) = matches.get_one::<String>("category").map(|s| s.as_str())
+            {
                 // Display examples for a specific category
                 examples::display_category_by_name(category);
             } else {
@@ -411,20 +469,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        ("solana", Some(solana_matches)) => {
-            let (solana_sub_command, solana_sub_matches) = solana_matches.subcommand();
-            match (solana_sub_command, solana_sub_matches) {
-                ("validator", Some(validator_matches)) => {
+        "solana" => {
+            let Some((solana_sub_command, solana_sub_matches)) = matches.subcommand() else {
+                eprintln!("No solana subcommand provided");
+                exit(1);
+            };
+
+            match solana_sub_command {
+                "validator" => {
                     // Deploy a Solana validator with enhanced features
-                    let connection_str = validator_matches.value_of("connection").unwrap();
-                    let network_str = validator_matches.value_of("network").unwrap_or("mainnet");
-                    let version = validator_matches.value_of("version").map(|s| s.to_string());
-                    let client_type = validator_matches
-                        .value_of("client-type")
+                    let connection_str = solana_sub_matches
+                        .get_one::<String>("connection")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let network_str = solana_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
+                    let version = solana_sub_matches
+                        .get_one::<String>("version")
+                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
-                    let hot_swap_enabled = validator_matches.is_present("hot-swap");
-                    let metrics_config = validator_matches
-                        .value_of("metrics-config")
+                    let client_type = solana_sub_matches
+                        .get_one::<String>("client-type")
+                        .map(|s| s.as_str())
+                        .map(|s| s.to_string());
+                    let hot_swap_enabled = solana_sub_matches.contains_id("hot-swap");
+                    let metrics_config = solana_sub_matches
+                        .get_one::<String>("metrics-config")
+                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
 
                     // Parse connection string
@@ -449,16 +522,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if (validator_matches.is_present("ledger-disk")
-                        && validator_matches.is_present("accounts-disk"))
+                    let disk_config = if solana_sub_matches.contains_id("ledger-disk")
+                        && solana_sub_matches.contains_id("accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: validator_matches
-                                .value_of("ledger-disk")
+                            ledger_disk: solana_sub_matches
+                                .get_one::<String>("ledger-disk")
+                                .map(|s| s.as_str())
                                 .unwrap()
                                 .to_string(),
-                            accounts_disk: validator_matches
-                                .value_of("accounts-disk")
+                            accounts_disk: solana_sub_matches
+                                .get_one::<String>("accounts-disk")
+                                .map(|s| s.as_str())
                                 .unwrap()
                                 .to_string(),
                         })
@@ -489,7 +564,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if (deploy_config.hot_swap_enabled) {
+                    if deploy_config.hot_swap_enabled {
                         println!("Hot-swap capability: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -507,15 +582,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("Solana validator node deployed successfully!");
                 }
-                ("rpc", Some(rpc_matches)) => {
+                "rpc" => {
+                    let solana_sub_matches = solana_sub_matches;
                     // Deploy a Solana RPC node with enhanced features
-                    let connection_str = rpc_matches.value_of("connection").unwrap();
-                    let network_str = rpc_matches.value_of("network").unwrap_or("mainnet");
-                    let version = rpc_matches.value_of("version").map(|s| s.to_string());
-                    let client_type = rpc_matches.value_of("client-type").map(|s| s.to_string());
-                    let enable_history = rpc_matches.is_present("enable-history");
-                    let metrics_config = rpc_matches
-                        .value_of("metrics-config")
+                    let connection_str = solana_sub_matches
+                        .get_one::<String>("connection")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let network_str = solana_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
+                    let version = solana_sub_matches
+                        .get_one::<String>("version")
+                        .map(|s| s.as_str())
+                        .map(|s| s.to_string());
+                    let client_type = solana_sub_matches
+                        .get_one::<String>("client-type")
+                        .map(|s| s.as_str())
+                        .map(|s| s.to_string());
+                    let enable_history = solana_sub_matches.contains_id("enable-history");
+                    let metrics_config = solana_sub_matches
+                        .get_one::<String>("metrics-config")
+                        .map(|s| s.as_str())
                         .map(|s| s.to_string());
 
                     // Parse connection string
@@ -540,13 +629,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
 
                     // Create disk configuration if both disk params are provided
-                    let disk_config = if (rpc_matches.is_present("ledger-disk")
-                        && rpc_matches.is_present("accounts-disk"))
+                    let disk_config = if solana_sub_matches.contains_id("ledger-disk")
+                        && solana_sub_matches.contains_id("accounts-disk")
                     {
                         Some(ssh_deploy::DiskConfig {
-                            ledger_disk: rpc_matches.value_of("ledger-disk").unwrap().to_string(),
-                            accounts_disk: rpc_matches
-                                .value_of("accounts-disk")
+                            ledger_disk: solana_sub_matches
+                                .get_one::<String>("ledger-disk")
+                                .map(|s| s.as_str())
+                                .unwrap()
+                                .to_string(),
+                            accounts_disk: solana_sub_matches
+                                .get_one::<String>("accounts-disk")
+                                .map(|s| s.as_str())
                                 .unwrap()
                                 .to_string(),
                         })
@@ -556,7 +650,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     // Create additional params for RPC-specific options
                     let mut additional_params = std::collections::HashMap::new();
-                    if (enable_history) {
+                    if enable_history {
                         additional_params.insert("enable_history".to_string(), "true".to_string());
                     }
 
@@ -583,7 +677,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(client) = &deploy_config.client_type {
                         println!("Client type: {}", client);
                     }
-                    if (enable_history) {
+                    if enable_history {
                         println!("Transaction history: Enabled");
                     }
                     if let Some(disks) = &deploy_config.disk_config {
@@ -607,13 +701,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        ("rpc", Some(rpc_matches)) => {
-            let (rpc_sub_command, rpc_sub_matches) = rpc_matches.subcommand();
-            match (rpc_sub_command, rpc_sub_matches) {
-                ("sonic", Some(sonic_matches)) => {
+        "rpc" => {
+            let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
+                eprintln!("No RPC subcommand provided");
+                exit(1);
+            };
+
+            match rpc_sub_command {
+                "sonic" => {
                     // Deploy a Sonic RPC node
-                    let connection_str = sonic_matches.value_of("connection").unwrap();
-                    let network_str = sonic_matches.value_of("network").unwrap();
+                    let connection_str = rpc_sub_matches
+                        .get_one::<String>("connection")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let network_str = rpc_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap();
 
                     // Parse connection string
                     let connection =
@@ -662,10 +766,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("Sonic RPC node deployed successfully!");
                 }
-                ("solana", Some(solana_matches)) => {
+                "solana" => {
                     // Use the enhanced Solana deployment via rpc subcommand
-                    let connection_str = solana_matches.value_of("connection").unwrap();
-                    let network_str = solana_matches.value_of("network").unwrap_or("mainnet");
+                    let connection_str = rpc_sub_matches
+                        .get_one::<String>("connection")
+                        .map(|s| s.as_str())
+                        .unwrap();
+                    let network_str = rpc_sub_matches
+                        .get_one::<String>("network")
+                        .map(|s| s.as_str())
+                        .unwrap_or("mainnet");
 
                     // Parse connection string
                     let connection =
@@ -721,11 +831,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         // Handle SSH deployment (format: osvm user@host --svm svm1,svm2)
-        (conn_str, _) if conn_str.contains('@') && matches.is_present("svm") => {
+        conn_str if conn_str.contains('@') && matches.contains_id("svm") => {
             // This is an SSH deployment command
-            let svm_list = matches.value_of("svm").unwrap();
-            let node_type_str = matches.value_of("node-type").unwrap();
-            let network_str = matches.value_of("network").unwrap();
+            let svm_list = matches
+                .get_one::<String>("svm")
+                .map(|s| s.as_str())
+                .unwrap();
+            let node_type_str = matches
+                .get_one::<String>("node-type")
+                .map(|s| s.as_str())
+                .unwrap();
+            let network_str = matches
+                .get_one::<String>("network")
+                .map(|s| s.as_str())
+                .unwrap();
 
             // Parse connection string
             let connection = match ssh_deploy::ServerConfig::from_connection_string(conn_str) {
@@ -755,7 +874,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect::<Vec<_>>();
-            if (svm_types.is_empty()) {
+            if svm_types.is_empty() {
                 eprintln!("No SVMs specified");
                 exit(1);
             }
@@ -780,10 +899,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
         }
-        ("new_feature_command", _) => {
+        "new_feature_command" => {
             println!("Expected output for new feature");
         }
-        (cmd, _) => {
+        cmd => {
             eprintln!("Unknown command: {}", cmd);
             exit(1);
         }
