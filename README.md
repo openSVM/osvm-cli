@@ -161,7 +161,7 @@ osvm user@host --svm sonic --node-type rpc --network testnet
 osvm rpc sonic root@host.example.com --network mainnet
 
 # Deploy multiple SVMs to a single server
-osvm user@host --svm sonic,solana,sei --node-type validator --network devnet
+osvm user@host --svm sonic,solana,eclipse,soon --node-type validator --network devnet
 ```
 
 ### RPC Node Deployment
