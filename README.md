@@ -162,6 +162,9 @@ osvm rpc sonic root@host.example.com --network mainnet
 
 # Deploy multiple SVMs to a single server
 osvm user@host --svm sonic,solana,eclipse,soon --node-type validator --network devnet
+
+# Deploy an eBPF binary to all available SVM networks
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publishIDL yes
 ```
 
 ### RPC Node Deployment
@@ -182,6 +185,27 @@ The `rpc` command provides a streamlined way to deploy specific RPC nodes:
 - **Sonic RPC**: Deploys a Sonic RPC node using Docker containers from the official repository
 - **Network Selection**: Choose between mainnet, testnet, or devnet environments
 - **Automatic Configuration**: Handles all dependencies and configuration automatically
+
+### eBPF Program Deployment
+
+```bash
+# Deploy an eBPF binary to all available SVM networks
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publishIDL yes
+
+# Deploy to a specific network only
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --network mainnet
+```
+
+The `deploy` command provides a streamlined way to deploy eBPF programs:
+
+- **Multi-network Deployment**: Deploy to all SVM networks with one command
+- **Network Selection**: Choose between mainnet, testnet, devnet, or all networks
+- **IDL Publishing**: Option to publish the IDL along with the program
+- **Required Files**:
+  - eBPF binary (.so file)
+  - Program ID JSON file (contains the program address)
+  - Program owner keypair JSON file
+  - Fee payer keypair JSON file (pays for deployment transaction)
 
 ## 🔧 Detailed Installation
 

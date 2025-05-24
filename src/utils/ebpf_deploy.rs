@@ -14,6 +14,34 @@ use {
     thiserror::Error,
 };
 
+/// Utility module for deploying eBPF programs to Solana Virtual Machines (SVMs)
+/// 
+/// This module provides functionality to deploy eBPF programs (.so files) to
+/// one or more SVM networks (mainnet, testnet, devnet). It handles the loading
+/// of program binaries, keypairs, and program IDs from files, and provides
+/// a consistent interface for deployment operations.
+/// 
+/// # Example
+/// 
+/// ```
+/// let config = DeployConfig {
+///     binary_path: "program.so".to_string(),
+///     program_id_path: "program_id.json".to_string(),
+///     owner_path: "owner_keypair.json".to_string(),
+///     fee_payer_path: "fee_payer.json".to_string(),
+///     publish_idl: true,
+///     network_type: NetworkType::Mainnet,
+/// };
+/// 
+/// let results = deploy_to_all_networks(config, CommitmentConfig::confirmed()).await;
+/// for result in results {
+///     match result {
+///         Ok(deployment) => println!("Deployed to {}", deployment.network),
+///         Err(e) => println!("Failed to deploy: {}", e),
+///     }
+/// }
+/// ```
+
 /// Error types for eBPF deployment operations
 #[derive(Error, Debug)]
 pub enum EbpfDeployError {
