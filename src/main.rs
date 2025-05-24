@@ -1,5 +1,5 @@
 use {
-    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_clap_utils::input_validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
@@ -898,6 +898,103 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("Deployment failed: {}", e);
                 exit(1);
             }
+        }
+        "deploy" => {
+            // Command to deploy eBPF binary to all SVM networks
+            let binary_path = matches
+                .get_one::<String>("binary")
+                .map(|s| s.as_str())
+                .unwrap();
+            let program_id_path = matches
+                .get_one::<String>("program-id")
+                .map(|s| s.as_str())
+                .unwrap();
+            let owner_path = matches
+                .get_one::<String>("owner")
+                .map(|s| s.as_str())
+                .unwrap();
+            let fee_payer_path = matches
+                .get_one::<String>("fee")
+                .map(|s| s.as_str())
+                .unwrap();
+            let publish_idl = matches
+                .get_one::<String>("publish-idl")
+                .map(|s| s.as_str())
+                .map(|s| s == "yes")
+                .unwrap_or(false);
+            let network_str = matches
+                .get_one::<String>("network")
+                .map(|s| s.as_str())
+                .unwrap_or("all");
+                
+            // Parse network type
+            let network_type = match network_str.to_lowercase().as_str() {
+                "mainnet" => ssh_deploy::NetworkType::Mainnet,
+                "testnet" => ssh_deploy::NetworkType::Testnet,
+                "devnet" => ssh_deploy::NetworkType::Devnet,
+                "all" => ssh_deploy::NetworkType::Mainnet, // Default value, will deploy to all
+                _ => {
+                    eprintln!("Invalid network: {}", network_str);
+                    exit(1);
+                }
+            };
+            
+            // Create deployment configuration
+            let deploy_config = ebpf_deploy::DeployConfig {
+                binary_path: binary_path.to_string(),
+                program_id_path: program_id_path.to_string(),
+                owner_path: owner_path.to_string(),
+                fee_payer_path: fee_payer_path.to_string(),
+                publish_idl,
+                network_type,
+            };
+            
+            println!("Deploying eBPF binary to SVM networks...");
+            println!("Binary path: {}", binary_path);
+            println!("Program ID: {}", program_id_path);
+            println!("Owner: {}", owner_path);
+            println!("Fee payer: {}", fee_payer_path);
+            println!("Publish IDL: {}", if publish_idl { "yes" } else { "no" });
+            println!("Network: {}", network_str);
+            
+            // Execute deployment
+            let results = tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(ebpf_deploy::deploy_to_all_networks(
+                    deploy_config,
+                    config.commitment_config,
+                ));
+            
+            // Display results
+            println!("\nDeployment Results:");
+            let mut success_count = 0;
+            let mut failure_count = 0;
+            
+            for result in results {
+                match result {
+                    Ok(deployment) => {
+                        if deployment.success {
+                            success_count += 1;
+                            println!("✅ {} - Success. Program ID: {}", deployment.network, deployment.program_id);
+                            if let Some(signature) = deployment.transaction_signature {
+                                println!("   Transaction signature: {}", signature);
+                            }
+                        } else {
+                            failure_count += 1;
+                            println!("❌ {} - Failed. Program ID: {}", deployment.network, deployment.program_id);
+                            if let Some(error) = deployment.error_message {
+                                println!("   Error: {}", error);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        failure_count += 1;
+                        println!("❌ Deployment error: {}", e);
+                    }
+                }
+            }
+            
+            println!("\nSummary: {} successful, {} failed", success_count, failure_count);
         }
         "new_feature_command" => {
             println!("Expected output for new feature");
