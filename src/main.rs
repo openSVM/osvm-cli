@@ -927,18 +927,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.as_str())
                 .unwrap_or("all");
                 
-            // Parse network type
-            let network_type = match network_str.to_lowercase().as_str() {
-                "mainnet" => ssh_deploy::NetworkType::Mainnet,
-                "testnet" => ssh_deploy::NetworkType::Testnet,
-                "devnet" => ssh_deploy::NetworkType::Devnet,
-                "all" => ssh_deploy::NetworkType::Mainnet, // Default value, will deploy to all
-                _ => {
-                    eprintln!("Invalid network: {}", network_str);
-                    exit(1);
-                }
-            };
-            
             // Create deployment configuration
             let deploy_config = ebpf_deploy::DeployConfig {
                 binary_path: binary_path.to_string(),
@@ -946,7 +934,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 owner_path: owner_path.to_string(),
                 fee_payer_path: fee_payer_path.to_string(),
                 publish_idl,
-                network_type,
+                network_filter: network_str.to_string(), // Pass the original network string
             };
             
             println!("Deploying eBPF binary to SVM networks...");

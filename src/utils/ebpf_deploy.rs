@@ -30,7 +30,7 @@ use {
 ///     owner_path: "owner_keypair.json".to_string(),
 ///     fee_payer_path: "fee_payer.json".to_string(),
 ///     publish_idl: true,
-///     network_type: NetworkType::Mainnet,
+///     network_filter: "all".to_string(),
 /// };
 /// 
 /// let results = deploy_to_all_networks(config, CommitmentConfig::confirmed()).await;
@@ -86,8 +86,8 @@ pub struct DeployConfig {
     pub fee_payer_path: String,
     /// Whether to publish IDL
     pub publish_idl: bool,
-    /// Network to deploy on
-    pub network_type: NetworkType,
+    /// Network filter (mainnet, testnet, devnet, or all)
+    pub network_filter: String,
 }
 
 /// Result of a deployment operation
@@ -149,11 +149,7 @@ pub async fn deploy_to_network(
     let program_data = load_program(&config.binary_path)?;
     
     // Get network name for result
-    let network_name = match config.network_type {
-        NetworkType::Mainnet => "mainnet".to_string(),
-        NetworkType::Testnet => "testnet".to_string(),
-        NetworkType::Devnet => "devnet".to_string(),
-    };
+    let network_name = config.network_filter.clone();
     
     println!("Deploying to {} network...", network_name);
     println!("  Program ID: {}", program_id);
@@ -244,21 +240,23 @@ pub async fn deploy_to_all_networks(
 ) -> Vec<Result<DeploymentResult, EbpfDeployError>> {
     let mut results = Vec::new();
     
-    // List of networks to deploy to
-    // In a real implementation, this would query available networks dynamically
-    let networks = match config.network_type {
-        NetworkType::Mainnet => vec![NetworkType::Mainnet],
-        NetworkType::Testnet => vec![NetworkType::Testnet],
-        NetworkType::Devnet => vec![NetworkType::Devnet],
-        // Handle the case when "all" networks are specified
-        // In reality NetworkType doesn't have a variant for "all", but we handle it here for completeness
-        #[allow(unreachable_patterns)]
-        _ => vec![NetworkType::Mainnet, NetworkType::Testnet, NetworkType::Devnet],
+    // Determine which networks to deploy to based on the filter
+    let networks = match config.network_filter.to_lowercase().as_str() {
+        "mainnet" => vec![NetworkType::Mainnet],
+        "testnet" => vec![NetworkType::Testnet],
+        "devnet" => vec![NetworkType::Devnet],
+        "all" => vec![NetworkType::Mainnet, NetworkType::Testnet, NetworkType::Devnet],
+        _ => {
+            // Invalid network filter, return error
+            let error = EbpfDeployError::NetworkNotAvailable(
+                format!("Invalid network filter: {}", config.network_filter)
+            );
+            return vec![Err(error)];
+        }
     };
     
     for network in networks {
         // Create client for the specific network
-        // In a real implementation, this would use the appropriate RPC URL for each network
         let client_url = match network {
             NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
             NetworkType::Testnet => "https://api.testnet.solana.com",
@@ -269,7 +267,11 @@ pub async fn deploy_to_all_networks(
         
         // Create network-specific config
         let network_config = DeployConfig {
-            network_type: network,
+            network_filter: match network {
+                NetworkType::Mainnet => "mainnet".to_string(),
+                NetworkType::Testnet => "testnet".to_string(),
+                NetworkType::Devnet => "devnet".to_string(),
+            },
             ..config.clone()
         };
         
