@@ -79,8 +79,13 @@ async fn test_network_filter_logic() {
     file.write_all(br#"{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}"#)
         .unwrap();
 
+    // Create valid Solana keypairs for the test
+    use solana_sdk::signature::Keypair;
+    let test_keypair = Keypair::new();
+
     let owner_file = dir.path().join("owner.json");
     let mut file = File::create(&owner_file).unwrap();
+<<<<<<< HEAD
     // Valid Ed25519 keypair in JSON format expected by solana_sdk
     let keypair_json = r#"[135,200,194,177,120,128,243,152,197,79,76,10,132,167,244,175,199,194,227,33,37,90,96,252,146,66,44,66,183,10,55,85,26,201,157,110,103,72,127,109,27,132,110,31,236,15,197,176,142,237,127,103,246,250,240,199,68,36,87,172,149,250,22,160]"#;
     file.write_all(keypair_json.as_bytes()).unwrap();
@@ -88,6 +93,24 @@ async fn test_network_filter_logic() {
     let fee_payer_file = dir.path().join("fee_payer.json");
     let mut file = File::create(&fee_payer_file).unwrap();
     file.write_all(keypair_json.as_bytes()).unwrap();
+=======
+    // Write the keypair in the format expected by Solana SDK
+    file.write_all(
+        serde_json::to_string(&test_keypair.to_bytes().to_vec())
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+
+    let fee_payer_file = dir.path().join("fee_payer.json");
+    let mut file = File::create(&fee_payer_file).unwrap();
+    file.write_all(
+        serde_json::to_string(&test_keypair.to_bytes().to_vec())
+            .unwrap()
+            .as_bytes(),
+    )
+    .unwrap();
+>>>>>>> 63e7890 (Fix failing test and apply code formatting)
 
     // Test "all" network filter
     let config_all = DeployConfig {
