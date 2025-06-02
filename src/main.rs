@@ -937,13 +937,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 network_filter: network_str.to_string(), // Pass the original network string
             };
 
-            println!("Deploying eBPF binary to SVM networks...");
-            println!("Binary path: {}", binary_path);
-            println!("Program ID: {}", program_id_path);
-            println!("Owner: {}", owner_path);
-            println!("Fee payer: {}", fee_payer_path);
-            println!("Publish IDL: {}", if publish_idl { "yes" } else { "no" });
-            println!("Network: {}", network_str);
+            println!("🚀 OSVM eBPF Deployment Tool");
+            println!("============================");
+            println!("📁 Binary path: {}", binary_path);
+            println!("🆔 Program ID: {}", program_id_path);
+            println!("👤 Owner: {}", owner_path);
+            println!("💰 Fee payer: {}", fee_payer_path);
+            println!("📄 Publish IDL: {}", if publish_idl { "yes" } else { "no" });
+            println!("🌐 Target network(s): {}", network_str);
+            println!();
 
             // Execute deployment
             let results = tokio::runtime::Runtime::new().unwrap().block_on(
@@ -951,7 +953,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
 
             // Display results
-            println!("\nDeployment Results:");
+            println!("\n📋 Deployment Results Summary");
+            println!("==============================");
             let mut success_count = 0;
             let mut failure_count = 0;
 
@@ -961,20 +964,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if deployment.success {
                             success_count += 1;
                             println!(
-                                "✅ {} - Success. Program ID: {}",
-                                deployment.network, deployment.program_id
+                                "✅ {} - Success 🎉",
+                                deployment.network.to_uppercase()
                             );
+                            println!("   📍 Program ID: {}", deployment.program_id);
                             if let Some(signature) = deployment.transaction_signature {
-                                println!("   Transaction signature: {}", signature);
+                                println!("   📄 Transaction: {}", signature);
                             }
                         } else {
                             failure_count += 1;
                             println!(
-                                "❌ {} - Failed. Program ID: {}",
-                                deployment.network, deployment.program_id
+                                "❌ {} - Failed ⚠️",
+                                deployment.network.to_uppercase()
                             );
+                            println!("   📍 Program ID: {}", deployment.program_id);
                             if let Some(error) = deployment.error_message {
-                                println!("   Error: {}", error);
+                                println!("   🚨 Error: {}", error);
                             }
                         }
                     }
@@ -983,12 +988,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("❌ Deployment error: {}", e);
                     }
                 }
+                println!(); // Add spacing between results
             }
 
-            println!(
-                "\nSummary: {} successful, {} failed",
-                success_count, failure_count
-            );
+            println!("📊 Final Summary: {} successful ✅, {} failed ❌", success_count, failure_count);
+            
+            if failure_count > 0 {
+                println!("💡 Tip: Check error messages above for troubleshooting guidance");
+                exit(1);
+            } else {
+                println!("🎉 All deployments completed successfully!");
+            }
         }
         "new_feature_command" => {
             println!("Expected output for new feature");
