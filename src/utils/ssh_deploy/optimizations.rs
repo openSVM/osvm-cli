@@ -30,7 +30,7 @@ pub fn apply_system_optimizations(client: &mut SshClient) -> Result<(), Deployme
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
 fn apply_sysctl_settings(client: &mut SshClient) -> Result<(), DeploymentError> {
-    let sysctl_content = r#"
+    let sysctl_content = r"
 # TCP Buffer Sizes (10k min, 87.38k default, 12M max)
 net.ipv4.tcp_rmem=10240 87380 12582912
 net.ipv4.tcp_wmem=10240 87380 12582912
@@ -66,7 +66,7 @@ net.core.rmem_max=134217728
 net.core.rmem_default=134217728
 net.core.wmem_max=134217728
 net.core.wmem_default=134217728
-"#;
+";
 
     // Write settings to a temporary file
     let temp_path = "/tmp/solana_sysctl.conf";
@@ -193,14 +193,14 @@ pub fn configure_firewall(client: &mut SshClient, is_rpc: bool) -> Result<(), De
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
 pub fn setup_log_rotation(client: &mut SshClient) -> Result<(), DeploymentError> {
-    let logrotate_content = r#"/home/$(whoami)/solana-validator.log {
+    let logrotate_content = r"/home/$(whoami)/solana-validator.log {
     rotate 7
     daily
     missingok
     postrotate
         systemctl kill -s USR1 solana-validator.service
     endscript
-}"#;
+}";
 
     // Create logrotate file
     client.execute_command(&format!(

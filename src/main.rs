@@ -939,12 +939,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("🚀 OSVM eBPF Deployment Tool");
             println!("============================");
-            println!("📁 Binary path: {}", binary_path);
-            println!("🆔 Program ID: {}", program_id_path);
-            println!("👤 Owner: {}", owner_path);
-            println!("💰 Fee payer: {}", fee_payer_path);
+            println!("📁 Binary path: {binary_path}");
+            println!("🆔 Program ID: {program_id_path}");
+            println!("👤 Owner: {owner_path}");
+            println!("💰 Fee payer: {fee_payer_path}");
             println!("📄 Publish IDL: {}", if publish_idl { "yes" } else { "no" });
-            println!("🌐 Target network(s): {}", network_str);
+            println!("🌐 Target network(s): {network_str}");
             println!();
 
             // Execute deployment
@@ -963,36 +963,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Ok(deployment) => {
                         if deployment.success {
                             success_count += 1;
-                            println!(
-                                "✅ {} - Success 🎉",
-                                deployment.network.to_uppercase()
-                            );
+                            println!("✅ {} - Success 🎉", deployment.network.to_uppercase());
                             println!("   📍 Program ID: {}", deployment.program_id);
                             if let Some(signature) = deployment.transaction_signature {
-                                println!("   📄 Transaction: {}", signature);
+                                println!("   📄 Transaction: {signature}");
                             }
                         } else {
                             failure_count += 1;
-                            println!(
-                                "❌ {} - Failed ⚠️",
-                                deployment.network.to_uppercase()
-                            );
+                            println!("❌ {} - Failed ⚠️", deployment.network.to_uppercase());
                             println!("   📍 Program ID: {}", deployment.program_id);
                             if let Some(error) = deployment.error_message {
-                                println!("   🚨 Error: {}", error);
+                                println!("   🚨 Error: {error}");
                             }
                         }
                     }
                     Err(e) => {
                         failure_count += 1;
-                        println!("❌ Deployment error: {}", e);
+                        println!("❌ Deployment error: {e}");
                     }
                 }
                 println!(); // Add spacing between results
             }
 
-            println!("📊 Final Summary: {} successful ✅, {} failed ❌", success_count, failure_count);
-            
+            println!("📊 Final Summary: {success_count} successful ✅, {failure_count} failed ❌");
+
             if failure_count > 0 {
                 println!("💡 Tip: Check error messages above for troubleshooting guidance");
                 exit(1);
@@ -1004,7 +998,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Expected output for new feature");
         }
         cmd => {
-            eprintln!("Unknown command: {}", cmd);
+            eprintln!("Unknown command: {cmd}");
             exit(1);
         }
     };
@@ -1020,7 +1014,7 @@ mod test {
     #[test]
     fn test_borsh() {
         #[repr(C)]
-        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Eq, Debug, Clone)]
         pub struct UpdateMetadataAccountArgs {
             pub data: Option<String>,
             pub update_authority: Option<Pubkey>,

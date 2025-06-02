@@ -205,14 +205,14 @@ fi
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
 pub fn configure_log_rotation(client: &mut SshClient) -> Result<(), DeploymentError> {
-    let logrotate_content = r#"/home/$(whoami)/solana-validator.log {
+    let logrotate_content = r"/home/$(whoami)/solana-validator.log {
     rotate 7
     daily
     missingok
     postrotate
         systemctl kill -s USR1 solana-validator.service
     endscript
-}"#;
+}";
 
     // Write log rotation configuration
     client.execute_command(&format!(
