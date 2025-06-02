@@ -156,10 +156,10 @@ fi
 # Check if validator is catching up
 if grep -q "behind by" "$LOG_FILE" | tail -n 100; then
     SLOTS_BEHIND=$(grep "behind by" "$LOG_FILE" | tail -n 1 | grep -oP "behind by \K[0-9]+")
-    
+
     if [ -n "$SLOTS_BEHIND" ] && [ "$SLOTS_BEHIND" -gt 500 ]; then
         CURRENT_STATE=$(cat "$CURRENT_STATE_FILE")
-        
+
         if [ "$CURRENT_STATE" = "staked" ]; then
             echo "$(date): Validator falling behind ($SLOTS_BEHIND slots), switching to unstaked identity"
             "$SWITCH_SCRIPT" unstaked
@@ -171,7 +171,7 @@ fi
 # Check if validator has caught up and can return to staked identity
 if ! grep -q "behind by" "$LOG_FILE" | tail -n 100; then
     CURRENT_STATE=$(cat "$CURRENT_STATE_FILE")
-    
+
     if [ "$CURRENT_STATE" = "unstaked" ]; then
         echo "$(date): Validator caught up, switching back to staked identity"
         "$SWITCH_SCRIPT" staked

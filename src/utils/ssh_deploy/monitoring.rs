@@ -91,12 +91,12 @@ if [ "$SERVICE_STATUS" = "active" ]; then
     # Check validator progress and health
     CATCHUP_INFO=$(solana catchup --our-localhost | tail -n2)
     echo "$(date): $CATCHUP_INFO" >> "$MONITOR_LOG"
-    
+
     # Get system metrics
     LOAD=$(uptime | awk -F'load average: ' '{{ print $2 }}')
     DISK=$(df -h /mnt/ledger /mnt/extras | grep -v "Filesystem")
     MEM=$(free -h | grep "Mem:" | awk '{{ print "Total: "$2", Used: "$3", Free: "$4 }}')
-    
+
     # Log system metrics
     echo "$(date): Load average: $LOAD" >> "$MONITOR_LOG"
     echo "$(date): Disk usage:" >> "$MONITOR_LOG"
@@ -152,10 +152,10 @@ EMAIL_TO=""  # Set this to your email address to receive alerts
 send_alert() {
     local subject="$1"
     local message="$2"
-    
+
     # Log the alert
     echo "$(date): $subject - $message" >> "$ALERT_LOG"
-    
+
     # Send email if configured
     if [ -n "$EMAIL_TO" ] && command -v mail >/dev/null 2>&1; then
         echo "$message" | mail -s "Solana Validator Alert: $subject" "$EMAIL_TO"
@@ -171,7 +171,7 @@ fi
 # Check for excessive catching up
 if grep -q "behind by" "$LOG_FILE" | tail -n 100; then
     SLOTS_BEHIND=$(grep "behind by" "$LOG_FILE" | tail -n 1 | grep -oP "behind by \K[0-9]+")
-    
+
     if [ -n "$SLOTS_BEHIND" ] && [ "$SLOTS_BEHIND" -gt 1000 ]; then
         send_alert "Falling Behind" "Validator is $SLOTS_BEHIND slots behind"
     fi
