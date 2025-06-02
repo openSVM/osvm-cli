@@ -985,7 +985,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(); // Add spacing between results
             }
 
-            println!("📊 Final Summary: {success_count} successful ✅, {failure_count} failed ❌");
+            println!("📊 Final Summary: {} successful ✅, {} failed ❌", success_count, failure_count);
 
             if failure_count > 0 {
                 println!("💡 Tip: Check error messages above for troubleshooting guidance");

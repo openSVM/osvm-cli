@@ -32,13 +32,13 @@ mod tests {
         // Start container with SSH
         let output = Command::new("docker")
             .args([
-                "run", 
-                "-d", 
+                "run",
+                "-d",
                 "--privileged",
-                "-p", "2222:22", 
-                "ubuntu:20.04", 
-                "/bin/bash", 
-                "-c", 
+                "-p", "2222:22",
+                "ubuntu:20.04",
+                "/bin/bash",
+                "-c",
                 "apt-get update && apt-get install -y openssh-server && \
                  mkdir -p /run/sshd && \
                  echo 'root:password' | chpasswd && \

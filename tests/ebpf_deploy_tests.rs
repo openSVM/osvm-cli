@@ -81,20 +81,13 @@ async fn test_network_filter_logic() {
 
     let owner_file = dir.path().join("owner.json");
     let mut file = File::create(&owner_file).unwrap();
-    // Valid Ed25519 keypair (64 bytes)
-    let keypair = [
-        74, 97, 123, 217, 156, 17, 153, 238, 153, 193, 31, 227, 15, 68, 138, 151, 87, 14, 66, 179,
-        187, 149, 171, 224, 24, 176, 206, 49, 225, 173, 85, 69, 35, 85, 76, 4, 41, 56, 193, 80,
-        141, 162, 202, 35, 90, 29, 138, 14, 176, 85, 191, 245, 106, 196, 149, 53, 180, 252, 241,
-        119, 54, 11, 141, 223,
-    ];
-    file.write_all(format!("{:?}", keypair.to_vec()).as_bytes())
-        .unwrap();
+    // Valid Ed25519 keypair in JSON format expected by solana_sdk
+    let keypair_json = r#"[135,200,194,177,120,128,243,152,197,79,76,10,132,167,244,175,199,194,227,33,37,90,96,252,146,66,44,66,183,10,55,85,26,201,157,110,103,72,127,109,27,132,110,31,236,15,197,176,142,237,127,103,246,250,240,199,68,36,87,172,149,250,22,160]"#;
+    file.write_all(keypair_json.as_bytes()).unwrap();
 
     let fee_payer_file = dir.path().join("fee_payer.json");
     let mut file = File::create(&fee_payer_file).unwrap();
-    file.write_all(format!("{:?}", keypair.to_vec()).as_bytes())
-        .unwrap();
+    file.write_all(keypair_json.as_bytes()).unwrap();
 
     // Test "all" network filter
     let config_all = DeployConfig {
@@ -106,12 +99,17 @@ async fn test_network_filter_logic() {
         network_filter: "all".to_string(),
     };
 
-    // This would attempt network calls in a real scenario, but we're just testing the logic
-    // The function should handle "all" and try to deploy to 3 networks (mainnet, testnet, devnet)
+    // This attempts network calls which will fail in test environment
+    // Since the configuration validation passes but network connection fails,
+    // it should return 3 error results (one for each network)
     let results = deploy_to_all_networks(config_all, CommitmentConfig::confirmed()).await;
 
-    // Should return 3 results (one for each network)
+    // Should return 3 results (one for each network: mainnet, testnet, devnet)
     assert_eq!(results.len(), 3);
+    // All results should be errors due to network connectivity issues in test environment
+    for result in &results {
+        assert!(result.is_err());
+    }
 
     // Test single network filter
     let config_single = DeployConfig {
@@ -127,6 +125,8 @@ async fn test_network_filter_logic() {
 
     // Should return 1 result (devnet only)
     assert_eq!(results.len(), 1);
+    // Result should be an error due to network connectivity issues in test environment
+    assert!(results[0].is_err());
 
     // Test invalid network filter
     let config_invalid = DeployConfig {
