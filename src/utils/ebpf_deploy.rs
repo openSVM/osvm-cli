@@ -96,14 +96,30 @@ pub struct DeploymentResult {
 
 /// Load a keypair from a JSON file
 pub fn load_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
+    // Validate file exists first
+    if !Path::new(path).exists() {
+        return Err(EbpfDeployError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Keypair file not found: {}", path),
+        )));
+    }
+
     let mut file = File::open(path)?;
     let keypair = solana_sdk::signature::read_keypair(&mut file)
-        .map_err(|e| EbpfDeployError::DeploymentError(format!("Failed to read keypair: {}", e)))?;
+        .map_err(|e| EbpfDeployError::DeploymentError(format!("Failed to read keypair from {}: {}", path, e)))?;
     Ok(keypair)
 }
 
 /// Load program ID from a JSON file
 pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
+    // Validate file exists first
+    if !Path::new(path).exists() {
+        return Err(EbpfDeployError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Program ID file not found: {}", path),
+        )));
+    }
+
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -112,21 +128,57 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
         if let Some(program_id) = json.get("programId").and_then(|v| v.as_str()) {
             return Pubkey::try_from(program_id)
-                .map_err(|_| EbpfDeployError::InvalidProgramId(program_id.to_string()));
+                .map_err(|_| EbpfDeployError::InvalidProgramId(format!("Invalid program ID in {}: {}", path, program_id)));
         }
     }
 
     // If not JSON with programId field, try direct pubkey parse
-    Pubkey::try_from(contents.trim()).map_err(|_| EbpfDeployError::InvalidProgramId(contents))
+    let trimmed_contents = contents.trim();
+    Pubkey::try_from(trimmed_contents).map_err(|_| {
+        EbpfDeployError::InvalidProgramId(format!("Invalid program ID format in {}: {}", path, trimmed_contents))
+    })
 }
 
 /// Load eBPF program binary from file
 pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     let path = Path::new(path);
-    let mut file = File::open(path)?;
+    
+    // Validate file exists
+    if !path.exists() {
+        return Err(EbpfDeployError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("eBPF binary file not found: {}", path.display()),
+        )));
+    }
 
+    // Check file extension
+    if let Some(extension) = path.extension() {
+        if extension != "so" {
+            eprintln!("Warning: Expected .so file extension for eBPF binary, got .{}", extension.to_string_lossy());
+        }
+    } else {
+        eprintln!("Warning: eBPF binary file has no extension, expected .so");
+    }
+
+    let mut file = File::open(path)?;
     let mut program_data = Vec::new();
     file.read_to_end(&mut program_data)?;
+
+    // Basic validation of file size
+    if program_data.is_empty() {
+        return Err(EbpfDeployError::DeploymentError(format!(
+            "eBPF binary file is empty: {}",
+            path.display()
+        )));
+    }
+
+    // Check for reasonable file size (typical eBPF programs are < 100KB)
+    if program_data.len() > 1_000_000 {
+        eprintln!(
+            "Warning: eBPF binary is quite large ({} bytes). Typical programs are much smaller.",
+            program_data.len()
+        );
+    }
 
     Ok(program_data)
 }
@@ -145,11 +197,14 @@ pub async fn deploy_to_network(
     // Get network name for result
     let network_name = config.network_filter.clone();
 
-    println!("Deploying to {} network...", network_name);
-    println!("  Program ID: {}", program_id);
-    println!("  Owner: {}", program_owner.pubkey());
-    println!("  Fee payer: {}", fee_payer.pubkey());
-    println!("  Binary size: {} bytes", program_data.len());
+    println!("\n📡 Deploying to {} network...", network_name);
+    println!("  • Program ID: {}", program_id);
+    println!("  • Owner: {}", program_owner.pubkey());
+    println!("  • Fee payer: {}", fee_payer.pubkey());
+    println!("  • Binary size: {} bytes", program_data.len());
+    if config.publish_idl {
+        println!("  • IDL publishing: enabled");
+    }
 
     // Attempt to deploy the program
     let result = match deploy_bpf_program(
@@ -164,7 +219,7 @@ pub async fn deploy_to_network(
     .await
     {
         Ok(signature) => {
-            println!("✅ Deployment successful on {}", network_name);
+            println!("✅ Deployment successful on {} 🎉", network_name);
             DeploymentResult {
                 network: network_name,
                 program_id,
@@ -232,11 +287,22 @@ async fn deploy_bpf_program(
 }
 
 /// Deploy eBPF program to all available SVM networks
+/// 
+/// This function validates the deployment configuration and attempts to deploy
+/// the eBPF program to the specified networks concurrently for better performance.
 pub async fn deploy_to_all_networks(
     config: DeployConfig,
     commitment_config: CommitmentConfig,
 ) -> Vec<Result<DeploymentResult, EbpfDeployError>> {
-    let mut results = Vec::new();
+    // Early validation of all input files
+    println!("🔍 Validating deployment configuration...");
+    
+    // Validate all files exist before starting deployment
+    if let Err(e) = validate_deployment_config(&config) {
+        return vec![Err(e)];
+    }
+
+    println!("✅ Configuration validation successful");
 
     // Determine which networks to deploy to based on the filter
     let networks = match config.network_filter.to_lowercase().as_str() {
@@ -251,37 +317,76 @@ pub async fn deploy_to_all_networks(
         _ => {
             // Invalid network filter, return error
             let error = EbpfDeployError::NetworkNotAvailable(format!(
-                "Invalid network filter: {}",
+                "Invalid network filter '{}'. Valid options: mainnet, testnet, devnet, all",
                 config.network_filter
             ));
             return vec![Err(error)];
         }
     };
 
+    println!("🚀 Starting deployment to {} network(s)...", networks.len());
+
+    // Deploy to networks concurrently for better performance
+    let mut deployment_tasks = Vec::new();
+
     for network in networks {
-        // Create client for the specific network
-        let client_url = match network {
-            NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
-            NetworkType::Testnet => "https://api.testnet.solana.com",
-            NetworkType::Devnet => "https://api.devnet.solana.com",
-        };
+        let config_clone = config.clone();
+        
+        let task = tokio::spawn(async move {
+            // Create client for the specific network
+            let client_url = match network {
+                NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
+                NetworkType::Testnet => "https://api.testnet.solana.com",
+                NetworkType::Devnet => "https://api.devnet.solana.com",
+            };
 
-        let client = RpcClient::new(client_url.to_string());
+            let client = RpcClient::new(client_url.to_string());
 
-        // Create network-specific config
-        let network_config = DeployConfig {
-            network_filter: match network {
-                NetworkType::Mainnet => "mainnet".to_string(),
-                NetworkType::Testnet => "testnet".to_string(),
-                NetworkType::Devnet => "devnet".to_string(),
-            },
-            ..config.clone()
-        };
+            // Create network-specific config
+            let network_config = DeployConfig {
+                network_filter: match network {
+                    NetworkType::Mainnet => "mainnet".to_string(),
+                    NetworkType::Testnet => "testnet".to_string(),
+                    NetworkType::Devnet => "devnet".to_string(),
+                },
+                ..config_clone
+            };
 
-        // Deploy to this network
-        let result = deploy_to_network(&client, &network_config, commitment_config).await;
-        results.push(result);
+            // Deploy to this network
+            deploy_to_network(&client, &network_config, commitment_config).await
+        });
+        
+        deployment_tasks.push(task);
+    }
+
+    // Wait for all deployments to complete
+    let mut results = Vec::new();
+    for task in deployment_tasks {
+        match task.await {
+            Ok(result) => results.push(result),
+            Err(e) => results.push(Err(EbpfDeployError::DeploymentError(format!(
+                "Task execution error: {}",
+                e
+            )))),
+        }
     }
 
     results
+}
+
+/// Validate deployment configuration before attempting deployment
+fn validate_deployment_config(config: &DeployConfig) -> Result<(), EbpfDeployError> {
+    // Check if binary file exists and is valid
+    load_program(&config.binary_path)?;
+    
+    // Check if program ID file exists and is valid
+    load_program_id(&config.program_id_path)?;
+    
+    // Check if owner keypair exists and is valid
+    load_keypair(&config.owner_path)?;
+    
+    // Check if fee payer keypair exists and is valid
+    load_keypair(&config.fee_payer_path)?;
+    
+    Ok(())
 }
