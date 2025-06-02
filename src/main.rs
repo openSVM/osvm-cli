@@ -16,7 +16,7 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<solana_sd
 }
 
 #[cfg(feature = "remote-wallet")]
-use solana_remote_wallet::remote_wallet::RemoteWalletManager;
+use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
 pub mod clparse;
 pub mod prelude;
 pub mod utils;
@@ -66,6 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     #[cfg(feature = "remote-wallet")]
+    #[allow(unused_variables, unused_mut)]
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
@@ -101,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
             default_signer: Box::new(signer),
             // Count occurrences of the verbose flag to determine verbosity level
-            verbose: matches.get_count("verbose") as u8,
+            verbose: matches.get_count("verbose"),
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
         }
@@ -583,7 +584,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Solana validator node deployed successfully!");
                 }
                 "rpc" => {
-                    let solana_sub_matches = solana_sub_matches;
                     // Deploy a Solana RPC node with enhanced features
                     let connection_str = solana_sub_matches
                         .get_one::<String>("connection")
@@ -926,7 +926,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("network")
                 .map(|s| s.as_str())
                 .unwrap_or("all");
-                
+
             // Create deployment configuration
             let deploy_config = ebpf_deploy::DeployConfig {
                 binary_path: binary_path.to_string(),
@@ -936,7 +936,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 publish_idl,
                 network_filter: network_str.to_string(), // Pass the original network string
             };
-            
+
             println!("Deploying eBPF binary to SVM networks...");
             println!("Binary path: {}", binary_path);
             println!("Program ID: {}", program_id_path);
@@ -944,32 +944,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Fee payer: {}", fee_payer_path);
             println!("Publish IDL: {}", if publish_idl { "yes" } else { "no" });
             println!("Network: {}", network_str);
-            
+
             // Execute deployment
-            let results = tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(ebpf_deploy::deploy_to_all_networks(
-                    deploy_config,
-                    config.commitment_config,
-                ));
-            
+            let results = tokio::runtime::Runtime::new().unwrap().block_on(
+                ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config),
+            );
+
             // Display results
             println!("\nDeployment Results:");
             let mut success_count = 0;
             let mut failure_count = 0;
-            
+
             for result in results {
                 match result {
                     Ok(deployment) => {
                         if deployment.success {
                             success_count += 1;
-                            println!("✅ {} - Success. Program ID: {}", deployment.network, deployment.program_id);
+                            println!(
+                                "✅ {} - Success. Program ID: {}",
+                                deployment.network, deployment.program_id
+                            );
                             if let Some(signature) = deployment.transaction_signature {
                                 println!("   Transaction signature: {}", signature);
                             }
                         } else {
                             failure_count += 1;
-                            println!("❌ {} - Failed. Program ID: {}", deployment.network, deployment.program_id);
+                            println!(
+                                "❌ {} - Failed. Program ID: {}",
+                                deployment.network, deployment.program_id
+                            );
                             if let Some(error) = deployment.error_message {
                                 println!("   Error: {}", error);
                             }
@@ -981,8 +984,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            
-            println!("\nSummary: {} successful, {} failed", success_count, failure_count);
+
+            println!(
+                "\nSummary: {} successful, {} failed",
+                success_count, failure_count
+            );
         }
         "new_feature_command" => {
             println!("Expected output for new feature");

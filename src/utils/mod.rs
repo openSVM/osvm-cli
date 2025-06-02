@@ -18,14 +18,14 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// eBPF deployment utilities for program deployment
+pub mod ebpf_deploy;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
 /// SSH deployment utilities for remote node deployment
 pub mod ssh_deploy;
 /// SVM information and management utilities
 pub mod svm_info;
-/// eBPF deployment utilities for program deployment
-pub mod ebpf_deploy;
 
 // External dependency wrappers
 /// Wrapper for webpki::Error to implement std::error::Error trait

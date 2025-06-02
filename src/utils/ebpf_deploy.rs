@@ -6,23 +6,19 @@ use {
         pubkey::Pubkey,
         signature::{Keypair, Signer},
     },
-    std::{
-        fs::File,
-        io::Read,
-        path::Path,
-    },
+    std::{fs::File, io::Read, path::Path},
     thiserror::Error,
 };
 
 /// Utility module for deploying eBPF programs to Solana Virtual Machines (SVMs)
-/// 
+///
 /// This module provides functionality to deploy eBPF programs (.so files) to
 /// one or more SVM networks (mainnet, testnet, devnet). It handles the loading
 /// of program binaries, keypairs, and program IDs from files, and provides
 /// a consistent interface for deployment operations.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```
 /// let config = DeployConfig {
 ///     binary_path: "program.so".to_string(),
@@ -32,7 +28,7 @@ use {
 ///     publish_idl: true,
 ///     network_filter: "all".to_string(),
 /// };
-/// 
+///
 /// let results = deploy_to_all_networks(config, CommitmentConfig::confirmed()).await;
 /// for result in results {
 ///     match result {
@@ -41,7 +37,6 @@ use {
 ///     }
 /// }
 /// ```
-
 /// Error types for eBPF deployment operations
 #[derive(Error, Debug)]
 pub enum EbpfDeployError {
@@ -62,13 +57,13 @@ pub enum EbpfDeployError {
 
     #[error("Network not available: {0}")]
     NetworkNotAvailable(String),
-    
+
     #[error("Insufficient funds: {0}")]
     InsufficientFunds(String),
-    
+
     #[error("Transaction error: {0}")]
     TransactionError(String),
-    
+
     #[error("IDL publishing error: {0}")]
     IdlPublishError(String),
 }
@@ -112,7 +107,7 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    
+
     // Try parsing as JSON with a "programId" field
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
         if let Some(program_id) = json.get("programId").and_then(|v| v.as_str()) {
@@ -120,20 +115,19 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
                 .map_err(|_| EbpfDeployError::InvalidProgramId(program_id.to_string()));
         }
     }
-    
+
     // If not JSON with programId field, try direct pubkey parse
-    Pubkey::try_from(contents.trim())
-        .map_err(|_| EbpfDeployError::InvalidProgramId(contents))
+    Pubkey::try_from(contents.trim()).map_err(|_| EbpfDeployError::InvalidProgramId(contents))
 }
 
 /// Load eBPF program binary from file
 pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     let path = Path::new(path);
     let mut file = File::open(path)?;
-    
+
     let mut program_data = Vec::new();
     file.read_to_end(&mut program_data)?;
-    
+
     Ok(program_data)
 }
 
@@ -147,26 +141,28 @@ pub async fn deploy_to_network(
     let program_owner = load_keypair(&config.owner_path)?;
     let fee_payer = load_keypair(&config.fee_payer_path)?;
     let program_data = load_program(&config.binary_path)?;
-    
+
     // Get network name for result
     let network_name = config.network_filter.clone();
-    
+
     println!("Deploying to {} network...", network_name);
     println!("  Program ID: {}", program_id);
     println!("  Owner: {}", program_owner.pubkey());
     println!("  Fee payer: {}", fee_payer.pubkey());
     println!("  Binary size: {} bytes", program_data.len());
-    
+
     // Attempt to deploy the program
     let result = match deploy_bpf_program(
-        client, 
-        &fee_payer, 
-        &program_owner, 
-        program_id, 
+        client,
+        &fee_payer,
+        &program_owner,
+        program_id,
         &program_data,
         commitment_config,
         config.publish_idl,
-    ).await {
+    )
+    .await
+    {
         Ok(signature) => {
             println!("✅ Deployment successful on {}", network_name);
             DeploymentResult {
@@ -176,7 +172,7 @@ pub async fn deploy_to_network(
                 transaction_signature: Some(signature),
                 error_message: None,
             }
-        },
+        }
         Err(e) => {
             println!("❌ Deployment failed on {}: {}", network_name, e);
             DeploymentResult {
@@ -188,7 +184,7 @@ pub async fn deploy_to_network(
             }
         }
     };
-    
+
     Ok(result)
 }
 
@@ -211,15 +207,17 @@ async fn deploy_bpf_program(
             return Err(EbpfDeployError::ClientError(err));
         }
     }
-    
+
     // Check fee payer balance
     let balance = client.get_balance(&fee_payer.pubkey())?;
-    if balance < 10_000_000 { // 0.01 SOL minimum
-        return Err(EbpfDeployError::InsufficientFunds(
-            format!("Fee payer has insufficient balance: {} lamports", balance)
-        ));
+    if balance < 10_000_000 {
+        // 0.01 SOL minimum
+        return Err(EbpfDeployError::InsufficientFunds(format!(
+            "Fee payer has insufficient balance: {} lamports",
+            balance
+        )));
     }
-    
+
     // In a real implementation, this function would:
     // 1. Create a BPF loader instruction to deploy the program
     // 2. Create and sign a transaction with that instruction
@@ -228,7 +226,7 @@ async fn deploy_bpf_program(
 
     // For now, simulate with a small delay to represent network operation
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    
+
     // In a real implementation, return the actual transaction signature
     Ok("simulated_transaction_signature_for_deployment".to_string())
 }
@@ -239,22 +237,27 @@ pub async fn deploy_to_all_networks(
     commitment_config: CommitmentConfig,
 ) -> Vec<Result<DeploymentResult, EbpfDeployError>> {
     let mut results = Vec::new();
-    
+
     // Determine which networks to deploy to based on the filter
     let networks = match config.network_filter.to_lowercase().as_str() {
         "mainnet" => vec![NetworkType::Mainnet],
         "testnet" => vec![NetworkType::Testnet],
         "devnet" => vec![NetworkType::Devnet],
-        "all" => vec![NetworkType::Mainnet, NetworkType::Testnet, NetworkType::Devnet],
+        "all" => vec![
+            NetworkType::Mainnet,
+            NetworkType::Testnet,
+            NetworkType::Devnet,
+        ],
         _ => {
             // Invalid network filter, return error
-            let error = EbpfDeployError::NetworkNotAvailable(
-                format!("Invalid network filter: {}", config.network_filter)
-            );
+            let error = EbpfDeployError::NetworkNotAvailable(format!(
+                "Invalid network filter: {}",
+                config.network_filter
+            ));
             return vec![Err(error)];
         }
     };
-    
+
     for network in networks {
         // Create client for the specific network
         let client_url = match network {
@@ -262,9 +265,9 @@ pub async fn deploy_to_all_networks(
             NetworkType::Testnet => "https://api.testnet.solana.com",
             NetworkType::Devnet => "https://api.devnet.solana.com",
         };
-        
+
         let client = RpcClient::new(client_url.to_string());
-        
+
         // Create network-specific config
         let network_config = DeployConfig {
             network_filter: match network {
@@ -274,11 +277,11 @@ pub async fn deploy_to_all_networks(
             },
             ..config.clone()
         };
-        
+
         // Deploy to this network
         let result = deploy_to_network(&client, &network_config, commitment_config).await;
         results.push(result);
     }
-    
+
     results
 }
