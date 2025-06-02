@@ -4,11 +4,11 @@ use {
 };
 
 fn validate_signer(s: &str) -> Result<String, String> {
-    is_valid_signer(s).map(|_| s.to_string())
+    is_valid_signer(s).map(|()| s.to_string())
 }
 
 fn validate_url_or_moniker(s: &str) -> Result<String, String> {
-    is_url_or_moniker(s).map(|_| s.to_string())
+    is_url_or_moniker(s).map(|()| s.to_string())
 }
 
 /// Construct the cli input model and parse command line

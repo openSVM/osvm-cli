@@ -105,8 +105,9 @@ pub fn load_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
     }
 
     let mut file = File::open(path)?;
-    let keypair = solana_sdk::signature::read_keypair(&mut file)
-        .map_err(|e| EbpfDeployError::DeploymentError(format!("Failed to read keypair from {}: {}", path, e)))?;
+    let keypair = solana_sdk::signature::read_keypair(&mut file).map_err(|e| {
+        EbpfDeployError::DeploymentError(format!("Failed to read keypair from {}: {}", path, e))
+    })?;
     Ok(keypair)
 }
 
@@ -127,22 +128,29 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
     // Try parsing as JSON with a "programId" field
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&contents) {
         if let Some(program_id) = json.get("programId").and_then(|v| v.as_str()) {
-            return Pubkey::try_from(program_id)
-                .map_err(|_| EbpfDeployError::InvalidProgramId(format!("Invalid program ID in {}: {}", path, program_id)));
+            return Pubkey::try_from(program_id).map_err(|_| {
+                EbpfDeployError::InvalidProgramId(format!(
+                    "Invalid program ID in {}: {}",
+                    path, program_id
+                ))
+            });
         }
     }
 
     // If not JSON with programId field, try direct pubkey parse
     let trimmed_contents = contents.trim();
     Pubkey::try_from(trimmed_contents).map_err(|_| {
-        EbpfDeployError::InvalidProgramId(format!("Invalid program ID format in {}: {}", path, trimmed_contents))
+        EbpfDeployError::InvalidProgramId(format!(
+            "Invalid program ID format in {}: {}",
+            path, trimmed_contents
+        ))
     })
 }
 
 /// Load eBPF program binary from file
 pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     let path = Path::new(path);
-    
+
     // Validate file exists
     if !path.exists() {
         return Err(EbpfDeployError::IoError(std::io::Error::new(
@@ -154,7 +162,10 @@ pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     // Check file extension
     if let Some(extension) = path.extension() {
         if extension != "so" {
-            eprintln!("Warning: Expected .so file extension for eBPF binary, got .{}", extension.to_string_lossy());
+            eprintln!(
+                "Warning: Expected .so file extension for eBPF binary, got .{}",
+                extension.to_string_lossy()
+            );
         }
     } else {
         eprintln!("Warning: eBPF binary file has no extension, expected .so");
@@ -287,7 +298,7 @@ async fn deploy_bpf_program(
 }
 
 /// Deploy eBPF program to all available SVM networks
-/// 
+///
 /// This function validates the deployment configuration and attempts to deploy
 /// the eBPF program to the specified networks concurrently for better performance.
 pub async fn deploy_to_all_networks(
@@ -296,7 +307,7 @@ pub async fn deploy_to_all_networks(
 ) -> Vec<Result<DeploymentResult, EbpfDeployError>> {
     // Early validation of all input files
     println!("🔍 Validating deployment configuration...");
-    
+
     // Validate all files exist before starting deployment
     if let Err(e) = validate_deployment_config(&config) {
         return vec![Err(e)];
@@ -331,7 +342,7 @@ pub async fn deploy_to_all_networks(
 
     for network in networks {
         let config_clone = config.clone();
-        
+
         let task = tokio::spawn(async move {
             // Create client for the specific network
             let client_url = match network {
@@ -355,7 +366,7 @@ pub async fn deploy_to_all_networks(
             // Deploy to this network
             deploy_to_network(&client, &network_config, commitment_config).await
         });
-        
+
         deployment_tasks.push(task);
     }
 
@@ -378,15 +389,15 @@ pub async fn deploy_to_all_networks(
 fn validate_deployment_config(config: &DeployConfig) -> Result<(), EbpfDeployError> {
     // Check if binary file exists and is valid
     load_program(&config.binary_path)?;
-    
+
     // Check if program ID file exists and is valid
     load_program_id(&config.program_id_path)?;
-    
+
     // Check if owner keypair exists and is valid
     load_keypair(&config.owner_path)?;
-    
+
     // Check if fee payer keypair exists and is valid
     load_keypair(&config.fee_payer_path)?;
-    
+
     Ok(())
 }
