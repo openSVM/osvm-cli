@@ -48,7 +48,7 @@ fn test_create_deploy_config() {
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: true,
-        network_filter: "devnet".to_string(),
+        network_selection: "devnet".to_string(),
     };
 
     // Verify config fields
@@ -57,7 +57,7 @@ fn test_create_deploy_config() {
     assert_eq!(config.owner_path, "path/to/owner.json");
     assert_eq!(config.fee_payer_path, "path/to/fee_payer.json");
     assert!(config.publish_idl);
-    assert_eq!(config.network_filter, "devnet");
+    assert_eq!(config.network_selection, "devnet");
 
     // Clone the config and verify the clone
     let config_clone = config.clone();
@@ -66,7 +66,7 @@ fn test_create_deploy_config() {
 
 #[tokio::test]
 async fn test_network_filter_logic() {
-    // This test only validates the network filtering logic without actually making network calls
+    // This test validates the network selection logic without actually making network calls
     let dir = tempdir().unwrap();
 
     // Create test files
@@ -102,14 +102,14 @@ async fn test_network_filter_logic() {
     )
     .unwrap();
 
-    // Test "all" network filter
+    // Test "all" network selection
     let config_all = DeployConfig {
         binary_path: program_file.to_string_lossy().to_string(),
         program_id_path: program_id_file.to_string_lossy().to_string(),
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
-        network_filter: "all".to_string(),
+        network_selection: "all".to_string(),
     };
 
     // This attempts network calls which will fail in test environment
@@ -124,14 +124,14 @@ async fn test_network_filter_logic() {
         assert!(result.is_err());
     }
 
-    // Test single network filter
+    // Test single network selection
     let config_single = DeployConfig {
         binary_path: program_file.to_string_lossy().to_string(),
         program_id_path: program_id_file.to_string_lossy().to_string(),
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
-        network_filter: "devnet".to_string(),
+        network_selection: "devnet".to_string(),
     };
 
     let results = deploy_to_all_networks(config_single, CommitmentConfig::confirmed()).await;
@@ -141,14 +141,14 @@ async fn test_network_filter_logic() {
     // Result should be an error due to network connectivity issues in test environment
     assert!(results[0].is_err());
 
-    // Test invalid network filter
+    // Test invalid network selection
     let config_invalid = DeployConfig {
         binary_path: program_file.to_string_lossy().to_string(),
         program_id_path: program_id_file.to_string_lossy().to_string(),
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
-        network_filter: "invalid".to_string(),
+        network_selection: "invalid".to_string(),
     };
 
     let results = deploy_to_all_networks(config_invalid, CommitmentConfig::confirmed()).await;
