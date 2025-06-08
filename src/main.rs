@@ -934,7 +934,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 owner_path: owner_path.to_string(),
                 fee_payer_path: fee_payer_path.to_string(),
                 publish_idl,
-                network_filter: network_str.to_string(), // Pass the original network string
+                network_selection: network_str.to_string(),
             };
 
             println!("🚀 OSVM eBPF Deployment Tool");
