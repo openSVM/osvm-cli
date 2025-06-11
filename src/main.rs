@@ -53,8 +53,7 @@ impl From<webpki::Error> for WebPkiError {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
     let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
-        eprintln!("No subcommand provided");
-        exit(1);
+        return Err("No subcommand provided".into());
     };
     let matches = sub_matches;
 
@@ -88,10 +87,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Create a signer directly from the keypair path
         let signer =
-            solana_sdk::signature::read_keypair_file(&keypair_path).unwrap_or_else(|err| {
-                eprintln!("Error reading keypair file {}: {}", keypair_path, err);
-                exit(1);
-            });
+            match solana_sdk::signature::read_keypair_file(&keypair_path) {
+                Ok(signer) => signer,
+                Err(err) => {
+                    return Err(format!("Error reading keypair file {}: {}", keypair_path, err).into());
+                }
+            };
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
@@ -948,9 +949,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!();
 
             // Execute deployment
-            let results = tokio::runtime::Runtime::new().unwrap().block_on(
-                ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config),
-            );
+            let results = match tokio::runtime::Runtime::new() {
+                Ok(runtime) => runtime.block_on(
+                    ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config),
+                ),
+                Err(e) => {
+                    eprintln!("Failed to create async runtime: {}", e);
+                    return Err(e.into());
+                }
+            };
 
             // Display results
             println!("\n📋 Deployment Results Summary");
@@ -992,7 +999,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if failure_count > 0 {
                 println!("💡 Tip: Check error messages above for troubleshooting guidance");
-                exit(1);
+                return Err("Some deployments failed".into());
             } else {
                 println!("🎉 All deployments completed successfully!");
             }
@@ -1001,8 +1008,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Expected output for new feature");
         }
         cmd => {
-            eprintln!("Unknown command: {cmd}");
-            exit(1);
+            return Err(format!("Unknown command: {cmd}").into());
         }
     };
 
