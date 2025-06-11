@@ -2,9 +2,11 @@ use {
     crate::utils::ssh_deploy::NetworkType,
     solana_client::rpc_client::RpcClient,
     solana_sdk::{
+        bpf_loader_upgradeable,
         commitment_config::CommitmentConfig,
         pubkey::Pubkey,
         signature::{Keypair, Signer},
+        transaction::Transaction,
     },
     std::{fs::File, io::Read, path::Path},
     thiserror::Error,
@@ -66,6 +68,9 @@ pub enum EbpfDeployError {
 
     #[error("IDL publishing error: {0}")]
     IdlPublishError(String),
+
+    #[error("Instruction error: {0}")]
+    InstructionError(#[from] solana_sdk::instruction::InstructionError),
 }
 
 /// Configuration for eBPF program deployment
@@ -205,11 +210,7 @@ async fn deploy_bpf_program(
     commitment_config: CommitmentConfig,
     publish_idl: bool,
 ) -> Result<String, EbpfDeployError> {
-    use solana_sdk::{
-        message::Message,
-        system_instruction,
-        transaction::Transaction,
-    };
+    
 
     // Check client connection
     match client.get_version() {
@@ -221,23 +222,9 @@ async fn deploy_bpf_program(
         }
     }
 
-    // Get rent for program account (basic calculation)
-    let rent = client.get_minimum_balance_for_rent_exemption(program_data.len())?;
-    
-    // Check fee payer balance (need enough for rent + transaction fees)
-    let balance = client.get_balance(&fee_payer.pubkey())?;
-    let minimum_balance = rent + 10_000_000; // rent + ~0.01 SOL for transaction fees
-    if balance < minimum_balance {
-        return Err(EbpfDeployError::InsufficientFunds(format!(
-            "Fee payer has insufficient balance: {} lamports (minimum required: {})",
-            balance, minimum_balance
-        )));
-    }
-
     println!("🔧 Processing deployment transaction...");
     println!("  • Program size: {} bytes", program_data.len());
     println!("  • Target program ID: {}", program_id);
-    println!("  • Required rent: {} lamports", rent);
 
     // Check if program already exists
     let program_account = client.get_account(&program_id);
@@ -246,74 +233,282 @@ async fn deploy_bpf_program(
     if is_upgrade {
         println!("  • Existing program detected - performing upgrade");
         
-        // For now, implement a simplified upgrade process
-        // In a real implementation, this would use the upgradeable loader properly
-        
-        // Create a system instruction to transfer some SOL (simulating upgrade cost)
-        let upgrade_cost = 1_000_000; // 0.001 SOL for upgrade simulation
-        let upgrade_ix = system_instruction::transfer(
-            &fee_payer.pubkey(),
-            &program_owner.pubkey(),
-            upgrade_cost,
-        );
-        
-        let recent_blockhash = client.get_latest_blockhash()?;
-        let message = Message::new(&[upgrade_ix], Some(&fee_payer.pubkey()));
-        let transaction = Transaction::new(&[fee_payer], message, recent_blockhash);
-        
-        let signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
-            &transaction,
+        // For upgrades, we need to use the upgrade instruction from the BPF loader upgradeable
+        let upgrade_result = upgrade_bpf_program(
+            client,
+            fee_payer,
+            program_owner,
+            program_id,
+            program_data,
             commitment_config,
-        )?;
-        
-        println!("  • Program upgrade simulated: {}", signature);
+        ).await?;
         
         if publish_idl {
             println!("  • IDL publishing: enabled (placeholder - would implement IDL publishing here)");
             // TODO: Implement actual IDL publishing using anchor or similar framework
         }
         
-        Ok(signature.to_string())
+        Ok(upgrade_result)
     } else {
         println!("  • New program deployment");
         
-        // For new deployments, create a system account for the program
-        // In a real implementation, this would use the BPF loader
-        let create_account_ix = system_instruction::create_account(
-            &fee_payer.pubkey(),
-            &program_id,
-            rent,
-            program_data.len() as u64,
-            &solana_sdk::system_program::id(), // In real deployment, use BPF loader ID
-        );
-        
-        let recent_blockhash = client.get_latest_blockhash()?;
-        let message = Message::new(&[create_account_ix], Some(&fee_payer.pubkey()));
-        
-        // Note: In real deployment, you'd need a keypair for the program ID
-        // For now, this is a simplified implementation
-        let transaction = Transaction::new(&[fee_payer], message, recent_blockhash);
-        
-        let signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
-            &transaction,
+        // For new deployments, use the BPF loader upgradeable to deploy the program
+        let deploy_result = deploy_new_bpf_program(
+            client,
+            fee_payer,
+            program_owner,
+            program_id,
+            program_data,
             commitment_config,
-        )?;
-        
-        println!("  • Program account created: {}", signature);
-        
-        // TODO: Add actual BPF loader instructions to load the program data
-        // This would involve:
-        // 1. Writing program data in chunks
-        // 2. Finalizing the program
-        // 3. Setting the program as executable
+        ).await?;
         
         if publish_idl {
             println!("  • IDL publishing: enabled (placeholder - would implement IDL publishing here)");
             // TODO: Implement actual IDL publishing
         }
         
-        Ok(signature.to_string())
+        Ok(deploy_result)
     }
+}
+
+/// Deploy a new BPF program using the upgradeable BPF loader
+async fn deploy_new_bpf_program(
+    client: &RpcClient,
+    fee_payer: &Keypair,
+    program_owner: &Keypair,
+    _program_id: Pubkey,
+    program_data: &[u8],
+    commitment_config: CommitmentConfig,
+) -> Result<String, EbpfDeployError> {
+    use solana_sdk::message::Message;
+
+    println!("  • Deploying new BPF program using upgradeable loader");
+
+    // Calculate rent requirements for buffer and program
+    let buffer_size = program_data.len();
+    let buffer_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 8)?; // +8 for discriminator
+    let program_rent = client.get_minimum_balance_for_rent_exemption(36)?; // Program account size
+    let program_data_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 48)?; // +48 for metadata
+    
+    let total_rent = buffer_rent + program_rent + program_data_rent;
+    let transaction_fees = 50_000_000; // ~0.05 SOL for multiple transactions
+    let minimum_balance = total_rent + transaction_fees;
+
+    // Check fee payer balance
+    let balance = client.get_balance(&fee_payer.pubkey())?;
+    if balance < minimum_balance {
+        return Err(EbpfDeployError::InsufficientFunds(format!(
+            "Fee payer has insufficient balance: {} lamports (minimum required: {})",
+            balance, minimum_balance
+        )));
+    }
+
+    println!("  • Required rent: {} lamports", total_rent);
+    println!("  • Buffer size: {} bytes", buffer_size);
+
+    // Generate keypair for the buffer
+    let buffer_keypair = Keypair::new();
+
+    // Step 1: Create and initialize buffer account
+    println!("  • Step 1: Creating and initializing buffer account");
+    let create_buffer_instructions = bpf_loader_upgradeable::create_buffer(
+        &fee_payer.pubkey(),
+        &buffer_keypair.pubkey(),
+        &program_owner.pubkey(),
+        buffer_rent,
+        buffer_size,
+    )?;
+
+    let recent_blockhash = client.get_latest_blockhash()?;
+    let create_buffer_message = Message::new(&create_buffer_instructions, Some(&fee_payer.pubkey()));
+    let create_buffer_tx = Transaction::new(&[fee_payer, &buffer_keypair], create_buffer_message, recent_blockhash);
+    
+    let init_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+        &create_buffer_tx,
+        commitment_config,
+    )?;
+    println!("    ✓ Buffer created and initialized: {}", init_signature);
+
+    // Step 2: Write program data to buffer in chunks
+    println!("  • Step 2: Writing program data in chunks");
+    let max_chunk_size = 1024; // Conservative chunk size to stay within transaction limits
+    let mut offset = 0;
+    let mut chunk_count = 0;
+
+    while offset < program_data.len() {
+        let end = std::cmp::min(offset + max_chunk_size, program_data.len());
+        let chunk = &program_data[offset..end];
+        
+        let write_ix = bpf_loader_upgradeable::write(
+            &buffer_keypair.pubkey(),
+            &program_owner.pubkey(),
+            offset as u32,
+            chunk.to_vec(),
+        );
+
+        let recent_blockhash = client.get_latest_blockhash()?;
+        let write_message = Message::new(&[write_ix], Some(&fee_payer.pubkey()));
+        let write_tx = Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
+        
+        let _write_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+            &write_tx,
+            commitment_config,
+        )?;
+        
+        chunk_count += 1;
+        offset = end;
+        
+        if chunk_count % 10 == 0 || offset >= program_data.len() {
+            println!("    ✓ Written {}/{} bytes in {} chunks", offset, program_data.len(), chunk_count);
+        }
+    }
+
+    // Step 3: Deploy the program from buffer
+    println!("  • Step 3: Finalizing program deployment");
+    
+    // Create a program keypair if we need to deploy to a specific address
+    // Note: In practice, the program_id might need to be a keypair for new deployments
+    let program_keypair = Keypair::new(); // This creates a new program ID
+    let actual_program_id = program_keypair.pubkey();
+    
+    let deploy_instructions = bpf_loader_upgradeable::deploy_with_max_program_len(
+        &fee_payer.pubkey(),
+        &actual_program_id,
+        &buffer_keypair.pubkey(),
+        &program_owner.pubkey(),
+        program_rent,
+        buffer_size,
+    )?;
+
+    let recent_blockhash = client.get_latest_blockhash()?;
+    let deploy_message = Message::new(&deploy_instructions, Some(&fee_payer.pubkey()));
+    let deploy_tx = Transaction::new(
+        &[fee_payer, &program_keypair],
+        deploy_message,
+        recent_blockhash,
+    );
+    
+    let deploy_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+        &deploy_tx,
+        commitment_config,
+    )?;
+    
+    println!("    ✓ Program deployment finalized: {}", deploy_signature);
+    println!("  • Program is now executable at: {} (Note: generated new program ID)", actual_program_id);
+
+    Ok(deploy_signature.to_string())
+}
+
+/// Upgrade an existing BPF program using the upgradeable BPF loader  
+async fn upgrade_bpf_program(
+    client: &RpcClient,
+    fee_payer: &Keypair,
+    program_owner: &Keypair,
+    program_id: Pubkey,
+    program_data: &[u8],
+    commitment_config: CommitmentConfig,
+) -> Result<String, EbpfDeployError> {
+    use solana_sdk::message::Message;
+
+    println!("  • Upgrading existing BPF program using upgradeable loader");
+
+    // Calculate rent for the buffer
+    let buffer_size = program_data.len();
+    let buffer_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 8)?; // +8 for discriminator
+    let transaction_fees = 20_000_000; // ~0.02 SOL for upgrade transactions
+    let minimum_balance = buffer_rent + transaction_fees;
+
+    // Check fee payer balance
+    let balance = client.get_balance(&fee_payer.pubkey())?;
+    if balance < minimum_balance {
+        return Err(EbpfDeployError::InsufficientFunds(format!(
+            "Fee payer has insufficient balance: {} lamports (minimum required: {})",
+            balance, minimum_balance
+        )));
+    }
+
+    println!("  • Buffer size: {} bytes", buffer_size);
+    println!("  • Required rent: {} lamports", buffer_rent);
+
+    // Generate buffer keypair for the upgrade
+    let buffer_keypair = Keypair::new();
+
+    // Step 1: Create and initialize buffer for upgrade
+    println!("  • Step 1: Creating and initializing upgrade buffer");
+    let create_buffer_instructions = bpf_loader_upgradeable::create_buffer(
+        &fee_payer.pubkey(),
+        &buffer_keypair.pubkey(),
+        &program_owner.pubkey(),
+        buffer_rent,
+        buffer_size,
+    )?;
+
+    let recent_blockhash = client.get_latest_blockhash()?;
+    let init_message = Message::new(&create_buffer_instructions, Some(&fee_payer.pubkey()));
+    let init_tx = Transaction::new(&[fee_payer, &buffer_keypair], init_message, recent_blockhash);
+    
+    let init_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+        &init_tx,
+        commitment_config,
+    )?;
+    println!("    ✓ Upgrade buffer created and initialized: {}", init_signature);
+
+    // Step 2: Write new program data to buffer in chunks
+    println!("  • Step 2: Writing updated program data");
+    let max_chunk_size = 1024; // Conservative chunk size
+    let mut offset = 0;
+    let mut chunk_count = 0;
+
+    while offset < program_data.len() {
+        let end = std::cmp::min(offset + max_chunk_size, program_data.len());
+        let chunk = &program_data[offset..end];
+        
+        let write_ix = bpf_loader_upgradeable::write(
+            &buffer_keypair.pubkey(),
+            &program_owner.pubkey(),
+            offset as u32,
+            chunk.to_vec(),
+        );
+
+        let recent_blockhash = client.get_latest_blockhash()?;
+        let write_message = Message::new(&[write_ix], Some(&fee_payer.pubkey()));
+        let write_tx = Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
+        
+        let _write_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+            &write_tx,
+            commitment_config,
+        )?;
+        
+        chunk_count += 1;
+        offset = end;
+        
+        if chunk_count % 10 == 0 || offset >= program_data.len() {
+            println!("    ✓ Written {}/{} bytes in {} chunks", offset, program_data.len(), chunk_count);
+        }
+    }
+
+    // Step 3: Upgrade the program from buffer
+    println!("  • Step 3: Executing program upgrade");
+    
+    let upgrade_ix = bpf_loader_upgradeable::upgrade(
+        &program_id,
+        &buffer_keypair.pubkey(),
+        &program_owner.pubkey(),
+        &fee_payer.pubkey(), // spill address for rent refund
+    );
+
+    let recent_blockhash = client.get_latest_blockhash()?;
+    let upgrade_message = Message::new(&[upgrade_ix], Some(&fee_payer.pubkey()));
+    let upgrade_tx = Transaction::new(&[fee_payer, program_owner], upgrade_message, recent_blockhash);
+    
+    let upgrade_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
+        &upgrade_tx,
+        commitment_config,
+    )?;
+    
+    println!("    ✓ Program upgrade completed: {}", upgrade_signature);
+
+    Ok(upgrade_signature.to_string())
 }
 
 /// Deploy eBPF program to all available SVM networks
