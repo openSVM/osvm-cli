@@ -387,7 +387,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
                 .arg(
                     Arg::new("publish-idl")
-                        .long("publishIDL")
+                        .long("publish-idl")
                         .value_name("YES_OR_NO")
                         .value_parser(clap::builder::PossibleValuesParser::new(["yes", "no"]))
                         .default_value("no")
