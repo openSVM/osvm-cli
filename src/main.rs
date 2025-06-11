@@ -86,13 +86,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| cli_config.keypair_path.clone());
 
         // Create a signer directly from the keypair path
-        let signer =
-            match solana_sdk::signature::read_keypair_file(&keypair_path) {
-                Ok(signer) => signer,
-                Err(err) => {
-                    return Err(format!("Error reading keypair file {}: {}", keypair_path, err).into());
-                }
-            };
+        let signer = match solana_sdk::signature::read_keypair_file(&keypair_path) {
+            Ok(signer) => signer,
+            Err(err) => {
+                return Err(format!("Error reading keypair file {}: {}", keypair_path, err).into());
+            }
+        };
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
@@ -949,15 +948,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!();
 
             // Execute deployment
-            let results = match tokio::runtime::Runtime::new() {
-                Ok(runtime) => runtime.block_on(
-                    ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config),
-                ),
-                Err(e) => {
-                    eprintln!("Failed to create async runtime: {}", e);
-                    return Err(e.into());
-                }
-            };
+            let results =
+                ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config).await;
 
             // Display results
             println!("\n📋 Deployment Results Summary");

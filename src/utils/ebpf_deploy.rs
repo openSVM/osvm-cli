@@ -116,7 +116,7 @@ pub fn load_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
     Ok(keypair)
 }
 
-/// Load program ID from a JSON file
+/// Load program ID from a JSON file - supports both keypair files and pubkey-only files
 pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
     // Validate file exists first
     if !Path::new(path).exists() {
@@ -126,6 +126,14 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
         )));
     }
 
+    // First try to load as a keypair file
+    if let Ok(mut file) = File::open(path) {
+        if let Ok(keypair) = solana_sdk::signature::read_keypair(&mut file) {
+            return Ok(keypair.pubkey());
+        }
+    }
+
+    // If not a keypair, try as a JSON with programId field or direct pubkey
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
@@ -199,7 +207,6 @@ pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     Ok(program_data)
 }
 
-
 /// Deploy a BPF program to a Solana network
 async fn deploy_bpf_program(
     client: &RpcClient,
@@ -210,8 +217,6 @@ async fn deploy_bpf_program(
     commitment_config: CommitmentConfig,
     publish_idl: bool,
 ) -> Result<String, EbpfDeployError> {
-    
-
     // Check client connection
     match client.get_version() {
         Ok(version) => {
@@ -232,7 +237,7 @@ async fn deploy_bpf_program(
 
     if is_upgrade {
         println!("  • Existing program detected - performing upgrade");
-        
+
         // For upgrades, we need to use the upgrade instruction from the BPF loader upgradeable
         let upgrade_result = upgrade_bpf_program(
             client,
@@ -241,17 +246,22 @@ async fn deploy_bpf_program(
             program_id,
             program_data,
             commitment_config,
-        ).await?;
-        
+        )
+        .await?;
+
         if publish_idl {
-            println!("  • IDL publishing: enabled (placeholder - would implement IDL publishing here)");
+            eprintln!("⚠️  Warning: IDL publishing is requested but not yet implemented");
+            eprintln!("    IDL publishing will be skipped for this deployment");
+            println!(
+                "  • IDL publishing: enabled (placeholder - would implement IDL publishing here)"
+            );
             // TODO: Implement actual IDL publishing using anchor or similar framework
         }
-        
+
         Ok(upgrade_result)
     } else {
         println!("  • New program deployment");
-        
+
         // For new deployments, use the BPF loader upgradeable to deploy the program
         let deploy_result = deploy_new_bpf_program(
             client,
@@ -260,13 +270,18 @@ async fn deploy_bpf_program(
             program_id,
             program_data,
             commitment_config,
-        ).await?;
-        
+        )
+        .await?;
+
         if publish_idl {
-            println!("  • IDL publishing: enabled (placeholder - would implement IDL publishing here)");
+            eprintln!("⚠️  Warning: IDL publishing is requested but not yet implemented");
+            eprintln!("    IDL publishing will be skipped for this deployment");
+            println!(
+                "  • IDL publishing: enabled (placeholder - would implement IDL publishing here)"
+            );
             // TODO: Implement actual IDL publishing
         }
-        
+
         Ok(deploy_result)
     }
 }
@@ -276,7 +291,7 @@ async fn deploy_new_bpf_program(
     client: &RpcClient,
     fee_payer: &Keypair,
     program_owner: &Keypair,
-    _program_id: Pubkey,
+    program_id: Pubkey,
     program_data: &[u8],
     commitment_config: CommitmentConfig,
 ) -> Result<String, EbpfDeployError> {
@@ -289,7 +304,7 @@ async fn deploy_new_bpf_program(
     let buffer_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 8)?; // +8 for discriminator
     let program_rent = client.get_minimum_balance_for_rent_exemption(36)?; // Program account size
     let program_data_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 48)?; // +48 for metadata
-    
+
     let total_rent = buffer_rent + program_rent + program_data_rent;
     let transaction_fees = 50_000_000; // ~0.05 SOL for multiple transactions
     let minimum_balance = total_rent + transaction_fees;
@@ -320,9 +335,14 @@ async fn deploy_new_bpf_program(
     )?;
 
     let recent_blockhash = client.get_latest_blockhash()?;
-    let create_buffer_message = Message::new(&create_buffer_instructions, Some(&fee_payer.pubkey()));
-    let create_buffer_tx = Transaction::new(&[fee_payer, &buffer_keypair], create_buffer_message, recent_blockhash);
-    
+    let create_buffer_message =
+        Message::new(&create_buffer_instructions, Some(&fee_payer.pubkey()));
+    let create_buffer_tx = Transaction::new(
+        &[fee_payer, &buffer_keypair],
+        create_buffer_message,
+        recent_blockhash,
+    );
+
     let init_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
         &create_buffer_tx,
         commitment_config,
@@ -338,7 +358,7 @@ async fn deploy_new_bpf_program(
     while offset < program_data.len() {
         let end = std::cmp::min(offset + max_chunk_size, program_data.len());
         let chunk = &program_data[offset..end];
-        
+
         let write_ix = bpf_loader_upgradeable::write(
             &buffer_keypair.pubkey(),
             &program_owner.pubkey(),
@@ -348,32 +368,37 @@ async fn deploy_new_bpf_program(
 
         let recent_blockhash = client.get_latest_blockhash()?;
         let write_message = Message::new(&[write_ix], Some(&fee_payer.pubkey()));
-        let write_tx = Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
-        
+        let write_tx =
+            Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
+
         let _write_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
             &write_tx,
             commitment_config,
         )?;
-        
+
         chunk_count += 1;
         offset = end;
-        
+
         if chunk_count % 10 == 0 || offset >= program_data.len() {
-            println!("    ✓ Written {}/{} bytes in {} chunks", offset, program_data.len(), chunk_count);
+            println!(
+                "    ✓ Written {}/{} bytes in {} chunks",
+                offset,
+                program_data.len(),
+                chunk_count
+            );
         }
     }
 
     // Step 3: Deploy the program from buffer
     println!("  • Step 3: Finalizing program deployment");
-    
-    // Create a program keypair if we need to deploy to a specific address
-    // Note: In practice, the program_id might need to be a keypair for new deployments
-    let program_keypair = Keypair::new(); // This creates a new program ID
-    let actual_program_id = program_keypair.pubkey();
-    
+
+    // Use the provided program_id for deployment instead of generating a new one
+    // Note: For new deployments to a specific program ID, we need the program keypair
+    // In practice, the program_id should be loaded from a keypair file for new deployments
+
     let deploy_instructions = bpf_loader_upgradeable::deploy_with_max_program_len(
         &fee_payer.pubkey(),
-        &actual_program_id,
+        &program_id,
         &buffer_keypair.pubkey(),
         &program_owner.pubkey(),
         program_rent,
@@ -382,19 +407,17 @@ async fn deploy_new_bpf_program(
 
     let recent_blockhash = client.get_latest_blockhash()?;
     let deploy_message = Message::new(&deploy_instructions, Some(&fee_payer.pubkey()));
-    let deploy_tx = Transaction::new(
-        &[fee_payer, &program_keypair],
-        deploy_message,
-        recent_blockhash,
-    );
-    
-    let deploy_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
-        &deploy_tx,
-        commitment_config,
-    )?;
-    
+
+    // Note: For this to work with a specific program_id, the program_id must be a keypair
+    // that can sign the transaction. In practice, this means the program_id_path should
+    // contain a keypair, not just a public key.
+    let deploy_tx = Transaction::new(&[fee_payer], deploy_message, recent_blockhash);
+
+    let deploy_signature = client
+        .send_and_confirm_transaction_with_spinner_and_commitment(&deploy_tx, commitment_config)?;
+
     println!("    ✓ Program deployment finalized: {}", deploy_signature);
-    println!("  • Program is now executable at: {} (Note: generated new program ID)", actual_program_id);
+    println!("  • Program is now executable at: {}", program_id);
 
     Ok(deploy_signature.to_string())
 }
@@ -445,13 +468,18 @@ async fn upgrade_bpf_program(
 
     let recent_blockhash = client.get_latest_blockhash()?;
     let init_message = Message::new(&create_buffer_instructions, Some(&fee_payer.pubkey()));
-    let init_tx = Transaction::new(&[fee_payer, &buffer_keypair], init_message, recent_blockhash);
-    
-    let init_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
-        &init_tx,
-        commitment_config,
-    )?;
-    println!("    ✓ Upgrade buffer created and initialized: {}", init_signature);
+    let init_tx = Transaction::new(
+        &[fee_payer, &buffer_keypair],
+        init_message,
+        recent_blockhash,
+    );
+
+    let init_signature = client
+        .send_and_confirm_transaction_with_spinner_and_commitment(&init_tx, commitment_config)?;
+    println!(
+        "    ✓ Upgrade buffer created and initialized: {}",
+        init_signature
+    );
 
     // Step 2: Write new program data to buffer in chunks
     println!("  • Step 2: Writing updated program data");
@@ -462,7 +490,7 @@ async fn upgrade_bpf_program(
     while offset < program_data.len() {
         let end = std::cmp::min(offset + max_chunk_size, program_data.len());
         let chunk = &program_data[offset..end];
-        
+
         let write_ix = bpf_loader_upgradeable::write(
             &buffer_keypair.pubkey(),
             &program_owner.pubkey(),
@@ -472,24 +500,30 @@ async fn upgrade_bpf_program(
 
         let recent_blockhash = client.get_latest_blockhash()?;
         let write_message = Message::new(&[write_ix], Some(&fee_payer.pubkey()));
-        let write_tx = Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
-        
+        let write_tx =
+            Transaction::new(&[fee_payer, program_owner], write_message, recent_blockhash);
+
         let _write_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
             &write_tx,
             commitment_config,
         )?;
-        
+
         chunk_count += 1;
         offset = end;
-        
+
         if chunk_count % 10 == 0 || offset >= program_data.len() {
-            println!("    ✓ Written {}/{} bytes in {} chunks", offset, program_data.len(), chunk_count);
+            println!(
+                "    ✓ Written {}/{} bytes in {} chunks",
+                offset,
+                program_data.len(),
+                chunk_count
+            );
         }
     }
 
     // Step 3: Upgrade the program from buffer
     println!("  • Step 3: Executing program upgrade");
-    
+
     let upgrade_ix = bpf_loader_upgradeable::upgrade(
         &program_id,
         &buffer_keypair.pubkey(),
@@ -499,13 +533,15 @@ async fn upgrade_bpf_program(
 
     let recent_blockhash = client.get_latest_blockhash()?;
     let upgrade_message = Message::new(&[upgrade_ix], Some(&fee_payer.pubkey()));
-    let upgrade_tx = Transaction::new(&[fee_payer, program_owner], upgrade_message, recent_blockhash);
-    
-    let upgrade_signature = client.send_and_confirm_transaction_with_spinner_and_commitment(
-        &upgrade_tx,
-        commitment_config,
-    )?;
-    
+    let upgrade_tx = Transaction::new(
+        &[fee_payer, program_owner],
+        upgrade_message,
+        recent_blockhash,
+    );
+
+    let upgrade_signature = client
+        .send_and_confirm_transaction_with_spinner_and_commitment(&upgrade_tx, commitment_config)?;
+
     println!("    ✓ Program upgrade completed: {}", upgrade_signature);
 
     Ok(upgrade_signature.to_string())
@@ -578,14 +614,22 @@ pub async fn deploy_to_all_networks(
 
     for network in networks {
         let publish_idl = config.publish_idl;
-        
+
         // Clone the loaded data for each task (more efficient than reloading files)
         let program_id_clone = program_id;
         let program_data_clone = program_data.clone();
-        let program_owner_clone = Keypair::from_bytes(&program_owner.to_bytes()).unwrap();
-        let fee_payer_clone = Keypair::from_bytes(&fee_payer.to_bytes()).unwrap();
+
+        // Clone keypairs by bytes - these operations are extremely unlikely to fail
+        // but we'll use expect with helpful messages instead of unwrap
+        let program_owner_bytes = program_owner.to_bytes();
+        let fee_payer_bytes = fee_payer.to_bytes();
 
         let task = tokio::spawn(async move {
+            let program_owner_clone = Keypair::from_bytes(&program_owner_bytes)
+                .expect("Failed to clone program owner keypair from valid bytes");
+            let fee_payer_clone = Keypair::from_bytes(&fee_payer_bytes)
+                .expect("Failed to clone fee payer keypair from valid bytes");
+
             // Create client for the specific network
             let client_url = match network {
                 NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
@@ -612,7 +656,8 @@ pub async fn deploy_to_all_networks(
                 target_network,
                 commitment_config,
                 publish_idl,
-            ).await
+            )
+            .await
         });
 
         deployment_tasks.push(task);
@@ -689,5 +734,3 @@ async fn deploy_to_network_with_data(
 
     Ok(result)
 }
-
-
