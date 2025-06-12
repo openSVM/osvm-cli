@@ -1,5 +1,5 @@
 use {
-    crate::utils::{dashboard, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_clap_utils::input_validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
@@ -16,7 +16,7 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<solana_sd
 }
 
 #[cfg(feature = "remote-wallet")]
-use solana_remote_wallet::remote_wallet::RemoteWalletManager;
+use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
 pub mod clparse;
 pub mod prelude;
 pub mod utils;
@@ -53,8 +53,7 @@ impl From<webpki::Error> for WebPkiError {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
     let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
-        eprintln!("No subcommand provided");
-        exit(1);
+        return Err("No subcommand provided".into());
     };
     let matches = sub_matches;
 
@@ -66,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     #[cfg(feature = "remote-wallet")]
+    #[allow(unused_variables, unused_mut)]
     let mut wallet_manager: Option<Arc<RemoteWalletManager>> = None;
 
     #[cfg(not(feature = "remote-wallet"))]
@@ -86,11 +86,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or_else(|| cli_config.keypair_path.clone());
 
         // Create a signer directly from the keypair path
-        let signer =
-            solana_sdk::signature::read_keypair_file(&keypair_path).unwrap_or_else(|err| {
-                eprintln!("Error reading keypair file {}: {}", keypair_path, err);
-                exit(1);
-            });
+        let signer = match solana_sdk::signature::read_keypair_file(&keypair_path) {
+            Ok(signer) => signer,
+            Err(err) => {
+                return Err(format!("Error reading keypair file {}: {}", keypair_path, err).into());
+            }
+        };
 
         Config {
             json_rpc_url: normalize_to_url_if_moniker(
@@ -101,7 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ),
             default_signer: Box::new(signer),
             // Count occurrences of the verbose flag to determine verbosity level
-            verbose: matches.get_count("verbose") as u8,
+            verbose: matches.get_count("verbose"),
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
         }
@@ -583,7 +584,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Solana validator node deployed successfully!");
                 }
                 "rpc" => {
-                    let solana_sub_matches = solana_sub_matches;
                     // Deploy a Solana RPC node with enhanced features
                     let connection_str = solana_sub_matches
                         .get_one::<String>("connection")
@@ -899,12 +899,90 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
         }
+        "deploy" => {
+            // Command to deploy eBPF binary to all SVM networks
+            let binary_path = matches
+                .get_one::<String>("binary")
+                .map(|s| s.as_str())
+                .unwrap();
+            let program_id_path = matches
+                .get_one::<String>("program-id")
+                .map(|s| s.as_str())
+                .unwrap();
+            let owner_path = matches
+                .get_one::<String>("owner")
+                .map(|s| s.as_str())
+                .unwrap();
+            let fee_payer_path = matches
+                .get_one::<String>("fee")
+                .map(|s| s.as_str())
+                .unwrap();
+            let publish_idl = matches.get_flag("publish-idl");
+            let idl_file_path = matches.get_one::<String>("idl-file").map(|s| s.to_string());
+            let network_str = matches
+                .get_one::<String>("network")
+                .map(|s| s.as_str())
+                .unwrap_or("all");
+            let json_output = matches.get_flag("json");
+            let retry_attempts = matches
+                .get_one::<String>("retry-attempts")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3);
+            let confirm_large_binaries = matches.get_flag("confirm-large");
+
+            // Create deployment configuration
+            let deploy_config = ebpf_deploy::DeployConfig {
+                binary_path: binary_path.to_string(),
+                program_id_path: program_id_path.to_string(),
+                owner_path: owner_path.to_string(),
+                fee_payer_path: fee_payer_path.to_string(),
+                publish_idl,
+                idl_file_path,
+                network_selection: network_str.to_string(),
+                json_output,
+                retry_attempts,
+                confirm_large_binaries,
+            };
+
+            println!("🚀 OSVM eBPF Deployment Tool");
+            println!("============================");
+            println!("📁 Binary path: {binary_path}");
+            println!("🆔 Program ID: {program_id_path}");
+            println!("👤 Owner: {owner_path}");
+            println!("💰 Fee payer: {fee_payer_path}");
+            println!("📄 Publish IDL: {}", if publish_idl { "yes" } else { "no" });
+            println!("🌐 Target network(s): {network_str}");
+            println!();
+
+            // Execute deployment
+            let results = ebpf_deploy::deploy_to_all_networks(
+                deploy_config.clone(),
+                config.commitment_config,
+            )
+            .await;
+
+            // Display results using the new display function
+            if let Err(e) =
+                ebpf_deploy::display_deployment_results(&results, deploy_config.json_output)
+            {
+                eprintln!("Error displaying results: {}", e);
+            }
+
+            // Determine exit status
+            let failure_count = results
+                .iter()
+                .filter(|r| r.as_ref().map_or(true, |d| !d.success))
+                .count();
+
+            if failure_count > 0 {
+                return Err("Some deployments failed".into());
+            }
+        }
         "new_feature_command" => {
             println!("Expected output for new feature");
         }
         cmd => {
-            eprintln!("Unknown command: {}", cmd);
-            exit(1);
+            return Err(format!("Unknown command: {cmd}").into());
         }
     };
 
@@ -919,7 +997,7 @@ mod test {
     #[test]
     fn test_borsh() {
         #[repr(C)]
-        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+        #[derive(BorshSerialize, BorshDeserialize, PartialEq, Eq, Debug, Clone)]
         pub struct UpdateMetadataAccountArgs {
             pub data: Option<String>,
             pub update_authority: Option<Pubkey>,

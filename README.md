@@ -162,6 +162,9 @@ osvm rpc sonic root@host.example.com --network mainnet
 
 # Deploy multiple SVMs to a single server
 osvm user@host --svm sonic,solana,eclipse,soon --node-type validator --network devnet
+
+# Deploy an eBPF binary to all available SVM networks
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publish-idl
 ```
 
 ### RPC Node Deployment
@@ -182,6 +185,50 @@ The `rpc` command provides a streamlined way to deploy specific RPC nodes:
 - **Sonic RPC**: Deploys a Sonic RPC node using Docker containers from the official repository
 - **Network Selection**: Choose between mainnet, testnet, or devnet environments
 - **Automatic Configuration**: Handles all dependencies and configuration automatically
+
+### eBPF Program Deployment
+
+```bash
+# Deploy an eBPF binary to all available SVM networks
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publish-idl
+
+# Deploy with custom Anchor IDL file
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publish-idl --idl-file ./path/to/program.json
+
+# Deploy to a specific network only
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --network mainnet
+```
+
+The `deploy` command provides a streamlined way to deploy eBPF programs:
+
+- **Multi-network Deployment**: Deploy to all SVM networks with one command
+- **Network Selection**: Choose between mainnet, testnet, devnet, or all networks
+- **IDL Publishing**: Option to publish the IDL along with the program
+  - Auto-generated basic IDL (default)
+  - Custom Anchor IDL JSON file support via `--idl-file` option
+- **Required Files**:
+  - eBPF binary (.so file)
+  - **Program ID file**: 
+    - For **new deployments**: Must be a keypair JSON file (contains private key)
+    - For **upgrades**: Can be either a keypair file or pubkey-only JSON file
+  - **Program owner keypair**: JSON file containing private key (required for all deployments)
+  - **Fee payer keypair**: JSON file containing private key (pays for deployment transaction)
+
+### File Format Requirements
+
+**Keypair files** (generated with `solana-keygen new`):
+```json
+[123,45,67,89,...,234]  // Array of 64 bytes containing private key
+```
+
+**Pubkey-only files** (for upgrades only):
+```json
+{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}
+```
+or plain string:
+```
+HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS
+```
 
 ## 🔧 Detailed Installation
 

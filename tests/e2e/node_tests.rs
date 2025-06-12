@@ -13,7 +13,7 @@ fn test_nodes_list() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["nodes", "list"])
+        .args(["nodes", "list"])
         .output()
         .expect("Failed to execute command");
 
@@ -30,7 +30,7 @@ fn test_nodes_list_with_filters_basic() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["nodes", "list", "--status", "active"])
+        .args(["nodes", "list", "--status", "active"])
         .output()
         .expect("Failed to execute command");
 
@@ -47,7 +47,7 @@ fn test_nodes_list_with_filters() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["nodes", "list", "--status", "active", "--type", "validator"])
+        .args(["nodes", "list", "--status", "active", "--type", "validator"])
         .output()
         .expect("Failed to execute command");
 
@@ -63,7 +63,7 @@ fn test_nodes_list_with_filters() {
 fn test_nodes_dashboard() {
     // This test is more complex as it involves an interactive dashboard
     // For now, we'll just verify the command doesn't immediately fail with "unknown command"
-    let assert = run_osvm_command().args(&["nodes", "dashboard"]).assert();
+    let assert = run_osvm_command().args(["nodes", "dashboard"]).assert();
 
     // The dashboard might not work in a test environment, so we're just checking
     // that the command is recognized
@@ -76,7 +76,7 @@ fn test_nodes_get_invalid() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["nodes", "get", "invalid_node_id"])
+        .args(["nodes", "get", "invalid_node_id"])
         .output()
         .expect("Failed to execute command");
 
