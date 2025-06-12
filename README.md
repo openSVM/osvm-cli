@@ -192,6 +192,9 @@ The `rpc` command provides a streamlined way to deploy specific RPC nodes:
 # Deploy an eBPF binary to all available SVM networks
 osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publish-idl
 
+# Deploy with custom Anchor IDL file
+osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --publish-idl --idl-file ./path/to/program.json
+
 # Deploy to a specific network only
 osvm deploy ./path/to/ebpf.so --program-id ./path/to/program-address.json --owner ./path/to/program-owner.json --fee ./path/to/deployment-fee-payer.json --network mainnet
 ```
@@ -201,6 +204,8 @@ The `deploy` command provides a streamlined way to deploy eBPF programs:
 - **Multi-network Deployment**: Deploy to all SVM networks with one command
 - **Network Selection**: Choose between mainnet, testnet, devnet, or all networks
 - **IDL Publishing**: Option to publish the IDL along with the program
+  - Auto-generated basic IDL (default)
+  - Custom Anchor IDL JSON file support via `--idl-file` option
 - **Required Files**:
   - eBPF binary (.so file)
   - **Program ID file**: 

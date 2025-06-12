@@ -87,6 +87,8 @@ pub struct DeployConfig {
     pub fee_payer_path: String,
     /// Whether to publish IDL
     pub publish_idl: bool,
+    /// Optional path to custom IDL JSON file
+    pub idl_file_path: Option<String>,
     /// Network selection criteria (mainnet, testnet, devnet, or all)
     pub network_selection: String,
 }
@@ -244,6 +246,7 @@ async fn deploy_bpf_program(
     program_data: &[u8],
     commitment_config: CommitmentConfig,
     publish_idl: bool,
+    idl_file_path: Option<&str>,  // Added for IDL file support
 ) -> Result<String, EbpfDeployError> {
     // Check client connection
     match client.get_version() {
@@ -279,7 +282,7 @@ async fn deploy_bpf_program(
 
         if publish_idl {
             // Implement actual IDL publishing for upgrades
-            publish_program_idl(client, fee_payer, program_id, commitment_config).await?;
+            publish_program_idl(client, fee_payer, program_id, idl_file_path, commitment_config).await?;
         }
 
         Ok(upgrade_result)
@@ -321,7 +324,7 @@ async fn deploy_bpf_program(
 
         if publish_idl {
             // Implement actual IDL publishing for new deployments
-            publish_program_idl(client, fee_payer, program_id, commitment_config).await?;
+            publish_program_idl(client, fee_payer, program_keypair.pubkey(), idl_file_path, commitment_config).await?;
         }
 
         Ok(deploy_result)
@@ -375,11 +378,61 @@ async fn calculate_dynamic_fees(
     Ok(total_fees)
 }
 
+/// Load IDL from a JSON file or create a default one
+pub fn load_or_create_idl(idl_file_path: Option<&str>, program_id: Pubkey) -> Result<serde_json::Value, EbpfDeployError> {
+    if let Some(idl_path) = idl_file_path {
+        // Try to load from the provided IDL file
+        if !Path::new(idl_path).exists() {
+            return Err(EbpfDeployError::IoError(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("IDL file not found: {}", idl_path),
+            )));
+        }
+
+        let mut file = File::open(idl_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        // Parse the IDL JSON and validate it's a proper Anchor IDL
+        let idl: serde_json::Value = serde_json::from_str(&contents)
+            .map_err(|e| EbpfDeployError::JsonError(e))?;
+
+        // Basic validation that it looks like an Anchor IDL
+        if !idl.is_object() {
+            return Err(EbpfDeployError::DeploymentError(
+                "IDL file must contain a JSON object".to_string()
+            ));
+        }
+
+        println!("    - Loaded custom IDL from: {}", idl_path);
+        Ok(idl)
+    } else {
+        // Create a basic IDL structure
+        println!("    - Generating basic IDL structure");
+        let basic_idl = serde_json::json!({
+            "version": "0.1.0",
+            "name": "deployed_program",
+            "instructions": [],
+            "accounts": [],
+            "types": [],
+            "events": [],
+            "errors": [],
+            "metadata": {
+                "address": program_id.to_string(),
+                "deployed_at": chrono::Utc::now().to_rfc3339(),
+                "note": "This is a generated IDL. Use --idl-file to specify a custom Anchor IDL."
+            }
+        });
+        Ok(basic_idl)
+    }
+}
+
 /// Publish IDL for a deployed program
 async fn publish_program_idl(
     client: &RpcClient,
     fee_payer: &Keypair,
     program_id: Pubkey,
+    idl_file_path: Option<&str>,
     commitment_config: CommitmentConfig,
 ) -> Result<(), EbpfDeployError> {
     println!("  • Publishing IDL for program {}", program_id);
@@ -399,24 +452,9 @@ async fn publish_program_idl(
         return Ok(());
     }
 
-    // Create a basic IDL structure
-    // In a real implementation, this would parse the program binary or
-    // load IDL from a separate .json file
-    let basic_idl = serde_json::json!({
-        "version": "0.1.0",
-        "name": "deployed_program",
-        "instructions": [],
-        "accounts": [],
-        "types": [],
-        "events": [],
-        "errors": [],
-        "metadata": {
-            "address": program_id.to_string(),
-            "deployed_at": chrono::Utc::now().to_rfc3339()
-        }
-    });
-
-    let idl_data = basic_idl.to_string().into_bytes();
+    // Load IDL from file or create a default one
+    let idl = load_or_create_idl(idl_file_path, program_id)?;
+    let idl_data = idl.to_string().into_bytes();
 
     // Calculate rent for IDL account
     let idl_rent = client.get_minimum_balance_for_rent_exemption(idl_data.len() + 128)?; // +128 for account overhead
@@ -822,6 +860,7 @@ pub async fn deploy_to_all_networks(
         let program_id_clone = program_id;
         let program_data_clone = program_data.clone();
         let program_id_path_clone = config.program_id_path.clone();  // Clone path for this task
+        let idl_file_path_clone = config.idl_file_path.clone();  // Clone IDL path for this task
 
         // Clone keypairs by bytes - these operations are extremely unlikely to fail
         // but we'll use expect with helpful messages instead of unwrap
@@ -861,6 +900,7 @@ pub async fn deploy_to_all_networks(
                 target_network,
                 commitment_config,
                 publish_idl,
+                idl_file_path_clone.as_deref(),  // Use the cloned IDL path
             )
             .await
         });
@@ -894,6 +934,7 @@ async fn deploy_to_network_with_data(
     target_network: &str,
     commitment_config: CommitmentConfig,
     publish_idl: bool,
+    idl_file_path: Option<&str>,  // Added for IDL file support
 ) -> Result<DeploymentResult, EbpfDeployError> {
     println!("\n📡 Deploying to {} network...", target_network);
     println!("  • Program ID: {}", program_id);
@@ -914,6 +955,7 @@ async fn deploy_to_network_with_data(
         program_data,
         commitment_config,
         publish_idl,
+        idl_file_path,
     )
     .await
     {

@@ -919,6 +919,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let publish_idl = matches
                 .get_flag("publish-idl");
+            let idl_file_path = matches
+                .get_one::<String>("idl-file")
+                .map(|s| s.to_string());
             let network_str = matches
                 .get_one::<String>("network")
                 .map(|s| s.as_str())
@@ -931,6 +934,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 owner_path: owner_path.to_string(),
                 fee_payer_path: fee_payer_path.to_string(),
                 publish_idl,
+                idl_file_path,
                 network_selection: network_str.to_string(),
             };
 

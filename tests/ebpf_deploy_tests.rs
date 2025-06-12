@@ -49,6 +49,7 @@ fn test_create_deploy_config() {
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: true,
+        idl_file_path: None,  // No custom IDL file
         network_selection: "devnet".to_string(),
     };
 
@@ -135,6 +136,7 @@ fn test_deploy_config_with_boolean_idl_flag() {
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: true,  // Boolean flag instead of string
+        idl_file_path: None,
         network_selection: "all".to_string(),
     };
     
@@ -146,10 +148,49 @@ fn test_deploy_config_with_boolean_idl_flag() {
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: false,
+        idl_file_path: Some("custom_idl.json".to_string()),  // Test with custom IDL
         network_selection: "mainnet".to_string(),
     };
     
     assert!(!config_false.publish_idl);
+}
+
+#[test]
+fn test_load_custom_idl() {
+    let dir = tempdir().unwrap();
+    
+    // Create a mock Anchor IDL file
+    let idl_path = dir.path().join("test_program.json");
+    let anchor_idl = serde_json::json!({
+        "version": "0.1.0",
+        "name": "test_program",
+        "instructions": [
+            {
+                "name": "initialize",
+                "accounts": [],
+                "args": []
+            }
+        ],
+        "accounts": [],
+        "types": [],
+        "events": [],
+        "errors": []
+    });
+    
+    let mut file = File::create(&idl_path).unwrap();
+    file.write_all(anchor_idl.to_string().as_bytes()).unwrap();
+    
+    // Test loading the IDL
+    use osvm::utils::ebpf_deploy::load_or_create_idl;
+    use solana_sdk::pubkey::Pubkey;
+    
+    let program_id = Pubkey::new_unique();
+    let loaded_idl = load_or_create_idl(Some(idl_path.to_str().unwrap()), program_id).unwrap();
+    
+    // Verify it loaded the custom IDL
+    assert_eq!(loaded_idl["name"], "test_program");
+    assert_eq!(loaded_idl["version"], "0.1.0");
+    assert!(loaded_idl["instructions"].is_array());
 }
 
 #[tokio::test]
@@ -197,6 +238,7 @@ async fn test_network_filter_logic() {
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
+        idl_file_path: None,
         network_selection: "all".to_string(),
     };
 
@@ -219,6 +261,7 @@ async fn test_network_filter_logic() {
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
+        idl_file_path: None,
         network_selection: "devnet".to_string(),
     };
 
@@ -236,6 +279,7 @@ async fn test_network_filter_logic() {
         owner_path: owner_file.to_string_lossy().to_string(),
         fee_payer_path: fee_payer_file.to_string_lossy().to_string(),
         publish_idl: false,
+        idl_file_path: None,
         network_selection: "invalid".to_string(),
     };
 
