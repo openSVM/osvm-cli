@@ -923,6 +923,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .get_one::<String>("network")
                 .map(|s| s.as_str())
                 .unwrap_or("all");
+            let json_output = matches.get_flag("json");
+            let retry_attempts = matches
+                .get_one::<String>("retry-attempts")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3);
+            let confirm_large_binaries = matches.get_flag("confirm-large");
 
             // Create deployment configuration
             let deploy_config = ebpf_deploy::DeployConfig {
@@ -933,6 +939,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 publish_idl,
                 idl_file_path,
                 network_selection: network_str.to_string(),
+                json_output,
+                retry_attempts,
+                confirm_large_binaries,
             };
 
             println!("🚀 OSVM eBPF Deployment Tool");
@@ -946,52 +955,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!();
 
             // Execute deployment
-            let results =
-                ebpf_deploy::deploy_to_all_networks(deploy_config, config.commitment_config).await;
+            let results = ebpf_deploy::deploy_to_all_networks(
+                deploy_config.clone(),
+                config.commitment_config,
+            )
+            .await;
 
-            // Display results
-            println!("\n📋 Deployment Results Summary");
-            println!("==============================");
-            let mut success_count = 0;
-            let mut failure_count = 0;
-
-            for result in results {
-                match result {
-                    Ok(deployment) => {
-                        if deployment.success {
-                            success_count += 1;
-                            println!("✅ {} - Success 🎉", deployment.network.to_uppercase());
-                            println!("   📍 Program ID: {}", deployment.program_id);
-                            if let Some(signature) = deployment.transaction_signature {
-                                println!("   📄 Transaction: {signature}");
-                            }
-                        } else {
-                            failure_count += 1;
-                            println!("❌ {} - Failed ⚠️", deployment.network.to_uppercase());
-                            println!("   📍 Program ID: {}", deployment.program_id);
-                            if let Some(error) = deployment.error_message {
-                                println!("   🚨 Error: {error}");
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        failure_count += 1;
-                        println!("❌ Deployment error: {e}");
-                    }
-                }
-                println!(); // Add spacing between results
+            // Display results using the new display function
+            if let Err(e) =
+                ebpf_deploy::display_deployment_results(&results, deploy_config.json_output)
+            {
+                eprintln!("Error displaying results: {}", e);
             }
 
-            println!(
-                "📊 Final Summary: {} successful ✅, {} failed ❌",
-                success_count, failure_count
-            );
+            // Determine exit status
+            let failure_count = results
+                .iter()
+                .filter(|r| r.as_ref().map_or(true, |d| !d.success))
+                .count();
 
             if failure_count > 0 {
-                println!("💡 Tip: Check error messages above for troubleshooting guidance");
                 return Err("Some deployments failed".into());
-            } else {
-                println!("🎉 All deployments completed successfully!");
             }
         }
         "new_feature_command" => {

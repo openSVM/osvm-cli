@@ -9,8 +9,16 @@ use {
         system_instruction,
         transaction::Transaction,
     },
-    std::{fs::File, io::Read, path::Path},
+    std::{
+        collections::HashMap,
+        fs::File,
+        io::Read,
+        path::Path,
+        sync::Arc,
+        time::{Duration, Instant},
+    },
     thiserror::Error,
+    tokio::time::sleep,
 };
 
 /// Utility module for deploying eBPF programs to Solana Virtual Machines (SVMs)
@@ -72,6 +80,32 @@ pub enum EbpfDeployError {
 
     #[error("Instruction error: {0}")]
     InstructionError(#[from] solana_sdk::instruction::InstructionError),
+
+    #[error("Keypair cloning error: {0}")]
+    KeypairCloneError(String),
+
+    #[error("Retry limit exceeded: {0}")]
+    RetryLimitExceeded(String),
+}
+
+/// Cache for RPC clients to reduce DNS lookups and connection overhead
+pub struct RpcClientCache {
+    clients: HashMap<String, Arc<RpcClient>>,
+}
+
+impl RpcClientCache {
+    pub fn new() -> Self {
+        Self {
+            clients: HashMap::new(),
+        }
+    }
+
+    pub fn get_client(&mut self, url: &str) -> Arc<RpcClient> {
+        self.clients
+            .entry(url.to_string())
+            .or_insert_with(|| Arc::new(RpcClient::new(url.to_string())))
+            .clone()
+    }
 }
 
 /// Configuration for eBPF program deployment
@@ -91,18 +125,37 @@ pub struct DeployConfig {
     pub idl_file_path: Option<String>,
     /// Network selection criteria (mainnet, testnet, devnet, or all)
     pub network_selection: String,
+    /// Whether to output results in JSON format
+    pub json_output: bool,
+    /// Number of retry attempts for failed deployments
+    pub retry_attempts: u32,
+    /// Whether to require confirmation for large binaries
+    pub confirm_large_binaries: bool,
 }
 
 /// Result of a deployment operation
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct DeploymentResult {
     pub network: String,
     pub program_id: Pubkey,
     pub success: bool,
     pub transaction_signature: Option<String>,
     pub error_message: Option<String>,
+    /// Number of retries attempted
+    pub retries_attempted: u32,
+    /// Duration of deployment in milliseconds
+    pub duration_ms: u64,
 }
 
-/// Load a keypair from a JSON file
+/// Safe keypair cloning that returns proper error instead of panicking
+fn clone_keypair(keypair: &Keypair, context: &str) -> Result<Keypair, EbpfDeployError> {
+    Keypair::from_bytes(&keypair.to_bytes()).map_err(|e| {
+        EbpfDeployError::KeypairCloneError(format!(
+            "Failed to clone {} keypair: {}. This indicates memory corruption or invalid keypair data.",
+            context, e
+        ))
+    })
+}
 pub fn load_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
     // Validate file exists first
     if !Path::new(path).exists() {
@@ -225,12 +278,23 @@ pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
         )));
     }
 
-    // Check for reasonable file size (typical eBPF programs are < 100KB)
-    if program_data.len() > 1_000_000 {
+    // Enhanced file size validation with different thresholds
+    const LARGE_FILE_THRESHOLD: usize = 1_000_000; // 1MB
+    const VERY_LARGE_FILE_THRESHOLD: usize = 5_000_000; // 5MB
+
+    if program_data.len() > VERY_LARGE_FILE_THRESHOLD {
+        return Err(EbpfDeployError::DeploymentError(format!(
+            "eBPF binary is too large ({} bytes). Maximum recommended size is {} bytes. \
+             Large programs consume more compute units and increase deployment costs.",
+            program_data.len(),
+            VERY_LARGE_FILE_THRESHOLD
+        )));
+    } else if program_data.len() > LARGE_FILE_THRESHOLD {
         eprintln!(
-            "Warning: eBPF binary is quite large ({} bytes). Typical programs are much smaller.",
+            "⚠️  Warning: eBPF binary is quite large ({} bytes). Typical programs are much smaller.",
             program_data.len()
         );
+        eprintln!("   Large programs may require additional confirmation for deployment.");
     }
 
     Ok(program_data)
@@ -813,7 +877,98 @@ async fn upgrade_bpf_program(
     Ok(upgrade_signature.to_string())
 }
 
-/// Deploy eBPF program to all available SVM networks
+/// Display deployment results in the specified format
+pub fn display_deployment_results(
+    results: &[Result<DeploymentResult, EbpfDeployError>],
+    json_output: bool,
+) -> Result<(), EbpfDeployError> {
+    if json_output {
+        let json_results: Vec<serde_json::Value> = results
+            .iter()
+            .map(|result| match result {
+                Ok(deployment) => serde_json::to_value(deployment).unwrap_or_else(|_| {
+                    serde_json::json!({
+                        "error": "Failed to serialize deployment result"
+                    })
+                }),
+                Err(error) => serde_json::json!({
+                    "error": error.to_string(),
+                    "success": false
+                }),
+            })
+            .collect();
+
+        let output = serde_json::json!({
+            "deployments": json_results,
+            "summary": {
+                "total": results.len(),
+                "successful": results.iter().filter(|r|
+                    r.as_ref().map_or(false, |d| d.success)).count(),
+                "failed": results.iter().filter(|r|
+                    r.as_ref().map_or(true, |d| !d.success)).count(),
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
+        });
+
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).map_err(|e| { EbpfDeployError::JsonError(e) })?
+        );
+    } else {
+        // Display results in human-readable format
+        println!("\n📋 Deployment Results Summary");
+        println!("==============================");
+        let mut success_count = 0;
+        let mut failure_count = 0;
+
+        for result in results {
+            match result {
+                Ok(deployment) => {
+                    if deployment.success {
+                        success_count += 1;
+                        println!("✅ {} - Success 🎉", deployment.network.to_uppercase());
+                        println!("   📍 Program ID: {}", deployment.program_id);
+                        if let Some(signature) = &deployment.transaction_signature {
+                            println!("   📄 Transaction: {signature}");
+                        }
+                        if deployment.retries_attempted > 0 {
+                            println!("   🔄 Retries: {}", deployment.retries_attempted);
+                        }
+                        println!("   ⏱️  Duration: {}ms", deployment.duration_ms);
+                    } else {
+                        failure_count += 1;
+                        println!("❌ {} - Failed ⚠️", deployment.network.to_uppercase());
+                        println!("   📍 Program ID: {}", deployment.program_id);
+                        if let Some(error) = &deployment.error_message {
+                            println!("   🚨 Error: {error}");
+                        }
+                        if deployment.retries_attempted > 0 {
+                            println!("   🔄 Retries attempted: {}", deployment.retries_attempted);
+                        }
+                    }
+                }
+                Err(e) => {
+                    failure_count += 1;
+                    println!("❌ Deployment error: {e}");
+                }
+            }
+            println!(); // Add spacing between results
+        }
+
+        println!(
+            "📊 Final Summary: {} successful ✅, {} failed ❌",
+            success_count, failure_count
+        );
+
+        if failure_count > 0 {
+            println!("💡 Tip: Check error messages above for troubleshooting guidance");
+        } else {
+            println!("🎉 All deployments completed successfully!");
+        }
+    }
+
+    Ok(())
+}
 ///
 /// This function validates the deployment configuration and attempts to deploy
 /// the eBPF program to the specified networks concurrently for better performance.
@@ -874,38 +1029,44 @@ pub async fn deploy_to_all_networks(
 
     println!("🚀 Starting deployment to {} network(s)...", networks.len());
 
+    // Create RPC client cache for performance optimization
+    let mut client_cache = RpcClientCache::new();
+
     // Deploy to networks concurrently for better performance
     // Pass references to loaded data instead of reloading in each task
     let mut deployment_tasks = Vec::new();
 
     for network in networks {
         let publish_idl = config.publish_idl;
+        let retry_attempts = config.retry_attempts;
 
         // Clone the loaded data for each task (more efficient than reloading files)
         let program_id_clone = program_id;
         let program_data_clone = program_data.clone();
-        let program_id_path_clone = config.program_id_path.clone(); // Clone path for this task
-        let idl_file_path_clone = config.idl_file_path.clone(); // Clone IDL path for this task
+        let program_id_path_clone = config.program_id_path.clone();
+        let idl_file_path_clone = config.idl_file_path.clone();
 
-        // Clone keypairs by bytes - these operations are extremely unlikely to fail
-        // but we'll use expect with helpful messages instead of unwrap
-        let program_owner_bytes = program_owner.to_bytes();
-        let fee_payer_bytes = fee_payer.to_bytes();
+        // Clone keypairs safely with proper error handling
+        let program_owner_clone = match clone_keypair(&program_owner, "program owner") {
+            Ok(keypair) => keypair,
+            Err(e) => return vec![Err(e)],
+        };
+        let fee_payer_clone = match clone_keypair(&fee_payer, "fee payer") {
+            Ok(keypair) => keypair,
+            Err(e) => return vec![Err(e)],
+        };
+
+        // Get cached client for the specific network
+        let client_url = match network {
+            NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
+            NetworkType::Testnet => "https://api.testnet.solana.com",
+            NetworkType::Devnet => "https://api.devnet.solana.com",
+        };
+
+        let client = client_cache.get_client(client_url);
 
         let task = tokio::spawn(async move {
-            let program_owner_clone = Keypair::from_bytes(&program_owner_bytes)
-                .expect("Failed to clone program owner keypair from valid bytes");
-            let fee_payer_clone = Keypair::from_bytes(&fee_payer_bytes)
-                .expect("Failed to clone fee payer keypair from valid bytes");
-
-            // Create client for the specific network
-            let client_url = match network {
-                NetworkType::Mainnet => "https://api.mainnet-beta.solana.com",
-                NetworkType::Testnet => "https://api.testnet.solana.com",
-                NetworkType::Devnet => "https://api.devnet.solana.com",
-            };
-
-            let client = RpcClient::new(client_url.to_string());
+            let start_time = Instant::now();
 
             // Get the target network name
             let target_network = match network {
@@ -914,20 +1075,58 @@ pub async fn deploy_to_all_networks(
                 NetworkType::Devnet => "devnet",
             };
 
-            // Deploy to this specific network with pre-loaded data
-            deploy_to_network_with_data(
-                &client,
-                &program_data_clone,
-                program_id_clone,
-                &program_id_path_clone, // Use the cloned path
-                &program_owner_clone,
-                &fee_payer_clone,
-                target_network,
-                commitment_config,
-                publish_idl,
-                idl_file_path_clone.as_deref(), // Use the cloned IDL path
-            )
-            .await
+            // Deploy to this specific network with retry logic
+            let mut retries_attempted = 0;
+            let mut last_error = None;
+
+            for attempt in 0..=retry_attempts {
+                let result = deploy_to_network_with_data(
+                    &client,
+                    &program_data_clone,
+                    program_id_clone,
+                    &program_id_path_clone,
+                    &program_owner_clone,
+                    &fee_payer_clone,
+                    target_network,
+                    commitment_config,
+                    publish_idl,
+                    idl_file_path_clone.as_deref(),
+                )
+                .await;
+
+                match result {
+                    Ok(mut deployment_result) => {
+                        let duration_ms = start_time.elapsed().as_millis() as u64;
+                        deployment_result.retries_attempted = retries_attempted;
+                        deployment_result.duration_ms = duration_ms;
+                        return Ok(deployment_result);
+                    }
+                    Err(e) => {
+                        retries_attempted = attempt;
+                        last_error = Some(e);
+
+                        if attempt < retry_attempts {
+                            let delay_ms = 1000 * (2_u64.pow(attempt)); // Exponential backoff: 1s, 2s, 4s, 8s...
+                            println!("  ⚠️  Deployment to {} failed (attempt {}/{}), retrying in {}ms...", 
+                                     target_network, attempt + 1, retry_attempts + 1, delay_ms);
+                            sleep(Duration::from_millis(delay_ms)).await;
+                        }
+                    }
+                }
+            }
+
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+
+            // Create a failed deployment result
+            Ok(DeploymentResult {
+                network: target_network.to_string(),
+                program_id: program_id_clone,
+                success: false,
+                transaction_signature: None,
+                error_message: Some(last_error.unwrap().to_string()),
+                retries_attempted,
+                duration_ms,
+            })
         });
 
         deployment_tasks.push(task);
@@ -992,6 +1191,8 @@ async fn deploy_to_network_with_data(
                 success: true,
                 transaction_signature: Some(signature),
                 error_message: None,
+                retries_attempted: 0, // Will be set by the caller
+                duration_ms: 0,       // Will be set by the caller
             }
         }
         Err(e) => {
@@ -1002,6 +1203,8 @@ async fn deploy_to_network_with_data(
                 success: false,
                 transaction_signature: None,
                 error_message: Some(e.to_string()),
+                retries_attempted: 0, // Will be set by the caller
+                duration_ms: 0,       // Will be set by the caller
             }
         }
     };

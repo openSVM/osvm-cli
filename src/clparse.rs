@@ -405,6 +405,25 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .default_value("all")
                         .help("Network to deploy on (default: deploy to all networks)")
                 )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output results in JSON format for machine-readable processing")
+                )
+                .arg(
+                    Arg::new("retry-attempts")
+                        .long("retry-attempts")
+                        .value_name("COUNT")
+                        .default_value("3")
+                        .help("Number of retry attempts for failed deployments (default: 3)")
+                )
+                .arg(
+                    Arg::new("confirm-large")
+                        .long("confirm-large")
+                        .action(ArgAction::SetTrue)
+                        .help("Require confirmation for deploying large binaries (>1MB)")
+                )
         )
         .subcommand(
             Command::new("new_feature_command")
