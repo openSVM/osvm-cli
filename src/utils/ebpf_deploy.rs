@@ -242,11 +242,11 @@ async fn deploy_bpf_program(
     fee_payer: &Keypair,
     program_owner: &Keypair,
     program_id: Pubkey,
-    program_id_path: &str,  // Added to load keypair for new deployments
+    program_id_path: &str, // Added to load keypair for new deployments
     program_data: &[u8],
     commitment_config: CommitmentConfig,
     publish_idl: bool,
-    idl_file_path: Option<&str>,  // Added for IDL file support
+    idl_file_path: Option<&str>, // Added for IDL file support
 ) -> Result<String, EbpfDeployError> {
     // Check client connection
     match client.get_version() {
@@ -282,13 +282,20 @@ async fn deploy_bpf_program(
 
         if publish_idl {
             // Implement actual IDL publishing for upgrades
-            publish_program_idl(client, fee_payer, program_id, idl_file_path, commitment_config).await?;
+            publish_program_idl(
+                client,
+                fee_payer,
+                program_id,
+                idl_file_path,
+                commitment_config,
+            )
+            .await?;
         }
 
         Ok(upgrade_result)
     } else {
         println!("  • New program deployment");
-        
+
         // For new deployments, validate that program_id_path contains a keypair
         println!("  • Validating program keypair for new deployment...");
         let program_keypair = match load_program_keypair(program_id_path) {
@@ -296,7 +303,8 @@ async fn deploy_bpf_program(
                 if keypair.pubkey() != program_id {
                     return Err(EbpfDeployError::DeploymentError(format!(
                         "Program keypair pubkey ({}) does not match expected program ID ({})",
-                        keypair.pubkey(), program_id
+                        keypair.pubkey(),
+                        program_id
                     )));
                 }
                 keypair
@@ -316,7 +324,7 @@ async fn deploy_bpf_program(
             client,
             fee_payer,
             program_owner,
-            &program_keypair,  // Pass the keypair instead of pubkey
+            &program_keypair, // Pass the keypair instead of pubkey
             program_data,
             commitment_config,
         )
@@ -324,7 +332,14 @@ async fn deploy_bpf_program(
 
         if publish_idl {
             // Implement actual IDL publishing for new deployments
-            publish_program_idl(client, fee_payer, program_keypair.pubkey(), idl_file_path, commitment_config).await?;
+            publish_program_idl(
+                client,
+                fee_payer,
+                program_keypair.pubkey(),
+                idl_file_path,
+                commitment_config,
+            )
+            .await?;
         }
 
         Ok(deploy_result)
@@ -379,7 +394,10 @@ async fn calculate_dynamic_fees(
 }
 
 /// Load IDL from a JSON file or create a default one
-pub fn load_or_create_idl(idl_file_path: Option<&str>, program_id: Pubkey) -> Result<serde_json::Value, EbpfDeployError> {
+pub fn load_or_create_idl(
+    idl_file_path: Option<&str>,
+    program_id: Pubkey,
+) -> Result<serde_json::Value, EbpfDeployError> {
     if let Some(idl_path) = idl_file_path {
         // Try to load from the provided IDL file
         if !Path::new(idl_path).exists() {
@@ -394,13 +412,13 @@ pub fn load_or_create_idl(idl_file_path: Option<&str>, program_id: Pubkey) -> Re
         file.read_to_string(&mut contents)?;
 
         // Parse the IDL JSON and validate it's a proper Anchor IDL
-        let idl: serde_json::Value = serde_json::from_str(&contents)
-            .map_err(|e| EbpfDeployError::JsonError(e))?;
+        let idl: serde_json::Value =
+            serde_json::from_str(&contents).map_err(|e| EbpfDeployError::JsonError(e))?;
 
         // Basic validation that it looks like an Anchor IDL
         if !idl.is_object() {
             return Err(EbpfDeployError::DeploymentError(
-                "IDL file must contain a JSON object".to_string()
+                "IDL file must contain a JSON object".to_string(),
             ));
         }
 
@@ -508,7 +526,7 @@ async fn deploy_new_bpf_program(
     client: &RpcClient,
     fee_payer: &Keypair,
     program_owner: &Keypair,
-    program_keypair: &Keypair,  // Changed from Pubkey to &Keypair for new deployments
+    program_keypair: &Keypair, // Changed from Pubkey to &Keypair for new deployments
     program_data: &[u8],
     commitment_config: CommitmentConfig,
 ) -> Result<String, EbpfDeployError> {
@@ -639,13 +657,20 @@ async fn deploy_new_bpf_program(
     let deploy_message = Message::new(&deploy_instructions, Some(&fee_payer.pubkey()));
 
     // Program keypair must sign the transaction for new program deployment
-    let deploy_tx = Transaction::new(&[fee_payer, program_keypair], deploy_message, recent_blockhash);
+    let deploy_tx = Transaction::new(
+        &[fee_payer, program_keypair],
+        deploy_message,
+        recent_blockhash,
+    );
 
     let deploy_signature = client
         .send_and_confirm_transaction_with_spinner_and_commitment(&deploy_tx, commitment_config)?;
 
     println!("    ✓ Program deployment finalized: {}", deploy_signature);
-    println!("  • Program is now executable at: {}", program_keypair.pubkey());
+    println!(
+        "  • Program is now executable at: {}",
+        program_keypair.pubkey()
+    );
 
     Ok(deploy_signature.to_string())
 }
@@ -859,8 +884,8 @@ pub async fn deploy_to_all_networks(
         // Clone the loaded data for each task (more efficient than reloading files)
         let program_id_clone = program_id;
         let program_data_clone = program_data.clone();
-        let program_id_path_clone = config.program_id_path.clone();  // Clone path for this task
-        let idl_file_path_clone = config.idl_file_path.clone();  // Clone IDL path for this task
+        let program_id_path_clone = config.program_id_path.clone(); // Clone path for this task
+        let idl_file_path_clone = config.idl_file_path.clone(); // Clone IDL path for this task
 
         // Clone keypairs by bytes - these operations are extremely unlikely to fail
         // but we'll use expect with helpful messages instead of unwrap
@@ -894,13 +919,13 @@ pub async fn deploy_to_all_networks(
                 &client,
                 &program_data_clone,
                 program_id_clone,
-                &program_id_path_clone,  // Use the cloned path
+                &program_id_path_clone, // Use the cloned path
                 &program_owner_clone,
                 &fee_payer_clone,
                 target_network,
                 commitment_config,
                 publish_idl,
-                idl_file_path_clone.as_deref(),  // Use the cloned IDL path
+                idl_file_path_clone.as_deref(), // Use the cloned IDL path
             )
             .await
         });
@@ -928,13 +953,13 @@ async fn deploy_to_network_with_data(
     client: &RpcClient,
     program_data: &[u8],
     program_id: Pubkey,
-    program_id_path: &str,  // Added to support keypair validation for new deployments
+    program_id_path: &str, // Added to support keypair validation for new deployments
     program_owner: &Keypair,
     fee_payer: &Keypair,
     target_network: &str,
     commitment_config: CommitmentConfig,
     publish_idl: bool,
-    idl_file_path: Option<&str>,  // Added for IDL file support
+    idl_file_path: Option<&str>, // Added for IDL file support
 ) -> Result<DeploymentResult, EbpfDeployError> {
     println!("\n📡 Deploying to {} network...", target_network);
     println!("  • Program ID: {}", program_id);

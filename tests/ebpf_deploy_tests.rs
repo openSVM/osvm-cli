@@ -1,5 +1,5 @@
 use osvm::utils::ebpf_deploy::{
-    deploy_to_all_networks, load_program, load_program_id, load_program_keypair, 
+    deploy_to_all_networks, load_program, load_program_id, load_program_keypair,
     validate_program_id_for_new_deployment, DeployConfig,
 };
 use solana_sdk::{commitment_config::CommitmentConfig, signature::Signer};
@@ -49,7 +49,7 @@ fn test_create_deploy_config() {
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: true,
-        idl_file_path: None,  // No custom IDL file
+        idl_file_path: None, // No custom IDL file
         network_selection: "devnet".to_string(),
     };
 
@@ -69,16 +69,16 @@ fn test_create_deploy_config() {
 #[test]
 fn test_load_program_keypair() {
     let dir = tempdir().unwrap();
-    
+
     // Test with a valid keypair file
     let keypair_path = dir.path().join("program_keypair.json");
     let keypair = solana_sdk::signature::Keypair::new();
     let keypair_bytes = keypair.to_bytes();
     let keypair_json = serde_json::to_string(&keypair_bytes.to_vec()).unwrap();
-    
+
     let mut file = File::create(&keypair_path).unwrap();
     file.write_all(keypair_json.as_bytes()).unwrap();
-    
+
     // Test loading the keypair
     let loaded_keypair = load_program_keypair(keypair_path.to_str().unwrap()).unwrap();
     assert_eq!(loaded_keypair.pubkey(), keypair.pubkey());
@@ -87,14 +87,14 @@ fn test_load_program_keypair() {
 #[test]
 fn test_load_program_keypair_fails_on_pubkey_only() {
     let dir = tempdir().unwrap();
-    
+
     // Test with a pubkey-only file
     let pubkey_path = dir.path().join("pubkey_only.json");
     let pubkey_content = r#"{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}"#;
-    
+
     let mut file = File::create(&pubkey_path).unwrap();
     file.write_all(pubkey_content.as_bytes()).unwrap();
-    
+
     // This should fail because it's not a keypair
     let result = load_program_keypair(pubkey_path.to_str().unwrap());
     assert!(result.is_err());
@@ -103,31 +103,31 @@ fn test_load_program_keypair_fails_on_pubkey_only() {
 #[test]
 fn test_validate_program_id_for_new_deployment() {
     let dir = tempdir().unwrap();
-    
+
     // Test with valid keypair file - should succeed
     let keypair_path = dir.path().join("valid_keypair.json");
     let keypair = solana_sdk::signature::Keypair::new();
     let keypair_bytes = keypair.to_bytes();
     let keypair_json = serde_json::to_string(&keypair_bytes.to_vec()).unwrap();
-    
+
     let mut file = File::create(&keypair_path).unwrap();
     file.write_all(keypair_json.as_bytes()).unwrap();
-    
+
     let result = validate_program_id_for_new_deployment(keypair_path.to_str().unwrap());
     assert!(result.is_ok());
-    
+
     // Test with pubkey-only file - should fail
     let pubkey_path = dir.path().join("pubkey_only.json");
     let pubkey_content = r#"{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}"#;
-    
+
     let mut file = File::create(&pubkey_path).unwrap();
     file.write_all(pubkey_content.as_bytes()).unwrap();
-    
+
     let result = validate_program_id_for_new_deployment(pubkey_path.to_str().unwrap());
     assert!(result.is_err());
 }
 
-#[test] 
+#[test]
 fn test_deploy_config_with_boolean_idl_flag() {
     // Test that DeployConfig properly handles boolean IDL flag
     let config = DeployConfig {
@@ -135,30 +135,30 @@ fn test_deploy_config_with_boolean_idl_flag() {
         program_id_path: "path/to/program_id.json".to_string(),
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
-        publish_idl: true,  // Boolean flag instead of string
+        publish_idl: true, // Boolean flag instead of string
         idl_file_path: None,
         network_selection: "all".to_string(),
     };
-    
+
     assert!(config.publish_idl);
-    
+
     let config_false = DeployConfig {
         binary_path: "path/to/binary.so".to_string(),
         program_id_path: "path/to/program_id.json".to_string(),
         owner_path: "path/to/owner.json".to_string(),
         fee_payer_path: "path/to/fee_payer.json".to_string(),
         publish_idl: false,
-        idl_file_path: Some("custom_idl.json".to_string()),  // Test with custom IDL
+        idl_file_path: Some("custom_idl.json".to_string()), // Test with custom IDL
         network_selection: "mainnet".to_string(),
     };
-    
+
     assert!(!config_false.publish_idl);
 }
 
 #[test]
 fn test_load_custom_idl() {
     let dir = tempdir().unwrap();
-    
+
     // Create a mock Anchor IDL file
     let idl_path = dir.path().join("test_program.json");
     let anchor_idl = serde_json::json!({
@@ -176,17 +176,17 @@ fn test_load_custom_idl() {
         "events": [],
         "errors": []
     });
-    
+
     let mut file = File::create(&idl_path).unwrap();
     file.write_all(anchor_idl.to_string().as_bytes()).unwrap();
-    
+
     // Test loading the IDL
     use osvm::utils::ebpf_deploy::load_or_create_idl;
     use solana_sdk::pubkey::Pubkey;
-    
+
     let program_id = Pubkey::new_unique();
     let loaded_idl = load_or_create_idl(Some(idl_path.to_str().unwrap()), program_id).unwrap();
-    
+
     // Verify it loaded the custom IDL
     assert_eq!(loaded_idl["name"], "test_program");
     assert_eq!(loaded_idl["version"], "0.1.0");
