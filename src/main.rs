@@ -30,25 +30,6 @@ struct Config {
     no_color: bool,
 }
 
-// Wrapper type for webpki::Error to implement traits
-#[derive(Debug)]
-struct WebPkiError(webpki::Error);
-
-impl std::fmt::Display for WebPkiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "WebPkiError: {:?}", self.0)
-    }
-}
-
-impl std::error::Error for WebPkiError {}
-
-// Convert from webpki::Error to WebPkiError
-impl From<webpki::Error> for WebPkiError {
-    fn from(error: webpki::Error) -> Self {
-        WebPkiError(error)
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();

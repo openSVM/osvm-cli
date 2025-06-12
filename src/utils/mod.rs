@@ -28,8 +28,6 @@ pub mod ssh_deploy;
 pub mod svm_info;
 
 // External dependency wrappers
-/// Wrapper for webpki::Error to implement std::error::Error trait
-pub mod webpki_error;
 
 /// Loads a YAML configuration file and deserializes it into the specified type
 ///
