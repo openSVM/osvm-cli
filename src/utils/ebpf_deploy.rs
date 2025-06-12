@@ -161,6 +161,32 @@ pub fn load_program_id(path: &str) -> Result<Pubkey, EbpfDeployError> {
     })
 }
 
+/// Load program keypair from a JSON file - used for new program deployment
+/// This function specifically requires a keypair file, not just a pubkey
+pub fn load_program_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
+    // Validate file exists first
+    if !Path::new(path).exists() {
+        return Err(EbpfDeployError::IoError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Program keypair file not found: {}", path),
+        )));
+    }
+
+    let mut file = File::open(path)?;
+    solana_sdk::signature::read_keypair(&mut file).map_err(|e| {
+        EbpfDeployError::DeploymentError(format!(
+            "Failed to read program keypair from {}: {}. For new program deployment, the program-id path must contain a keypair file, not just a pubkey.",
+            path, e
+        ))
+    })
+}
+
+/// Validate that program_id_path contains a keypair for new program deployment
+pub fn validate_program_id_for_new_deployment(path: &str) -> Result<(), EbpfDeployError> {
+    // Try to load as a keypair - this will fail if it's just a pubkey
+    load_program_keypair(path).map(|_| ())
+}
+
 /// Load eBPF program binary from file
 pub fn load_program(path: &str) -> Result<Vec<u8>, EbpfDeployError> {
     let path = Path::new(path);
@@ -214,6 +240,7 @@ async fn deploy_bpf_program(
     fee_payer: &Keypair,
     program_owner: &Keypair,
     program_id: Pubkey,
+    program_id_path: &str,  // Added to load keypair for new deployments
     program_data: &[u8],
     commitment_config: CommitmentConfig,
     publish_idl: bool,
@@ -258,13 +285,35 @@ async fn deploy_bpf_program(
         Ok(upgrade_result)
     } else {
         println!("  • New program deployment");
+        
+        // For new deployments, validate that program_id_path contains a keypair
+        println!("  • Validating program keypair for new deployment...");
+        let program_keypair = match load_program_keypair(program_id_path) {
+            Ok(keypair) => {
+                if keypair.pubkey() != program_id {
+                    return Err(EbpfDeployError::DeploymentError(format!(
+                        "Program keypair pubkey ({}) does not match expected program ID ({})",
+                        keypair.pubkey(), program_id
+                    )));
+                }
+                keypair
+            }
+            Err(_) => {
+                return Err(EbpfDeployError::DeploymentError(format!(
+                    "New program deployment requires a program keypair file at {}. \
+                     The file must contain a keypair (private key), not just a public key. \
+                     Use 'solana-keygen new -o {}' to generate a new program keypair.",
+                    program_id_path, program_id_path
+                )));
+            }
+        };
 
         // For new deployments, use the BPF loader upgradeable to deploy the program
         let deploy_result = deploy_new_bpf_program(
             client,
             fee_payer,
             program_owner,
-            program_id,
+            &program_keypair,  // Pass the keypair instead of pubkey
             program_data,
             commitment_config,
         )
@@ -421,7 +470,7 @@ async fn deploy_new_bpf_program(
     client: &RpcClient,
     fee_payer: &Keypair,
     program_owner: &Keypair,
-    program_id: Pubkey,
+    program_keypair: &Keypair,  // Changed from Pubkey to &Keypair for new deployments
     program_data: &[u8],
     commitment_config: CommitmentConfig,
 ) -> Result<String, EbpfDeployError> {
@@ -541,7 +590,7 @@ async fn deploy_new_bpf_program(
 
     let deploy_instructions = bpf_loader_upgradeable::deploy_with_max_program_len(
         &fee_payer.pubkey(),
-        &program_id,
+        &program_keypair.pubkey(),
         &buffer_keypair.pubkey(),
         &program_owner.pubkey(),
         program_rent,
@@ -551,16 +600,14 @@ async fn deploy_new_bpf_program(
     let recent_blockhash = client.get_latest_blockhash()?;
     let deploy_message = Message::new(&deploy_instructions, Some(&fee_payer.pubkey()));
 
-    // Note: For this to work with a specific program_id, the program_id must be a keypair
-    // that can sign the transaction. In practice, this means the program_id_path should
-    // contain a keypair, not just a public key.
-    let deploy_tx = Transaction::new(&[fee_payer], deploy_message, recent_blockhash);
+    // Program keypair must sign the transaction for new program deployment
+    let deploy_tx = Transaction::new(&[fee_payer, program_keypair], deploy_message, recent_blockhash);
 
     let deploy_signature = client
         .send_and_confirm_transaction_with_spinner_and_commitment(&deploy_tx, commitment_config)?;
 
     println!("    ✓ Program deployment finalized: {}", deploy_signature);
-    println!("  • Program is now executable at: {}", program_id);
+    println!("  • Program is now executable at: {}", program_keypair.pubkey());
 
     Ok(deploy_signature.to_string())
 }
@@ -774,6 +821,7 @@ pub async fn deploy_to_all_networks(
         // Clone the loaded data for each task (more efficient than reloading files)
         let program_id_clone = program_id;
         let program_data_clone = program_data.clone();
+        let program_id_path_clone = config.program_id_path.clone();  // Clone path for this task
 
         // Clone keypairs by bytes - these operations are extremely unlikely to fail
         // but we'll use expect with helpful messages instead of unwrap
@@ -807,6 +855,7 @@ pub async fn deploy_to_all_networks(
                 &client,
                 &program_data_clone,
                 program_id_clone,
+                &program_id_path_clone,  // Use the cloned path
                 &program_owner_clone,
                 &fee_payer_clone,
                 target_network,
@@ -839,6 +888,7 @@ async fn deploy_to_network_with_data(
     client: &RpcClient,
     program_data: &[u8],
     program_id: Pubkey,
+    program_id_path: &str,  // Added to support keypair validation for new deployments
     program_owner: &Keypair,
     fee_payer: &Keypair,
     target_network: &str,
@@ -860,6 +910,7 @@ async fn deploy_to_network_with_data(
         fee_payer,
         program_owner,
         program_id,
+        program_id_path,
         program_data,
         commitment_config,
         publish_idl,

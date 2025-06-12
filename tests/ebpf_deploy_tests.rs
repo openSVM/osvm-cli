@@ -1,7 +1,8 @@
 use osvm::utils::ebpf_deploy::{
-    deploy_to_all_networks, load_program, load_program_id, DeployConfig,
+    deploy_to_all_networks, load_program, load_program_id, load_program_keypair, 
+    validate_program_id_for_new_deployment, DeployConfig,
 };
-use solana_sdk::commitment_config::CommitmentConfig;
+use solana_sdk::{commitment_config::CommitmentConfig, signature::Signer};
 use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
@@ -62,6 +63,93 @@ fn test_create_deploy_config() {
     // Clone the config and verify the clone
     let config_clone = config.clone();
     assert_eq!(config_clone.binary_path, config.binary_path);
+}
+
+#[test]
+fn test_load_program_keypair() {
+    let dir = tempdir().unwrap();
+    
+    // Test with a valid keypair file
+    let keypair_path = dir.path().join("program_keypair.json");
+    let keypair = solana_sdk::signature::Keypair::new();
+    let keypair_bytes = keypair.to_bytes();
+    let keypair_json = serde_json::to_string(&keypair_bytes.to_vec()).unwrap();
+    
+    let mut file = File::create(&keypair_path).unwrap();
+    file.write_all(keypair_json.as_bytes()).unwrap();
+    
+    // Test loading the keypair
+    let loaded_keypair = load_program_keypair(keypair_path.to_str().unwrap()).unwrap();
+    assert_eq!(loaded_keypair.pubkey(), keypair.pubkey());
+}
+
+#[test]
+fn test_load_program_keypair_fails_on_pubkey_only() {
+    let dir = tempdir().unwrap();
+    
+    // Test with a pubkey-only file
+    let pubkey_path = dir.path().join("pubkey_only.json");
+    let pubkey_content = r#"{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}"#;
+    
+    let mut file = File::create(&pubkey_path).unwrap();
+    file.write_all(pubkey_content.as_bytes()).unwrap();
+    
+    // This should fail because it's not a keypair
+    let result = load_program_keypair(pubkey_path.to_str().unwrap());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_validate_program_id_for_new_deployment() {
+    let dir = tempdir().unwrap();
+    
+    // Test with valid keypair file - should succeed
+    let keypair_path = dir.path().join("valid_keypair.json");
+    let keypair = solana_sdk::signature::Keypair::new();
+    let keypair_bytes = keypair.to_bytes();
+    let keypair_json = serde_json::to_string(&keypair_bytes.to_vec()).unwrap();
+    
+    let mut file = File::create(&keypair_path).unwrap();
+    file.write_all(keypair_json.as_bytes()).unwrap();
+    
+    let result = validate_program_id_for_new_deployment(keypair_path.to_str().unwrap());
+    assert!(result.is_ok());
+    
+    // Test with pubkey-only file - should fail
+    let pubkey_path = dir.path().join("pubkey_only.json");
+    let pubkey_content = r#"{"programId": "HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS"}"#;
+    
+    let mut file = File::create(&pubkey_path).unwrap();
+    file.write_all(pubkey_content.as_bytes()).unwrap();
+    
+    let result = validate_program_id_for_new_deployment(pubkey_path.to_str().unwrap());
+    assert!(result.is_err());
+}
+
+#[test] 
+fn test_deploy_config_with_boolean_idl_flag() {
+    // Test that DeployConfig properly handles boolean IDL flag
+    let config = DeployConfig {
+        binary_path: "path/to/binary.so".to_string(),
+        program_id_path: "path/to/program_id.json".to_string(),
+        owner_path: "path/to/owner.json".to_string(),
+        fee_payer_path: "path/to/fee_payer.json".to_string(),
+        publish_idl: true,  // Boolean flag instead of string
+        network_selection: "all".to_string(),
+    };
+    
+    assert!(config.publish_idl);
+    
+    let config_false = DeployConfig {
+        binary_path: "path/to/binary.so".to_string(),
+        program_id_path: "path/to/program_id.json".to_string(),
+        owner_path: "path/to/owner.json".to_string(),
+        fee_payer_path: "path/to/fee_payer.json".to_string(),
+        publish_idl: false,
+        network_selection: "mainnet".to_string(),
+    };
+    
+    assert!(!config_false.publish_idl);
 }
 
 #[tokio::test]
