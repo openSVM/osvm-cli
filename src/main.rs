@@ -918,10 +918,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.as_str())
                 .unwrap();
             let publish_idl = matches
-                .get_one::<String>("publish-idl")
-                .map(|s| s.as_str())
-                .map(|s| s == "yes")
-                .unwrap_or(false);
+                .get_flag("publish-idl");
             let network_str = matches
                 .get_one::<String>("network")
                 .map(|s| s.as_str())
