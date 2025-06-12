@@ -1,0 +1,26 @@
+[package]
+name = "crunchy"
+version = "0.2.3"
+authors = ["Eira Fransham <eira@dali99.co.uk>"]
+license = "MIT"
+description = "Crunchy unroller: deterministically unroll constant loops (fixed for cross-compilation)"
+repository = "https://github.com/eira-fransham/crunchy"
+documentation = "https://docs.rs/crunchy"
+keywords = ["unroll", "loop", "const", "for", "deterministic"]
+categories = ["development-tools", "no-std"]
+edition = "2018"
+exclude = ["CHANGELOG.md"]
+
+[features]
+default = ["limit_128"]
+
+std = []
+
+limit_64 = []
+limit_128 = []
+limit_256 = []
+limit_512 = []
+limit_1024 = []
+limit_2048 = []
+
+[build-dependencies]
