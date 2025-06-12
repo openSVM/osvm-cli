@@ -51,6 +51,9 @@ fn test_create_deploy_config() {
         publish_idl: true,
         idl_file_path: None, // No custom IDL file
         network_selection: "devnet".to_string(),
+        json_output: false,
+        retry_attempts: 3,
+        confirm_large_binaries: false,
     };
 
     // Verify config fields
@@ -138,6 +141,9 @@ fn test_deploy_config_with_boolean_idl_flag() {
         publish_idl: true, // Boolean flag instead of string
         idl_file_path: None,
         network_selection: "all".to_string(),
+        json_output: false,
+        retry_attempts: 3,
+        confirm_large_binaries: false,
     };
 
     assert!(config.publish_idl);
@@ -150,6 +156,9 @@ fn test_deploy_config_with_boolean_idl_flag() {
         publish_idl: false,
         idl_file_path: Some("custom_idl.json".to_string()), // Test with custom IDL
         network_selection: "mainnet".to_string(),
+        json_output: false,
+        retry_attempts: 3,
+        confirm_large_binaries: false,
     };
 
     assert!(!config_false.publish_idl);
@@ -191,6 +200,156 @@ fn test_load_custom_idl() {
     assert_eq!(loaded_idl["name"], "test_program");
     assert_eq!(loaded_idl["version"], "0.1.0");
     assert!(loaded_idl["instructions"].is_array());
+}
+
+#[test]
+fn test_deploy_config_with_new_fields() {
+    // Test that DeployConfig properly handles new fields
+    let config = DeployConfig {
+        binary_path: "path/to/binary.so".to_string(),
+        program_id_path: "path/to/program_id.json".to_string(),
+        owner_path: "path/to/owner.json".to_string(),
+        fee_payer_path: "path/to/fee_payer.json".to_string(),
+        publish_idl: true,
+        idl_file_path: None,
+        network_selection: "all".to_string(),
+        json_output: true,
+        retry_attempts: 5,
+        confirm_large_binaries: true,
+    };
+
+    assert!(config.json_output);
+    assert_eq!(config.retry_attempts, 5);
+    assert!(config.confirm_large_binaries);
+}
+
+#[test]
+fn test_large_binary_validation() {
+    let dir = tempdir().unwrap();
+
+    // Create a binary that's too large (>5MB)
+    let file_path = dir.path().join("large_program.so");
+    let large_data = vec![0u8; 6_000_000]; // 6MB
+    let mut file = File::create(&file_path).unwrap();
+    file.write_all(&large_data).unwrap();
+
+    // This should fail with an error about the file being too large
+    let result = load_program(file_path.to_str().unwrap());
+    assert!(result.is_err());
+
+    if let Err(e) = result {
+        assert!(e.to_string().contains("too large"));
+    }
+}
+
+#[test]
+fn test_large_binary_warning() {
+    let dir = tempdir().unwrap();
+
+    // Create a binary that triggers warning (1.5MB)
+    let file_path = dir.path().join("warning_program.so");
+    let warning_data = vec![0u8; 1_500_000]; // 1.5MB
+    let mut file = File::create(&file_path).unwrap();
+    file.write_all(&warning_data).unwrap();
+
+    // This should succeed but emit a warning
+    let result = load_program(file_path.to_str().unwrap());
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap().len(), 1_500_000);
+}
+
+#[tokio::test]
+async fn test_idl_publishing_edge_cases() {
+    use solana_sdk::pubkey::Pubkey;
+
+    // This test validates IDL publishing edge cases without actual network calls
+    let dir = tempdir().unwrap();
+
+    // Test with invalid IDL file (not JSON)
+    let invalid_idl_path = dir.path().join("invalid.json");
+    let mut file = File::create(&invalid_idl_path).unwrap();
+    file.write_all(b"not valid json").unwrap();
+
+    // Test loading invalid IDL
+    use osvm::utils::ebpf_deploy::load_or_create_idl;
+    let program_id = Pubkey::new_unique();
+    let result = load_or_create_idl(Some(invalid_idl_path.to_str().unwrap()), program_id);
+    assert!(result.is_err());
+
+    // Test with missing IDL file
+    let missing_idl_path = dir.path().join("missing.json");
+    let result = load_or_create_idl(Some(missing_idl_path.to_str().unwrap()), program_id);
+    assert!(result.is_err());
+
+    // Test with valid but empty JSON object
+    let empty_idl_path = dir.path().join("empty.json");
+    let mut file = File::create(&empty_idl_path).unwrap();
+    file.write_all(b"{}").unwrap();
+
+    let result = load_or_create_idl(Some(empty_idl_path.to_str().unwrap()), program_id);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_keypair_cloning_error_handling() {
+    // Test that keypair cloning works through the public interface
+    use solana_sdk::signature::Keypair;
+
+    let original_keypair = Keypair::new();
+
+    // Test that keypair can be cloned through bytes round-trip
+    let cloned_bytes = original_keypair.to_bytes();
+    let cloned = Keypair::from_bytes(&cloned_bytes);
+
+    assert!(cloned.is_ok());
+    assert_eq!(cloned.unwrap().pubkey(), original_keypair.pubkey());
+}
+
+#[test]
+fn test_deployment_result_serialization() {
+    // Test that DeploymentResult can be serialized/deserialized
+    use osvm::utils::ebpf_deploy::DeploymentResult;
+    use solana_sdk::pubkey::Pubkey;
+
+    let result = DeploymentResult {
+        network: "devnet".to_string(),
+        program_id: Pubkey::new_unique(),
+        success: true,
+        transaction_signature: Some("test_signature".to_string()),
+        error_message: None,
+        retries_attempted: 2,
+        duration_ms: 5000,
+    };
+
+    // Test serialization
+    let json = serde_json::to_string(&result).unwrap();
+    assert!(json.contains("devnet"));
+    assert!(json.contains("test_signature"));
+    assert!(json.contains("5000"));
+
+    // Test deserialization
+    let deserialized: DeploymentResult = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.network, "devnet");
+    assert_eq!(deserialized.retries_attempted, 2);
+    assert_eq!(deserialized.duration_ms, 5000);
+}
+
+#[tokio::test]
+async fn test_rpc_client_cache() {
+    use osvm::utils::ebpf_deploy::RpcClientCache;
+
+    let mut cache = RpcClientCache::new();
+
+    // Test that same URL returns same client instance
+    let client1 = cache.get_client("https://api.devnet.solana.com");
+    let client2 = cache.get_client("https://api.devnet.solana.com");
+
+    // Both should reference the same underlying client (Arc)
+    assert!(std::ptr::eq(client1.as_ref(), client2.as_ref()));
+
+    // Different URL should return different client
+    let client3 = cache.get_client("https://api.testnet.solana.com");
+    assert!(!std::ptr::eq(client1.as_ref(), client3.as_ref()));
 }
 
 #[tokio::test]
@@ -240,6 +399,9 @@ async fn test_network_filter_logic() {
         publish_idl: false,
         idl_file_path: None,
         network_selection: "all".to_string(),
+        json_output: false,
+        retry_attempts: 1,
+        confirm_large_binaries: false,
     };
 
     // This attempts network calls which will fail in test environment
@@ -263,6 +425,9 @@ async fn test_network_filter_logic() {
         publish_idl: false,
         idl_file_path: None,
         network_selection: "devnet".to_string(),
+        json_output: false,
+        retry_attempts: 1,
+        confirm_large_binaries: false,
     };
 
     let results = deploy_to_all_networks(config_single, CommitmentConfig::confirmed()).await;
@@ -281,6 +446,9 @@ async fn test_network_filter_logic() {
         publish_idl: false,
         idl_file_path: None,
         network_selection: "invalid".to_string(),
+        json_output: false,
+        retry_attempts: 1,
+        confirm_large_binaries: false,
     };
 
     let results = deploy_to_all_networks(config_invalid, CommitmentConfig::confirmed()).await;
