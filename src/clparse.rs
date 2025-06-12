@@ -392,6 +392,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .help("Publish IDL alongside the program deployment")
                 )
                 .arg(
+                    Arg::new("idl-file")
+                        .long("idl-file")
+                        .value_name("IDL_PATH")
+                        .help("Path to Anchor IDL JSON file (optional, defaults to generated IDL)")
+                )
+                .arg(
                     Arg::new("network")
                         .long("network")
                         .value_name("NETWORK")
