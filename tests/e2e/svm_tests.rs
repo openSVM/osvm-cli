@@ -25,7 +25,7 @@ fn test_svm_list() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["svm", "list"])
+        .args(["svm", "list"])
         .output()
         .expect("Failed to execute command");
 
@@ -60,7 +60,7 @@ fn test_svm_get_invalid() {
     setup_test_environment();
 
     let result = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(&["svm", "get", "invalid_svm"])
+        .args(["svm", "get", "invalid_svm"])
         .output();
 
     if let Err(e) = &result {
@@ -83,7 +83,7 @@ fn test_svm_get_invalid() {
 fn test_svm_dashboard() {
     // This test is more complex as it involves an interactive dashboard
     // For now, we'll just verify the command doesn't immediately fail with "unknown command"
-    let assert = run_osvm_command().args(&["svm", "dashboard"]).assert();
+    let assert = run_osvm_command().args(["svm", "dashboard"]).assert();
 
     // The dashboard might not work in a test environment, so we're just checking
     // that the command is recognized
@@ -137,7 +137,7 @@ fn test_svm_install() {
 fn test_svm_install_invalid() {
     // Use assert_cmd to run a command and make assertions about the output
     let assert = run_osvm_command()
-        .args(&["svm", "install", "invalid_svm", "--host", "user@host"])
+        .args(["svm", "install", "invalid_svm", "--host", "user@host"])
         .assert();
 
     // Verify the command fails with a non-zero exit code

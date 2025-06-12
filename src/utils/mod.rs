@@ -18,6 +18,8 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// eBPF deployment utilities for program deployment
+pub mod ebpf_deploy;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
 /// SSH deployment utilities for remote node deployment

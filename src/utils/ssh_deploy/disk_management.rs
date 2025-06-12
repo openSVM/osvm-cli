@@ -68,15 +68,14 @@ fn format_and_mount_disk(
         if mount_check.trim() == mount_point {
             // Already mounted at the correct location
             return Ok(());
-        } else {
-            // Mounted at a different location, return an error
-            return Err(DeploymentError::DeploymentError(format!(
-                "Disk {} is already mounted at {}, cannot mount at {}",
-                disk,
-                mount_check.trim(),
-                mount_point
-            )));
         }
+        // Mounted at a different location, return an error
+        return Err(DeploymentError::DeploymentError(format!(
+            "Disk {} is already mounted at {}, cannot mount at {}",
+            disk,
+            mount_check.trim(),
+            mount_point
+        )));
     }
 
     // Format the disk (with confirmation to avoid data loss)

@@ -14,7 +14,7 @@ pub fn execute(args: Args) -> Result<(), Box<dyn Error>> {
     // Parse configuration and setup client
     let config = Config::default();
     println!("OSVM - Node Management");
-    
+
     if args.verbose {
         println!("Available SVMs in the chain:");
         let svms = get_available_svms(&args.json_rpc_url)?;
@@ -22,7 +22,7 @@ pub fn execute(args: Args) -> Result<(), Box<dyn Error>> {
             println!("  - {}: {}", svm.name, svm.token);
         }
     }
-    
+
     // Process the requested node command
     match args.command.as_deref() {
         Some("list") => {
@@ -51,7 +51,7 @@ pub fn execute(args: Args) -> Result<(), Box<dyn Error>> {
             return Err(format!("Unknown node subcommand: {}", cmd).into());
         }
     }
-    
+
     Ok(())
 }
 
