@@ -288,14 +288,30 @@ async fn setup_ngrok_tunnels(ports: &[u16]) -> Result<HashMap<u16, String>> {
     for &port in ports {
         println!("🔗 Creating ngrok tunnel for port {}", port);
         
-        // Start ngrok in background
-        let mut child = Command::new("ngrok")
-            .arg("tcp")
-            .arg(port.to_string())
-            .arg("--log")
-            .arg("stdout")
-            .spawn()
-            .context("Failed to start ngrok")?;
+        // Use HTTP tunnel with custom domain for RPC ports (8899), TCP for others
+        let mut child = if port == 8899 {
+            // HTTP tunnel for RPC endpoint with custom domain
+            Command::new("ngrok")
+                .arg("http")
+                .arg(format!("localhost:{}", port))
+                .arg("--domain")
+                .arg(format!("osvm.dev"))
+                .arg("--log")
+                .arg("stdout")
+                .spawn()
+                .context("Failed to start ngrok")?
+        } else {
+            // TCP tunnel with custom remote address for gossip/other ports
+            Command::new("ngrok")
+                .arg("tcp")
+                .arg(port.to_string())
+                .arg("--remote-addr")
+                .arg(format!("{}.osvm.dev:{}", port, port))
+                .arg("--log")
+                .arg("stdout")
+                .spawn()
+                .context("Failed to start ngrok")?
+        };
         
         // Give ngrok time to start
         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
