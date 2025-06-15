@@ -178,13 +178,42 @@ osvm rpc sonic user@host --network testnet
 
 # Deploy a Sonic RPC node to a remote server (devnet)
 osvm rpc sonic user@host --network devnet
+
+# Monitor devnet RPC node logs (automatically finds the most recent log file)
+osvm rpc-manager devnet --logs
+
+# Show specific number of recent log lines
+osvm rpc-manager devnet --logs --lines 100
+
+# Follow logs in real-time (similar to tail -f)
+osvm rpc-manager devnet --logs --follow
+
+# Start a local test validator for development (guaranteed to work)
+osvm rpc-manager test --background --reset
+
+# Check test validator status
+osvm rpc-manager test --status
+
+# Stop test validator
+osvm rpc-manager test --stop
 ```
 
-The `rpc` command provides a streamlined way to deploy specific RPC nodes:
+The `rpc-manager` command provides comprehensive RPC node management:
 
-- **Sonic RPC**: Deploys a Sonic RPC node using Docker containers from the official repository
+- **Test Validator**: Local development validator with guaranteed RPC functionality
+  - Instant startup with no external dependencies
+  - Built-in faucet for SOL airdrops
+  - Perfect for local development and testing
+  - Full Solana RPC API support
+- **Devnet RPC**: Real devnet validator that syncs with live blockchain
+  - Auto-repair system with real-time log monitoring
+  - System parameter tuning (network limits, file descriptors, etc.)
+  - External reachability fixes using ngrok tunnels
+  - Port conflict resolution and memory optimization
+- **Sonic RPC**: Deploys Sonic RPC nodes using Docker containers
 - **Network Selection**: Choose between mainnet, testnet, or devnet environments
 - **Automatic Configuration**: Handles all dependencies and configuration automatically
+- **Comprehensive Logging**: Structured JSON logging to `osvm.log` for debugging
 
 ### eBPF Program Deployment
 
