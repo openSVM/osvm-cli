@@ -12,3 +12,5 @@ node_modules/
 Cargo.lock
 package-lock.json
 ~*.*
+*-ledger/
+*.log
