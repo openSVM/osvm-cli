@@ -156,6 +156,18 @@ pub fn get_all_examples() -> Vec<Example> {
             category: ExampleCategory::NodeDeployment,
         },
         Example {
+            title: "Deploy Solana validator with Firedancer client",
+            command: "osvm solana validator user@host.example.com --network mainnet --client-type firedancer",
+            explanation: "Deploys a Solana validator using the high-performance Firedancer client implementation",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
+            title: "Deploy Solana validator with Sig client",
+            command: "osvm solana validator user@host.example.com --network mainnet --client-type sig",
+            explanation: "Deploys a Solana validator using the Sig (Zig-based) client implementation",
+            category: ExampleCategory::NodeDeployment,
+        },
+        Example {
             title: "Deploy Solana validator with hot-swap capability",
             command: "osvm solana validator user@host.example.com --network mainnet --hot-swap",
             explanation: "Deploys a Solana validator with hot-swap capability for high availability",

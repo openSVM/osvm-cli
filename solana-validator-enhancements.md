@@ -18,7 +18,7 @@ The following enhancements have been implemented:
    - Memory management
 
 3. **Enhanced Installation Options**
-   - Version selection (standard, Jito, Agave)
+   - Version selection (standard, Jito, Agave, Firedancer, Sig)
    - Client type configuration
    - Installation verification
 
@@ -58,6 +58,16 @@ osvm solana validator user@host --network mainnet \
 osvm solana validator user@host --network mainnet \
   --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1 \
   --hot-swap
+
+# Validator with Firedancer client (high-performance implementation)
+osvm solana validator user@host --network mainnet \
+  --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1 \
+  --client-type firedancer
+
+# Validator with Sig client (Zig-based implementation)
+osvm solana validator user@host --network mainnet \
+  --ledger-disk /dev/nvme0n1 --accounts-disk /dev/nvme1n1 \
+  --client-type sig
 
 # Full configuration with metrics
 osvm solana validator user@host --network mainnet \
