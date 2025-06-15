@@ -148,7 +148,7 @@ pub async fn deploy_solana(
 /// # Arguments
 /// * `client` - SSH client
 /// * `version` - Optional Solana version
-/// * `client_type` - Optional client type (standard, jito, agave)
+/// * `client_type` - Optional client type (standard, jito, agave, firedancer, sig)
 ///
 /// # Returns
 /// * `Result<(), DeploymentError>` - Success/failure
@@ -190,6 +190,53 @@ fn install_solana_cli(
             };
 
             client.execute_command("curl -sSf https://raw.githubusercontent.com/agave-blockchain/releases/main/install.sh | sh")?;
+        }
+        Some("firedancer") => {
+            // Install Firedancer client
+            // First install dependencies
+            client.execute_command("sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev")?;
+            
+            // Clone and build Firedancer
+            client.execute_command("git clone https://github.com/firedancer-io/firedancer.git /tmp/firedancer")?;
+            client.execute_command("cd /tmp/firedancer && make -j")?;
+            
+            // Install Firedancer binaries
+            client.execute_command("sudo mkdir -p /opt/firedancer/bin")?;
+            client.execute_command("sudo cp /tmp/firedancer/build/bin/* /opt/firedancer/bin/")?;
+            
+            // Create symlinks for compatibility
+            client.execute_command("sudo ln -sf /opt/firedancer/bin/fdctl /usr/local/bin/solana-validator")?;
+            client.execute_command("sudo ln -sf /opt/firedancer/bin/fd_keygen /usr/local/bin/solana-keygen")?;
+            
+            // Clean up
+            client.execute_command("rm -rf /tmp/firedancer")?;
+        }
+        Some("sig") => {
+            // Install Sig (Solana Zig Validator)
+            // First install Zig compiler
+            client.execute_command("curl -sSf https://ziglang.org/download/master/zig-linux-x86_64-0.14.0-dev.tar.xz | tar xJ -C /tmp")?;
+            client.execute_command("sudo mv /tmp/zig-linux-x86_64-0.14.0-dev /opt/zig")?;
+            client.execute_command("sudo ln -sf /opt/zig/zig /usr/local/bin/zig")?;
+            
+            // Clone and build Sig
+            client.execute_command("git clone https://github.com/syndica/sig.git /tmp/sig")?;
+            client.execute_command("cd /tmp/sig && zig build -Doptimize=ReleaseFast")?;
+            
+            // Install Sig binaries
+            client.execute_command("sudo mkdir -p /opt/sig/bin")?;
+            client.execute_command("sudo cp /tmp/sig/zig-out/bin/* /opt/sig/bin/")?;
+            
+            // Create symlinks for compatibility
+            client.execute_command("sudo ln -sf /opt/sig/bin/sig /usr/local/bin/solana-validator")?;
+            
+            // For keygen, we'll use the standard Solana keygen as Sig is compatible
+            client.execute_command(&format!(
+                "sh -c \"$(curl -sSfL https://release.solana.com/{}/install)\"",
+                version
+            ))?;
+            
+            // Clean up
+            client.execute_command("rm -rf /tmp/sig")?;
         }
         _ => {
             // Install standard Solana client
