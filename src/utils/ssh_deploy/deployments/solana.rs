@@ -226,30 +226,37 @@ fn install_solana_cli(
         }
         Some("sig") => {
             // Install Sig (Solana Zig Validator)
-            // First install Zig compiler
-            client.execute_command("curl -sSf https://ziglang.org/download/master/zig-linux-x86_64-0.14.0-dev.tar.xz | tar xJ -C /tmp")?;
-            client.execute_command("sudo mv /tmp/zig-linux-x86_64-0.14.0-dev /opt/zig")?;
-            client.execute_command("sudo ln -sf /opt/zig/zig /usr/local/bin/zig")?;
+            let result = (|| -> Result<(), DeploymentError> {
+                // First install Zig compiler
+                client.execute_command("curl -sSf https://ziglang.org/download/master/zig-linux-x86_64-0.14.0-dev.tar.xz | tar xJ -C /tmp")?;
+                client.execute_command("sudo mv /tmp/zig-linux-x86_64-0.14.0-dev /opt/zig")?;
+                client.execute_command("sudo ln -sf /opt/zig/zig /usr/local/bin/zig")?;
+                
+                // Clone and build Sig
+                client.execute_command("git clone https://github.com/syndica/sig.git /tmp/sig")?;
+                client.execute_command("cd /tmp/sig && zig build -Doptimize=ReleaseFast")?;
+                
+                // Install Sig binaries
+                client.execute_command("sudo mkdir -p /opt/sig/bin")?;
+                client.execute_command("sudo cp /tmp/sig/zig-out/bin/* /opt/sig/bin/")?;
+                
+                // Create symlinks for compatibility
+                client.execute_command("sudo ln -sf /opt/sig/bin/sig /usr/local/bin/solana-validator")?;
+                
+                // For keygen, we'll use the standard Solana keygen as Sig is compatible
+                client.execute_command(&format!(
+                    "sh -c \"$(curl -sSfL https://release.solana.com/{}/install)\"",
+                    version
+                ))?;
+                
+                Ok(())
+            })();
             
-            // Clone and build Sig
-            client.execute_command("git clone https://github.com/syndica/sig.git /tmp/sig")?;
-            client.execute_command("cd /tmp/sig && zig build -Doptimize=ReleaseFast")?;
-            
-            // Install Sig binaries
-            client.execute_command("sudo mkdir -p /opt/sig/bin")?;
-            client.execute_command("sudo cp /tmp/sig/zig-out/bin/* /opt/sig/bin/")?;
-            
-            // Create symlinks for compatibility
-            client.execute_command("sudo ln -sf /opt/sig/bin/sig /usr/local/bin/solana-validator")?;
-            
-            // For keygen, we'll use the standard Solana keygen as Sig is compatible
-            client.execute_command(&format!(
-                "sh -c \"$(curl -sSfL https://release.solana.com/{}/install)\"",
-                version
-            ))?;
-            
-            // Clean up
+            // Ensure cleanup is performed
             client.execute_command("rm -rf /tmp/sig")?;
+            
+            // Propagate errors
+            result?;
         }
         _ => {
             // Install standard Solana client
