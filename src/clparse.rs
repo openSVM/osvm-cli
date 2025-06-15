@@ -913,7 +913,8 @@ pub fn parse_command_line() -> clap::ArgMatches {
                                 .action(ArgAction::SetTrue)
                                 .help("Enable transaction history (increases storage requirements)")
                         )
-                  )
+                )
+        )
         .subcommand(
             Command::new("doctor")
                 .about("Comprehensive system health check and repair")
