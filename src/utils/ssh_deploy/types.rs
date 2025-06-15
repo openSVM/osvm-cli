@@ -139,7 +139,7 @@ pub struct DeploymentConfig {
     // New fields for enhanced Solana validator configuration
     /// Solana client version
     pub version: Option<String>,
-    /// Solana client type (standard, jito, agave)
+    /// Solana client type (standard, jito, agave, firedancer, sig)
     pub client_type: Option<String>,
     /// Enable hot-swap capability
     pub hot_swap_enabled: bool,
