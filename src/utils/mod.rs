@@ -26,6 +26,22 @@ pub mod nodes;
 pub mod ssh_deploy;
 /// SVM information and management utilities
 pub mod svm_info;
+/// Local RPC node deployment and management
+pub mod local_rpc;
+/// Devnet RPC node that syncs with real blockchain
+pub mod devnet_rpc;
+/// Solana RPC connectivity and monitoring
+pub mod solana_rpc;
+
+// Self-repair and diagnostics
+/// Self-repair system for automatic dependency management
+pub mod self_repair;
+/// System diagnostics and health monitoring
+pub mod diagnostics;
+/// Continuous log monitoring and automatic repair
+pub mod log_monitor;
+/// OSVM internal logging system for tracking events and decisions
+pub mod osvm_logger;
 
 // External dependency wrappers
 
