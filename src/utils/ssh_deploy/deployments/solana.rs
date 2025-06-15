@@ -193,23 +193,36 @@ fn install_solana_cli(
         }
         Some("firedancer") => {
             // Install Firedancer client
-            // First install dependencies
-            client.execute_command("sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev")?;
+            let temp_dir = "/tmp/firedancer";
+            let cleanup = || {
+                let _ = client.execute_command(&format!("rm -rf {}", temp_dir));
+            };
             
-            // Clone and build Firedancer
-            client.execute_command("git clone https://github.com/firedancer-io/firedancer.git /tmp/firedancer")?;
-            client.execute_command("cd /tmp/firedancer && make -j")?;
-            
-            // Install Firedancer binaries
-            client.execute_command("sudo mkdir -p /opt/firedancer/bin")?;
-            client.execute_command("sudo cp /tmp/firedancer/build/bin/* /opt/firedancer/bin/")?;
-            
-            // Create symlinks for compatibility
-            client.execute_command("sudo ln -sf /opt/firedancer/bin/fdctl /usr/local/bin/solana-validator")?;
-            client.execute_command("sudo ln -sf /opt/firedancer/bin/fd_keygen /usr/local/bin/solana-keygen")?;
+            // Wrap installation steps in error handling
+            if let Err(e) = (|| -> Result<(), DeploymentError> {
+                // First install dependencies
+                client.execute_command("sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev")?;
+                
+                // Clone and build Firedancer
+                client.execute_command(&format!("git clone https://github.com/firedancer-io/firedancer.git {}", temp_dir))?;
+                client.execute_command(&format!("cd {} && make -j", temp_dir))?;
+                
+                // Install Firedancer binaries
+                client.execute_command("sudo mkdir -p /opt/firedancer/bin")?;
+                client.execute_command("sudo cp /tmp/firedancer/build/bin/* /opt/firedancer/bin/")?;
+                
+                // Create symlinks for compatibility
+                client.execute_command("sudo ln -sf /opt/firedancer/bin/fdctl /usr/local/bin/solana-validator")?;
+                client.execute_command("sudo ln -sf /opt/firedancer/bin/fd_keygen /usr/local/bin/solana-keygen")?;
+                
+                Ok(())
+            })() {
+                cleanup();
+                return Err(e);
+            }
             
             // Clean up
-            client.execute_command("rm -rf /tmp/firedancer")?;
+            cleanup();
         }
         Some("sig") => {
             // Install Sig (Solana Zig Validator)
