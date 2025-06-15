@@ -194,12 +194,9 @@ fn install_solana_cli(
         Some("firedancer") => {
             // Install Firedancer client
             let temp_dir = "/tmp/firedancer";
-            let cleanup = || {
-                let _ = client.execute_command(&format!("rm -rf {}", temp_dir));
-            };
             
             // Wrap installation steps in error handling
-            if let Err(e) = (|| -> Result<(), DeploymentError> {
+            let result = (|| -> Result<(), DeploymentError> {
                 // First install dependencies
                 client.execute_command("sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev")?;
                 
@@ -216,13 +213,13 @@ fn install_solana_cli(
                 client.execute_command("sudo ln -sf /opt/firedancer/bin/fd_keygen /usr/local/bin/solana-keygen")?;
                 
                 Ok(())
-            })() {
-                cleanup();
-                return Err(e);
-            }
+            })();
             
-            // Clean up
-            cleanup();
+            // Clean up regardless of success or failure
+            let _ = client.execute_command(&format!("rm -rf {}", temp_dir));
+            
+            // Return result after cleanup
+            result?;
         }
         Some("sig") => {
             // Install Sig (Solana Zig Validator)
