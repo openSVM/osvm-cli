@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM CLI - Solana Virtual Machine Management Tool</title>
+    <meta name="description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks. Monitor, deploy, and manage your SVM infrastructure with a single tool.">
+    <meta name="keywords" content="Solana, SVM, CLI, blockchain, validator, RPC, node management, OSVM">
+    
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
+    <meta property="og:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://opensvm.github.io/osvm-cli/">
+    
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
+    <meta name="twitter:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks.">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 60px 0;
+            color: white;
+        }
+        
+        .logo {
+            font-size: 4rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tagline {
+            font-size: 1.4rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+        
+        .badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        
+        .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        
+        .btn-primary {
+            background: #fff;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+        }
+        
+        main {
+            background: white;
+            margin-top: -50px;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 1;
+        }
+        
+        .section {
+            padding: 60px 0;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 50px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+        
+        .feature-card {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 15px;
+        }
+        
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .feature-description {
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .install-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 40px;
+            margin: 40px 0;
+        }
+        
+        .install-tabs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .install-tab {
+            padding: 10px 20px;
+            background: #e9ecef;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .install-tab.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .install-content {
+            display: none;
+        }
+        
+        .install-content.active {
+            display: block;
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #4a5568;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        
+        .copy-btn:hover {
+            background: #667eea;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            text-align: center;
+            margin: 50px 0;
+        }
+        
+        .stat-item {
+            padding: 20px;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            display: block;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 1rem;
+            margin-top: 5px;
+        }
+        
+        footer {
+            background: #2d3748;
+            color: white;
+            text-align: center;
+            padding: 40px 0;
+        }
+        
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .footer-links a {
+            color: #cbd5e0;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+        
+        .footer-links a:hover {
+            color: white;
+        }
+        
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 2.5rem;
+            }
+            
+            .tagline {
+                font-size: 1.1rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .section-title {
+                font-size: 2rem;
+            }
+            
+            .install-tabs {
+                justify-content: stretch;
+            }
+            
+            .install-tab {
+                flex: 1;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">OSVM CLI 🚀</div>
+            <div class="tagline">A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks</div>
+            <div class="badges">
+                <span class="badge">MIT License</span>
+                <span class="badge">Rust 1.80.0+</span>
+                <span class="badge">Solana 1.14.29+</span>
+            </div>
+            <div class="cta-buttons">
+                <a href="https://github.com/openSVM/osvm-cli" class="btn btn-primary" target="_blank">View on GitHub</a>
+                <a href="https://github.com/openSVM/osvm-cli/releases" class="btn btn-secondary" target="_blank">Download</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <section class="section">
+                <h2 class="section-title">Key Features</h2>
+                <p class="section-subtitle">Everything you need to manage your Solana Virtual Machine infrastructure</p>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🔧</div>
+                        <div class="feature-title">SVM Management</div>
+                        <div class="feature-description">List and inspect Solana Virtual Machines with detailed information and status monitoring.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🚀</div>
+                        <div class="feature-title">Node Deployment</div>
+                        <div class="feature-description">Deploy validator or dedicated RPC nodes with a single command across different networks.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <div class="feature-title">Interactive Dashboard</div>
+                        <div class="feature-description">Real-time monitoring with a terminal-based UI for comprehensive infrastructure oversight.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🌐</div>
+                        <div class="feature-title">Network Configuration</div>
+                        <div class="feature-description">Configure nodes for mainnet, testnet, or devnet with optimized settings for each environment.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">📈</div>
+                        <div class="feature-title">Performance Metrics</div>
+                        <div class="feature-description">Track TPS, latency, and system requirements with detailed performance analytics.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🎨</div>
+                        <div class="feature-title">Enhanced Output</div>
+                        <div class="feature-description">Colorized output with consistent color-coding for status, commands, and data visualization.</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Quick Installation</h2>
+                <p class="section-subtitle">Get started with OSVM CLI in just one command</p>
+                
+                <div class="install-section">
+                    <div class="install-tabs">
+                        <button class="install-tab active" onclick="showInstall('linux')">Linux/macOS</button>
+                        <button class="install-tab" onclick="showInstall('windows')">Windows</button>
+                        <button class="install-tab" onclick="showInstall('source')">From Source</button>
+                    </div>
+                    
+                    <div id="linux-install" class="install-content active">
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('curl -sSf https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.sh | sh')">Copy</button>
+                            <code>curl -sSf https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.sh | sh</code>
+                        </div>
+                    </div>
+                    
+                    <div id="windows-install" class="install-content">
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('powershell -Command \"Invoke-WebRequest -Uri \'https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.ps1\' -OutFile \'install.ps1\'; .\\install.ps1\"')">Copy</button>
+                            <code>powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.ps1' -OutFile 'install.ps1'; .\install.ps1"</code>
+                        </div>
+                    </div>
+                    
+                    <div id="source-install" class="install-content">
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('git clone https://github.com/openSVM/osvm-cli.git\ncd osvm-cli\ncargo build --release\nsudo cp target/release/osvm /usr/local/bin/')">Copy</button>
+                            <code># Clone the repository<br>git clone https://github.com/openSVM/osvm-cli.git<br>cd osvm-cli<br><br># Build the project<br>cargo build --release<br><br># Install the binary<br>sudo cp target/release/osvm /usr/local/bin/</code>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Quick Start</h2>
+                <p class="section-subtitle">Common commands to get you started</p>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-title">List SVMs</div>
+                        <div class="code-block">
+                            <code>osvm svm list</code>
+                        </div>
+                        <div class="feature-description">View all installed Solana Virtual Machines</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-title">SVM Dashboard</div>
+                        <div class="code-block">
+                            <code>osvm svm dashboard</code>
+                        </div>
+                        <div class="feature-description">Launch interactive monitoring dashboard</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-title">List Nodes</div>
+                        <div class="code-block">
+                            <code>osvm nodes list</code>
+                        </div>
+                        <div class="feature-description">View all managed validator and RPC nodes</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-title">View Examples</div>
+                        <div class="code-block">
+                            <code>osvm examples</code>
+                        </div>
+                        <div class="feature-description">Show examples for common workflows</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">Prerequisites</h2>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-number">Rust</span>
+                        <div class="stat-label">1.80.0 or later</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">Solana CLI</span>
+                        <div class="stat-label">1.14.29 or later</div>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-number">SSH</span>
+                        <div class="stat-label">For remote deployment</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="https://github.com/openSVM/osvm-cli">GitHub Repository</a>
+                <a href="https://github.com/openSVM/osvm-cli/blob/main/README.md">Documentation</a>
+                <a href="https://github.com/openSVM/osvm-cli/issues">Report Issues</a>
+                <a href="https://github.com/openSVM/osvm-cli/blob/main/LICENSE">License</a>
+                <a href="https://docs.opensvm.org">Official Docs</a>
+            </div>
+            <p>&copy; 2024 OSVM CLI. Licensed under the MIT License.</p>
+        </div>
+    </footer>
+
+    <script>
+        function showInstall(platform) {
+            // Hide all install contents
+            document.querySelectorAll('.install-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.install-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected content and mark tab as active
+            document.getElementById(platform + '-install').classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function copyToClipboard(text) {
+            // Clean up the text for copying (remove HTML)
+            const cleanText = text.replace(/<br>/g, '\n');
+            
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(cleanText).then(() => {
+                    showCopyFeedback(event.target);
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = cleanText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showCopyFeedback(event.target);
+            }
+        }
+        
+        function showCopyFeedback(button) {
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.style.background = '#48bb78';
+            
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.background = '#4a5568';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
