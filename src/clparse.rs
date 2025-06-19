@@ -14,8 +14,23 @@ fn validate_url_or_moniker(s: &str) -> Result<String, String> {
 /// Construct the cli input model and parse command line
 pub fn parse_command_line() -> clap::ArgMatches {
     command!()
+        .disable_version_flag(true) // Disable the auto-generated --version flag
         .arg_required_else_help(true)
+        // Add version aliases as subcommands
+        .subcommand(Command::new("v").about("Show version information"))
+        .subcommand(Command::new("ver").about("Show version information"))
+        .subcommand(Command::new("version").about("Show version information"))
         .allow_external_subcommands(true)
+        // Add a single version flag with multiple aliases
+        .arg(
+            Arg::new("version_flag")
+                .long("version")
+                .short('V')
+                .visible_aliases(["v", "ver"])
+                .action(ArgAction::SetTrue)
+                .help("Show version information")
+                .global(false)
+        )
         // Global arguments
         .arg({
             let mut arg = Arg::new("config_file")

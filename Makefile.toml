@@ -1,0 +1,63 @@
+[config]
+default_to_workspace = false
+min_version = "0.32.0"
+
+[env]
+CARGO_MAKE_EXTEND_WORKSPACE_MAKEFILE = true
+
+[tasks.build-release]
+description = "Build release binary"
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.install]
+description = "Install release binary to /usr/bin"
+dependencies = ["build-release"]
+script = ["./install-release.sh"]
+
+[tasks.install-dev]
+description = "Install debug binary to /usr/bin"
+dependencies = ["build"]
+script = [
+    "sudo cp target/debug/osvm /usr/bin/osvm",
+    "sudo chmod +x /usr/bin/osvm",
+    "echo '✅ Debug binary installed to /usr/bin/osvm'"
+]
+
+[tasks.uninstall]
+description = "Remove osvm from /usr/bin"
+script = [
+    "sudo rm -f /usr/bin/osvm",
+    "echo '✅ osvm removed from /usr/bin'"
+]
+
+[tasks.clean-install]
+description = "Remove all installed binaries and backups"
+dependencies = ["uninstall"]
+script = [
+    "sudo rm -f /usr/bin/osvm.backup",
+    "echo '✅ All installed files cleaned'"
+]
+
+[tasks.verify-install]
+description = "Verify osvm installation"
+script = [
+    '''
+    if command -v osvm >/dev/null 2>&1; then
+        echo "✅ osvm is installed and accessible"
+        echo "📍 Location: $(which osvm)"
+        echo "📦 Version: $(osvm --version)"
+    else
+        echo "❌ osvm is not installed or not in PATH"
+        exit 1
+    fi
+    '''
+]
+
+[tasks.dev-cycle]
+description = "Full development cycle: clean, build, test"
+dependencies = ["clean", "build", "test"]
+
+[tasks.release-cycle]
+description = "Full release cycle: clean, build-release, test, install"
+dependencies = ["clean", "build-release", "test", "install"]
