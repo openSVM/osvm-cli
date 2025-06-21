@@ -314,6 +314,45 @@ For complete documentation, visit [our official documentation](https://docs.open
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+### Development Setup
+
+To ensure code quality and consistency, this project uses pre-commit hooks that enforce code formatting and linting.
+
+#### Installing Pre-commit Hooks
+
+Run the following command from the project root to install the pre-commit hooks:
+
+```bash
+./install-pre-commit-hook.sh
+```
+
+This will install a git hook that automatically runs:
+- `cargo fmt --all -- --check` - Ensures code is properly formatted
+- `cargo clippy` - Runs linting checks
+
+#### Manual Code Quality Checks
+
+You can also run these checks manually:
+
+```bash
+# Format your code
+cargo fmt --all
+
+# Check formatting without modifying files
+cargo fmt --all -- --check
+
+# Run clippy linting
+cargo clippy --all-targets --all-features
+```
+
+#### Skipping Pre-commit Hooks
+
+If you need to skip the pre-commit hook for a specific commit (not recommended), use:
+
+```bash
+git commit --no-verify -m "your message"
+```
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
