@@ -88,6 +88,7 @@ jobs:
           # Prepare the source directory with source files, not the binary
           mkdir -p osvm-$VERSION
           cp -r src Cargo.toml Cargo.lock README.md LICENSE osvm-$VERSION/
+          rm -f ../osvm_$VERSION.orig.tar.gz  # <--- add this line
           tar czvf osvm_$VERSION.orig.tar.gz osvm-$VERSION
           cd osvm-$VERSION
           dh_make -y -s -c apache -e rin@opensvm.com -f ../osvm_$VERSION.orig.tar.gz
