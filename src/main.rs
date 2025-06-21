@@ -1726,14 +1726,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
 
-            // Initialize audit coordinator
-            let audit_coordinator = AuditCoordinator::new();
-
-            // Generate audit report
+            // Generate audit report - handle test mode first
             let report = if test_mode {
                 println!("🧪 Generating test audit report...");
+                // Create audit coordinator only for test report generation - no diagnostics
+                let audit_coordinator = AuditCoordinator::new();
                 audit_coordinator.create_test_audit_report()
             } else {
+                // Initialize audit coordinator and run full audit
+                let audit_coordinator = AuditCoordinator::new();
+                
                 // Run security audit
                 match audit_coordinator.run_security_audit().await {
                     Ok(report) => report,
@@ -1767,6 +1769,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Generate outputs based on requested format
             let typst_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
             let pdf_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
+            
+            // Create audit coordinator for document generation
+            let audit_coordinator = AuditCoordinator::new();
             
             match format.as_str() {
                 "typst" | "both" => {

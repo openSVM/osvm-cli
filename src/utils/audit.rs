@@ -495,9 +495,10 @@ impl AuditCoordinator {
             references: vec!["https://cwe.mitre.org/data/definitions/200.html".to_string()],
         });
 
+        // Use hardcoded system info to avoid triggering diagnostics
         let system_info = SystemInfo {
-            rust_version: "rustc 1.87.0".to_string(),
-            solana_version: Some("solana-cli 2.2.7".to_string()),
+            rust_version: "rustc 1.87.0 (example)".to_string(),
+            solana_version: Some("solana-cli 2.2.7 (example)".to_string()),
             os_info: "Linux x86_64".to_string(),
             architecture: "x86_64".to_string(),
             dependencies: {
