@@ -1,8 +1,8 @@
 use {
     crate::utils::self_repair::read_keypair_with_repair,
     solana_clap_utils::input_validators::normalize_to_url_if_moniker,
-    solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
     solana_client::rpc_client::RpcClient,
+    solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
     std::env,
 };
 
@@ -34,12 +34,11 @@ impl Config {
         // Let's take it from app_matches, as it's a common global flag.
         let verbose = app_matches.get_count("verbose");
 
-
         let cli_config_path = sub_matches
             .get_one::<String>("config_file")
             .map(|s| s.as_str())
             .unwrap_or("~/.config/osvm/config.yml");
-        
+
         let cli_config = solana_cli_config::Config::load(cli_config_path).unwrap_or_default();
 
         let keypair_path = sub_matches

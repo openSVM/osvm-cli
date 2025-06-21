@@ -3,11 +3,11 @@
 //! This module provides functionality to deploy and manage RPC nodes
 //! on localhost for development and testing purposes.
 
-use std::process::{Command, Stdio};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader};
-use anyhow::{Result, Context};
-use serde::{Deserialize, Serialize};
+use std::process::{Command, Stdio};
 use tokio::task;
 
 /// Configuration for local RPC node deployment
@@ -46,23 +46,25 @@ pub struct LocalRpcStatus {
 pub async fn start_local_rpc(config: LocalRpcConfig) -> Result<LocalRpcInfo> {
     // For now, we only support Solana
     if config.svm != "solana" {
-        anyhow::bail!("Currently only Solana local RPC is supported. {} support coming soon!", config.svm);
+        anyhow::bail!(
+            "Currently only Solana local RPC is supported. {} support coming soon!",
+            config.svm
+        );
     }
 
     // Ensure ledger directory exists
-    fs::create_dir_all(&config.ledger_path)
-        .context("Failed to create ledger directory")?;
+    fs::create_dir_all(&config.ledger_path).context("Failed to create ledger directory")?;
 
     // Build the command
     let mut cmd = Command::new("solana-test-validator");
-    
+
     if config.reset {
         cmd.arg("--reset");
     }
-    
+
     cmd.arg("--ledger").arg(&config.ledger_path);
     cmd.arg("--rpc-port").arg(config.port.to_string());
-    
+
     if let Some(faucet_port) = config.faucet_port {
         cmd.arg("--faucet-port").arg(faucet_port.to_string());
     }
@@ -95,7 +97,9 @@ pub async fn start_local_rpc(config: LocalRpcConfig) -> Result<LocalRpcInfo> {
         }
 
         // Wait for process
-        child.wait().context("Failed to wait for solana-test-validator")?;
+        child
+            .wait()
+            .context("Failed to wait for solana-test-validator")?;
     }
 
     Ok(LocalRpcInfo {
@@ -169,7 +173,11 @@ pub async fn check_local_rpc_status() -> Result<LocalRpcStatus> {
             running,
             pid,
             port: if running { Some(8899) } else { None },
-            network: if running { Some("localnet".to_string()) } else { None },
+            network: if running {
+                Some("localnet".to_string())
+            } else {
+                None
+            },
             uptime: None, // Would need to implement uptime tracking
         })
     } else {

@@ -3,11 +3,11 @@
 //! This module handles checking and installing system-level dependencies
 //! including Rust toolchain, build tools, and system packages.
 
-use std::process::Command;
+use super::package_managers::{PackageManager, PackageManagerError, PackageManagerOps};
+use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
-use serde::{Deserialize, Serialize};
-use super::package_managers::{PackageManager, PackageManagerOps, PackageManagerError};
+use std::process::Command;
 
 /// System dependency error
 #[derive(Debug)]
@@ -58,9 +58,9 @@ pub struct SystemDependencyManager {
 impl SystemDependencyManager {
     /// Create a new system dependency manager
     pub fn new() -> Result<Self, SystemDepsError> {
-        let package_manager = PackageManager::detect()
-            .map_err(SystemDepsError::PackageManagerError)?;
-        
+        let package_manager =
+            PackageManager::detect().map_err(SystemDepsError::PackageManagerError)?;
+
         Ok(Self { package_manager })
     }
 
@@ -70,7 +70,7 @@ impl SystemDependencyManager {
 
         // Check Rust toolchain
         dependencies.push(self.check_rust_toolchain().await?);
-        
+
         // Check build tools
         let build_tools = super::package_managers::get_build_dependencies();
         for tool in build_tools {
@@ -87,7 +87,7 @@ impl SystemDependencyManager {
     /// Check Rust toolchain status
     pub async fn check_rust_toolchain(&self) -> Result<DependencyInfo, SystemDepsError> {
         let installed = self.is_rust_installed().await?;
-        
+
         if !installed {
             return Ok(DependencyInfo {
                 name: "rust".to_string(),
@@ -131,10 +131,14 @@ impl SystemDependencyManager {
             if let Some(version) = version_str.split_whitespace().nth(1) {
                 Ok(version.to_string())
             } else {
-                Err(SystemDepsError::VersionCheckFailed("Could not parse Rust version".to_string()))
+                Err(SystemDepsError::VersionCheckFailed(
+                    "Could not parse Rust version".to_string(),
+                ))
             }
         } else {
-            Err(SystemDepsError::CommandFailed("Failed to get Rust version".to_string()))
+            Err(SystemDepsError::CommandFailed(
+                "Failed to get Rust version".to_string(),
+            ))
         }
     }
 
@@ -158,7 +162,7 @@ impl SystemDependencyManager {
                 "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
             } else {
                 return Err(SystemDepsError::InstallationFailed(
-                    "Please install Rust manually on Windows".to_string()
+                    "Please install Rust manually on Windows".to_string(),
                 ));
             };
 
@@ -170,16 +174,13 @@ impl SystemDependencyManager {
 
             if !output.status.success() {
                 return Err(SystemDepsError::InstallationFailed(
-                    String::from_utf8_lossy(&output.stderr).to_string()
+                    String::from_utf8_lossy(&output.stderr).to_string(),
                 ));
             }
 
             // Source the cargo environment
             let source_cmd = "source ~/.cargo/env";
-            let _ = Command::new("sh")
-                .arg("-c")
-                .arg(source_cmd)
-                .output();
+            let _ = Command::new("sh").arg("-c").arg(source_cmd).output();
 
             Ok("Rust toolchain installed successfully".to_string())
         } else {
@@ -193,7 +194,7 @@ impl SystemDependencyManager {
                 Ok("Rust toolchain updated successfully".to_string())
             } else {
                 Err(SystemDepsError::InstallationFailed(
-                    String::from_utf8_lossy(&output.stderr).to_string()
+                    String::from_utf8_lossy(&output.stderr).to_string(),
                 ))
             }
         }
@@ -208,14 +209,22 @@ impl SystemDependencyManager {
     }
 
     /// Check system package status
-    pub async fn check_system_package(&self, package: &str) -> Result<DependencyInfo, SystemDepsError> {
-        let mapped_package = super::package_managers::map_package_name(package, &self.package_manager);
+    pub async fn check_system_package(
+        &self,
+        package: &str,
+    ) -> Result<DependencyInfo, SystemDepsError> {
+        let mapped_package =
+            super::package_managers::map_package_name(package, &self.package_manager);
         let installed = self.package_manager.is_package_installed(mapped_package)?;
 
         Ok(DependencyInfo {
             name: package.to_string(),
             installed,
-            version: if installed { Some("installed".to_string()) } else { None },
+            version: if installed {
+                Some("installed".to_string())
+            } else {
+                None
+            },
             required_version: None,
             update_available: false, // TODO: Implement update checking
         })
@@ -225,10 +234,10 @@ impl SystemDependencyManager {
     pub async fn update_system_packages(&self) -> Result<String, SystemDepsError> {
         println!("🔄 Updating package database...");
         self.package_manager.update_packages()?;
-        
+
         println!("📦 Upgrading system packages...");
         let result = self.package_manager.upgrade_packages()?;
-        
+
         Ok(result)
     }
 
@@ -250,9 +259,10 @@ impl SystemDependencyManager {
         }
 
         println!("📦 Installing build dependencies: {:?}", missing_deps);
-        
+
         // Map package names for the current package manager
-        let mapped_deps: Vec<&str> = missing_deps.iter()
+        let mapped_deps: Vec<&str> = missing_deps
+            .iter()
             .map(|dep| super::package_managers::map_package_name(dep, &self.package_manager))
             .collect();
 
@@ -261,15 +271,19 @@ impl SystemDependencyManager {
     }
 
     /// Install specific system dependencies
-    pub async fn install_system_dependencies(&self, dependencies: &[String]) -> Result<String, SystemDepsError> {
+    pub async fn install_system_dependencies(
+        &self,
+        dependencies: &[String],
+    ) -> Result<String, SystemDepsError> {
         if dependencies.is_empty() {
             return Ok("No dependencies to install".to_string());
         }
 
         println!("📦 Installing system dependencies: {:?}", dependencies);
-        
+
         // Map package names for the current package manager
-        let mapped_deps: Vec<&str> = dependencies.iter()
+        let mapped_deps: Vec<&str> = dependencies
+            .iter()
             .map(|dep| super::package_managers::map_package_name(dep, &self.package_manager))
             .collect();
 
@@ -316,9 +330,10 @@ pub async fn get_solana_version() -> Result<Option<String>, SystemDepsError> {
 /// Install Solana CLI
 pub async fn install_solana_cli() -> Result<String, SystemDepsError> {
     println!("🌐 Installing Solana CLI...");
-    
-    let install_script = "curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash";
-    
+
+    let install_script =
+        "curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash";
+
     let output = Command::new("sh")
         .arg("-c")
         .arg(install_script)
@@ -328,15 +343,12 @@ pub async fn install_solana_cli() -> Result<String, SystemDepsError> {
     if output.status.success() {
         // Add Solana to PATH for current session
         let path_cmd = "export PATH=\"$HOME/.local/share/solana/install/active_release/bin:$PATH\"";
-        let _ = Command::new("sh")
-            .arg("-c")
-            .arg(path_cmd)
-            .output();
+        let _ = Command::new("sh").arg("-c").arg(path_cmd).output();
 
         Ok("Solana CLI installed successfully".to_string())
     } else {
         Err(SystemDepsError::InstallationFailed(
-            String::from_utf8_lossy(&output.stderr).to_string()
+            String::from_utf8_lossy(&output.stderr).to_string(),
         ))
     }
 }
@@ -348,15 +360,20 @@ mod tests {
     #[tokio::test]
     async fn test_rust_installation_check() {
         let manager = SystemDependencyManager::new().expect("Failed to create manager");
-        let is_installed = manager.is_rust_installed().await.expect("Failed to check Rust");
-        
+        let is_installed = manager
+            .is_rust_installed()
+            .await
+            .expect("Failed to check Rust");
+
         // This test depends on the environment, so we just ensure it doesn't crash
         println!("Rust installed: {}", is_installed);
     }
 
     #[tokio::test]
     async fn test_solana_cli_check() {
-        let is_installed = check_solana_cli().await.expect("Failed to check Solana CLI");
+        let is_installed = check_solana_cli()
+            .await
+            .expect("Failed to check Solana CLI");
         println!("Solana CLI installed: {}", is_installed);
     }
 
@@ -369,7 +386,7 @@ mod tests {
             required_version: Some("1.0.0+".to_string()),
             update_available: false,
         };
-        
+
         assert_eq!(dep_info.name, "test-package");
         assert!(dep_info.installed);
     }
