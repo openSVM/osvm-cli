@@ -1,11 +1,11 @@
 use {
     crate::config::Config, // Added
-    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     crate::utils::diagnostics::DiagnosticCoordinator,
+    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_client::rpc_client::RpcClient,
-    solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer}, // Modified (removed CommitmentConfig)
-    std::{process::exit, str::FromStr}, // Modified
+    solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer}, // Modified (removed CommitmentConfig) - bad formatting
+    std::{process::exit, str::FromStr},                                 // Modified
 };
 
 // Helper function to handle the type mismatch between clap v2 and v4
@@ -30,10 +30,10 @@ pub mod utils;
 fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs;
     use std::process::Command;
-    
+
     println!("📋 Devnet RPC Node Logs");
     println!("=======================");
-    
+
     // Find the most recent agave-validator log file
     let log_files = fs::read_dir(".")?
         .filter_map(|entry| {
@@ -46,23 +46,27 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
             }
         })
         .collect::<Vec<_>>();
-    
+
     if log_files.is_empty() {
         println!("⚠️  No validator log files found in current directory");
         println!("💡 Make sure you're in the correct directory where the validator was started");
         println!("💡 Log files are named like: agave-validator-*.log");
         return Ok(());
     }
-    
+
     // Get the most recent log file
     let (most_recent_log, _) = log_files
         .iter()
         .max_by_key(|(_, modified_time)| *modified_time)
         .unwrap();
-    
+
     println!("📄 Log file: {}", most_recent_log.display());
-    println!("📏 Showing last {} lines{}\n", lines, if follow { " (following)" } else { "" });
-    
+    println!(
+        "📏 Showing last {} lines{}\n",
+        lines,
+        if follow { " (following)" } else { "" }
+    );
+
     if follow {
         // Use tail -f to follow the log
         let mut child = Command::new("tail")
@@ -71,9 +75,9 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
             .arg(lines.to_string())
             .arg(most_recent_log)
             .spawn()?;
-        
+
         println!("📡 Following logs in real-time (Press Ctrl+C to stop)...\n");
-        
+
         // Wait for the process (it will run until Ctrl+C)
         let status = child.wait()?;
         if !status.success() {
@@ -86,10 +90,10 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
             .arg(lines.to_string())
             .arg(most_recent_log)
             .output()?;
-        
+
         if output.status.success() {
             let log_content = String::from_utf8_lossy(&output.stdout);
-            
+
             // Parse and format the logs with colors
             for line in log_content.lines() {
                 if line.contains("ERROR") {
@@ -103,10 +107,13 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
                 }
             }
         } else {
-            eprintln!("❌ Failed to read log file: {}", String::from_utf8_lossy(&output.stderr));
+            eprintln!(
+                "❌ Failed to read log file: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
     }
-    
+
     Ok(())
 }
 
@@ -700,14 +707,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         //         }
         //     }
         // }
-        "rpc-manager" => { // Renamed from "rpc"
+        "rpc-manager" => {
+            // Renamed from "rpc"
             let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
                 eprintln!("No RPC subcommand provided");
                 exit(1);
             };
 
             match rpc_sub_command {
-                "sonic" => { // Moved to be first to match clparse.rs
+                "sonic" => {
+                    // Moved to be first to match clparse.rs
                     // Deploy a Sonic RPC node
                     let connection_str = rpc_sub_matches
                         .get_one::<String>("connection")
@@ -765,7 +774,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     println!("Sonic RPC node deployed successfully!");
                 }
-                "query-solana" => { // Renamed from "solana"
+                "query-solana" => {
+                    // Renamed from "solana"
                     // Connect to Solana RPC endpoints
                     let network = rpc_sub_matches
                         .get_one::<String>("network")
@@ -781,7 +791,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if monitor {
                         // Monitor network activity
                         match crate::utils::solana_rpc::monitor_network(network, custom_url).await {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(e) => {
                                 eprintln!("❌ Error monitoring network: {}", e);
                                 exit(1);
@@ -789,11 +799,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else if health {
                         // Check network health
-                        match crate::utils::solana_rpc::check_network_health(network, custom_url).await {
+                        match crate::utils::solana_rpc::check_network_health(network, custom_url)
+                            .await
+                        {
                             Ok(health_info) => {
                                 println!("🏥 Solana {} Network Health", network.to_uppercase());
                                 println!("=============================");
-                                println!("Status: {}", if health_info.healthy { "✅ Healthy" } else { "❌ Unhealthy" });
+                                println!(
+                                    "Status: {}",
+                                    if health_info.healthy {
+                                        "✅ Healthy"
+                                    } else {
+                                        "❌ Unhealthy"
+                                    }
+                                );
                                 println!("RPC URL: {}", health_info.rpc_url);
                                 if let Some(response_time) = health_info.response_time_ms {
                                     println!("Response Time: {}ms", response_time);
@@ -818,8 +837,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     } else {
                         // Show network info (default)
-                        match crate::utils::solana_rpc::show_network_info(network, custom_url).await {
-                            Ok(_) => {},
+                        match crate::utils::solana_rpc::show_network_info(network, custom_url).await
+                        {
+                            Ok(_) => {}
                             Err(e) => {
                                 eprintln!("❌ Error getting network info: {}", e);
                                 exit(1);
@@ -869,7 +889,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Ok(status_info) => {
                                 println!("📊 Local RPC Node Status");
                                 println!("========================");
-                                println!("Status: {}", if status_info.running { "🟢 Running" } else { "🔴 Stopped" });
+                                println!(
+                                    "Status: {}",
+                                    if status_info.running {
+                                        "🟢 Running"
+                                    } else {
+                                        "🔴 Stopped"
+                                    }
+                                );
                                 if let Some(pid) = status_info.pid {
                                     println!("PID: {}", pid);
                                 }
@@ -901,7 +928,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             background,
                         };
 
-                        println!("🚀 Starting local {} RPC node on localhost", svm.to_uppercase());
+                        println!(
+                            "🚀 Starting local {} RPC node on localhost",
+                            svm.to_uppercase()
+                        );
                         println!("📋 Configuration:");
                         println!("   SVM: {}", svm);
                         println!("   Network: {}", network);
@@ -963,7 +993,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if stop {
                         // Stop devnet RPC node
                         match crate::utils::devnet_rpc::stop_devnet_rpc().await {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(e) => {
                                 eprintln!("❌ Error stopping devnet RPC node: {}", e);
                                 exit(1);
@@ -975,7 +1005,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             Ok(status_info) => {
                                 println!("📊 Devnet RPC Node Status");
                                 println!("=========================");
-                                println!("Status: {}", if status_info.running { "🟢 Running" } else { "🔴 Stopped" });
+                                println!(
+                                    "Status: {}",
+                                    if status_info.running {
+                                        "🟢 Running"
+                                    } else {
+                                        "🔴 Stopped"
+                                    }
+                                );
                                 println!("Network: {} (real blockchain sync)", status_info.network);
                                 if let Some(pid) = status_info.pid {
                                     println!("PID: {}", pid);
@@ -1001,7 +1038,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     } else if logs {
                         // Show logs from devnet RPC node
                         match show_devnet_logs(lines, follow) {
-                            Ok(_) => {},
+                            Ok(_) => {}
                             Err(e) => {
                                 eprintln!("❌ Error showing devnet RPC logs: {}", e);
                                 exit(1);
@@ -1017,9 +1054,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         };
 
                         match crate::utils::devnet_rpc::start_devnet_rpc(config).await {
-                            Ok(_node_info) => { // _node_info was unused
+                            Ok(_node_info) => {
+                                // _node_info was unused
                                 if background {
-                                    println!("🔧 Use 'osvm rpc devnet --status' to check sync progress");
+                                    println!(
+                                        "🔧 Use 'osvm rpc devnet --status' to check sync progress"
+                                    );
                                     println!("🛑 Use 'osvm rpc devnet --stop' to stop the node");
                                 } else {
                                     println!("ℹ️  Devnet RPC node finished");
@@ -1077,13 +1117,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         // Check status of test validator
                         println!("📊 Test Validator Status");
                         println!("========================");
-                        
+
                         // Check if process is running
                         let ps_output = std::process::Command::new("pgrep")
                             .arg("-f")
                             .arg("solana-test-validator")
                             .output();
-                        
+
                         match ps_output {
                             Ok(result) => {
                                 if result.status.success() && !result.stdout.is_empty() {
@@ -1093,7 +1133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     println!("RPC URL: http://localhost:{}", rpc_port);
                                     println!("Faucet URL: http://localhost:{}", faucet_port);
                                     println!("Ledger Path: {}", ledger_path);
-                                    
+
                                     // Test RPC health
                                     let health_check = std::process::Command::new("curl")
                                         .arg("-s")
@@ -1105,14 +1145,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         .arg(r#"{"jsonrpc":"2.0","id":1,"method":"getHealth"}"#)
                                         .arg(&format!("http://localhost:{}", rpc_port))
                                         .output();
-                                    
+
                                     if let Ok(health_result) = health_check {
                                         if health_result.status.success() {
-                                            let response = String::from_utf8_lossy(&health_result.stdout);
+                                            let response =
+                                                String::from_utf8_lossy(&health_result.stdout);
                                             if response.contains("\"ok\"") {
                                                 println!("RPC Health: ✅ Healthy");
                                             } else {
-                                                println!("RPC Health: ⚠️  Unknown response: {}", response);
+                                                println!(
+                                                    "RPC Health: ⚠️  Unknown response: {}",
+                                                    response
+                                                );
                                             }
                                         } else {
                                             println!("RPC Health: ❌ Not responding");
@@ -1135,7 +1179,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("📋 Test Validator Logs");
                         println!("======================");
                         println!("ℹ️  Test validator runs with minimal logging.");
-                        println!("💡 Check the terminal where the validator was started for output.");
+                        println!(
+                            "💡 Check the terminal where the validator was started for output."
+                        );
                         println!("🔧 Use 'osvm rpc-manager test --status' to check health.");
                     } else {
                         // Start test validator
@@ -1160,7 +1206,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         cmd.arg("--rpc-port").arg(rpc_port);
                         cmd.arg("--faucet-port").arg(faucet_port);
                         cmd.arg("--ledger").arg(ledger_path);
-                        
+
                         if reset {
                             cmd.arg("--reset");
                         }
@@ -1174,7 +1220,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 Ok(mut child) => {
                                     // Give it a moment to start
                                     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                                    
+
                                     // Check if it's still running
                                     match child.try_wait() {
                                         Ok(Some(status)) => {
@@ -1185,13 +1231,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             println!("✅ Test validator started in background");
                                             println!("🆔 Process ID: {}", child.id());
                                             println!("🔗 RPC URL: http://localhost:{}", rpc_port);
-                                            println!("💰 Faucet URL: http://localhost:{}", faucet_port);
+                                            println!(
+                                                "💰 Faucet URL: http://localhost:{}",
+                                                faucet_port
+                                            );
                                             println!();
                                             println!("🔧 Use 'osvm rpc-manager test --status' to check status");
-                                            println!("🛑 Use 'osvm rpc-manager test --stop' to stop");
-                                            
+                                            println!(
+                                                "🛑 Use 'osvm rpc-manager test --stop' to stop"
+                                            );
+
                                             // Test RPC after a moment
-                                            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                            tokio::time::sleep(tokio::time::Duration::from_secs(2))
+                                                .await;
                                             let health_check = std::process::Command::new("curl")
                                                 .arg("-s")
                                                 .arg("-X")
@@ -1202,10 +1254,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 .arg(r#"{"jsonrpc":"2.0","id":1,"method":"getHealth"}"#)
                                                 .arg(&format!("http://localhost:{}", rpc_port))
                                                 .output();
-                                            
+
                                             if let Ok(health_result) = health_check {
                                                 if health_result.status.success() {
-                                                    let response = String::from_utf8_lossy(&health_result.stdout);
+                                                    let response = String::from_utf8_lossy(
+                                                        &health_result.stdout,
+                                                    );
                                                     if response.contains("\"ok\"") {
                                                         println!("🎉 Test validator is healthy and ready!");
                                                     }
@@ -1213,7 +1267,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             }
                                         }
                                         Err(e) => {
-                                            eprintln!("❌ Error checking test validator status: {}", e);
+                                            eprintln!(
+                                                "❌ Error checking test validator status: {}",
+                                                e
+                                            );
                                             exit(1);
                                         }
                                     }
@@ -1228,13 +1285,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("🎯 Starting test validator in foreground mode...");
                             println!("ℹ️  Press Ctrl+C to stop");
                             println!();
-                            
+
                             match cmd.status() {
                                 Ok(status) => {
                                     if status.success() {
                                         println!("✅ Test validator finished normally");
                                     } else {
-                                        eprintln!("❌ Test validator exited with status: {}", status);
+                                        eprintln!(
+                                            "❌ Test validator exited with status: {}",
+                                            status
+                                        );
                                         exit(1);
                                     }
                                 }
@@ -1403,25 +1463,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "doctor" => {
             // Handle the doctor command for system diagnostics and repair
             let diagnostic_coordinator = DiagnosticCoordinator::new();
-            
+
             if matches.contains_id("fix") {
                 // Run diagnostics and attempt repairs
                 println!("🩺 OSVM System Health Check & Repair");
                 println!("===================================");
-                
+
                 match diagnostic_coordinator.run_detailed_diagnostics().await {
                     Ok(results) => {
                         // Display current status
                         println!("📊 System Status: {:?}", results.summary.overall_health);
-                        println!("🔍 Checks: {}/{} passed", results.summary.passed_checks, results.summary.total_checks);
-                        
+                        println!(
+                            "🔍 Checks: {}/{} passed",
+                            results.summary.passed_checks, results.summary.total_checks
+                        );
+
                         if results.summary.critical_issues > 0 || results.summary.warnings > 0 {
                             println!("\n🛠️  Issues detected - attempting automatic repair...");
-                            
+
                             // Extract repairable errors from health check
                             let health = &results.system_health;
                             let mut repairable_errors = Vec::new();
-                            
+
                             // Convert health issues to repairable errors
                             for issue in &health.issues {
                                 match issue.category {
@@ -1453,9 +1516,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     _ => {}
                                 }
                             }
-                            
+
                             if !repairable_errors.is_empty() {
-                                let repair_system = crate::utils::self_repair::SelfRepairSystem::default();
+                                let repair_system =
+                                    crate::utils::self_repair::SelfRepairSystem::default();
                                 match repair_system.repair_automatically(repairable_errors).await {
                                     Ok(crate::utils::self_repair::RepairResult::Success(msg)) => {
                                         println!("✅ {}", msg);
@@ -1485,11 +1549,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let system_only = matches.contains_id("system_only");
                 let user_only = matches.contains_id("user_only");
                 let verbose = matches.get_count("verbose") > 0;
-                
+
                 if check_all || (!system_only && !user_only) {
                     println!("🩺 OSVM Comprehensive System Health Check");
                     println!("==========================================");
-                    
+
                     match diagnostic_coordinator.run_detailed_diagnostics().await {
                         Ok(results) => {
                             // Display summary
@@ -1500,7 +1564,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("├── Failed: {}", results.summary.failed_checks);
                             println!("├── Critical Issues: {}", results.summary.critical_issues);
                             println!("└── Warnings: {}", results.summary.warnings);
-                            
+
                             // Display detailed results if verbose
                             if verbose {
                                 println!("\n🔍 DETAILED RESULTS");
@@ -1512,7 +1576,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                 }
                             }
-                            
+
                             // Display issues and recommendations
                             let health = &results.system_health;
                             if !health.issues.is_empty() {
@@ -1524,24 +1588,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         crate::utils::diagnostics::IssueSeverity::Warning => "🟡",
                                         crate::utils::diagnostics::IssueSeverity::Info => "🔵",
                                     };
-                                    println!("  {} {}: {}", severity_icon, issue.title, issue.description);
+                                    println!(
+                                        "  {} {}: {}",
+                                        severity_icon, issue.title, issue.description
+                                    );
                                     if let Some(fix) = &issue.suggested_fix {
                                         println!("     💡 Suggested fix: {}", fix);
                                     }
                                 }
                             }
-                            
+
                             if !health.recommendations.is_empty() {
                                 println!("\n💡 RECOMMENDATIONS:");
                                 for rec in &health.recommendations {
                                     println!("  • {}", rec);
                                 }
                             }
-                            
+
                             if health.issues.is_empty() {
                                 println!("\n🎉 All systems healthy!");
                             } else {
-                                println!("\nℹ️  Use 'osvm doctor --fix' to attempt automatic repairs");
+                                println!(
+                                    "\nℹ️  Use 'osvm doctor --fix' to attempt automatic repairs"
+                                );
                             }
                         }
                         Err(e) => {
@@ -1552,15 +1621,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     println!("🩺 OSVM Targeted Health Check");
                     println!("=============================");
-                    
+
                     match diagnostic_coordinator.check_system_health().await {
                         Ok(health) => {
                             if system_only {
                                 println!("\n🖥️  SYSTEM DEPENDENCIES:");
                                 for dep in &health.system_dependencies {
                                     let status = if dep.installed { "✅" } else { "❌" };
-                                    let update_info = if dep.update_available { " (update available)" } else { "" };
-                                    println!("  {} {}: {}{}",
+                                    let update_info = if dep.update_available {
+                                        " (update available)"
+                                    } else {
+                                        ""
+                                    };
+                                    println!(
+                                        "  {} {}: {}{}",
                                         status,
                                         dep.name,
                                         dep.version.as_deref().unwrap_or("not installed"),
@@ -1568,11 +1642,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     );
                                 }
                             }
-                            
+
                             if user_only {
                                 println!("\n👤 USER CONFIGURATION:");
                                 let config = &health.user_configuration;
-                                println!("  {} Solana CLI: {}",
+                                println!(
+                                    "  {} Solana CLI: {}",
                                     if config.cli_installed { "✅" } else { "❌" },
                                     if config.cli_installed {
                                         config.cli_version.as_deref().unwrap_or("unknown version")
@@ -1580,11 +1655,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "not installed"
                                     }
                                 );
-                                println!("  {} Config directory: {}",
-                                    if config.config_dir_exists { "✅" } else { "❌" },
-                                    if config.config_dir_exists { "exists" } else { "missing" }
+                                println!(
+                                    "  {} Config directory: {}",
+                                    if config.config_dir_exists {
+                                        "✅"
+                                    } else {
+                                        "❌"
+                                    },
+                                    if config.config_dir_exists {
+                                        "exists"
+                                    } else {
+                                        "missing"
+                                    }
                                 );
-                                println!("  {} Keypair: {}",
+                                println!(
+                                    "  {} Keypair: {}",
                                     if config.keypair_exists { "✅" } else { "❌" },
                                     if config.keypair_exists {
                                         config.keypair_path.as_deref().unwrap_or("unknown path")
@@ -1592,9 +1677,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         "missing"
                                     }
                                 );
-                                println!("  {} Network: {}",
-                                    if config.current_network.is_some() { "✅" } else { "❌" },
-                                    config.current_network.as_deref().unwrap_or("not configured")
+                                println!(
+                                    "  {} Network: {}",
+                                    if config.current_network.is_some() {
+                                        "✅"
+                                    } else {
+                                        "❌"
+                                    },
+                                    config
+                                        .current_network
+                                        .as_deref()
+                                        .unwrap_or("not configured")
                                 );
                             }
                         }
