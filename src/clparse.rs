@@ -795,10 +795,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
         )
         .subcommand(
-            Command::new("new_feature_command")
-                .about("New feature for testing")
-        )
-        .subcommand(
             Command::new("solana")
                 .about("Deploy and manage Solana validators")
                 .arg_required_else_help(true)
@@ -948,6 +944,39 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .short('v')
                         .action(ArgAction::Count)
                         .help("Detailed diagnostic output")
+                )
+        )
+        .subcommand(
+            Command::new("audit")
+                .about("Generate comprehensive security audit report")
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .short('o')
+                        .value_name("PATH")
+                        .help("Output directory for audit report files")
+                        .default_value("audit_reports")
+                )
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .value_name("FORMAT")
+                        .value_parser(clap::builder::PossibleValuesParser::new(["typst", "pdf", "both"]))
+                        .default_value("both")
+                        .help("Output format: typst source, PDF, or both")
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('v')
+                        .action(ArgAction::Count)
+                        .help("Verbose audit output")
+                )
+                .arg(
+                    Arg::new("test")
+                        .long("test")
+                        .action(ArgAction::SetTrue)
+                        .help("Generate test audit report with sample data")
                 )
         )
         .subcommand(

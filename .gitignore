@@ -12,3 +12,11 @@ node_modules/
 
 package-lock.json
 ~*.*
+
+# Typst installation files
+typst-*
+*.tar.xz
+
+# Generated audit reports
+audit_reports/
+*.pdf

@@ -1699,6 +1699,131 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        "audit" => {
+            use crate::utils::audit::AuditCoordinator;
+            use std::fs;
+            use std::path::Path;
+
+            println!("🔍 OSVM Security Audit");
+            println!("======================");
+
+            let output_dir = matches.get_one::<String>("output").unwrap();
+            let format = matches.get_one::<String>("format").unwrap();
+            let verbose = matches.get_count("verbose");
+            let test_mode = matches.get_flag("test");
+
+            if verbose > 0 {
+                println!("📁 Output directory: {}", output_dir);
+                println!("📄 Format: {}", format);
+                if test_mode {
+                    println!("🧪 Test mode: generating sample audit report");
+                }
+            }
+
+            // Create output directory
+            if let Err(e) = fs::create_dir_all(output_dir) {
+                eprintln!("❌ Failed to create output directory: {}", e);
+                exit(1);
+            }
+
+            // Initialize audit coordinator
+            let audit_coordinator = AuditCoordinator::new();
+
+            // Generate audit report
+            let report = if test_mode {
+                println!("🧪 Generating test audit report...");
+                audit_coordinator.create_test_audit_report()
+            } else {
+                // Run security audit
+                match audit_coordinator.run_security_audit().await {
+                    Ok(report) => report,
+                    Err(e) => {
+                        eprintln!("❌ Failed to run security audit: {}", e);
+                        exit(1);
+                    }
+                }
+            };
+
+            println!("✅ Security audit completed successfully");
+            println!("📊 Security Score: {:.1}/100", report.summary.security_score);
+            println!("🔍 Total Findings: {}", report.summary.total_findings);
+            
+            if report.summary.critical_findings > 0 {
+                println!("🔴 Critical: {}", report.summary.critical_findings);
+            }
+            if report.summary.high_findings > 0 {
+                println!("🟠 High: {}", report.summary.high_findings);
+            }
+            if report.summary.medium_findings > 0 {
+                println!("🟡 Medium: {}", report.summary.medium_findings);
+            }
+            if report.summary.low_findings > 0 {
+                println!("🔵 Low: {}", report.summary.low_findings);
+            }
+
+            // Generate timestamp for unique filenames
+            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+            
+            // Generate outputs based on requested format
+            let typst_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
+            let pdf_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
+            
+            match format.as_str() {
+                "typst" | "both" => {
+                    if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
+                        eprintln!("❌ Failed to generate Typst document: {}", e);
+                        exit(1);
+                    }
+                    println!("📄 Typst document generated: {}", typst_path.display());
+                    
+                    if format == "both" {
+                        if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
+                            eprintln!("❌ Failed to compile PDF: {}", e);
+                            eprintln!("   Typst document is available at: {}", typst_path.display());
+                        } else {
+                            println!("📋 PDF report generated: {}", pdf_path.display());
+                        }
+                    }
+                }
+                "pdf" => {
+                    // Generate Typst document first (temporary)
+                    if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
+                        eprintln!("❌ Failed to generate Typst document: {}", e);
+                        exit(1);
+                    }
+                    
+                    if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
+                        eprintln!("❌ Failed to compile PDF: {}", e);
+                        exit(1);
+                    }
+                    
+                    // Remove temporary Typst file
+                    let _ = fs::remove_file(&typst_path);
+                    println!("📋 PDF report generated: {}", pdf_path.display());
+                }
+                _ => {
+                    eprintln!("❌ Invalid format specified");
+                    exit(1);
+                }
+            }
+
+            if verbose > 0 {
+                println!("\n📋 Audit Summary:");
+                println!("  Compliance Level: {}", report.summary.compliance_level);
+                println!("  System: {} {}", report.system_info.os_info, report.system_info.architecture);
+                println!("  Rust Version: {}", report.system_info.rust_version);
+                if let Some(ref solana_version) = report.system_info.solana_version {
+                    println!("  Solana Version: {}", solana_version);
+                }
+            }
+
+            println!("\n💡 To view the full report, open the generated file.");
+            
+            if !test_mode && (report.summary.critical_findings > 0 || report.summary.high_findings > 0) {
+                println!("⚠️  Critical or high-severity findings detected. Please review and address them promptly.");
+                exit(1);
+            }
+        }
         "new_feature_command" => {
             println!("Expected output for new feature");
         }

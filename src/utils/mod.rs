@@ -18,6 +18,8 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// Security audit system for comprehensive vulnerability analysis
+pub mod audit;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
