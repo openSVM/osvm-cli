@@ -85,16 +85,19 @@ jobs:
       - name: Create Debian package
         run: |
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          # Prepare the source directory with source files, not the binary
-          mkdir -p osvm-$VERSION
-          cp -r src Cargo.toml Cargo.lock README.md LICENSE osvm-$VERSION/
-          rm -f ../osvm_$VERSION.orig.tar.gz  # <--- add this line
-          tar czvf osvm_$VERSION.orig.tar.gz osvm-$VERSION
-          cd osvm-$VERSION
-          dh_make -y -s -c apache -e rin@opensvm.com -f ../osvm_$VERSION.orig.tar.gz
-          cd ..
+          WORKDIR=$(pwd)
+          PKG=osvm-$VERSION
+          TARBALL="$WORKDIR/osvm_${VERSION}.orig.tar.gz"
+          rm -rf "$PKG"
+          rm -f "$TARBALL"
+          mkdir -p "$PKG"
+          cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
+          tar czvf "$TARBALL" "$PKG"
+          cd "$PKG"
+          dh_make -y -s -c apache -e rin@opensvm.com -f "$TARBALL"
+          cd "$WORKDIR"
           dpkg-buildpackage -us -uc
-      
+          
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
