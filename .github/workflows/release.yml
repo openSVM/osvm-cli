@@ -85,10 +85,12 @@ jobs:
       - name: Create Debian package
         run: |
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          # Prepare the source directory with source files, not the binary
           mkdir -p osvm-$VERSION
-          cp ./osvm osvm-$VERSION/
+          cp -r src Cargo.toml Cargo.lock README.md LICENSE osvm-$VERSION/
+          tar czvf osvm_$VERSION.orig.tar.gz osvm-$VERSION
           cd osvm-$VERSION
-          dh_make -y -s -c apache -e rin@opensvm.com -f ../osvm
+          dh_make -y -s -c apache -e rin@opensvm.com -f ../osvm_$VERSION.orig.tar.gz
           cd ..
           dpkg-buildpackage -us -uc
       
