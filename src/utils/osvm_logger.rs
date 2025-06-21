@@ -1,14 +1,14 @@
 use chrono::{DateTime, Utc};
+use colored::*;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
-use colored::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogLevel {
     Debug,
-    Info, 
+    Info,
     Warn,
     Error,
     Critical,
@@ -73,7 +73,14 @@ impl OsvmLogger {
         self
     }
 
-    pub fn log(&self, level: LogLevel, category: LogCategory, component: &str, message: &str, context: std::collections::HashMap<String, String>) {
+    pub fn log(
+        &self,
+        level: LogLevel,
+        category: LogCategory,
+        component: &str,
+        message: &str,
+        context: std::collections::HashMap<String, String>,
+    ) {
         if !self.should_log(&level) {
             return;
         }
@@ -137,11 +144,12 @@ impl OsvmLogger {
         };
 
         let time = entry.timestamp.format("%H:%M:%S%.3f");
-        
-        println!("{} [{}] [{}] [{}] {}", 
-            level_str, 
-            time, 
-            category_str.bright_cyan(), 
+
+        println!(
+            "{} [{}] [{}] [{}] {}",
+            level_str,
+            time,
+            category_str.bright_cyan(),
             entry.component.bright_white(),
             entry.message
         );
@@ -165,7 +173,7 @@ impl OsvmLogger {
                     entry.message.replace('"', "\\\"")
                 )
             });
-            
+
             let _ = writeln!(file, "{}", json_line);
             let _ = file.flush();
         }
@@ -173,35 +181,83 @@ impl OsvmLogger {
 
     // Convenience methods
     pub fn debug(&self, category: LogCategory, component: &str, message: &str) {
-        self.log(LogLevel::Debug, category, component, message, std::collections::HashMap::new());
+        self.log(
+            LogLevel::Debug,
+            category,
+            component,
+            message,
+            std::collections::HashMap::new(),
+        );
     }
 
     pub fn info(&self, category: LogCategory, component: &str, message: &str) {
-        self.log(LogLevel::Info, category, component, message, std::collections::HashMap::new());
+        self.log(
+            LogLevel::Info,
+            category,
+            component,
+            message,
+            std::collections::HashMap::new(),
+        );
     }
 
     pub fn warn(&self, category: LogCategory, component: &str, message: &str) {
-        self.log(LogLevel::Warn, category, component, message, std::collections::HashMap::new());
+        self.log(
+            LogLevel::Warn,
+            category,
+            component,
+            message,
+            std::collections::HashMap::new(),
+        );
     }
 
     pub fn error(&self, category: LogCategory, component: &str, message: &str) {
-        self.log(LogLevel::Error, category, component, message, std::collections::HashMap::new());
+        self.log(
+            LogLevel::Error,
+            category,
+            component,
+            message,
+            std::collections::HashMap::new(),
+        );
     }
 
     pub fn critical(&self, category: LogCategory, component: &str, message: &str) {
-        self.log(LogLevel::Critical, category, component, message, std::collections::HashMap::new());
+        self.log(
+            LogLevel::Critical,
+            category,
+            component,
+            message,
+            std::collections::HashMap::new(),
+        );
     }
 
     // Methods with context
-    pub fn info_with_context(&self, category: LogCategory, component: &str, message: &str, context: std::collections::HashMap<String, String>) {
+    pub fn info_with_context(
+        &self,
+        category: LogCategory,
+        component: &str,
+        message: &str,
+        context: std::collections::HashMap<String, String>,
+    ) {
         self.log(LogLevel::Info, category, component, message, context);
     }
 
-    pub fn error_with_context(&self, category: LogCategory, component: &str, message: &str, context: std::collections::HashMap<String, String>) {
+    pub fn error_with_context(
+        &self,
+        category: LogCategory,
+        component: &str,
+        message: &str,
+        context: std::collections::HashMap<String, String>,
+    ) {
         self.log(LogLevel::Error, category, component, message, context);
     }
 
-    pub fn debug_with_context(&self, category: LogCategory, component: &str, message: &str, context: std::collections::HashMap<String, String>) {
+    pub fn debug_with_context(
+        &self,
+        category: LogCategory,
+        component: &str,
+        message: &str,
+        context: std::collections::HashMap<String, String>,
+    ) {
         self.log(LogLevel::Debug, category, component, message, context);
     }
 }
@@ -221,7 +277,8 @@ macro_rules! osvm_info {
         $crate::utils::osvm_logger::OSVM_LOGGER.info($category, $component, $message);
     };
     ($category:expr, $component:expr, $message:expr, $context:expr) => {
-        $crate::utils::osvm_logger::OSVM_LOGGER.info_with_context($category, $component, $message, $context);
+        $crate::utils::osvm_logger::OSVM_LOGGER
+            .info_with_context($category, $component, $message, $context);
     };
 }
 
@@ -231,7 +288,8 @@ macro_rules! osvm_error {
         $crate::utils::osvm_logger::OSVM_LOGGER.error($category, $component, $message);
     };
     ($category:expr, $component:expr, $message:expr, $context:expr) => {
-        $crate::utils::osvm_logger::OSVM_LOGGER.error_with_context($category, $component, $message, $context);
+        $crate::utils::osvm_logger::OSVM_LOGGER
+            .error_with_context($category, $component, $message, $context);
     };
 }
 
@@ -248,7 +306,8 @@ macro_rules! osvm_debug {
         $crate::utils::osvm_logger::OSVM_LOGGER.debug($category, $component, $message);
     };
     ($category:expr, $component:expr, $message:expr, $context:expr) => {
-        $crate::utils::osvm_logger::OSVM_LOGGER.debug_with_context($category, $component, $message, $context);
+        $crate::utils::osvm_logger::OSVM_LOGGER
+            .debug_with_context($category, $component, $message, $context);
     };
 }
 
@@ -257,4 +316,4 @@ macro_rules! osvm_critical {
     ($category:expr, $component:expr, $message:expr) => {
         $crate::utils::osvm_logger::OSVM_LOGGER.critical($category, $component, $message);
     };
-} 
+}
