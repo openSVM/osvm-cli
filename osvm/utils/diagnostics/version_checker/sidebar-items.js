@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["VersionComparison","VersionError","VersionMismatchSeverity"],"struct":["SemanticVersion","VersionChecker","VersionRequirement"]};

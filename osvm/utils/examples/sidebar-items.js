@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExampleCategory"],"fn":["display_all_examples","display_category","display_category_by_name","get_all_examples","get_examples_by_category"],"struct":["Example"]};

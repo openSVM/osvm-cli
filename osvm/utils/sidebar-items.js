@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["load_keys_config_file"],"mod":["color","dashboard","devnet_rpc","diagnostics","ebpf_deploy","examples","local_rpc","log_monitor","nodes","nodes_dashboard","osvm_logger","self_repair","solana_rpc","ssh_deploy","svm_info"]};
