@@ -3,9 +3,9 @@
 //! This module provides detailed system health assessment capabilities
 //! and health status management.
 
+use super::{HealthIssue, HealthStatus, IssueCategory, IssueSeverity, SystemHealth};
 use std::collections::HashMap;
 use std::process::Command;
-use super::{SystemHealth, HealthStatus, HealthIssue, IssueSeverity, IssueCategory};
 
 /// System health analyzer
 pub struct SystemHealthAnalyzer;
@@ -36,7 +36,10 @@ impl SystemHealthAnalyzer {
                     severity: IssueSeverity::Error,
                     category: IssueCategory::SystemDependencies,
                     title: format!("Missing dependency: {}", dep.name),
-                    description: format!("Required system dependency '{}' is not installed", dep.name),
+                    description: format!(
+                        "Required system dependency '{}' is not installed",
+                        dep.name
+                    ),
                     suggested_fix: Some(format!("Install {} using your package manager", dep.name)),
                 });
             } else if dep.update_available {
@@ -59,7 +62,8 @@ impl SystemHealthAnalyzer {
                 description: "Solana CLI is required for OSVM operations".to_string(),
                 suggested_fix: Some("Install Solana CLI using the official installer".to_string()),
             });
-            recommendations.push("Run 'osvm doctor --fix' to automatically install Solana CLI".to_string());
+            recommendations
+                .push("Run 'osvm doctor --fix' to automatically install Solana CLI".to_string());
         }
 
         if !user_config.config_dir_exists {
@@ -80,7 +84,8 @@ impl SystemHealthAnalyzer {
                 description: "No Solana keypair found".to_string(),
                 suggested_fix: Some("Generate a new keypair with 'solana-keygen new'".to_string()),
             });
-            recommendations.push("Run 'osvm doctor --fix' to automatically generate a keypair".to_string());
+            recommendations
+                .push("Run 'osvm doctor --fix' to automatically generate a keypair".to_string());
         }
 
         // Analyze network connectivity
@@ -150,7 +155,9 @@ impl SystemHealthAnalyzer {
 
         // Add general recommendations
         if !issues.is_empty() {
-            recommendations.push("Use 'osvm doctor --verbose' for detailed diagnostic information".to_string());
+            recommendations.push(
+                "Use 'osvm doctor --verbose' for detailed diagnostic information".to_string(),
+            );
         }
 
         SystemHealth {
@@ -195,7 +202,10 @@ impl SystemHealthAnalyzer {
                                 param, recommended
                             )),
                         });
-                        recommendations.push("Run 'osvm doctor --fix' to automatically tune system parameters".to_string());
+                        recommendations.push(
+                            "Run 'osvm doctor --fix' to automatically tune system parameters"
+                                .to_string(),
+                        );
                     }
                 }
                 Err(_) => {
@@ -204,7 +214,9 @@ impl SystemHealthAnalyzer {
                         category: IssueCategory::SystemDependencies,
                         title: format!("Cannot check system parameter: {}", param),
                         description: format!("Unable to read kernel parameter {}", param),
-                        suggested_fix: Some("Check system permissions or kernel configuration".to_string()),
+                        suggested_fix: Some(
+                            "Check system permissions or kernel configuration".to_string(),
+                        ),
                     });
                 }
             }
@@ -245,7 +257,8 @@ impl SystemHealthAnalyzer {
         }
 
         let value_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        value_str.parse::<u64>()
+        value_str
+            .parse::<u64>()
             .map_err(|e| format!("Failed to parse value: {}", e))
     }
 
@@ -261,7 +274,8 @@ impl SystemHealthAnalyzer {
         }
 
         let value_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        value_str.parse::<u64>()
+        value_str
+            .parse::<u64>()
             .map_err(|e| format!("Failed to parse value: {}", e))
     }
 
@@ -272,21 +286,34 @@ impl SystemHealthAnalyzer {
         issues: &mut Vec<HealthIssue>,
     ) {
         for (endpoint, &response_time) in response_times {
-            if response_time > 5000 { // 5 seconds
+            if response_time > 5000 {
+                // 5 seconds
                 issues.push(HealthIssue {
                     severity: IssueSeverity::Warning,
                     category: IssueCategory::Performance,
                     title: format!("Slow network response: {}", endpoint),
-                    description: format!("Network response time to {} is {} ms", endpoint, response_time),
-                    suggested_fix: Some("Check network connectivity and consider using a different RPC endpoint".to_string()),
+                    description: format!(
+                        "Network response time to {} is {} ms",
+                        endpoint, response_time
+                    ),
+                    suggested_fix: Some(
+                        "Check network connectivity and consider using a different RPC endpoint"
+                            .to_string(),
+                    ),
                 });
-            } else if response_time > 10000 { // 10 seconds
+            } else if response_time > 10000 {
+                // 10 seconds
                 issues.push(HealthIssue {
                     severity: IssueSeverity::Error,
                     category: IssueCategory::Performance,
                     title: format!("Very slow network response: {}", endpoint),
-                    description: format!("Network response time to {} is {} ms", endpoint, response_time),
-                    suggested_fix: Some("Network performance is severely degraded - check connection".to_string()),
+                    description: format!(
+                        "Network response time to {} is {} ms",
+                        endpoint, response_time
+                    ),
+                    suggested_fix: Some(
+                        "Network performance is severely degraded - check connection".to_string(),
+                    ),
                 });
             }
         }
@@ -316,7 +343,10 @@ impl SystemHealthAnalyzer {
                                 severity: IssueSeverity::Warning,
                                 category: IssueCategory::Security,
                                 title: "Keypair file permissions too permissive".to_string(),
-                                description: format!("Keypair file {} has overly permissive permissions", keypair_path),
+                                description: format!(
+                                    "Keypair file {} has overly permissive permissions",
+                                    keypair_path
+                                ),
                                 suggested_fix: Some(format!("Run: chmod 600 {}", keypair_path)),
                             });
                         }
@@ -333,7 +363,9 @@ impl SystemHealthAnalyzer {
                     category: IssueCategory::Security,
                     title: "Using development network".to_string(),
                     description: "Currently configured to use Solana devnet".to_string(),
-                    suggested_fix: Some("Consider switching to mainnet for production use".to_string()),
+                    suggested_fix: Some(
+                        "Consider switching to mainnet for production use".to_string(),
+                    ),
                 });
             }
         }
@@ -396,11 +428,17 @@ impl SystemHealthAnalyzer {
         let mut recommendations = health.recommendations.clone();
 
         // Add category-specific recommendations
-        let has_system_issues = health.issues.iter()
+        let has_system_issues = health
+            .issues
+            .iter()
             .any(|i| matches!(i.category, IssueCategory::SystemDependencies));
-        let has_user_issues = health.issues.iter()
+        let has_user_issues = health
+            .issues
+            .iter()
             .any(|i| matches!(i.category, IssueCategory::UserConfiguration));
-        let has_network_issues = health.issues.iter()
+        let has_network_issues = health
+            .issues
+            .iter()
             .any(|i| matches!(i.category, IssueCategory::NetworkConnectivity));
 
         if has_system_issues {
@@ -408,7 +446,9 @@ impl SystemHealthAnalyzer {
         }
 
         if has_user_issues {
-            recommendations.push("Review user configuration and ensure all required tools are installed".to_string());
+            recommendations.push(
+                "Review user configuration and ensure all required tools are installed".to_string(),
+            );
         }
 
         if has_network_issues {
@@ -417,7 +457,9 @@ impl SystemHealthAnalyzer {
 
         // Add proactive recommendations
         if health.overall_status == HealthStatus::Healthy {
-            recommendations.push("System is healthy - consider running 'osvm doctor' periodically".to_string());
+            recommendations.push(
+                "System is healthy - consider running 'osvm doctor' periodically".to_string(),
+            );
             recommendations.push("Keep system dependencies up to date".to_string());
         }
 
@@ -444,10 +486,22 @@ mod tests {
 
     #[test]
     fn test_health_status_emoji() {
-        assert_eq!(SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Healthy), "🟢");
-        assert_eq!(SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Warning), "🟡");
-        assert_eq!(SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Critical), "🔴");
-        assert_eq!(SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Unknown), "⚪");
+        assert_eq!(
+            SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Healthy),
+            "🟢"
+        );
+        assert_eq!(
+            SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Warning),
+            "🟡"
+        );
+        assert_eq!(
+            SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Critical),
+            "🔴"
+        );
+        assert_eq!(
+            SystemHealthAnalyzer::get_status_emoji(&HealthStatus::Unknown),
+            "⚪"
+        );
     }
 
     #[test]
@@ -469,7 +523,7 @@ mod tests {
     #[test]
     fn test_health_score_calculation() {
         let analyzer = SystemHealthAnalyzer::new();
-        
+
         // Healthy system
         let healthy_system = SystemHealth {
             overall_status: HealthStatus::Healthy,
@@ -493,7 +547,7 @@ mod tests {
             issues: Vec::new(),
             recommendations: Vec::new(),
         };
-        
+
         assert_eq!(analyzer.calculate_health_score(&healthy_system), 100);
 
         // System with warning
@@ -505,18 +559,21 @@ mod tests {
             description: "Test".to_string(),
             suggested_fix: None,
         });
-        
+
         assert_eq!(analyzer.calculate_health_score(&warning_system), 95);
     }
 
     #[test]
     fn test_overall_status_determination() {
         let analyzer = SystemHealthAnalyzer::new();
-        
+
         // No issues
         let no_issues = Vec::new();
-        assert_eq!(analyzer.determine_overall_status(&no_issues), HealthStatus::Healthy);
-        
+        assert_eq!(
+            analyzer.determine_overall_status(&no_issues),
+            HealthStatus::Healthy
+        );
+
         // Warning issue
         let warning_issues = vec![HealthIssue {
             severity: IssueSeverity::Warning,
@@ -525,8 +582,11 @@ mod tests {
             description: "Test".to_string(),
             suggested_fix: None,
         }];
-        assert_eq!(analyzer.determine_overall_status(&warning_issues), HealthStatus::Warning);
-        
+        assert_eq!(
+            analyzer.determine_overall_status(&warning_issues),
+            HealthStatus::Warning
+        );
+
         // Critical issue
         let critical_issues = vec![HealthIssue {
             severity: IssueSeverity::Critical,
@@ -535,6 +595,9 @@ mod tests {
             description: "Test".to_string(),
             suggested_fix: None,
         }];
-        assert_eq!(analyzer.determine_overall_status(&critical_issues), HealthStatus::Critical);
+        assert_eq!(
+            analyzer.determine_overall_status(&critical_issues),
+            HealthStatus::Critical
+        );
     }
 }

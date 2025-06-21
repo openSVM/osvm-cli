@@ -3,10 +3,10 @@
 //! This module provides unified interface for different package managers
 //! across Linux, macOS, and Windows platforms.
 
-use std::process::Command;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
+use std::process::Command;
 
 /// Supported package managers
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -57,22 +57,22 @@ impl StdError for PackageManagerError {}
 pub trait PackageManagerOps {
     /// Update package database
     fn update_packages(&self) -> Result<String, PackageManagerError>;
-    
+
     /// Upgrade all packages
     fn upgrade_packages(&self) -> Result<String, PackageManagerError>;
-    
+
     /// Install specific packages
     fn install_packages(&self, packages: &[&str]) -> Result<String, PackageManagerError>;
-    
+
     /// Check if package is installed
     fn is_package_installed(&self, package: &str) -> Result<bool, PackageManagerError>;
-    
+
     /// List available updates
     fn list_updates(&self) -> Result<Vec<String>, PackageManagerError>;
-    
+
     /// Get package manager name
     fn name(&self) -> &str;
-    
+
     /// Check if this package manager is available on the system
     fn is_available(&self) -> bool;
 }
@@ -97,7 +97,7 @@ impl PackageManager {
         }
 
         Err(PackageManagerError::NotFound(
-            "No supported package manager found on this system".to_string()
+            "No supported package manager found on this system".to_string(),
         ))
     }
 
@@ -250,7 +250,9 @@ impl PackageManagerOps for PackageManager {
 /// Execute a command and return the output
 fn execute_command(cmd: &[&str]) -> Result<String, PackageManagerError> {
     if cmd.is_empty() {
-        return Err(PackageManagerError::ExecutionFailed("Empty command".to_string()));
+        return Err(PackageManagerError::ExecutionFailed(
+            "Empty command".to_string(),
+        ));
     }
 
     let mut command = Command::new(cmd[0]);
@@ -289,17 +291,9 @@ pub fn get_build_dependencies() -> Vec<&'static str> {
             "libudev-dev",
         ]
     } else if cfg!(target_os = "macos") {
-        vec![
-            "pkg-config",
-            "openssl",
-            "git",
-            "curl",
-        ]
+        vec!["pkg-config", "openssl", "git", "curl"]
     } else if cfg!(target_os = "windows") {
-        vec![
-            "git",
-            "curl",
-        ]
+        vec!["git", "curl"]
     } else {
         vec!["git", "curl"]
     }
@@ -330,7 +324,10 @@ mod tests {
     fn test_package_manager_detection() {
         // This test will vary based on the system it's run on
         let detected = PackageManager::detect_all();
-        assert!(!detected.is_empty(), "At least one package manager should be detected");
+        assert!(
+            !detected.is_empty(),
+            "At least one package manager should be detected"
+        );
     }
 
     #[test]
