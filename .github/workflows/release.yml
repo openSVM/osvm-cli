@@ -84,18 +84,26 @@ jobs:
       
       - name: Create Debian package
         run: |
+          # Get version by stripping 'v' prefix from tag
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
           WORKDIR=$(pwd)
           PKG=osvm-$VERSION
           TARBALL="$WORKDIR/osvm_${VERSION}.orig.tar.gz"
+          # Clean up any old stuff
           rm -rf "$PKG"
           rm -f "$TARBALL"
+          # Prepare source dir
           mkdir -p "$PKG"
           cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
+          # Pack source tarball in the working dir
           tar czvf "$TARBALL" "$PKG"
+          # Move into the package dir
           cd "$PKG"
-          dh_make -y -s -c apache -e rin@opensvm.com -f "$TARBALL"
+          # Run dh_make using relative path to the tarball
+          dh_make -y -s -c apache -e rin@opensvm.com -f "../osvm_${VERSION}.orig.tar.gz"
+          # Move back to the working dir
           cd "$WORKDIR"
+          # Build the .deb package
           dpkg-buildpackage -us -uc
           
       - name: Upload Debian package
