@@ -863,7 +863,7 @@ impl AuditCoordinator {
         // Document header and styling
         content.push_str(r#"#set document(title: "OSVM Security Audit Report")
 #set page(numbering: "1")
-#set text(font: "Linux Libertine", size: 11pt)
+#set text(size: 11pt)
 #set heading(numbering: "1.")
 
 #align(center)[
@@ -876,7 +876,7 @@ impl AuditCoordinator {
   #v(2em)
   
   #text(size: 12pt)[
-    Generated: #datetime.now().display()
+    Generated: #datetime.today().display()
     
     Version: "#);
         content.push_str(&report.version);
