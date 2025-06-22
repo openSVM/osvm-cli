@@ -1,0 +1,166 @@
+name: 'Deploy SVM'
+description: 'Deploy Solana Virtual Machine nodes using the OSVM CLI'
+author: 'openSVM'
+branding:
+  icon: 'upload-cloud'
+  color: 'purple'
+
+inputs:
+  svm-name:
+    description: 'Name of the SVM to deploy'
+    required: true
+  host:
+    description: 'Remote host to deploy to (format: user@host[:port])'
+    required: true
+  network:
+    description: 'Target Solana network'
+    required: false
+    default: 'mainnet'
+  node-type:
+    description: 'Type of node to deploy (validator or rpc)'
+    required: false
+    default: 'validator'
+  ssh-private-key:
+    description: 'SSH private key for connecting to remote host'
+    required: true
+  keypair:
+    description: 'Solana keypair JSON content'
+    required: false
+  rpc-url:
+    description: 'JSON RPC URL for the cluster'
+    required: false
+  verbose:
+    description: 'Enable verbose logging'
+    required: false
+    default: 'false'
+  deploy-args:
+    description: 'Additional CLI flags for deployment'
+    required: false
+    default: ''
+
+outputs:
+  status:
+    description: 'Deployment status (success or failure)'
+    value: ${{ steps.deploy.outputs.status }}
+  logs:
+    description: 'Deployment logs'
+    value: ${{ steps.deploy.outputs.logs }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup SSH key
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ inputs.ssh-private-key }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $(echo "${{ inputs.host }}" | cut -d'@' -f2 | cut -d':' -f1) >> ~/.ssh/known_hosts
+
+    - name: Setup Solana keypair
+      shell: bash
+      if: inputs.keypair != ''
+      run: |
+        mkdir -p ~/.config/solana
+        echo "${{ inputs.keypair }}" > ~/.config/solana/id.json
+        chmod 600 ~/.config/solana/id.json
+
+    - name: Install OSVM CLI
+      shell: bash
+      run: |
+        # Check if osvm binary is already available
+        if ! command -v osvm &> /dev/null; then
+          echo "Installing OSVM CLI..."
+          # Download and install the latest release
+          OSVM_VERSION=$(curl -s https://api.github.com/repos/openSVM/osvm-cli/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+          if [ -z "$OSVM_VERSION" ]; then
+            echo "Warning: Could not determine latest version, using main branch"
+            # Build from source if no release is available
+            if [ ! -d "/tmp/osvm-cli" ]; then
+              git clone https://github.com/openSVM/osvm-cli.git /tmp/osvm-cli
+            fi
+            cd /tmp/osvm-cli
+            cargo build --release
+            sudo cp target/release/osvm /usr/local/bin/osvm
+          else
+            echo "Installing OSVM CLI version $OSVM_VERSION"
+            wget -O /tmp/osvm "https://github.com/openSVM/osvm-cli/releases/download/$OSVM_VERSION/osvm-linux-x86_64" 2>/dev/null || {
+              echo "Binary release not available, building from source..."
+              if [ ! -d "/tmp/osvm-cli" ]; then
+                git clone https://github.com/openSVM/osvm-cli.git /tmp/osvm-cli
+              fi
+              cd /tmp/osvm-cli
+              cargo build --release
+              sudo cp target/release/osvm /usr/local/bin/osvm
+            }
+            if [ -f "/tmp/osvm" ]; then
+              chmod +x /tmp/osvm
+              sudo mv /tmp/osvm /usr/local/bin/osvm
+            fi
+          fi
+        fi
+        
+        # Verify installation
+        osvm --version
+
+    - name: Deploy SVM
+      id: deploy
+      shell: bash
+      run: |
+        set -e
+        
+        echo "::group::Deploying SVM"
+        
+        # Build command
+        CMD="osvm svm install"
+        CMD="$CMD --host ${{ inputs.host }}"
+        
+        if [ "${{ inputs.rpc-url }}" != "" ]; then
+          CMD="$CMD --url ${{ inputs.rpc-url }}"
+        fi
+        
+        if [ "${{ inputs.keypair }}" != "" ]; then
+          CMD="$CMD --keypair ~/.config/solana/id.json"
+        fi
+        
+        if [ "${{ inputs.verbose }}" == "true" ]; then
+          CMD="$CMD -v"
+        fi
+        
+        # Add any additional deployment arguments
+        if [ "${{ inputs.deploy-args }}" != "" ]; then
+          CMD="$CMD ${{ inputs.deploy-args }}"
+        fi
+        
+        # Add SVM name at the end
+        CMD="$CMD ${{ inputs.svm-name }}"
+        
+        echo "Executing: $CMD"
+        
+        # Execute the deployment
+        if OUTPUT=$(eval $CMD 2>&1); then
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "logs<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "✅ SVM deployment completed successfully"
+          echo "$OUTPUT"
+        else
+          echo "status=failure" >> $GITHUB_OUTPUT
+          echo "logs<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "❌ SVM deployment failed"
+          echo "$OUTPUT"
+          exit 1
+        fi
+        
+        echo "::endgroup::"
+
+    - name: Cleanup
+      shell: bash
+      if: always()
+      run: |
+        # Clean up SSH key and keypair
+        rm -f ~/.ssh/id_rsa
+        rm -f ~/.config/solana/id.json

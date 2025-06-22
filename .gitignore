@@ -2,21 +2,68 @@
 /program/target/
 .cline/
 .ledger
-notes/
 .vscode/*
 .vscode
 .dist/*
 .dist
 node_modules/
 .DS_Store
-
-package-lock.json
-~*.*
+*-ledger/
+*.log
 
 # Typst installation files
 typst-*
 *.tar.xz
 
-# Generated audit reports
-audit_reports/
-*.pdf
+# Additional logs and temporary files
+*.log.*
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+*.old
+*.rej
+*.out
+
+# Runtime and crash dumps
+core
+core.*
+*.core
+*.stackdump
+*.dmp
+
+# IDE specific files
+.idea/
+*.iml
+*.iws
+*.ipr
+.settings/
+.project
+.classpath
+*.sublime-workspace
+*.sublime-project
+.history/
+.ionide/
+osvm-local 
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Rust specific
+debug/
+profile.*
+perf.*
+
+# Project specific
+agave-validator-*.log
+solana-validator-*.log
+sonic-*.log
+eclipse-*.log
+osvm-*.log

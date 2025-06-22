@@ -1,0 +1,97 @@
+name: Deploy SVM (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      svm-name:
+        description: 'Name of the SVM to deploy'
+        required: true
+        type: string
+      host:
+        description: 'Remote host to deploy to (format: user@host[:port])'
+        required: true
+        type: string
+      network:
+        description: 'Target Solana network'
+        required: false
+        type: string
+        default: 'mainnet'
+      node-type:
+        description: 'Type of node to deploy (validator or rpc)'
+        required: false
+        type: string
+        default: 'validator'
+      rpc-url:
+        description: 'JSON RPC URL for the cluster'
+        required: false
+        type: string
+        default: ''
+      verbose:
+        description: 'Enable verbose logging'
+        required: false
+        type: boolean
+        default: false
+      deploy-args:
+        description: 'Additional CLI flags for deployment'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      SSH_PRIVATE_KEY:
+        description: 'SSH private key for connecting to remote host'
+        required: true
+      SOLANA_KEYPAIR:
+        description: 'Solana keypair JSON content'
+        required: false
+    outputs:
+      status:
+        description: 'Deployment status'
+        value: ${{ jobs.deploy.outputs.status }}
+      logs:
+        description: 'Deployment logs'
+        value: ${{ jobs.deploy.outputs.logs }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ steps.deploy-svm.outputs.status }}
+      logs: ${{ steps.deploy-svm.outputs.logs }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+
+      - name: Deploy SVM Node
+        id: deploy-svm
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ inputs.svm-name }}
+          host: ${{ inputs.host }}
+          network: ${{ inputs.network }}
+          node-type: ${{ inputs.node-type }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          rpc-url: ${{ inputs.rpc-url }}
+          verbose: ${{ inputs.verbose }}
+          deploy-args: ${{ inputs.deploy-args }}
+
+      - name: Post-deployment summary
+        run: |
+          echo "## SVM Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **SVM Name:** ${{ inputs.svm-name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Host:** ${{ inputs.host }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Network:** ${{ inputs.network }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Node Type:** ${{ inputs.node-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ steps.deploy-svm.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.deploy-svm.outputs.status }}" == "success" ]; then
+            echo "✅ **Deployment completed successfully!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Deployment failed. Check logs for details.**" >> $GITHUB_STEP_SUMMARY
+          fi
