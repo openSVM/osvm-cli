@@ -49,6 +49,11 @@ jobs:
         cd osvm-cli
         cargo build --release
         
+    - name: Run tests
+      run: |
+        cd osvm-cli
+        cargo test --release
+        
     - name: Setup Git for audit commits
       run: |
         git config --global user.name "OSVM Security Audit Bot"
@@ -59,11 +64,15 @@ jobs:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
         cd osvm-cli
+        AI_FLAG=""
+        if [ "${{ github.event.inputs.ai_analysis }}" == "true" ]; then
+          AI_FLAG="--ai-analysis"
+        fi
         ./target/release/osvm audit \
           --gh "${{ github.event.inputs.repository }}#${{ github.event.inputs.branch }}" \
           --format both \
           --verbose \
-          ${{ github.event.inputs.ai_analysis == 'true' && '--ai-analysis' || '' }}
+          $AI_FLAG
           
     - name: Create audit summary
       id: audit_summary
