@@ -12,6 +12,244 @@ use std::process::Command;
 
 use crate::utils::diagnostics::{DiagnosticCoordinator, DiagnosticResults, IssueSeverity, IssueCategory};
 
+/// OpenAI API client for AI-powered analysis
+pub struct OpenAIClient {
+    api_key: String,
+    client: reqwest::Client,
+}
+
+/// AI analysis result from OpenAI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIAnalysis {
+    pub enhanced_description: String,
+    pub risk_assessment: String,
+    pub mitigation_strategy: String,
+    pub confidence_score: f32,
+    pub additional_cwe_ids: Vec<String>,
+}
+
+/// AI-enhanced security finding
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AIEnhancedFinding {
+    pub original_finding: AuditFinding,
+    pub ai_analysis: Option<AIAnalysis>,
+}
+
+impl OpenAIClient {
+    /// Create a new OpenAI client
+    pub fn new(api_key: String) -> Self {
+        Self {
+            api_key,
+            client: reqwest::Client::new(),
+        }
+    }
+
+    /// Analyze a security finding using OpenAI
+    pub async fn analyze_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
+        let prompt = format!(
+            "Analyze this security finding and provide enhanced insights:\n\n\
+            Title: {}\n\
+            Description: {}\n\
+            Severity: {:?}\n\
+            Category: {}\n\
+            Current Recommendation: {}\n\n\
+            Please provide:\n\
+            1. Enhanced description with technical details\n\
+            2. Comprehensive risk assessment\n\
+            3. Specific mitigation strategy\n\
+            4. Confidence score (0.0-1.0)\n\
+            5. Additional relevant CWE IDs if applicable\n\n\
+            Format your response as JSON with these exact fields:\n\
+            - enhanced_description\n\
+            - risk_assessment\n\
+            - mitigation_strategy\n\
+            - confidence_score\n\
+            - additional_cwe_ids (array of strings)",
+            finding.title,
+            finding.description,
+            finding.severity,
+            finding.category,
+            finding.recommendation
+        );
+
+        let request_body = serde_json::json!({
+            "model": "gpt-4",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a cybersecurity expert specializing in Rust and blockchain security. Analyze security findings and provide detailed technical insights in JSON format."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3
+        });
+
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send request to OpenAI API")?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!("OpenAI API request failed: {}", error_text);
+        }
+
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI response")?;
+
+        let content = response_json
+            .get("choices")
+            .and_then(|choices| choices.get(0))
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(|content| content.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid OpenAI response format"))?;
+
+        // Parse the JSON response from OpenAI
+        let ai_analysis: AIAnalysis = serde_json::from_str(content)
+            .context("Failed to parse AI analysis JSON")?;
+
+        Ok(ai_analysis)
+    }
+
+    /// Analyze code content for security issues
+    pub async fn analyze_code(&self, code_content: &str, file_path: &str) -> Result<Vec<AuditFinding>> {
+        let prompt = format!(
+            "Analyze this Rust code file for security vulnerabilities:\n\n\
+            File: {}\n\
+            Code:\n```rust\n{}\n```\n\n\
+            Please identify potential security issues and provide findings in JSON format.\n\
+            For each finding, include: id, title, description, severity, category, impact, recommendation.\n\
+            Severity should be one of: Critical, High, Medium, Low, Info.\n\
+            Category should be one of: Security, Dependencies, Configuration, Network, Performance.\n\
+            Respond with a JSON array of findings.",
+            file_path,
+            code_content
+        );
+
+        let request_body = serde_json::json!({
+            "model": "gpt-4",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a security expert specializing in Rust code analysis. Identify security vulnerabilities and respond with JSON array of findings."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 2000,
+            "temperature": 0.2
+        });
+
+        let response = self
+            .client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .context("Failed to send code analysis request to OpenAI API")?;
+
+        if !response.status().is_success() {
+            return Ok(Vec::new()); // Return empty findings on API failure
+        }
+
+        let response_json: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI response")?;
+
+        let content = response_json
+            .get("choices")
+            .and_then(|choices| choices.get(0))
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
+            .and_then(|content| content.as_str())
+            .unwrap_or("[]");
+
+        // Parse the JSON response and convert to AuditFinding objects
+        let ai_findings: Vec<serde_json::Value> = serde_json::from_str(content)
+            .unwrap_or_default();
+
+        let mut findings = Vec::new();
+        for (i, finding_json) in ai_findings.iter().enumerate() {
+            if let Ok(finding) = self.parse_ai_finding(finding_json, i + 1000, file_path) {
+                findings.push(finding);
+            }
+        }
+
+        Ok(findings)
+    }
+
+    /// Parse AI finding JSON into AuditFinding
+    fn parse_ai_finding(&self, finding_json: &serde_json::Value, id_offset: usize, file_path: &str) -> Result<AuditFinding> {
+        let title = finding_json.get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("AI-detected security issue")
+            .to_string();
+
+        let description = finding_json.get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Security issue identified by AI analysis")
+            .to_string();
+
+        let severity_str = finding_json.get("severity")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Medium");
+
+        let severity = match severity_str {
+            "Critical" => AuditSeverity::Critical,
+            "High" => AuditSeverity::High,
+            "Medium" => AuditSeverity::Medium,
+            "Low" => AuditSeverity::Low,
+            _ => AuditSeverity::Info,
+        };
+
+        let category = finding_json.get("category")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Security")
+            .to_string();
+
+        let impact = finding_json.get("impact")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Potential security vulnerability")
+            .to_string();
+
+        let recommendation = finding_json.get("recommendation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Review and address the identified security concern")
+            .to_string();
+
+        Ok(AuditFinding {
+            id: format!("AI-{:03}", id_offset),
+            title,
+            description,
+            severity,
+            category,
+            cwe_id: Some("CWE-AI".to_string()),
+            cvss_score: Some(5.0),
+            impact,
+            recommendation,
+            code_location: Some(file_path.to_string()),
+            references: vec!["AI-generated finding".to_string()],
+        })
+    }
+}
+
 /// Audit severity levels
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AuditSeverity {
@@ -86,7 +324,7 @@ pub struct SystemInfo {
 
 /// Main audit coordinator
 pub struct AuditCoordinator {
-    // Remove automatic diagnostic coordinator creation
+    ai_client: Option<OpenAIClient>,
 }
 
 impl Default for AuditCoordinator {
@@ -99,13 +337,24 @@ impl AuditCoordinator {
     /// Create a new audit coordinator
     pub fn new() -> Self {
         Self {
-            // No diagnostic coordinator here
+            ai_client: None,
         }
     }
 
-    /// Run comprehensive security audit
+    /// Create a new audit coordinator with AI capabilities
+    pub fn with_ai(api_key: String) -> Self {
+        Self {
+            ai_client: Some(OpenAIClient::new(api_key)),
+        }
+    }
+
+    /// Run comprehensive security audit with optional AI enhancement
     pub async fn run_security_audit(&self) -> Result<AuditReport> {
         println!("🔍 Starting comprehensive security audit...");
+        
+        if self.ai_client.is_some() {
+            println!("🤖 AI-powered analysis enabled");
+        }
         
         // Create diagnostic coordinator only when needed
         let diagnostic_coordinator = DiagnosticCoordinator::new();
@@ -122,7 +371,20 @@ impl AuditCoordinator {
         };
 
         // Convert diagnostic results to audit findings
-        let findings = self.convert_diagnostics_to_findings(&diagnostic_results);
+        let mut findings = self.convert_diagnostics_to_findings(&diagnostic_results);
+        
+        // Perform additional security checks
+        findings.extend(self.perform_additional_security_checks());
+        
+        // If AI is enabled, perform AI-enhanced analysis
+        if let Some(ref ai_client) = self.ai_client {
+            println!("🤖 Running AI-powered code analysis...");
+            let ai_findings = self.perform_ai_code_analysis(ai_client).await;
+            findings.extend(ai_findings);
+            
+            // Enhance existing findings with AI analysis
+            findings = self.enhance_findings_with_ai(ai_client, findings).await;
+        }
         
         // Generate system information
         let system_info = self.collect_system_info().await?;
@@ -270,6 +532,61 @@ impl AuditCoordinator {
             ],
             _ => vec![],
         }
+    }
+
+    /// Perform AI-powered code analysis
+    async fn perform_ai_code_analysis(&self, ai_client: &OpenAIClient) -> Vec<AuditFinding> {
+        let mut ai_findings = Vec::new();
+        
+        // Analyze Rust source files
+        if let Ok(entries) = std::fs::read_dir("src") {
+            for entry in entries.flatten() {
+                if let Some(ext) = entry.path().extension() {
+                    if ext == "rs" {
+                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
+                            // Limit content size to avoid API limits
+                            if content.len() < 8000 {
+                                match ai_client.analyze_code(&content, &entry.path().display().to_string()).await {
+                                    Ok(findings) => ai_findings.extend(findings),
+                                    Err(e) => println!("⚠️  AI analysis failed for {}: {}", entry.path().display(), e),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        ai_findings
+    }
+
+    /// Enhance existing findings with AI analysis
+    async fn enhance_findings_with_ai(&self, ai_client: &OpenAIClient, findings: Vec<AuditFinding>) -> Vec<AuditFinding> {
+        let mut enhanced_findings = Vec::new();
+        
+        for finding in findings {
+            if finding.severity == AuditSeverity::Critical || finding.severity == AuditSeverity::High {
+                match ai_client.analyze_finding(&finding).await {
+                    Ok(ai_analysis) => {
+                        let mut enhanced_finding = finding.clone();
+                        // Enhance the finding with AI insights
+                        enhanced_finding.description = format!("{}\n\nAI Analysis: {}", 
+                            enhanced_finding.description, ai_analysis.enhanced_description);
+                        enhanced_finding.recommendation = format!("{}\n\nAI Recommendation: {}", 
+                            enhanced_finding.recommendation, ai_analysis.mitigation_strategy);
+                        enhanced_findings.push(enhanced_finding);
+                    }
+                    Err(e) => {
+                        println!("⚠️  AI enhancement failed for finding {}: {}", finding.id, e);
+                        enhanced_findings.push(finding);
+                    }
+                }
+            } else {
+                enhanced_findings.push(finding);
+            }
+        }
+        
+        enhanced_findings
     }
 
     /// Perform additional security-specific checks

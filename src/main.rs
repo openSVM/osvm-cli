@@ -1711,6 +1711,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let format = matches.get_one::<String>("format").unwrap();
             let verbose = matches.get_count("verbose");
             let test_mode = matches.get_flag("test");
+            let ai_analysis = matches.get_flag("ai-analysis");
 
             if verbose > 0 {
                 println!("📁 Output directory: {}", output_dir);
@@ -1718,7 +1719,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if test_mode {
                     println!("🧪 Test mode: generating sample audit report");
                 }
+                if ai_analysis {
+                    println!("🤖 AI analysis: enabled");
+                }
             }
+
+            // Check for OpenAI API key if AI analysis is enabled
+            let openai_api_key = if ai_analysis {
+                match std::env::var("OPENAI_API_KEY") {
+                    Ok(key) => {
+                        if key.is_empty() {
+                            eprintln!("❌ OPENAI_API_KEY environment variable is empty");
+                            eprintln!("   Please set your OpenAI API key to enable AI analysis");
+                            exit(1);
+                        }
+                        Some(key)
+                    }
+                    Err(_) => {
+                        eprintln!("❌ OPENAI_API_KEY environment variable not found");
+                        eprintln!("   Please set your OpenAI API key to enable AI analysis");
+                        eprintln!("   Example: export OPENAI_API_KEY='your-api-key-here'");
+                        exit(1);
+                    }
+                }
+            } else {
+                None
+            };
 
             // Create output directory
             if let Err(e) = fs::create_dir_all(output_dir) {
@@ -1730,11 +1756,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let report = if test_mode {
                 println!("🧪 Generating test audit report...");
                 // Create audit coordinator only for test report generation - no diagnostics
-                let audit_coordinator = AuditCoordinator::new();
+                let audit_coordinator = if let Some(api_key) = openai_api_key {
+                    AuditCoordinator::with_ai(api_key)
+                } else {
+                    AuditCoordinator::new()
+                };
                 audit_coordinator.create_test_audit_report()
             } else {
                 // Initialize audit coordinator and run full audit
-                let audit_coordinator = AuditCoordinator::new();
+                let audit_coordinator = if let Some(api_key) = openai_api_key {
+                    AuditCoordinator::with_ai(api_key)
+                } else {
+                    AuditCoordinator::new()
+                };
                 
                 // Run security audit
                 match audit_coordinator.run_security_audit().await {
