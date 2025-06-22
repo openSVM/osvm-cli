@@ -1,0 +1,84 @@
+name: OSVM Security Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repository to audit (owner/repo)'
+        required: true
+        type: string
+      branch:
+        description: 'Branch to audit'
+        required: true
+        default: 'main'
+        type: string
+      ai_analysis:
+        description: 'Enable AI-powered analysis'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Checkout OSVM CLI
+      uses: actions/checkout@v4
+      with:
+        repository: openSVM/osvm-cli
+        path: osvm-cli
+        
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        
+    - name: Install Typst
+      run: |
+        curl -fsSL https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJ
+        sudo mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+        typst --version
+        
+    - name: Build OSVM CLI
+      run: |
+        cd osvm-cli
+        cargo build --release
+        
+    - name: Setup Git for audit commits
+      run: |
+        git config --global user.name "OSVM Security Audit Bot"
+        git config --global user.email "audit@opensvm.org"
+        
+    - name: Run Security Audit
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        cd osvm-cli
+        ./target/release/osvm audit \
+          --gh "${{ github.event.inputs.repository }}#${{ github.event.inputs.branch }}" \
+          --format both \
+          --verbose \
+          ${{ github.event.inputs.ai_analysis == 'true' && '--ai-analysis' || '' }}
+          
+    - name: Create audit summary
+      id: audit_summary
+      run: |
+        cd osvm-cli
+        echo "## 🔍 OSVM Security Audit Completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** ${{ github.event.inputs.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.event.inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Analysis:** ${{ github.event.inputs.ai_analysis }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "A new audit branch has been created in the target repository with:" >> $GITHUB_STEP_SUMMARY
+        echo "- 📄 Typst audit report source" >> $GITHUB_STEP_SUMMARY
+        echo "- 📋 PDF audit report (if Typst compilation succeeded)" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 Comprehensive security findings and recommendations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Check the target repository for the new audit branch starting with \`osvm-audit-\`" >> $GITHUB_STEP_SUMMARY
