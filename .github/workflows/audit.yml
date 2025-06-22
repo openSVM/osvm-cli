@@ -40,8 +40,21 @@ jobs:
         
     - name: Install Typst
       run: |
-        curl -fsSL https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJ
+        set -e
+        TYPST_VERSION="v0.12.0"
+        TYPST_URL="https://github.com/typst/typst/releases/download/${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+        EXPECTED_SHA256="c64bbad2e44b6b8d5b61f3d96b4e51c4bdcfdc9e6ac5a7e25ade2c2e1b81b70c"
+        
+        # Download with integrity verification
+        curl -fsSL "$TYPST_URL" -o typst.tar.xz
+        echo "${EXPECTED_SHA256}  typst.tar.xz" | sha256sum -c || {
+          echo "❌ Typst checksum verification failed"
+          exit 1
+        }
+        
+        tar -xf typst.tar.xz
         sudo mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+        rm -rf typst.tar.xz typst-x86_64-unknown-linux-musl/
         typst --version
         
     - name: Build OSVM CLI
@@ -56,13 +69,17 @@ jobs:
         
     - name: Setup Git for audit commits
       run: |
-        git config --global user.name "OSVM Security Audit Bot"
-        git config --global user.email "audit@opensvm.org"
+        set -e
+        # Use local git config to avoid affecting other jobs
+        cd osvm-cli
+        git config user.name "OSVM Security Audit Bot"
+        git config user.email "audit@opensvm.org"
         
     - name: Run Security Audit
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
+        set -e
         cd osvm-cli
         AI_FLAG=""
         if [ "${{ github.event.inputs.ai_analysis }}" == "true" ]; then
@@ -72,11 +89,17 @@ jobs:
           --gh "${{ github.event.inputs.repository }}#${{ github.event.inputs.branch }}" \
           --format both \
           --verbose \
-          $AI_FLAG
+          ${AI_FLAG} || {
+            echo "❌ Security audit failed or found critical issues"
+            echo "📋 This is expected behavior for repositories with security vulnerabilities"
+            exit 1
+          }
           
     - name: Create audit summary
       id: audit_summary
+      if: always()
       run: |
+        set -e
         cd osvm-cli
         echo "## 🔍 OSVM Security Audit Completed" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
@@ -91,3 +114,8 @@ jobs:
         echo "- 🔍 Comprehensive security findings and recommendations" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "Check the target repository for the new audit branch starting with \`osvm-audit-\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ job.status }}" != "success" ]; then
+          echo "⚠️ **Note:** Audit process exited with code 1, indicating critical or high-severity security findings were detected." >> $GITHUB_STEP_SUMMARY
+          echo "This is intended behavior to alert CI/CD systems about security issues that require attention." >> $GITHUB_STEP_SUMMARY
+        fi
