@@ -73,7 +73,7 @@ impl OpenAIClient {
         );
 
         let request_body = serde_json::json!({
-            "model": "gpt-4",
+            "model": "gpt-4.1",
             "messages": [
                 {
                     "role": "system",
@@ -139,7 +139,7 @@ impl OpenAIClient {
         );
 
         let request_body = serde_json::json!({
-            "model": "gpt-4",
+            "model": "gpt-4.1",
             "messages": [
                 {
                     "role": "system",
@@ -542,17 +542,17 @@ impl AuditCoordinator {
         if let Ok(entries) = std::fs::read_dir("src") {
             for entry in entries.flatten() {
                 if let Some(ext) = entry.path().extension() {
-                    if ext == "rs" {
+                //    if ext == "rs" {
                         if let Ok(content) = std::fs::read_to_string(&entry.path()) {
                             // Limit content size to avoid API limits
-                            if content.len() < 8000 {
+                            if content.len() < 80000 {
                                 match ai_client.analyze_code(&content, &entry.path().display().to_string()).await {
                                     Ok(findings) => ai_findings.extend(findings),
                                     Err(e) => println!("⚠️  AI analysis failed for {}: {}", entry.path().display(), e),
                                 }
                             }
                         }
-                    }
+                 //   }
                 }
             }
         }
