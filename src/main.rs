@@ -117,6 +117,197 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
+/// Handle the audit command separately to avoid triggering config loading and self-repair
+async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::utils::audit::AuditCoordinator;
+    use std::fs;
+    use std::path::Path;
+
+    println!("🔍 OSVM Security Audit");
+    println!("======================");
+
+    let output_dir = matches.get_one::<String>("output").unwrap();
+    let format = matches.get_one::<String>("format").unwrap();
+    let verbose = matches.get_count("verbose");
+    let test_mode = matches.get_flag("test");
+    let ai_analysis = matches.get_flag("ai-analysis");
+    let gh_repo = matches.get_one::<String>("gh");
+
+    if verbose > 0 {
+        println!("📁 Output directory: {}", output_dir);
+        println!("📄 Format: {}", format);
+        if test_mode {
+            println!("🧪 Test mode: generating sample audit report");
+        }
+        if ai_analysis {
+            println!("🤖 AI analysis: enabled");
+        }
+        if let Some(repo) = gh_repo {
+            println!("🐙 GitHub repository: {}", repo);
+        }
+    }
+
+    // Check for OpenAI API key if AI analysis is enabled
+    let openai_api_key = if ai_analysis {
+        match std::env::var("OPENAI_API_KEY") {
+            Ok(key) => {
+                if key.is_empty() {
+                    eprintln!("❌ OPENAI_API_KEY environment variable is empty");
+                    eprintln!("   Please set your OpenAI API key to enable AI analysis");
+                    exit(1);
+                }
+                Some(key)
+            }
+            Err(_) => {
+                eprintln!("❌ OPENAI_API_KEY environment variable not found");
+                eprintln!("   Please set your OpenAI API key to enable AI analysis");
+                eprintln!("   Example: export OPENAI_API_KEY='your-api-key-here'");
+                exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
+    // Create output directory
+    if let Err(e) = fs::create_dir_all(output_dir) {
+        eprintln!("❌ Failed to create output directory: {}", e);
+        exit(1);
+    }
+
+    // Generate audit report - handle GitHub mode, test mode, or regular audit
+    let report = if let Some(repo_spec) = gh_repo {
+        // GitHub repository audit mode
+        println!("🐙 GitHub repository audit mode");
+        let audit_coordinator = if let Some(api_key) = openai_api_key {
+            AuditCoordinator::with_ai(api_key)
+        } else {
+            AuditCoordinator::new()
+        };
+        
+        match audit_coordinator.audit_github_repository(repo_spec).await {
+            Ok(_) => {
+                println!("✅ GitHub repository audit completed and pushed");
+                return Ok(()); // Exit early as files are already generated and committed
+            },
+            Err(e) => {
+                eprintln!("❌ Failed to audit GitHub repository: {}", e);
+                exit(1);
+            }
+        }
+    } else if test_mode {
+        println!("🧪 Generating test audit report...");
+        // Create audit coordinator only for test report generation - no diagnostics
+        let audit_coordinator = if let Some(api_key) = openai_api_key {
+            AuditCoordinator::with_ai(api_key)
+        } else {
+            AuditCoordinator::new()
+        };
+        audit_coordinator.create_test_audit_report()
+    } else {
+        // Initialize audit coordinator and run full audit
+        let audit_coordinator = if let Some(api_key) = openai_api_key {
+            AuditCoordinator::with_ai(api_key)
+        } else {
+            AuditCoordinator::new()
+        };
+        
+        // Run security audit
+        match audit_coordinator.run_security_audit().await {
+            Ok(report) => report,
+            Err(e) => {
+                eprintln!("❌ Failed to run security audit: {}", e);
+                exit(1);
+            }
+        }
+    };
+
+    println!("✅ Security audit completed successfully");
+    println!("📊 Security Score: {:.1}/100", report.summary.security_score);
+    println!("🔍 Total Findings: {}", report.summary.total_findings);
+    
+    if report.summary.critical_findings > 0 {
+        println!("🔴 Critical: {}", report.summary.critical_findings);
+    }
+    if report.summary.high_findings > 0 {
+        println!("🟠 High: {}", report.summary.high_findings);
+    }
+    if report.summary.medium_findings > 0 {
+        println!("🟡 Medium: {}", report.summary.medium_findings);
+    }
+    if report.summary.low_findings > 0 {
+        println!("🔵 Low: {}", report.summary.low_findings);
+    }
+
+    // Generate timestamp for unique filenames
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    
+    // Generate outputs based on requested format
+    let typst_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
+    let pdf_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
+    
+    // Create audit coordinator for document generation
+    let audit_coordinator = AuditCoordinator::new();
+    
+    match format.as_str() {
+        "typst" | "both" => {
+            if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
+                eprintln!("❌ Failed to generate Typst document: {}", e);
+                exit(1);
+            }
+            println!("📄 Typst document generated: {}", typst_path.display());
+            
+            if format == "both" {
+                if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
+                    eprintln!("❌ Failed to compile PDF: {}", e);
+                    eprintln!("   Typst document is available at: {}", typst_path.display());
+                } else {
+                    println!("📋 PDF report generated: {}", pdf_path.display());
+                }
+            }
+        }
+        "pdf" => {
+            // Generate Typst document first (temporary)
+            if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
+                eprintln!("❌ Failed to generate Typst document: {}", e);
+                exit(1);
+            }
+            
+            if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
+                eprintln!("❌ Failed to compile PDF: {}", e);
+                exit(1);
+            }
+            
+            // Remove temporary Typst file
+            let _ = fs::remove_file(&typst_path);
+            println!("📋 PDF report generated: {}", pdf_path.display());
+        }
+        _ => {
+            eprintln!("❌ Invalid format specified");
+            exit(1);
+        }
+    }
+
+    if verbose > 0 {
+        println!("\n📋 Audit Summary:");
+        println!("  Compliance Level: {}", report.summary.compliance_level);
+        println!("  System: {} {}", report.system_info.os_info, report.system_info.architecture);
+        println!("  Rust Version: {}", report.system_info.rust_version);
+        if let Some(ref solana_version) = report.system_info.solana_version {
+            println!("  Solana Version: {}", solana_version);
+        }
+    }
+
+    println!("\n💡 To view the full report, open the generated file.");
+    
+    if !test_mode && (report.summary.critical_findings > 0 || report.summary.high_findings > 0) {
+        println!("⚠️  Critical or high-severity findings detected. Please review and address them promptly.");
+        exit(1);
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_matches = parse_command_line();
@@ -127,6 +318,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     // 'matches' will refer to the subcommand's matches, as before.
     let matches = sub_matches;
+
+    // Handle audit command early to avoid config loading that might trigger self-repair
+    if sub_command == "audit" {
+        return handle_audit_command(&app_matches, sub_matches).await;
+    }
 
     // Load configuration using the new Config module
     // Pass app_matches for global flags like 'verbose' and 'no_color',
@@ -1700,191 +1896,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         "audit" => {
-            use crate::utils::audit::AuditCoordinator;
-            use std::fs;
-            use std::path::Path;
-
-            println!("🔍 OSVM Security Audit");
-            println!("======================");
-
-            let output_dir = matches.get_one::<String>("output").unwrap();
-            let format = matches.get_one::<String>("format").unwrap();
-            let verbose = matches.get_count("verbose");
-            let test_mode = matches.get_flag("test");
-            let ai_analysis = matches.get_flag("ai-analysis");
-            let gh_repo = matches.get_one::<String>("gh");
-
-            if verbose > 0 {
-                println!("📁 Output directory: {}", output_dir);
-                println!("📄 Format: {}", format);
-                if test_mode {
-                    println!("🧪 Test mode: generating sample audit report");
-                }
-                if ai_analysis {
-                    println!("🤖 AI analysis: enabled");
-                }
-                if let Some(repo) = gh_repo {
-                    println!("🐙 GitHub repository: {}", repo);
-                }
-            }
-
-            // Check for OpenAI API key if AI analysis is enabled
-            let openai_api_key = if ai_analysis {
-                match std::env::var("OPENAI_API_KEY") {
-                    Ok(key) => {
-                        if key.is_empty() {
-                            eprintln!("❌ OPENAI_API_KEY environment variable is empty");
-                            eprintln!("   Please set your OpenAI API key to enable AI analysis");
-                            exit(1);
-                        }
-                        Some(key)
-                    }
-                    Err(_) => {
-                        eprintln!("❌ OPENAI_API_KEY environment variable not found");
-                        eprintln!("   Please set your OpenAI API key to enable AI analysis");
-                        eprintln!("   Example: export OPENAI_API_KEY='your-api-key-here'");
-                        exit(1);
-                    }
-                }
-            } else {
-                None
-            };
-
-            // Create output directory
-            if let Err(e) = fs::create_dir_all(output_dir) {
-                eprintln!("❌ Failed to create output directory: {}", e);
-                exit(1);
-            }
-
-            // Generate audit report - handle GitHub mode, test mode, or regular audit
-            let report = if let Some(repo_spec) = gh_repo {
-                // GitHub repository audit mode
-                println!("🐙 GitHub repository audit mode");
-                let audit_coordinator = if let Some(api_key) = openai_api_key {
-                    AuditCoordinator::with_ai(api_key)
-                } else {
-                    AuditCoordinator::new()
-                };
-                
-                match audit_coordinator.audit_github_repository(repo_spec).await {
-                    Ok(_) => {
-                        println!("✅ GitHub repository audit completed and pushed");
-                        return Ok(()); // Exit early as files are already generated and committed
-                    },
-                    Err(e) => {
-                        eprintln!("❌ Failed to audit GitHub repository: {}", e);
-                        exit(1);
-                    }
-                }
-            } else if test_mode {
-                println!("🧪 Generating test audit report...");
-                // Create audit coordinator only for test report generation - no diagnostics
-                let audit_coordinator = if let Some(api_key) = openai_api_key {
-                    AuditCoordinator::with_ai(api_key)
-                } else {
-                    AuditCoordinator::new()
-                };
-                audit_coordinator.create_test_audit_report()
-            } else {
-                // Initialize audit coordinator and run full audit
-                let audit_coordinator = if let Some(api_key) = openai_api_key {
-                    AuditCoordinator::with_ai(api_key)
-                } else {
-                    AuditCoordinator::new()
-                };
-                
-                // Run security audit
-                match audit_coordinator.run_security_audit().await {
-                    Ok(report) => report,
-                    Err(e) => {
-                        eprintln!("❌ Failed to run security audit: {}", e);
-                        exit(1);
-                    }
-                }
-            };
-
-            println!("✅ Security audit completed successfully");
-            println!("📊 Security Score: {:.1}/100", report.summary.security_score);
-            println!("🔍 Total Findings: {}", report.summary.total_findings);
-            
-            if report.summary.critical_findings > 0 {
-                println!("🔴 Critical: {}", report.summary.critical_findings);
-            }
-            if report.summary.high_findings > 0 {
-                println!("🟠 High: {}", report.summary.high_findings);
-            }
-            if report.summary.medium_findings > 0 {
-                println!("🟡 Medium: {}", report.summary.medium_findings);
-            }
-            if report.summary.low_findings > 0 {
-                println!("🔵 Low: {}", report.summary.low_findings);
-            }
-
-            // Generate timestamp for unique filenames
-            let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-            
-            // Generate outputs based on requested format
-            let typst_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
-            let pdf_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
-            
-            // Create audit coordinator for document generation
-            let audit_coordinator = AuditCoordinator::new();
-            
-            match format.as_str() {
-                "typst" | "both" => {
-                    if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
-                        eprintln!("❌ Failed to generate Typst document: {}", e);
-                        exit(1);
-                    }
-                    println!("📄 Typst document generated: {}", typst_path.display());
-                    
-                    if format == "both" {
-                        if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
-                            eprintln!("❌ Failed to compile PDF: {}", e);
-                            eprintln!("   Typst document is available at: {}", typst_path.display());
-                        } else {
-                            println!("📋 PDF report generated: {}", pdf_path.display());
-                        }
-                    }
-                }
-                "pdf" => {
-                    // Generate Typst document first (temporary)
-                    if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
-                        eprintln!("❌ Failed to generate Typst document: {}", e);
-                        exit(1);
-                    }
-                    
-                    if let Err(e) = audit_coordinator.compile_to_pdf(&typst_path, &pdf_path) {
-                        eprintln!("❌ Failed to compile PDF: {}", e);
-                        exit(1);
-                    }
-                    
-                    // Remove temporary Typst file
-                    let _ = fs::remove_file(&typst_path);
-                    println!("📋 PDF report generated: {}", pdf_path.display());
-                }
-                _ => {
-                    eprintln!("❌ Invalid format specified");
-                    exit(1);
-                }
-            }
-
-            if verbose > 0 {
-                println!("\n📋 Audit Summary:");
-                println!("  Compliance Level: {}", report.summary.compliance_level);
-                println!("  System: {} {}", report.system_info.os_info, report.system_info.architecture);
-                println!("  Rust Version: {}", report.system_info.rust_version);
-                if let Some(ref solana_version) = report.system_info.solana_version {
-                    println!("  Solana Version: {}", solana_version);
-                }
-            }
-
-            println!("\n💡 To view the full report, open the generated file.");
-            
-            if !test_mode && (report.summary.critical_findings > 0 || report.summary.high_findings > 0) {
-                println!("⚠️  Critical or high-severity findings detected. Please review and address them promptly.");
-                exit(1);
-            }
+            // This case should not be reached as audit is handled early
+            eprintln!("❌ Audit command handled early - this should not be reached");
+            exit(1);
         }
         "new_feature_command" => {
             println!("Expected output for new feature");
