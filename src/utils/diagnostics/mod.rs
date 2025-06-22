@@ -3,17 +3,17 @@
 //! This module provides comprehensive system health assessment capabilities
 //! to support the self-repair system and general system monitoring.
 
+use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
-use serde::{Deserialize, Serialize};
 
 pub mod connectivity;
 pub mod rollback_validator;
 pub mod system_health;
 pub mod version_checker;
 
-use crate::utils::self_repair::system_deps::{SystemDependencyManager, DependencyInfo};
-use crate::utils::self_repair::user_deps::{UserDependencyManager, SolanaConfigInfo};
+use crate::utils::self_repair::system_deps::{DependencyInfo, SystemDependencyManager};
+use crate::utils::self_repair::user_deps::{SolanaConfigInfo, UserDependencyManager};
 
 /// Diagnostic error types
 #[derive(Debug)]
@@ -139,7 +139,7 @@ impl DiagnosticCoordinator {
     pub fn new() -> Self {
         let system_manager = SystemDependencyManager::new().ok();
         let user_manager = UserDependencyManager::new();
-        
+
         Self {
             system_manager,
             user_manager,
@@ -162,8 +162,14 @@ impl DiagnosticCoordinator {
                                 severity: IssueSeverity::Error,
                                 category: IssueCategory::SystemDependencies,
                                 title: format!("Missing dependency: {}", dep.name),
-                                description: format!("Required system dependency '{}' is not installed", dep.name),
-                                suggested_fix: Some(format!("Install {} using your package manager", dep.name)),
+                                description: format!(
+                                    "Required system dependency '{}' is not installed",
+                                    dep.name
+                                ),
+                                suggested_fix: Some(format!(
+                                    "Install {} using your package manager",
+                                    dep.name
+                                )),
                             });
                         } else if dep.update_available {
                             issues.push(HealthIssue {
@@ -183,7 +189,9 @@ impl DiagnosticCoordinator {
                         category: IssueCategory::SystemDependencies,
                         title: "System dependency check failed".to_string(),
                         description: format!("Failed to check system dependencies: {}", e),
-                        suggested_fix: Some("Check system configuration and permissions".to_string()),
+                        suggested_fix: Some(
+                            "Check system configuration and permissions".to_string(),
+                        ),
                     });
                     Vec::new()
                 }
@@ -194,7 +202,9 @@ impl DiagnosticCoordinator {
                 category: IssueCategory::SystemDependencies,
                 title: "System dependency manager unavailable".to_string(),
                 description: "Could not initialize system dependency manager".to_string(),
-                suggested_fix: Some("Check if a supported package manager is installed".to_string()),
+                suggested_fix: Some(
+                    "Check if a supported package manager is installed".to_string(),
+                ),
             });
             Vec::new()
         };
@@ -208,11 +218,15 @@ impl DiagnosticCoordinator {
                         category: IssueCategory::UserConfiguration,
                         title: "Solana CLI not installed".to_string(),
                         description: "Solana CLI is required for OSVM operations".to_string(),
-                        suggested_fix: Some("Install Solana CLI using the official installer".to_string()),
+                        suggested_fix: Some(
+                            "Install Solana CLI using the official installer".to_string(),
+                        ),
                     });
-                    recommendations.push("Run 'osvm doctor --fix' to automatically install Solana CLI".to_string());
+                    recommendations.push(
+                        "Run 'osvm doctor --fix' to automatically install Solana CLI".to_string(),
+                    );
                 }
-                
+
                 if !config.config_dir_exists {
                     issues.push(HealthIssue {
                         severity: IssueSeverity::Warning,
@@ -222,18 +236,22 @@ impl DiagnosticCoordinator {
                         suggested_fix: Some("Create configuration directory".to_string()),
                     });
                 }
-                
+
                 if !config.keypair_exists {
                     issues.push(HealthIssue {
                         severity: IssueSeverity::Warning,
                         category: IssueCategory::UserConfiguration,
                         title: "Solana keypair missing".to_string(),
                         description: "No Solana keypair found".to_string(),
-                        suggested_fix: Some("Generate a new keypair with 'solana-keygen new'".to_string()),
+                        suggested_fix: Some(
+                            "Generate a new keypair with 'solana-keygen new'".to_string(),
+                        ),
                     });
-                    recommendations.push("Run 'osvm doctor --fix' to automatically generate a keypair".to_string());
+                    recommendations.push(
+                        "Run 'osvm doctor --fix' to automatically generate a keypair".to_string(),
+                    );
                 }
-                
+
                 config
             }
             Err(e) => {
@@ -242,9 +260,11 @@ impl DiagnosticCoordinator {
                     category: IssueCategory::UserConfiguration,
                     title: "User configuration check failed".to_string(),
                     description: format!("Failed to check user configuration: {}", e),
-                    suggested_fix: Some("Check file permissions and configuration paths".to_string()),
+                    suggested_fix: Some(
+                        "Check file permissions and configuration paths".to_string(),
+                    ),
                 });
-                
+
                 // Return default config
                 SolanaConfigInfo {
                     cli_installed: false,
@@ -259,16 +279,19 @@ impl DiagnosticCoordinator {
         };
 
         // Check network connectivity
-        let network_connectivity = connectivity::check_network_health().await
+        let network_connectivity = connectivity::check_network_health()
+            .await
             .unwrap_or_else(|e| {
                 issues.push(HealthIssue {
                     severity: IssueSeverity::Error,
                     category: IssueCategory::NetworkConnectivity,
                     title: "Network connectivity check failed".to_string(),
                     description: format!("Failed to check network connectivity: {}", e),
-                    suggested_fix: Some("Check internet connection and firewall settings".to_string()),
+                    suggested_fix: Some(
+                        "Check internet connection and firewall settings".to_string(),
+                    ),
                 });
-                
+
                 NetworkHealth {
                     internet_connected: false,
                     solana_mainnet_accessible: false,
@@ -283,7 +306,9 @@ impl DiagnosticCoordinator {
 
         // Add general recommendations
         if !issues.is_empty() {
-            recommendations.push("Use 'osvm doctor --verbose' for detailed diagnostic information".to_string());
+            recommendations.push(
+                "Use 'osvm doctor --verbose' for detailed diagnostic information".to_string(),
+            );
         }
 
         Ok(SystemHealth {
@@ -315,10 +340,7 @@ impl DiagnosticCoordinator {
             self.check_solana_installation().await,
         );
 
-        detailed_checks.insert(
-            "build_tools".to_string(),
-            self.check_build_tools().await,
-        );
+        detailed_checks.insert("build_tools".to_string(), self.check_build_tools().await);
 
         detailed_checks.insert(
             "network_endpoints".to_string(),
@@ -330,21 +352,22 @@ impl DiagnosticCoordinator {
             self.check_file_permissions().await,
         );
 
-        detailed_checks.insert(
-            "disk_space".to_string(),
-            self.check_disk_space().await,
-        );
+        detailed_checks.insert("disk_space".to_string(), self.check_disk_space().await);
 
         // Calculate summary
         let total_checks = detailed_checks.len();
         let passed_checks = detailed_checks.values().filter(|r| r.passed).count();
         let failed_checks = total_checks - passed_checks;
-        
-        let critical_issues = system_health.issues.iter()
+
+        let critical_issues = system_health
+            .issues
+            .iter()
             .filter(|i| i.severity == IssueSeverity::Critical || i.severity == IssueSeverity::Error)
             .count();
-        
-        let warnings = system_health.issues.iter()
+
+        let warnings = system_health
+            .issues
+            .iter()
             .filter(|i| i.severity == IssueSeverity::Warning)
             .count();
 
@@ -383,7 +406,7 @@ impl DiagnosticCoordinator {
     /// Check Rust installation
     async fn check_rust_installation(&self) -> CheckResult {
         let start = std::time::Instant::now();
-        
+
         if let Some(ref manager) = self.system_manager {
             match manager.check_rust_toolchain().await {
                 Ok(rust_info) => {
@@ -391,8 +414,14 @@ impl DiagnosticCoordinator {
                         CheckResult {
                             name: "Rust Installation".to_string(),
                             passed: true,
-                            message: format!("Rust {} installed", rust_info.version.unwrap_or_else(|| "unknown".to_string())),
-                            details: Some(format!("Update available: {}", rust_info.update_available)),
+                            message: format!(
+                                "Rust {} installed",
+                                rust_info.version.unwrap_or_else(|| "unknown".to_string())
+                            ),
+                            details: Some(format!(
+                                "Update available: {}",
+                                rust_info.update_available
+                            )),
                             execution_time_ms: start.elapsed().as_millis() as u64,
                         }
                     } else {
@@ -400,7 +429,10 @@ impl DiagnosticCoordinator {
                             name: "Rust Installation".to_string(),
                             passed: false,
                             message: "Rust is not installed".to_string(),
-                            details: Some("Rust toolchain is required for building Solana programs".to_string()),
+                            details: Some(
+                                "Rust toolchain is required for building Solana programs"
+                                    .to_string(),
+                            ),
                             execution_time_ms: start.elapsed().as_millis() as u64,
                         }
                     }
@@ -411,7 +443,7 @@ impl DiagnosticCoordinator {
                     message: format!("Rust check failed: {}", e),
                     details: None,
                     execution_time_ms: start.elapsed().as_millis() as u64,
-                }
+                },
             }
         } else {
             CheckResult {
@@ -427,40 +459,43 @@ impl DiagnosticCoordinator {
     /// Check Solana installation
     async fn check_solana_installation(&self) -> CheckResult {
         let start = std::time::Instant::now();
-        
+
         match self.user_manager.check_all_user_dependencies().await {
-            Ok(config) => {
-                CheckResult {
-                    name: "Solana Installation".to_string(),
-                    passed: config.cli_installed,
-                    message: if config.cli_installed {
-                        format!("Solana CLI {} installed", config.cli_version.unwrap_or_else(|| "unknown".to_string()))
-                    } else {
-                        "Solana CLI is not installed".to_string()
-                    },
-                    details: Some(format!(
-                        "Config dir: {}, Keypair: {}, Network: {}",
-                        config.config_dir_exists,
-                        config.keypair_exists,
-                        config.current_network.unwrap_or_else(|| "not configured".to_string())
-                    )),
-                    execution_time_ms: start.elapsed().as_millis() as u64,
-                }
-            }
+            Ok(config) => CheckResult {
+                name: "Solana Installation".to_string(),
+                passed: config.cli_installed,
+                message: if config.cli_installed {
+                    format!(
+                        "Solana CLI {} installed",
+                        config.cli_version.unwrap_or_else(|| "unknown".to_string())
+                    )
+                } else {
+                    "Solana CLI is not installed".to_string()
+                },
+                details: Some(format!(
+                    "Config dir: {}, Keypair: {}, Network: {}",
+                    config.config_dir_exists,
+                    config.keypair_exists,
+                    config
+                        .current_network
+                        .unwrap_or_else(|| "not configured".to_string())
+                )),
+                execution_time_ms: start.elapsed().as_millis() as u64,
+            },
             Err(e) => CheckResult {
                 name: "Solana Installation".to_string(),
                 passed: false,
                 message: format!("Solana check failed: {}", e),
                 details: None,
                 execution_time_ms: start.elapsed().as_millis() as u64,
-            }
+            },
         }
     }
 
     /// Check build tools
     async fn check_build_tools(&self) -> CheckResult {
         let start = std::time::Instant::now();
-        
+
         if let Some(ref manager) = self.system_manager {
             let build_deps = crate::utils::self_repair::package_managers::get_build_dependencies();
             let mut missing_tools = Vec::new();
@@ -507,17 +542,17 @@ impl DiagnosticCoordinator {
     /// Check file permissions
     async fn check_file_permissions(&self) -> CheckResult {
         let start = std::time::Instant::now();
-        
+
         let config_dir = self.user_manager.get_solana_config_dir();
         let osvm_config_dir = self.user_manager.get_osvm_config_dir();
-        
+
         let mut issues = Vec::new();
-        
+
         // Check if we can create directories
         if let Err(e) = std::fs::create_dir_all(&config_dir) {
             issues.push(format!("Cannot create Solana config directory: {}", e));
         }
-        
+
         if let Err(e) = std::fs::create_dir_all(&osvm_config_dir) {
             issues.push(format!("Cannot create OSVM config directory: {}", e));
         }
@@ -542,13 +577,9 @@ impl DiagnosticCoordinator {
     /// Check available disk space
     async fn check_disk_space(&self) -> CheckResult {
         let start = std::time::Instant::now();
-        
+
         // Use `df` command to check disk space
-        match std::process::Command::new("df")
-            .arg("-h")
-            .arg(".")
-            .output()
-        {
+        match std::process::Command::new("df").arg("-h").arg(".").output() {
             Ok(output) if output.status.success() => {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 CheckResult {
@@ -565,7 +596,7 @@ impl DiagnosticCoordinator {
                 message: "Could not check disk space".to_string(),
                 details: None,
                 execution_time_ms: start.elapsed().as_millis() as u64,
-            }
+            },
         }
     }
 }
@@ -573,23 +604,27 @@ impl DiagnosticCoordinator {
 impl SystemHealth {
     /// Check if the system has package updates available
     pub fn has_package_updates(&self) -> bool {
-        self.system_dependencies.iter()
+        self.system_dependencies
+            .iter()
             .any(|dep| dep.update_available)
     }
 
     /// Check if the system has Rust updates available
     pub fn has_rust_updates(&self) -> bool {
-        self.system_dependencies.iter()
+        self.system_dependencies
+            .iter()
             .any(|dep| dep.name == "rust" && dep.update_available)
     }
 
     /// Get missing build tools
     pub fn missing_build_tools(&self) -> Option<Vec<String>> {
-        let missing: Vec<String> = self.system_dependencies.iter()
+        let missing: Vec<String> = self
+            .system_dependencies
+            .iter()
             .filter(|dep| !dep.installed)
             .map(|dep| dep.name.clone())
             .collect();
-        
+
         if missing.is_empty() {
             None
         } else {
@@ -622,7 +657,7 @@ mod tests {
     #[test]
     fn test_health_status_determination() {
         let coordinator = DiagnosticCoordinator::new();
-        
+
         let critical_issues = vec![HealthIssue {
             severity: IssueSeverity::Critical,
             category: IssueCategory::SystemDependencies,
@@ -630,7 +665,7 @@ mod tests {
             description: "Test".to_string(),
             suggested_fix: None,
         }];
-        
+
         let status = coordinator.determine_overall_status(&critical_issues);
         assert_eq!(status, HealthStatus::Critical);
     }
@@ -676,7 +711,10 @@ mod tests {
         };
 
         assert!(system_health.has_rust_updates());
-        assert_eq!(system_health.missing_build_tools(), Some(vec!["build-essential".to_string()]));
+        assert_eq!(
+            system_health.missing_build_tools(),
+            Some(vec!["build-essential".to_string()])
+        );
         assert!(system_health.is_healthy());
     }
 }

@@ -18,30 +18,30 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// Devnet RPC node that syncs with real blockchain
+pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
 pub mod ebpf_deploy;
+/// Local RPC node deployment and management
+pub mod local_rpc;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
+/// Solana RPC connectivity and monitoring
+pub mod solana_rpc;
 /// SSH deployment utilities for remote node deployment
 pub mod ssh_deploy;
 /// SVM information and management utilities
 pub mod svm_info;
-/// Local RPC node deployment and management
-pub mod local_rpc;
-/// Devnet RPC node that syncs with real blockchain
-pub mod devnet_rpc;
-/// Solana RPC connectivity and monitoring
-pub mod solana_rpc;
 
 // Self-repair and diagnostics
-/// Self-repair system for automatic dependency management
-pub mod self_repair;
 /// System diagnostics and health monitoring
 pub mod diagnostics;
 /// Continuous log monitoring and automatic repair
 pub mod log_monitor;
 /// OSVM internal logging system for tracking events and decisions
 pub mod osvm_logger;
+/// Self-repair system for automatic dependency management
+pub mod self_repair;
 
 // External dependency wrappers
 
