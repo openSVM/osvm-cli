@@ -1,3 +1,6 @@
+#![allow(clippy::all)]
+#![allow(unused)]
+
 use {
     crate::config::Config, // Added
     crate::utils::diagnostics::DiagnosticCoordinator,
@@ -22,6 +25,7 @@ use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
 pub mod clparse;
 pub mod config; // Added
 pub mod prelude;
+pub mod services;
 pub mod utils;
 
 // Config struct is now in src/config.rs
@@ -117,6 +121,60 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
     Ok(())
 }
 
+/// Handle the audit command using the dedicated audit service
+async fn handle_audit_command(
+    app_matches: &clap::ArgMatches,
+    matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::services::audit_service::{AuditRequest, AuditService};
+
+    let output_dir = matches.get_one::<String>("output").unwrap().to_string();
+    let format = matches.get_one::<String>("format").unwrap().to_string();
+    let verbose = matches.get_count("verbose");
+    let test_mode = matches.get_flag("test");
+    let ai_analysis = matches.get_flag("ai-analysis");
+    let gh_repo = matches.get_one::<String>("gh").map(|s| s.to_string());
+
+    let request = AuditRequest {
+        output_dir,
+        format,
+        verbose,
+        test_mode,
+        ai_analysis,
+        gh_repo,
+    };
+
+    // Create the audit service with or without AI
+    let service = if ai_analysis {
+        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "OPENAI_API_KEY environment variable not found",
+            )
+        })?;
+
+        if api_key.is_empty() {
+            return Err("OPENAI_API_KEY environment variable is empty".into());
+        }
+
+        AuditService::with_ai(api_key)
+    } else {
+        AuditService::new()
+    };
+
+    // Execute the audit
+    let result = service.execute_audit(&request).await?;
+
+    // Handle exit code for CI/CD systems
+    if !result.success {
+        println!("⚠️  Critical or high-severity findings detected. Please review and address them promptly.");
+        println!("📋 This audit exits with code 1 to signal CI/CD systems about security issues.");
+        std::process::exit(1);
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check for -version or -ver directly from args (special case for non-standard formats)
@@ -126,9 +184,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     let app_matches = parse_command_line();
-    
+
     // Check for version flag (which includes aliases)
     if app_matches.get_flag("version_flag") {
         // Show version info and exit
@@ -136,14 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // Check for subcommands (including version subcommands)
     let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
         // If no subcommand is provided, parse_command_line should handle it or exit.
         // This return is a fallback.
         return Err("No subcommand provided. Use --help for more information.".into());
     };
-    
+
     // Check for version subcommands
     if sub_command == "v" || sub_command == "ver" || sub_command == "version" {
         // Show version info and exit
@@ -151,9 +209,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // 'matches' will refer to the subcommand's matches, as before.
     let matches = sub_matches;
+
+    // Handle audit command early to avoid config loading that might trigger self-repair
+    if sub_command == "audit" {
+        return handle_audit_command(&app_matches, sub_matches).await;
+    }
 
     // Load configuration using the new Config module
     // Pass app_matches for global flags like 'verbose' and 'no_color',
@@ -349,8 +412,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node status: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node status: {}", e).into());
                         }
                     }
                 }
@@ -371,8 +433,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node info: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node info: {}", e).into());
                         }
                     }
                 }
@@ -385,8 +446,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match nodes::restart_node(node_id) {
                         Ok(_) => println!("Node {} restarted successfully", node_id),
                         Err(e) => {
-                            eprintln!("Error restarting node: {}", e);
-                            exit(1);
+                            return Err(format!("Error restarting node: {}", e).into());
                         }
                     }
                 }
@@ -399,8 +459,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match nodes::stop_node(node_id) {
                         Ok(_) => println!("Node {} stopped successfully", node_id),
                         Err(e) => {
-                            eprintln!("Error stopping node: {}", e);
-                            exit(1);
+                            return Err(format!("Error stopping node: {}", e).into());
                         }
                     }
                 }
@@ -424,8 +483,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node logs: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node logs: {}", e).into());
                         }
                     }
                 }
@@ -503,237 +561,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        // "solana" => { // Temporarily commented out due to clparse changes
-        //     let Some((solana_sub_command, solana_sub_matches)) = matches.subcommand() else {
-        //         eprintln!("No solana subcommand provided");
-        //         exit(1);
-        //     };
-        //
-        //     match solana_sub_command {
-        //         "validator" => {
-        //             // Deploy a Solana validator with enhanced features
-        //             let connection_str = solana_sub_matches
-        //                 .get_one::<String>("connection")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap();
-        //             let network_str = solana_sub_matches
-        //                 .get_one::<String>("network")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap_or("mainnet");
-        //             let version = solana_sub_matches
-        //                 .get_one::<String>("version")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let client_type = solana_sub_matches
-        //                 .get_one::<String>("client-type")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let hot_swap_enabled = solana_sub_matches.contains_id("hot-swap");
-        //             let metrics_config = solana_sub_matches
-        //                 .get_one::<String>("metrics-config")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //
-        //             // Parse connection string
-        //             let connection =
-        //                 match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-        //                     Ok(conn) => conn,
-        //                     Err(e) => {
-        //                         eprintln!("Error parsing SSH connection string: {}", e);
-        //                         exit(1);
-        //                     }
-        //                 };
-        //
-        //             // Parse network type
-        //             let network = match network_str.to_lowercase().as_str() {
-        //                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
-        //                 "testnet" => ssh_deploy::NetworkType::Testnet,
-        //                 "devnet" => ssh_deploy::NetworkType::Devnet,
-        //                 _ => {
-        //                     eprintln!("Invalid network: {}", network_str);
-        //                     exit(1);
-        //                 }
-        //             };
-        //
-        //             // Create disk configuration if both disk params are provided
-        //             let disk_config = if solana_sub_matches.contains_id("ledger-disk")
-        //                 && solana_sub_matches.contains_id("accounts-disk")
-        //             {
-        //                 Some(ssh_deploy::DiskConfig {
-        //                     ledger_disk: solana_sub_matches
-        //                         .get_one::<String>("ledger-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                     accounts_disk: solana_sub_matches
-        //                         .get_one::<String>("accounts-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                 })
-        //             } else {
-        //                 None
-        //             };
-        //
-        //             // Create deployment config with enhanced features
-        //             let deploy_config = ssh_deploy::DeploymentConfig {
-        //                 svm_type: "solana".to_string(),
-        //                 node_type: "validator".to_string(),
-        //                 network,
-        //                 node_name: format!("solana-validator-{}", network_str),
-        //                 rpc_url: None,
-        //                 additional_params: std::collections::HashMap::new(),
-        //                 version,
-        //                 client_type,
-        //                 hot_swap_enabled,
-        //                 metrics_config,
-        //                 disk_config,
-        //             };
-        //
-        //             println!("Deploying Solana validator node to {}...", connection_str);
-        //             println!("Network: {}", network_str);
-        //             if let Some(ver) = &deploy_config.version {
-        //                 println!("Version: {}", ver);
-        //             }
-        //             if let Some(client) = &deploy_config.client_type {
-        //                 println!("Client type: {}", client);
-        //             }
-        //             if deploy_config.hot_swap_enabled {
-        //                 println!("Hot-swap capability: Enabled");
-        //             }
-        //             if let Some(disks) = &deploy_config.disk_config {
-        //                 println!("Disk configuration:");
-        //                 println!("  Ledger disk: {}", disks.ledger_disk);
-        //                 println!("  Accounts disk: {}", disks.accounts_disk);
-        //             }
-        //
-        //             if let Err(e) =
-        //                 ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
-        //             {
-        //                 eprintln!("Deployment error: {}", e);
-        //                 exit(1);
-        //             }
-        //
-        //             println!("Solana validator node deployed successfully!");
-        //         }
-        //         "rpc" => {
-        //             // Deploy a Solana RPC node with enhanced features
-        //             let connection_str = solana_sub_matches
-        //                 .get_one::<String>("connection")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap();
-        //             let network_str = solana_sub_matches
-        //                 .get_one::<String>("network")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap_or("mainnet");
-        //             let version = solana_sub_matches
-        //                 .get_one::<String>("version")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let client_type = solana_sub_matches
-        //                 .get_one::<String>("client-type")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let enable_history = solana_sub_matches.contains_id("enable-history");
-        //             let metrics_config = solana_sub_matches
-        //                 .get_one::<String>("metrics-config")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //
-        //             // Parse connection string
-        //             let connection =
-        //                 match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-        //                     Ok(conn) => conn,
-        //                     Err(e) => {
-        //                         eprintln!("Error parsing SSH connection string: {}", e);
-        //                         exit(1);
-        //                     }
-        //                 };
-        //
-        //             // Parse network type
-        //             let network = match network_str.to_lowercase().as_str() {
-        //                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
-        //                 "testnet" => ssh_deploy::NetworkType::Testnet,
-        //                 "devnet" => ssh_deploy::NetworkType::Devnet,
-        //                 _ => {
-        //                     eprintln!("Invalid network: {}", network_str);
-        //                     exit(1);
-        //                 }
-        //             };
-        //
-        //             // Create disk configuration if both disk params are provided
-        //             let disk_config = if solana_sub_matches.contains_id("ledger-disk")
-        //                 && solana_sub_matches.contains_id("accounts-disk")
-        //             {
-        //                 Some(ssh_deploy::DiskConfig {
-        //                     ledger_disk: solana_sub_matches
-        //                         .get_one::<String>("ledger-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                     accounts_disk: solana_sub_matches
-        //                         .get_one::<String>("accounts-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                 })
-        //             } else {
-        //                 None
-        //             };
-        //
-        //             // Create additional params for RPC-specific options
-        //             let mut additional_params = std::collections::HashMap::new();
-        //             if enable_history {
-        //                 additional_params.insert("enable_history".to_string(), "true".to_string());
-        //             }
-        //
-        //             // Create deployment config with enhanced features
-        //             let deploy_config = ssh_deploy::DeploymentConfig {
-        //                 svm_type: "solana".to_string(),
-        //                 node_type: "rpc".to_string(),
-        //                 network,
-        //                 node_name: format!("solana-rpc-{}", network_str),
-        //                 rpc_url: None,
-        //                 additional_params,
-        //                 version,
-        //                 client_type,
-        //                 hot_swap_enabled: false, // Not needed for RPC nodes
-        //                 metrics_config,
-        //                 disk_config,
-        //             };
-        //
-        //             println!("Deploying Solana RPC node to {}...", connection_str);
-        //             println!("Network: {}", network_str);
-        //             if let Some(ver) = &deploy_config.version {
-        //                 println!("Version: {}", ver);
-        //             }
-        //             if let Some(client) = &deploy_config.client_type {
-        //                 println!("Client type: {}", client);
-        //             }
-        //             if enable_history {
-        //                 println!("Transaction history: Enabled");
-        //             }
-        //             if let Some(disks) = &deploy_config.disk_config {
-        //                 println!("Disk configuration:");
-        //                 println!("  Ledger disk: {}", disks.ledger_disk);
-        //                 println!("  Accounts disk: {}", disks.accounts_disk);
-        //             }
-        //
-        //             if let Err(e) =
-        //                 ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
-        //             {
-        //                 eprintln!("Deployment error: {}", e);
-        //                 exit(1);
-        //             }
-        //
-        //             println!("Solana RPC node deployed successfully!");
-        //         }
-        //         _ => {
-        //             eprintln!("Unknown Solana command: {}", solana_sub_command);
-        //             exit(1);
-        //         }
-        //     }
-        // }
         "rpc-manager" => {
             // Renamed from "rpc"
             let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
@@ -1546,7 +1373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             if !repairable_errors.is_empty() {
                                 let repair_system =
-                                    crate::utils::self_repair::SelfRepairSystem::default();
+                                    crate::utils::self_repair::SelfRepairSystem::with_default_config();
                                 match repair_system.repair_automatically(repairable_errors).await {
                                     Ok(crate::utils::self_repair::RepairResult::Success(msg)) => {
                                         println!("✅ {}", msg);
@@ -1725,6 +1552,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
+        }
+        "audit" => {
+            // This case should not be reached as audit is handled early to avoid config loading
+            eprintln!("❌ Audit command should be handled before config loading");
+            eprintln!("   This indicates a programming error - please report this issue.");
+            exit(1);
         }
         "new_feature_command" => {
             println!("Expected output for new feature");

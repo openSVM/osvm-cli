@@ -576,168 +576,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         )
                 )
         )
-        // .subcommand( // RPC SUBCOMMAND WAS MOVED TO BE FIRST
-        //     Command::new("rpc")
-        //         .about("Manage RPC nodes (local/remote)") // Simplified about string
-        //         .arg_required_else_help(true)
-        //         .subcommand( // Moved sonic to be first
-        //             Command::new("sonic")
-        //                 .about("Deploy a Sonic RPC node")
-        //                 .arg(
-        //                     Arg::new("connection")
-        //                         .help("SSH connection string (format: user@host[:port])")
-        //                         .required(true)
-        //                         .index(1)
-        //                 )
-        //                 .arg(
-        //                     Arg::new("network")
-        //                         .long("network")
-        //                         .value_name("NETWORK")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-        //                         .default_value("mainnet")
-        //                         .help("Network to deploy on")
-        //                 )
-        //         )
-        //         .subcommand(
-        //             Command::new("query-solana") // Renamed from "solana"
-        //                 .about("Query Solana RPC endpoint (info, health, monitor)") // Updated about string
-        //                 .arg(
-        //                     Arg::new("network")
-        //                         .long("network")
-        //                         .value_name("NETWORK")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-        //                         .default_value("mainnet")
-        //                         .help("Solana network to query")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("custom-url")
-        //                         .long("custom-url")
-        //                         .value_name("URL")
-        //                         .help("Custom RPC URL to query")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("monitor")
-        //                         .long("monitor")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Monitor network activity in real-time")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("health")
-        //                         .long("health")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Check network health")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("info")
-        //                         .long("info")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Show network information (default if no other flag)")
-        //                 )
-        //         )
-        //         .subcommand(
-        //             Command::new("local")
-        //                 .about("Deploy a local RPC node on localhost")
-        //                 .arg(
-        //                     Arg::new("svm")
-        //                         .long("svm")
-        //                         .value_name("SVM_NAME")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["solana", "sonic", "eclipse", "soon", "opensvm"]))
-        //                         .default_value("solana")
-        //                         .help("SVM to deploy RPC for")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("network")
-        //                         .long("network")
-        //                         .value_name("NETWORK")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-        //                         .default_value("devnet")
-        //                         .help("Network to deploy on")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("port")
-        //                         .long("port")
-        //                         .value_name("PORT")
-        //                         .default_value("8899")
-        //                         .help("RPC port to bind to (default: 8899)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("faucet-port")
-        //                         .long("faucet-port")
-        //                         .value_name("FAUCET_PORT")
-        //                         .default_value("9900")
-        //                         .help("Faucet port for devnet (default: 9900)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("ledger-path")
-        //                         .long("ledger-path")
-        //                         .value_name("PATH")
-        //                         .default_value("/tmp/test-ledger")
-        //                         .help("Ledger data directory path")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("reset")
-        //                         .long("reset")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Reset the ledger on startup")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("background")
-        //                         .long("background")
-        //                         .short('d')
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Run in background (daemon mode)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("stop")
-        //                         .long("stop")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Stop running local RPC node")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("status")
-        //                         .long("status")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Check status of local RPC node")
-        //                 )
-        //         )
-        //         .subcommand(
-        //             Command::new("devnet")
-        //                 .about("Start a legitimate devnet RPC node that syncs with Solana devnet")
-        //                 .arg(
-        //                     Arg::new("ledger-path")
-        //                         .long("ledger-path")
-        //                         .value_name("PATH")
-        //                         .default_value("devnet-ledger")
-        //                         .help("Ledger data directory path for devnet sync")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("rpc-port")
-        //                         .long("rpc-port")
-        //                         .value_name("PORT")
-        //                         .default_value("8899")
-        //                         .help("RPC port to bind to")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("background")
-        //                         .long("background")
-        //                         .short('d')
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Run in background (daemon mode)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("stop")
-        //                         .long("stop")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Stop running devnet RPC node")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("status")
-        //                         .long("status")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Check status of devnet RPC node")
-        //                 )
-        //         )
-        // )
         .subcommand(
             Command::new("deploy")
                 .about("Deploy eBPF binary to all available SVM networks")
@@ -961,123 +799,67 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .help("Detailed diagnostic output")
                 )
         )
+        .subcommand(
+            Command::new("audit")
+                .about("Generate comprehensive security audit report")
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .short('o')
+                        .value_name("PATH")
+                        .help("Output directory for audit report files")
+                        .default_value("audit_reports")
+                )
+                .arg(
+                    Arg::new("format")
+                        .long("format")
+                        .value_name("FORMAT")
+                        .value_parser(clap::builder::PossibleValuesParser::new(["typst", "pdf", "both"]))
+                        .default_value("both")
+                        .help("Output format: typst source, PDF, or both")
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('v')
+                        .action(ArgAction::Count)
+                        .help("Verbose audit output")
+                )
+                .arg(
+                    Arg::new("test")
+                        .long("test")
+                        .action(ArgAction::SetTrue)
+                        .help("Generate test audit report with sample data")
+                )
+                .arg(
+                    Arg::new("ai-analysis")
+                        .long("ai-analysis")
+                        .action(ArgAction::SetTrue)
+                        .help("Enable AI-powered security analysis using OpenAI (requires OPENAI_API_KEY)")
+                )
+                .arg(
+                    Arg::new("gh")
+                        .long("gh")
+                        .value_name("REPO#BRANCH")
+                        .help("Git repository to audit in format: owner/repo#branch
+                               
+Examples:
+  --gh opensvm/aeamcp#main           # Audit main branch of opensvm/aeamcp
+  --gh solana-labs/solana#master     # Audit Solana Labs repository
+  --gh myorg/myproject#develop       # Audit develop branch
 
-        // .subcommand( // Temporarily commented out to isolate RPC command issues
-        //     Command::new("solana")
-        //         .about("Deploy and manage Solana validators")
-        //         .arg_required_else_help(true)
-        //         .subcommand(
-        //             Command::new("validator")
-        //                 .about("Deploy a Solana validator node with enhanced features")
-        //                 .arg(
-        //                     Arg::new("connection")
-        //                         .help("SSH connection string (format: user@host[:port])")
-        //                         .required(true)
-        //                         .index(1)
-        //                 )
-        //                 .arg(
-        //                     Arg::new("network")
-        //                         .long("network")
-        //                         .value_name("NETWORK")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-        //                         .default_value("mainnet")
-        //                         .help("Network to deploy on")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("version")
-        //                         .long("version")
-        //                         .value_name("VERSION")
-        //                         .help("Solana client version (e.g., v1.16.0, v1.18.23-jito)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("client-type")
-        //                         .long("client-type")
-        //                         .value_name("TYPE")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave"]))
-        //                         .default_value("standard")
-        //                         .help("Solana client type (standard, jito, agave)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("hot-swap")
-        //                         .long("hot-swap")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Enable hot-swap capability for high availability")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("ledger-disk")
-        //                         .long("ledger-disk")
-        //                         .value_name("DEVICE")
-        //                         .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("accounts-disk")
-        //                         .long("accounts-disk")
-        //                         .value_name("DEVICE")
-        //                         .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("metrics-config")
-        //                         .long("metrics-config")
-        //                         .value_name("CONFIG")
-        //                         .help("Metrics configuration string (e.g., host=https://metrics.solana.com:8086,db=mainnet-beta,u=mainnet-beta_write,p=password)")
-        //                 )
-        //         )
-        //         .subcommand(
-        //             Command::new("rpc")
-        //                 .about("Deploy a Solana RPC node with enhanced features")
-        //                 .arg(
-        //                     Arg::new("connection")
-        //                         .help("SSH connection string (format: user@host[:port])")
-        //                         .required(true)
-        //                         .index(1)
-        //                 )
-        //                 .arg(
-        //                     Arg::new("network")
-        //                         .long("network")
-        //                         .value_name("NETWORK")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-        //                         .default_value("mainnet")
-        //                         .help("Network to deploy on")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("version")
-        //                         .long("version")
-        //                         .value_name("VERSION")
-        //                         .help("Solana client version (e.g., v1.16.0)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("client-type")
-        //                         .long("client-type")
-        //                         .value_name("TYPE")
-        //                         .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave"]))
-        //                         .default_value("standard")
-        //                         .help("Solana client type (standard, jito, agave)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("ledger-disk")
-        //                         .long("ledger-disk")
-        //                         .value_name("DEVICE")
-        //                         .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("accounts-disk")
-        //                         .long("accounts-disk")
-        //                         .value_name("DEVICE")
-        //                         .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("metrics-config")
-        //                         .long("metrics-config")
-        //                         .value_name("CONFIG")
-        //                         .help("Metrics configuration string")
-        //                 )
-        //                 .arg(
-        //                     Arg::new("enable-history")
-        //                         .long("enable-history")
-        //                         .action(ArgAction::SetTrue)
-        //                         .help("Enable transaction history (increases storage requirements)")
-        //                 )
-        //         )
-        // )
-        .get_matches()
+The command will:
+1. Clone the specified repository and branch
+2. Create a new audit branch with timestamp
+3. Run comprehensive security analysis
+4. Generate audit reports (Typst/PDF)
+5. Commit and push results to the new branch")
+                )
+        )
+        .subcommand(
+            Command::new("new_feature_command")
+                .about("New feature for testing")
+        )
+
+                .get_matches()
 }

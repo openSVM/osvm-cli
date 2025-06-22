@@ -1,0 +1,121 @@
+name: OSVM Security Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: 'Repository to audit (owner/repo)'
+        required: true
+        type: string
+      branch:
+        description: 'Branch to audit'
+        required: true
+        default: 'main'
+        type: string
+      ai_analysis:
+        description: 'Enable AI-powered analysis'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  security-audit:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      
+    steps:
+    - name: Checkout OSVM CLI
+      uses: actions/checkout@v4
+      with:
+        repository: openSVM/osvm-cli
+        path: osvm-cli
+        
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        
+    - name: Install Typst
+      run: |
+        set -e
+        TYPST_VERSION="v0.12.0"
+        TYPST_URL="https://github.com/typst/typst/releases/download/${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz"
+        EXPECTED_SHA256="c64bbad2e44b6b8d5b61f3d96b4e51c4bdcfdc9e6ac5a7e25ade2c2e1b81b70c"
+        
+        # Download with integrity verification
+        curl -fsSL "$TYPST_URL" -o typst.tar.xz
+        echo "${EXPECTED_SHA256}  typst.tar.xz" | sha256sum -c || {
+          echo "❌ Typst checksum verification failed"
+          exit 1
+        }
+        
+        tar -xf typst.tar.xz
+        sudo mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+        rm -rf typst.tar.xz typst-x86_64-unknown-linux-musl/
+        typst --version
+        
+    - name: Build OSVM CLI
+      run: |
+        cd osvm-cli
+        cargo build --release
+        
+    - name: Run tests
+      run: |
+        cd osvm-cli
+        cargo test --release
+        
+    - name: Setup Git for audit commits
+      run: |
+        set -e
+        # Use local git config to avoid affecting other jobs
+        cd osvm-cli
+        git config user.name "OSVM Security Audit Bot"
+        git config user.email "audit@opensvm.org"
+        
+    - name: Run Security Audit
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      run: |
+        set -e
+        cd osvm-cli
+        AI_FLAG=""
+        if [ "${{ github.event.inputs.ai_analysis }}" == "true" ]; then
+          AI_FLAG="--ai-analysis"
+        fi
+        ./target/release/osvm audit \
+          --gh "${{ github.event.inputs.repository }}#${{ github.event.inputs.branch }}" \
+          --format both \
+          --verbose \
+          ${AI_FLAG} || {
+            echo "❌ Security audit failed or found critical issues"
+            echo "📋 This is expected behavior for repositories with security vulnerabilities"
+            exit 1
+          }
+          
+    - name: Create audit summary
+      id: audit_summary
+      if: always()
+      run: |
+        set -e
+        cd osvm-cli
+        echo "## 🔍 OSVM Security Audit Completed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Repository:** ${{ github.event.inputs.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Branch:** ${{ github.event.inputs.branch }}" >> $GITHUB_STEP_SUMMARY
+        echo "**AI Analysis:** ${{ github.event.inputs.ai_analysis }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Timestamp:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "A new audit branch has been created in the target repository with:" >> $GITHUB_STEP_SUMMARY
+        echo "- 📄 Typst audit report source" >> $GITHUB_STEP_SUMMARY
+        echo "- 📋 PDF audit report (if Typst compilation succeeded)" >> $GITHUB_STEP_SUMMARY
+        echo "- 🔍 Comprehensive security findings and recommendations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Check the target repository for the new audit branch starting with \`osvm-audit-\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ job.status }}" != "success" ]; then
+          echo "⚠️ **Note:** Audit process exited with code 1, indicating critical or high-severity security findings were detected." >> $GITHUB_STEP_SUMMARY
+          echo "This is intended behavior to alert CI/CD systems about security issues that require attention." >> $GITHUB_STEP_SUMMARY
+        fi
