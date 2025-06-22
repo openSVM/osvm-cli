@@ -477,7 +477,7 @@ pub fn load_or_create_idl(
 
         // Parse the IDL JSON and validate it's a proper Anchor IDL
         let idl: serde_json::Value =
-            serde_json::from_str(&contents).map_err(|e| EbpfDeployError::JsonError(e))?;
+            serde_json::from_str(&contents).map_err(EbpfDeployError::JsonError)?;
 
         // Basic validation that it looks like an Anchor IDL
         if !idl.is_object() {
@@ -607,7 +607,7 @@ async fn deploy_new_bpf_program(
     let total_rent = buffer_rent + program_rent + program_data_rent;
 
     // Calculate dynamic transaction fees based on program size and network conditions
-    let num_chunks = (buffer_size + 1023) / 1024; // Round up division for 1KB chunks
+    let num_chunks = buffer_size.div_ceil(1024); // Round up division for 1KB chunks
     let estimated_transaction_count = 3 + num_chunks as u32; // create buffer + write chunks + deploy
     let transaction_fees = calculate_dynamic_fees(client, estimated_transaction_count).await?;
 
@@ -757,7 +757,7 @@ async fn upgrade_bpf_program(
     let buffer_rent = client.get_minimum_balance_for_rent_exemption(buffer_size + 8)?; // +8 for discriminator
 
     // Calculate dynamic transaction fees for upgrade operations
-    let num_chunks = (buffer_size + 1023) / 1024; // Round up division for 1KB chunks
+    let num_chunks = buffer_size.div_ceil(1024); // Round up division for 1KB chunks
     let estimated_transaction_count = 2 + num_chunks as u32; // create buffer + write chunks + upgrade
     let transaction_fees = calculate_dynamic_fees(client, estimated_transaction_count).await?;
 
@@ -903,7 +903,7 @@ pub fn display_deployment_results(
             "summary": {
                 "total": results.len(),
                 "successful": results.iter().filter(|r|
-                    r.as_ref().map_or(false, |d| d.success)).count(),
+                    r.as_ref().is_ok_and(|d| d.success)).count(),
                 "failed": results.iter().filter(|r|
                     r.as_ref().map_or(true, |d| !d.success)).count(),
                 "timestamp": chrono::Utc::now().to_rfc3339()

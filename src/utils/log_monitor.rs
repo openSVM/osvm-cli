@@ -303,7 +303,7 @@ async fn setup_ngrok_tunnels(ports: &[u16]) -> Result<HashMap<u16, String>> {
                 .arg("http")
                 .arg(format!("localhost:{}", port))
                 .arg("--domain")
-                .arg("osvm.dev".to_string())
+                .arg("osvm.dev")
                 .arg("--log")
                 .arg("stdout")
                 .spawn()
