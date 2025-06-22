@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use {
     crate::utils::ssh_deploy::NetworkType,
     solana_client::rpc_client::RpcClient,

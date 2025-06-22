@@ -133,7 +133,7 @@ impl SelfRepairSystem {
     }
 
     /// Create a new self-repair system with default configuration
-    pub fn default() -> Self {
+    pub fn with_default_config() -> Self {
         Self::new(RepairConfig::default())
     }
 
@@ -355,7 +355,7 @@ pub async fn read_keypair_with_repair(
         Ok(keypair) => Ok(keypair),
         Err(err) => {
             // Error detected, attempt self-repair
-            let repair_system = SelfRepairSystem::default();
+            let repair_system = SelfRepairSystem::with_default_config();
             let error_message = format!("Error reading keypair file {}: {}", keypair_path, err);
 
             println!("🔧 OSVM detected a configuration issue. Attempting automatic repair...");
@@ -405,7 +405,7 @@ pub async fn read_keypair_with_repair(
             }
 
             // If we get here, repair was declined or failed
-            Err(err.into())
+            Err(err)
         }
     }
 }
@@ -430,7 +430,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_repair_system_creation() {
-        let repair_system = SelfRepairSystem::default();
+        let repair_system = SelfRepairSystem::with_default_config();
         assert!(repair_system.config.interactive);
         // assert!(repair_system.config.auto_snapshot);  // REMOVED
     }

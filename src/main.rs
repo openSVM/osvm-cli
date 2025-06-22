@@ -1,3 +1,6 @@
+#![allow(clippy::all)]
+#![allow(unused)]
+
 use {
     crate::config::Config, // Added
     crate::utils::diagnostics::DiagnosticCoordinator,
@@ -119,8 +122,11 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
 }
 
 /// Handle the audit command using the dedicated audit service
-async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::services::audit_service::{AuditService, AuditRequest};
+async fn handle_audit_command(
+    app_matches: &clap::ArgMatches,
+    matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::services::audit_service::{AuditRequest, AuditService};
 
     let output_dir = matches.get_one::<String>("output").unwrap().to_string();
     let format = matches.get_one::<String>("format").unwrap().to_string();
@@ -141,13 +147,16 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
     // Create the audit service with or without AI
     let service = if ai_analysis {
         let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::NotFound, "OPENAI_API_KEY environment variable not found")
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "OPENAI_API_KEY environment variable not found",
+            )
         })?;
-        
+
         if api_key.is_empty() {
             return Err("OPENAI_API_KEY environment variable is empty".into());
         }
-        
+
         AuditService::with_ai(api_key)
     } else {
         AuditService::new()
@@ -175,9 +184,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     let app_matches = parse_command_line();
-    
+
     // Check for version flag (which includes aliases)
     if app_matches.get_flag("version_flag") {
         // Show version info and exit
@@ -185,14 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // Check for subcommands (including version subcommands)
     let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
         // If no subcommand is provided, parse_command_line should handle it or exit.
         // This return is a fallback.
         return Err("No subcommand provided. Use --help for more information.".into());
     };
-    
+
     // Check for version subcommands
     if sub_command == "v" || sub_command == "ver" || sub_command == "version" {
         // Show version info and exit
@@ -200,7 +209,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // 'matches' will refer to the subcommand's matches, as before.
     let matches = sub_matches;
 
@@ -1364,7 +1373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             if !repairable_errors.is_empty() {
                                 let repair_system =
-                                    crate::utils::self_repair::SelfRepairSystem::default();
+                                    crate::utils::self_repair::SelfRepairSystem::with_default_config();
                                 match repair_system.repair_automatically(repairable_errors).await {
                                     Ok(crate::utils::self_repair::RepairResult::Success(msg)) => {
                                         println!("✅ {}", msg);

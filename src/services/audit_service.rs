@@ -65,22 +65,29 @@ impl AuditService {
         // Check for OpenAI API key if AI analysis is enabled
         if request.ai_analysis {
             match std::env::var("OPENAI_API_KEY") {
-                Ok(key) if !key.is_empty() => {},
-                Ok(_) => return Err(AuditError::EnvironmentError(
-                    "OPENAI_API_KEY environment variable is empty".to_string()
-                )),
-                Err(_) => return Err(AuditError::EnvironmentError(
-                    "OPENAI_API_KEY environment variable not found".to_string()
-                )),
+                Ok(key) if !key.is_empty() => {}
+                Ok(_) => {
+                    return Err(AuditError::EnvironmentError(
+                        "OPENAI_API_KEY environment variable is empty".to_string(),
+                    ))
+                }
+                Err(_) => {
+                    return Err(AuditError::EnvironmentError(
+                        "OPENAI_API_KEY environment variable not found".to_string(),
+                    ))
+                }
             }
         }
 
         // Validate output format
         match request.format.as_str() {
-            "typst" | "pdf" | "both" => {},
-            _ => return Err(AuditError::ConfigurationError(
-                format!("Invalid format '{}'. Valid formats: typst, pdf, both", request.format)
-            )),
+            "typst" | "pdf" | "both" => {}
+            _ => {
+                return Err(AuditError::ConfigurationError(format!(
+                    "Invalid format '{}'. Valid formats: typst, pdf, both",
+                    request.format
+                )))
+            }
         }
 
         Ok(())
@@ -88,7 +95,10 @@ impl AuditService {
 
     pub fn prepare_output_directory(output_dir: &str) -> Result<(), AuditError> {
         fs::create_dir_all(output_dir).map_err(|e| {
-            AuditError::OutputError(format!("Failed to create output directory '{}': {}", output_dir, e))
+            AuditError::OutputError(format!(
+                "Failed to create output directory '{}': {}",
+                output_dir, e
+            ))
         })?;
         Ok(())
     }
@@ -96,7 +106,7 @@ impl AuditService {
     pub async fn execute_audit(&self, request: &AuditRequest) -> Result<AuditResult, AuditError> {
         // Validate environment first
         Self::validate_environment(request)?;
-        
+
         // Prepare output directory
         Self::prepare_output_directory(&request.output_dir)?;
 
@@ -122,10 +132,14 @@ impl AuditService {
             if request.verbose > 0 {
                 println!("🐙 GitHub repository audit mode");
             }
-            
-            self.coordinator.audit_github_repository(repo_spec).await
-                .map_err(|e| AuditError::AuditExecutionError(format!("GitHub audit failed: {}", e)))?;
-            
+
+            self.coordinator
+                .audit_github_repository(repo_spec)
+                .await
+                .map_err(|e| {
+                    AuditError::AuditExecutionError(format!("GitHub audit failed: {}", e))
+                })?;
+
             // For GitHub mode, we return early as files are already generated and committed
             return Ok(AuditResult {
                 success: true,
@@ -145,15 +159,19 @@ impl AuditService {
             self.coordinator.create_test_audit_report()
         } else {
             // Run security audit
-            self.coordinator.run_security_audit().await
-                .map_err(|e| AuditError::AuditExecutionError(format!("Security audit failed: {}", e)))?
+            self.coordinator.run_security_audit().await.map_err(|e| {
+                AuditError::AuditExecutionError(format!("Security audit failed: {}", e))
+            })?
         };
 
         if request.verbose > 0 {
             println!("✅ Security audit completed successfully");
-            println!("📊 Security Score: {:.1}/100", report.summary.security_score);
+            println!(
+                "📊 Security Score: {:.1}/100",
+                report.summary.security_score
+            );
             println!("🔍 Total Findings: {}", report.summary.total_findings);
-            
+
             if report.summary.critical_findings > 0 {
                 println!("🔴 Critical: {}", report.summary.critical_findings);
             }
@@ -171,19 +189,24 @@ impl AuditService {
         // Generate outputs based on requested format
         let mut output_files = Vec::new();
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-        let typst_path = Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
-        let pdf_path = Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
-        
+        let typst_path =
+            Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
+        let pdf_path =
+            Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
+
         match request.format.as_str() {
             "typst" | "both" => {
-                self.coordinator.generate_typst_document(&report, &typst_path)
-                    .map_err(|e| AuditError::OutputError(format!("Failed to generate Typst document: {}", e)))?;
-                
+                self.coordinator
+                    .generate_typst_document(&report, &typst_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
+                    })?;
+
                 if request.verbose > 0 {
                     println!("📄 Typst document generated: {}", typst_path.display());
                 }
                 output_files.push(typst_path.to_string_lossy().to_string());
-                
+
                 if request.format == "both" {
                     match self.coordinator.compile_to_pdf(&typst_path, &pdf_path) {
                         Ok(_) => {
@@ -191,45 +214,63 @@ impl AuditService {
                                 println!("📋 PDF report generated: {}", pdf_path.display());
                             }
                             output_files.push(pdf_path.to_string_lossy().to_string());
-                        },
+                        }
                         Err(e) => {
                             eprintln!("❌ Failed to compile PDF: {}", e);
-                            eprintln!("   Typst document is available at: {}", typst_path.display());
-                            eprintln!("   You can compile it manually using: typst compile {}", typst_path.display());
+                            eprintln!(
+                                "   Typst document is available at: {}",
+                                typst_path.display()
+                            );
+                            eprintln!(
+                                "   You can compile it manually using: typst compile {}",
+                                typst_path.display()
+                            );
                         }
                     }
                 }
             }
             "pdf" => {
                 // Generate Typst document first (temporary)
-                self.coordinator.generate_typst_document(&report, &typst_path)
-                    .map_err(|e| AuditError::OutputError(format!("Failed to generate Typst document: {}", e)))?;
-                
-                self.coordinator.compile_to_pdf(&typst_path, &pdf_path)
-                    .map_err(|e| AuditError::OutputError(format!("Failed to compile PDF: {}", e)))?;
-                
+                self.coordinator
+                    .generate_typst_document(&report, &typst_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
+                    })?;
+
+                self.coordinator
+                    .compile_to_pdf(&typst_path, &pdf_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to compile PDF: {}", e))
+                    })?;
+
                 // Remove temporary Typst file
                 let _ = fs::remove_file(&typst_path);
-                
+
                 if request.verbose > 0 {
                     println!("📋 PDF report generated: {}", pdf_path.display());
                 }
                 output_files.push(pdf_path.to_string_lossy().to_string());
             }
-            _ => return Err(AuditError::ConfigurationError(
-                format!("Invalid format specified: {}", request.format)
-            )),
+            _ => {
+                return Err(AuditError::ConfigurationError(format!(
+                    "Invalid format specified: {}",
+                    request.format
+                )))
+            }
         }
 
         if request.verbose > 0 {
             println!("\n📋 Audit Summary:");
             println!("  Compliance Level: {}", report.summary.compliance_level);
-            println!("  System: {} {}", report.system_info.os_info, report.system_info.architecture);
+            println!(
+                "  System: {} {}",
+                report.system_info.os_info, report.system_info.architecture
+            );
             println!("  Rust Version: {}", report.system_info.rust_version);
             if let Some(ref solana_version) = report.system_info.solana_version {
                 println!("  Solana Version: {}", solana_version);
             }
-            
+
             println!("\n💡 To view the full report, open the generated file(s):");
             for file in &output_files {
                 println!("   📁 {}", file);
@@ -237,12 +278,12 @@ impl AuditService {
         }
 
         // Check if exit with error code is needed (critical or high findings)
-        let has_serious_findings = !request.test_mode && 
-            (report.summary.critical_findings > 0 || report.summary.high_findings > 0);
+        let has_serious_findings = !request.test_mode
+            && (report.summary.critical_findings > 0 || report.summary.high_findings > 0);
 
         Ok(AuditResult {
             success: !has_serious_findings,
-            security_score: report.summary.security_score,
+            security_score: report.summary.security_score as f64,
             total_findings: report.summary.total_findings,
             critical_findings: report.summary.critical_findings,
             high_findings: report.summary.high_findings,

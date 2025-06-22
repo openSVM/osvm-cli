@@ -684,10 +684,8 @@ pub async fn monitor_logs_continuous(
 
     // Spawn log reader thread
     task::spawn_blocking(move || {
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                let _ = tx.blocking_send(line);
-            }
+        for line in reader.lines().flatten() {
+            let _ = tx.blocking_send(line);
         }
     });
 
@@ -986,5 +984,4 @@ mod tests {
         }
         assert!(found, "System tuning pattern should match");
     }
-
 }
