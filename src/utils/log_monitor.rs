@@ -309,12 +309,11 @@ async fn setup_ngrok_tunnels(ports: &[u16]) -> Result<HashMap<u16, String>> {
                 .spawn()
                 .context("Failed to start ngrok")?
         } else {
-            // TCP tunnel with custom remote address for gossip/other ports
+            // TCP tunnel with pooling enabled to allow sharing endpoints
             Command::new("ngrok")
                 .arg("tcp")
                 .arg(port.to_string())
-                .arg("--remote-addr")
-                .arg(format!("{}.osvm.dev:{}", port, port))
+                .arg("--pooling-enabled")
                 .arg("--log")
                 .arg("stdout")
                 .spawn()
@@ -970,7 +969,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_pattern_matching() {
+    fn test_log_pattern_matching() {
         let patterns = init_log_patterns();
 
         // Test system tuning pattern
@@ -987,4 +986,5 @@ mod tests {
         }
         assert!(found, "System tuning pattern should match");
     }
+
 }
