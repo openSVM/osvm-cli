@@ -118,6 +118,34 @@ powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/o
 - **Command Examples**: Built-in examples for common workflows and operations
 - **SSH Deployment**: Remote deployment and management capabilities
 
+## 🚀 GitHub Actions Integration
+
+OSVM CLI now includes a dedicated GitHub Action for seamless CI/CD integration! Deploy SVM nodes directly from your workflows with minimal configuration.
+
+### Quick Start
+
+```yaml
+- name: Deploy SVM Node
+  uses: ./.github/actions/svm-deploy
+  with:
+    svm-name: 'my-svm'
+    host: 'user@example.com'
+    ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    network: 'devnet'
+    node-type: 'validator'
+```
+
+### Features
+
+- 🔒 **Secure**: Uses GitHub Secrets for sensitive data
+- 🎯 **Configurable**: Support for different networks and node types  
+- 📊 **Detailed Logging**: Comprehensive deployment logs
+- 🔄 **Reusable**: Includes reusable workflows for common patterns
+
+[📖 View Complete Documentation](.github/actions/svm-deploy/README.md) | [🔧 See Examples](examples/github-actions/)
+
+---
+
 ## 📋 Command Reference
 
 ### SVM Management
@@ -307,6 +335,13 @@ osvm svm dashboard
 - `q` or `Ctrl+C`: Quit the dashboard
 
 ## 📚 Documentation
+
+- [📖 GitHub Actions Integration](.github/actions/svm-deploy/README.md) - Complete guide for CI/CD integration
+- [🔧 GitHub Actions Examples](examples/github-actions/) - Ready-to-use workflow examples
+- [📋 Command Reference](#-command-reference) - All available commands and options
+- [🎯 Usage Examples](#-usage-examples) - Common use cases and scenarios
+- [🔧 Installation Guide](#-detailed-installation) - Step-by-step setup instructions
+- [📊 Dashboard Features](#-dashboard-features) - Interactive monitoring capabilities
 
 For complete documentation, visit [our official documentation](https://docs.opensvm.org).
 

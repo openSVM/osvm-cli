@@ -1,0 +1,81 @@
+# Multi-Environment Deployment Example
+
+name: Multi-Environment SVM Deployment
+
+on:
+  push:
+    branches: [ main, develop, staging ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+jobs:
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      network: ${{ steps.env.outputs.network }}
+      host: ${{ steps.env.outputs.host }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV="production"
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            ENV="staging"
+          else
+            ENV="development"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          
+          case $ENV in
+            production)
+              echo "network=mainnet" >> $GITHUB_OUTPUT
+              echo "host=prod-user@prod.svm-cluster.com" >> $GITHUB_OUTPUT
+              ;;
+            staging)
+              echo "network=testnet" >> $GITHUB_OUTPUT
+              echo "host=staging-user@staging.svm-cluster.com" >> $GITHUB_OUTPUT
+              ;;
+            development)
+              echo "network=devnet" >> $GITHUB_OUTPUT
+              echo "host=dev-user@dev.svm-cluster.com" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+  deploy:
+    needs: determine-environment
+    runs-on: ubuntu-latest
+    environment: ${{ needs.determine-environment.outputs.environment }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: 'multi-env-svm-${{ needs.determine-environment.outputs.environment }}'
+          host: ${{ needs.determine-environment.outputs.host }}
+          network: ${{ needs.determine-environment.outputs.network }}
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: true
