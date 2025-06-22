@@ -1,0 +1,33 @@
+# Basic SVM Deployment Example
+
+name: Basic SVM Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' # Only deploy on push, not PR
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: 'basic-svm'
+          host: 'deploy@svm-server.example.com'
+          network: 'devnet'
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          verbose: true

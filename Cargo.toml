@@ -55,3 +55,11 @@ remote-wallet = ["solana-remote-wallet"]
 [patch.crates-io]
 curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }
 crunchy = { path = "vendor/crunchy" }
+
+# Custom scripts for development and deployment
+[package.metadata.scripts]
+install = "bash install-release.sh"
+install-dev = "cargo build && sudo cp target/debug/osvm /usr/bin/osvm"
+build-release = "cargo build --release"
+test-install = "cargo build --release && ./target/release/osvm --version"
+clean-install = "sudo rm -f /usr/bin/osvm /usr/bin/osvm.backup"
