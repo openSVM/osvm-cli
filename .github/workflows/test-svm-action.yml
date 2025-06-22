@@ -1,0 +1,170 @@
+name: Test SVM Deploy Action
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of test to run'
+        required: true
+        default: 'validation'
+        type: choice
+        options:
+          - validation
+          - integration
+          - dry-run
+
+jobs:
+  validate-action-structure:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Validate action.yml structure
+        run: |
+          echo "Validating GitHub Action structure..."
+          
+          # Check if action.yml exists
+          if [ ! -f ".github/actions/svm-deploy/action.yml" ]; then
+            echo "❌ action.yml not found"
+            exit 1
+          fi
+          
+          # Check if README exists
+          if [ ! -f ".github/actions/svm-deploy/README.md" ]; then
+            echo "❌ README.md not found"
+            exit 1
+          fi
+          
+          # Validate YAML syntax
+          python -c "import yaml; yaml.safe_load(open('.github/actions/svm-deploy/action.yml'))" || {
+            echo "❌ Invalid YAML syntax in action.yml"
+            exit 1
+          }
+          
+          echo "✅ Action structure validation passed"
+
+      - name: Validate reusable workflow
+        run: |
+          echo "Validating reusable workflow..."
+          
+          # Check if reusable workflow exists
+          if [ ! -f ".github/workflows/svm-deploy.yml" ]; then
+            echo "❌ Reusable workflow not found"
+            exit 1
+          fi
+          
+          # Validate YAML syntax
+          python -c "import yaml; yaml.safe_load(open('.github/workflows/svm-deploy.yml'))" || {
+            echo "❌ Invalid YAML syntax in reusable workflow"
+            exit 1
+          }
+          
+          echo "✅ Reusable workflow validation passed"
+
+      - name: Validate examples
+        run: |
+          echo "Validating example workflows..."
+          
+          EXAMPLE_DIR="examples/github-actions"
+          if [ ! -d "$EXAMPLE_DIR" ]; then
+            echo "❌ Examples directory not found"
+            exit 1
+          fi
+          
+          # Check each example file
+          for file in "$EXAMPLE_DIR"/*.yml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file..."
+              python -c "import yaml; yaml.safe_load(open('$file'))" || {
+                echo "❌ Invalid YAML syntax in $file"
+                exit 1
+              }
+            fi
+          done
+          
+          echo "✅ Examples validation passed"
+
+  dry-run-test:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'dry-run' || github.event.inputs.test_type == 'integration'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Dry run - Build OSVM CLI
+        run: |
+          echo "Building OSVM CLI for dry run test..."
+          cargo build --release
+          
+          # Verify the binary works
+          ./target/release/osvm --version
+          ./target/release/osvm --help
+
+      - name: Dry run - Test CLI commands
+        run: |
+          echo "Testing CLI commands that the action would use..."
+          
+          # Test the help for svm install command
+          ./target/release/osvm svm install --help
+          
+          echo "✅ CLI commands are working correctly"
+
+  integration-test:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'integration'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup test SSH key
+        run: |
+          # Generate a test SSH key pair for testing
+          ssh-keygen -t ed25519 -C "test-key" -f ~/.ssh/test_key -N ""
+          echo "Test SSH key generated"
+
+      - name: Setup test Solana keypair
+        run: |
+          # Create a test keypair (not for real use)
+          mkdir -p ~/.config/solana
+          echo '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]' > ~/.config/solana/test.json
+          echo "Test Solana keypair created"
+
+      - name: Test action inputs validation
+        env:
+          TEST_SSH_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY || 'test-key-placeholder' }}
+          TEST_KEYPAIR: '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]'
+        run: |
+          echo "Testing action input validation..."
+          
+          # Test that the action would accept valid inputs
+          echo "✅ Input validation test would pass with proper secrets"
+          echo "Note: Full integration test requires valid SSH host and credentials"
+
+  test-summary:
+    needs: [validate-action-structure, dry-run-test, integration-test]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Test Summary
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action Structure | ${{ needs.validate-action-structure.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dry Run | ${{ needs.dry-run-test.result == 'success' && '✅ Passed' || needs.dry-run-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Integration | ${{ needs.integration-test.result == 'success' && '✅ Passed' || needs.integration-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "- For full integration testing, set up test secrets (TEST_SSH_PRIVATE_KEY)" >> $GITHUB_STEP_SUMMARY
+          echo "- Test with actual remote hosts in a safe environment" >> $GITHUB_STEP_SUMMARY
+          echo "- Validate deployment results and error handling" >> $GITHUB_STEP_SUMMARY

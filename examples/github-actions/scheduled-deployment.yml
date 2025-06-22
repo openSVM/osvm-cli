@@ -1,0 +1,112 @@
+# Scheduled Deployment Example
+
+name: Scheduled SVM Deployment
+
+on:
+  schedule:
+    # Deploy every day at 2 AM UTC
+    - cron: '0 2 * * *'
+    # Deploy every Monday at 8 AM UTC for weekly maintenance
+    - cron: '0 8 * * 1'
+  
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if checks fail'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  pre-deployment-checks:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check deployment conditions
+        id: check
+        run: |
+          # Check if it's a forced deployment
+          if [ "${{ github.event.inputs.force_deploy }}" == "true" ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "Forced deployment requested"
+            exit 0
+          fi
+          
+          # Check system health before deployment
+          # This is a placeholder - replace with actual health checks
+          SYSTEM_HEALTHY=true
+          
+          # Check if there are recent deployments (avoid too frequent deployments)
+          HOURS_SINCE_LAST_DEPLOY=25  # Placeholder value
+          
+          if [ "$SYSTEM_HEALTHY" = "true" ] && [ "$HOURS_SINCE_LAST_DEPLOY" -gt 24 ]; then
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "System is healthy and sufficient time has passed since last deployment"
+          else
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "Skipping deployment - conditions not met"
+          fi
+
+  scheduled-deployment:
+    needs: pre-deployment-checks
+    runs-on: ubuntu-latest
+    if: needs.pre-deployment-checks.outputs.should_deploy == 'true'
+    
+    strategy:
+      matrix:
+        environment: [staging, production]
+        include:
+          - environment: staging
+            network: testnet
+            host: staging-user@staging.svm-cluster.com
+            svm_name: scheduled-staging-svm
+          - environment: production
+            network: mainnet
+            host: prod-user@prod.svm-cluster.com
+            svm_name: scheduled-prod-svm
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Deploy SVM Node - ${{ matrix.environment }}
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ matrix.svm_name }}
+          host: ${{ matrix.host }}
+          network: ${{ matrix.network }}
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: true
+          deploy-args: '--schedule-deployment'
+
+  post-deployment-notification:
+    needs: [pre-deployment-checks, scheduled-deployment]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.pre-deployment-checks.outputs.should_deploy }}" == "true" ]; then
+            if [ "${{ needs.scheduled-deployment.result }}" == "success" ]; then
+              echo "✅ Scheduled deployment completed successfully"
+              # Add your notification logic here (Slack, Discord, email, etc.)
+            else
+              echo "❌ Scheduled deployment failed"
+              # Add your notification logic here
+            fi
+          else
+            echo "ℹ️  Scheduled deployment was skipped due to pre-deployment checks"
+          fi

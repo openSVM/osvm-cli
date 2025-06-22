@@ -1,0 +1,191 @@
+# Conditional Deployment Example
+
+name: Conditional SVM Deployment
+
+on:
+  push:
+    branches: [ main, develop, 'release/**', 'hotfix/**' ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  determine-deployment-strategy:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.conditions.outputs.should_deploy }}
+      environment: ${{ steps.conditions.outputs.environment }}
+      network: ${{ steps.conditions.outputs.network }}
+      deployment_type: ${{ steps.conditions.outputs.deployment_type }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Evaluate deployment conditions
+        id: conditions
+        run: |
+          SHOULD_DEPLOY="false"
+          ENVIRONMENT=""
+          NETWORK=""
+          DEPLOYMENT_TYPE=""
+          
+          # Check event type and conditions
+          if [ "${{ github.event_name }}" == "push" ]; then
+            case "${{ github.ref }}" in
+              refs/heads/main)
+                SHOULD_DEPLOY="true"
+                ENVIRONMENT="production"
+                NETWORK="mainnet"
+                DEPLOYMENT_TYPE="production"
+                ;;
+              refs/heads/develop)
+                SHOULD_DEPLOY="true"
+                ENVIRONMENT="development"
+                NETWORK="devnet"
+                DEPLOYMENT_TYPE="development"
+                ;;
+              refs/heads/release/*)
+                SHOULD_DEPLOY="true"
+                ENVIRONMENT="staging"
+                NETWORK="testnet"
+                DEPLOYMENT_TYPE="release"
+                ;;
+              refs/heads/hotfix/*)
+                SHOULD_DEPLOY="true"
+                ENVIRONMENT="production"
+                NETWORK="mainnet"
+                DEPLOYMENT_TYPE="hotfix"
+                ;;
+              refs/tags/v*)
+                SHOULD_DEPLOY="true"
+                ENVIRONMENT="production"
+                NETWORK="mainnet"
+                DEPLOYMENT_TYPE="tagged_release"
+                ;;
+            esac
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            # Deploy on PR only if it has 'deploy' label
+            if echo '${{ github.event.pull_request.labels.*.name }}' | grep -q 'deploy'; then
+              SHOULD_DEPLOY="true"
+              ENVIRONMENT="preview"
+              NETWORK="devnet"
+              DEPLOYMENT_TYPE="preview"
+            fi
+          fi
+          
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "network=$NETWORK" >> $GITHUB_OUTPUT
+          echo "deployment_type=$DEPLOYMENT_TYPE" >> $GITHUB_OUTPUT
+          
+          echo "Deployment decision: $SHOULD_DEPLOY"
+          echo "Environment: $ENVIRONMENT"
+          echo "Network: $NETWORK"
+          echo "Type: $DEPLOYMENT_TYPE"
+
+  conditional-deployment:
+    needs: determine-deployment-strategy
+    runs-on: ubuntu-latest
+    if: needs.determine-deployment-strategy.outputs.should_deploy == 'true'
+    environment: ${{ needs.determine-deployment-strategy.outputs.environment }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Generate deployment name
+        id: naming
+        run: |
+          TYPE="${{ needs.determine-deployment-strategy.outputs.deployment_type }}"
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          
+          case "$TYPE" in
+            production)
+              SVM_NAME="prod-svm-$TIMESTAMP"
+              HOST="${{ secrets.PROD_HOST }}"
+              ;;
+            development)
+              SVM_NAME="dev-svm-$TIMESTAMP"
+              HOST="${{ secrets.DEV_HOST }}"
+              ;;
+            staging)
+              SVM_NAME="staging-svm-$TIMESTAMP"
+              HOST="${{ secrets.STAGING_HOST }}"
+              ;;
+            release)
+              SVM_NAME="release-svm-$TIMESTAMP"
+              HOST="${{ secrets.STAGING_HOST }}"
+              ;;
+            hotfix)
+              SVM_NAME="hotfix-svm-$TIMESTAMP"
+              HOST="${{ secrets.PROD_HOST }}"
+              ;;
+            tagged_release)
+              TAG="${{ github.ref_name }}"
+              SVM_NAME="release-$TAG-svm"
+              HOST="${{ secrets.PROD_HOST }}"
+              ;;
+            preview)
+              PR_NUMBER="${{ github.event.number }}"
+              SVM_NAME="pr-$PR_NUMBER-svm"
+              HOST="${{ secrets.DEV_HOST }}"
+              ;;
+            *)
+              SVM_NAME="conditional-svm-$TIMESTAMP"
+              HOST="${{ secrets.DEV_HOST }}"
+              ;;
+          esac
+          
+          echo "svm_name=$SVM_NAME" >> $GITHUB_OUTPUT
+          echo "host=$HOST" >> $GITHUB_OUTPUT
+
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ steps.naming.outputs.svm_name }}
+          host: ${{ steps.naming.outputs.host }}
+          network: ${{ needs.determine-deployment-strategy.outputs.network }}
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: true
+          deploy-args: '--deployment-type ${{ needs.determine-deployment-strategy.outputs.deployment_type }}'
+
+      - name: Comment on PR (for preview deployments)
+        if: needs.determine-deployment-strategy.outputs.deployment_type == 'preview'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🚀 **Preview Deployment Complete**
+              
+              - **SVM Name:** ${{ steps.naming.outputs.svm_name }}
+              - **Network:** ${{ needs.determine-deployment-strategy.outputs.network }}
+              - **Host:** ${{ steps.naming.outputs.host }}
+              
+              The preview environment is ready for testing!`
+            })
+
+  deployment-cleanup:
+    needs: [determine-deployment-strategy, conditional-deployment]
+    runs-on: ubuntu-latest
+    if: always() && needs.determine-deployment-strategy.outputs.deployment_type == 'preview'
+    
+    steps:
+      - name: Schedule cleanup
+        run: |
+          echo "Preview deployment cleanup would be scheduled here"
+          # In a real scenario, you might:
+          # 1. Store deployment info in a database
+          # 2. Schedule a cleanup job for later
+          # 3. Set up automatic cleanup on PR closure
