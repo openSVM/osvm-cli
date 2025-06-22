@@ -175,15 +175,17 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
         exit(1);
     }
 
+    // Create a single audit coordinator instance for all operations
+    let audit_coordinator = if let Some(api_key) = openai_api_key.clone() {
+        AuditCoordinator::with_ai(api_key)
+    } else {
+        AuditCoordinator::new()
+    };
+
     // Generate audit report - handle GitHub mode, test mode, or regular audit
     let report = if let Some(repo_spec) = gh_repo {
         // GitHub repository audit mode
         println!("🐙 GitHub repository audit mode");
-        let audit_coordinator = if let Some(api_key) = openai_api_key {
-            AuditCoordinator::with_ai(api_key)
-        } else {
-            AuditCoordinator::new()
-        };
         
         match audit_coordinator.audit_github_repository(repo_spec).await {
             Ok(_) => {
@@ -197,21 +199,8 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
         }
     } else if test_mode {
         println!("🧪 Generating test audit report...");
-        // Create audit coordinator only for test report generation - no diagnostics
-        let audit_coordinator = if let Some(api_key) = openai_api_key {
-            AuditCoordinator::with_ai(api_key)
-        } else {
-            AuditCoordinator::new()
-        };
         audit_coordinator.create_test_audit_report()
     } else {
-        // Initialize audit coordinator and run full audit
-        let audit_coordinator = if let Some(api_key) = openai_api_key {
-            AuditCoordinator::with_ai(api_key)
-        } else {
-            AuditCoordinator::new()
-        };
-        
         // Run security audit
         match audit_coordinator.run_security_audit().await {
             Ok(report) => report,
@@ -246,9 +235,7 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
     let typst_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
     let pdf_path = Path::new(output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
     
-    // Create audit coordinator for document generation
-    let audit_coordinator = AuditCoordinator::new();
-    
+    // Generate outputs based on requested format using the same coordinator
     match format.as_str() {
         "typst" | "both" => {
             if let Err(e) = audit_coordinator.generate_typst_document(&report, &typst_path) {
@@ -283,7 +270,8 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
             println!("📋 PDF report generated: {}", pdf_path.display());
         }
         _ => {
-            eprintln!("❌ Invalid format specified");
+            eprintln!("❌ Invalid format specified: {}", format);
+            eprintln!("   Valid formats: typst, pdf, both");
             exit(1);
         }
     }
@@ -300,8 +288,10 @@ async fn handle_audit_command(app_matches: &clap::ArgMatches, matches: &clap::Ar
 
     println!("\n💡 To view the full report, open the generated file.");
     
+    // Exit with appropriate code based on findings severity
     if !test_mode && (report.summary.critical_findings > 0 || report.summary.high_findings > 0) {
         println!("⚠️  Critical or high-severity findings detected. Please review and address them promptly.");
+        println!("📋 This audit exits with code 1 to signal CI/CD systems about security issues.");
         exit(1);
     }
 
@@ -699,237 +689,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        // "solana" => { // Temporarily commented out due to clparse changes
-        //     let Some((solana_sub_command, solana_sub_matches)) = matches.subcommand() else {
-        //         eprintln!("No solana subcommand provided");
-        //         exit(1);
-        //     };
-        //
-        //     match solana_sub_command {
-        //         "validator" => {
-        //             // Deploy a Solana validator with enhanced features
-        //             let connection_str = solana_sub_matches
-        //                 .get_one::<String>("connection")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap();
-        //             let network_str = solana_sub_matches
-        //                 .get_one::<String>("network")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap_or("mainnet");
-        //             let version = solana_sub_matches
-        //                 .get_one::<String>("version")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let client_type = solana_sub_matches
-        //                 .get_one::<String>("client-type")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let hot_swap_enabled = solana_sub_matches.contains_id("hot-swap");
-        //             let metrics_config = solana_sub_matches
-        //                 .get_one::<String>("metrics-config")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //
-        //             // Parse connection string
-        //             let connection =
-        //                 match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-        //                     Ok(conn) => conn,
-        //                     Err(e) => {
-        //                         eprintln!("Error parsing SSH connection string: {}", e);
-        //                         exit(1);
-        //                     }
-        //                 };
-        //
-        //             // Parse network type
-        //             let network = match network_str.to_lowercase().as_str() {
-        //                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
-        //                 "testnet" => ssh_deploy::NetworkType::Testnet,
-        //                 "devnet" => ssh_deploy::NetworkType::Devnet,
-        //                 _ => {
-        //                     eprintln!("Invalid network: {}", network_str);
-        //                     exit(1);
-        //                 }
-        //             };
-        //
-        //             // Create disk configuration if both disk params are provided
-        //             let disk_config = if solana_sub_matches.contains_id("ledger-disk")
-        //                 && solana_sub_matches.contains_id("accounts-disk")
-        //             {
-        //                 Some(ssh_deploy::DiskConfig {
-        //                     ledger_disk: solana_sub_matches
-        //                         .get_one::<String>("ledger-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                     accounts_disk: solana_sub_matches
-        //                         .get_one::<String>("accounts-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                 })
-        //             } else {
-        //                 None
-        //             };
-        //
-        //             // Create deployment config with enhanced features
-        //             let deploy_config = ssh_deploy::DeploymentConfig {
-        //                 svm_type: "solana".to_string(),
-        //                 node_type: "validator".to_string(),
-        //                 network,
-        //                 node_name: format!("solana-validator-{}", network_str),
-        //                 rpc_url: None,
-        //                 additional_params: std::collections::HashMap::new(),
-        //                 version,
-        //                 client_type,
-        //                 hot_swap_enabled,
-        //                 metrics_config,
-        //                 disk_config,
-        //             };
-        //
-        //             println!("Deploying Solana validator node to {}...", connection_str);
-        //             println!("Network: {}", network_str);
-        //             if let Some(ver) = &deploy_config.version {
-        //                 println!("Version: {}", ver);
-        //             }
-        //             if let Some(client) = &deploy_config.client_type {
-        //                 println!("Client type: {}", client);
-        //             }
-        //             if deploy_config.hot_swap_enabled {
-        //                 println!("Hot-swap capability: Enabled");
-        //             }
-        //             if let Some(disks) = &deploy_config.disk_config {
-        //                 println!("Disk configuration:");
-        //                 println!("  Ledger disk: {}", disks.ledger_disk);
-        //                 println!("  Accounts disk: {}", disks.accounts_disk);
-        //             }
-        //
-        //             if let Err(e) =
-        //                 ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
-        //             {
-        //                 eprintln!("Deployment error: {}", e);
-        //                 exit(1);
-        //             }
-        //
-        //             println!("Solana validator node deployed successfully!");
-        //         }
-        //         "rpc" => {
-        //             // Deploy a Solana RPC node with enhanced features
-        //             let connection_str = solana_sub_matches
-        //                 .get_one::<String>("connection")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap();
-        //             let network_str = solana_sub_matches
-        //                 .get_one::<String>("network")
-        //                 .map(|s| s.as_str())
-        //                 .unwrap_or("mainnet");
-        //             let version = solana_sub_matches
-        //                 .get_one::<String>("version")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let client_type = solana_sub_matches
-        //                 .get_one::<String>("client-type")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //             let enable_history = solana_sub_matches.contains_id("enable-history");
-        //             let metrics_config = solana_sub_matches
-        //                 .get_one::<String>("metrics-config")
-        //                 .map(|s| s.as_str())
-        //                 .map(|s| s.to_string());
-        //
-        //             // Parse connection string
-        //             let connection =
-        //                 match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
-        //                     Ok(conn) => conn,
-        //                     Err(e) => {
-        //                         eprintln!("Error parsing SSH connection string: {}", e);
-        //                         exit(1);
-        //                     }
-        //                 };
-        //
-        //             // Parse network type
-        //             let network = match network_str.to_lowercase().as_str() {
-        //                 "mainnet" => ssh_deploy::NetworkType::Mainnet,
-        //                 "testnet" => ssh_deploy::NetworkType::Testnet,
-        //                 "devnet" => ssh_deploy::NetworkType::Devnet,
-        //                 _ => {
-        //                     eprintln!("Invalid network: {}", network_str);
-        //                     exit(1);
-        //                 }
-        //             };
-        //
-        //             // Create disk configuration if both disk params are provided
-        //             let disk_config = if solana_sub_matches.contains_id("ledger-disk")
-        //                 && solana_sub_matches.contains_id("accounts-disk")
-        //             {
-        //                 Some(ssh_deploy::DiskConfig {
-        //                     ledger_disk: solana_sub_matches
-        //                         .get_one::<String>("ledger-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                     accounts_disk: solana_sub_matches
-        //                         .get_one::<String>("accounts-disk")
-        //                         .map(|s| s.as_str())
-        //                         .unwrap()
-        //                         .to_string(),
-        //                 })
-        //             } else {
-        //                 None
-        //             };
-        //
-        //             // Create additional params for RPC-specific options
-        //             let mut additional_params = std::collections::HashMap::new();
-        //             if enable_history {
-        //                 additional_params.insert("enable_history".to_string(), "true".to_string());
-        //             }
-        //
-        //             // Create deployment config with enhanced features
-        //             let deploy_config = ssh_deploy::DeploymentConfig {
-        //                 svm_type: "solana".to_string(),
-        //                 node_type: "rpc".to_string(),
-        //                 network,
-        //                 node_name: format!("solana-rpc-{}", network_str),
-        //                 rpc_url: None,
-        //                 additional_params,
-        //                 version,
-        //                 client_type,
-        //                 hot_swap_enabled: false, // Not needed for RPC nodes
-        //                 metrics_config,
-        //                 disk_config,
-        //             };
-        //
-        //             println!("Deploying Solana RPC node to {}...", connection_str);
-        //             println!("Network: {}", network_str);
-        //             if let Some(ver) = &deploy_config.version {
-        //                 println!("Version: {}", ver);
-        //             }
-        //             if let Some(client) = &deploy_config.client_type {
-        //                 println!("Client type: {}", client);
-        //             }
-        //             if enable_history {
-        //                 println!("Transaction history: Enabled");
-        //             }
-        //             if let Some(disks) = &deploy_config.disk_config {
-        //                 println!("Disk configuration:");
-        //                 println!("  Ledger disk: {}", disks.ledger_disk);
-        //                 println!("  Accounts disk: {}", disks.accounts_disk);
-        //             }
-        //
-        //             if let Err(e) =
-        //                 ssh_deploy::deploy_svm_node(connection, deploy_config, None).await
-        //             {
-        //                 eprintln!("Deployment error: {}", e);
-        //                 exit(1);
-        //             }
-        //
-        //             println!("Solana RPC node deployed successfully!");
-        //         }
-        //         _ => {
-        //             eprintln!("Unknown Solana command: {}", solana_sub_command);
-        //             exit(1);
-        //         }
-        //     }
-        // }
         "rpc-manager" => {
             // Renamed from "rpc"
             let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
@@ -1923,8 +1682,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         "audit" => {
-            // This case should not be reached as audit is handled early
-            eprintln!("❌ Audit command handled early - this should not be reached");
+            // This case should not be reached as audit is handled early to avoid config loading
+            eprintln!("❌ Audit command should be handled before config loading");
+            eprintln!("   This indicates a programming error - please report this issue.");
             exit(1);
         }
         "new_feature_command" => {
