@@ -1,0 +1,105 @@
+name: Example SVM Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      svm_name:
+        description: 'SVM name to deploy'
+        required: true
+        default: 'example-svm'
+      target_host:
+        description: 'Target host for deployment'
+        required: true
+        default: 'user@example.com'
+      network:
+        description: 'Network to deploy on'
+        required: true
+        default: 'devnet'
+        type: choice
+        options:
+          - mainnet
+          - testnet
+          - devnet
+      node_type:
+        description: 'Node type'
+        required: true
+        default: 'validator'
+        type: choice
+        options:
+          - validator
+          - rpc
+      verbose:
+        description: 'Enable verbose logging'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  # Example 1: Using the reusable workflow
+  deploy-with-reusable-workflow:
+    uses: ./.github/workflows/svm-deploy.yml
+    with:
+      svm-name: ${{ github.event.inputs.svm_name }}
+      host: ${{ github.event.inputs.target_host }}
+      network: ${{ github.event.inputs.network }}
+      node-type: ${{ github.event.inputs.node_type }}
+      verbose: ${{ github.event.inputs.verbose }}
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SOLANA_KEYPAIR: ${{ secrets.SOLANA_KEYPAIR }}
+
+  # Example 2: Using the action directly  
+  deploy-with-action-directly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ github.event.inputs.svm_name }}
+          host: ${{ github.event.inputs.target_host }}
+          network: ${{ github.event.inputs.network }}
+          node-type: ${{ github.event.inputs.node_type }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: ${{ github.event.inputs.verbose }}
+
+  # Example 3: Multiple SVM deployments in parallel
+  deploy-multiple-svms:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        svm: [svm1, svm2, svm3]
+        include:
+          - svm: svm1
+            host: user@host1.example.com
+          - svm: svm2
+            host: user@host2.example.com
+          - svm: svm3
+            host: user@host3.example.com
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ matrix.svm }}
+          host: ${{ matrix.host }}
+          network: ${{ github.event.inputs.network }}
+          node-type: ${{ github.event.inputs.node_type }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: ${{ github.event.inputs.verbose }}

@@ -3,17 +3,16 @@
 //! This module provides comprehensive self-repair functionality for OSVM CLI,
 //! including automatic dependency detection, system repairs, and rollback capabilities.
 
+use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
 use tokio::time::Duration;
-use serde::{Deserialize, Serialize};
 
 pub mod package_managers;
 pub mod repair_strategies;
 // pub mod snapshots;  // REMOVED
 pub mod system_deps;
 pub mod user_deps;
-
 
 /// Main error type for self-repair operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,18 +60,18 @@ pub enum RepairableError {
     MissingBuildTools,
     OutdatedRustToolchain,
     MissingSystemDependencies(Vec<String>),
-    
+
     // User-level issues
     MissingSolanaCli,
     OutdatedSolanaCli,
     MissingKeypair(String),
     InvalidConfig,
     MissingConfigDirectory,
-    
+
     // Network-level issues
     ConnectivityIssues,
     RpcEndpointFailure(String),
-    
+
     // Permission issues
     InsufficientPermissions(String),
 
@@ -148,17 +147,19 @@ impl SelfRepairSystem {
         }
 
         // Check for keypair file errors
-        if error.contains("Error reading keypair file") && error.contains("No such file or directory") {
+        if error.contains("Error reading keypair file")
+            && error.contains("No such file or directory")
+        {
             // Extract the keypair path from the error message
             if let Some(path) = extract_keypair_path(error) {
                 repairable_errors.push(RepairableError::MissingKeypair(path));
             }
-            
+
             // Check if this is due to missing Solana CLI
             if !self.is_solana_cli_installed().await? {
                 repairable_errors.push(RepairableError::MissingSolanaCli);
             }
-            
+
             // Check if config directory exists
             if !self.config_directory_exists().await? {
                 repairable_errors.push(RepairableError::MissingConfigDirectory);
@@ -166,25 +167,27 @@ impl SelfRepairSystem {
         }
 
         // Check for other system-level issues
-        let system_health = self.diagnostics.check_system_health().await
+        let system_health = self
+            .diagnostics
+            .check_system_health()
+            .await
             .map_err(|e| RepairError::ValidationError(e.to_string()))?;
-        
+
         // Check if system tuning is needed based on health check
-        if system_health.issues.iter().any(|issue| 
-            issue.title.contains("System tuning") || 
-            issue.description.contains("kernel parameter")
-        ) {
+        if system_health.issues.iter().any(|issue| {
+            issue.title.contains("System tuning") || issue.description.contains("kernel parameter")
+        }) {
             repairable_errors.push(RepairableError::SystemTuningRequired);
         }
-        
+
         if system_health.has_package_updates() {
             repairable_errors.push(RepairableError::OutdatedSystemPackages);
         }
-        
+
         if system_health.has_rust_updates() {
             repairable_errors.push(RepairableError::OutdatedRustToolchain);
         }
-        
+
         if let Some(missing_deps) = system_health.missing_build_tools() {
             if !missing_deps.is_empty() {
                 repairable_errors.push(RepairableError::MissingSystemDependencies(missing_deps));
@@ -195,7 +198,10 @@ impl SelfRepairSystem {
     }
 
     /// Attempt to repair the detected issues automatically
-    pub async fn repair_automatically(&self, errors: Vec<RepairableError>) -> Result<RepairResult, RepairError> {
+    pub async fn repair_automatically(
+        &self,
+        errors: Vec<RepairableError>,
+    ) -> Result<RepairResult, RepairError> {
         if errors.is_empty() {
             return Ok(RepairResult::Success("No issues detected".to_string()));
         }
@@ -211,10 +217,11 @@ impl SelfRepairSystem {
 
         let mut repair_transaction = repair_strategies::RepairTransaction::new()
             .map_err(|e| RepairError::Unknown(e.to_string()))?;
-        
+
         // Add operations based on detected errors
         for error in &errors {
-            self.add_repair_operation(&mut repair_transaction, error).await?;
+            self.add_repair_operation(&mut repair_transaction, error)
+                .await?;
         }
 
         // Execute the repair transaction
@@ -223,7 +230,9 @@ impl SelfRepairSystem {
                 // Validate the repairs
                 let validation_result = self.validate_repairs(&errors).await?;
                 match validation_result {
-                    true => Ok(RepairResult::Success("All repairs completed successfully".to_string())),
+                    true => Ok(RepairResult::Success(
+                        "All repairs completed successfully".to_string(),
+                    )),
                     false => {
                         // Rollback if validation fails
                         // DISABLED: No rollback since no snapshot was created
@@ -249,13 +258,15 @@ impl SelfRepairSystem {
 
     /// Check if Solana CLI is installed
     async fn is_solana_cli_installed(&self) -> Result<bool, RepairError> {
-        system_deps::check_solana_cli().await
+        system_deps::check_solana_cli()
+            .await
             .map_err(|e| RepairError::SystemDependency(e.to_string()))
     }
 
     /// Check if config directory exists
     async fn config_directory_exists(&self) -> Result<bool, RepairError> {
-        user_deps::check_config_directory().await
+        user_deps::check_config_directory()
+            .await
             .map_err(|e| RepairError::UserDependency(e.to_string()))
     }
 
@@ -270,19 +281,24 @@ impl SelfRepairSystem {
                 transaction.add_operation(repair_strategies::RepairOperation::InstallSolanaCli);
             }
             RepairableError::MissingKeypair(path) => {
-                transaction.add_operation(repair_strategies::RepairOperation::GenerateKeypair(path.clone()));
+                transaction.add_operation(repair_strategies::RepairOperation::GenerateKeypair(
+                    path.clone(),
+                ));
             }
             RepairableError::MissingConfigDirectory => {
-                transaction.add_operation(repair_strategies::RepairOperation::CreateConfigDirectory);
+                transaction
+                    .add_operation(repair_strategies::RepairOperation::CreateConfigDirectory);
             }
             RepairableError::SystemTuningRequired => {
                 if self.config.allow_system_repairs {
-                    transaction.add_operation(repair_strategies::RepairOperation::TuneSystemParameters);
+                    transaction
+                        .add_operation(repair_strategies::RepairOperation::TuneSystemParameters);
                 }
             }
             RepairableError::OutdatedSystemPackages => {
                 if self.config.allow_system_repairs {
-                    transaction.add_operation(repair_strategies::RepairOperation::UpdateSystemPackages);
+                    transaction
+                        .add_operation(repair_strategies::RepairOperation::UpdateSystemPackages);
                 }
             }
             RepairableError::OutdatedRustToolchain => {
@@ -290,11 +306,16 @@ impl SelfRepairSystem {
             }
             RepairableError::MissingSystemDependencies(deps) => {
                 if self.config.allow_system_repairs {
-                    transaction.add_operation(repair_strategies::RepairOperation::InstallSystemDependencies(deps.clone()));
+                    transaction.add_operation(
+                        repair_strategies::RepairOperation::InstallSystemDependencies(deps.clone()),
+                    );
                 }
             }
             _ => {
-                return Err(RepairError::Unknown(format!("Unsupported repair type: {:?}", error)));
+                return Err(RepairError::Unknown(format!(
+                    "Unsupported repair type: {:?}",
+                    error
+                )));
             }
         }
         Ok(())
@@ -303,9 +324,12 @@ impl SelfRepairSystem {
     /// Validate that repairs were successful
     async fn validate_repairs(&self, _errors: &[RepairableError]) -> Result<bool, RepairError> {
         // Perform comprehensive health check after repairs
-        let health_check = self.diagnostics.check_system_health().await
+        let health_check = self
+            .diagnostics
+            .check_system_health()
+            .await
             .map_err(|e| RepairError::ValidationError(e.to_string()))?;
-        
+
         Ok(health_check.is_healthy())
     }
 }
@@ -323,7 +347,9 @@ fn extract_keypair_path(error: &str) -> Option<String> {
 }
 
 /// Convenience function to handle keypair reading with automatic repair
-pub async fn read_keypair_with_repair(keypair_path: &str) -> Result<solana_sdk::signature::Keypair, Box<dyn StdError>> {
+pub async fn read_keypair_with_repair(
+    keypair_path: &str,
+) -> Result<solana_sdk::signature::Keypair, Box<dyn StdError>> {
     // First try normal keypair reading
     match solana_sdk::signature::read_keypair_file(keypair_path) {
         Ok(keypair) => Ok(keypair),
@@ -331,9 +357,9 @@ pub async fn read_keypair_with_repair(keypair_path: &str) -> Result<solana_sdk::
             // Error detected, attempt self-repair
             let repair_system = SelfRepairSystem::default();
             let error_message = format!("Error reading keypair file {}: {}", keypair_path, err);
-            
+
             println!("🔧 OSVM detected a configuration issue. Attempting automatic repair...");
-            
+
             match repair_system.analyze_error(&error_message).await {
                 Ok(repairable_errors) => {
                     if !repairable_errors.is_empty() {
@@ -342,17 +368,19 @@ pub async fn read_keypair_with_repair(keypair_path: &str) -> Result<solana_sdk::
                         for error in &repairable_errors {
                             println!("  - {:?}", error);
                         }
-                        
-                        println!("\n🛠️  Would you like OSVM to fix these issues automatically? (Y/n):");
+
+                        println!(
+                            "\n🛠️  Would you like OSVM to fix these issues automatically? (Y/n):"
+                        );
                         let mut input = String::new();
                         std::io::stdin().read_line(&mut input).unwrap();
-                        
+
                         if input.trim().to_lowercase() != "n" {
                             match repair_system.repair_automatically(repairable_errors).await {
                                 Ok(RepairResult::Success(msg)) => {
                                     println!("✅ {}", msg);
                                     println!("🔄 Retrying keypair read...");
-                                    
+
                                     // Retry reading the keypair
                                     match solana_sdk::signature::read_keypair_file(keypair_path) {
                                         Ok(keypair) => return Ok(keypair),
@@ -375,7 +403,7 @@ pub async fn read_keypair_with_repair(keypair_path: &str) -> Result<solana_sdk::
                     return Err(format!("Failed to analyze error: {}", analysis_err).into());
                 }
             }
-            
+
             // If we get here, repair was declined or failed
             Err(err.into())
         }

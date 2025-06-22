@@ -1,0 +1,79 @@
+# Matrix Deployment Example
+
+name: Matrix SVM Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: 'Deploy all SVMs'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  deploy-matrix:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deploy_all == 'true'
+    
+    strategy:
+      matrix:
+        config:
+          - svm_name: validator-svm-1
+            host: user@validator1.example.com
+            network: mainnet
+            node_type: validator
+          - svm_name: validator-svm-2
+            host: user@validator2.example.com
+            network: mainnet
+            node_type: validator
+          - svm_name: rpc-svm-1
+            host: user@rpc1.example.com
+            network: mainnet
+            node_type: rpc
+          - svm_name: rpc-svm-2
+            host: user@rpc2.example.com
+            network: mainnet
+            node_type: rpc
+          - svm_name: testnet-validator
+            host: user@testnet-validator.example.com
+            network: testnet
+            node_type: validator
+      
+      # Don't cancel other jobs if one fails
+      fail-fast: false
+      
+      # Limit concurrent deployments
+      max-parallel: 2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Deploy SVM Node - ${{ matrix.config.svm_name }}
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ matrix.config.svm_name }}
+          host: ${{ matrix.config.host }}
+          network: ${{ matrix.config.network }}
+          node-type: ${{ matrix.config.node_type }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: true
+
+  deployment-summary:
+    needs: deploy-matrix
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Create deployment summary
+        run: |
+          echo "## Matrix Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "All SVM deployments have been processed." >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job results for deployment status." >> $GITHUB_STEP_SUMMARY

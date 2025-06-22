@@ -3,10 +3,10 @@
 //! This module provides version comparison and compatibility checking
 //! for system dependencies and tools.
 
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 
 /// Version comparison result
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -87,7 +87,10 @@ impl VersionChecker {
 
     /// Compare two version strings
     pub fn compare_versions(&self, version1: &str, version2: &str) -> VersionComparison {
-        match (SemanticVersion::from_str(version1), SemanticVersion::from_str(version2)) {
+        match (
+            SemanticVersion::from_str(version1),
+            SemanticVersion::from_str(version2),
+        ) {
             (Ok(v1), Ok(v2)) => match v1.cmp(&v2) {
                 Ordering::Greater => VersionComparison::Newer,
                 Ordering::Equal => VersionComparison::Equal,
@@ -98,7 +101,12 @@ impl VersionChecker {
     }
 
     /// Check if a version is compatible with a range
-    pub fn is_version_compatible(&self, version: &str, min_version: &str, max_version: Option<&str>) -> bool {
+    pub fn is_version_compatible(
+        &self,
+        version: &str,
+        min_version: &str,
+        max_version: Option<&str>,
+    ) -> bool {
         let version_obj = match SemanticVersion::from_str(version) {
             Ok(v) => v,
             Err(_) => return false,
@@ -157,22 +165,10 @@ impl VersionChecker {
     pub fn extract_version_from_output(&self, output: &str, tool: &str) -> Option<String> {
         // Common patterns for version extraction
         let patterns = match tool.to_lowercase().as_str() {
-            "rust" | "rustc" => vec![
-                r"rustc (\d+\.\d+\.\d+)",
-                r"(\d+\.\d+\.\d+)",
-            ],
-            "solana" => vec![
-                r"solana-cli (\d+\.\d+\.\d+)",
-                r"(\d+\.\d+\.\d+)",
-            ],
-            "node" => vec![
-                r"v(\d+\.\d+\.\d+)",
-                r"(\d+\.\d+\.\d+)",
-            ],
-            "git" => vec![
-                r"git version (\d+\.\d+\.\d+)",
-                r"(\d+\.\d+\.\d+)",
-            ],
+            "rust" | "rustc" => vec![r"rustc (\d+\.\d+\.\d+)", r"(\d+\.\d+\.\d+)"],
+            "solana" => vec![r"solana-cli (\d+\.\d+\.\d+)", r"(\d+\.\d+\.\d+)"],
+            "node" => vec![r"v(\d+\.\d+\.\d+)", r"(\d+\.\d+\.\d+)"],
+            "git" => vec![r"git version (\d+\.\d+\.\d+)", r"(\d+\.\d+\.\d+)"],
             _ => vec![r"(\d+\.\d+\.\d+)"],
         };
 
@@ -198,11 +194,18 @@ impl VersionChecker {
     }
 
     /// Get severity of version mismatch
-    pub fn get_version_mismatch_severity(&self, current: &str, required: &str) -> VersionMismatchSeverity {
+    pub fn get_version_mismatch_severity(
+        &self,
+        current: &str,
+        required: &str,
+    ) -> VersionMismatchSeverity {
         match self.compare_versions(current, required) {
             VersionComparison::Older => {
                 // Check how far behind we are
-                if let (Ok(curr), Ok(req)) = (SemanticVersion::from_str(current), SemanticVersion::from_str(required)) {
+                if let (Ok(curr), Ok(req)) = (
+                    SemanticVersion::from_str(current),
+                    SemanticVersion::from_str(required),
+                ) {
                     if curr.major < req.major {
                         VersionMismatchSeverity::Critical
                     } else if curr.minor < req.minor {
@@ -258,7 +261,7 @@ impl FromStr for SemanticVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Remove common prefixes
         let cleaned = s.trim_start_matches('v').trim();
-        
+
         // Split on '+' to separate build metadata
         let (version_part, build) = if let Some(plus_pos) = cleaned.find('+') {
             let (ver, build_part) = cleaned.split_at(plus_pos);
@@ -279,19 +282,23 @@ impl FromStr for SemanticVersion {
         let parts: Vec<&str> = core_version.split('.').collect();
         if parts.len() < 2 {
             return Err(VersionError::InvalidFormat(format!(
-                "Version must have at least major.minor: {}", s
+                "Version must have at least major.minor: {}",
+                s
             )));
         }
 
-        let major = parts[0].parse::<u32>()
-            .map_err(|_| VersionError::ParseError(format!("Invalid major version: {}", parts[0])))?;
-        
-        let minor = parts[1].parse::<u32>()
-            .map_err(|_| VersionError::ParseError(format!("Invalid minor version: {}", parts[1])))?;
-        
+        let major = parts[0].parse::<u32>().map_err(|_| {
+            VersionError::ParseError(format!("Invalid major version: {}", parts[0]))
+        })?;
+
+        let minor = parts[1].parse::<u32>().map_err(|_| {
+            VersionError::ParseError(format!("Invalid minor version: {}", parts[1]))
+        })?;
+
         let patch = if parts.len() >= 3 {
-            parts[2].parse::<u32>()
-                .map_err(|_| VersionError::ParseError(format!("Invalid patch version: {}", parts[2])))?
+            parts[2].parse::<u32>().map_err(|_| {
+                VersionError::ParseError(format!("Invalid patch version: {}", parts[2]))
+            })?
         } else {
             0
         };
@@ -309,15 +316,15 @@ impl FromStr for SemanticVersion {
 impl fmt::Display for SemanticVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)?;
-        
+
         if let Some(ref pre) = self.pre_release {
             write!(f, "-{}", pre)?;
         }
-        
+
         if let Some(ref build) = self.build {
             write!(f, "+{}", build)?;
         }
-        
+
         Ok(())
     }
 }
@@ -335,12 +342,12 @@ impl Ord for SemanticVersion {
             Ordering::Equal => {}
             other => return other,
         }
-        
+
         match self.minor.cmp(&other.minor) {
             Ordering::Equal => {}
             other => return other,
         }
-        
+
         match self.patch.cmp(&other.patch) {
             Ordering::Equal => {}
             other => return other,
@@ -351,7 +358,7 @@ impl Ord for SemanticVersion {
             (None, None) => Ordering::Equal,
             (Some(_), None) => Ordering::Less, // Pre-release < release
             (None, Some(_)) => Ordering::Greater, // Release > pre-release
-            (Some(a), Some(b)) => a.cmp(b), // Compare pre-release strings
+            (Some(a), Some(b)) => a.cmp(b),    // Compare pre-release strings
         }
     }
 }
@@ -393,7 +400,7 @@ mod tests {
         let v1 = SemanticVersion::from_str("1.2.3").unwrap();
         let v2 = SemanticVersion::from_str("1.2.4").unwrap();
         let v3 = SemanticVersion::from_str("1.3.0").unwrap();
-        
+
         assert!(v1 < v2);
         assert!(v2 < v3);
         assert!(v1 < v3);
@@ -406,7 +413,7 @@ mod tests {
     #[test]
     fn test_version_checker() {
         let checker = VersionChecker::new();
-        
+
         let comparison = checker.compare_versions("1.2.3", "1.2.4");
         assert_eq!(comparison, VersionComparison::Older);
 
@@ -420,7 +427,7 @@ mod tests {
     #[test]
     fn test_version_compatibility() {
         let checker = VersionChecker::new();
-        
+
         assert!(checker.is_version_compatible("1.5.0", "1.0.0", Some("2.0.0")));
         assert!(!checker.is_version_compatible("0.9.0", "1.0.0", Some("2.0.0")));
         assert!(!checker.is_version_compatible("2.1.0", "1.0.0", Some("2.0.0")));
@@ -430,7 +437,7 @@ mod tests {
     #[test]
     fn test_needs_update() {
         let checker = VersionChecker::new();
-        
+
         assert!(checker.needs_update("1.2.3", "1.2.4"));
         assert!(!checker.needs_update("1.2.4", "1.2.3"));
         assert!(!checker.needs_update("1.2.3", "1.2.3"));
@@ -439,16 +446,16 @@ mod tests {
     #[test]
     fn test_version_mismatch_severity() {
         let checker = VersionChecker::new();
-        
+
         let severity = checker.get_version_mismatch_severity("1.0.0", "2.0.0");
         assert_eq!(severity, VersionMismatchSeverity::Critical);
-        
+
         let severity = checker.get_version_mismatch_severity("1.1.0", "1.2.0");
         assert_eq!(severity, VersionMismatchSeverity::Major);
-        
+
         let severity = checker.get_version_mismatch_severity("1.1.1", "1.1.2");
         assert_eq!(severity, VersionMismatchSeverity::Minor);
-        
+
         let severity = checker.get_version_mismatch_severity("1.2.3", "1.2.3");
         assert_eq!(severity, VersionMismatchSeverity::None);
     }
@@ -464,7 +471,11 @@ mod tests {
             blacklisted_versions: vec![],
         };
 
-        assert!(checker.check_version_requirement("1.75.0", &requirement).unwrap());
-        assert!(!checker.check_version_requirement("1.69.0", &requirement).unwrap());
+        assert!(checker
+            .check_version_requirement("1.75.0", &requirement)
+            .unwrap());
+        assert!(!checker
+            .check_version_requirement("1.69.0", &requirement)
+            .unwrap());
     }
 }
