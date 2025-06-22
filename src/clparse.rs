@@ -795,10 +795,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
         )
         .subcommand(
-            Command::new("new_feature_command")
-                .about("New feature for testing")
-        )
-        .subcommand(
             Command::new("solana")
                 .about("Deploy and manage Solana validators")
                 .arg_required_else_help(true)
@@ -949,10 +945,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .action(ArgAction::Count)
                         .help("Detailed diagnostic output")
                 )
-        )
-        .subcommand(
-            Command::new("new_feature_command")
-                .about("New feature for testing")
         )
         // .subcommand( // Temporarily commented out to isolate RPC command issues
         //     Command::new("solana")
