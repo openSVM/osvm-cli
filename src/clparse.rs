@@ -984,6 +984,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .action(ArgAction::SetTrue)
                         .help("Enable AI-powered security analysis using OpenAI (requires OPENAI_API_KEY)")
                 )
+                .arg(
+                    Arg::new("gh")
+                        .long("gh")
+                        .value_name("REPO#BRANCH")
+                        .help("Git repository to audit in format: owner/repo#branch (e.g., opensvm/aeamcp#main)")
+                )
         )
         .subcommand(
             Command::new("new_feature_command")

@@ -1712,6 +1712,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let verbose = matches.get_count("verbose");
             let test_mode = matches.get_flag("test");
             let ai_analysis = matches.get_flag("ai-analysis");
+            let gh_repo = matches.get_one::<String>("gh");
 
             if verbose > 0 {
                 println!("📁 Output directory: {}", output_dir);
@@ -1721,6 +1722,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 if ai_analysis {
                     println!("🤖 AI analysis: enabled");
+                }
+                if let Some(repo) = gh_repo {
+                    println!("🐙 GitHub repository: {}", repo);
                 }
             }
 
@@ -1752,8 +1756,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             }
 
-            // Generate audit report - handle test mode first
-            let report = if test_mode {
+            // Generate audit report - handle GitHub mode, test mode, or regular audit
+            let report = if let Some(repo_spec) = gh_repo {
+                // GitHub repository audit mode
+                println!("🐙 GitHub repository audit mode");
+                let audit_coordinator = if let Some(api_key) = openai_api_key {
+                    AuditCoordinator::with_ai(api_key)
+                } else {
+                    AuditCoordinator::new()
+                };
+                
+                match audit_coordinator.audit_github_repository(repo_spec).await {
+                    Ok(_) => {
+                        println!("✅ GitHub repository audit completed and pushed");
+                        return Ok(()); // Exit early as files are already generated and committed
+                    },
+                    Err(e) => {
+                        eprintln!("❌ Failed to audit GitHub repository: {}", e);
+                        exit(1);
+                    }
+                }
+            } else if test_mode {
                 println!("🧪 Generating test audit report...");
                 // Create audit coordinator only for test report generation - no diagnostics
                 let audit_coordinator = if let Some(api_key) = openai_api_key {

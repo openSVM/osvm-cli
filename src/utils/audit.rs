@@ -1026,6 +1026,194 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         Ok(content)
     }
 
+    /// Perform GitHub repository audit workflow
+    pub async fn audit_github_repository(&self, repo_spec: &str) -> Result<AuditReport> {
+        println!("🐙 Starting GitHub repository audit for: {}", repo_spec);
+        
+        // Parse repository specification (owner/repo#branch)
+        let (repo_url, branch) = self.parse_repo_spec(repo_spec)?;
+        
+        // Clone repository
+        let temp_dir = self.clone_repository(&repo_url, &branch)?;
+        
+        // Create audit branch
+        let audit_branch = self.create_audit_branch(&temp_dir)?;
+        
+        // Perform audit
+        let report = self.audit_repository_files(&temp_dir).await?;
+        
+        // Generate audit files
+        self.generate_audit_files_in_repo(&temp_dir, &report).await?;
+        
+        // Commit and push audit results
+        self.commit_and_push_audit(&temp_dir, &audit_branch)?;
+        
+        println!("✅ GitHub repository audit completed and pushed to branch: {}", audit_branch);
+        
+        Ok(report)
+    }
+    
+    /// Parse repository specification (owner/repo#branch)
+    fn parse_repo_spec(&self, repo_spec: &str) -> Result<(String, String)> {
+        let parts: Vec<&str> = repo_spec.split('#').collect();
+        if parts.len() != 2 {
+            anyhow::bail!("Invalid repository specification. Expected format: owner/repo#branch");
+        }
+        
+        let repo_path = parts[0];
+        let branch = parts[1];
+        
+        if !repo_path.contains('/') {
+            anyhow::bail!("Invalid repository path. Expected format: owner/repo");
+        }
+        
+        let repo_url = format!("https://github.com/{}.git", repo_path);
+        Ok((repo_url, branch.to_string()))
+    }
+    
+    /// Clone repository to temporary directory
+    fn clone_repository(&self, repo_url: &str, branch: &str) -> Result<std::path::PathBuf> {
+        let temp_dir = std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
+        
+        println!("📥 Cloning repository to: {}", temp_dir.display());
+        
+        let output = Command::new("git")
+            .args(&["clone", "--branch", branch, "--single-branch", repo_url])
+            .arg(&temp_dir)
+            .output()
+            .context("Failed to execute git clone")?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Git clone failed: {}", error_msg);
+        }
+        
+        Ok(temp_dir)
+    }
+    
+    /// Create audit branch with timestamp and commit hash
+    fn create_audit_branch(&self, repo_dir: &Path) -> Result<String> {
+        let now = chrono::Utc::now();
+        let datetime = now.format("%Y%m%d-%H%M%S");
+        
+        // Get current commit hash
+        let commit_output = Command::new("git")
+            .args(&["rev-parse", "--short", "HEAD"])
+            .current_dir(repo_dir)
+            .output()
+            .context("Failed to get commit hash")?;
+        
+        if !commit_output.status.success() {
+            anyhow::bail!("Failed to get commit hash");
+        }
+        
+        let commit_hash = String::from_utf8(commit_output.stdout)?.trim().to_string();
+        let audit_branch = format!("osvm-audit-{}-{}", datetime, commit_hash);
+        
+        println!("🌿 Creating audit branch: {}", audit_branch);
+        
+        // Create and checkout new branch
+        let output = Command::new("git")
+            .args(&["checkout", "-b", &audit_branch])
+            .current_dir(repo_dir)
+            .output()
+            .context("Failed to create audit branch")?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to create audit branch: {}", error_msg);
+        }
+        
+        Ok(audit_branch)
+    }
+    
+    /// Audit files in the repository directory
+    async fn audit_repository_files(&self, repo_dir: &Path) -> Result<AuditReport> {
+        println!("🔍 Performing security audit on repository files...");
+        
+        // Change to repository directory for audit
+        let original_dir = std::env::current_dir()?;
+        std::env::set_current_dir(repo_dir)?;
+        
+        // Run audit
+        let report = self.run_security_audit().await;
+        
+        // Restore original directory
+        std::env::set_current_dir(original_dir)?;
+        
+        report
+    }
+    
+    /// Generate audit files in the repository
+    async fn generate_audit_files_in_repo(&self, repo_dir: &Path, report: &AuditReport) -> Result<()> {
+        let audit_dir = repo_dir.join("osvm-audit");
+        std::fs::create_dir_all(&audit_dir)?;
+        
+        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+        let typst_path = audit_dir.join(format!("osvm_audit_report_{}.typ", timestamp));
+        let pdf_path = audit_dir.join(format!("osvm_audit_report_{}.pdf", timestamp));
+        
+        // Generate Typst document
+        self.generate_typst_document(report, &typst_path)?;
+        
+        // Try to compile to PDF
+        if let Err(e) = self.compile_to_pdf(&typst_path, &pdf_path) {
+            println!("⚠️  PDF compilation failed (Typst not installed?): {}", e);
+            println!("📄 Typst source file generated: {}", typst_path.display());
+        } else {
+            println!("📄 Generated audit files:");
+            println!("  - Typst: {}", typst_path.display());
+            println!("  - PDF: {}", pdf_path.display());
+        }
+        
+        Ok(())
+    }
+    
+    /// Commit and push audit results
+    fn commit_and_push_audit(&self, repo_dir: &Path, branch: &str) -> Result<()> {
+        println!("💾 Committing audit results...");
+        
+        // Add audit files
+        let output = Command::new("git")
+            .args(&["add", "osvm-audit/"])
+            .current_dir(repo_dir)
+            .output()
+            .context("Failed to add audit files")?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to add audit files: {}", error_msg);
+        }
+        
+        // Commit changes
+        let commit_message = format!("Add OSVM security audit report ({})", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"));
+        let output = Command::new("git")
+            .args(&["commit", "-m", &commit_message])
+            .current_dir(repo_dir)
+            .output()
+            .context("Failed to commit audit files")?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to commit audit files: {}", error_msg);
+        }
+        
+        // Push branch
+        println!("🚀 Pushing audit branch to origin...");
+        let output = Command::new("git")
+            .args(&["push", "origin", branch])
+            .current_dir(repo_dir)
+            .output()
+            .context("Failed to push audit branch")?;
+        
+        if !output.status.success() {
+            let error_msg = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to push audit branch: {}", error_msg);
+        }
+        
+        Ok(())
+    }
+
     /// Compile Typst document to PDF
     pub fn compile_to_pdf(&self, typst_file: &Path, output_path: &Path) -> Result<()> {
         println!("📄 Compiling Typst document to PDF...");
