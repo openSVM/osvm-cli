@@ -403,8 +403,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node status: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node status: {}", e).into());
                         }
                     }
                 }
@@ -425,8 +424,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node info: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node info: {}", e).into());
                         }
                     }
                 }
@@ -439,8 +437,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match nodes::restart_node(node_id) {
                         Ok(_) => println!("Node {} restarted successfully", node_id),
                         Err(e) => {
-                            eprintln!("Error restarting node: {}", e);
-                            exit(1);
+                            return Err(format!("Error restarting node: {}", e).into());
                         }
                     }
                 }
@@ -453,8 +450,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match nodes::stop_node(node_id) {
                         Ok(_) => println!("Node {} stopped successfully", node_id),
                         Err(e) => {
-                            eprintln!("Error stopping node: {}", e);
-                            exit(1);
+                            return Err(format!("Error stopping node: {}", e).into());
                         }
                     }
                 }
@@ -478,8 +474,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error getting node logs: {}", e);
-                            exit(1);
+                            return Err(format!("Error getting node logs: {}", e).into());
                         }
                     }
                 }

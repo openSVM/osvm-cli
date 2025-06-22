@@ -9,13 +9,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
+use tokio::time::sleep;
 
 use crate::utils::diagnostics::{DiagnosticCoordinator, DiagnosticResults, IssueSeverity, IssueCategory};
 
-/// OpenAI API client for AI-powered analysis
+/// OpenAI API client for AI-powered analysis with rate limiting and retry logic
 pub struct OpenAIClient {
     api_key: String,
     client: reqwest::Client,
+    max_retries: u32,
+    base_delay: Duration,
 }
 
 /// AI analysis result from OpenAI
@@ -36,16 +40,46 @@ pub struct AIEnhancedFinding {
 }
 
 impl OpenAIClient {
-    /// Create a new OpenAI client
+    /// Create a new OpenAI client with retry and rate limiting
     pub fn new(api_key: String) -> Self {
         Self {
             api_key,
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+            max_retries: 3,
+            base_delay: Duration::from_millis(1000),
         }
     }
 
-    /// Analyze a security finding using OpenAI
+    /// Analyze a security finding using OpenAI with retry logic
     pub async fn analyze_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
+        for attempt in 0..=self.max_retries {
+            match self.try_analyze_finding(finding).await {
+                Ok(analysis) => return Ok(analysis),
+                Err(e) if attempt < self.max_retries => {
+                    // Check if it's a rate limit error
+                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
+                        let delay = self.base_delay * 2_u32.pow(attempt);
+                        eprintln!("⏳ Rate limited, retrying in {}ms... (attempt {}/{})", 
+                                 delay.as_millis(), attempt + 1, self.max_retries);
+                        sleep(delay).await;
+                    } else {
+                        eprintln!("⚠️ OpenAI API error, retrying... (attempt {}/{}): {}", 
+                                 attempt + 1, self.max_retries, e);
+                        sleep(self.base_delay).await;
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        
+        Err(anyhow::anyhow!("OpenAI analysis failed after {} retries", self.max_retries))
+    }
+
+    /// Single attempt to analyze a finding
+    async fn try_analyze_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
         let prompt = format!(
             "Analyze this security finding and provide enhanced insights:\n\n\
             Title: {}\n\
@@ -123,8 +157,32 @@ impl OpenAIClient {
         Ok(ai_analysis)
     }
 
-    /// Analyze code content for security issues
+    /// Analyze code content for security issues with retry logic
     pub async fn analyze_code(&self, code_content: &str, file_path: &str) -> Result<Vec<AuditFinding>> {
+        for attempt in 0..=self.max_retries {
+            match self.try_analyze_code(code_content, file_path).await {
+                Ok(findings) => return Ok(findings),
+                Err(e) if attempt < self.max_retries => {
+                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
+                        let delay = self.base_delay * 2_u32.pow(attempt);
+                        eprintln!("⏳ Rate limited during code analysis, retrying in {}ms... (attempt {}/{})", 
+                                 delay.as_millis(), attempt + 1, self.max_retries);
+                        sleep(delay).await;
+                    } else {
+                        eprintln!("⚠️ OpenAI code analysis error, retrying... (attempt {}/{}): {}", 
+                                 attempt + 1, self.max_retries, e);
+                        sleep(self.base_delay).await;
+                    }
+                },
+                Err(e) => return Err(e),
+            }
+        }
+        
+        Err(anyhow::anyhow!("OpenAI code analysis failed after {} retries", self.max_retries))
+    }
+
+    /// Single attempt to analyze code
+    async fn try_analyze_code(&self, code_content: &str, file_path: &str) -> Result<Vec<AuditFinding>> {
         let prompt = format!(
             "Analyze this Rust code file for security vulnerabilities:\n\n\
             File: {}\n\
