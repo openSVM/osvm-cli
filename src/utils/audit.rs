@@ -644,6 +644,9 @@ impl AuditCoordinator {
                             // Check for input validation issues
                             findings.extend(self.check_input_validation(&content, &file_path, &mut finding_id));
 
+                            // Check for Solana-specific security issues
+                            findings.extend(self.check_solana_security(&content, &file_path, &mut finding_id));
+
                             // Perform positive security checks (good practices)
                             findings.extend(self.check_positive_security_practices(&content, &file_path, &mut finding_id));
                         }
@@ -1009,6 +1012,459 @@ impl AuditCoordinator {
                 });
                 *finding_id += 1;
                 break;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for Solana-specific security vulnerabilities
+    fn check_solana_security(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for Solana program security issues
+        findings.extend(self.check_solana_program_security(content, file_path, finding_id));
+        
+        // Check for Solana network/RPC security issues
+        findings.extend(self.check_solana_network_security(content, file_path, finding_id));
+        
+        // Check for Solana account validation issues
+        findings.extend(self.check_solana_account_validation(content, file_path, finding_id));
+        
+        // Check for Solana development anti-patterns
+        findings.extend(self.check_solana_antipatterns(content, file_path, finding_id));
+        
+        // Check for Solana cryptographic issues
+        findings.extend(self.check_solana_crypto_security(content, file_path, finding_id));
+        
+        findings
+    }
+
+    /// Check for Solana program security vulnerabilities
+    fn check_solana_program_security(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for missing signer validation
+        let signer_patterns = [
+            r#"AccountInfo.*without.*is_signer"#,
+            r#"AccountMeta::new\("#,
+            r#"instruction.*without.*signer.*check"#,
+        ];
+        
+        for pattern in &signer_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Missing signer validation in Solana program".to_string(),
+                    description: format!("File {} may lack proper signer validation for sensitive operations", file_path),
+                    severity: AuditSeverity::Critical,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-862".to_string()),
+                    cvss_score: Some(9.0),
+                    impact: "Unauthorized users could execute privileged operations".to_string(),
+                    recommendation: "Always validate that required accounts are signers using is_signer checks".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        "https://solana.com/developers/guides/getstarted/intro-to-anchor".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        // Check for PDA (Program Derived Address) vulnerabilities
+        if content.contains("find_program_address") || content.contains("create_program_address") {
+            if !content.contains("assert_eq!") && !content.contains("require!") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Potential PDA verification bypass".to_string(),
+                    description: format!("File {} uses PDA operations without proper verification", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-345".to_string()),
+                    cvss_score: Some(8.0),
+                    impact: "Attackers could provide arbitrary accounts instead of valid PDAs".to_string(),
+                    recommendation: "Always verify PDA derivation matches expected seeds and program ID".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://solanacookbook.com/references/programs.html#how-to-create-a-pda".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for missing account ownership validation
+        if content.contains("AccountInfo") && !content.contains("owner") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing account ownership validation".to_string(),
+                description: format!("File {} handles accounts without verifying ownership", file_path),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-284".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Programs could operate on accounts owned by malicious programs".to_string(),
+                recommendation: "Always verify account ownership before performing operations".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        // Check for rent exemption issues
+        if content.contains("create_account") && !content.contains("rent.minimum_balance") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing rent exemption check".to_string(),
+                description: format!("File {} creates accounts without ensuring rent exemption", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-400".to_string()),
+                cvss_score: Some(4.0),
+                impact: "Accounts could be closed due to insufficient rent, causing data loss".to_string(),
+                recommendation: "Ensure accounts are rent-exempt when creating them".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://docs.solana.com/developing/programming-model/accounts#rent".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        // Check for instruction replay vulnerabilities
+        if content.contains("instruction") && !content.contains("nonce") && !content.contains("timestamp") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Potential instruction replay vulnerability".to_string(),
+                description: format!("File {} may be vulnerable to instruction replay attacks", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-294".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Attackers could replay previous instructions to manipulate program state".to_string(),
+                recommendation: "Implement nonce or timestamp-based replay protection".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        findings
+    }
+
+    /// Check for Solana network and RPC security issues
+    fn check_solana_network_security(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for insecure RPC endpoints
+        let insecure_rpc_patterns = [
+            r#"http://.*solana"#,
+            r#"mainnet-beta\.solana\.com"#,
+            r#"devnet\.solana\.com"#,
+            r#"testnet\.solana\.com"#,
+        ];
+        
+        for pattern in &insecure_rpc_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Insecure Solana RPC endpoint usage".to_string(),
+                    description: format!("File {} uses insecure or public RPC endpoints", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-319".to_string()),
+                    cvss_score: Some(5.0),
+                    impact: "Rate limiting, censorship, or man-in-the-middle attacks on RPC calls".to_string(),
+                    recommendation: "Use HTTPS RPC endpoints and consider private/dedicated RPC providers".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/cluster/rpc-endpoints".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        // Check for hardcoded program IDs
+        let program_id_patterns = [
+            r#"11111111111111111111111111111111"#,
+            r#"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"#,
+            r#"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"#,
+        ];
+        
+        for pattern in &program_id_patterns {
+            if content.contains(pattern) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Hardcoded Solana program ID detected".to_string(),
+                    description: format!("File {} contains hardcoded Solana program IDs", file_path),
+                    severity: AuditSeverity::Low,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-798".to_string()),
+                    cvss_score: Some(3.0),
+                    impact: "Reduced flexibility and potential issues when deploying to different clusters".to_string(),
+                    recommendation: "Use configuration files or environment variables for program IDs".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/accounts".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        // Check for MEV vulnerabilities
+        if content.contains("swap") || content.contains("dex") {
+            if !content.contains("slippage") && !content.contains("deadline") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Missing MEV protection in trading operations".to_string(),
+                    description: format!("File {} performs trading operations without MEV protection", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-841".to_string()),
+                    cvss_score: Some(4.5),
+                    impact: "Transactions vulnerable to front-running and sandwich attacks".to_string(),
+                    recommendation: "Implement slippage protection and transaction deadlines".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/transactions".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for Solana account validation issues
+    fn check_solana_account_validation(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for missing account size validation
+        if content.contains("data.len()") || content.contains("account.data") {
+            if !content.contains("expected_size") && !content.contains("minimum_size") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Missing account size validation".to_string(),
+                    description: format!("File {} accesses account data without size validation", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-119".to_string()),
+                    cvss_score: Some(7.0),
+                    impact: "Buffer overflow or underflow when accessing account data".to_string(),
+                    recommendation: "Always validate account data size before access".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for missing close account validation
+        if content.contains("close") && content.contains("account") {
+            if !content.contains("assert") && !content.contains("require") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Unsafe account closing operation".to_string(),
+                    description: format!("File {} closes accounts without proper validation", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-404".to_string()),
+                    cvss_score: Some(6.5),
+                    impact: "Accounts could be closed prematurely, causing loss of funds or data".to_string(),
+                    recommendation: "Validate account state and ownership before closing".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for sysvar account misuse
+        let sysvar_patterns = [
+            r#"SysvarC1ock11111111111111111111111111111111"#,
+            r#"SysvarRent111111111111111111111111111111111"#,
+            r#"SysvarS1otHashes111111111111111111111111111"#,
+        ];
+        
+        for pattern in &sysvar_patterns {
+            if content.contains(pattern) && !content.contains("sysvar::") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Direct sysvar account access".to_string(),
+                    description: format!("File {} accesses sysvar accounts directly", file_path),
+                    severity: AuditSeverity::Low,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-668".to_string()),
+                    cvss_score: Some(2.5),
+                    impact: "Potential inconsistency or incorrect sysvar data access".to_string(),
+                    recommendation: "Use the sysvar crate for safe sysvar access".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/developing/runtime-facilities/sysvars".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for Solana development anti-patterns
+    fn check_solana_antipatterns(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for missing Anchor constraints
+        if content.contains("#[derive(Accounts)]") {
+            if !content.contains("#[account(") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Missing Anchor account constraints".to_string(),
+                    description: format!("File {} uses Anchor without proper account constraints", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-20".to_string()),
+                    cvss_score: Some(5.0),
+                    impact: "Insufficient validation of account inputs".to_string(),
+                    recommendation: "Use Anchor constraints like #[account(mut)], #[account(init)], etc.".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_references/account-constraints.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for improper error handling
+        if content.contains("ProgramError") || content.contains("anchor_lang::error") {
+            if !content.contains("Result<") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Improper Solana error handling".to_string(),
+                    description: format!("File {} handles Solana errors without proper Result types", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-754".to_string()),
+                    cvss_score: Some(4.0),
+                    impact: "Program crashes or unexpected behavior on error conditions".to_string(),
+                    recommendation: "Use Result<T, E> types for proper error propagation".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/errors.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for missing program state validation
+        if content.contains("Program") && content.contains("State") {
+            if !content.contains("validate") && !content.contains("check") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Missing program state validation".to_string(),
+                    description: format!("File {} modifies program state without validation", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-20".to_string()),
+                    cvss_score: Some(6.0),
+                    impact: "Program state could be corrupted or manipulated".to_string(),
+                    recommendation: "Implement proper state validation before modifications".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for Solana-specific cryptographic security issues
+    fn check_solana_crypto_security(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for weak keypair generation
+        if content.contains("Keypair::new()") && !content.contains("random") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Potentially weak Solana keypair generation".to_string(),
+                description: format!("File {} generates keypairs without explicit randomness", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-330".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Predictable keypairs could be exploited by attackers".to_string(),
+                recommendation: "Ensure secure random number generation for keypair creation".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://docs.solana.com/developing/clients/rust-api#keypair".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        // Check for signature verification bypass
+        if content.contains("verify") && content.contains("signature") {
+            if content.contains("false") || content.contains("skip") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Signature verification bypass detected".to_string(),
+                    description: format!("File {} may bypass signature verification", file_path),
+                    severity: AuditSeverity::Critical,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-347".to_string()),
+                    cvss_score: Some(9.5),
+                    impact: "Unauthorized transactions could be executed without proper signatures".to_string(),
+                    recommendation: "Never bypass signature verification in production code".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/transactions#signatures".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Check for SPL token security issues
+        if content.contains("spl_token") || content.contains("Token") {
+            if !content.contains("mint") && !content.contains("authority") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "SPL token operations without authority checks".to_string(),
+                    description: format!("File {} performs SPL token operations without authority validation", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-862".to_string()),
+                    cvss_score: Some(8.0),
+                    impact: "Unauthorized token operations could lead to fund theft".to_string(),
+                    recommendation: "Always verify token authorities before performing operations".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://spl.solana.com/token".to_string(),
+                    ],
+                });
+                *finding_id += 1;
             }
         }
         
@@ -2244,6 +2700,88 @@ impl AuditCoordinator {
             references: vec!["https://cwe.mitre.org/data/definitions/200.html".to_string()],
         });
 
+        // Add Solana-specific test findings
+        findings.push(AuditFinding {
+            id: "OSVM-SOL-001".to_string(),
+            title: "Missing signer validation in Solana program".to_string(),
+            description: "Detected potential missing signer validation in program instruction handling".to_string(),
+            severity: AuditSeverity::Critical,
+            category: "Solana Security".to_string(),
+            cwe_id: Some("CWE-862".to_string()),
+            cvss_score: Some(9.0),
+            impact: "Unauthorized users could execute privileged operations".to_string(),
+            recommendation: "Always validate that required accounts are signers using is_signer checks".to_string(),
+            code_location: Some("src/solana/program.rs".to_string()),
+            references: vec![
+                "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                "https://solana.com/developers/guides/getstarted/intro-to-anchor".to_string(),
+            ],
+        });
+
+        findings.push(AuditFinding {
+            id: "OSVM-SOL-002".to_string(),
+            title: "Potential PDA verification bypass".to_string(),
+            description: "Program uses PDA operations without proper verification of derived addresses".to_string(),
+            severity: AuditSeverity::High,
+            category: "Solana Security".to_string(),
+            cwe_id: Some("CWE-345".to_string()),
+            cvss_score: Some(8.0),
+            impact: "Attackers could provide arbitrary accounts instead of valid PDAs".to_string(),
+            recommendation: "Always verify PDA derivation matches expected seeds and program ID".to_string(),
+            code_location: Some("src/solana/pda.rs".to_string()),
+            references: vec![
+                "https://solanacookbook.com/references/programs.html#how-to-create-a-pda".to_string(),
+            ],
+        });
+
+        findings.push(AuditFinding {
+            id: "OSVM-SOL-003".to_string(),
+            title: "SPL token operations without authority checks".to_string(),
+            description: "Token operations performed without proper authority validation".to_string(),
+            severity: AuditSeverity::High,
+            category: "Solana Security".to_string(),
+            cwe_id: Some("CWE-862".to_string()),
+            cvss_score: Some(8.0),
+            impact: "Unauthorized token operations could lead to fund theft".to_string(),
+            recommendation: "Always verify token authorities before performing operations".to_string(),
+            code_location: Some("src/solana/token.rs".to_string()),
+            references: vec![
+                "https://spl.solana.com/token".to_string(),
+            ],
+        });
+
+        findings.push(AuditFinding {
+            id: "OSVM-SOL-004".to_string(),
+            title: "Missing MEV protection in trading operations".to_string(),
+            description: "Trading operations lack protection against MEV attacks".to_string(),
+            severity: AuditSeverity::Medium,
+            category: "Solana Security".to_string(),
+            cwe_id: Some("CWE-841".to_string()),
+            cvss_score: Some(4.5),
+            impact: "Transactions vulnerable to front-running and sandwich attacks".to_string(),
+            recommendation: "Implement slippage protection and transaction deadlines".to_string(),
+            code_location: Some("src/solana/dex.rs".to_string()),
+            references: vec![
+                "https://docs.solana.com/developing/programming-model/transactions".to_string(),
+            ],
+        });
+
+        findings.push(AuditFinding {
+            id: "OSVM-SOL-005".to_string(),
+            title: "Insecure Solana RPC endpoint usage".to_string(),
+            description: "Application uses public or insecure RPC endpoints".to_string(),
+            severity: AuditSeverity::Medium,
+            category: "Solana Security".to_string(),
+            cwe_id: Some("CWE-319".to_string()),
+            cvss_score: Some(5.0),
+            impact: "Rate limiting, censorship, or man-in-the-middle attacks on RPC calls".to_string(),
+            recommendation: "Use HTTPS RPC endpoints and consider private/dedicated RPC providers".to_string(),
+            code_location: Some("src/config/rpc.rs".to_string()),
+            references: vec![
+                "https://docs.solana.com/cluster/rpc-endpoints".to_string(),
+            ],
+        });
+
         // Use hardcoded system info to avoid triggering diagnostics
         let system_info = SystemInfo {
             rust_version: "rustc 1.87.0 (example)".to_string(),
@@ -2255,19 +2793,22 @@ impl AuditCoordinator {
                 deps.insert("clap".to_string(), "4.5.40".to_string());
                 deps.insert("tokio".to_string(), "1.45.1".to_string());
                 deps.insert("serde".to_string(), "1.0.219".to_string());
+                deps.insert("anchor-lang".to_string(), "0.30.1".to_string());
+                deps.insert("solana-sdk".to_string(), "2.2.7".to_string());
+                deps.insert("spl-token".to_string(), "6.0.0".to_string());
                 deps
             },
         };
 
         let summary = AuditSummary {
             total_findings: findings.len(),
-            critical_findings: 0,
-            high_findings: 0,
-            medium_findings: 1,
+            critical_findings: 1,
+            high_findings: 2,
+            medium_findings: 3,
             low_findings: 0,
             info_findings: 0,
-            security_score: 85.0,
-            compliance_level: "Good".to_string(),
+            security_score: 75.0, // Reduced due to critical Solana findings
+            compliance_level: "Moderate".to_string(),
         };
 
         AuditReport {
@@ -2280,10 +2821,15 @@ impl AuditCoordinator {
                 "Implement regular security audits".to_string(),
                 "Keep dependencies up to date".to_string(),
                 "Follow security best practices".to_string(),
+                "Implement proper Solana account validation".to_string(),
+                "Use secure RPC endpoints and MEV protection".to_string(),
+                "Follow Solana security guidelines and best practices".to_string(),
             ],
             compliance_notes: vec![
                 "This audit follows industry security standards".to_string(),
                 "Findings are categorized using CWE framework".to_string(),
+                "Solana-specific security checks included".to_string(),
+                "Critical Solana vulnerabilities require immediate attention".to_string(),
             ],
         }
     }
