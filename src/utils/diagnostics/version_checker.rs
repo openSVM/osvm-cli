@@ -187,10 +187,10 @@ impl VersionChecker {
 
     /// Check if a tool needs an update
     pub fn needs_update(&self, current_version: &str, latest_version: &str) -> bool {
-        match self.compare_versions(current_version, latest_version) {
-            VersionComparison::Older => true,
-            _ => false,
-        }
+        matches!(
+            self.compare_versions(current_version, latest_version),
+            VersionComparison::Older
+        )
     }
 
     /// Get severity of version mismatch

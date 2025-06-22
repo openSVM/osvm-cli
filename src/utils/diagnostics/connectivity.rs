@@ -272,44 +272,41 @@ pub async fn check_solana_endpoints() -> CheckResult {
     let start = Instant::now();
     let config = ConnectivityConfig::default();
 
-    match test_solana_endpoints(&config).await {
-        results => {
-            let accessible_count = results.iter().filter(|r| r.accessible).count();
-            let total_count = results.len();
+    let results = test_solana_endpoints(&config).await;
+    let accessible_count = results.iter().filter(|r| r.accessible).count();
+    let total_count = results.len();
 
-            let passed = accessible_count == total_count;
-            let message = if passed {
-                "All Solana endpoints are accessible".to_string()
-            } else {
-                format!(
-                    "{}/{} Solana endpoints accessible",
-                    accessible_count, total_count
-                )
-            };
+    let passed = accessible_count == total_count;
+    let message = if passed {
+        "All Solana endpoints are accessible".to_string()
+    } else {
+        format!(
+            "{}/{} Solana endpoints accessible",
+            accessible_count, total_count
+        )
+    };
 
-            let details = results
-                .iter()
-                .map(|r| {
-                    format!(
-                        "{}: {} ({}ms)",
-                        r.endpoint,
-                        if r.accessible { "✅" } else { "❌" },
-                        r.response_time_ms
-                            .map(|t| t.to_string())
-                            .unwrap_or_else(|| "timeout".to_string())
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
+    let details = results
+        .iter()
+        .map(|r| {
+            format!(
+                "{}: {} ({}ms)",
+                r.endpoint,
+                if r.accessible { "✅" } else { "❌" },
+                r.response_time_ms
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "timeout".to_string())
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
-            CheckResult {
-                name: "Solana Endpoints".to_string(),
-                passed,
-                message,
-                details: Some(details),
-                execution_time_ms: start.elapsed().as_millis() as u64,
-            }
-        }
+    CheckResult {
+        name: "Solana Endpoints".to_string(),
+        passed,
+        message,
+        details: Some(details),
+        execution_time_ms: start.elapsed().as_millis() as u64,
     }
 }
 
@@ -498,7 +495,7 @@ mod tests {
     #[tokio::test]
     async fn test_solana_endpoints_list() {
         // Test that our endpoint list is not empty and contains expected networks
-        assert!(!SOLANA_ENDPOINTS.is_empty());
+        assert!(SOLANA_ENDPOINTS.len() > 0);
 
         let networks: Vec<&str> = SOLANA_ENDPOINTS
             .iter()

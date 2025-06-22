@@ -87,7 +87,7 @@ pub async fn check_network_health(
             let slot_height = client.get_slot().ok();
             let epoch_info = client.get_epoch_info().ok();
             let block_time = if let Some(slot) = slot_height {
-                client.get_block_time(slot).ok().and_then(|t| Some(t))
+                client.get_block_time(slot).ok()
             } else {
                 None
             };
@@ -158,11 +158,7 @@ pub async fn monitor_network(network: &str, custom_url: Option<&str>) -> Result<
         match get_network_stats(&client).await {
             Ok(stats) => {
                 // Calculate TPS approximation
-                let slot_diff = if stats.slot > last_slot {
-                    stats.slot - last_slot
-                } else {
-                    0
-                };
+                let slot_diff = stats.slot.saturating_sub(last_slot);
 
                 slot_times.push_back(std::time::Instant::now());
                 if slot_times.len() > 10 {
@@ -210,7 +206,7 @@ async fn get_network_stats(client: &RpcClient) -> Result<NetworkStats> {
     let epoch_progress = epoch_info.slot_index as f64 / epoch_info.slots_in_epoch as f64;
 
     // Get block time if available
-    let block_time = client.get_block_time(slot).ok().and_then(|t| Some(t));
+    let block_time = client.get_block_time(slot).ok();
 
     // Get leader schedule for current slot (if available)
     let leader = client

@@ -121,7 +121,7 @@ async fn apply_system_tuning(param: &str, recommended_value: &str) -> Result<()>
     let output = Command::new("sudo")
         .arg("sysctl")
         .arg("-w")
-        .arg(&format!("{}={}", param, recommended_value))
+        .arg(format!("{}={}", param, recommended_value))
         .output()
         .context("Failed to run sysctl")?;
 
@@ -131,7 +131,7 @@ async fn apply_system_tuning(param: &str, recommended_value: &str) -> Result<()>
         // Try to persist to sysctl.conf
         let persist_cmd = Command::new("sh")
             .arg("-c")
-            .arg(&format!(
+            .arg(format!(
                 "grep -q '^{}=' /etc/sysctl.conf || echo '{}={}' | sudo tee -a /etc/sysctl.conf > /dev/null",
                 param, param, recommended_value
             ))

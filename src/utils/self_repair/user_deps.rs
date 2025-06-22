@@ -48,7 +48,7 @@ pub struct SolanaConfigInfo {
 }
 
 /// User dependency manager
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct UserDependencyManager;
 
 impl UserDependencyManager {

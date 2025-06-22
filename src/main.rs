@@ -126,9 +126,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     let app_matches = parse_command_line();
-    
+
     // Check for version flag (which includes aliases)
     if app_matches.get_flag("version_flag") {
         // Show version info and exit
@@ -136,14 +136,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // Check for subcommands (including version subcommands)
     let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
         // If no subcommand is provided, parse_command_line should handle it or exit.
         // This return is a fallback.
         return Err("No subcommand provided. Use --help for more information.".into());
     };
-    
+
     // Check for version subcommands
     if sub_command == "v" || sub_command == "ver" || sub_command == "version" {
         // Show version info and exit
@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
-    
+
     // 'matches' will refer to the subcommand's matches, as before.
     let matches = sub_matches;
 

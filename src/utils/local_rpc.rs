@@ -88,10 +88,8 @@ pub async fn start_local_rpc(config: LocalRpcConfig) -> Result<LocalRpcInfo> {
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
             task::spawn_blocking(move || {
-                for line in reader.lines() {
-                    if let Ok(line) = line {
-                        println!("{}", line);
-                    }
+                for line in reader.lines().flatten() {
+                    println!("{}", line);
                 }
             });
         }

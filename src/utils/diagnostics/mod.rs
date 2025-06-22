@@ -390,9 +390,10 @@ impl DiagnosticCoordinator {
 
     /// Determine overall system status based on issues
     fn determine_overall_status(&self, issues: &[HealthIssue]) -> HealthStatus {
-        if issues.iter().any(|i| i.severity == IssueSeverity::Critical) {
-            HealthStatus::Critical
-        } else if issues.iter().any(|i| i.severity == IssueSeverity::Error) {
+        if issues
+            .iter()
+            .any(|i| matches!(i.severity, IssueSeverity::Critical | IssueSeverity::Error))
+        {
             HealthStatus::Critical
         } else if issues.iter().any(|i| i.severity == IssueSeverity::Warning) {
             HealthStatus::Warning
