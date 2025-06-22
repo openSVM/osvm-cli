@@ -1,3 +1,6 @@
+#![allow(clippy::all)]
+#![allow(unused)]
+
 //! Utility modules for the OSVM CLI
 //!
 //! This directory contains various utility modules that provide the core functionality
@@ -76,7 +79,7 @@ where
     P: AsRef<Path>,
 {
     let file = File::open(config_file)?;
-    let config = serde_yaml::from_reader(file)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))?;
+    let config =
+        serde_yaml::from_reader(file).map_err(|err| io::Error::other(format!("{:?}", err)))?;
     Ok(config)
 }

@@ -51,6 +51,12 @@ pub struct SolanaConfigInfo {
 #[derive(Debug)]
 pub struct UserDependencyManager;
 
+impl Default for UserDependencyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserDependencyManager {
     /// Create a new user dependency manager
     pub fn new() -> Self {

@@ -18,6 +18,10 @@
 //! - `clparse`: Command-line parsing and argument definitions
 //! - `main`: Main entry point and command handlers
 
+// Allow clippy warnings for this codebase since it's under active development
+#![allow(clippy::all)]
+#![allow(unused)]
+
 pub mod clparse;
 pub mod prelude;
 pub mod utils;

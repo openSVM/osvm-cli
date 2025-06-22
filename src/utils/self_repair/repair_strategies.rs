@@ -424,7 +424,7 @@ impl RepairTransaction {
             let output = Command::new("sudo")
                 .arg("sysctl")
                 .arg("-w")
-                .arg(&format!("{}={}", param, value))
+                .arg(format!("{}={}", param, value))
                 .output();
 
             match output {
@@ -453,7 +453,7 @@ impl RepairTransaction {
 
             let persist_cmd = Command::new("sh")
                 .arg("-c")
-                .arg(&format!(
+                .arg(format!(
                     "echo '# OSVM Solana tuning parameters\n{}' | sudo tee -a /etc/sysctl.conf > /dev/null",
                     sysctl_conf_content
                 ))
