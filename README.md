@@ -107,6 +107,24 @@ curl -sSf https://raw.githubusercontent.com/opensvm/osvm-cli/main/install.sh | s
 powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/opensvm/osvm-cli/main/install.ps1' -OutFile 'install.ps1'; .\install.ps1"
 ```
 
+### Docker
+
+Run OSVM CLI in a Docker container without installing it locally:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/opensvm/osvm-cli:latest
+
+# Run with version check
+docker run --rm ghcr.io/opensvm/osvm-cli:latest --version
+
+# Run with interactive mode (mount current directory)
+docker run --rm -it -v $(pwd):/workspace ghcr.io/opensvm/osvm-cli:latest
+
+# Use as an alias
+alias osvm='docker run --rm -it -v $(pwd):/workspace ghcr.io/opensvm/osvm-cli:latest'
+```
+
 ## 🌟 Key Features
 
 - **SVM Management**: List and inspect Solana Virtual Machines
