@@ -2,16 +2,18 @@
 /program/target/
 .cline/
 .ledger
-notes/
 .vscode/*
 .vscode
 .dist/*
 .dist
 node_modules/
 .DS_Store
-~*.*
 *-ledger/
 *.log
+
+# Typst installation files
+typst-*
+*.tar.xz
 
 # Additional logs and temporary files
 *.log.*

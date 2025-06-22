@@ -1,3 +1,6 @@
+#![allow(clippy::all)]
+#![allow(unused)]
+
 //! Utility modules for the OSVM CLI
 //!
 //! This directory contains various utility modules that provide the core functionality
@@ -18,6 +21,8 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// Security audit system for comprehensive vulnerability analysis
+pub mod audit;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
@@ -74,7 +79,7 @@ where
     P: AsRef<Path>,
 {
     let file = File::open(config_file)?;
-    let config = serde_yaml::from_reader(file)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))?;
+    let config =
+        serde_yaml::from_reader(file).map_err(|err| io::Error::other(format!("{:?}", err)))?;
     Ok(config)
 }

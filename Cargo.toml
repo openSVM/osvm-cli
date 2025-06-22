@@ -36,6 +36,9 @@ dirs = "6.0.0"
 chrono = { version = "0.4.41", features = ["serde"] }
 md5 = "0.7.0"
 regex = "1.10.0"
+# Use latest reqwest version for consistency
+reqwest = { version = "0.12.20", features = ["json"] }
+base64 = "0.22.1"
 
 
 [dev-dependencies]
