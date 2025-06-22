@@ -303,7 +303,7 @@ async fn setup_ngrok_tunnels(ports: &[u16]) -> Result<HashMap<u16, String>> {
                 .arg("http")
                 .arg(format!("localhost:{}", port))
                 .arg("--domain")
-                .arg(format!("osvm.dev"))
+                .arg("osvm.dev".to_string())
                 .arg("--log")
                 .arg("stdout")
                 .spawn()
@@ -420,7 +420,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
             let output = Command::new("sudo")
                 .arg("sysctl")
                 .arg("-w")
-                .arg(&format!("{}={}", param, recommended))
+                .arg(format!("{}={}", param, recommended))
                 .output()
                 .context("Failed to run sysctl")?;
 
@@ -428,7 +428,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
                 // Persist to sysctl.conf
                 let _ = Command::new("sh")
                     .arg("-c")
-                    .arg(&format!(
+                    .arg(format!(
                         "grep -q '^{}=' /etc/sysctl.conf || echo '{}={}' | sudo tee -a /etc/sysctl.conf > /dev/null",
                         param, param, recommended
                     ))
@@ -469,7 +469,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
             let lsof_output = Command::new("sudo")
                 .arg("lsof")
                 .arg("-i")
-                .arg(&format!(":{}", port))
+                .arg(format!(":{}", port))
                 .output()
                 .context("Failed to run lsof")?;
 
@@ -524,7 +524,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
             let limits_conf = "* soft nofile 65536\n* hard nofile 65536\n";
             let _ = Command::new("sh")
                 .arg("-c")
-                .arg(&format!(
+                .arg(format!(
                     "echo '{}' | sudo tee /etc/security/limits.d/90-nofile.conf",
                     limits_conf
                 ))
@@ -566,7 +566,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
                 let output = Command::new("sudo")
                     .arg("ufw")
                     .arg("allow")
-                    .arg(&format!("{}/tcp", port))
+                    .arg(format!("{}/tcp", port))
                     .output();
 
                 if let Ok(result) = output {
@@ -630,7 +630,7 @@ async fn apply_fix(issue: &DetectedIssue, config: &LogMonitorConfig) -> Result<F
 
             match setup_ngrok_tunnels(&solana_ports).await {
                 Ok(tunnel_urls) => {
-                    let mut message = format!("Set up ngrok tunnels for external access");
+                    let mut message = "Set up ngrok tunnels for external access".to_string();
                     if !tunnel_urls.is_empty() {
                         message.push_str(&format!(" - {} tunnels active", tunnel_urls.len()));
                         for (port, url) in &tunnel_urls {
@@ -684,10 +684,8 @@ pub async fn monitor_logs_continuous(
 
     // Spawn log reader thread
     task::spawn_blocking(move || {
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                let _ = tx.blocking_send(line);
-            }
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = tx.blocking_send(line);
         }
     });
 
@@ -986,5 +984,4 @@ mod tests {
         }
         assert!(found, "System tuning pattern should match");
     }
-
 }

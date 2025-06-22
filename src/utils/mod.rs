@@ -74,7 +74,7 @@ where
     P: AsRef<Path>,
 {
     let file = File::open(config_file)?;
-    let config = serde_yaml::from_reader(file)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, format!("{:?}", err)))?;
+    let config =
+        serde_yaml::from_reader(file).map_err(|err| io::Error::other(format!("{:?}", err)))?;
     Ok(config)
 }

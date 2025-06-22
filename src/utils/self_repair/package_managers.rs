@@ -292,9 +292,8 @@ pub fn get_build_dependencies() -> Vec<&'static str> {
         ]
     } else if cfg!(target_os = "macos") {
         vec!["pkg-config", "openssl", "git", "curl"]
-    } else if cfg!(target_os = "windows") {
-        vec!["git", "curl"]
     } else {
+        // Windows and other platforms
         vec!["git", "curl"]
     }
 }

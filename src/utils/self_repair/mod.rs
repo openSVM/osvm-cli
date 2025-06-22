@@ -123,6 +123,12 @@ pub struct SelfRepairSystem {
     diagnostics: crate::utils::diagnostics::DiagnosticCoordinator,
 }
 
+impl Default for SelfRepairSystem {
+    fn default() -> Self {
+        Self::new(RepairConfig::default())
+    }
+}
+
 impl SelfRepairSystem {
     /// Create a new self-repair system
     pub fn new(config: RepairConfig) -> Self {
@@ -130,11 +136,6 @@ impl SelfRepairSystem {
             config,
             diagnostics: crate::utils::diagnostics::DiagnosticCoordinator::new(),
         }
-    }
-
-    /// Create a new self-repair system with default configuration
-    pub fn default() -> Self {
-        Self::new(RepairConfig::default())
     }
 
     /// Analyze an error and determine if it can be automatically repaired
@@ -405,7 +406,7 @@ pub async fn read_keypair_with_repair(
             }
 
             // If we get here, repair was declined or failed
-            Err(err.into())
+            Err(err)
         }
     }
 }
