@@ -841,7 +841,19 @@ pub fn parse_command_line() -> clap::ArgMatches {
                     Arg::new("gh")
                         .long("gh")
                         .value_name("REPO#BRANCH")
-                        .help("Git repository to audit in format: owner/repo#branch\n                         Examples:\n                         - opensvm/aeamcp#main\n                         - solana-labs/solana#master\n                         - myorg/myproject#develop")
+                        .help("Git repository to audit in format: owner/repo#branch
+                               
+Examples:
+  --gh opensvm/aeamcp#main           # Audit main branch of opensvm/aeamcp
+  --gh solana-labs/solana#master     # Audit Solana Labs repository
+  --gh myorg/myproject#develop       # Audit develop branch
+
+The command will:
+1. Clone the specified repository and branch
+2. Create a new audit branch with timestamp
+3. Run comprehensive security analysis
+4. Generate audit reports (Typst/PDF)
+5. Commit and push results to the new branch")
                 )
         )
         .subcommand(
