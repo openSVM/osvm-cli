@@ -594,33 +594,66 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
         let mut finding_id = 100; // Start from 100 to avoid conflicts
 
-        // Check for hardcoded secrets (basic check)
+        // Comprehensive security analysis of Rust source files
         if let Ok(entries) = std::fs::read_dir("src") {
             for entry in entries.flatten() {
                 if let Some(ext) = entry.path().extension() {
                     if ext == "rs" {
-                        if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
+                            let file_path = entry.path().display().to_string();
+                            
+                            // Check for hardcoded secrets
                             if self.contains_potential_secrets(&content) {
                                 findings.push(AuditFinding {
                                     id: format!("OSVM-{:03}", finding_id),
                                     title: "Potential hardcoded secrets detected".to_string(),
-                                    description: format!("File {} may contain hardcoded secrets", entry.path().display()),
+                                    description: format!("File {} may contain hardcoded secrets", file_path),
                                     severity: AuditSeverity::High,
                                     category: "Security".to_string(),
                                     cwe_id: Some("CWE-798".to_string()),
                                     cvss_score: Some(8.0),
                                     impact: "Exposed secrets could lead to unauthorized access".to_string(),
                                     recommendation: "Review and remove any hardcoded secrets, use environment variables or secure key management".to_string(),
-                                    code_location: Some(entry.path().display().to_string()),
+                                    code_location: Some(file_path.clone()),
                                     references: vec!["https://cwe.mitre.org/data/definitions/798.html".to_string()],
                                 });
                                 finding_id += 1;
                             }
+
+                            // Check for unsafe code blocks
+                            findings.extend(self.check_unsafe_code(&content, &file_path, &mut finding_id));
+                            
+                            // Check for unwrap usage without proper error handling
+                            findings.extend(self.check_unwrap_usage(&content, &file_path, &mut finding_id));
+                            
+                            // Check for command injection vulnerabilities
+                            findings.extend(self.check_command_injection(&content, &file_path, &mut finding_id));
+                            
+                            // Check for path traversal vulnerabilities
+                            findings.extend(self.check_path_traversal(&content, &file_path, &mut finding_id));
+                            
+                            // Check for insecure network operations
+                            findings.extend(self.check_insecure_network(&content, &file_path, &mut finding_id));
+                            
+                            // Check for error handling issues
+                            findings.extend(self.check_error_handling(&content, &file_path, &mut finding_id));
+                            
+                            // Check for cryptographic issues
+                            findings.extend(self.check_cryptographic_issues(&content, &file_path, &mut finding_id));
+                            
+                            // Check for input validation issues
+                            findings.extend(self.check_input_validation(&content, &file_path, &mut finding_id));
                         }
                     }
                 }
             }
         }
+
+        // Check Cargo.toml for dependency vulnerabilities
+        findings.extend(self.check_dependency_security(&mut finding_id));
+        
+        // Check configuration files for security issues
+        findings.extend(self.check_configuration_security(&mut finding_id));
 
         findings
     }
@@ -632,6 +665,10 @@ impl AuditCoordinator {
             r#"(?i)secret\s*=\s*['"'][^'"']+['"']"#,
             r#"(?i)key\s*=\s*['"'][^'"']+['"']"#,
             r#"(?i)token\s*=\s*['"'][^'"']+['"']"#,
+            r#"(?i)api_key\s*=\s*['"'][^'"']+['"']"#,
+            r#"(?i)private_key\s*=\s*['"'][^'"']+['"']"#,
+            r#"['"'][0-9a-fA-F]{32,}['"']"#, // Hex strings that might be keys
+            r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#, // Base64 strings
         ];
 
         for pattern in &secret_patterns {
@@ -640,6 +677,527 @@ impl AuditCoordinator {
             }
         }
         false
+    }
+
+    /// Check for unsafe code blocks
+    fn check_unsafe_code(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        if content.contains("unsafe") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-{:03}", *finding_id),
+                title: "Unsafe code block detected".to_string(),
+                description: format!("File {} contains unsafe code blocks that bypass Rust's memory safety guarantees", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Security".to_string(),
+                cwe_id: Some("CWE-119".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Potential memory safety violations and buffer overflows".to_string(),
+                recommendation: "Review unsafe code blocks carefully, ensure proper bounds checking and memory management".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html".to_string(),
+                    "https://cwe.mitre.org/data/definitions/119.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        findings
+    }
+
+    /// Check for unwrap usage without proper error handling
+    fn check_unwrap_usage(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        let unwrap_count = content.matches(".unwrap()").count() + content.matches(".expect(").count();
+        
+        if unwrap_count > 5 { // Threshold for excessive unwrap usage
+            findings.push(AuditFinding {
+                id: format!("OSVM-{:03}", *finding_id),
+                title: "Excessive unwrap/expect usage".to_string(),
+                description: format!("File {} contains {} instances of unwrap/expect which can cause panics", file_path, unwrap_count),
+                severity: AuditSeverity::Medium,
+                category: "Security".to_string(),
+                cwe_id: Some("CWE-248".to_string()),
+                cvss_score: Some(4.0),
+                impact: "Application crashes due to unhandled panics, potential denial of service".to_string(),
+                recommendation: "Replace unwrap/expect with proper error handling using match or if let patterns".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://doc.rust-lang.org/book/ch09-00-error-handling.html".to_string(),
+                    "https://cwe.mitre.org/data/definitions/248.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        findings
+    }
+
+    /// Check for command injection vulnerabilities
+    fn check_command_injection(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        let command_patterns = [
+            r#"Command::new\([^)]*format!"#,
+            r#"Command::new\([^)]*\+\s*"#,
+            r#"std::process::Command::new\([^)]*format!"#,
+            r#"shell\("#,
+            r#"exec\("#,
+            r#"system\("#,
+        ];
+        
+        for pattern in &command_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Potential command injection vulnerability".to_string(),
+                    description: format!("File {} contains command execution with potentially unsafe input", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-78".to_string()),
+                    cvss_score: Some(7.5),
+                    impact: "Arbitrary command execution on the host system".to_string(),
+                    recommendation: "Validate and sanitize all input before using in commands, use parameterized commands".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/78.html".to_string(),
+                        "https://owasp.org/Top10/A03_2021-Injection/".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break; // Only report once per file
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for path traversal vulnerabilities
+    fn check_path_traversal(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        let path_patterns = [
+            r#"\.\./"#,
+            r#"\.\.\\"#,
+            r#"Path::new\([^)]*format!"#,
+            r#"PathBuf::from\([^)]*format!"#,
+            r#"File::open\([^)]*format!"#,
+            r#"std::fs::read\([^)]*format!"#,
+        ];
+        
+        for pattern in &path_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Potential path traversal vulnerability".to_string(),
+                    description: format!("File {} contains file operations with potentially unsafe paths", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-22".to_string()),
+                    cvss_score: Some(7.0),
+                    impact: "Unauthorized access to files outside intended directory".to_string(),
+                    recommendation: "Validate and canonicalize file paths, use safe path construction methods".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/22.html".to_string(),
+                        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break; // Only report once per file
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for insecure network operations
+    fn check_insecure_network(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for HTTP usage instead of HTTPS
+        if content.contains("http://") && !content.contains("localhost") && !content.contains("127.0.0.1") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-{:03}", *finding_id),
+                title: "Insecure HTTP usage detected".to_string(),
+                description: format!("File {} uses HTTP instead of HTTPS for network communications", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Security".to_string(),
+                cwe_id: Some("CWE-319".to_string()),
+                cvss_score: Some(5.0),
+                impact: "Data transmitted in plain text, susceptible to interception".to_string(),
+                recommendation: "Use HTTPS for all external network communications".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://cwe.mitre.org/data/definitions/319.html".to_string(),
+                    "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        // Check for TLS verification bypass
+        let tls_bypass_patterns = [
+            r#"danger_accept_invalid_certs\(true\)"#,
+            r#"verify\(false\)"#,
+            r#"accept_invalid_hostnames\(true\)"#,
+            r#"verify_mode\(SslVerifyMode::NONE\)"#,
+        ];
+        
+        for pattern in &tls_bypass_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "TLS certificate verification bypass".to_string(),
+                    description: format!("File {} disables TLS certificate verification", file_path),
+                    severity: AuditSeverity::High,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-295".to_string()),
+                    cvss_score: Some(7.5),
+                    impact: "Man-in-the-middle attacks, compromised secure communications".to_string(),
+                    recommendation: "Enable proper TLS certificate verification for all connections".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/295.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for error handling issues
+    fn check_error_handling(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for sensitive information in error messages
+        let sensitive_patterns = [
+            r#"println!\([^)]*password"#,
+            r#"println!\([^)]*secret"#,
+            r#"println!\([^)]*key"#,
+            r#"eprintln!\([^)]*password"#,
+            r#"error!\([^)]*password"#,
+            r#"format!\([^)]*password"#,
+        ];
+        
+        for pattern in &sensitive_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Sensitive information in error messages".to_string(),
+                    description: format!("File {} may expose sensitive information in error messages", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-209".to_string()),
+                    cvss_score: Some(4.5),
+                    impact: "Information disclosure through error messages".to_string(),
+                    recommendation: "Sanitize error messages to avoid exposing sensitive information".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/209.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check for cryptographic issues
+    fn check_cryptographic_issues(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for weak random number generation
+        let weak_rng_patterns = [
+            r#"thread_rng\(\)"#,
+            r#"rand::random"#,
+            r#"SmallRng"#,
+        ];
+        
+        for pattern in &weak_rng_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Potentially weak random number generation".to_string(),
+                    description: format!("File {} uses random number generation that may not be cryptographically secure", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-338".to_string()),
+                    cvss_score: Some(5.0),
+                    impact: "Predictable random values could compromise cryptographic operations".to_string(),
+                    recommendation: "Use cryptographically secure random number generators for security-sensitive operations".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/338.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        // Check for hardcoded IV/salt
+        if content.contains("vec![0") || content.contains("&[0") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-{:03}", *finding_id),
+                title: "Potential hardcoded initialization vector or salt".to_string(),
+                description: format!("File {} may contain hardcoded cryptographic parameters", file_path),
+                severity: AuditSeverity::Medium,
+                category: "Security".to_string(),
+                cwe_id: Some("CWE-330".to_string()),
+                cvss_score: Some(4.5),
+                impact: "Weak cryptographic operations due to predictable parameters".to_string(),
+                recommendation: "Generate random initialization vectors and salts for each operation".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://cwe.mitre.org/data/definitions/330.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        findings
+    }
+
+    /// Check for input validation issues
+    fn check_input_validation(&self, content: &str, file_path: &str, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for direct parsing without validation
+        let parsing_patterns = [
+            r#"\.parse\(\)\.unwrap\(\)"#,
+            r#"\.parse\(\)\.expect\("#,
+            r#"from_str\([^)]*\)\.unwrap\(\)"#,
+            r#"serde_json::from_str\([^)]*\)\.unwrap\(\)"#,
+        ];
+        
+        for pattern in &parsing_patterns {
+            if regex::Regex::new(pattern).unwrap().is_match(content) {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Unsafe input parsing without validation".to_string(),
+                    description: format!("File {} parses input without proper validation or error handling", file_path),
+                    severity: AuditSeverity::Medium,
+                    category: "Security".to_string(),
+                    cwe_id: Some("CWE-20".to_string()),
+                    cvss_score: Some(5.0),
+                    impact: "Application crashes or unexpected behavior from malformed input".to_string(),
+                    recommendation: "Validate all input and handle parsing errors gracefully".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://cwe.mitre.org/data/definitions/20.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+                break;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check dependency security in Cargo.toml
+    fn check_dependency_security(&self, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        if let Ok(content) = std::fs::read_to_string("Cargo.toml") {
+            // Check for wildcard dependencies
+            if content.contains("\"*\"") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Wildcard dependency version detected".to_string(),
+                    description: "Cargo.toml contains wildcard (*) version dependencies".to_string(),
+                    severity: AuditSeverity::Medium,
+                    category: "Dependencies".to_string(),
+                    cwe_id: Some("CWE-937".to_string()),
+                    cvss_score: Some(4.0),
+                    impact: "Unpredictable dependency updates may introduce vulnerabilities".to_string(),
+                    recommendation: "Pin dependency versions to specific, tested versions".to_string(),
+                    code_location: Some("Cargo.toml".to_string()),
+                    references: vec![
+                        "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+            
+            // Check for git dependencies
+            if content.contains("git = ") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Git dependencies detected".to_string(),
+                    description: "Cargo.toml contains dependencies from git repositories".to_string(),
+                    severity: AuditSeverity::Low,
+                    category: "Dependencies".to_string(),
+                    cwe_id: Some("CWE-494".to_string()),
+                    cvss_score: Some(3.0),
+                    impact: "Git dependencies may not be audited or may change unexpectedly".to_string(),
+                    recommendation: "Use published crates from crates.io when possible, pin git dependencies to specific commits".to_string(),
+                    code_location: Some("Cargo.toml".to_string()),
+                    references: vec![
+                        "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        // Run cargo-audit if available for vulnerability scanning
+        findings.extend(self.run_cargo_audit(finding_id));
+        
+        findings
+    }
+
+    /// Run cargo-audit to check for known vulnerabilities
+    fn run_cargo_audit(&self, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Try to run cargo audit
+        if let Ok(output) = Command::new("cargo")
+            .args(&["audit", "--format", "json"])
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if let Ok(audit_result) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                    if let Some(vulnerabilities) = audit_result.get("vulnerabilities") {
+                        if let Some(vuln_list) = vulnerabilities.get("list") {
+                            if let Some(vulns) = vuln_list.as_array() {
+                                for vuln in vulns {
+                                    let advisory_id = vuln.get("advisory")
+                                        .and_then(|a| a.get("id"))
+                                        .and_then(|id| id.as_str())
+                                        .unwrap_or("Unknown");
+                                    
+                                    let title = vuln.get("advisory")
+                                        .and_then(|a| a.get("title"))
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("Known vulnerability in dependency");
+                                    
+                                    let package = vuln.get("advisory")
+                                        .and_then(|a| a.get("package"))
+                                        .and_then(|p| p.as_str())
+                                        .unwrap_or("Unknown package");
+                                    
+                                    let severity = match vuln.get("advisory")
+                                        .and_then(|a| a.get("severity"))
+                                        .and_then(|s| s.as_str())
+                                        .unwrap_or("medium")
+                                        .to_lowercase()
+                                        .as_str()
+                                    {
+                                        "critical" => AuditSeverity::Critical,
+                                        "high" => AuditSeverity::High,
+                                        "medium" => AuditSeverity::Medium,
+                                        "low" => AuditSeverity::Low,
+                                        _ => AuditSeverity::Medium,
+                                    };
+                                    
+                                    let cvss = vuln.get("advisory")
+                                        .and_then(|a| a.get("cvss"))
+                                        .and_then(|c| c.as_f64())
+                                        .unwrap_or(5.0) as f32;
+                                    
+                                    findings.push(AuditFinding {
+                                        id: format!("OSVM-{:03}", *finding_id),
+                                        title: format!("Vulnerability in dependency: {}", package),
+                                        description: format!("Known vulnerability {} in package {}: {}", advisory_id, package, title),
+                                        severity,
+                                        category: "Dependencies".to_string(),
+                                        cwe_id: Some("CWE-937".to_string()),
+                                        cvss_score: Some(cvss),
+                                        impact: "Known vulnerability may be exploitable".to_string(),
+                                        recommendation: format!("Update package {} to a patched version", package),
+                                        code_location: Some("Cargo.toml".to_string()),
+                                        references: vec![
+                                            format!("https://rustsec.org/advisories/{}", advisory_id),
+                                        ],
+                                    });
+                                    *finding_id += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // cargo-audit not available or failed, add a finding about it
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Dependency vulnerability scanning unavailable".to_string(),
+                    description: "cargo-audit is not installed or failed to run, dependency vulnerabilities cannot be checked".to_string(),
+                    severity: AuditSeverity::Low,
+                    category: "Dependencies".to_string(),
+                    cwe_id: Some("CWE-1104".to_string()),
+                    cvss_score: Some(2.0),
+                    impact: "Unknown vulnerabilities in dependencies may exist".to_string(),
+                    recommendation: "Install cargo-audit with 'cargo install cargo-audit' and run regular dependency scans".to_string(),
+                    code_location: None,
+                    references: vec![
+                        "https://crates.io/crates/cargo-audit".to_string(),
+                        "https://rustsec.org/".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        findings
+    }
+
+    /// Check configuration files for security issues
+    fn check_configuration_security(&self, finding_id: &mut usize) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        // Check for insecure file permissions (if .env files exist)
+        if std::path::Path::new(".env").exists() {
+            findings.push(AuditFinding {
+                id: format!("OSVM-{:03}", *finding_id),
+                title: "Environment file detected".to_string(),
+                description: ".env file contains potentially sensitive configuration".to_string(),
+                severity: AuditSeverity::Low,
+                category: "Configuration".to_string(),
+                cwe_id: Some("CWE-312".to_string()),
+                cvss_score: Some(3.5),
+                impact: "Sensitive configuration data may be exposed".to_string(),
+                recommendation: "Ensure .env files are not committed to version control and have proper file permissions".to_string(),
+                code_location: Some(".env".to_string()),
+                references: vec![
+                    "https://cwe.mitre.org/data/definitions/312.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+        
+        // Check for debug builds in production
+        if let Ok(content) = std::fs::read_to_string("Cargo.toml") {
+            if content.contains("[profile.release]") && content.contains("debug = true") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-{:03}", *finding_id),
+                    title: "Debug symbols enabled in release build".to_string(),
+                    description: "Release profile has debug symbols enabled".to_string(),
+                    severity: AuditSeverity::Low,
+                    category: "Configuration".to_string(),
+                    cwe_id: Some("CWE-489".to_string()),
+                    cvss_score: Some(2.5),
+                    impact: "Debug symbols may expose internal implementation details".to_string(),
+                    recommendation: "Disable debug symbols in release builds for production use".to_string(),
+                    code_location: Some("Cargo.toml".to_string()),
+                    references: vec![
+                        "https://doc.rust-lang.org/cargo/reference/profiles.html".to_string(),
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+        
+        findings
     }
 
     /// Collect system information
