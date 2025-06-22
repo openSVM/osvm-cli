@@ -978,6 +978,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .action(ArgAction::SetTrue)
                         .help("Generate test audit report with sample data")
                 )
+                .arg(
+                    Arg::new("ai-analysis")
+                        .long("ai-analysis")
+                        .action(ArgAction::SetTrue)
+                        .help("Enable AI-powered security analysis using OpenAI (requires OPENAI_API_KEY)")
+                )
         )
         .subcommand(
             Command::new("new_feature_command")
