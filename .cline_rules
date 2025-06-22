@@ -1,0 +1,24 @@
+# OSVM CLI Project Rules
+
+## CRITICAL: No Custom Scripts
+- **NEVER create custom shell scripts, Python scripts, or any standalone scripts in this repository**
+- **ALL functionality must be implemented within the osvm binary itself**
+- **The only way to execute functionality is through the compiled osvm binary**
+- If a feature needs to be added, it must be implemented in the Rust source code and compiled into osvm
+
+## Project Structure
+- All code must be in Rust source files under src/
+- Use cargo build to compile changes
+- Execute features only via ./target/debug/osvm or cargo run
+
+## Examples of what NOT to do:
+- ❌ Creating shell scripts (*.sh files)
+- ❌ Creating Python scripts (*.py files)  
+- ❌ Creating any standalone executable scripts
+- ❌ Using external tools when osvm can handle it
+
+## Examples of what TO do:
+- ✅ Implement features in Rust within src/
+- ✅ Use cargo build to compile
+- ✅ Run features via osvm binary commands
+- ✅ If osvm doesn't have a feature, implement it in the Rust code first
