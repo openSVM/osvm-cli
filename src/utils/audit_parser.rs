@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use syn::{
     visit::Visit, Expr, File, Item, ItemFn, ItemImpl, ItemMod, LitStr, Path, PathSegment, Stmt,
 };
+use quote::ToTokens;
 
 /// Structured analysis result from parsing Rust code
 #[derive(Debug, Clone)]
@@ -499,30 +500,123 @@ impl SecurityVisitor {
     /// Analyze if program ID is properly checked before CPI calls
     fn analyze_program_id_check(&self, call: &syn::ExprCall) -> bool {
         // Look for program ID verification patterns
-        // This should check if the program ID is validated before invoke calls
         if let Expr::Path(path) = &*call.func {
             let path_str = path_to_string(&path.path);
-            // If it's an invoke call, check if program ID validation is present
+            
+            // If it's an invoke call, look for program ID validation in the arguments
             if path_str.contains("invoke") {
-                // In a real implementation, we'd analyze the surrounding context
-                // to ensure program ID is checked before the invoke
-                return false; // Default to assuming no check for now
+                // Check if any argument contains program ID validation patterns
+                let has_program_id_validation = call.args.iter().any(|arg| {
+                    self.contains_program_id_validation(arg)
+                });
+                
+                // Also check for common validation patterns in the call itself
+                let has_validation_call = path_str.contains("verify_program") || 
+                                        path_str.contains("check_program") ||
+                                        path_str.contains("validate_program");
+                
+                return has_program_id_validation || has_validation_call;
             }
         }
+        
+        // For non-invoke calls, assume they don't need program ID validation
         true
+    }
+    
+    /// Check if an expression contains program ID validation patterns
+    fn contains_program_id_validation(&self, expr: &Expr) -> bool {
+        match expr {
+            // Check for binary comparisons involving program_id
+            Expr::Binary(binary) => {
+                if matches!(binary.op, syn::BinOp::Eq(_) | syn::BinOp::Ne(_)) {
+                    let left_str = self.expr_to_string(&binary.left);
+                    let right_str = self.expr_to_string(&binary.right);
+                    
+                    (left_str.contains("program_id") || left_str.contains("program.key")) ||
+                    (right_str.contains("program_id") || right_str.contains("program.key"))
+                } else {
+                    false
+                }
+            },
+            // Check for method calls that might validate program ID
+            Expr::MethodCall(method) => {
+                let method_name = method.method.to_string();
+                method_name.contains("verify") || method_name.contains("check") || 
+                method_name.contains("validate") || method_name == "key"
+            },
+            // Check for paths that reference program validation
+            Expr::Path(path) => {
+                let path_str = path_to_string(&path.path);
+                path_str.contains("program_id") || path_str.contains("PROGRAM_ID")
+            },
+            _ => false,
+        }
+    }
+    
+    /// Convert expression to string for analysis
+    fn expr_to_string(&self, expr: &Expr) -> String {
+        match expr {
+            Expr::Path(path) => path_to_string(&path.path),
+            Expr::Field(field) => {
+                format!("{}.{}", self.expr_to_string(&field.base), field.member.to_token_stream())
+            },
+            Expr::MethodCall(method) => {
+                format!("{}.{}", self.expr_to_string(&method.receiver), method.method)
+            },
+            _ => String::new(),
+        }
     }
 
     /// Analyze if account owner is properly verified
     fn analyze_owner_check(&self, call: &syn::ExprCall) -> bool {
         // Look for owner verification patterns like: account.owner == expected_program_id
         call.args.iter().any(|arg| {
-            if let Expr::Binary(binary) = arg {
-                // Check if it's a comparison involving owner
-                matches!(binary.op, syn::BinOp::Eq(_)) || matches!(binary.op, syn::BinOp::Ne(_))
-            } else {
-                false
-            }
-        })
+            self.contains_owner_validation(arg)
+        }) || self.function_call_validates_owner(call)
+    }
+    
+    /// Check if an expression contains owner validation patterns
+    fn contains_owner_validation(&self, expr: &Expr) -> bool {
+        match expr {
+            // Check for binary comparisons involving owner
+            Expr::Binary(binary) => {
+                if matches!(binary.op, syn::BinOp::Eq(_) | syn::BinOp::Ne(_)) {
+                    let left_str = self.expr_to_string(&binary.left);
+                    let right_str = self.expr_to_string(&binary.right);
+                    
+                    // Check if either side references account owner
+                    (left_str.contains("owner") && (right_str.contains("program") || right_str.contains("PROGRAM_ID"))) ||
+                    (right_str.contains("owner") && (left_str.contains("program") || left_str.contains("PROGRAM_ID"))) ||
+                    (left_str.contains(".owner") || right_str.contains(".owner"))
+                } else {
+                    false
+                }
+            },
+            // Check for method calls that validate ownership
+            Expr::MethodCall(method) => {
+                let method_name = method.method.to_string();
+                let receiver_str = self.expr_to_string(&method.receiver);
+                
+                (method_name.contains("owner") || method_name.contains("check_owner")) ||
+                (receiver_str.contains("owner") && (method_name == "eq" || method_name == "ne"))
+            },
+            // Recursively check nested expressions
+            Expr::Group(group) => self.contains_owner_validation(&group.expr),
+            Expr::Paren(paren) => self.contains_owner_validation(&paren.expr),
+            _ => false,
+        }
+    }
+    
+    /// Check if the function call itself validates owner
+    fn function_call_validates_owner(&self, call: &syn::ExprCall) -> bool {
+        if let Expr::Path(path) = &*call.func {
+            let path_str = path_to_string(&path.path);
+            path_str.contains("check_owner") || 
+            path_str.contains("verify_owner") || 
+            path_str.contains("validate_owner")
+        } else {
+            false
+        }
     }
 
     /// Analyze if account data validation is performed

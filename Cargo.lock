@@ -3227,6 +3227,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode 2.0.1",
  "borsh 1.5.7",
+ "bs58",
  "cargo_metadata",
  "chrono",
  "clap 4.5.40",
