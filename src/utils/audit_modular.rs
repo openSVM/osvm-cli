@@ -33,7 +33,7 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     cache.insert("dynamic_path", regex::Regex::new(r#"Path::new\([^)]*format!"#).unwrap());
     
     // Network patterns
-    cache.insert("http_insecure", regex::Regex::new(r#"http://.*(?!localhost|127\.0\.0\.1)"#).unwrap());
+    cache.insert("http_insecure", regex::Regex::new(r#"http://[^/]*\..*"#).unwrap()); // Simplified pattern for non-localhost HTTP
     cache.insert("tls_bypass", regex::Regex::new(r#"danger_accept_invalid_certs\(true\)"#).unwrap());
     
     // Solana-specific patterns
@@ -646,6 +646,52 @@ mod tests {
         let check = MemorySafetyCheck;
         let findings = check.check_content(code, "test.rs").unwrap();
         assert!(!findings.is_empty());
+    }
+
+    #[test]
+    fn test_base58_validation() {
+        // Test valid base58 Solana public keys
+        assert!(SolanaSecurityCheck::is_valid_base58_pubkey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"));
+        assert!(SolanaSecurityCheck::is_valid_base58_pubkey("11111111111111111111111111111112"));
+        
+        // Test invalid base58 (contains forbidden characters)
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1111111111111111111111111111111O")); // Contains 'O'
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1111111111111111111111111111111I")); // Contains 'I'
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("111111111111111111111111111111l0")); // Contains 'l' and '0'
+        
+        // Test base64 strings (should not be detected as base58)
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("SGVsbG8gV29ybGQ=")); // base64
+        
+        // Test wrong length
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("123")); // Too short
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1".repeat(100).as_str())); // Too long
+    }
+
+    #[test] 
+    fn test_hardcoded_key_detection() {
+        let code_with_hardcoded_key = r#"
+            const PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+            const SYSTEM_PROGRAM: &str = "11111111111111111111111111111112";
+        "#;
+
+        let code_with_base64 = r#"
+            const NOT_A_KEY: &str = "SGVsbG8gV29ybGQ="; // base64
+            const INVALID_BASE58: &str = "1111111111111111111111111111111O"; // Contains 'O'
+        "#;
+
+        let check = SolanaSecurityCheck;
+        
+        let findings_hardcoded = check.check_content(code_with_hardcoded_key, "test.rs").unwrap();
+        let hardcoded_findings: Vec<_> = findings_hardcoded.iter()
+            .filter(|f| f.title.contains("hardcoded Solana public key"))
+            .collect();
+        assert_eq!(hardcoded_findings.len(), 2, "Should detect 2 hardcoded Solana keys");
+
+        let findings_base64 = check.check_content(code_with_base64, "test.rs").unwrap();
+        let base64_findings: Vec<_> = findings_base64.iter()
+            .filter(|f| f.title.contains("hardcoded Solana public key"))
+            .collect();
+        assert_eq!(base64_findings.len(), 0, "Should not detect base64 or invalid base58 as Solana keys");
     }
 
     #[test]
