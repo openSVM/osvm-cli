@@ -477,6 +477,94 @@ impl AuditCoordinator {
         }
     }
 
+    /// Create a new audit coordinator with optional AI capabilities
+    /// If api_key is None or empty, AI analysis will be disabled
+    pub fn with_optional_ai(api_key: Option<String>) -> Self {
+        match api_key {
+            Some(key) if !key.trim().is_empty() => {
+                println!("🤖 AI analysis enabled with provided API key");
+                Self::with_ai(key)
+            }
+            _ => {
+                println!("🔧 Running audit without AI analysis (no API key provided)");
+                Self::new()
+            }
+        }
+    }
+
+    /// Detect if the current directory is a Rust workspace
+    pub fn is_workspace(&self) -> bool {
+        std::path::Path::new("Cargo.toml").exists() && 
+        std::fs::read_to_string("Cargo.toml")
+            .map(|content| content.contains("[workspace]"))
+            .unwrap_or(false)
+    }
+
+    /// Get all crate directories in a workspace
+    pub fn get_workspace_crates(&self) -> Result<Vec<std::path::PathBuf>> {
+        let mut crates = Vec::new();
+
+        if self.is_workspace() {
+            let cargo_toml = std::fs::read_to_string("Cargo.toml")?;
+            
+            // Simple parsing to find workspace members
+            let mut in_workspace = false;
+            let mut in_members = false;
+            
+            for line in cargo_toml.lines() {
+                let line = line.trim();
+                
+                if line == "[workspace]" {
+                    in_workspace = true;
+                    continue;
+                }
+                
+                if in_workspace && line.starts_with("members") {
+                    in_members = true;
+                    continue;
+                }
+                
+                if in_members && line.starts_with('[') && !line.starts_with("members") {
+                    break;
+                }
+                
+                if in_members && line.contains("\"") {
+                    if let Some(member) = line.split('"').nth(1) {
+                        let crate_path = std::path::PathBuf::from(member);
+                        if crate_path.join("Cargo.toml").exists() {
+                            crates.push(crate_path);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Single crate
+            crates.push(std::path::PathBuf::from("."));
+        }
+
+        if crates.is_empty() {
+            crates.push(std::path::PathBuf::from("."));
+        }
+
+        Ok(crates)
+    }
+
+    /// Get AI client for testing purposes
+    #[cfg(test)]
+    pub fn ai_client(&self) -> &Option<OpenAIClient> {
+        &self.ai_client
+    }
+
+    /// Enhance existing findings with AI analysis (exposed for testing)
+    #[cfg(test)] 
+    pub async fn enhance_findings_with_ai(
+        &self,
+        ai_client: &OpenAIClient,
+        findings: Vec<AuditFinding>,
+    ) -> Vec<AuditFinding> {
+        self.enhance_findings_with_ai_internal(ai_client, findings).await
+    }
+
     /// Run comprehensive security audit with enhanced modular architecture
     pub async fn run_security_audit(&self) -> Result<AuditReport> {
         println!("🔍 Starting comprehensive security audit with enhanced modular system...");
@@ -485,6 +573,9 @@ impl AuditCoordinator {
             println!("🤖 AI-powered analysis enabled");
         } else if self.ai_disabled {
             println!("🤖 AI analysis disabled due to previous errors");
+        } else {
+            println!("🔧 Running audit without AI analysis (no API key provided)");
+            println!("💡 Consider setting OPENAI_API_KEY environment variable for enhanced analysis");
         }
 
         // Create diagnostic coordinator only when needed
@@ -515,7 +606,7 @@ impl AuditCoordinator {
                 findings.extend(ai_findings);
 
                 // Enhance existing findings with AI analysis (only critical/high)
-                findings = self.enhance_findings_with_ai(ai_client, findings).await;
+                findings = self.enhance_findings_with_ai_internal(ai_client, findings).await;
             }
         }
 
@@ -546,7 +637,7 @@ impl AuditCoordinator {
     }
 
     /// Run audit using only the modular system (fallback when diagnostics fail)
-    async fn run_modular_audit_only(&self) -> Result<AuditReport> {
+    pub async fn run_modular_audit_only(&self) -> Result<AuditReport> {
         println!("🔧 Running modular security audit system...");
 
         let mut findings = Vec::new();
@@ -591,36 +682,92 @@ impl AuditCoordinator {
 
         println!("🔍 Running modular security checks...");
         
-        // Analyze Rust source files using the modular system
-        if let Ok(entries) = std::fs::read_dir("src") {
-            for entry in entries.flatten() {
-                if let Some(ext) = entry.path().extension() {
-                    if ext == "rs" {
-                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
-                            let file_path = entry.path().display().to_string();
-                            
-                            match self.modular_coordinator.audit_file(&content, &file_path) {
-                                Ok(findings) => {
-                                    println!("  📄 Analyzed {} - {} findings", file_path, findings.len());
-                                    all_findings.extend(findings);
-                                }
-                                Err(e) => {
-                                    log::warn!("Failed to analyze file {}: {}", file_path, e);
-                                    // Continue with other files even if one fails
+        // Get all crates in the workspace
+        let crates = self.get_workspace_crates()?;
+        
+        if crates.len() > 1 {
+            println!("📦 Detected workspace with {} crates", crates.len());
+        }
+        
+        for crate_path in &crates {
+            let src_dir = crate_path.join("src");
+            let crate_name = crate_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("root");
+            
+            if src_dir.exists() {
+                println!("🔍 Scanning crate: {}", crate_name);
+                
+                // Recursively scan all Rust files in the crate
+                self.scan_rust_files_recursive(&src_dir, &mut all_findings, crate_name).await?;
+            }
+        }
+
+        // Add configuration and dependency checks for each crate
+        for crate_path in &crates {
+            let current_dir = std::env::current_dir()?;
+            if let Err(e) = std::env::set_current_dir(crate_path) {
+                log::warn!("Failed to change directory to {}: {}", crate_path.display(), e);
+                continue;
+            }
+            
+            all_findings.extend(self.check_dependency_security_enhanced()?);
+            all_findings.extend(self.check_configuration_security_enhanced()?);
+            
+            // Restore original directory
+            if let Err(e) = std::env::set_current_dir(&current_dir) {
+                log::warn!("Failed to restore directory: {}", e);
+            }
+        }
+
+        println!("✅ Modular security checks completed - {} findings", all_findings.len());
+        Ok(all_findings)
+    }
+
+    /// Recursively scan Rust files in a directory
+    fn scan_rust_files_recursive<'a>(
+        &'a self, 
+        dir: &'a std::path::Path, 
+        findings: &'a mut Vec<AuditFinding>,
+        crate_name: &'a str
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
+        Box::pin(async move {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    
+                    if path.is_dir() {
+                        // Recursively scan subdirectories
+                        self.scan_rust_files_recursive(&path, findings, crate_name).await?;
+                    } else if let Some(ext) = path.extension() {
+                        if ext == "rs" {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                let file_path = format!("{}/{}", crate_name, path.display());
+                                
+                                match self.modular_coordinator.audit_file(&content, &file_path) {
+                                    Ok(mut file_findings) => {
+                                        // Tag findings with the crate name
+                                        for finding in &mut file_findings {
+                                            finding.code_location = Some(format!("{}:{}", crate_name, 
+                                                finding.code_location.as_ref().unwrap_or(&"unknown".to_string())));
+                                        }
+                                        
+                                        println!("  📄 Analyzed {} - {} findings", file_path, file_findings.len());
+                                        findings.extend(file_findings);
+                                    }
+                                    Err(e) => {
+                                        log::warn!("Failed to analyze file {}: {}", file_path, e);
+                                        // Continue with other files even if one fails
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        }
-
-        // Add configuration and dependency checks
-        all_findings.extend(self.check_dependency_security_enhanced()?);
-        all_findings.extend(self.check_configuration_security_enhanced()?);
-
-        println!("✅ Modular security checks completed - {} findings", all_findings.len());
-        Ok(all_findings)
+            
+            Ok(())
+        })
     }
 
     /// Create a fallback audit report when diagnostics fail
@@ -819,7 +966,7 @@ impl AuditCoordinator {
     }
 
     /// Enhance existing findings with AI analysis with improved error handling
-    async fn enhance_findings_with_ai(
+    async fn enhance_findings_with_ai_internal(
         &self,
         ai_client: &OpenAIClient,
         findings: Vec<AuditFinding>,

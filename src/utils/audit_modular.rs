@@ -279,6 +279,7 @@ impl AuditCheck for SolanaSecurityCheck {
 
         // Check for Solana operations without proper validation
         for solana_op in &analysis.solana_operations {
+            // Missing signer validation
             if !solana_op.signer_check {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
@@ -293,19 +294,21 @@ impl AuditCheck for SolanaSecurityCheck {
                     cvss_score: Some(9.0),
                     impact: "Unauthorized users could execute privileged operations".to_string(),
                     recommendation: "Always validate that required accounts are signers using is_signer checks".to_string(),
-                    code_location: Some(file_path.to_string()),
+                    code_location: Some(format!("{}:{}", file_path, solana_op.line)),
                     references: vec![
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        "https://solana-labs.github.io/solana-program-library/anchor/lang/macro.Program.html".to_string(),
                     ],
                 });
             }
 
-            if !solana_op.account_validation {
+            // Missing account owner validation
+            if !solana_op.owner_check && solana_op.operation_type.contains("account") {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
-                    title: "Missing account validation in Solana operation".to_string(),
+                    title: "Missing account owner validation".to_string(),
                     description: format!(
-                        "File {} contains Solana operation without account validation at line {}",
+                        "File {} contains account operation without owner validation at line {}",
                         file_path, solana_op.line
                     ),
                     severity: AuditSeverity::High,
@@ -313,8 +316,76 @@ impl AuditCheck for SolanaSecurityCheck {
                     cwe_id: Some("CWE-284".to_string()),
                     cvss_score: Some(7.5),
                     impact: "Programs could operate on accounts owned by malicious programs".to_string(),
-                    recommendation: "Always verify account ownership before performing operations".to_string(),
-                    code_location: Some(file_path.to_string()),
+                    recommendation: "Always verify account ownership before performing operations: account.owner == expected_program_id".to_string(),
+                    code_location: Some(format!("{}:{}", file_path, solana_op.line)),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    ],
+                });
+            }
+
+            // Missing program ID validation for CPI calls
+            if !solana_op.program_id_check && solana_op.operation_type.contains("invoke") {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Missing program ID validation before CPI".to_string(),
+                    description: format!(
+                        "File {} contains Cross-Program Invocation without program ID validation at line {}",
+                        file_path, solana_op.line
+                    ),
+                    severity: AuditSeverity::Critical,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-20".to_string()),
+                    cvss_score: Some(9.0),
+                    impact: "Arbitrary program execution vulnerability - attacker can invoke malicious programs".to_string(),
+                    recommendation: "Always validate the program ID before making cross-program invocations".to_string(),
+                    code_location: Some(format!("{}:{}", file_path, solana_op.line)),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/calling-between-programs".to_string(),
+                        "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/0-arbitrary-cpi".to_string(),
+                    ],
+                });
+            }
+
+            // Weak PDA seed uniqueness
+            if !solana_op.pda_seeds.is_empty() && solana_op.pda_seeds.len() < 2 {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Insufficient PDA seed uniqueness".to_string(),
+                    description: format!(
+                        "File {} uses PDA with insufficient seed uniqueness ({} seeds) at line {}",
+                        file_path, solana_op.pda_seeds.len(), solana_op.line
+                    ),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-330".to_string()),
+                    cvss_score: Some(7.0),
+                    impact: "PDA collision attacks possible, unauthorized access to program accounts".to_string(),
+                    recommendation: "Use multiple unique seeds for PDA creation including user-specific identifiers".to_string(),
+                    code_location: Some(format!("{}:{}", file_path, solana_op.line)),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/3-pda-sharing".to_string(),
+                    ],
+                });
+            }
+
+            // Missing account data validation
+            if !solana_op.account_data_validation && solana_op.operation_type.contains("AccountInfo") {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Missing account data validation".to_string(),
+                    description: format!(
+                        "File {} accesses account data without proper validation at line {}",
+                        file_path, solana_op.line
+                    ),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-20".to_string()),
+                    cvss_score: Some(6.0),
+                    impact: "Account data confusion vulnerabilities, type safety bypasses".to_string(),
+                    recommendation: "Always deserialize and validate account data before use, check discriminators".to_string(),
+                    code_location: Some(format!("{}:{}", file_path, solana_op.line)),
                     references: vec![
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                     ],
@@ -322,7 +393,76 @@ impl AuditCheck for SolanaSecurityCheck {
             }
         }
 
+        // Additional Solana-specific pattern checks using cached regexes
+        self.check_solana_patterns(analysis, file_path, &mut findings);
+
         Ok(findings)
+    }
+}
+
+impl SolanaSecurityCheck {
+    /// Check for additional Solana security patterns using regex cache
+    fn check_solana_patterns(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        // Check for hardcoded program IDs or keys in string literals
+        for string_lit in &analysis.string_literals {
+            if string_lit.value.len() == 44 && string_lit.value.chars().all(|c| c.is_alphanumeric()) {
+                // Potential base58 encoded public key
+                if REGEX_CACHE.get("base64_pattern").unwrap().is_match(&string_lit.value) {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_category_id("solana"),
+                        title: "Potential hardcoded Solana public key".to_string(),
+                        description: format!(
+                            "File {} contains what appears to be a hardcoded public key at line {}",
+                            file_path, string_lit.line
+                        ),
+                        severity: AuditSeverity::Medium,
+                        category: "Solana Security".to_string(),
+                        cwe_id: Some("CWE-798".to_string()),
+                        cvss_score: Some(5.0),
+                        impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
+                        recommendation: "Use environment variables or configuration for public keys".to_string(),
+                        code_location: Some(format!("{}:{}", file_path, string_lit.line)),
+                        references: vec![
+                            "https://docs.solana.com/developing/programming-model/accounts".to_string(),
+                        ],
+                    });
+                }
+            }
+        }
+
+        // Check for potential rent exemption bypass
+        let code_patterns = [
+            ("rent_exempt", "Missing rent exemption check"),
+            ("lamports", "Potential lamports manipulation"),
+            ("close_account", "Account closure without proper validation"),
+        ];
+
+        for (pattern, issue) in code_patterns.iter() {
+            if let Some(regex) = REGEX_CACHE.get(pattern) {
+                // In a real implementation, we'd scan the actual file content here
+                // For now, we'll check if any operations contain these patterns
+                let has_pattern = analysis.solana_operations.iter()
+                    .any(|op| op.operation_type.contains(pattern));
+                
+                if has_pattern {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_category_id("solana"),
+                        title: issue.to_string(),
+                        description: format!("File {} contains Solana operations related to {}", file_path, pattern),
+                        severity: AuditSeverity::Medium,
+                        category: "Solana Security".to_string(),
+                        cwe_id: Some("CWE-20".to_string()),
+                        cvss_score: Some(5.5),
+                        impact: "Potential Solana-specific security vulnerability".to_string(),
+                        recommendation: format!("Review {} operations for proper validation", pattern),
+                        code_location: Some(file_path.to_string()),
+                        references: vec![
+                            "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        ],
+                    });
+                }
+            }
+        }
     }
 }
 

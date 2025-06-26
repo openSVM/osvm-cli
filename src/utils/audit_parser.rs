@@ -80,6 +80,10 @@ pub struct SolanaOperation {
     pub operation_type: String,
     pub account_validation: bool,
     pub signer_check: bool,
+    pub pda_seeds: Vec<String>,
+    pub program_id_check: bool,
+    pub owner_check: bool,
+    pub account_data_validation: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -129,8 +133,67 @@ impl RustCodeParser {
             "path_traversal" => analysis.path_operations.iter().any(|p| p.is_dynamic),
             "insecure_network" => analysis.network_operations.iter().any(|n| !n.uses_https),
             "solana_security" => !analysis.solana_operations.is_empty(),
+            "missing_signer_check" => analysis.solana_operations.iter().any(|op| !op.signer_check),
+            "missing_program_id_check" => analysis.solana_operations.iter().any(|op| !op.program_id_check),
+            "missing_owner_check" => analysis.solana_operations.iter().any(|op| !op.owner_check),
+            "weak_pda_seeds" => analysis.solana_operations.iter().any(|op| op.pda_seeds.len() < 2),
             _ => false,
         }
+    }
+
+    /// Analyze Solana-specific security vulnerabilities
+    pub fn analyze_solana_security(analysis: &ParsedCodeAnalysis) -> Vec<String> {
+        let mut vulnerabilities = Vec::new();
+
+        // Check for missing signer validation
+        let missing_signer_ops: Vec<_> = analysis.solana_operations.iter()
+            .filter(|op| !op.signer_check && op.operation_type.contains("account"))
+            .collect();
+        
+        if !missing_signer_ops.is_empty() {
+            vulnerabilities.push(format!(
+                "Missing signer validation detected in {} operations: consider adding is_signer checks",
+                missing_signer_ops.len()
+            ));
+        }
+
+        // Check for weak PDA seed uniqueness
+        let weak_pda_ops: Vec<_> = analysis.solana_operations.iter()
+            .filter(|op| !op.pda_seeds.is_empty() && op.pda_seeds.len() < 2)
+            .collect();
+        
+        if !weak_pda_ops.is_empty() {
+            vulnerabilities.push(format!(
+                "Weak PDA seed uniqueness detected in {} operations: use multiple unique seeds",
+                weak_pda_ops.len()
+            ));
+        }
+
+        // Check for missing program ID verification
+        let missing_program_id_ops: Vec<_> = analysis.solana_operations.iter()
+            .filter(|op| op.operation_type.contains("invoke") && !op.program_id_check)
+            .collect();
+        
+        if !missing_program_id_ops.is_empty() {
+            vulnerabilities.push(format!(
+                "Missing program ID verification detected in {} CPI calls: validate program ID before invoke",
+                missing_program_id_ops.len()
+            ));
+        }
+
+        // Check for missing account owner verification
+        let missing_owner_ops: Vec<_> = analysis.solana_operations.iter()
+            .filter(|op| op.operation_type.contains("account") && !op.owner_check)
+            .collect();
+        
+        if !missing_owner_ops.is_empty() {
+            vulnerabilities.push(format!(
+                "Missing account owner verification detected in {} operations: validate account owner",
+                missing_owner_ops.len()
+            ));
+        }
+
+        vulnerabilities
     }
 }
 
@@ -233,14 +296,22 @@ impl SecurityVisitor {
                     });
                 }
 
-                // Check for Solana operations
+                // Check for Solana operations with detailed analysis
                 if path_string.contains("solana") || path_string.contains("anchor") {
-                    self.solana_operations.push(SolanaOperation {
+                    let mut solana_op = SolanaOperation {
                         line: self.current_line,
-                        operation_type: path_string,
-                        account_validation: false, // TODO: Implement deeper analysis
+                        operation_type: path_string.clone(),
+                        account_validation: false,
                         signer_check: false,
-                    });
+                        pda_seeds: Vec::new(),
+                        program_id_check: false,
+                        owner_check: false,
+                        account_data_validation: false,
+                    };
+
+                    // Analyze for specific Solana security patterns
+                    self.analyze_solana_security_patterns(&path_string, &mut solana_op, call);
+                    self.solana_operations.push(solana_op);
                 }
             }
         }
@@ -359,6 +430,112 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
         self.imports.push(import);
 
         syn::visit::visit_item_use(self, item_use);
+    }
+}
+
+impl SecurityVisitor {
+    /// Analyze Solana-specific security patterns in function calls
+    fn analyze_solana_security_patterns(&mut self, path_string: &str, solana_op: &mut SolanaOperation, call: &syn::ExprCall) {
+        // Check for signer validation patterns
+        if path_string.contains("is_signer") || path_string.contains("signer") {
+            solana_op.signer_check = self.analyze_signer_check(call);
+        }
+
+        // Check for PDA (Program Derived Address) operations
+        if path_string.contains("find_program_address") || path_string.contains("create_program_address") {
+            solana_op.pda_seeds = self.extract_pda_seeds(call);
+        }
+
+        // Check for program ID verification
+        if path_string.contains("program_id") || path_string.contains("invoke") {
+            solana_op.program_id_check = self.analyze_program_id_check(call);
+        }
+
+        // Check for account owner verification
+        if path_string.contains("owner") && path_string.contains("account") {
+            solana_op.owner_check = self.analyze_owner_check(call);
+        }
+
+        // Check for account data validation
+        if path_string.contains("AccountInfo") || path_string.contains("account_data") {
+            solana_op.account_data_validation = self.analyze_account_data_validation(call);
+            solana_op.account_validation = true;
+        }
+    }
+
+    /// Analyze if proper signer validation is performed
+    fn analyze_signer_check(&self, call: &syn::ExprCall) -> bool {
+        // Look for patterns like: account.is_signer or !account.is_signer
+        // This is a simplified analysis - in practice, we'd need more sophisticated checking
+        call.args.iter().any(|arg| {
+            if let Expr::Path(path) = arg {
+                path_to_string(&path.path).contains("is_signer")
+            } else {
+                false
+            }
+        })
+    }
+
+    /// Extract PDA seeds from find_program_address or create_program_address calls
+    fn extract_pda_seeds(&self, call: &syn::ExprCall) -> Vec<String> {
+        let mut seeds = Vec::new();
+        
+        // Look for seed arrays in the arguments
+        for arg in &call.args {
+            if let Expr::Array(array) = arg {
+                for elem in &array.elems {
+                    if let Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = elem {
+                        seeds.push(lit_str.value());
+                    } else if let Expr::Path(path) = elem {
+                        seeds.push(path_to_string(&path.path));
+                    }
+                }
+            }
+        }
+        
+        seeds
+    }
+
+    /// Analyze if program ID is properly checked before CPI calls
+    fn analyze_program_id_check(&self, call: &syn::ExprCall) -> bool {
+        // Look for program ID verification patterns
+        // This should check if the program ID is validated before invoke calls
+        if let Expr::Path(path) = &*call.func {
+            let path_str = path_to_string(&path.path);
+            // If it's an invoke call, check if program ID validation is present
+            if path_str.contains("invoke") {
+                // In a real implementation, we'd analyze the surrounding context
+                // to ensure program ID is checked before the invoke
+                return false; // Default to assuming no check for now
+            }
+        }
+        true
+    }
+
+    /// Analyze if account owner is properly verified
+    fn analyze_owner_check(&self, call: &syn::ExprCall) -> bool {
+        // Look for owner verification patterns like: account.owner == expected_program_id
+        call.args.iter().any(|arg| {
+            if let Expr::Binary(binary) = arg {
+                // Check if it's a comparison involving owner
+                matches!(binary.op, syn::BinOp::Eq(_)) || matches!(binary.op, syn::BinOp::Ne(_))
+            } else {
+                false
+            }
+        })
+    }
+
+    /// Analyze if account data validation is performed
+    fn analyze_account_data_validation(&self, call: &syn::ExprCall) -> bool {
+        // Look for account data validation patterns
+        call.args.iter().any(|arg| {
+            if let Expr::Path(path) = arg {
+                let path_str = path_to_string(&path.path);
+                path_str.contains("data") || path_str.contains("try_from") || path_str.contains("deserialize")
+            } else {
+                false
+            }
+        })
     }
 }
 
