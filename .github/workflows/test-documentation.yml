@@ -1,0 +1,261 @@
+name: Test GitHub Actions Documentation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'docs/deployment/**'
+      - '.github/actions/**'
+      - 'examples/github-actions/**'
+
+jobs:
+  validate-documentation:
+    name: Validate Documentation and Examples
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+          pip install yamllint
+      
+      - name: Validate YAML syntax
+        run: |
+          echo "Validating workflow YAML files..."
+          find .github/workflows -name "*.yml" -exec yamllint {} \;
+          find .github/actions -name "*.yml" -exec yamllint {} \;
+          find examples/github-actions -name "*.yml" -exec yamllint {} \;
+          yamllint docs/deployment/sample-workflow.yml
+          echo "✅ All YAML files are valid"
+      
+      - name: Validate Python YAML parsing
+        run: |
+          echo "Testing YAML parsing with Python..."
+          python3 -c "
+          import yaml
+          import os
+          import glob
+          
+          files = []
+          files.extend(glob.glob('.github/workflows/*.yml'))
+          files.extend(glob.glob('.github/actions/**/*.yml', recursive=True))
+          files.extend(glob.glob('examples/github-actions/*.yml'))
+          files.append('docs/deployment/sample-workflow.yml')
+          
+          for file in files:
+              try:
+                  with open(file, 'r') as f:
+                      yaml.safe_load(f)
+                  print(f'✅ {file}')
+              except Exception as e:
+                  print(f'❌ {file}: {e}')
+                  exit(1)
+          
+          print('✅ All YAML files parse correctly')
+          "
+      
+      - name: Check documentation completeness
+        run: |
+          echo "Checking documentation completeness..."
+          
+          # Check if the main documentation file exists
+          if [ ! -f "docs/deployment/github-actions.md" ]; then
+            echo "❌ Main documentation file missing"
+            exit 1
+          fi
+          
+          # Check if sample workflow exists
+          if [ ! -f "docs/deployment/sample-workflow.yml" ]; then
+            echo "❌ Sample workflow file missing"
+            exit 1
+          fi
+          
+          # Check if existing action documentation exists
+          if [ ! -f ".github/actions/svm-deploy/README.md" ]; then
+            echo "❌ Action documentation missing"
+            exit 1
+          fi
+          
+          # Check if examples directory exists
+          if [ ! -d "examples/github-actions" ]; then
+            echo "❌ Examples directory missing"
+            exit 1
+          fi
+          
+          echo "✅ All required documentation files exist"
+      
+      - name: Validate markdown links
+        run: |
+          echo "Checking markdown links in documentation..."
+          
+          # Check if README.md has been updated with new links
+          if ! grep -q "docs/deployment/github-actions.md" README.md; then
+            echo "❌ README.md not updated with new documentation link"
+            exit 1
+          fi
+          
+          echo "✅ README.md updated correctly"
+      
+      - name: Test action syntax (dry run)
+        run: |
+          echo "Testing action syntax..."
+          
+          # Build the project to ensure OSVM CLI is available
+          cargo build --release
+          
+          # Verify the binary works
+          ./target/release/osvm --version
+          
+          echo "✅ OSVM CLI builds and runs correctly"
+      
+      - name: Documentation structure check
+        run: |
+          echo "Checking documentation structure..."
+          
+          # Verify the new docs directory structure
+          ls -la docs/
+          ls -la docs/deployment/
+          
+          # Count sections in the main documentation
+          SECTIONS=$(grep -c "^## " docs/deployment/github-actions.md)
+          echo "Found $SECTIONS main sections in documentation"
+          
+          if [ $SECTIONS -lt 10 ]; then
+            echo "❌ Documentation seems incomplete (only $SECTIONS sections)"
+            exit 1
+          fi
+          
+          echo "✅ Documentation structure is complete"
+      
+      - name: Security best practices check
+        run: |
+          echo "Checking security best practices in documentation..."
+          
+          # Check if security section exists
+          if ! grep -q "Security Best Practices" docs/deployment/github-actions.md; then
+            echo "❌ Security best practices section missing"
+            exit 1
+          fi
+          
+          # Check if secret management is covered
+          if ! grep -q "GitHub Secrets" docs/deployment/github-actions.md; then
+            echo "❌ GitHub Secrets documentation missing"
+            exit 1
+          fi
+          
+          # Check if SSH security is covered
+          if ! grep -q "SSH Security" docs/deployment/github-actions.md; then
+            echo "❌ SSH Security documentation missing"
+            exit 1
+          fi
+          
+          echo "✅ Security documentation is comprehensive"
+
+  test-action-availability:
+    name: Test Action Availability
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check action files
+        run: |
+          echo "Checking SVM Deploy action files..."
+          
+          # Verify action.yml exists and is valid
+          if [ ! -f ".github/actions/svm-deploy/action.yml" ]; then
+            echo "❌ Action definition file missing"
+            exit 1
+          fi
+          
+          # Check if all required inputs are defined
+          REQUIRED_INPUTS=("svm-name" "host" "ssh-private-key")
+          for input in "${REQUIRED_INPUTS[@]}"; do
+            if ! grep -q "$input:" .github/actions/svm-deploy/action.yml; then
+              echo "❌ Required input '$input' not found in action definition"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Action definition is complete"
+      
+      - name: Validate action documentation
+        run: |
+          echo "Validating action documentation..."
+          
+          # Check if action README exists
+          if [ ! -f ".github/actions/svm-deploy/README.md" ]; then
+            echo "❌ Action README missing"
+            exit 1
+          fi
+          
+          # Check if documentation covers key topics
+          DOC_TOPICS=("Usage" "Inputs" "Outputs" "Secrets Setup" "Troubleshooting")
+          for topic in "${DOC_TOPICS[@]}"; do
+            if ! grep -q "$topic" .github/actions/svm-deploy/README.md; then
+              echo "❌ Documentation missing topic: $topic"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Action documentation is comprehensive"
+
+  validate-examples:
+    name: Validate Example Workflows
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Check example workflows
+        run: |
+          echo "Checking example workflows..."
+          
+          EXAMPLE_FILES=(
+            "examples/github-actions/basic-deployment.yml"
+            "examples/github-actions/multi-environment.yml"
+            "examples/github-actions/scheduled-deployment.yml"
+            "examples/github-actions/matrix-deployment.yml"
+            "examples/github-actions/conditional-deployment.yml"
+          )
+          
+          for file in "${EXAMPLE_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Example file missing: $file"
+              exit 1
+            fi
+            
+            # Check if the example uses the correct action
+            if ! grep -q ".github/actions/svm-deploy" "$file"; then
+              echo "❌ Example file '$file' doesn't use the SVM Deploy action"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All example workflows are present and valid"
+      
+      - name: Check examples documentation
+        run: |
+          echo "Checking examples documentation..."
+          
+          if [ ! -f "examples/github-actions/README.md" ]; then
+            echo "❌ Examples README missing"
+            exit 1
+          fi
+          
+          # Check if all examples are documented
+          EXAMPLES=("Basic Deployment" "Multi-Environment" "Scheduled" "Matrix" "Conditional")
+          for example in "${EXAMPLES[@]}"; do
+            if ! grep -q "$example" examples/github-actions/README.md; then
+              echo "❌ Example '$example' not documented"
+              exit 1
+            fi
+          done
+          
+          echo "✅ All examples are properly documented"

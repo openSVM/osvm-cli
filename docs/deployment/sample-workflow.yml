@@ -1,0 +1,271 @@
+# Sample GitHub Actions Workflow for OSVM CLI Deployment
+# 
+# This is a comprehensive example workflow that demonstrates various
+# deployment scenarios covered in the GitHub Actions deployment guide.
+# 
+# To use this workflow:
+# 1. Copy this file to .github/workflows/ in your repository
+# 2. Configure the required secrets in your GitHub repository
+# 3. Customize the parameters for your specific use case
+# 4. Remove or modify the deployment scenarios you don't need
+
+name: OSVM CLI Sample Deployment
+
+on:
+  # Trigger on pushes to main branch
+  push:
+    branches: [ main ]
+  
+  # Trigger on releases
+  release:
+    types: [ published ]
+  
+  # Manual trigger with input options
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'devnet'
+        type: choice
+        options:
+          - devnet
+          - testnet
+          - mainnet
+      svm_name:
+        description: 'SVM name'
+        required: true
+        default: 'sample-svm'
+      host:
+        description: 'Target host (leave empty to use secrets)'
+        required: false
+      node_type:
+        description: 'Node type'
+        required: true
+        default: 'validator'
+        type: choice
+        options:
+          - validator
+          - rpc
+
+env:
+  # Default configuration
+  DEFAULT_NETWORK: devnet
+  DEFAULT_NODE_TYPE: validator
+
+jobs:
+  # Job 1: Basic deployment (triggered on push)
+  basic-deployment:
+    name: Basic SVM Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: 'basic-svm'
+          host: ${{ secrets.DEVNET_HOST || 'validator@dev.example.com' }}
+          network: ${{ env.DEFAULT_NETWORK }}
+          node-type: ${{ env.DEFAULT_NODE_TYPE }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets.SOLANA_KEYPAIR }}
+          verbose: true
+
+  # Job 2: Multi-environment deployment (triggered on manual dispatch)
+  multi-environment-deployment:
+    name: Deploy to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    # Use GitHub Environments for additional protection
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Validate inputs
+        run: |
+          echo "Deploying SVM: ${{ github.event.inputs.svm_name }}"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Node type: ${{ github.event.inputs.node_type }}"
+          echo "Host: ${{ github.event.inputs.host || 'Using secret host' }}"
+      
+      - name: Deploy SVM Node
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ github.event.inputs.svm_name }}
+          host: ${{ github.event.inputs.host || secrets[format('{0}_HOST', upper(github.event.inputs.environment))] }}
+          network: ${{ github.event.inputs.environment }}
+          node-type: ${{ github.event.inputs.node_type }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets[format('{0}_KEYPAIR', upper(github.event.inputs.environment))] }}
+          rpc-url: ${{ secrets[format('{0}_RPC_URL', upper(github.event.inputs.environment))] }}
+          verbose: true
+
+  # Job 3: Production deployment (triggered on release)
+  production-deployment:
+    name: Production Release Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Deploying version: ${VERSION}"
+      
+      - name: Deploy Production SVM
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: 'prod-svm-${{ steps.version.outputs.version }}'
+          host: ${{ secrets.PROD_HOST }}
+          network: 'mainnet'
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.PROD_SSH_KEY }}
+          keypair: ${{ secrets.PROD_KEYPAIR }}
+          rpc-url: ${{ secrets.PROD_RPC_URL }}
+          verbose: true
+          deploy-args: '--production --version ${{ steps.version.outputs.version }}'
+      
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Successfully deployed version ${{ steps.version.outputs.version }} to production"
+          # Add your notification logic here (Slack, Discord, email, etc.)
+
+  # Job 4: Matrix deployment (multiple validators in parallel)
+  matrix-deployment:
+    name: Matrix Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'devnet'
+    
+    strategy:
+      matrix:
+        validator: [1, 2, 3]
+      fail-fast: false
+      max-parallel: 2
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Deploy Validator ${{ matrix.validator }}
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: 'cluster-validator-${{ matrix.validator }}'
+          host: 'validator${{ matrix.validator }}@cluster.example.com'
+          network: 'devnet'
+          node-type: 'validator'
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          keypair: ${{ secrets[format('KEYPAIR_VALIDATOR_{0}', matrix.validator)] }}
+
+  # Job 5: Rollback deployment (manual trigger only)
+  rollback-deployment:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && contains(github.event.inputs.svm_name, 'rollback')
+    
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Confirm rollback
+        run: |
+          echo "⚠️  ROLLBACK DEPLOYMENT INITIATED"
+          echo "This will rollback the current deployment"
+          echo "SVM: ${{ github.event.inputs.svm_name }}"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+      
+      - name: Execute rollback
+        uses: ./.github/actions/svm-deploy
+        with:
+          svm-name: ${{ github.event.inputs.svm_name }}
+          host: ${{ secrets[format('{0}_HOST', upper(github.event.inputs.environment))] }}
+          network: ${{ github.event.inputs.environment }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          deploy-args: '--rollback --confirm'
+
+  # Job 6: Health check and monitoring
+  post-deployment-validation:
+    name: Post-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: [basic-deployment, multi-environment-deployment, production-deployment]
+    if: always() && (needs.basic-deployment.result == 'success' || needs.multi-environment-deployment.result == 'success' || needs.production-deployment.result == 'success')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Wait for deployment to stabilize
+        run: |
+          echo "Waiting for deployment to stabilize..."
+          sleep 30
+      
+      - name: Health check
+        run: |
+          # Add your health check logic here
+          echo "🏥 Performing health checks..."
+          
+          # Example health checks:
+          # curl -f http://your-validator.com:8080/health
+          # solana validators --url your-network
+          # Check validator voting status
+          
+          echo "✅ Health checks completed"
+      
+      - name: Update monitoring
+        run: |
+          # Add monitoring integration here
+          echo "📊 Updating monitoring dashboards..."
+          
+          # Example monitoring updates:
+          # Post metrics to Prometheus
+          # Update Grafana dashboards
+          # Send status to external monitoring service
+          
+          echo "✅ Monitoring updated"
+
+# Secrets Required for this workflow:
+# 
+# Basic secrets (required):
+# - SSH_PRIVATE_KEY: SSH private key for connecting to servers
+# 
+# Optional secrets (environment-specific):
+# - DEVNET_HOST: Devnet server host
+# - TESTNET_HOST: Testnet server host 
+# - MAINNET_HOST: Mainnet server host
+# - PROD_HOST: Production server host
+# - SOLANA_KEYPAIR: Default Solana keypair
+# - DEVNET_KEYPAIR: Devnet-specific keypair
+# - TESTNET_KEYPAIR: Testnet-specific keypair
+# - MAINNET_KEYPAIR: Mainnet-specific keypair
+# - PROD_KEYPAIR: Production keypair
+# - DEVNET_RPC_URL: Custom devnet RPC URL
+# - TESTNET_RPC_URL: Custom testnet RPC URL
+# - MAINNET_RPC_URL: Custom mainnet RPC URL
+# - PROD_RPC_URL: Production RPC URL
+# - PROD_SSH_KEY: Production-specific SSH key
+# - KEYPAIR_VALIDATOR_1: Keypair for validator 1 (matrix deployment)
+# - KEYPAIR_VALIDATOR_2: Keypair for validator 2 (matrix deployment)
+# - KEYPAIR_VALIDATOR_3: Keypair for validator 3 (matrix deployment)
