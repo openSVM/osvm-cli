@@ -337,6 +337,7 @@
             </div>
             <div class="cta-buttons">
                 <a href="https://github.com/openSVM/osvm-cli" class="btn btn-primary" target="_blank">View on GitHub</a>
+                <a href="docs/README.md" class="btn btn-secondary">📚 Documentation</a>
                 <a href="https://github.com/openSVM/osvm-cli/releases" class="btn btn-secondary" target="_blank">Download</a>
             </div>
         </div>
@@ -429,6 +430,7 @@
                     <div class="feature-card">
                         <div class="feature-title">List SVMs</div>
                         <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('osvm svm list')">Copy</button>
                             <code>osvm svm list</code>
                         </div>
                         <div class="feature-description">View all installed Solana Virtual Machines</div>
@@ -437,6 +439,7 @@
                     <div class="feature-card">
                         <div class="feature-title">SVM Dashboard</div>
                         <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('osvm svm dashboard')">Copy</button>
                             <code>osvm svm dashboard</code>
                         </div>
                         <div class="feature-description">Launch interactive monitoring dashboard</div>
@@ -445,6 +448,7 @@
                     <div class="feature-card">
                         <div class="feature-title">List Nodes</div>
                         <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('osvm nodes list')">Copy</button>
                             <code>osvm nodes list</code>
                         </div>
                         <div class="feature-description">View all managed validator and RPC nodes</div>
@@ -453,9 +457,75 @@
                     <div class="feature-card">
                         <div class="feature-title">View Examples</div>
                         <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('osvm examples')">Copy</button>
                             <code>osvm examples</code>
                         </div>
                         <div class="feature-description">Show examples for common workflows</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section">
+                <h2 class="section-title">📚 Comprehensive Documentation</h2>
+                <p class="section-subtitle">Explore our detailed guides and references organized by feature</p>
+                
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📖</div>
+                        <div class="feature-title">Getting Started</div>
+                        <div class="feature-description">
+                            <a href="docs/installation.md" style="color: #667eea; text-decoration: none;">Installation Guide</a> | 
+                            <a href="docs/configuration.md" style="color: #667eea; text-decoration: none;">Configuration</a> | 
+                            <a href="docs/examples.md" style="color: #667eea; text-decoration: none;">Examples</a>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🔧</div>
+                        <div class="feature-title">Core Features</div>
+                        <div class="feature-description">
+                            <a href="docs/svm-management.md" style="color: #667eea; text-decoration: none;">SVM Management</a> | 
+                            <a href="docs/node-management.md" style="color: #667eea; text-decoration: none;">Node Management</a> | 
+                            <a href="docs/rpc-manager.md" style="color: #667eea; text-decoration: none;">RPC Manager</a>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🚀</div>
+                        <div class="feature-title">Deployment</div>
+                        <div class="feature-description">
+                            <a href="docs/ssh-deployment.md" style="color: #667eea; text-decoration: none;">SSH Deployment</a> | 
+                            <a href="docs/ebpf-deployment.md" style="color: #667eea; text-decoration: none;">eBPF Programs</a> | 
+                            <a href="docs/validator-enhancements.md" style="color: #667eea; text-decoration: none;">Validator Setup</a>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <div class="feature-title">Monitoring & Operations</div>
+                        <div class="feature-description">
+                            <a href="docs/dashboard.md" style="color: #667eea; text-decoration: none;">Interactive Dashboard</a> | 
+                            <a href="docs/log-monitoring.md" style="color: #667eea; text-decoration: none;">Log Monitoring</a> | 
+                            <a href="docs/self-repair-system.md" style="color: #667eea; text-decoration: none;">Self-Repair</a>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <div class="feature-title">Security & Audit</div>
+                        <div class="feature-description">
+                            <a href="docs/security-audit.md" style="color: #667eea; text-decoration: none;">Security Audit</a> | 
+                            <span style="color: #666;">AI-powered vulnerability analysis and compliance reporting</span>
+                        </div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🎯</div>
+                        <div class="feature-title">Complete Index</div>
+                        <div class="feature-description">
+                            <a href="docs/README.md" style="color: #667eea; text-decoration: none; font-weight: bold;">📖 Complete Documentation Index</a><br>
+                            <span style="color: #666;">Central hub with architecture overview and all feature guides</span>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -484,7 +554,7 @@
         <div class="container">
             <div class="footer-links">
                 <a href="https://github.com/openSVM/osvm-cli">GitHub Repository</a>
-                <a href="https://github.com/openSVM/osvm-cli/blob/main/README.md">Documentation</a>
+                <a href="docs/README.md">Documentation</a>
                 <a href="https://github.com/openSVM/osvm-cli/issues">Report Issues</a>
                 <a href="https://github.com/openSVM/osvm-cli/blob/main/LICENSE">License</a>
                 <a href="https://docs.opensvm.org">Official Docs</a>
