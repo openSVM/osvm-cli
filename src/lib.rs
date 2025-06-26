@@ -24,4 +24,5 @@
 
 pub mod clparse;
 pub mod prelude;
+pub mod services;
 pub mod utils;

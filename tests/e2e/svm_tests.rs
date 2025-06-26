@@ -64,7 +64,7 @@ fn test_svm_get_invalid() {
         .output();
 
     if let Err(e) = &result {
-        panic!("Failed to execute command: {}", e);
+        panic!("Failed to execute command: {e}");
     }
 
     let output = result.expect("Failed to execute command");

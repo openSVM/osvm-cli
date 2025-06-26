@@ -4,11 +4,11 @@
 //! to eliminate false positives from text-based pattern matching.
 
 use anyhow::{Context, Result};
+use quote::ToTokens;
 use std::collections::HashMap;
 use syn::{
     visit::Visit, Expr, File, Item, ItemFn, ItemImpl, ItemMod, LitStr, Path, PathSegment, Stmt,
 };
-use quote::ToTokens;
 
 /// Structured analysis result from parsing Rust code
 #[derive(Debug, Clone)]
@@ -115,8 +115,7 @@ pub struct RustCodeParser;
 impl RustCodeParser {
     /// Parse Rust code and extract security-relevant information
     pub fn parse_code(content: &str) -> Result<ParsedCodeAnalysis> {
-        let syntax_tree = syn::parse_file(content)
-            .context("Failed to parse Rust syntax")?;
+        let syntax_tree = syn::parse_file(content).context("Failed to parse Rust syntax")?;
 
         let mut visitor = SecurityVisitor::new();
         visitor.visit_file(&syntax_tree);
@@ -135,9 +134,15 @@ impl RustCodeParser {
             "insecure_network" => analysis.network_operations.iter().any(|n| !n.uses_https),
             "solana_security" => !analysis.solana_operations.is_empty(),
             "missing_signer_check" => analysis.solana_operations.iter().any(|op| !op.signer_check),
-            "missing_program_id_check" => analysis.solana_operations.iter().any(|op| !op.program_id_check),
+            "missing_program_id_check" => analysis
+                .solana_operations
+                .iter()
+                .any(|op| !op.program_id_check),
             "missing_owner_check" => analysis.solana_operations.iter().any(|op| !op.owner_check),
-            "weak_pda_seeds" => analysis.solana_operations.iter().any(|op| op.pda_seeds.len() < 2),
+            "weak_pda_seeds" => analysis
+                .solana_operations
+                .iter()
+                .any(|op| op.pda_seeds.len() < 2),
             _ => false,
         }
     }
@@ -147,10 +152,12 @@ impl RustCodeParser {
         let mut vulnerabilities = Vec::new();
 
         // Check for missing signer validation
-        let missing_signer_ops: Vec<_> = analysis.solana_operations.iter()
+        let missing_signer_ops: Vec<_> = analysis
+            .solana_operations
+            .iter()
             .filter(|op| !op.signer_check && op.operation_type.contains("account"))
             .collect();
-        
+
         if !missing_signer_ops.is_empty() {
             vulnerabilities.push(format!(
                 "Missing signer validation detected in {} operations: consider adding is_signer checks",
@@ -159,10 +166,12 @@ impl RustCodeParser {
         }
 
         // Check for weak PDA seed uniqueness
-        let weak_pda_ops: Vec<_> = analysis.solana_operations.iter()
+        let weak_pda_ops: Vec<_> = analysis
+            .solana_operations
+            .iter()
             .filter(|op| !op.pda_seeds.is_empty() && op.pda_seeds.len() < 2)
             .collect();
-        
+
         if !weak_pda_ops.is_empty() {
             vulnerabilities.push(format!(
                 "Weak PDA seed uniqueness detected in {} operations: use multiple unique seeds",
@@ -171,10 +180,12 @@ impl RustCodeParser {
         }
 
         // Check for missing program ID verification
-        let missing_program_id_ops: Vec<_> = analysis.solana_operations.iter()
+        let missing_program_id_ops: Vec<_> = analysis
+            .solana_operations
+            .iter()
             .filter(|op| op.operation_type.contains("invoke") && !op.program_id_check)
             .collect();
-        
+
         if !missing_program_id_ops.is_empty() {
             vulnerabilities.push(format!(
                 "Missing program ID verification detected in {} CPI calls: validate program ID before invoke",
@@ -183,10 +194,12 @@ impl RustCodeParser {
         }
 
         // Check for missing account owner verification
-        let missing_owner_ops: Vec<_> = analysis.solana_operations.iter()
+        let missing_owner_ops: Vec<_> = analysis
+            .solana_operations
+            .iter()
             .filter(|op| op.operation_type.contains("account") && !op.owner_check)
             .collect();
-        
+
         if !missing_owner_ops.is_empty() {
             vulnerabilities.push(format!(
                 "Missing account owner verification detected in {} operations: validate account owner",
@@ -251,7 +264,7 @@ impl SecurityVisitor {
     fn analyze_method_call(&mut self, expr: &Expr) {
         if let Expr::MethodCall(method_call) = expr {
             let method_name = method_call.method.to_string();
-            
+
             match method_name.as_str() {
                 "unwrap" => {
                     self.unwrap_usages.push(UnwrapUsage {
@@ -276,9 +289,11 @@ impl SecurityVisitor {
         if let Expr::Call(call) = expr {
             if let Expr::Path(path) = &*call.func {
                 let path_string = path_to_string(&path.path);
-                
+
                 // Check for command execution patterns
-                if path_string.contains("Command::new") || path_string.contains("std::process::Command") {
+                if path_string.contains("Command::new")
+                    || path_string.contains("std::process::Command")
+                {
                     let is_dynamic = call.args.iter().any(|arg| is_dynamic_expr(arg));
                     self.command_executions.push(CommandExecution {
                         line: self.current_line,
@@ -298,9 +313,13 @@ impl SecurityVisitor {
                 }
 
                 // Check for Solana operations with detailed analysis
-                if path_string.contains("solana") || path_string.contains("anchor") || 
-                   path_string.contains("invoke") || path_string.contains("is_signer") || 
-                   path_string.contains("program_id") || path_string.contains("account") {
+                if path_string.contains("solana")
+                    || path_string.contains("anchor")
+                    || path_string.contains("invoke")
+                    || path_string.contains("is_signer")
+                    || path_string.contains("program_id")
+                    || path_string.contains("account")
+                {
                     let mut solana_op = SolanaOperation {
                         line: self.current_line,
                         operation_type: path_string.clone(),
@@ -364,21 +383,26 @@ impl SecurityVisitor {
 
         // Check for common secret keywords
         let lower_value = value.to_lowercase();
-        lower_value.len() > 16 && (
-            lower_value.contains("password") ||
-            lower_value.contains("secret") ||
-            lower_value.contains("key") ||
-            lower_value.contains("token") ||
-            lower_value.contains("api")
-        )
+        lower_value.len() > 16
+            && (lower_value.contains("password")
+                || lower_value.contains("secret")
+                || lower_value.contains("key")
+                || lower_value.contains("token")
+                || lower_value.contains("api"))
     }
 
     fn classify_secret(&self, value: &str) -> String {
         if value.starts_with("sk-") {
             "openai_api_key".to_string()
-        } else if regex::Regex::new(r"^[A-Za-z0-9+/]{20,}={0,2}$").unwrap().is_match(value) {
+        } else if regex::Regex::new(r"^[A-Za-z0-9+/]{20,}={0,2}$")
+            .unwrap()
+            .is_match(value)
+        {
             "base64_encoded".to_string()
-        } else if regex::Regex::new(r"^[0-9a-fA-F]{32,}$").unwrap().is_match(value) {
+        } else if regex::Regex::new(r"^[0-9a-fA-F]{32,}$")
+            .unwrap()
+            .is_match(value)
+        {
             "hex_encoded".to_string()
         } else {
             "generic_secret".to_string()
@@ -417,7 +441,12 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
             name: item_fn.sig.ident.to_string(),
             is_public: matches!(item_fn.vis, syn::Visibility::Public(_)),
             is_async: item_fn.sig.asyncness.is_some(),
-            parameters: item_fn.sig.inputs.iter().map(|_| "param".to_string()).collect(),
+            parameters: item_fn
+                .sig
+                .inputs
+                .iter()
+                .map(|_| "param".to_string())
+                .collect(),
             return_type: None, // TODO: Implement return type analysis
         };
         self.function_signatures.push(signature);
@@ -428,7 +457,7 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         let import = ImportDeclaration {
             path: "use_item".to_string(), // Simplified for now
-            items: vec![], // TODO: Implement detailed import analysis
+            items: vec![],                // TODO: Implement detailed import analysis
         };
         self.imports.push(import);
 
@@ -438,14 +467,21 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
 
 impl SecurityVisitor {
     /// Analyze Solana-specific security patterns in function calls
-    fn analyze_solana_security_patterns(&mut self, path_string: &str, solana_op: &mut SolanaOperation, call: &syn::ExprCall) {
+    fn analyze_solana_security_patterns(
+        &mut self,
+        path_string: &str,
+        solana_op: &mut SolanaOperation,
+        call: &syn::ExprCall,
+    ) {
         // Check for signer validation patterns
         if path_string.contains("is_signer") || path_string.contains("signer") {
             solana_op.signer_check = self.analyze_signer_check(call);
         }
 
         // Check for PDA (Program Derived Address) operations
-        if path_string.contains("find_program_address") || path_string.contains("create_program_address") {
+        if path_string.contains("find_program_address")
+            || path_string.contains("create_program_address")
+        {
             solana_op.pda_seeds = self.extract_pda_seeds(call);
         }
 
@@ -482,12 +518,16 @@ impl SecurityVisitor {
     /// Extract PDA seeds from find_program_address or create_program_address calls
     fn extract_pda_seeds(&self, call: &syn::ExprCall) -> Vec<String> {
         let mut seeds = Vec::new();
-        
+
         // Look for seed arrays in the arguments
         for arg in &call.args {
             if let Expr::Array(array) = arg {
                 for elem in &array.elems {
-                    if let Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = elem {
+                    if let Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(lit_str),
+                        ..
+                    }) = elem
+                    {
                         seeds.push(lit_str.value());
                     } else if let Expr::Path(path) = elem {
                         seeds.push(path_to_string(&path.path));
@@ -495,7 +535,7 @@ impl SecurityVisitor {
                 }
             }
         }
-        
+
         seeds
     }
 
@@ -504,27 +544,28 @@ impl SecurityVisitor {
         // Look for program ID verification patterns
         if let Expr::Path(path) = &*call.func {
             let path_str = path_to_string(&path.path);
-            
+
             // If it's an invoke call, look for program ID validation in the arguments
             if path_str.contains("invoke") {
                 // Check if any argument contains program ID validation patterns
-                let has_program_id_validation = call.args.iter().any(|arg| {
-                    self.contains_program_id_validation(arg)
-                });
-                
+                let has_program_id_validation = call
+                    .args
+                    .iter()
+                    .any(|arg| self.contains_program_id_validation(arg));
+
                 // Also check for common validation patterns in the call itself
-                let has_validation_call = path_str.contains("verify_program") || 
-                                        path_str.contains("check_program") ||
-                                        path_str.contains("validate_program");
-                
+                let has_validation_call = path_str.contains("verify_program")
+                    || path_str.contains("check_program")
+                    || path_str.contains("validate_program");
+
                 return has_program_id_validation || has_validation_call;
             }
         }
-        
+
         // For non-invoke calls, assume they don't need program ID validation
         true
     }
-    
+
     /// Check if an expression contains program ID validation patterns
     fn contains_program_id_validation(&self, expr: &Expr) -> bool {
         match expr {
@@ -533,38 +574,48 @@ impl SecurityVisitor {
                 if matches!(binary.op, syn::BinOp::Eq(_) | syn::BinOp::Ne(_)) {
                     let left_str = self.expr_to_string(&binary.left);
                     let right_str = self.expr_to_string(&binary.right);
-                    
-                    (left_str.contains("program_id") || left_str.contains("program.key")) ||
-                    (right_str.contains("program_id") || right_str.contains("program.key"))
+
+                    (left_str.contains("program_id") || left_str.contains("program.key"))
+                        || (right_str.contains("program_id") || right_str.contains("program.key"))
                 } else {
                     false
                 }
-            },
+            }
             // Check for method calls that might validate program ID
             Expr::MethodCall(method) => {
                 let method_name = method.method.to_string();
-                method_name.contains("verify") || method_name.contains("check") || 
-                method_name.contains("validate") || method_name == "key"
-            },
+                method_name.contains("verify")
+                    || method_name.contains("check")
+                    || method_name.contains("validate")
+                    || method_name == "key"
+            }
             // Check for paths that reference program validation
             Expr::Path(path) => {
                 let path_str = path_to_string(&path.path);
                 path_str.contains("program_id") || path_str.contains("PROGRAM_ID")
-            },
+            }
             _ => false,
         }
     }
-    
+
     /// Convert expression to string for analysis
     fn expr_to_string(&self, expr: &Expr) -> String {
         match expr {
             Expr::Path(path) => path_to_string(&path.path),
             Expr::Field(field) => {
-                format!("{}.{}", self.expr_to_string(&field.base), field.member.to_token_stream())
-            },
+                format!(
+                    "{}.{}",
+                    self.expr_to_string(&field.base),
+                    field.member.to_token_stream()
+                )
+            }
             Expr::MethodCall(method) => {
-                format!("{}.{}", self.expr_to_string(&method.receiver), method.method)
-            },
+                format!(
+                    "{}.{}",
+                    self.expr_to_string(&method.receiver),
+                    method.method
+                )
+            }
             _ => String::new(),
         }
     }
@@ -572,11 +623,12 @@ impl SecurityVisitor {
     /// Analyze if account owner is properly verified
     fn analyze_owner_check(&self, call: &syn::ExprCall) -> bool {
         // Look for owner verification patterns like: account.owner == expected_program_id
-        call.args.iter().any(|arg| {
-            self.contains_owner_validation(arg)
-        }) || self.function_call_validates_owner(call)
+        call.args
+            .iter()
+            .any(|arg| self.contains_owner_validation(arg))
+            || self.function_call_validates_owner(call)
     }
-    
+
     /// Check if an expression contains owner validation patterns
     fn contains_owner_validation(&self, expr: &Expr) -> bool {
         match expr {
@@ -585,37 +637,40 @@ impl SecurityVisitor {
                 if matches!(binary.op, syn::BinOp::Eq(_) | syn::BinOp::Ne(_)) {
                     let left_str = self.expr_to_string(&binary.left);
                     let right_str = self.expr_to_string(&binary.right);
-                    
+
                     // Check if either side references account owner
-                    (left_str.contains("owner") && (right_str.contains("program") || right_str.contains("PROGRAM_ID"))) ||
-                    (right_str.contains("owner") && (left_str.contains("program") || left_str.contains("PROGRAM_ID"))) ||
-                    (left_str.contains(".owner") || right_str.contains(".owner"))
+                    (left_str.contains("owner")
+                        && (right_str.contains("program") || right_str.contains("PROGRAM_ID")))
+                        || (right_str.contains("owner")
+                            && (left_str.contains("program") || left_str.contains("PROGRAM_ID")))
+                        || (left_str.contains(".owner") || right_str.contains(".owner"))
                 } else {
                     false
                 }
-            },
+            }
             // Check for method calls that validate ownership
             Expr::MethodCall(method) => {
                 let method_name = method.method.to_string();
                 let receiver_str = self.expr_to_string(&method.receiver);
-                
-                (method_name.contains("owner") || method_name.contains("check_owner")) ||
-                (receiver_str.contains("owner") && (method_name == "eq" || method_name == "ne"))
-            },
+
+                (method_name.contains("owner") || method_name.contains("check_owner"))
+                    || (receiver_str.contains("owner")
+                        && (method_name == "eq" || method_name == "ne"))
+            }
             // Recursively check nested expressions
             Expr::Group(group) => self.contains_owner_validation(&group.expr),
             Expr::Paren(paren) => self.contains_owner_validation(&paren.expr),
             _ => false,
         }
     }
-    
+
     /// Check if the function call itself validates owner
     fn function_call_validates_owner(&self, call: &syn::ExprCall) -> bool {
         if let Expr::Path(path) = &*call.func {
             let path_str = path_to_string(&path.path);
-            path_str.contains("check_owner") || 
-            path_str.contains("verify_owner") || 
-            path_str.contains("validate_owner")
+            path_str.contains("check_owner")
+                || path_str.contains("verify_owner")
+                || path_str.contains("validate_owner")
         } else {
             false
         }
@@ -627,7 +682,9 @@ impl SecurityVisitor {
         call.args.iter().any(|arg| {
             if let Expr::Path(path) = arg {
                 let path_str = path_to_string(&path.path);
-                path_str.contains("data") || path_str.contains("try_from") || path_str.contains("deserialize")
+                path_str.contains("data")
+                    || path_str.contains("try_from")
+                    || path_str.contains("deserialize")
             } else {
                 false
             }
@@ -647,12 +704,12 @@ fn path_to_string(path: &Path) -> String {
 /// Check if an expression involves dynamic/runtime values
 fn is_dynamic_expr(expr: &Expr) -> bool {
     match expr {
-        Expr::Lit(_) => false, // Literal values are static
-        Expr::Path(_) => true, // Variables are dynamic
-        Expr::Call(_) => true, // Function calls are dynamic
+        Expr::Lit(_) => false,       // Literal values are static
+        Expr::Path(_) => true,       // Variables are dynamic
+        Expr::Call(_) => true,       // Function calls are dynamic
         Expr::MethodCall(_) => true, // Method calls are dynamic
-        Expr::Macro(_) => true, // Macros could be dynamic
-        _ => true, // Conservative assumption for other expressions
+        Expr::Macro(_) => true,      // Macros could be dynamic
+        _ => true,                   // Conservative assumption for other expressions
     }
 }
 
@@ -720,21 +777,39 @@ mod tests {
         let analysis_good = RustCodeParser::parse_code(code_with_validation).unwrap();
         let analysis_bad = RustCodeParser::parse_code(code_without_validation).unwrap();
 
-        println!("Good analysis - total solana operations: {}", analysis_good.solana_operations.len());
+        println!(
+            "Good analysis - total solana operations: {}",
+            analysis_good.solana_operations.len()
+        );
         for (i, op) in analysis_good.solana_operations.iter().enumerate() {
-            println!("  Op {}: type='{}', program_id_check={}", i, op.operation_type, op.program_id_check);
+            println!(
+                "  Op {}: type='{}', program_id_check={}",
+                i, op.operation_type, op.program_id_check
+            );
         }
 
-        println!("Bad analysis - total solana operations: {}", analysis_bad.solana_operations.len());
+        println!(
+            "Bad analysis - total solana operations: {}",
+            analysis_bad.solana_operations.len()
+        );
         for (i, op) in analysis_bad.solana_operations.iter().enumerate() {
-            println!("  Op {}: type='{}', program_id_check={}", i, op.operation_type, op.program_id_check);
+            println!(
+                "  Op {}: type='{}', program_id_check={}",
+                i, op.operation_type, op.program_id_check
+            );
         }
 
         // The operations should be detected and the logic should work correctly
-        assert!(!analysis_good.solana_operations.is_empty(), "Should detect some solana operations in good code");
-        assert!(!analysis_bad.solana_operations.is_empty(), "Should detect some solana operations in bad code");
-        
-        // This test demonstrates the improved detection logic, even if the specific 
+        assert!(
+            !analysis_good.solana_operations.is_empty(),
+            "Should detect some solana operations in good code"
+        );
+        assert!(
+            !analysis_bad.solana_operations.is_empty(),
+            "Should detect some solana operations in bad code"
+        );
+
+        // This test demonstrates the improved detection logic, even if the specific
         // validation pattern detection may need further refinement for complex cases
         println!("Test demonstrates improved Solana operation detection and analysis");
     }
@@ -757,14 +832,18 @@ mod tests {
         let analysis_bad = RustCodeParser::parse_code(code_without_owner_check).unwrap();
 
         // Check that we can detect operations involving accounts
-        let good_has_account_ops = analysis_good.solana_operations.iter()
+        let good_has_account_ops = analysis_good
+            .solana_operations
+            .iter()
             .any(|op| op.operation_type.contains("account"));
-        let bad_has_account_ops = analysis_bad.solana_operations.iter()
+        let bad_has_account_ops = analysis_bad
+            .solana_operations
+            .iter()
             .any(|op| op.operation_type.contains("account"));
 
         println!("Good code has account operations: {}", good_has_account_ops);
         println!("Bad code has account operations: {}", bad_has_account_ops);
-        
+
         // This test demonstrates that we can detect account operations
         // The specific owner validation logic would be tested with more complex patterns
         println!("Test demonstrates improved account operation detection");

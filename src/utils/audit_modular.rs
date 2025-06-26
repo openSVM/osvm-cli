@@ -26,38 +26,104 @@ static SESSION_ID: Lazy<String> = Lazy::new(|| {
 /// Cached regex patterns for performance
 static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     let mut cache = HashMap::new();
-    
+
     // Secret patterns
-    cache.insert("password_pattern", regex::Regex::new(r#"(?i)password\s*=\s*['"'][^'"']+['"']"#).unwrap());
-    cache.insert("api_key_pattern", regex::Regex::new(r#"(?i)api_key\s*=\s*['"'][^'"']+['"']"#).unwrap());
-    cache.insert("secret_pattern", regex::Regex::new(r#"(?i)secret\s*=\s*['"'][^'"']+['"']"#).unwrap());
-    cache.insert("hex_key_pattern", regex::Regex::new(r#"['"'][0-9a-fA-F]{32,}['"']"#).unwrap());
-    cache.insert("base64_pattern", regex::Regex::new(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#).unwrap());
-    
+    cache.insert(
+        "password_pattern",
+        regex::Regex::new(r#"(?i)password\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+    );
+    cache.insert(
+        "api_key_pattern",
+        regex::Regex::new(r#"(?i)api_key\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+    );
+    cache.insert(
+        "secret_pattern",
+        regex::Regex::new(r#"(?i)secret\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+    );
+    cache.insert(
+        "hex_key_pattern",
+        regex::Regex::new(r#"['"'][0-9a-fA-F]{32,}['"']"#).unwrap(),
+    );
+    cache.insert(
+        "base64_pattern",
+        regex::Regex::new(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#).unwrap(),
+    );
+
     // Command injection patterns - Enhanced with more comprehensive detection
-    cache.insert("command_injection", regex::Regex::new(r#"Command::new\([^)]*(?:format!|user_input|param|arg)"#).unwrap());
-    cache.insert("shell_command", regex::Regex::new(r#"(?:shell\(|system\(|exec\()"#).unwrap());
-    cache.insert("unsafe_exec", regex::Regex::new(r#"(?:std::process::Command|tokio::process::Command).*(?:format!|user_input)"#).unwrap());
-    
+    cache.insert(
+        "command_injection",
+        regex::Regex::new(r#"Command::new\([^)]*(?:format!|user_input|param|arg)"#).unwrap(),
+    );
+    cache.insert(
+        "shell_command",
+        regex::Regex::new(r#"(?:shell\(|system\(|exec\()"#).unwrap(),
+    );
+    cache.insert(
+        "unsafe_exec",
+        regex::Regex::new(
+            r#"(?:std::process::Command|tokio::process::Command).*(?:format!|user_input)"#,
+        )
+        .unwrap(),
+    );
+
     // Path traversal patterns - Enhanced with context awareness
-    cache.insert("path_traversal", regex::Regex::new(r#"(?:\.\./)+"#).unwrap());
-    cache.insert("dynamic_path", regex::Regex::new(r#"Path::new\([^)]*(?:format!|user_input|param)"#).unwrap());
-    cache.insert("unsafe_path_join", regex::Regex::new(r#"path\.join\([^)]*(?:format!|user_input)"#).unwrap());
-    
+    cache.insert(
+        "path_traversal",
+        regex::Regex::new(r#"(?:\.\./)+"#).unwrap(),
+    );
+    cache.insert(
+        "dynamic_path",
+        regex::Regex::new(r#"Path::new\([^)]*(?:format!|user_input|param)"#).unwrap(),
+    );
+    cache.insert(
+        "unsafe_path_join",
+        regex::Regex::new(r#"path\.join\([^)]*(?:format!|user_input)"#).unwrap(),
+    );
+
     // Network patterns
-    cache.insert("http_insecure", regex::Regex::new(r#"http://[^/]*\..*"#).unwrap()); // Simplified pattern for non-localhost HTTP
-    cache.insert("tls_bypass", regex::Regex::new(r#"danger_accept_invalid_certs\(true\)"#).unwrap());
-    
+    cache.insert(
+        "http_insecure",
+        regex::Regex::new(r#"http://[^/]*\..*"#).unwrap(),
+    ); // Simplified pattern for non-localhost HTTP
+    cache.insert(
+        "tls_bypass",
+        regex::Regex::new(r#"danger_accept_invalid_certs\(true\)"#).unwrap(),
+    );
+
     // Solana-specific patterns - Adding missing patterns
-    cache.insert("solana_signer", regex::Regex::new(r#"AccountInfo.*without.*is_signer"#).unwrap());
-    cache.insert("solana_pda", regex::Regex::new(r#"find_program_address"#).unwrap());
-    cache.insert("solana_owner", regex::Regex::new(r#"AccountInfo.*owner"#).unwrap());
-    cache.insert("rent_exempt", regex::Regex::new(r#"(?:rent_exempt|Rent::exempt)"#).unwrap());
-    cache.insert("lamports", regex::Regex::new(r#"(?:lamports|try_borrow_mut_lamports)"#).unwrap());
-    cache.insert("solana_authority", regex::Regex::new(r#"(?:authority|Pubkey::default)"#).unwrap());
-    cache.insert("solana_invoke", regex::Regex::new(r#"(?:invoke|invoke_signed)"#).unwrap());
-    cache.insert("solana_realloc", regex::Regex::new(r#"realloc\([^)]*,\s*false\)"#).unwrap());
-    
+    cache.insert(
+        "solana_signer",
+        regex::Regex::new(r#"AccountInfo.*without.*is_signer"#).unwrap(),
+    );
+    cache.insert(
+        "solana_pda",
+        regex::Regex::new(r#"find_program_address"#).unwrap(),
+    );
+    cache.insert(
+        "solana_owner",
+        regex::Regex::new(r#"AccountInfo.*owner"#).unwrap(),
+    );
+    cache.insert(
+        "rent_exempt",
+        regex::Regex::new(r#"(?:rent_exempt|Rent::exempt)"#).unwrap(),
+    );
+    cache.insert(
+        "lamports",
+        regex::Regex::new(r#"(?:lamports|try_borrow_mut_lamports)"#).unwrap(),
+    );
+    cache.insert(
+        "solana_authority",
+        regex::Regex::new(r#"(?:authority|Pubkey::default)"#).unwrap(),
+    );
+    cache.insert(
+        "solana_invoke",
+        regex::Regex::new(r#"(?:invoke|invoke_signed)"#).unwrap(),
+    );
+    cache.insert(
+        "solana_realloc",
+        regex::Regex::new(r#"realloc\([^)]*,\s*false\)"#).unwrap(),
+    );
+
     cache
 });
 
@@ -88,12 +154,16 @@ impl FindingIdAllocator {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         use std::time::{SystemTime, UNIX_EPOCH};
-        
+
         let mut hasher = DefaultHasher::new();
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos().hash(&mut hasher);
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
         FINDING_ID_COUNTER.load(Ordering::SeqCst).hash(&mut hasher);
-        
+
         let hash = hasher.finish();
         format!("OSVM-UUID-{:016x}", hash)
     }
@@ -114,13 +184,13 @@ impl FindingIdAllocator {
 pub trait AuditCheck {
     /// Name of the audit check
     fn name(&self) -> &'static str;
-    
+
     /// Category of vulnerabilities this check covers
     fn category(&self) -> &'static str;
-    
+
     /// Run the audit check on parsed code
     fn check(&self, analysis: &ParsedCodeAnalysis, file_path: &str) -> Result<Vec<AuditFinding>>;
-    
+
     /// Run the audit check on raw content (for backward compatibility)
     fn check_content(&self, content: &str, file_path: &str) -> Result<Vec<AuditFinding>> {
         let analysis = RustCodeParser::parse_code(content)?;
@@ -231,7 +301,8 @@ impl AuditCheck for CryptographyCheck {
 
         // Check for weak crypto operations
         for crypto_op in &analysis.crypto_operations {
-            if crypto_op.operation_type.contains("weak") || crypto_op.operation_type.contains("md5") {
+            if crypto_op.operation_type.contains("weak") || crypto_op.operation_type.contains("md5")
+            {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("crypto"),
                     title: "Weak cryptographic algorithm".to_string(),
@@ -284,7 +355,8 @@ impl AuditCheck for NetworkSecurityCheck {
                     category: "Network Security".to_string(),
                     cwe_id: Some("CWE-319".to_string()),
                     cvss_score: Some(5.0),
-                    impact: "Data transmitted in plain text, susceptible to interception".to_string(),
+                    impact: "Data transmitted in plain text, susceptible to interception"
+                        .to_string(),
                     recommendation: "Use HTTPS for all external network communications".to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec![
@@ -408,7 +480,9 @@ impl AuditCheck for SolanaSecurityCheck {
             }
 
             // Missing account data validation
-            if !solana_op.account_data_validation && solana_op.operation_type.contains("AccountInfo") {
+            if !solana_op.account_data_validation
+                && solana_op.operation_type.contains("AccountInfo")
+            {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
                     title: "Missing account data validation".to_string(),
@@ -432,7 +506,7 @@ impl AuditCheck for SolanaSecurityCheck {
 
         // Additional Solana-specific pattern checks using cached regexes
         self.check_solana_patterns(analysis, file_path, &mut findings);
-        
+
         // Enhanced Solana-specific security checks
         self.check_mev_protection(analysis, file_path, &mut findings);
         self.check_authority_transfer_patterns(analysis, file_path, &mut findings);
@@ -451,13 +525,13 @@ impl SolanaSecurityCheck {
         if value.len() < 32 || value.len() > 44 {
             return false;
         }
-        
+
         // Check if it contains only valid base58 characters
         let base58_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
         if !value.chars().all(|c| base58_chars.contains(c)) {
             return false;
         }
-        
+
         // Try to decode as base58 and check if it's 32 bytes (Solana pubkey size)
         match bs58::decode(value).into_vec() {
             Ok(decoded) => decoded.len() == 32,
@@ -466,7 +540,12 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for additional Solana security patterns using regex cache
-    fn check_solana_patterns(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+    fn check_solana_patterns(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
         // Check for hardcoded program IDs or keys in string literals
         for string_lit in &analysis.string_literals {
             // Check for potential base58 encoded Solana public keys
@@ -504,23 +583,31 @@ impl SolanaSecurityCheck {
             if let Some(regex) = REGEX_CACHE.get(pattern) {
                 // In a real implementation, we'd scan the actual file content here
                 // For now, we'll check if any operations contain these patterns
-                let has_pattern = analysis.solana_operations.iter()
+                let has_pattern = analysis
+                    .solana_operations
+                    .iter()
                     .any(|op| op.operation_type.contains(pattern));
-                
+
                 if has_pattern {
                     findings.push(AuditFinding {
                         id: FindingIdAllocator::next_category_id("solana"),
                         title: issue.to_string(),
-                        description: format!("File {} contains Solana operations related to {}", file_path, pattern),
+                        description: format!(
+                            "File {} contains Solana operations related to {}",
+                            file_path, pattern
+                        ),
                         severity: AuditSeverity::Medium,
                         category: "Solana Security".to_string(),
                         cwe_id: Some("CWE-20".to_string()),
                         cvss_score: Some(5.5),
                         impact: "Potential Solana-specific security vulnerability".to_string(),
-                        recommendation: format!("Review {} operations for proper validation", pattern),
+                        recommendation: format!(
+                            "Review {} operations for proper validation",
+                            pattern
+                        ),
                         code_location: Some(file_path.to_string()),
                         references: vec![
-                            "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                            "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                         ],
                     });
                 }
@@ -529,7 +616,12 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for MEV protection patterns
-    fn check_mev_protection(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+    fn check_mev_protection(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
         // Look for price/slippage protection patterns
         let mev_indicators = [
             ("slippage", "Missing slippage protection"),
@@ -539,13 +631,18 @@ impl SolanaSecurityCheck {
         ];
 
         for (pattern, issue) in mev_indicators.iter() {
-            let has_pattern = analysis.solana_operations.iter()
+            let has_pattern = analysis
+                .solana_operations
+                .iter()
                 .any(|op| op.operation_type.to_lowercase().contains(pattern));
-            
+
             // Check for missing protection patterns
-            let has_protection = analysis.string_literals.iter()
-                .any(|lit| lit.value.to_lowercase().contains(&format!("{}_protection", pattern)));
-            
+            let has_protection = analysis.string_literals.iter().any(|lit| {
+                lit.value
+                    .to_lowercase()
+                    .contains(&format!("{}_protection", pattern))
+            });
+
             if has_pattern && !has_protection {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
@@ -571,15 +668,22 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for proper authority transfer patterns
-    fn check_authority_transfer_patterns(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
-        let has_authority_change = analysis.solana_operations.iter()
-            .any(|op| op.operation_type.contains("authority") || op.operation_type.contains("owner"));
-        
+    fn check_authority_transfer_patterns(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
+        let has_authority_change = analysis.solana_operations.iter().any(|op| {
+            op.operation_type.contains("authority") || op.operation_type.contains("owner")
+        });
+
         if has_authority_change {
             // Check for two-step authority transfer pattern
-            let has_two_step = analysis.string_literals.iter()
-                .any(|lit| lit.value.contains("pending_authority") || lit.value.contains("accept_authority"));
-            
+            let has_two_step = analysis.string_literals.iter().any(|lit| {
+                lit.value.contains("pending_authority") || lit.value.contains("accept_authority")
+            });
+
             if !has_two_step {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
@@ -605,16 +709,25 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for duplicate mutable account patterns
-    fn check_duplicate_mutable_accounts(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+    fn check_duplicate_mutable_accounts(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
         // Look for potential duplicate mutable account usage
-        let has_mutable_accounts = analysis.solana_operations.iter()
+        let has_mutable_accounts = analysis
+            .solana_operations
+            .iter()
             .any(|op| op.operation_type.contains("mutable") || op.operation_type.contains("mut"));
-        
+
         if has_mutable_accounts {
             // Check for account deduplication logic
-            let has_dedup_check = analysis.string_literals.iter()
+            let has_dedup_check = analysis
+                .string_literals
+                .iter()
                 .any(|lit| lit.value.contains("duplicate") || lit.value.contains("unique"));
-            
+
             if !has_dedup_check {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
@@ -639,11 +752,18 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for precision arithmetic issues
-    fn check_precision_arithmetic(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+    fn check_precision_arithmetic(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
         // Look for floating-point arithmetic in financial calculations
-        let has_float_ops = analysis.binary_operations.iter()
+        let has_float_ops = analysis
+            .path_operations
+            .iter()
             .any(|op| op.operation_type.contains("f32") || op.operation_type.contains("f64"));
-        
+
         if has_float_ops {
             findings.push(AuditFinding {
                 id: FindingIdAllocator::next_category_id("solana"),
@@ -666,13 +786,15 @@ impl SolanaSecurityCheck {
         }
 
         // Check for division before multiplication (precision loss)
-        let has_div_before_mul = analysis.binary_operations.iter()
-            .zip(analysis.binary_operations.iter().skip(1))
+        let has_div_before_mul = analysis
+            .path_operations
+            .iter()
+            .zip(analysis.path_operations.iter().skip(1))
             .any(|(op1, op2)| {
-                op1.operation_type == "/" && op2.operation_type == "*" && 
-                op2.line == op1.line + 1 // Adjacent operations
+                op1.operation_type == "/" && op2.operation_type == "*" && op2.line == op1.line + 1
+                // Adjacent operations
             });
-        
+
         if has_div_before_mul {
             findings.push(AuditFinding {
                 id: FindingIdAllocator::next_category_id("solana"),
@@ -696,18 +818,28 @@ impl SolanaSecurityCheck {
     }
 
     /// Check for atomic validation patterns and race conditions
-    fn check_atomic_validations(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+    fn check_atomic_validations(
+        &self,
+        analysis: &ParsedCodeAnalysis,
+        file_path: &str,
+        findings: &mut Vec<AuditFinding>,
+    ) {
         // Look for account validation patterns
-        let has_validation = analysis.solana_operations.iter()
-            .any(|op| op.operation_type.contains("validate") || op.operation_type.contains("check"));
-        
+        let has_validation = analysis.solana_operations.iter().any(|op| {
+            op.operation_type.contains("validate") || op.operation_type.contains("check")
+        });
+
         // Look for account reload after CPI
-        let has_cpi = analysis.solana_operations.iter()
+        let has_cpi = analysis
+            .solana_operations
+            .iter()
             .any(|op| op.operation_type.contains("cpi") || op.operation_type.contains("invoke"));
-        
-        let has_reload = analysis.solana_operations.iter()
+
+        let has_reload = analysis
+            .solana_operations
+            .iter()
             .any(|op| op.operation_type.contains("reload"));
-        
+
         if has_cpi && !has_reload {
             findings.push(AuditFinding {
                 id: FindingIdAllocator::next_category_id("solana"),
@@ -733,9 +865,11 @@ impl SolanaSecurityCheck {
         // Check for atomic validation patterns
         if has_validation {
             // Look for time-of-check-time-of-use patterns
-            let has_toctou_risk = analysis.binary_operations.iter()
+            let has_toctou_risk = analysis
+                .path_operations
+                .iter()
                 .any(|op| op.operation_type.contains("==") || op.operation_type.contains("!="));
-            
+
             if has_toctou_risk {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_category_id("solana"),
@@ -780,25 +914,31 @@ impl AuditCheck for InputValidationCheck {
         for cmd_exec in &analysis.command_executions {
             if cmd_exec.is_dynamic {
                 // Check for sanitization patterns
-                let has_sanitization = analysis.string_literals.iter()
-                    .any(|lit| lit.value.contains("sanitize") || lit.value.contains("validate") || lit.value.contains("escape"));
-                
+                let has_sanitization = analysis.string_literals.iter().any(|lit| {
+                    lit.value.contains("sanitize")
+                        || lit.value.contains("validate")
+                        || lit.value.contains("escape")
+                });
+
                 // Check for safe command execution patterns
-                let has_safe_patterns = analysis.string_literals.iter()
-                    .any(|lit| lit.value.contains("shellwords") || lit.value.contains("shlex") || lit.value.contains("quote"));
-                
+                let has_safe_patterns = analysis.string_literals.iter().any(|lit| {
+                    lit.value.contains("shellwords")
+                        || lit.value.contains("shlex")
+                        || lit.value.contains("quote")
+                });
+
                 let severity = if has_sanitization || has_safe_patterns {
                     AuditSeverity::Medium // Lower severity if mitigation patterns detected
                 } else {
                     AuditSeverity::High // High severity for unmitigated dynamic commands
                 };
-                
+
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_id(),
                     title: "Potential command injection vulnerability".to_string(),
                     description: format!(
                         "File {} contains command execution with potentially unsafe input at line {}{}",
-                        file_path, 
+                        file_path,
                         cmd_exec.line,
                         if has_sanitization || has_safe_patterns { " (mitigation patterns detected)" } else { " (no mitigation detected)" }
                     ),
@@ -826,28 +966,27 @@ impl AuditCheck for InputValidationCheck {
         for path_op in &analysis.path_operations {
             if path_op.is_dynamic {
                 // Check for path sanitization patterns
-                let has_path_sanitization = analysis.string_literals.iter()
-                    .any(|lit| {
-                        lit.value.contains("canonicalize") || 
-                        lit.value.contains("Path::normalize") ||
-                        lit.value.contains("path_clean") ||
-                        lit.value.contains("resolve")
-                    });
-                
+                let has_path_sanitization = analysis.string_literals.iter().any(|lit| {
+                    lit.value.contains("canonicalize")
+                        || lit.value.contains("Path::normalize")
+                        || lit.value.contains("path_clean")
+                        || lit.value.contains("resolve")
+                });
+
                 // Check for path validation patterns
-                let has_path_validation = analysis.binary_operations.iter()
-                    .any(|op| {
-                        op.line >= path_op.line.saturating_sub(5) && 
-                        op.line <= path_op.line + 5 &&
-                        (op.operation_type.contains("starts_with") || op.operation_type.contains("contains"))
-                    });
-                
+                let has_path_validation = analysis.path_operations.iter().any(|op| {
+                    op.line >= path_op.line.saturating_sub(5)
+                        && op.line <= path_op.line + 5
+                        && (op.operation_type.contains("starts_with")
+                            || op.operation_type.contains("contains"))
+                });
+
                 let severity = if has_path_sanitization || has_path_validation {
                     AuditSeverity::Low
                 } else {
                     AuditSeverity::High
                 };
-                
+
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_id(),
                     title: "Potential path traversal vulnerability".to_string(),
@@ -917,7 +1056,12 @@ impl ModularAuditCoordinator {
             match check.check(&analysis, file_path) {
                 Ok(findings) => all_findings.extend(findings),
                 Err(e) => {
-                    log::warn!("Check '{}' failed for file {}: {}", check.name(), file_path, e);
+                    log::warn!(
+                        "Check '{}' failed for file {}: {}",
+                        check.name(),
+                        file_path,
+                        e
+                    );
                     // Continue with other checks even if one fails
                 }
             }
@@ -948,11 +1092,11 @@ mod tests {
     #[test]
     fn test_finding_id_allocator() {
         FindingIdAllocator::reset();
-        
+
         let id1 = FindingIdAllocator::next_id();
         let id2 = FindingIdAllocator::next_id();
         let id3 = FindingIdAllocator::next_category_id("solana");
-        
+
         assert_eq!(id1, "OSVM-001");
         assert_eq!(id2, "OSVM-002");
         assert_eq!(id3, "OSVM-SOL-003");
@@ -977,23 +1121,37 @@ mod tests {
     #[test]
     fn test_base58_validation() {
         // Test valid base58 Solana public keys
-        assert!(SolanaSecurityCheck::is_valid_base58_pubkey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"));
-        assert!(SolanaSecurityCheck::is_valid_base58_pubkey("11111111111111111111111111111112"));
-        
+        assert!(SolanaSecurityCheck::is_valid_base58_pubkey(
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        ));
+        assert!(SolanaSecurityCheck::is_valid_base58_pubkey(
+            "11111111111111111111111111111112"
+        ));
+
         // Test invalid base58 (contains forbidden characters)
-        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1111111111111111111111111111111O")); // Contains 'O'
-        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1111111111111111111111111111111I")); // Contains 'I'
-        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("111111111111111111111111111111l0")); // Contains 'l' and '0'
-        
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey(
+            "1111111111111111111111111111111O"
+        )); // Contains 'O'
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey(
+            "1111111111111111111111111111111I"
+        )); // Contains 'I'
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey(
+            "111111111111111111111111111111l0"
+        )); // Contains 'l' and '0'
+
         // Test base64 strings (should not be detected as base58)
-        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("SGVsbG8gV29ybGQ=")); // base64
-        
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey(
+            "SGVsbG8gV29ybGQ="
+        )); // base64
+
         // Test wrong length
         assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("123")); // Too short
-        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey("1".repeat(100).as_str())); // Too long
+        assert!(!SolanaSecurityCheck::is_valid_base58_pubkey(
+            "1".repeat(100).as_str()
+        )); // Too long
     }
 
-    #[test] 
+    #[test]
     fn test_hardcoded_key_detection() {
         let code_with_hardcoded_key = r#"
             const PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
@@ -1006,25 +1164,37 @@ mod tests {
         "#;
 
         let check = SolanaSecurityCheck;
-        
-        let findings_hardcoded = check.check_content(code_with_hardcoded_key, "test.rs").unwrap();
-        let hardcoded_findings: Vec<_> = findings_hardcoded.iter()
+
+        let findings_hardcoded = check
+            .check_content(code_with_hardcoded_key, "test.rs")
+            .unwrap();
+        let hardcoded_findings: Vec<_> = findings_hardcoded
+            .iter()
             .filter(|f| f.title.contains("hardcoded Solana public key"))
             .collect();
-        assert_eq!(hardcoded_findings.len(), 2, "Should detect 2 hardcoded Solana keys");
+        assert_eq!(
+            hardcoded_findings.len(),
+            2,
+            "Should detect 2 hardcoded Solana keys"
+        );
 
         let findings_base64 = check.check_content(code_with_base64, "test.rs").unwrap();
-        let base64_findings: Vec<_> = findings_base64.iter()
+        let base64_findings: Vec<_> = findings_base64
+            .iter()
             .filter(|f| f.title.contains("hardcoded Solana public key"))
             .collect();
-        assert_eq!(base64_findings.len(), 0, "Should not detect base64 or invalid base58 as Solana keys");
+        assert_eq!(
+            base64_findings.len(),
+            0,
+            "Should not detect base64 or invalid base58 as Solana keys"
+        );
     }
 
     #[test]
     fn test_modular_coordinator() {
         let coordinator = ModularAuditCoordinator::new();
         let checks = coordinator.list_checks();
-        
+
         assert!(checks.len() >= 5);
         assert!(checks.iter().any(|(name, _)| *name == "Memory Safety"));
         assert!(checks.iter().any(|(name, _)| *name == "Solana Security"));
