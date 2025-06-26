@@ -12,6 +12,8 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use crate::utils::audit_modular::{ModularAuditCoordinator, FindingIdAllocator};
+use crate::utils::audit_templates::{TemplateReportGenerator, EnhancedAIErrorHandler};
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
@@ -55,38 +57,50 @@ impl OpenAIClient {
         }
     }
 
-    /// Analyze a security finding using OpenAI with retry logic
+    /// Analyze a security finding using OpenAI with enhanced retry logic and error handling
     pub async fn analyze_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
         for attempt in 0..=self.max_retries {
             match self.try_analyze_finding(finding).await {
                 Ok(analysis) => return Ok(analysis),
                 Err(e) if attempt < self.max_retries => {
-                    // Check if it's a rate limit error
-                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
-                        let delay = self.base_delay * 2_u32.pow(attempt);
-                        eprintln!(
-                            "⏳ Rate limited, retrying in {}ms... (attempt {}/{})",
-                            delay.as_millis(),
+                    let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
+                    
+                    if should_retry {
+                        log::warn!(
+                            "AI analysis attempt {}/{} failed, retrying in {}ms: {}",
                             attempt + 1,
-                            self.max_retries
+                            self.max_retries,
+                            delay.as_millis(),
+                            e
                         );
                         sleep(delay).await;
                     } else {
-                        eprintln!(
-                            "⚠️ OpenAI API error, retrying... (attempt {}/{}): {}",
-                            attempt + 1,
-                            self.max_retries,
+                        log::error!(
+                            "AI analysis failed with non-retryable error: {}",
                             e
                         );
-                        sleep(self.base_delay).await;
+                        return Err(e);
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // Final attempt failed
+                    if let Some(fallback) = EnhancedAIErrorHandler::handle_ai_error(&e, "finding analysis") {
+                        log::warn!("Using fallback analysis: {}", fallback);
+                        return Ok(AIAnalysis {
+                            enhanced_description: EnhancedAIErrorHandler::generate_fallback_analysis(&finding.title, &finding.category),
+                            risk_assessment: "AI analysis unavailable - manual review required".to_string(),
+                            mitigation_strategy: finding.recommendation.clone(),
+                            confidence_score: 0.0,
+                            additional_cwe_ids: vec![],
+                        });
+                    }
+                    return Err(e);
+                }
             }
         }
 
         Err(anyhow::anyhow!(
-            "OpenAI analysis failed after {} retries",
+            "AI analysis failed after {} retries",
             self.max_retries
         ))
     }
@@ -170,7 +184,7 @@ impl OpenAIClient {
         Ok(ai_analysis)
     }
 
-    /// Analyze code content for security issues with retry logic
+    /// Analyze code content for security issues with enhanced retry logic
     pub async fn analyze_code(
         &self,
         code_content: &str,
@@ -180,29 +194,33 @@ impl OpenAIClient {
             match self.try_analyze_code(code_content, file_path).await {
                 Ok(findings) => return Ok(findings),
                 Err(e) if attempt < self.max_retries => {
-                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
-                        let delay = self.base_delay * 2_u32.pow(attempt);
-                        eprintln!("⏳ Rate limited during code analysis, retrying in {}ms... (attempt {}/{})", 
-                                 delay.as_millis(), attempt + 1, self.max_retries);
-                        sleep(delay).await;
-                    } else {
-                        eprintln!(
-                            "⚠️ OpenAI code analysis error, retrying... (attempt {}/{}): {}",
+                    let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
+                    
+                    if should_retry {
+                        log::warn!(
+                            "AI code analysis attempt {}/{} failed, retrying in {}ms: {}",
                             attempt + 1,
                             self.max_retries,
+                            delay.as_millis(),
                             e
                         );
-                        sleep(self.base_delay).await;
+                        sleep(delay).await;
+                    } else {
+                        log::error!("AI code analysis failed with non-retryable error: {}", e);
+                        return Ok(Vec::new()); // Return empty findings instead of failing
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // Final attempt failed - log and return empty findings
+                    EnhancedAIErrorHandler::handle_ai_error(&e, "code analysis");
+                    log::warn!("AI code analysis completely failed for {}, continuing without AI findings", file_path);
+                    return Ok(Vec::new());
+                }
             }
         }
 
-        Err(anyhow::anyhow!(
-            "OpenAI code analysis failed after {} retries",
-            self.max_retries
-        ))
+        log::warn!("AI code analysis failed after {} retries for {}", self.max_retries, file_path);
+        Ok(Vec::new())
     }
 
     /// Single attempt to analyze code
@@ -418,9 +436,12 @@ pub struct SystemInfo {
     pub dependencies: HashMap<String, String>,
 }
 
-/// Main audit coordinator
+/// Main audit coordinator with enhanced modular architecture
 pub struct AuditCoordinator {
     ai_client: Option<OpenAIClient>,
+    modular_coordinator: ModularAuditCoordinator,
+    template_generator: TemplateReportGenerator,
+    ai_disabled: bool,
 }
 
 impl Default for AuditCoordinator {
@@ -432,22 +453,38 @@ impl Default for AuditCoordinator {
 impl AuditCoordinator {
     /// Create a new audit coordinator
     pub fn new() -> Self {
-        Self { ai_client: None }
+        Self { 
+            ai_client: None,
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
+        }
     }
 
     /// Create a new audit coordinator with AI capabilities
     pub fn with_ai(api_key: String) -> Self {
         Self {
             ai_client: Some(OpenAIClient::new(api_key)),
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
         }
     }
 
-    /// Run comprehensive security audit with optional AI enhancement
+    /// Run comprehensive security audit with enhanced modular architecture
     pub async fn run_security_audit(&self) -> Result<AuditReport> {
-        println!("🔍 Starting comprehensive security audit...");
+        println!("🔍 Starting comprehensive security audit with enhanced modular system...");
 
-        if self.ai_client.is_some() {
+        if self.ai_client.is_some() && !self.ai_disabled {
             println!("🤖 AI-powered analysis enabled");
+        } else if self.ai_disabled {
+            println!("🤖 AI analysis disabled due to previous errors");
         }
 
         // Create diagnostic coordinator only when needed
@@ -458,26 +495,28 @@ impl AuditCoordinator {
             Ok(results) => results,
             Err(e) => {
                 println!("⚠️  Some diagnostic checks failed: {}", e);
-                println!("📝 Proceeding with partial audit data...");
-                // Create minimal diagnostic results for the audit
-                return self.create_fallback_audit_report().await;
+                println!("📝 Proceeding with modular audit system...");
+                // Use modular audit system instead of falling back
+                return self.run_modular_audit_only().await;
             }
         };
 
         // Convert diagnostic results to audit findings
         let mut findings = self.convert_diagnostics_to_findings(&diagnostic_results);
 
-        // Perform additional security checks
-        findings.extend(self.perform_additional_security_checks());
+        // Run enhanced modular security checks
+        findings.extend(self.run_modular_security_checks().await?);
 
-        // If AI is enabled, perform AI-enhanced analysis
+        // If AI is enabled and not disabled, perform AI-enhanced analysis
         if let Some(ref ai_client) = self.ai_client {
-            println!("🤖 Running AI-powered code analysis...");
-            let ai_findings = self.perform_ai_code_analysis(ai_client).await;
-            findings.extend(ai_findings);
+            if !self.ai_disabled {
+                println!("🤖 Running AI-powered code analysis...");
+                let ai_findings = self.perform_ai_code_analysis(ai_client).await;
+                findings.extend(ai_findings);
 
-            // Enhance existing findings with AI analysis
-            findings = self.enhance_findings_with_ai(ai_client, findings).await;
+                // Enhance existing findings with AI analysis (only critical/high)
+                findings = self.enhance_findings_with_ai(ai_client, findings).await;
+            }
         }
 
         // Generate system information
@@ -502,8 +541,86 @@ impl AuditCoordinator {
             compliance_notes,
         };
 
-        println!("✅ Security audit completed");
+        println!("✅ Enhanced security audit completed");
         Ok(audit_report)
+    }
+
+    /// Run audit using only the modular system (fallback when diagnostics fail)
+    async fn run_modular_audit_only(&self) -> Result<AuditReport> {
+        println!("🔧 Running modular security audit system...");
+
+        let mut findings = Vec::new();
+
+        // Run modular security checks
+        findings.extend(self.run_modular_security_checks().await?);
+
+        // Add a finding about the diagnostic failure
+        findings.push(AuditFinding {
+            id: FindingIdAllocator::next_id(),
+            title: "Diagnostic system unavailable".to_string(),
+            description: "Full system diagnostics could not be completed. This may indicate configuration issues.".to_string(),
+            severity: AuditSeverity::Medium,
+            category: "System".to_string(),
+            cwe_id: Some("CWE-754".to_string()),
+            cvss_score: Some(4.0),
+            impact: "Limited visibility into system security posture".to_string(),
+            recommendation: "Review system configuration and ensure all dependencies are properly installed".to_string(),
+            code_location: None,
+            references: vec!["https://cwe.mitre.org/data/definitions/754.html".to_string()],
+        });
+
+        let system_info = self.collect_system_info().await?;
+        let summary = self.calculate_audit_summary(&findings);
+        let recommendations = self.generate_security_recommendations(&findings);
+        let compliance_notes = self.generate_compliance_notes(&findings);
+
+        Ok(AuditReport {
+            timestamp: Utc::now(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            summary,
+            findings,
+            system_info,
+            recommendations,
+            compliance_notes,
+        })
+    }
+
+    /// Run enhanced modular security checks
+    async fn run_modular_security_checks(&self) -> Result<Vec<AuditFinding>> {
+        let mut all_findings = Vec::new();
+
+        println!("🔍 Running modular security checks...");
+        
+        // Analyze Rust source files using the modular system
+        if let Ok(entries) = std::fs::read_dir("src") {
+            for entry in entries.flatten() {
+                if let Some(ext) = entry.path().extension() {
+                    if ext == "rs" {
+                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
+                            let file_path = entry.path().display().to_string();
+                            
+                            match self.modular_coordinator.audit_file(&content, &file_path) {
+                                Ok(findings) => {
+                                    println!("  📄 Analyzed {} - {} findings", file_path, findings.len());
+                                    all_findings.extend(findings);
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to analyze file {}: {}", file_path, e);
+                                    // Continue with other files even if one fails
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add configuration and dependency checks
+        all_findings.extend(self.check_dependency_security_enhanced()?);
+        all_findings.extend(self.check_configuration_security_enhanced()?);
+
+        println!("✅ Modular security checks completed - {} findings", all_findings.len());
+        Ok(all_findings)
     }
 
     /// Create a fallback audit report when diagnostics fail
@@ -652,46 +769,64 @@ impl AuditCoordinator {
         }
     }
 
-    /// Perform AI-powered code analysis
+    /// Perform AI-powered code analysis with enhanced error handling
     async fn perform_ai_code_analysis(&self, ai_client: &OpenAIClient) -> Vec<AuditFinding> {
         let mut ai_findings = Vec::new();
+        let mut files_analyzed = 0;
+        let mut files_failed = 0;
 
         // Analyze Rust source files
         if let Ok(entries) = std::fs::read_dir("src") {
             for entry in entries.flatten() {
                 if let Some(ext) = entry.path().extension() {
-                    //    if ext == "rs" {
-                    if let Ok(content) = std::fs::read_to_string(&entry.path()) {
-                        // Limit content size to avoid API limits
-                        if content.len() < 80000 {
-                            match ai_client
-                                .analyze_code(&content, &entry.path().display().to_string())
-                                .await
-                            {
-                                Ok(findings) => ai_findings.extend(findings),
-                                Err(e) => println!(
-                                    "⚠️  AI analysis failed for {}: {}",
-                                    entry.path().display(),
-                                    e
-                                ),
+                    if ext == "rs" {
+                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
+                            // Limit content size to avoid API limits
+                            if content.len() < 80000 {
+                                match ai_client
+                                    .analyze_code(&content, &entry.path().display().to_string())
+                                    .await
+                                {
+                                    Ok(findings) => {
+                                        ai_findings.extend(findings);
+                                        files_analyzed += 1;
+                                    }
+                                    Err(e) => {
+                                        EnhancedAIErrorHandler::handle_ai_error(&e, &format!("file {}", entry.path().display()));
+                                        files_failed += 1;
+                                        
+                                        // If too many files fail or critical error, stop AI analysis
+                                        if EnhancedAIErrorHandler::should_disable_ai(&e) || files_failed > 5 {
+                                            log::warn!("Stopping AI code analysis due to repeated failures");
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else {
+                                log::info!("Skipping large file for AI analysis: {}", entry.path().display());
                             }
                         }
                     }
-                    //   }
                 }
             }
+        }
+
+        if files_analyzed > 0 || files_failed > 0 {
+            log::info!("AI code analysis completed: {} files analyzed, {} files failed", files_analyzed, files_failed);
         }
 
         ai_findings
     }
 
-    /// Enhance existing findings with AI analysis
+    /// Enhance existing findings with AI analysis with improved error handling
     async fn enhance_findings_with_ai(
         &self,
         ai_client: &OpenAIClient,
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
         let mut enhanced_findings = Vec::new();
+        let mut ai_failures = 0;
+        let mut ai_successes = 0;
 
         for finding in findings {
             if finding.severity == AuditSeverity::Critical
@@ -710,18 +845,33 @@ impl AuditCoordinator {
                             enhanced_finding.recommendation, ai_analysis.mitigation_strategy
                         );
                         enhanced_findings.push(enhanced_finding);
+                        ai_successes += 1;
                     }
                     Err(e) => {
-                        println!(
-                            "⚠️  AI enhancement failed for finding {}: {}",
-                            finding.id, e
-                        );
+                        // Handle error with enhanced error handler
+                        if let Some(fallback_msg) = EnhancedAIErrorHandler::handle_ai_error(&e, &format!("finding {}", finding.id)) {
+                            log::warn!("AI enhancement failed for finding {}: {}", finding.id, fallback_msg);
+                        }
+                        
+                        // Check if we should disable AI after too many failures
+                        ai_failures += 1;
+                        if EnhancedAIErrorHandler::should_disable_ai(&e) {
+                            log::error!("Disabling AI analysis due to: {}", e);
+                            // For this instance only, we'll continue without further AI enhancement
+                            enhanced_findings.push(finding);
+                            break;
+                        }
+                        
                         enhanced_findings.push(finding);
                     }
                 }
             } else {
                 enhanced_findings.push(finding);
             }
+        }
+
+        if ai_failures > 0 {
+            log::info!("AI enhancement completed: {} successes, {} failures", ai_successes, ai_failures);
         }
 
         enhanced_findings
@@ -5102,11 +5252,117 @@ impl AuditCoordinator {
         notes
     }
 
-    /// Generate Typst document from audit report
+    /// Generate Typst document from audit report using template system
     pub fn generate_typst_document(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
-        let typst_content = self.create_typst_content(report)?;
-        std::fs::write(output_path, typst_content).context("Failed to write Typst document")?;
-        Ok(())
+        self.template_generator.generate_typst_document(report, output_path)
+    }
+
+    /// Generate JSON report using template system
+    pub fn generate_json_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
+        self.template_generator.generate_json_report(report, output_path)
+    }
+
+    /// Generate HTML report using template system
+    pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
+        self.template_generator.generate_html_report(report, output_path)
+    }
+
+    /// Enhanced dependency security checks
+    fn check_dependency_security_enhanced(&self) -> Result<Vec<AuditFinding>> {
+        let mut findings = Vec::new();
+
+        if let Ok(content) = std::fs::read_to_string("Cargo.toml") {
+            // Check for known vulnerable dependencies
+            let vulnerable_patterns = [
+                ("openssl", "1.0"), // Example vulnerable version
+                ("serde", "0.8"),   // Example old version
+            ];
+
+            for (dep, version) in &vulnerable_patterns {
+                if content.contains(&format!("{} = \"{}\"", dep, version)) {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_id(),
+                        title: format!("Potentially vulnerable dependency: {}", dep),
+                        description: format!("Dependency {} version {} may contain known vulnerabilities", dep, version),
+                        severity: AuditSeverity::Medium,
+                        category: "Dependencies".to_string(),
+                        cwe_id: Some("CWE-937".to_string()),
+                        cvss_score: Some(5.0),
+                        impact: "Known vulnerabilities in dependencies could be exploited".to_string(),
+                        recommendation: format!("Update {} to the latest secure version", dep),
+                        code_location: Some("Cargo.toml".to_string()),
+                        references: vec!["https://rustsec.org/".to_string()],
+                    });
+                }
+            }
+
+            // Check for dev dependencies in production
+            if content.contains("[dependencies]") && content.contains("version = \"*\"") {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_id(),
+                    title: "Wildcard version in dependencies".to_string(),
+                    description: "Using wildcard versions (*) in dependencies can lead to supply chain attacks".to_string(),
+                    severity: AuditSeverity::Medium,
+                    category: "Dependencies".to_string(),
+                    cwe_id: Some("CWE-1104".to_string()),
+                    cvss_score: Some(4.5),
+                    impact: "Unpredictable dependency versions may introduce vulnerabilities".to_string(),
+                    recommendation: "Use specific version constraints for all dependencies".to_string(),
+                    code_location: Some("Cargo.toml".to_string()),
+                    references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string()],
+                });
+            }
+        }
+
+        Ok(findings)
+    }
+
+    /// Enhanced configuration security checks
+    fn check_configuration_security_enhanced(&self) -> Result<Vec<AuditFinding>> {
+        let mut findings = Vec::new();
+
+        // Check for .env files with potential secrets
+        if let Ok(content) = std::fs::read_to_string(".env") {
+            if content.contains("PASSWORD=") || content.contains("SECRET=") || content.contains("KEY=") {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_id(),
+                    title: "Secrets in .env file".to_string(),
+                    description: ".env file contains potential secrets that may be committed to version control".to_string(),
+                    severity: AuditSeverity::High,
+                    category: "Configuration".to_string(),
+                    cwe_id: Some("CWE-532".to_string()),
+                    cvss_score: Some(7.0),
+                    impact: "Secrets in configuration files could be exposed in version control".to_string(),
+                    recommendation: "Use secure secret management and add .env to .gitignore".to_string(),
+                    code_location: Some(".env".to_string()),
+                    references: vec!["https://cwe.mitre.org/data/definitions/532.html".to_string()],
+                });
+            }
+        }
+
+        // Check for missing .gitignore patterns
+        if let Ok(content) = std::fs::read_to_string(".gitignore") {
+            let important_patterns = [".env", "*.key", "*.pem", "target/"];
+            for pattern in &important_patterns {
+                if !content.contains(pattern) {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_id(),
+                        title: format!("Missing .gitignore pattern: {}", pattern),
+                        description: format!("Important pattern {} is not in .gitignore", pattern),
+                        severity: AuditSeverity::Low,
+                        category: "Configuration".to_string(),
+                        cwe_id: Some("CWE-200".to_string()),
+                        cvss_score: Some(3.0),
+                        impact: "Sensitive files may be accidentally committed to version control".to_string(),
+                        recommendation: format!("Add {} to .gitignore file", pattern),
+                        code_location: Some(".gitignore".to_string()),
+                        references: vec!["https://git-scm.com/docs/gitignore".to_string()],
+                    });
+                }
+            }
+        }
+
+        Ok(findings)
     }
 
     /// Create a test audit report for demonstration
