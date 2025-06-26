@@ -6,6 +6,30 @@
 
 A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks. Monitor, deploy, and manage your SVM infrastructure with a single tool.
 
+## 📚 Documentation
+
+For comprehensive documentation, please visit the [docs](docs/) directory:
+
+- **[📖 Complete Documentation Index](docs/README.md)** - Start here for all documentation
+- **[🚀 Quick Start Guide](docs/installation.md)** - Installation and setup
+- **[💡 Examples & Patterns](docs/examples.md)** - Usage examples and workflows
+- **[⚙️ Configuration Guide](docs/configuration.md)** - Configuration management
+
+### Core Features Documentation
+
+- **[🖥️ SVM Management](docs/svm-management.md)** - Manage Solana Virtual Machines
+- **[🏗️ Node Management](docs/node-management.md)** - Deploy and monitor nodes
+- **[🌐 SSH Deployment](docs/ssh-deployment.md)** - Remote deployment capabilities
+- **[🔗 RPC Manager](docs/rpc-manager.md)** - RPC node management
+- **[📊 Dashboard](docs/dashboard.md)** - Interactive monitoring interfaces
+
+### Advanced Features Documentation
+
+- **[🔧 Self-Repair System](docs/self-repair-system.md)** - Automated maintenance
+- **[📋 Log Monitoring](docs/log-monitoring.md)** - Real-time log analysis
+- **[⚡ Validator Enhancements](docs/validator-enhancements.md)** - Performance optimization
+- **[📦 eBPF Deployment](docs/ebpf-deployment.md)** - Smart contract deployment
+
 ```mermaid
 graph TB
     User((User))
