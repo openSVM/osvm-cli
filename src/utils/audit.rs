@@ -12,8 +12,8 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
-use crate::utils::audit_modular::{ModularAuditCoordinator, FindingIdAllocator};
-use crate::utils::audit_templates::{TemplateReportGenerator, EnhancedAIErrorHandler};
+use crate::utils::audit_modular::{FindingIdAllocator, ModularAuditCoordinator};
+use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenerator};
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
@@ -66,29 +66,42 @@ impl AICircuitBreaker {
     }
 
     pub fn record_success(&self) {
-        self.failure_count.store(0, std::sync::atomic::Ordering::Release);
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Release);
         if self.is_open.load(std::sync::atomic::Ordering::Acquire) {
             log::info!("AI circuit breaker closing - operation successful");
-            self.is_open.store(false, std::sync::atomic::Ordering::Release);
+            self.is_open
+                .store(false, std::sync::atomic::Ordering::Release);
         }
     }
 
     pub fn record_failure(&self) {
-        let current_failures = self.failure_count.fetch_add(1, std::sync::atomic::Ordering::AcqRel) + 1;
-        
+        let current_failures = self
+            .failure_count
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+            + 1;
+
         if let Ok(mut last_failure) = self.last_failure_time.lock() {
             *last_failure = Some(std::time::Instant::now());
         }
 
-        if current_failures >= self.failure_threshold && !self.is_open.load(std::sync::atomic::Ordering::Acquire) {
-            log::warn!("AI circuit breaker opening after {} failures", current_failures);
-            self.is_open.store(true, std::sync::atomic::Ordering::Release);
+        if current_failures >= self.failure_threshold
+            && !self.is_open.load(std::sync::atomic::Ordering::Acquire)
+        {
+            log::warn!(
+                "AI circuit breaker opening after {} failures",
+                current_failures
+            );
+            self.is_open
+                .store(true, std::sync::atomic::Ordering::Release);
         }
     }
 
     pub fn reset(&self) {
-        self.failure_count.store(0, std::sync::atomic::Ordering::Release);
-        self.is_open.store(false, std::sync::atomic::Ordering::Release);
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Release);
+        self.is_open
+            .store(false, std::sync::atomic::Ordering::Release);
         if let Ok(mut last_failure) = self.last_failure_time.lock() {
             *last_failure = None;
         }
@@ -96,7 +109,8 @@ impl AICircuitBreaker {
     }
 
     pub fn get_failure_count(&self) -> u32 {
-        self.failure_count.load(std::sync::atomic::Ordering::Acquire)
+        self.failure_count
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 }
 
@@ -138,7 +152,7 @@ impl OpenAIClient {
                 Ok(analysis) => return Ok(analysis),
                 Err(e) if attempt < self.max_retries => {
                     let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
-                    
+
                     if should_retry {
                         log::warn!(
                             "AI analysis attempt {}/{} failed, retrying in {}ms: {}",
@@ -149,20 +163,24 @@ impl OpenAIClient {
                         );
                         sleep(delay).await;
                     } else {
-                        log::error!(
-                            "AI analysis failed with non-retryable error: {}",
-                            e
-                        );
+                        log::error!("AI analysis failed with non-retryable error: {}", e);
                         return Err(e);
                     }
                 }
                 Err(e) => {
                     // Final attempt failed
-                    if let Some(fallback) = EnhancedAIErrorHandler::handle_ai_error(&e, "finding analysis") {
+                    if let Some(fallback) =
+                        EnhancedAIErrorHandler::handle_ai_error(&e, "finding analysis")
+                    {
                         log::warn!("Using fallback analysis: {}", fallback);
                         return Ok(AIAnalysis {
-                            enhanced_description: EnhancedAIErrorHandler::generate_fallback_analysis(&finding.title, &finding.category),
-                            risk_assessment: "AI analysis unavailable - manual review required".to_string(),
+                            enhanced_description:
+                                EnhancedAIErrorHandler::generate_fallback_analysis(
+                                    &finding.title,
+                                    &finding.category,
+                                ),
+                            risk_assessment: "AI analysis unavailable - manual review required"
+                                .to_string(),
                             mitigation_strategy: finding.recommendation.clone(),
                             confidence_score: 0.0,
                             additional_cwe_ids: vec![],
@@ -269,7 +287,7 @@ impl OpenAIClient {
                 Ok(findings) => return Ok(findings),
                 Err(e) if attempt < self.max_retries => {
                     let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
-                    
+
                     if should_retry {
                         log::warn!(
                             "AI code analysis attempt {}/{} failed, retrying in {}ms: {}",
@@ -287,13 +305,20 @@ impl OpenAIClient {
                 Err(e) => {
                     // Final attempt failed - log and return empty findings
                     EnhancedAIErrorHandler::handle_ai_error(&e, "code analysis");
-                    log::warn!("AI code analysis completely failed for {}, continuing without AI findings", file_path);
+                    log::warn!(
+                        "AI code analysis completely failed for {}, continuing without AI findings",
+                        file_path
+                    );
                     return Ok(Vec::new());
                 }
             }
         }
 
-        log::warn!("AI code analysis failed after {} retries for {}", self.max_retries, file_path);
+        log::warn!(
+            "AI code analysis failed after {} retries for {}",
+            self.max_retries,
+            file_path
+        );
         Ok(Vec::new())
     }
 
@@ -528,7 +553,7 @@ impl Default for AuditCoordinator {
 impl AuditCoordinator {
     /// Create a new audit coordinator
     pub fn new() -> Self {
-        Self { 
+        Self {
             ai_client: None,
             modular_coordinator: ModularAuditCoordinator::new(),
             template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
@@ -572,13 +597,15 @@ impl AuditCoordinator {
     /// Detect if the current directory is a Rust workspace using cargo_metadata
     pub fn is_workspace(&self) -> bool {
         match cargo_metadata::MetadataCommand::new().exec() {
-            Ok(metadata) => !metadata.workspace_members.is_empty() && metadata.workspace_members.len() > 1,
+            Ok(metadata) => {
+                !metadata.workspace_members.is_empty() && metadata.workspace_members.len() > 1
+            }
             Err(_) => {
                 // Fallback to simple file-based detection
-                std::path::Path::new("Cargo.toml").exists() && 
-                std::fs::read_to_string("Cargo.toml")
-                    .map(|content| content.contains("[workspace]"))
-                    .unwrap_or(false)
+                std::path::Path::new("Cargo.toml").exists()
+                    && std::fs::read_to_string("Cargo.toml")
+                        .map(|content| content.contains("[workspace]"))
+                        .unwrap_or(false)
             }
         }
     }
@@ -592,9 +619,12 @@ impl AuditCoordinator {
                 if metadata.workspace_members.len() > 1 {
                     // Multi-crate workspace
                     for package_id in &metadata.workspace_members {
-                        if let Some(package) = metadata.packages.iter().find(|p| p.id == *package_id) {
-                            let manifest_dir = package.manifest_path.parent()
-                                .ok_or_else(|| anyhow::anyhow!("Invalid manifest path: {}", package.manifest_path))?;
+                        if let Some(package) =
+                            metadata.packages.iter().find(|p| p.id == *package_id)
+                        {
+                            let manifest_dir = package.manifest_path.parent().ok_or_else(|| {
+                                anyhow::anyhow!("Invalid manifest path: {}", package.manifest_path)
+                            })?;
                             crates.push(manifest_dir.into());
                         }
                     }
@@ -604,8 +634,11 @@ impl AuditCoordinator {
                 }
             }
             Err(e) => {
-                log::warn!("Failed to use cargo_metadata, falling back to manual parsing: {}", e);
-                
+                log::warn!(
+                    "Failed to use cargo_metadata, falling back to manual parsing: {}",
+                    e
+                );
+
                 // Fallback to previous manual parsing logic
                 if self.is_workspace_fallback() {
                     crates = self.get_workspace_crates_fallback()?;
@@ -624,38 +657,38 @@ impl AuditCoordinator {
 
     /// Fallback workspace detection using file parsing
     fn is_workspace_fallback(&self) -> bool {
-        std::path::Path::new("Cargo.toml").exists() && 
-        std::fs::read_to_string("Cargo.toml")
-            .map(|content| content.contains("[workspace]"))
-            .unwrap_or(false)
+        std::path::Path::new("Cargo.toml").exists()
+            && std::fs::read_to_string("Cargo.toml")
+                .map(|content| content.contains("[workspace]"))
+                .unwrap_or(false)
     }
 
     /// Fallback workspace member detection using manual TOML parsing
     fn get_workspace_crates_fallback(&self) -> Result<Vec<std::path::PathBuf>> {
         let mut crates = Vec::new();
         let cargo_toml = std::fs::read_to_string("Cargo.toml")?;
-        
+
         // Simple parsing to find workspace members
         let mut in_workspace = false;
         let mut in_members = false;
-        
+
         for line in cargo_toml.lines() {
             let line = line.trim();
-            
+
             if line == "[workspace]" {
                 in_workspace = true;
                 continue;
             }
-            
+
             if in_workspace && line.starts_with("members") {
                 in_members = true;
                 continue;
             }
-            
+
             if in_members && line.starts_with('[') && !line.starts_with("members") {
                 break;
             }
-            
+
             if in_members && line.contains("\"") {
                 if let Some(member) = line.split('"').nth(1) {
                     let crate_path = std::path::PathBuf::from(member);
@@ -665,7 +698,7 @@ impl AuditCoordinator {
                 }
             }
         }
-        
+
         Ok(crates)
     }
 
@@ -676,13 +709,14 @@ impl AuditCoordinator {
     }
 
     /// Enhance existing findings with AI analysis (exposed for testing)
-    #[cfg(test)] 
+    #[cfg(test)]
     pub async fn enhance_findings_with_ai(
         &self,
         ai_client: &OpenAIClient,
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
-        self.enhance_findings_with_ai_internal(ai_client, findings).await
+        self.enhance_findings_with_ai_internal(ai_client, findings)
+            .await
     }
 
     /// Disable AI analysis due to persistent errors
@@ -711,7 +745,7 @@ impl AuditCoordinator {
         (
             self.ai_disabled,
             self.ai_circuit_breaker.get_failure_count(),
-            self.ai_circuit_breaker.is_open()
+            self.ai_circuit_breaker.is_open(),
         )
     }
 
@@ -725,10 +759,15 @@ impl AuditCoordinator {
             println!("🤖 AI analysis disabled due to previous errors");
         } else if self.ai_circuit_breaker.is_open() {
             let (_, failure_count, _) = self.get_ai_status();
-            println!("🤖 AI analysis temporarily disabled (circuit breaker open after {} failures)", failure_count);
+            println!(
+                "🤖 AI analysis temporarily disabled (circuit breaker open after {} failures)",
+                failure_count
+            );
         } else {
             println!("🔧 Running audit without AI analysis (no API key provided)");
-            println!("💡 Consider setting OPENAI_API_KEY environment variable for enhanced analysis");
+            println!(
+                "💡 Consider setting OPENAI_API_KEY environment variable for enhanced analysis"
+            );
         }
 
         // Create diagnostic coordinator only when needed
@@ -759,7 +798,9 @@ impl AuditCoordinator {
                 findings.extend(ai_findings);
 
                 // Enhance existing findings with AI analysis (only critical/high)
-                findings = self.enhance_findings_with_ai_internal(ai_client, findings).await;
+                findings = self
+                    .enhance_findings_with_ai_internal(ai_client, findings)
+                    .await;
             }
         }
 
@@ -834,25 +875,27 @@ impl AuditCoordinator {
         let mut all_findings = Vec::new();
 
         println!("🔍 Running modular security checks...");
-        
+
         // Get all crates in the workspace
         let crates = self.get_workspace_crates()?;
-        
+
         if crates.len() > 1 {
             println!("📦 Detected workspace with {} crates", crates.len());
         }
-        
+
         for crate_path in &crates {
             let src_dir = crate_path.join("src");
-            let crate_name = crate_path.file_name()
+            let crate_name = crate_path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("root");
-            
+
             if src_dir.exists() {
                 println!("🔍 Scanning crate: {}", crate_name);
-                
+
                 // Recursively scan all Rust files in the crate
-                self.scan_rust_files_recursive(&src_dir, &mut all_findings, crate_name).await?;
+                self.scan_rust_files_recursive(&src_dir, &mut all_findings, crate_name)
+                    .await?;
             }
         }
 
@@ -860,40 +903,48 @@ impl AuditCoordinator {
         for crate_path in &crates {
             let current_dir = std::env::current_dir()?;
             if let Err(e) = std::env::set_current_dir(crate_path) {
-                log::warn!("Failed to change directory to {}: {}", crate_path.display(), e);
+                log::warn!(
+                    "Failed to change directory to {}: {}",
+                    crate_path.display(),
+                    e
+                );
                 continue;
             }
-            
+
             all_findings.extend(self.check_dependency_security_enhanced()?);
             all_findings.extend(self.check_configuration_security_enhanced()?);
-            
+
             // Restore original directory
             if let Err(e) = std::env::set_current_dir(&current_dir) {
                 log::warn!("Failed to restore directory: {}", e);
             }
         }
 
-        println!("✅ Modular security checks completed - {} findings", all_findings.len());
+        println!(
+            "✅ Modular security checks completed - {} findings",
+            all_findings.len()
+        );
         Ok(all_findings)
     }
 
     /// Recursively scan Rust files in a directory
     fn scan_rust_files_recursive<'a>(
-        &'a self, 
-        dir: &'a std::path::Path, 
+        &'a self,
+        dir: &'a std::path::Path,
         findings: &'a mut Vec<AuditFinding>,
-        crate_name: &'a str
+        crate_name: &'a str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
             let mut entries = tokio::fs::read_dir(dir).await?;
             while let Some(entry) = entries.next_entry().await? {
                 let path = entry.path();
-                
+
                 if path.is_dir() {
                     // Recursively scan subdirectories, skip common build/cache directories
                     if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
                         if !matches!(dir_name, "target" | ".git" | "node_modules" | ".cargo") {
-                            self.scan_rust_files_recursive(&path, findings, crate_name).await?;
+                            self.scan_rust_files_recursive(&path, findings, crate_name)
+                                .await?;
                         }
                     }
                 } else if let Some(ext) = path.extension() {
@@ -901,16 +952,26 @@ impl AuditCoordinator {
                         // Use async file reading for better performance
                         if let Ok(content) = tokio::fs::read_to_string(&path).await {
                             let file_path = format!("{}/{}", crate_name, path.display());
-                            
+
                             match self.modular_coordinator.audit_file(&content, &file_path) {
                                 Ok(mut file_findings) => {
                                     // Tag findings with the crate name
                                     for finding in &mut file_findings {
-                                        finding.code_location = Some(format!("{}:{}", crate_name, 
-                                            finding.code_location.as_ref().unwrap_or(&"unknown".to_string())));
+                                        finding.code_location = Some(format!(
+                                            "{}:{}",
+                                            crate_name,
+                                            finding
+                                                .code_location
+                                                .as_ref()
+                                                .unwrap_or(&"unknown".to_string())
+                                        ));
                                     }
-                                    
-                                    println!("  📄 Analyzed {} - {} findings", file_path, file_findings.len());
+
+                                    println!(
+                                        "  📄 Analyzed {} - {} findings",
+                                        file_path,
+                                        file_findings.len()
+                                    );
                                     findings.extend(file_findings);
                                 }
                                 Err(e) => {
@@ -922,7 +983,7 @@ impl AuditCoordinator {
                     }
                 }
             }
-            
+
             Ok(())
         })
     }
@@ -1096,18 +1157,26 @@ impl AuditCoordinator {
                                         files_analyzed += 1;
                                     }
                                     Err(e) => {
-                                        EnhancedAIErrorHandler::handle_ai_error(&e, &format!("file {}", entry.path().display()));
+                                        EnhancedAIErrorHandler::handle_ai_error(
+                                            &e,
+                                            &format!("file {}", entry.path().display()),
+                                        );
                                         files_failed += 1;
-                                        
+
                                         // If too many files fail or critical error, stop AI analysis
-                                        if EnhancedAIErrorHandler::should_disable_ai(&e) || files_failed > 5 {
+                                        if EnhancedAIErrorHandler::should_disable_ai(&e)
+                                            || files_failed > 5
+                                        {
                                             log::warn!("Stopping AI code analysis due to repeated failures");
                                             break;
                                         }
                                     }
                                 }
                             } else {
-                                log::info!("Skipping large file for AI analysis: {}", entry.path().display());
+                                log::info!(
+                                    "Skipping large file for AI analysis: {}",
+                                    entry.path().display()
+                                );
                             }
                         }
                     }
@@ -1116,7 +1185,11 @@ impl AuditCoordinator {
         }
 
         if files_analyzed > 0 || files_failed > 0 {
-            log::info!("AI code analysis completed: {} files analyzed, {} files failed", files_analyzed, files_failed);
+            log::info!(
+                "AI code analysis completed: {} files analyzed, {} files failed",
+                files_analyzed,
+                files_failed
+            );
         }
 
         ai_findings
@@ -1138,7 +1211,10 @@ impl AuditCoordinator {
             {
                 // Check circuit breaker before each AI call
                 if self.ai_circuit_breaker.is_open() {
-                    log::warn!("AI circuit breaker is open, skipping AI enhancement for finding {}", finding.id);
+                    log::warn!(
+                        "AI circuit breaker is open, skipping AI enhancement for finding {}",
+                        finding.id
+                    );
                     enhanced_findings.push(finding);
                     continue;
                 }
@@ -1157,19 +1233,26 @@ impl AuditCoordinator {
                         );
                         enhanced_findings.push(enhanced_finding);
                         ai_successes += 1;
-                        
+
                         // Record success with circuit breaker
                         self.ai_circuit_breaker.record_success();
                     }
                     Err(e) => {
                         // Record failure with circuit breaker
                         self.ai_circuit_breaker.record_failure();
-                        
+
                         // Handle error with enhanced error handler
-                        if let Some(fallback_msg) = EnhancedAIErrorHandler::handle_ai_error(&e, &format!("finding {}", finding.id)) {
-                            log::warn!("AI enhancement failed for finding {}: {}", finding.id, fallback_msg);
+                        if let Some(fallback_msg) = EnhancedAIErrorHandler::handle_ai_error(
+                            &e,
+                            &format!("finding {}", finding.id),
+                        ) {
+                            log::warn!(
+                                "AI enhancement failed for finding {}: {}",
+                                finding.id,
+                                fallback_msg
+                            );
                         }
-                        
+
                         // Check if we should disable AI after too many failures
                         ai_failures += 1;
                         if EnhancedAIErrorHandler::should_disable_ai(&e) {
@@ -1178,7 +1261,7 @@ impl AuditCoordinator {
                             enhanced_findings.push(finding);
                             break;
                         }
-                        
+
                         enhanced_findings.push(finding);
                     }
                 }
@@ -1188,7 +1271,11 @@ impl AuditCoordinator {
         }
 
         if ai_failures > 0 {
-            log::info!("AI enhancement completed: {} successes, {} failures", ai_successes, ai_failures);
+            log::info!(
+                "AI enhancement completed: {} successes, {} failures",
+                ai_successes,
+                ai_failures
+            );
         }
 
         enhanced_findings
@@ -1786,7 +1873,8 @@ impl AuditCoordinator {
         findings.extend(self.check_precision_loss(content, file_path, finding_id));
         findings.extend(self.check_overflow_underflow_enhanced(content, file_path, finding_id));
         findings.extend(self.check_pda_sharing_vulnerabilities(content, file_path, finding_id));
-        findings.extend(self.check_remaining_accounts_vulnerabilities(content, file_path, finding_id));
+        findings
+            .extend(self.check_remaining_accounts_vulnerabilities(content, file_path, finding_id));
         findings.extend(self.check_rust_specific_errors(content, file_path, finding_id));
         findings.extend(self.check_type_cosplay_vulnerabilities(content, file_path, finding_id));
         findings.extend(self.check_financial_math_precision(content, file_path, finding_id));
@@ -3176,7 +3264,11 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for missing key validation
-        if content.contains("ctx.accounts") && !content.contains("key()") && !content.contains("has_one") && !content.contains("constraint") {
+        if content.contains("ctx.accounts")
+            && !content.contains("key()")
+            && !content.contains("has_one")
+            && !content.contains("constraint")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Missing account key validation".to_string(),
@@ -3199,7 +3291,9 @@ impl AuditCoordinator {
         }
 
         // Check for config data without admin validation
-        if (content.contains("config_data") || content.contains("admin_settings")) && !content.contains("admin.key()") {
+        if (content.contains("config_data") || content.contains("admin_settings"))
+            && !content.contains("admin.key()")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Config data modification without admin validation".to_string(),
@@ -3212,10 +3306,12 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-862".to_string()),
                 cvss_score: Some(9.0),
                 impact: "Unauthorized users could modify critical configuration data".to_string(),
-                recommendation: "Validate admin.key() matches config_data.admin before modifications".to_string(),
+                recommendation:
+                    "Validate admin.key() matches config_data.admin before modifications"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3247,17 +3343,21 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-200".to_string()),
                 cvss_score: Some(7.0),
                 impact: "Stale data could be exposed when account size decreases".to_string(),
-                recommendation: "Use realloc with zero_init=true when decreasing account size".to_string(),
+                recommendation: "Use realloc with zero_init=true when decreasing account size"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for realloc without proper length calculation
-        if content.contains("realloc") && !content.contains("required_data_len") && !content.contains("size") {
+        if content.contains("realloc")
+            && !content.contains("required_data_len")
+            && !content.contains("size")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Realloc without proper size calculation".to_string(),
@@ -3273,7 +3373,7 @@ impl AuditCoordinator {
                 recommendation: "Calculate required_data_len before realloc operations".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3292,7 +3392,10 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for CPI without reload
-        if content.contains("cpi::") && content.contains("ctx.accounts") && !content.contains("reload()") {
+        if content.contains("cpi::")
+            && content.contains("ctx.accounts")
+            && !content.contains("reload()")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Missing account reload after CPI".to_string(),
@@ -3315,7 +3418,11 @@ impl AuditCoordinator {
         }
 
         // Check for specific reward/staking patterns
-        if content.contains("rewards") && content.contains("staking_account") && content.contains("msg!") && !content.contains("reload") {
+        if content.contains("rewards")
+            && content.contains("staking_account")
+            && content.contains("msg!")
+            && !content.contains("reload")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Staking rewards accessed without account reload".to_string(),
@@ -3331,7 +3438,7 @@ impl AuditCoordinator {
                 recommendation: "Reload staking_account after reward distribution CPI".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3350,7 +3457,10 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for invoke without program ID verification
-        if content.contains("invoke(") && !content.contains("program.key()") && !content.contains("::ID") {
+        if content.contains("invoke(")
+            && !content.contains("program.key()")
+            && !content.contains("::ID")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Arbitrary CPI without program verification".to_string(),
@@ -3363,10 +3473,12 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-345".to_string()),
                 cvss_score: Some(9.0),
                 impact: "Malicious programs could be invoked, compromising security".to_string(),
-                recommendation: "Verify target program ID before CPI: if program.key() != &expected_program::ID".to_string(),
+                recommendation:
+                    "Verify target program ID before CPI: if program.key() != &expected_program::ID"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3386,10 +3498,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-345".to_string()),
                 cvss_score: Some(8.0),
                 impact: "Malicious ledger program could be invoked".to_string(),
-                recommendation: "Verify ledger_program.key() == &custom_ledger_program::ID".to_string(),
+                recommendation: "Verify ledger_program.key() == &custom_ledger_program::ID"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3408,7 +3521,10 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for direct authority transfer without two-step process
-        if content.contains("authority") && content.contains("=") && !content.contains("pending_authority") {
+        if content.contains("authority")
+            && content.contains("=")
+            && !content.contains("pending_authority")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Direct authority transfer without nomination".to_string(),
@@ -3420,18 +3536,23 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-266".to_string()),
                 cvss_score: Some(7.5),
-                impact: "Authority could be transferred to wrong address, causing lockout".to_string(),
-                recommendation: "Implement two-step authority transfer: nominate then accept".to_string(),
+                impact: "Authority could be transferred to wrong address, causing lockout"
+                    .to_string(),
+                recommendation: "Implement two-step authority transfer: nominate then accept"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for missing authority acceptance
-        if content.contains("require_keys_eq!") && content.contains("current_admin") && !content.contains("new_authority") {
+        if content.contains("require_keys_eq!")
+            && content.contains("current_admin")
+            && !content.contains("new_authority")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Authority verification without acceptance step".to_string(),
@@ -3479,17 +3600,21 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-345".to_string()),
                 cvss_score: Some(7.5),
                 impact: "Non-canonical bump seeds allow PDA manipulation attacks".to_string(),
-                recommendation: "Use find_program_address for canonical bump generation".to_string(),
+                recommendation: "Use find_program_address for canonical bump generation"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for missing bump validation in account
-        if content.contains("find_program_address") && content.contains("bump") && !content.contains("profile_pda.bump") {
+        if content.contains("find_program_address")
+            && content.contains("bump")
+            && !content.contains("profile_pda.bump")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Bump seed not stored in account".to_string(),
@@ -3505,7 +3630,7 @@ impl AuditCoordinator {
                 recommendation: "Store bump in account: profile_pda.bump = bump".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3524,7 +3649,9 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for improper account closure (lamports only)
-        if content.contains("**account.lamports.borrow_mut() = 0") && !content.contains("CLOSED_ACCOUNT_DISCRIMINATOR") {
+        if content.contains("**account.lamports.borrow_mut() = 0")
+            && !content.contains("CLOSED_ACCOUNT_DISCRIMINATOR")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Incomplete account closure".to_string(),
@@ -3536,18 +3663,25 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-404".to_string()),
                 cvss_score: Some(7.0),
-                impact: "Account data remains accessible, enabling reinitialization attacks".to_string(),
-                recommendation: "Zero data, set CLOSED_ACCOUNT_DISCRIMINATOR, then transfer lamports".to_string(),
+                impact: "Account data remains accessible, enabling reinitialization attacks"
+                    .to_string(),
+                recommendation:
+                    "Zero data, set CLOSED_ACCOUNT_DISCRIMINATOR, then transfer lamports"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for missing Anchor close attribute usage
-        if content.contains("close") && content.contains("account") && !content.contains("#[account(close = destination)]") && !content.contains("try_borrow_mut_data") {
+        if content.contains("close")
+            && content.contains("account")
+            && !content.contains("#[account(close = destination)]")
+            && !content.contains("try_borrow_mut_data")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Manual account closure without Anchor helper".to_string(),
@@ -3560,10 +3694,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-404".to_string()),
                 cvss_score: Some(5.5),
                 impact: "Manual closure may miss security steps".to_string(),
-                recommendation: "Use #[account(close = destination)] for safe account closure".to_string(),
+                recommendation: "Use #[account(close = destination)] for safe account closure"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3582,7 +3717,10 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for potential duplicate account usage in balance operations
-        if content.contains("reward_account.balance") && content.contains("bonus_account.balance") && !content.contains("reward_account.key() == bonus_account.key()") {
+        if content.contains("reward_account.balance")
+            && content.contains("bonus_account.balance")
+            && !content.contains("reward_account.key() == bonus_account.key()")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Missing duplicate account check".to_string(),
@@ -3594,18 +3732,24 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-841".to_string()),
                 cvss_score: Some(7.0),
-                impact: "Same account passed multiple times could cause double spending".to_string(),
-                recommendation: "Check account distinctness: reward_account.key() != bonus_account.key()".to_string(),
+                impact: "Same account passed multiple times could cause double spending"
+                    .to_string(),
+                recommendation:
+                    "Check account distinctness: reward_account.key() != bonus_account.key()"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for Anchor constraint usage for duplicate prevention
-        if content.contains("#[derive(Accounts)]") && content.contains("mut") && !content.contains("constraint") {
+        if content.contains("#[derive(Accounts)]")
+            && content.contains("mut")
+            && !content.contains("constraint")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Missing constraints for mutable accounts".to_string(),
@@ -3617,11 +3761,13 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-841".to_string()),
                 cvss_score: Some(6.0),
-                impact: "Duplicate mutable accounts could cause unintended state changes".to_string(),
-                recommendation: "Add #[account(constraint = account1.key() != account2.key())]".to_string(),
+                impact: "Duplicate mutable accounts could cause unintended state changes"
+                    .to_string(),
+                recommendation: "Add #[account(constraint = account1.key() != account2.key())]"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3640,7 +3786,10 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for purchase operations without price validation
-        if content.contains("purchase") && !content.contains("expected_price") && !content.contains("assert!") {
+        if content.contains("purchase")
+            && !content.contains("expected_price")
+            && !content.contains("assert!")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Purchase operation vulnerable to frontrunning".to_string(),
@@ -3653,17 +3802,22 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-362".to_string()),
                 cvss_score: Some(7.5),
                 impact: "Transaction could be frontrun with price manipulation".to_string(),
-                recommendation: "Include expected price validation: assert!(sale_price <= expected_price)".to_string(),
+                recommendation:
+                    "Include expected price validation: assert!(sale_price <= expected_price)"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for swap operations without slippage protection
-        if (content.contains("swap") || content.contains("dex")) && !content.contains("slippage") && !content.contains("min_out") {
+        if (content.contains("swap") || content.contains("dex"))
+            && !content.contains("slippage")
+            && !content.contains("min_out")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Swap operation without slippage protection".to_string(),
@@ -3676,10 +3830,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-362".to_string()),
                 cvss_score: Some(7.0),
                 impact: "Swaps vulnerable to frontrunning and sandwich attacks".to_string(),
-                recommendation: "Implement slippage protection and minimum output validation".to_string(),
+                recommendation: "Implement slippage protection and minimum output validation"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3698,7 +3853,9 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for initialization without upgrade authority check
-        if content.contains("central_state.authority") && !content.contains("upgrade_authority_address") {
+        if content.contains("central_state.authority")
+            && !content.contains("upgrade_authority_address")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Initialization without upgrade authority validation".to_string(),
@@ -3710,11 +3867,12 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-862".to_string()),
                 cvss_score: Some(9.0),
-                impact: "Unauthorized initialization could compromise the entire program".to_string(),
+                impact: "Unauthorized initialization could compromise the entire program"
+                    .to_string(),
                 recommendation: "Restrict initialization to program upgrade authority".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3734,10 +3892,12 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-345".to_string()),
                 cvss_score: Some(7.5),
                 impact: "Invalid program data could be used for initialization".to_string(),
-                recommendation: "Add constraint validation for program_data.upgrade_authority_address".to_string(),
+                recommendation:
+                    "Add constraint validation for program_data.upgrade_authority_address"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3756,7 +3916,12 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for multiplication after division
-        if content.contains("/ c") && content.contains("* b") && content.lines().any(|line| line.contains("/ c") && line.contains("* b")) {
+        if content.contains("/ c")
+            && content.contains("* b")
+            && content
+                .lines()
+                .any(|line| line.contains("/ c") && line.contains("* b"))
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Multiplication after division causing precision loss".to_string(),
@@ -3768,18 +3933,22 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-682".to_string()),
                 cvss_score: Some(7.0),
-                impact: "Precision loss in calculations could lead to incorrect token amounts".to_string(),
+                impact: "Precision loss in calculations could lead to incorrect token amounts"
+                    .to_string(),
                 recommendation: "Perform multiplication before division: (a * b) / c".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for saturating arithmetic usage
-        if content.contains("saturating_mul") || content.contains("saturating_add") || content.contains("saturating_sub") {
+        if content.contains("saturating_mul")
+            || content.contains("saturating_add")
+            || content.contains("saturating_sub")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Saturating arithmetic usage".to_string(),
@@ -3792,10 +3961,12 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-190".to_string()),
                 cvss_score: Some(6.0),
                 impact: "Silent value capping could hide overflow conditions".to_string(),
-                recommendation: "Use checked_* functions instead of saturating_* for explicit error handling".to_string(),
+                recommendation:
+                    "Use checked_* functions instead of saturating_* for explicit error handling"
+                        .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3818,7 +3989,7 @@ impl AuditCoordinator {
                 recommendation: "Use try_floor_u64 for rounding to avoid inflation".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3851,11 +4022,12 @@ impl AuditCoordinator {
                     category: "Solana Security".to_string(),
                     cwe_id: Some("CWE-190".to_string()),
                     cvss_score: Some(7.5),
-                    impact: "Integer overflow/underflow could alter balances unexpectedly".to_string(),
+                    impact: "Integer overflow/underflow could alter balances unexpectedly"
+                        .to_string(),
                     recommendation: "Use checked_* functions for arithmetic operations".to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec![
-                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                     ],
                 });
                 *finding_id += 1;
@@ -3881,7 +4053,7 @@ impl AuditCoordinator {
                     recommendation: "Use try_from for safe casting with error handling".to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec![
-                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                     ],
                 });
                 *finding_id += 1;
@@ -3901,7 +4073,9 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for shared PDA seeds
-        if content.contains("seeds = [b\"staking_pool_pda\"]") && !content.contains("staking_pool.key()") {
+        if content.contains("seeds = [b\"staking_pool_pda\"]")
+            && !content.contains("staking_pool.key()")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "PDA seeds lack uniqueness".to_string(),
@@ -3914,10 +4088,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-345".to_string()),
                 cvss_score: Some(7.5),
                 impact: "Same PDA used for multiple roles enables unauthorized access".to_string(),
-                recommendation: "Use unique seeds per functionality with specific identifiers".to_string(),
+                recommendation: "Use unique seeds per functionality with specific identifiers"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3952,7 +4127,7 @@ impl AuditCoordinator {
                 recommendation: "Validate ownership and data of all remaining accounts".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -3983,11 +4158,13 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-119".to_string()),
                 cvss_score: Some(7.5),
-                impact: "Unsafe code could lead to memory corruption or security vulnerabilities".to_string(),
-                recommendation: "Minimize unsafe usage, document thoroughly, and audit carefully".to_string(),
+                impact: "Unsafe code could lead to memory corruption or security vulnerabilities"
+                    .to_string(),
+                recommendation: "Minimize unsafe usage, document thoroughly, and audit carefully"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html".to_string(),
+                    "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -4009,9 +4186,7 @@ impl AuditCoordinator {
                 impact: "Out-of-bounds access could cause panics or memory corruption".to_string(),
                 recommendation: "Use safe array access with .get() method".to_string(),
                 code_location: Some(file_path.to_string()),
-                references: vec![
-                    "https://doc.rust-lang.org/book/ch08-01-vectors.html".to_string(),
-                ],
+                references: vec!["https://doc.rust-lang.org/book/ch08-01-vectors.html".to_string()],
             });
             *finding_id += 1;
         }
@@ -4030,10 +4205,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-703".to_string()),
                 cvss_score: Some(5.0),
                 impact: "Panics could crash the program or cause denial of service".to_string(),
-                recommendation: "Use pattern matching or proper error handling instead of unwrap".to_string(),
+                recommendation: "Use pattern matching or proper error handling instead of unwrap"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://doc.rust-lang.org/book/ch09-00-error-handling.html".to_string(),
+                    "https://doc.rust-lang.org/book/ch09-00-error-handling.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -4064,18 +4240,22 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-20".to_string()),
                 cvss_score: Some(7.5),
-                impact: "Wrong account types could be accepted, leading to type confusion".to_string(),
+                impact: "Wrong account types could be accepted, leading to type confusion"
+                    .to_string(),
                 recommendation: "Always check discriminator during deserialization".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for missing Anchor Account type usage
-        if content.contains("AccountInfo") && content.contains("data.borrow()") && !content.contains("Account<") {
+        if content.contains("AccountInfo")
+            && content.contains("data.borrow()")
+            && !content.contains("Account<")
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Manual account handling instead of Anchor types".to_string(),
@@ -4088,7 +4268,8 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-20".to_string()),
                 cvss_score: Some(5.5),
                 impact: "Manual account handling may miss type validation".to_string(),
-                recommendation: "Use Anchor's Account<'info, T> type for automatic validation".to_string(),
+                recommendation: "Use Anchor's Account<'info, T> type for automatic validation"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
                     "https://book.anchor-lang.com/anchor_references/accounts.html".to_string(),
@@ -4110,7 +4291,11 @@ impl AuditCoordinator {
         let mut findings = Vec::new();
 
         // Check for floating-point in financial calculations
-        if (content.contains("f64") || content.contains("f32")) && (content.contains("balance") || content.contains("amount") || content.contains("interest")) {
+        if (content.contains("f64") || content.contains("f32"))
+            && (content.contains("balance")
+                || content.contains("amount")
+                || content.contains("interest"))
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Floating-point usage in financial calculations".to_string(),
@@ -4145,18 +4330,21 @@ impl AuditCoordinator {
                 category: "Solana Security".to_string(),
                 cwe_id: Some("CWE-682".to_string()),
                 cvss_score: Some(5.5),
-                impact: "Inconsistent rounding could be exploited for token manipulation".to_string(),
+                impact: "Inconsistent rounding could be exploited for token manipulation"
+                    .to_string(),
                 recommendation: "Define consistent rounding policy and use uniformly".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
         }
 
         // Check for compound interest with floats
-        if content.contains("powf") && (content.contains("interest") || content.contains("compound")) {
+        if content.contains("powf")
+            && (content.contains("interest") || content.contains("compound"))
+        {
             findings.push(AuditFinding {
                 id: format!("OSVM-SOL-{:03}", *finding_id),
                 title: "Floating-point compound interest calculation".to_string(),
@@ -4169,10 +4357,11 @@ impl AuditCoordinator {
                 cwe_id: Some("CWE-682".to_string()),
                 cvss_score: Some(7.0),
                 impact: "Floating-point compound interest leads to precision errors".to_string(),
-                recommendation: "Use fixed-point arithmetic libraries like spl-math::PreciseNumber".to_string(),
+                recommendation: "Use fixed-point arithmetic libraries like spl-math::PreciseNumber"
+                    .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec![
-                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                 ],
             });
             *finding_id += 1;
@@ -5571,17 +5760,20 @@ impl AuditCoordinator {
 
     /// Generate Typst document from audit report using template system
     pub fn generate_typst_document(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
-        self.template_generator.generate_typst_document(report, output_path)
+        self.template_generator
+            .generate_typst_document(report, output_path)
     }
 
     /// Generate JSON report using template system
     pub fn generate_json_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
-        self.template_generator.generate_json_report(report, output_path)
+        self.template_generator
+            .generate_json_report(report, output_path)
     }
 
     /// Generate HTML report using template system
     pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
-        self.template_generator.generate_html_report(report, output_path)
+        self.template_generator
+            .generate_html_report(report, output_path)
     }
 
     /// Enhanced dependency security checks
@@ -5593,22 +5785,37 @@ impl AuditCoordinator {
             match toml::from_str::<toml::Value>(&content) {
                 Ok(parsed_toml) => {
                     // Check dependencies section
-                    if let Some(dependencies) = parsed_toml.get("dependencies").and_then(|d| d.as_table()) {
-                        findings.extend(self.analyze_dependencies_toml(dependencies, "dependencies"));
+                    if let Some(dependencies) =
+                        parsed_toml.get("dependencies").and_then(|d| d.as_table())
+                    {
+                        findings
+                            .extend(self.analyze_dependencies_toml(dependencies, "dependencies"));
                     }
-                    
+
                     // Check dev-dependencies section
-                    if let Some(dev_deps) = parsed_toml.get("dev-dependencies").and_then(|d| d.as_table()) {
-                        findings.extend(self.analyze_dependencies_toml(dev_deps, "dev-dependencies"));
+                    if let Some(dev_deps) = parsed_toml
+                        .get("dev-dependencies")
+                        .and_then(|d| d.as_table())
+                    {
+                        findings
+                            .extend(self.analyze_dependencies_toml(dev_deps, "dev-dependencies"));
                     }
-                    
+
                     // Check build-dependencies section
-                    if let Some(build_deps) = parsed_toml.get("build-dependencies").and_then(|d| d.as_table()) {
-                        findings.extend(self.analyze_dependencies_toml(build_deps, "build-dependencies"));
+                    if let Some(build_deps) = parsed_toml
+                        .get("build-dependencies")
+                        .and_then(|d| d.as_table())
+                    {
+                        findings.extend(
+                            self.analyze_dependencies_toml(build_deps, "build-dependencies"),
+                        );
                     }
                 }
                 Err(e) => {
-                    log::warn!("Failed to parse Cargo.toml as TOML, falling back to string matching: {}", e);
+                    log::warn!(
+                        "Failed to parse Cargo.toml as TOML, falling back to string matching: {}",
+                        e
+                    );
                     // Fallback to original string-based analysis
                     findings.extend(self.check_dependency_security_fallback(&content));
                 }
@@ -5619,9 +5826,13 @@ impl AuditCoordinator {
     }
 
     /// Analyze dependencies using parsed TOML structure
-    fn analyze_dependencies_toml(&self, dependencies: &toml::map::Map<String, toml::Value>, section_name: &str) -> Vec<AuditFinding> {
+    fn analyze_dependencies_toml(
+        &self,
+        dependencies: &toml::map::Map<String, toml::Value>,
+        section_name: &str,
+    ) -> Vec<AuditFinding> {
         let mut findings = Vec::new();
-        
+
         for (dep_name, dep_config) in dependencies {
             // Check for wildcard versions
             if let Some(version_str) = dep_config.as_str() {
@@ -5641,10 +5852,13 @@ impl AuditCoordinator {
                     });
                 }
             }
-            
+
             // Check for git dependencies without commit specification
             if let Some(dep_table) = dep_config.as_table() {
-                if dep_table.contains_key("git") && !dep_table.contains_key("rev") && !dep_table.contains_key("tag") {
+                if dep_table.contains_key("git")
+                    && !dep_table.contains_key("rev")
+                    && !dep_table.contains_key("tag")
+                {
                     findings.push(AuditFinding {
                         id: FindingIdAllocator::next_id(),
                         title: format!("Git dependency without fixed revision: {}", dep_name),
@@ -5659,7 +5873,7 @@ impl AuditCoordinator {
                         references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
                     });
                 }
-                
+
                 // Check for path dependencies that might be security risks
                 if dep_table.contains_key("path") {
                     if let Some(path_str) = dep_table.get("path").and_then(|p| p.as_str()) {
@@ -5681,14 +5895,14 @@ impl AuditCoordinator {
                     }
                 }
             }
-            
-            // Check for known vulnerable dependencies 
+
+            // Check for known vulnerable dependencies
             let vulnerable_deps = [
                 ("openssl", vec!["1.0", "0.10"]),
                 ("serde", vec!["0.8", "0.9"]),
                 ("reqwest", vec!["0.9", "0.8"]),
             ];
-            
+
             for (vuln_dep, vuln_versions) in &vulnerable_deps {
                 if dep_name == vuln_dep {
                     if let Some(version_str) = dep_config.as_str() {
@@ -5713,14 +5927,14 @@ impl AuditCoordinator {
                 }
             }
         }
-        
+
         findings
     }
 
     /// Fallback dependency analysis using string matching
     fn check_dependency_security_fallback(&self, content: &str) -> Vec<AuditFinding> {
         let mut findings = Vec::new();
-        
+
         // Check for wildcard dependencies
         if content.contains("\"*\"") {
             findings.push(AuditFinding {
@@ -5731,13 +5945,17 @@ impl AuditCoordinator {
                 category: "Dependencies".to_string(),
                 cwe_id: Some("CWE-1104".to_string()),
                 cvss_score: Some(4.5),
-                impact: "Unpredictable dependency versions may introduce vulnerabilities".to_string(),
+                impact: "Unpredictable dependency versions may introduce vulnerabilities"
+                    .to_string(),
                 recommendation: "Use specific version constraints for all dependencies".to_string(),
                 code_location: Some("Cargo.toml".to_string()),
-                references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string()],
+                references: vec![
+                    "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html"
+                        .to_string(),
+                ],
             });
         }
-        
+
         // Check for git dependencies
         if content.contains("git = ") {
             findings.push(AuditFinding {
@@ -5754,7 +5972,7 @@ impl AuditCoordinator {
                 references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
             });
         }
-        
+
         findings
     }
 
@@ -5764,7 +5982,10 @@ impl AuditCoordinator {
 
         // Check for .env files with potential secrets
         if let Ok(content) = std::fs::read_to_string(".env") {
-            if content.contains("PASSWORD=") || content.contains("SECRET=") || content.contains("KEY=") {
+            if content.contains("PASSWORD=")
+                || content.contains("SECRET=")
+                || content.contains("KEY=")
+            {
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_id(),
                     title: "Secrets in .env file".to_string(),
@@ -5794,7 +6015,8 @@ impl AuditCoordinator {
                         category: "Configuration".to_string(),
                         cwe_id: Some("CWE-200".to_string()),
                         cvss_score: Some(3.0),
-                        impact: "Sensitive files may be accidentally committed to version control".to_string(),
+                        impact: "Sensitive files may be accidentally committed to version control"
+                            .to_string(),
                         recommendation: format!("Add {} to .gitignore file", pattern),
                         code_location: Some(".gitignore".to_string()),
                         references: vec!["https://git-scm.com/docs/gitignore".to_string()],
@@ -6239,7 +6461,14 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         // Use timeout for git operations to prevent hanging
         let output = self.execute_git_with_timeout(
-            &["clone", "--branch", branch, "--single-branch", repo_url, temp_dir.to_str().unwrap()],
+            &[
+                "clone",
+                "--branch",
+                branch,
+                "--single-branch",
+                repo_url,
+                temp_dir.to_str().unwrap(),
+            ],
             Some(&std::env::temp_dir()),
             Duration::from_secs(300), // 5 minute timeout
         )?;
@@ -6251,7 +6480,10 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         // Verify the repository was cloned successfully
         if !temp_dir.exists() {
-            anyhow::bail!("Repository clone directory does not exist: {}", temp_dir.display());
+            anyhow::bail!(
+                "Repository clone directory does not exist: {}",
+                temp_dir.display()
+            );
         }
 
         Ok(temp_dir)
@@ -6271,16 +6503,16 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         let start_time = Instant::now();
         let mut command = Command::new("git");
-        command.args(args)
+        command
+            .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-            
+
         if let Some(dir) = current_dir {
             command.current_dir(dir);
         }
 
-        let mut child = command.spawn()
-            .context("Failed to spawn git command")?;
+        let mut child = command.spawn().context("Failed to spawn git command")?;
 
         let (tx, rx) = mpsc::channel();
         let child_id = child.id();
@@ -6297,13 +6529,14 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                 log::debug!("Git command completed in {:?}", start_time.elapsed());
                 Ok(output)
             }
-            Ok(Err(e)) => {
-                Err(anyhow::anyhow!("Git command failed: {}", e))
-            }
+            Ok(Err(e)) => Err(anyhow::anyhow!("Git command failed: {}", e)),
             Err(_) => {
                 // Timeout occurred, try to kill the process
-                log::warn!("Git command timed out after {:?}, attempting to terminate", timeout);
-                
+                log::warn!(
+                    "Git command timed out after {:?}, attempting to terminate",
+                    timeout
+                );
+
                 // On Unix systems, try to kill the process
                 #[cfg(unix)]
                 {
@@ -6311,14 +6544,14 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                         libc::kill(child_id as i32, libc::SIGTERM);
                     }
                 }
-                
+
                 // On Windows, there's no direct equivalent, but the process should
                 // be cleaned up when the program exits
                 #[cfg(windows)]
                 {
                     log::warn!("Process termination on Windows not implemented, process may continue running");
                 }
-                
+
                 Err(anyhow::anyhow!("Git command timed out after {:?}", timeout))
             }
         }
