@@ -401,32 +401,51 @@ impl AuditCheck for SolanaSecurityCheck {
 }
 
 impl SolanaSecurityCheck {
+    /// Check if a string is a valid base58 encoded Solana public key
+    fn is_valid_base58_pubkey(value: &str) -> bool {
+        // Solana public keys are 32 bytes, which when base58 encoded are typically 43-44 characters
+        if value.len() < 32 || value.len() > 44 {
+            return false;
+        }
+        
+        // Check if it contains only valid base58 characters
+        let base58_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        if !value.chars().all(|c| base58_chars.contains(c)) {
+            return false;
+        }
+        
+        // Try to decode as base58 and check if it's 32 bytes (Solana pubkey size)
+        match bs58::decode(value).into_vec() {
+            Ok(decoded) => decoded.len() == 32,
+            Err(_) => false,
+        }
+    }
+
     /// Check for additional Solana security patterns using regex cache
     fn check_solana_patterns(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
         // Check for hardcoded program IDs or keys in string literals
         for string_lit in &analysis.string_literals {
-            if string_lit.value.len() == 44 && string_lit.value.chars().all(|c| c.is_alphanumeric()) {
-                // Potential base58 encoded public key
-                if REGEX_CACHE.get("base64_pattern").unwrap().is_match(&string_lit.value) {
-                    findings.push(AuditFinding {
-                        id: FindingIdAllocator::next_category_id("solana"),
-                        title: "Potential hardcoded Solana public key".to_string(),
-                        description: format!(
-                            "File {} contains what appears to be a hardcoded public key at line {}",
-                            file_path, string_lit.line
-                        ),
-                        severity: AuditSeverity::Medium,
-                        category: "Solana Security".to_string(),
-                        cwe_id: Some("CWE-798".to_string()),
-                        cvss_score: Some(5.0),
-                        impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
-                        recommendation: "Use environment variables or configuration for public keys".to_string(),
-                        code_location: Some(format!("{}:{}", file_path, string_lit.line)),
-                        references: vec![
-                            "https://docs.solana.com/developing/programming-model/accounts".to_string(),
-                        ],
-                    });
-                }
+            // Check for potential base58 encoded Solana public keys
+            if Self::is_valid_base58_pubkey(&string_lit.value) {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Potential hardcoded Solana public key".to_string(),
+                    description: format!(
+                        "File {} contains what appears to be a hardcoded base58-encoded public key at line {}",
+                        file_path, string_lit.line
+                    ),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-798".to_string()),
+                    cvss_score: Some(5.0),
+                    impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
+                    recommendation: "Use environment variables or configuration for public keys, or use the Pubkey::from_str() function with constants".to_string(),
+                    code_location: Some(format!("{}:{}", file_path, string_lit.line)),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/accounts".to_string(),
+                        "https://docs.rs/solana-sdk/latest/solana_sdk/pubkey/struct.Pubkey.html".to_string(),
+                    ],
+                });
             }
         }
 
