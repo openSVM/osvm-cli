@@ -8,6 +8,8 @@
     
     <!-- Marked.js for markdown parsing - try multiple CDNs for reliability -->
     <script src="https://unpkg.com/marked/marked.min.js"></script>
+    <!-- Mermaid.js for diagram rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
     <script>
         // Fallback if marked.js fails to load
         if (typeof marked === 'undefined') {
@@ -260,6 +262,16 @@
             font-size: 1.1rem;
         }
         
+        /* Mermaid diagram styling */
+        .mermaid {
+            text-align: center;
+            margin: 20px 0;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
         .breadcrumb {
             background: #f8f9fa;
             padding: 15px 40px;
@@ -393,6 +405,80 @@
             document.title = `${title} - OSVM CLI Documentation`;
         }
         
+        // Process mermaid diagrams in the loaded content
+        function processMermaidDiagrams() {
+            // Find all code blocks that contain mermaid
+            const codeBlocks = document.querySelectorAll('pre code');
+            
+            codeBlocks.forEach((codeBlock, index) => {
+                let text = codeBlock.textContent.trim();
+                const parentPre = codeBlock.parentElement;
+                
+                // Check if this is a mermaid diagram - look for mermaid language or text starting with flowchart/graph/sequenceDiagram etc.
+                const isMermaidLang = codeBlock.className.includes('language-mermaid') || 
+                                     parentPre.querySelector('code[class*="language-mermaid"]');
+                const isMermaidContent = text.startsWith('flowchart') || 
+                                        text.startsWith('graph') || 
+                                        text.startsWith('sequenceDiagram') || 
+                                        text.startsWith('classDiagram') || 
+                                        text.startsWith('stateDiagram') ||
+                                        text.startsWith('pie') ||
+                                        text.startsWith('gantt') ||
+                                        text.startsWith('journey') ||
+                                        text.startsWith('gitgraph') ||
+                                        text.includes('subgraph');
+                
+                if (isMermaidLang || isMermaidContent) {
+                    // Clean up the text - remove "mermaid" prefix if it exists
+                    if (text.startsWith('mermaid\n') || text.startsWith('mermaid\r\n')) {
+                        text = text.substring(text.indexOf('\n') + 1).trim();
+                    } else if (text.startsWith('mermaidflowchart')) {
+                        text = text.substring(7); // Remove "mermaid" prefix
+                    }
+                    
+                    // Create a new div for the mermaid diagram
+                    const mermaidDiv = document.createElement('div');
+                    mermaidDiv.className = 'mermaid';
+                    mermaidDiv.setAttribute('id', `mermaid-${index}`);
+                    // Preserve line breaks and whitespace properly
+                    mermaidDiv.style.whiteSpace = 'pre';
+                    mermaidDiv.textContent = text;
+                    
+                    // Replace the code block with the mermaid div
+                    parentPre.parentElement.replaceChild(mermaidDiv, parentPre);
+                }
+            });
+            
+            // Initialize mermaid if diagrams were found and library is available
+            const mermaidDivs = document.querySelectorAll('.mermaid');
+            if (mermaidDivs.length > 0) {
+                // Initialize mermaid when library is available
+                const initMermaid = () => {
+                    if (typeof mermaid !== 'undefined') {
+                        try {
+                            // Configure mermaid
+                            mermaid.initialize({
+                                startOnLoad: true,
+                                theme: 'default',
+                                securityLevel: 'loose'
+                            });
+                        } catch (error) {
+                            console.error('Error initializing mermaid:', error);
+                        }
+                    } else {
+                        console.warn('Mermaid library not available');
+                        // Show fallback content
+                        mermaidDivs.forEach(div => {
+                            div.innerHTML = '<p><em>Mermaid diagram (requires mermaid.js)</em></p><pre style="background:#f4f4f4;padding:10px;border-radius:4px;"><code>' + div.textContent + '</code></pre>';
+                        });
+                    }
+                };
+                
+                // Try to initialize after a delay to ensure library is loaded
+                setTimeout(initMermaid, 500);
+            }
+        }
+        
         // Load and render markdown content
         async function loadDocument(docName) {
             const contentElement = document.getElementById('markdown-content');
@@ -429,6 +515,9 @@
                 );
                 
                 contentElement.innerHTML = processedHtml;
+                
+                // Process mermaid diagrams
+                processMermaidDiagrams();
                 
                 // Scroll to top
                 window.scrollTo(0, 0);
