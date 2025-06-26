@@ -29,6 +29,9 @@ pub mod audit_modular;
 pub mod audit_parser;
 /// Template-based report generation system
 pub mod audit_templates;
+/// Integration tests for audit system with AI fallback scenarios
+#[cfg(test)]
+pub mod audit_tests;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
