@@ -11,6 +11,7 @@ Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Mac
 - [RPC Manager](rpc-manager.md) - Comprehensive RPC node management
 
 ### Advanced Features
+- [Security Audit](security-audit.md) - Comprehensive security analysis and reporting
 - [Self-Repair System](self-repair-system.md) - Automatic error detection and repair
 - [Log Monitoring](log-monitoring.md) - Real-time log analysis and auto-repair
 - [Validator Enhancements](validator-enhancements.md) - Hardware optimization and configuration
@@ -30,6 +31,7 @@ Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Mac
 2. [Configure your environment](configuration.md)
 3. [Try basic SVM operations](svm-management.md#quick-start)
 4. [Deploy your first node](node-management.md#quick-start)
+5. [Run a security audit](security-audit.md#quick-start)
 
 ## Architecture Overview
 
@@ -46,6 +48,7 @@ flowchart TD
         end
         
         subgraph "Advanced Features"
+            AUDIT[Security Audit]
             REPAIR[Self-Repair System]
             MONITOR[Log Monitor]
             DASH[Dashboard]
@@ -56,6 +59,7 @@ flowchart TD
             SOLANA[Solana Network]
             REMOTE[Remote Servers]
             LOCAL[Local Environment]
+            GITHUB[GitHub Repos]
         end
     end
     
@@ -68,10 +72,13 @@ flowchart TD
     NODE --> MONITOR
     NODE --> DASH
     SSH --> DEPLOY
+    CLI --> AUDIT
     
     SSH --> REMOTE
     NODE --> LOCAL
     RPC --> SOLANA
+    AUDIT --> GITHUB
+    AUDIT --> LOCAL
     
     classDef techDebt fill:#f6f6f6,stroke:#d9534f,color:#d9534f,font-family:Consolas,monospace,font-weight:bold
 ```
