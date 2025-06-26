@@ -3,7 +3,13 @@ name = "osvm"
 version = "0.3.0"
 edition = "2021"
 license = "MIT"
-publish = false
+description = "OpenSVM CLI tool for managing SVM nodes and deployments"
+homepage = "https://github.com/openSVM/osvm-cli"
+repository = "https://github.com/openSVM/osvm-cli"
+readme = "README.md"
+keywords = ["solana", "svm", "blockchain", "validator", "deployment"]
+categories = ["command-line-utilities", "development-tools"]
+
 
 [dependencies]
 bincode = "2.0.1"
