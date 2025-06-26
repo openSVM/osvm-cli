@@ -10,8 +10,18 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Global finding ID allocator to ensure unique IDs
+/// Global finding ID allocator to ensure unique IDs across sessions
 static FINDING_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
+
+/// Session ID for this audit run based on timestamp
+static SESSION_ID: Lazy<String> = Lazy::new(|| {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    format!("{:08x}", timestamp & 0xFFFFFFFF) // Use lower 32 bits for shorter IDs
+});
 
 /// Cached regex patterns for performance
 static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
@@ -24,22 +34,29 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     cache.insert("hex_key_pattern", regex::Regex::new(r#"['"'][0-9a-fA-F]{32,}['"']"#).unwrap());
     cache.insert("base64_pattern", regex::Regex::new(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#).unwrap());
     
-    // Command injection patterns
-    cache.insert("command_injection", regex::Regex::new(r#"Command::new\([^)]*format!"#).unwrap());
-    cache.insert("shell_command", regex::Regex::new(r#"shell\("#).unwrap());
+    // Command injection patterns - Enhanced with more comprehensive detection
+    cache.insert("command_injection", regex::Regex::new(r#"Command::new\([^)]*(?:format!|user_input|param|arg)"#).unwrap());
+    cache.insert("shell_command", regex::Regex::new(r#"(?:shell\(|system\(|exec\()"#).unwrap());
+    cache.insert("unsafe_exec", regex::Regex::new(r#"(?:std::process::Command|tokio::process::Command).*(?:format!|user_input)"#).unwrap());
     
-    // Path traversal patterns
-    cache.insert("path_traversal", regex::Regex::new(r#"\.\./"#).unwrap());
-    cache.insert("dynamic_path", regex::Regex::new(r#"Path::new\([^)]*format!"#).unwrap());
+    // Path traversal patterns - Enhanced with context awareness
+    cache.insert("path_traversal", regex::Regex::new(r#"(?:\.\./)+"#).unwrap());
+    cache.insert("dynamic_path", regex::Regex::new(r#"Path::new\([^)]*(?:format!|user_input|param)"#).unwrap());
+    cache.insert("unsafe_path_join", regex::Regex::new(r#"path\.join\([^)]*(?:format!|user_input)"#).unwrap());
     
     // Network patterns
     cache.insert("http_insecure", regex::Regex::new(r#"http://[^/]*\..*"#).unwrap()); // Simplified pattern for non-localhost HTTP
     cache.insert("tls_bypass", regex::Regex::new(r#"danger_accept_invalid_certs\(true\)"#).unwrap());
     
-    // Solana-specific patterns
+    // Solana-specific patterns - Adding missing patterns
     cache.insert("solana_signer", regex::Regex::new(r#"AccountInfo.*without.*is_signer"#).unwrap());
     cache.insert("solana_pda", regex::Regex::new(r#"find_program_address"#).unwrap());
     cache.insert("solana_owner", regex::Regex::new(r#"AccountInfo.*owner"#).unwrap());
+    cache.insert("rent_exempt", regex::Regex::new(r#"(?:rent_exempt|Rent::exempt)"#).unwrap());
+    cache.insert("lamports", regex::Regex::new(r#"(?:lamports|try_borrow_mut_lamports)"#).unwrap());
+    cache.insert("solana_authority", regex::Regex::new(r#"(?:authority|Pubkey::default)"#).unwrap());
+    cache.insert("solana_invoke", regex::Regex::new(r#"(?:invoke|invoke_signed)"#).unwrap());
+    cache.insert("solana_realloc", regex::Regex::new(r#"realloc\([^)]*,\s*false\)"#).unwrap());
     
     cache
 });
@@ -48,28 +65,48 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
 pub struct FindingIdAllocator;
 
 impl FindingIdAllocator {
-    /// Generate a unique finding ID
+    /// Generate a unique finding ID with session context
     pub fn next_id() -> String {
         let id = FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-        format!("OSVM-{:03}", id)
+        format!("OSVM-{}-{:03}", &*SESSION_ID, id)
     }
 
-    /// Generate a category-specific finding ID
+    /// Generate a category-specific finding ID with session context
     pub fn next_category_id(category: &str) -> String {
         let id = FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         match category {
-            "solana" => format!("OSVM-SOL-{:03}", id),
-            "crypto" => format!("OSVM-CRYPTO-{:03}", id),
-            "network" => format!("OSVM-NET-{:03}", id),
-            "auth" => format!("OSVM-AUTH-{:03}", id),
-            _ => format!("OSVM-{:03}", id),
+            "solana" => format!("OSVM-{}-SOL-{:03}", &*SESSION_ID, id),
+            "crypto" => format!("OSVM-{}-CRYPTO-{:03}", &*SESSION_ID, id),
+            "network" => format!("OSVM-{}-NET-{:03}", &*SESSION_ID, id),
+            "auth" => format!("OSVM-{}-AUTH-{:03}", &*SESSION_ID, id),
+            _ => format!("OSVM-{}-{:03}", &*SESSION_ID, id),
         }
+    }
+
+    /// Generate UUID-based finding ID for maximum uniqueness
+    pub fn next_uuid_id() -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        use std::time::{SystemTime, UNIX_EPOCH};
+        
+        let mut hasher = DefaultHasher::new();
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos().hash(&mut hasher);
+        std::thread::current().id().hash(&mut hasher);
+        FINDING_ID_COUNTER.load(Ordering::SeqCst).hash(&mut hasher);
+        
+        let hash = hasher.finish();
+        format!("OSVM-UUID-{:016x}", hash)
     }
 
     /// Reset counter (for testing)
     #[cfg(test)]
     pub fn reset() {
         FINDING_ID_COUNTER.store(1, Ordering::SeqCst);
+    }
+
+    /// Get current session ID
+    pub fn get_session_id() -> &'static str {
+        &*SESSION_ID
     }
 }
 
@@ -395,6 +432,13 @@ impl AuditCheck for SolanaSecurityCheck {
 
         // Additional Solana-specific pattern checks using cached regexes
         self.check_solana_patterns(analysis, file_path, &mut findings);
+        
+        // Enhanced Solana-specific security checks
+        self.check_mev_protection(analysis, file_path, &mut findings);
+        self.check_authority_transfer_patterns(analysis, file_path, &mut findings);
+        self.check_duplicate_mutable_accounts(analysis, file_path, &mut findings);
+        self.check_precision_arithmetic(analysis, file_path, &mut findings);
+        self.check_atomic_validations(analysis, file_path, &mut findings);
 
         Ok(findings)
     }
@@ -483,6 +527,238 @@ impl SolanaSecurityCheck {
             }
         }
     }
+
+    /// Check for MEV protection patterns
+    fn check_mev_protection(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        // Look for price/slippage protection patterns
+        let mev_indicators = [
+            ("slippage", "Missing slippage protection"),
+            ("deadline", "Missing deadline protection"),
+            ("oracle", "Oracle price manipulation risk"),
+            ("swap", "Unprotected swap operation"),
+        ];
+
+        for (pattern, issue) in mev_indicators.iter() {
+            let has_pattern = analysis.solana_operations.iter()
+                .any(|op| op.operation_type.to_lowercase().contains(pattern));
+            
+            // Check for missing protection patterns
+            let has_protection = analysis.string_literals.iter()
+                .any(|lit| lit.value.to_lowercase().contains(&format!("{}_protection", pattern)));
+            
+            if has_pattern && !has_protection {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: format!("MEV Risk: {}", issue),
+                    description: format!(
+                        "File {} contains {} operations without proper protection mechanisms",
+                        file_path, pattern
+                    ),
+                    severity: AuditSeverity::High,
+                    category: "Solana MEV Protection".to_string(),
+                    cwe_id: Some("CWE-367".to_string()),
+                    cvss_score: Some(7.5),
+                    impact: format!("Potential {} manipulation and MEV attacks", pattern),
+                    recommendation: format!("Implement {} protection with deadline checks and oracle validation", pattern),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://docs.solana.com/developing/programming-model/transactions#atomic-transaction-processing".to_string(),
+                        "https://book.anchor-lang.com/anchor_bts/security.html#mev-protection".to_string(),
+                    ],
+                });
+            }
+        }
+    }
+
+    /// Check for proper authority transfer patterns
+    fn check_authority_transfer_patterns(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        let has_authority_change = analysis.solana_operations.iter()
+            .any(|op| op.operation_type.contains("authority") || op.operation_type.contains("owner"));
+        
+        if has_authority_change {
+            // Check for two-step authority transfer pattern
+            let has_two_step = analysis.string_literals.iter()
+                .any(|lit| lit.value.contains("pending_authority") || lit.value.contains("accept_authority"));
+            
+            if !has_two_step {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Unsafe authority transfer pattern".to_string(),
+                    description: format!(
+                        "File {} contains authority transfer operations without two-step verification",
+                        file_path
+                    ),
+                    severity: AuditSeverity::High,
+                    category: "Solana Authority Management".to_string(),
+                    cwe_id: Some("CWE-269".to_string()),
+                    cvss_score: Some(8.0),
+                    impact: "Authority could be transferred to incorrect or malicious addresses".to_string(),
+                    recommendation: "Implement two-step authority transfer with pending/accept pattern and proper validation".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html#authority-transfer".to_string(),
+                        "https://docs.solana.com/developing/programming-model/accounts#ownership".to_string(),
+                    ],
+                });
+            }
+        }
+    }
+
+    /// Check for duplicate mutable account patterns
+    fn check_duplicate_mutable_accounts(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        // Look for potential duplicate mutable account usage
+        let has_mutable_accounts = analysis.solana_operations.iter()
+            .any(|op| op.operation_type.contains("mutable") || op.operation_type.contains("mut"));
+        
+        if has_mutable_accounts {
+            // Check for account deduplication logic
+            let has_dedup_check = analysis.string_literals.iter()
+                .any(|lit| lit.value.contains("duplicate") || lit.value.contains("unique"));
+            
+            if !has_dedup_check {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Potential duplicate mutable accounts vulnerability".to_string(),
+                    description: format!(
+                        "File {} contains mutable account operations without duplicate checking",
+                        file_path
+                    ),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Account Management".to_string(),
+                    cwe_id: Some("CWE-694".to_string()),
+                    cvss_score: Some(6.5),
+                    impact: "Same account could be used multiple times in different roles, leading to unexpected behavior".to_string(),
+                    recommendation: "Implement account deduplication checks before processing mutable accounts".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html#duplicate-accounts".to_string(),
+                    ],
+                });
+            }
+        }
+    }
+
+    /// Check for precision arithmetic issues
+    fn check_precision_arithmetic(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        // Look for floating-point arithmetic in financial calculations
+        let has_float_ops = analysis.binary_operations.iter()
+            .any(|op| op.operation_type.contains("f32") || op.operation_type.contains("f64"));
+        
+        if has_float_ops {
+            findings.push(AuditFinding {
+                id: FindingIdAllocator::next_category_id("solana"),
+                title: "Floating-point arithmetic in financial calculations".to_string(),
+                description: format!(
+                    "File {} uses floating-point arithmetic which can cause precision loss in financial operations",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Financial Math".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Precision loss in financial calculations can lead to incorrect token amounts".to_string(),
+                recommendation: "Use fixed-point arithmetic or integer-based calculations for financial operations".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html#numerical-precision".to_string(),
+                ],
+            });
+        }
+
+        // Check for division before multiplication (precision loss)
+        let has_div_before_mul = analysis.binary_operations.iter()
+            .zip(analysis.binary_operations.iter().skip(1))
+            .any(|(op1, op2)| {
+                op1.operation_type == "/" && op2.operation_type == "*" && 
+                op2.line == op1.line + 1 // Adjacent operations
+            });
+        
+        if has_div_before_mul {
+            findings.push(AuditFinding {
+                id: FindingIdAllocator::next_category_id("solana"),
+                title: "Division before multiplication causing precision loss".to_string(),
+                description: format!(
+                    "File {} performs division before multiplication, which can cause precision loss",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Financial Math".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Mathematical operations may lose precision, affecting financial calculations".to_string(),
+                recommendation: "Reorder operations to multiply before dividing, or use higher precision arithmetic".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html#numerical-precision".to_string(),
+                ],
+            });
+        }
+    }
+
+    /// Check for atomic validation patterns and race conditions
+    fn check_atomic_validations(&self, analysis: &ParsedCodeAnalysis, file_path: &str, findings: &mut Vec<AuditFinding>) {
+        // Look for account validation patterns
+        let has_validation = analysis.solana_operations.iter()
+            .any(|op| op.operation_type.contains("validate") || op.operation_type.contains("check"));
+        
+        // Look for account reload after CPI
+        let has_cpi = analysis.solana_operations.iter()
+            .any(|op| op.operation_type.contains("cpi") || op.operation_type.contains("invoke"));
+        
+        let has_reload = analysis.solana_operations.iter()
+            .any(|op| op.operation_type.contains("reload"));
+        
+        if has_cpi && !has_reload {
+            findings.push(AuditFinding {
+                id: FindingIdAllocator::next_category_id("solana"),
+                title: "Missing account reload after CPI".to_string(),
+                description: format!(
+                    "File {} contains CPI operations without subsequent account reloading",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana CPI Safety".to_string(),
+                cwe_id: Some("CWE-362".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Account data may be stale after CPI, leading to incorrect program behavior and potential race conditions".to_string(),
+                recommendation: "Always reload account data after CPI operations to ensure data consistency and prevent race conditions. Use account.reload() or fetch fresh account data.".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html#account-reloading".to_string(),
+                    "https://docs.solana.com/developing/programming-model/calling-between-programs#reentrancy".to_string(),
+                ],
+            });
+        }
+
+        // Check for atomic validation patterns
+        if has_validation {
+            // Look for time-of-check-time-of-use patterns
+            let has_toctou_risk = analysis.binary_operations.iter()
+                .any(|op| op.operation_type.contains("==") || op.operation_type.contains("!="));
+            
+            if has_toctou_risk {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_category_id("solana"),
+                    title: "Potential TOCTOU race condition in account validation".to_string(),
+                    description: format!(
+                        "File {} contains account validation that may be susceptible to time-of-check-time-of-use attacks",
+                        file_path
+                    ),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Race Conditions".to_string(),
+                    cwe_id: Some("CWE-367".to_string()),
+                    cvss_score: Some(6.0),
+                    impact: "Account state could change between validation and use, leading to security vulnerabilities".to_string(),
+                    recommendation: "Ensure account validations are atomic and cannot be bypassed by concurrent operations. Consider using locks or ensuring operations are performed within the same transaction context.".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html#atomic-operations".to_string(),
+                        "https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use".to_string(),
+                    ],
+                });
+            }
+        }
+    }
 }
 
 /// Input validation audit checks
@@ -500,48 +776,98 @@ impl AuditCheck for InputValidationCheck {
     fn check(&self, analysis: &ParsedCodeAnalysis, file_path: &str) -> Result<Vec<AuditFinding>> {
         let mut findings = Vec::new();
 
-        // Check for command injection vulnerabilities
+        // Enhanced command injection vulnerability checks with context awareness
         for cmd_exec in &analysis.command_executions {
             if cmd_exec.is_dynamic {
+                // Check for sanitization patterns
+                let has_sanitization = analysis.string_literals.iter()
+                    .any(|lit| lit.value.contains("sanitize") || lit.value.contains("validate") || lit.value.contains("escape"));
+                
+                // Check for safe command execution patterns
+                let has_safe_patterns = analysis.string_literals.iter()
+                    .any(|lit| lit.value.contains("shellwords") || lit.value.contains("shlex") || lit.value.contains("quote"));
+                
+                let severity = if has_sanitization || has_safe_patterns {
+                    AuditSeverity::Medium // Lower severity if mitigation patterns detected
+                } else {
+                    AuditSeverity::High // High severity for unmitigated dynamic commands
+                };
+                
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_id(),
                     title: "Potential command injection vulnerability".to_string(),
                     description: format!(
-                        "File {} contains command execution with potentially unsafe input at line {}",
-                        file_path, cmd_exec.line
+                        "File {} contains command execution with potentially unsafe input at line {}{}",
+                        file_path, 
+                        cmd_exec.line,
+                        if has_sanitization || has_safe_patterns { " (mitigation patterns detected)" } else { " (no mitigation detected)" }
                     ),
-                    severity: AuditSeverity::High,
+                    severity,
                     category: "Input Validation".to_string(),
                     cwe_id: Some("CWE-78".to_string()),
-                    cvss_score: Some(7.5),
+                    cvss_score: Some(if has_sanitization || has_safe_patterns { 5.5 } else { 7.5 }),
                     impact: "Arbitrary command execution on the host system".to_string(),
-                    recommendation: "Validate and sanitize all input before using in commands, use parameterized commands".to_string(),
-                    code_location: Some(file_path.to_string()),
+                    recommendation: if has_sanitization || has_safe_patterns {
+                        "Review current sanitization logic to ensure it's comprehensive. Consider using allowlists instead of blocklists.".to_string()
+                    } else {
+                        "Validate and sanitize all input before using in commands, use parameterized commands, or consider using safe command execution libraries.".to_string()
+                    },
+                    code_location: Some(format!("{}:{}", file_path, cmd_exec.line)),
                     references: vec![
                         "https://cwe.mitre.org/data/definitions/78.html".to_string(),
                         "https://owasp.org/Top10/A03_2021-Injection/".to_string(),
+                        "https://docs.rs/shellwords/latest/shellwords/".to_string(),
                     ],
                 });
             }
         }
 
-        // Check for path traversal vulnerabilities
+        // Enhanced path traversal checks with context awareness
         for path_op in &analysis.path_operations {
             if path_op.is_dynamic {
+                // Check for path sanitization patterns
+                let has_path_sanitization = analysis.string_literals.iter()
+                    .any(|lit| {
+                        lit.value.contains("canonicalize") || 
+                        lit.value.contains("Path::normalize") ||
+                        lit.value.contains("path_clean") ||
+                        lit.value.contains("resolve")
+                    });
+                
+                // Check for path validation patterns
+                let has_path_validation = analysis.binary_operations.iter()
+                    .any(|op| {
+                        op.line >= path_op.line.saturating_sub(5) && 
+                        op.line <= path_op.line + 5 &&
+                        (op.operation_type.contains("starts_with") || op.operation_type.contains("contains"))
+                    });
+                
+                let severity = if has_path_sanitization || has_path_validation {
+                    AuditSeverity::Low
+                } else {
+                    AuditSeverity::High
+                };
+                
                 findings.push(AuditFinding {
                     id: FindingIdAllocator::next_id(),
                     title: "Potential path traversal vulnerability".to_string(),
                     description: format!(
-                        "File {} contains file operations with potentially unsafe paths at line {}",
-                        file_path, path_op.line
+                        "File {} contains file operations with potentially unsafe paths at line {}{}",
+                        file_path,
+                        path_op.line,
+                        if has_path_sanitization || has_path_validation { " (validation patterns detected)" } else { " (no validation detected)" }
                     ),
-                    severity: AuditSeverity::High,
+                    severity,
                     category: "Input Validation".to_string(),
                     cwe_id: Some("CWE-22".to_string()),
-                    cvss_score: Some(7.0),
+                    cvss_score: Some(if has_path_sanitization || has_path_validation { 3.5 } else { 7.0 }),
                     impact: "Unauthorized access to files outside intended directory".to_string(),
-                    recommendation: "Validate and canonicalize file paths, use safe path construction methods".to_string(),
-                    code_location: Some(file_path.to_string()),
+                    recommendation: if has_path_sanitization || has_path_validation {
+                        "Review path validation logic to ensure it prevents all traversal attempts including encoded sequences.".to_string()
+                    } else {
+                        "Validate and canonicalize file paths, use safe path construction methods, and implement proper bounds checking.".to_string()
+                    },
+                    code_location: Some(format!("{}:{}", file_path, path_op.line)),
                     references: vec![
                         "https://cwe.mitre.org/data/definitions/22.html".to_string(),
                         "https://owasp.org/Top10/A01_2021-Broken_Access_Control/".to_string(),

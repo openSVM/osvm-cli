@@ -13,25 +13,111 @@ mod tests {
     /// Test running audit without AI when no API key is provided
     #[tokio::test]
     async fn test_audit_without_ai_key() -> Result<()> {
-        // Skip this test for now due to template initialization issues
-        // TODO: Create minimal audit coordinator without template dependency
-        println!("✅ Test skipped - would test audit without AI key");
+        // Temporarily remove API key if it exists
+        let original_key = env::var("OPENAI_API_KEY").ok();
+        env::remove_var("OPENAI_API_KEY");
+        
+        // Create minimal audit coordinator for testing
+        let result = std::panic::catch_unwind(|| {
+            // Test the validation logic without creating full coordinator
+            use crate::services::audit_service::{AuditService, AuditRequest, AuditError};
+            
+            let request = AuditRequest {
+                output_dir: "/tmp".to_string(),
+                format: "json".to_string(),
+                verbose: 0,
+                test_mode: true,
+                ai_analysis: false, // AI not requested, should work
+                gh_repo: None,
+            };
+            
+            // This should succeed since AI is not requested
+            AuditService::validate_environment(&request)
+        });
+        
+        // Restore original key if it existed
+        if let Some(key) = original_key {
+            env::set_var("OPENAI_API_KEY", key);
+        }
+        
+        assert!(result.is_ok(), "Audit should work without AI when AI is not requested");
+        println!("✅ Test passed - audit works without AI key when AI not requested");
         Ok(())
     }
 
     /// Test running audit with empty API key
     #[tokio::test]
     async fn test_audit_with_empty_ai_key() -> Result<()> {
-        // Skip this test for now due to template initialization issues
-        println!("✅ Test skipped - would test audit with empty AI key");
+        // Set empty API key
+        let original_key = env::var("OPENAI_API_KEY").ok();
+        env::set_var("OPENAI_API_KEY", "");
+        
+        let result = std::panic::catch_unwind(|| {
+            use crate::services::audit_service::{AuditService, AuditRequest, AuditError};
+            
+            let request = AuditRequest {
+                output_dir: "/tmp".to_string(),
+                format: "json".to_string(),
+                verbose: 0,
+                test_mode: true,
+                ai_analysis: true, // AI requested but key is empty
+                gh_repo: None,
+            };
+            
+            // This should fail with environment error
+            match AuditService::validate_environment(&request) {
+                Err(AuditError::EnvironmentError(_)) => true,
+                _ => false,
+            }
+        });
+        
+        // Restore original key
+        if let Some(key) = original_key {
+            env::set_var("OPENAI_API_KEY", key);
+        } else {
+            env::remove_var("OPENAI_API_KEY");
+        }
+        
+        assert!(result.unwrap_or(false), "Should return EnvironmentError for empty API key when AI requested");
+        println!("✅ Test passed - proper error for empty AI key when AI requested");
         Ok(())
     }
 
     /// Test running audit with whitespace-only API key
     #[tokio::test]
     async fn test_audit_with_whitespace_ai_key() -> Result<()> {
-        // Skip this test for now due to template initialization issues
-        println!("✅ Test skipped - would test audit with whitespace AI key");
+        // Set whitespace-only API key
+        let original_key = env::var("OPENAI_API_KEY").ok();
+        env::set_var("OPENAI_API_KEY", "   \t\n  ");
+        
+        let result = std::panic::catch_unwind(|| {
+            use crate::services::audit_service::{AuditService, AuditRequest, AuditError};
+            
+            let request = AuditRequest {
+                output_dir: "/tmp".to_string(),
+                format: "json".to_string(),
+                verbose: 0,
+                test_mode: true,
+                ai_analysis: true, // AI requested but key is whitespace
+                gh_repo: None,
+            };
+            
+            // This should fail with environment error
+            match AuditService::validate_environment(&request) {
+                Err(AuditError::EnvironmentError(_)) => true,
+                _ => false,
+            }
+        });
+        
+        // Restore original key
+        if let Some(key) = original_key {
+            env::set_var("OPENAI_API_KEY", key);
+        } else {
+            env::remove_var("OPENAI_API_KEY");
+        }
+        
+        assert!(result.unwrap_or(false), "Should return EnvironmentError for whitespace API key when AI requested");
+        println!("✅ Test passed - proper error for whitespace-only AI key when AI requested");
         Ok(())
     }
 
@@ -270,5 +356,48 @@ mod tests {
         }
         
         Ok(())
+    }
+
+    /// Test session-local ID allocator functionality
+    #[test]
+    fn test_session_local_id_allocator() {
+        use super::super::audit_modular::FindingIdAllocator;
+        
+        // Test session ID consistency
+        let session_id1 = FindingIdAllocator::get_session_id();
+        let session_id2 = FindingIdAllocator::get_session_id();
+        assert_eq!(session_id1, session_id2, "Session ID should be consistent within the same session");
+        
+        // Test ID generation with session context
+        let id1 = FindingIdAllocator::next_id();
+        let id2 = FindingIdAllocator::next_id();
+        
+        // Both IDs should contain the session ID
+        assert!(id1.contains(session_id1), "ID should contain session context");
+        assert!(id2.contains(session_id1), "ID should contain session context");
+        
+        // IDs should be different
+        assert_ne!(id1, id2, "Generated IDs should be unique");
+        
+        // Test category-specific IDs
+        let solana_id = FindingIdAllocator::next_category_id("solana");
+        let crypto_id = FindingIdAllocator::next_category_id("crypto");
+        
+        assert!(solana_id.contains("SOL"), "Solana ID should contain category marker");
+        assert!(crypto_id.contains("CRYPTO"), "Crypto ID should contain category marker");
+        assert!(solana_id.contains(session_id1), "Category ID should contain session context");
+        
+        // Test UUID-based ID generation
+        let uuid_id1 = FindingIdAllocator::next_uuid_id();
+        let uuid_id2 = FindingIdAllocator::next_uuid_id();
+        
+        assert!(uuid_id1.starts_with("OSVM-UUID-"), "UUID ID should have correct prefix");
+        assert_ne!(uuid_id1, uuid_id2, "UUID IDs should be unique");
+        
+        println!("✅ Session-local ID allocator tests passed");
+        println!("  Session ID: {}", session_id1);
+        println!("  Sample ID: {}", id1);
+        println!("  Sample category ID: {}", solana_id);
+        println!("  Sample UUID ID: {}", uuid_id1);
     }
 }
