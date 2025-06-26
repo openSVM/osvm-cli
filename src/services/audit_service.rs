@@ -68,18 +68,24 @@ impl AuditService {
     }
 
     pub fn validate_environment(request: &AuditRequest) -> Result<(), AuditError> {
-        // Check for OpenAI API key if AI analysis is explicitly requested
-        if request.ai_analysis {
-            match std::env::var("OPENAI_API_KEY") {
-                Ok(key) if !key.trim().is_empty() => {
+        // Always check OpenAI API key status for better user guidance
+        match std::env::var("OPENAI_API_KEY") {
+            Ok(key) if !key.trim().is_empty() => {
+                if request.ai_analysis {
                     println!("🤖 AI analysis will be enabled with provided API key");
+                } else {
+                    println!("ℹ️  OPENAI_API_KEY detected but AI analysis is disabled. Use --ai-analysis to enable.");
                 }
-                Ok(_) => {
+            }
+            Ok(_) => {
+                if request.ai_analysis {
                     return Err(AuditError::EnvironmentError(
                         "OPENAI_API_KEY is empty but AI analysis was requested. Please provide a valid API key or disable AI analysis.".to_string()
                     ));
                 }
-                Err(_) => {
+            }
+            Err(_) => {
+                if request.ai_analysis {
                     return Err(AuditError::EnvironmentError(
                         "OPENAI_API_KEY not found but AI analysis was requested. Please set the environment variable or disable AI analysis.".to_string()
                     ));
@@ -201,6 +207,12 @@ impl AuditService {
             Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.typ", timestamp));
         let pdf_path =
             Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.pdf", timestamp));
+        let json_path =
+            Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.json", timestamp));
+        let html_path =
+            Path::new(&request.output_dir).join(format!("osvm_audit_report_{}.html", timestamp));
+        let markdown_path =
+            Path::new(&request.output_dir).join(format!("osvm_audit_summary_{}.md", timestamp));
 
         match request.format.as_str() {
             "typst" | "both" => {
@@ -258,6 +270,42 @@ impl AuditService {
                     println!("📋 PDF report generated: {}", pdf_path.display());
                 }
                 output_files.push(pdf_path.to_string_lossy().to_string());
+            }
+            "json" => {
+                self.coordinator
+                    .generate_json_report(&report, &json_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to generate JSON report: {}", e))
+                    })?;
+
+                if request.verbose > 0 {
+                    println!("📄 JSON report generated: {}", json_path.display());
+                }
+                output_files.push(json_path.to_string_lossy().to_string());
+            }
+            "html" => {
+                self.coordinator
+                    .generate_html_report(&report, &html_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to generate HTML report: {}", e))
+                    })?;
+
+                if request.verbose > 0 {
+                    println!("📄 HTML report generated: {}", html_path.display());
+                }
+                output_files.push(html_path.to_string_lossy().to_string());
+            }
+            "markdown" => {
+                self.coordinator
+                    .generate_markdown_summary(&report, &markdown_path)
+                    .map_err(|e| {
+                        AuditError::OutputError(format!("Failed to generate Markdown summary: {}", e))
+                    })?;
+
+                if request.verbose > 0 {
+                    println!("📄 Markdown summary generated: {}", markdown_path.display());
+                }
+                output_files.push(markdown_path.to_string_lossy().to_string());
             }
             _ => {
                 return Err(AuditError::ConfigurationError(format!(

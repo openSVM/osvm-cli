@@ -221,24 +221,61 @@ impl Default for TemplateReportGenerator {
     }
 }
 
-/// Enhanced AI error handling with better logging and fallback
-pub struct EnhancedAIErrorHandler;
+/// Enhanced AI error handling with rate limiting and better logging
+pub struct EnhancedAIErrorHandler {
+    last_error_log: std::sync::Arc<std::sync::Mutex<std::time::Instant>>,
+    error_log_threshold: std::time::Duration,
+}
 
 impl EnhancedAIErrorHandler {
-    /// Handle AI analysis error with comprehensive logging
-    pub fn handle_ai_error(error: &anyhow::Error, context: &str) -> Option<String> {
-        // Log the error with full context
-        log::error!("AI Analysis Error in {}: {}", context, error);
+    /// Create a new AI error handler with rate limiting
+    pub fn new() -> Self {
+        Self {
+            last_error_log: std::sync::Arc::new(std::sync::Mutex::new(
+                std::time::Instant::now() - std::time::Duration::from_secs(60)
+            )),
+            error_log_threshold: std::time::Duration::from_secs(30), // Log at most once every 30 seconds
+        }
+    }
 
-        // Log the full error chain
-        let mut current_error = error.source();
-        let mut error_level = 1;
-        while let Some(err) = current_error {
-            log::error!("  Error level {}: {}", error_level, err);
-            current_error = err.source();
-            error_level += 1;
+    /// Check if we should log the error (rate limiting)
+    fn should_log_error(&self) -> bool {
+        if let Ok(mut last_log) = self.last_error_log.try_lock() {
+            let now = std::time::Instant::now();
+            if now.duration_since(*last_log) > self.error_log_threshold {
+                *last_log = now;
+                true
+            } else {
+                false
+            }
+        } else {
+            false // If we can't acquire the lock, skip logging
+        }
+    }
+
+    /// Handle AI analysis error with comprehensive but rate-limited logging
+    pub fn handle_ai_error_with_context(&self, error: &anyhow::Error, context: &str) -> Option<String> {
+        // Always log the first occurrence or after the threshold period
+        if self.should_log_error() {
+            log::error!("AI Analysis Error in {}: {}", context, error);
+            log::warn!("AI error logging rate-limited to prevent log flooding");
+            
+            // Log the full error chain for detailed diagnostics
+            let mut current_error = error.source();
+            let mut error_level = 1;
+            while let Some(err) = current_error {
+                log::error!("  Error level {}: {}", error_level, err);
+                current_error = err.source();
+                error_level += 1;
+            }
         }
 
+        // Always provide fallback handling regardless of logging
+        Self::handle_ai_error(error, context)
+    }
+
+    /// Handle AI analysis error with comprehensive logging (static method for backward compatibility)
+    pub fn handle_ai_error(error: &anyhow::Error, _context: &str) -> Option<String> {
         // Check error type and provide specific fallback
         let error_string = error.to_string();
 
