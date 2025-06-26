@@ -23,6 +23,12 @@ pub mod nodes_dashboard;
 // Core functionality
 /// Security audit system for comprehensive vulnerability analysis
 pub mod audit;
+/// Modular audit system with structured vulnerability checks
+pub mod audit_modular;
+/// Structured Rust code parser for security analysis
+pub mod audit_parser;
+/// Template-based report generation system
+pub mod audit_templates;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
