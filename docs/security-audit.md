@@ -44,6 +44,36 @@ osvm audit --gh opensvm/osvm-cli#main --ai-analysis
 osvm audit --test --format both
 ```
 
+## Recent Improvements (v0.3.9+)
+
+The security audit system has been significantly enhanced based on comprehensive code review feedback:
+
+### 🔧 **Enhanced Reliability**
+- **UUID-based Finding IDs**: Eliminated collision risks with cryptographically unique identifiers
+- **Dependency Optimization**: Updated 51+ packages to reduce conflicts and improve stability
+- **AI Error Rate Limiting**: Prevents log flooding with intelligent 30-second throttling
+
+### 🎯 **Improved Accuracy**
+- **Context-Aware Solana Detection**: Reduced false positives in base58 key detection
+- **Enhanced Security Patterns**: Improved regex patterns for command injection and path traversal
+- **Smart Environment Validation**: Better API key handling with user-friendly guidance
+
+### 📊 **Extended Format Support**
+- **JSON Reports**: Machine-readable format for integration and automation
+- **HTML Reports**: Interactive web-based audit reports
+- **Markdown Summaries**: Perfect for documentation and GitHub integration
+- **Legacy Support**: Typst and PDF formats remain fully supported
+
+### 🤖 **Better AI Integration**
+- **Intelligent Fallback**: Clear user communication when AI analysis is unavailable
+- **Status Transparency**: Real-time feedback on AI enhancement success/failure rates
+- **Graceful Degradation**: Audit continues seamlessly even with AI service issues
+
+### ⚡ **Performance Optimizations**
+- **Single-Pass Parsing**: Optimized code analysis with shared parsed data
+- **Efficient Pattern Matching**: Cached regex compilation for faster scanning
+- **Reduced Resource Usage**: Minimized redundant operations across audit checks
+
 ## Architecture Overview
 
 ```mermaid
@@ -430,7 +460,9 @@ When auditing GitHub repositories, the system:
 
 ## Output Formats
 
-### Typst Reports
+The audit system supports multiple output formats to suit different use cases:
+
+### Typst Reports (`--format typst`)
 
 Typst source files provide:
 - Professional formatting
@@ -439,7 +471,7 @@ Typst source files provide:
 - Custom styling and themes
 - Reproducible builds
 
-### PDF Reports
+### PDF Reports (`--format pdf`)
 
 PDF outputs include:
 - Executive summary
@@ -448,13 +480,35 @@ PDF outputs include:
 - Mitigation roadmap
 - Technical appendices
 
-### JSON Data
+### JSON Reports (`--format json`)
 
 Machine-readable format for:
 - CI/CD integration
 - Custom reporting tools
 - Automated processing
-- Data analysis
+- Data analysis and metrics
+
+### HTML Reports (`--format html`)
+
+Interactive web-based reports featuring:
+- Responsive design for all devices
+- Searchable and filterable findings
+- Syntax-highlighted code samples
+- Collapsible sections for better navigation
+- Direct links to external references
+
+### Markdown Summaries (`--format markdown`)
+
+GitHub-friendly format ideal for:
+- README documentation
+- Pull request summaries
+- Issue tracking integration
+- Wiki documentation
+- Developer-friendly review process
+
+### Combined Output (`--format both`)
+
+Generates both Typst source and compiled PDF for maximum flexibility.
 
 ## Best Practices
 
