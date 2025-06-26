@@ -1,6 +1,32 @@
 # Security Audit System
 
-OSVM CLI includes a comprehensive security audit system that performs vulnerability analysis, generates detailed reports, and integrates with CI/CD pipelines for continuous security monitoring.
+OSVM CLI includes a comprehensive security audit system that performs vulnerability analysis, generates detailed reports, and integrates with CI/CD pipelines for continuous security monitoring. The system now includes **23 enhanced Solana-specific security vulnerability checks** based on the comprehensive Solana Program Vulnerabilities Guide.
+
+## Enhanced Solana Security Coverage
+
+The audit system now includes comprehensive detection for all major Solana vulnerability categories:
+
+### Critical Solana Vulnerabilities
+- **Account Data Matching** - Validates account keys against expected values
+- **Arbitrary CPI** - Ensures program ID verification before cross-program invocations
+- **Insecure Initialization** - Validates upgrade authority during program initialization
+- **Type Cosplay** - Prevents account type confusion via discriminator checks
+
+### High-Severity Checks
+- **Account Reloading** - Detects missing reload() calls after CPI operations
+- **Bump Seed Canonicalization** - Ensures canonical PDA creation
+- **Frontrunning Protection** - Validates price/slippage protection in trades
+- **Financial Math Precision** - Prevents floating-point errors in token calculations
+- **Missing Ownership/Signer Checks** - Validates account ownership and signing
+- **Overflow/Underflow** - Comprehensive checked arithmetic validation
+
+### Medium-Severity Patterns
+- **Authority Transfer** - Validates two-step authority transfer processes
+- **Account Data Reallocation** - Ensures safe realloc usage
+- **Duplicate Mutable Accounts** - Prevents same account used multiple times
+- **PDA Sharing** - Ensures unique PDA seeds per functionality
+- **Remaining Accounts** - Validates processing of remaining accounts
+- **Rust-Specific Errors** - Detects unsafe blocks, array bounds, unwrap usage
 
 ## Quick Start
 
