@@ -1,0 +1,60 @@
+{
+  "audit_report": {
+    "metadata": {
+      "generated_at": "{{ timestamp }}",
+      "version": "{{ version }}",
+      "tool": "OSVM Security Audit System"
+    },
+    "summary": {
+      "total_findings": {{ summary.total_findings }},
+      "critical_findings": {{ summary.critical_findings }},
+      "high_findings": {{ summary.high_findings }},
+      "medium_findings": {{ summary.medium_findings }},
+      "low_findings": {{ summary.low_findings }},
+      "info_findings": {{ summary.info_findings }},
+      "security_score": {{ summary.security_score }},
+      "compliance_level": "{{ summary.compliance_level }}"
+    },
+    "system_info": {
+      "rust_version": "{{ system_info.rust_version }}",
+      "solana_version": "{{ system_info.solana_version | default(value="Not installed") }}",
+      "os_info": "{{ system_info.os_info }}",
+      "architecture": "{{ system_info.architecture }}",
+      "dependencies": {{ system_info.dependencies | tojson }}
+    },
+    "findings": [
+      {% for finding in report.findings %}
+      {
+        "id": "{{ finding.id }}",
+        "title": "{{ finding.title }}",
+        "description": "{{ finding.description }}",
+        "severity": "{{ finding.severity }}",
+        "category": "{{ finding.category }}",
+        {% if finding.cwe_id %}"cwe_id": "{{ finding.cwe_id }}",{% endif %}
+        {% if finding.cvss_score %}"cvss_score": {{ finding.cvss_score }},{% endif %}
+        "impact": "{{ finding.impact }}",
+        "recommendation": "{{ finding.recommendation }}",
+        {% if finding.code_location %}"code_location": "{{ finding.code_location }}",{% endif %}
+        "references": {{ finding.references | tojson }}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    "categorized_findings": {
+      {% for category, findings in categorized_findings %}
+      "{{ category }}": [
+        {% for finding in findings %}
+        "{{ finding.id }}"{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]{% if not loop.last %},{% endif %}
+      {% endfor %}
+    },
+    "severity_breakdown": {
+      {% for severity, findings in severity_findings %}
+      "{{ severity }}": {{ findings | length }}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    },
+    "statistics": {{ statistics | tojson }},
+    "recommendations": {{ recommendations | tojson }},
+    "compliance_notes": {{ compliance_notes | tojson }}
+  }
+}

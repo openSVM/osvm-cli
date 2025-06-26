@@ -12,6 +12,8 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use crate::utils::audit_modular::{FindingIdAllocator, ModularAuditCoordinator};
+use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenerator};
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
@@ -22,6 +24,94 @@ pub struct OpenAIClient {
     client: reqwest::Client,
     max_retries: u32,
     base_delay: Duration,
+}
+
+/// Circuit breaker for AI operations to handle persistent failures
+#[derive(Debug, Clone)]
+pub struct AICircuitBreaker {
+    failure_count: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    last_failure_time: std::sync::Arc<std::sync::Mutex<Option<std::time::Instant>>>,
+    failure_threshold: u32,
+    recovery_timeout: Duration,
+    is_open: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl AICircuitBreaker {
+    pub fn new(failure_threshold: u32, recovery_timeout: Duration) -> Self {
+        Self {
+            failure_count: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            last_failure_time: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            failure_threshold,
+            recovery_timeout,
+            is_open: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    pub fn is_open(&self) -> bool {
+        if self.is_open.load(std::sync::atomic::Ordering::Acquire) {
+            // Check if recovery timeout has passed
+            if let Ok(last_failure) = self.last_failure_time.lock() {
+                if let Some(last_time) = *last_failure {
+                    if last_time.elapsed() > self.recovery_timeout {
+                        log::info!("AI circuit breaker attempting recovery after timeout");
+                        self.reset();
+                        return false;
+                    }
+                }
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn record_success(&self) {
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Release);
+        if self.is_open.load(std::sync::atomic::Ordering::Acquire) {
+            log::info!("AI circuit breaker closing - operation successful");
+            self.is_open
+                .store(false, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    pub fn record_failure(&self) {
+        let current_failures = self
+            .failure_count
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+            + 1;
+
+        if let Ok(mut last_failure) = self.last_failure_time.lock() {
+            *last_failure = Some(std::time::Instant::now());
+        }
+
+        if current_failures >= self.failure_threshold
+            && !self.is_open.load(std::sync::atomic::Ordering::Acquire)
+        {
+            log::warn!(
+                "AI circuit breaker opening after {} failures",
+                current_failures
+            );
+            self.is_open
+                .store(true, std::sync::atomic::Ordering::Release);
+        }
+    }
+
+    pub fn reset(&self) {
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Release);
+        self.is_open
+            .store(false, std::sync::atomic::Ordering::Release);
+        if let Ok(mut last_failure) = self.last_failure_time.lock() {
+            *last_failure = None;
+        }
+        log::info!("AI circuit breaker reset");
+    }
+
+    pub fn get_failure_count(&self) -> u32 {
+        self.failure_count
+            .load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 /// AI analysis result from OpenAI
@@ -55,38 +145,54 @@ impl OpenAIClient {
         }
     }
 
-    /// Analyze a security finding using OpenAI with retry logic
+    /// Analyze a security finding using OpenAI with enhanced retry logic and error handling
     pub async fn analyze_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
         for attempt in 0..=self.max_retries {
             match self.try_analyze_finding(finding).await {
                 Ok(analysis) => return Ok(analysis),
                 Err(e) if attempt < self.max_retries => {
-                    // Check if it's a rate limit error
-                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
-                        let delay = self.base_delay * 2_u32.pow(attempt);
-                        eprintln!(
-                            "⏳ Rate limited, retrying in {}ms... (attempt {}/{})",
-                            delay.as_millis(),
+                    let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
+
+                    if should_retry {
+                        log::warn!(
+                            "AI analysis attempt {}/{} failed, retrying in {}ms: {}",
                             attempt + 1,
-                            self.max_retries
+                            self.max_retries,
+                            delay.as_millis(),
+                            e
                         );
                         sleep(delay).await;
                     } else {
-                        eprintln!(
-                            "⚠️ OpenAI API error, retrying... (attempt {}/{}): {}",
-                            attempt + 1,
-                            self.max_retries,
-                            e
-                        );
-                        sleep(self.base_delay).await;
+                        log::error!("AI analysis failed with non-retryable error: {}", e);
+                        return Err(e);
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // Final attempt failed
+                    if let Some(fallback) =
+                        EnhancedAIErrorHandler::handle_ai_error(&e, "finding analysis")
+                    {
+                        log::warn!("Using fallback analysis: {}", fallback);
+                        return Ok(AIAnalysis {
+                            enhanced_description:
+                                EnhancedAIErrorHandler::generate_fallback_analysis(
+                                    &finding.title,
+                                    &finding.category,
+                                ),
+                            risk_assessment: "AI analysis unavailable - manual review required"
+                                .to_string(),
+                            mitigation_strategy: finding.recommendation.clone(),
+                            confidence_score: 0.0,
+                            additional_cwe_ids: vec![],
+                        });
+                    }
+                    return Err(e);
+                }
             }
         }
 
         Err(anyhow::anyhow!(
-            "OpenAI analysis failed after {} retries",
+            "AI analysis failed after {} retries",
             self.max_retries
         ))
     }
@@ -170,7 +276,7 @@ impl OpenAIClient {
         Ok(ai_analysis)
     }
 
-    /// Analyze code content for security issues with retry logic
+    /// Analyze code content for security issues with enhanced retry logic
     pub async fn analyze_code(
         &self,
         code_content: &str,
@@ -180,29 +286,40 @@ impl OpenAIClient {
             match self.try_analyze_code(code_content, file_path).await {
                 Ok(findings) => return Ok(findings),
                 Err(e) if attempt < self.max_retries => {
-                    if e.to_string().contains("rate limit") || e.to_string().contains("429") {
-                        let delay = self.base_delay * 2_u32.pow(attempt);
-                        eprintln!("⏳ Rate limited during code analysis, retrying in {}ms... (attempt {}/{})", 
-                                 delay.as_millis(), attempt + 1, self.max_retries);
-                        sleep(delay).await;
-                    } else {
-                        eprintln!(
-                            "⚠️ OpenAI code analysis error, retrying... (attempt {}/{}): {}",
+                    let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
+
+                    if should_retry {
+                        log::warn!(
+                            "AI code analysis attempt {}/{} failed, retrying in {}ms: {}",
                             attempt + 1,
                             self.max_retries,
+                            delay.as_millis(),
                             e
                         );
-                        sleep(self.base_delay).await;
+                        sleep(delay).await;
+                    } else {
+                        log::error!("AI code analysis failed with non-retryable error: {}", e);
+                        return Ok(Vec::new()); // Return empty findings instead of failing
                     }
                 }
-                Err(e) => return Err(e),
+                Err(e) => {
+                    // Final attempt failed - log and return empty findings
+                    EnhancedAIErrorHandler::handle_ai_error(&e, "code analysis");
+                    log::warn!(
+                        "AI code analysis completely failed for {}, continuing without AI findings",
+                        file_path
+                    );
+                    return Ok(Vec::new());
+                }
             }
         }
 
-        Err(anyhow::anyhow!(
-            "OpenAI code analysis failed after {} retries",
-            self.max_retries
-        ))
+        log::warn!(
+            "AI code analysis failed after {} retries for {}",
+            self.max_retries,
+            file_path
+        );
+        Ok(Vec::new())
     }
 
     /// Single attempt to analyze code
@@ -418,9 +535,13 @@ pub struct SystemInfo {
     pub dependencies: HashMap<String, String>,
 }
 
-/// Main audit coordinator
+/// Main audit coordinator with enhanced modular architecture and circuit breaker
 pub struct AuditCoordinator {
     ai_client: Option<OpenAIClient>,
+    modular_coordinator: ModularAuditCoordinator,
+    template_generator: TemplateReportGenerator,
+    ai_disabled: bool,
+    ai_circuit_breaker: AICircuitBreaker,
 }
 
 impl Default for AuditCoordinator {
@@ -432,22 +553,221 @@ impl Default for AuditCoordinator {
 impl AuditCoordinator {
     /// Create a new audit coordinator
     pub fn new() -> Self {
-        Self { ai_client: None }
+        Self {
+            ai_client: None,
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
+            ai_circuit_breaker: AICircuitBreaker::new(3, Duration::from_secs(300)), // 3 failures, 5 min recovery
+        }
     }
 
     /// Create a new audit coordinator with AI capabilities
     pub fn with_ai(api_key: String) -> Self {
         Self {
             ai_client: Some(OpenAIClient::new(api_key)),
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
+            ai_circuit_breaker: AICircuitBreaker::new(3, Duration::from_secs(300)), // 3 failures, 5 min recovery
         }
     }
 
-    /// Run comprehensive security audit with optional AI enhancement
-    pub async fn run_security_audit(&self) -> Result<AuditReport> {
-        println!("🔍 Starting comprehensive security audit...");
+    /// Create a new audit coordinator with optional AI capabilities
+    /// If api_key is None or empty, AI analysis will be disabled
+    pub fn with_optional_ai(api_key: Option<String>) -> Self {
+        match api_key {
+            Some(key) if !key.trim().is_empty() => {
+                println!("🤖 AI analysis enabled with provided API key");
+                Self::with_ai(key)
+            }
+            _ => {
+                println!("🔧 Running audit without AI analysis (no API key provided)");
+                Self::new()
+            }
+        }
+    }
 
+    /// Detect if the current directory is a Rust workspace using cargo_metadata
+    pub fn is_workspace(&self) -> bool {
+        match cargo_metadata::MetadataCommand::new().exec() {
+            Ok(metadata) => {
+                !metadata.workspace_members.is_empty() && metadata.workspace_members.len() > 1
+            }
+            Err(_) => {
+                // Fallback to simple file-based detection
+                std::path::Path::new("Cargo.toml").exists()
+                    && std::fs::read_to_string("Cargo.toml")
+                        .map(|content| content.contains("[workspace]"))
+                        .unwrap_or(false)
+            }
+        }
+    }
+
+    /// Get all crate directories in a workspace using cargo_metadata for robust parsing
+    pub fn get_workspace_crates(&self) -> Result<Vec<std::path::PathBuf>> {
+        let mut crates = Vec::new();
+
+        match cargo_metadata::MetadataCommand::new().exec() {
+            Ok(metadata) => {
+                if metadata.workspace_members.len() > 1 {
+                    // Multi-crate workspace
+                    for package_id in &metadata.workspace_members {
+                        if let Some(package) =
+                            metadata.packages.iter().find(|p| p.id == *package_id)
+                        {
+                            let manifest_dir = package.manifest_path.parent().ok_or_else(|| {
+                                anyhow::anyhow!("Invalid manifest path: {}", package.manifest_path)
+                            })?;
+                            crates.push(manifest_dir.into());
+                        }
+                    }
+                } else {
+                    // Single crate
+                    crates.push(std::path::PathBuf::from("."));
+                }
+            }
+            Err(e) => {
+                log::warn!(
+                    "Failed to use cargo_metadata, falling back to manual parsing: {}",
+                    e
+                );
+
+                // Fallback to previous manual parsing logic
+                if self.is_workspace_fallback() {
+                    crates = self.get_workspace_crates_fallback()?;
+                } else {
+                    crates.push(std::path::PathBuf::from("."));
+                }
+            }
+        }
+
+        if crates.is_empty() {
+            crates.push(std::path::PathBuf::from("."));
+        }
+
+        Ok(crates)
+    }
+
+    /// Fallback workspace detection using file parsing
+    fn is_workspace_fallback(&self) -> bool {
+        std::path::Path::new("Cargo.toml").exists()
+            && std::fs::read_to_string("Cargo.toml")
+                .map(|content| content.contains("[workspace]"))
+                .unwrap_or(false)
+    }
+
+    /// Fallback workspace member detection using manual TOML parsing
+    fn get_workspace_crates_fallback(&self) -> Result<Vec<std::path::PathBuf>> {
+        let mut crates = Vec::new();
+        let cargo_toml = std::fs::read_to_string("Cargo.toml")?;
+
+        // Simple parsing to find workspace members
+        let mut in_workspace = false;
+        let mut in_members = false;
+
+        for line in cargo_toml.lines() {
+            let line = line.trim();
+
+            if line == "[workspace]" {
+                in_workspace = true;
+                continue;
+            }
+
+            if in_workspace && line.starts_with("members") {
+                in_members = true;
+                continue;
+            }
+
+            if in_members && line.starts_with('[') && !line.starts_with("members") {
+                break;
+            }
+
+            if in_members && line.contains("\"") {
+                if let Some(member) = line.split('"').nth(1) {
+                    let crate_path = std::path::PathBuf::from(member);
+                    if crate_path.join("Cargo.toml").exists() {
+                        crates.push(crate_path);
+                    }
+                }
+            }
+        }
+
+        Ok(crates)
+    }
+
+    /// Get AI client for testing purposes
+    #[cfg(test)]
+    pub fn ai_client(&self) -> &Option<OpenAIClient> {
+        &self.ai_client
+    }
+
+    /// Enhance existing findings with AI analysis (exposed for testing)
+    #[cfg(test)]
+    pub async fn enhance_findings_with_ai(
+        &self,
+        ai_client: &OpenAIClient,
+        findings: Vec<AuditFinding>,
+    ) -> Vec<AuditFinding> {
+        self.enhance_findings_with_ai_internal(ai_client, findings)
+            .await
+    }
+
+    /// Disable AI analysis due to persistent errors
+    pub fn disable_ai(&mut self) {
+        self.ai_disabled = true;
+        self.ai_circuit_breaker.record_failure();
+        log::warn!("AI analysis disabled due to persistent errors");
+    }
+
+    /// Check if AI should be used based on circuit breaker state
+    pub fn should_use_ai(&self) -> bool {
+        self.ai_client.is_some() && !self.ai_disabled && !self.ai_circuit_breaker.is_open()
+    }
+
+    /// Reset AI circuit breaker and re-enable if client is available
+    pub fn reset_ai_circuit_breaker(&mut self) {
+        self.ai_circuit_breaker.reset();
         if self.ai_client.is_some() {
+            self.ai_disabled = false;
+            log::info!("AI analysis re-enabled after circuit breaker reset");
+        }
+    }
+
+    /// Get current AI circuit breaker status
+    pub fn get_ai_status(&self) -> (bool, u32, bool) {
+        (
+            self.ai_disabled,
+            self.ai_circuit_breaker.get_failure_count(),
+            self.ai_circuit_breaker.is_open(),
+        )
+    }
+
+    /// Run comprehensive security audit with enhanced modular architecture
+    pub async fn run_security_audit(&self) -> Result<AuditReport> {
+        println!("🔍 Starting comprehensive security audit with enhanced modular system...");
+
+        if self.should_use_ai() {
             println!("🤖 AI-powered analysis enabled");
+        } else if self.ai_disabled {
+            println!("🤖 AI analysis disabled due to previous errors");
+        } else if self.ai_circuit_breaker.is_open() {
+            let (_, failure_count, _) = self.get_ai_status();
+            println!(
+                "🤖 AI analysis temporarily disabled (circuit breaker open after {} failures)",
+                failure_count
+            );
+        } else {
+            println!("🔧 Running audit without AI analysis (no API key provided)");
+            println!(
+                "💡 Consider setting OPENAI_API_KEY environment variable for enhanced analysis"
+            );
         }
 
         // Create diagnostic coordinator only when needed
@@ -458,26 +778,30 @@ impl AuditCoordinator {
             Ok(results) => results,
             Err(e) => {
                 println!("⚠️  Some diagnostic checks failed: {}", e);
-                println!("📝 Proceeding with partial audit data...");
-                // Create minimal diagnostic results for the audit
-                return self.create_fallback_audit_report().await;
+                println!("📝 Proceeding with modular audit system...");
+                // Use modular audit system instead of falling back
+                return self.run_modular_audit_only().await;
             }
         };
 
         // Convert diagnostic results to audit findings
         let mut findings = self.convert_diagnostics_to_findings(&diagnostic_results);
 
-        // Perform additional security checks
-        findings.extend(self.perform_additional_security_checks());
+        // Run enhanced modular security checks
+        findings.extend(self.run_modular_security_checks().await?);
 
-        // If AI is enabled, perform AI-enhanced analysis
+        // If AI is enabled and not disabled, perform AI-enhanced analysis
         if let Some(ref ai_client) = self.ai_client {
-            println!("🤖 Running AI-powered code analysis...");
-            let ai_findings = self.perform_ai_code_analysis(ai_client).await;
-            findings.extend(ai_findings);
+            if self.should_use_ai() {
+                println!("🤖 Running AI-powered code analysis...");
+                let ai_findings = self.perform_ai_code_analysis(ai_client).await;
+                findings.extend(ai_findings);
 
-            // Enhance existing findings with AI analysis
-            findings = self.enhance_findings_with_ai(ai_client, findings).await;
+                // Enhance existing findings with AI analysis (only critical/high)
+                findings = self
+                    .enhance_findings_with_ai_internal(ai_client, findings)
+                    .await;
+            }
         }
 
         // Generate system information
@@ -502,8 +826,166 @@ impl AuditCoordinator {
             compliance_notes,
         };
 
-        println!("✅ Security audit completed");
+        println!("✅ Enhanced security audit completed");
         Ok(audit_report)
+    }
+
+    /// Run audit using only the modular system (fallback when diagnostics fail)
+    pub async fn run_modular_audit_only(&self) -> Result<AuditReport> {
+        println!("🔧 Running modular security audit system...");
+
+        let mut findings = Vec::new();
+
+        // Run modular security checks
+        findings.extend(self.run_modular_security_checks().await?);
+
+        // Add a finding about the diagnostic failure
+        findings.push(AuditFinding {
+            id: FindingIdAllocator::next_id(),
+            title: "Diagnostic system unavailable".to_string(),
+            description: "Full system diagnostics could not be completed. This may indicate configuration issues.".to_string(),
+            severity: AuditSeverity::Medium,
+            category: "System".to_string(),
+            cwe_id: Some("CWE-754".to_string()),
+            cvss_score: Some(4.0),
+            impact: "Limited visibility into system security posture".to_string(),
+            recommendation: "Review system configuration and ensure all dependencies are properly installed".to_string(),
+            code_location: None,
+            references: vec!["https://cwe.mitre.org/data/definitions/754.html".to_string()],
+        });
+
+        let system_info = self.collect_system_info().await?;
+        let summary = self.calculate_audit_summary(&findings);
+        let recommendations = self.generate_security_recommendations(&findings);
+        let compliance_notes = self.generate_compliance_notes(&findings);
+
+        Ok(AuditReport {
+            timestamp: Utc::now(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            summary,
+            findings,
+            system_info,
+            recommendations,
+            compliance_notes,
+        })
+    }
+
+    /// Run enhanced modular security checks
+    async fn run_modular_security_checks(&self) -> Result<Vec<AuditFinding>> {
+        let mut all_findings = Vec::new();
+
+        println!("🔍 Running modular security checks...");
+
+        // Get all crates in the workspace
+        let crates = self.get_workspace_crates()?;
+
+        if crates.len() > 1 {
+            println!("📦 Detected workspace with {} crates", crates.len());
+        }
+
+        for crate_path in &crates {
+            let src_dir = crate_path.join("src");
+            let crate_name = crate_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("root");
+
+            if src_dir.exists() {
+                println!("🔍 Scanning crate: {}", crate_name);
+
+                // Recursively scan all Rust files in the crate
+                self.scan_rust_files_recursive(&src_dir, &mut all_findings, crate_name)
+                    .await?;
+            }
+        }
+
+        // Add configuration and dependency checks for each crate
+        for crate_path in &crates {
+            let current_dir = std::env::current_dir()?;
+            if let Err(e) = std::env::set_current_dir(crate_path) {
+                log::warn!(
+                    "Failed to change directory to {}: {}",
+                    crate_path.display(),
+                    e
+                );
+                continue;
+            }
+
+            all_findings.extend(self.check_dependency_security_enhanced()?);
+            all_findings.extend(self.check_configuration_security_enhanced()?);
+
+            // Restore original directory
+            if let Err(e) = std::env::set_current_dir(&current_dir) {
+                log::warn!("Failed to restore directory: {}", e);
+            }
+        }
+
+        println!(
+            "✅ Modular security checks completed - {} findings",
+            all_findings.len()
+        );
+        Ok(all_findings)
+    }
+
+    /// Recursively scan Rust files in a directory
+    fn scan_rust_files_recursive<'a>(
+        &'a self,
+        dir: &'a std::path::Path,
+        findings: &'a mut Vec<AuditFinding>,
+        crate_name: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
+        Box::pin(async move {
+            let mut entries = tokio::fs::read_dir(dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+
+                if path.is_dir() {
+                    // Recursively scan subdirectories, skip common build/cache directories
+                    if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                        if !matches!(dir_name, "target" | ".git" | "node_modules" | ".cargo") {
+                            self.scan_rust_files_recursive(&path, findings, crate_name)
+                                .await?;
+                        }
+                    }
+                } else if let Some(ext) = path.extension() {
+                    if ext == "rs" {
+                        // Use async file reading for better performance
+                        if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                            let file_path = format!("{}/{}", crate_name, path.display());
+
+                            match self.modular_coordinator.audit_file(&content, &file_path) {
+                                Ok(mut file_findings) => {
+                                    // Tag findings with the crate name
+                                    for finding in &mut file_findings {
+                                        finding.code_location = Some(format!(
+                                            "{}:{}",
+                                            crate_name,
+                                            finding
+                                                .code_location
+                                                .as_ref()
+                                                .unwrap_or(&"unknown".to_string())
+                                        ));
+                                    }
+
+                                    println!(
+                                        "  📄 Analyzed {} - {} findings",
+                                        file_path,
+                                        file_findings.len()
+                                    );
+                                    findings.extend(file_findings);
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to analyze file {}: {}", file_path, e);
+                                    // Continue with other files even if one fails
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        })
     }
 
     /// Create a fallback audit report when diagnostics fail
@@ -652,51 +1134,91 @@ impl AuditCoordinator {
         }
     }
 
-    /// Perform AI-powered code analysis
+    /// Perform AI-powered code analysis with enhanced error handling
     async fn perform_ai_code_analysis(&self, ai_client: &OpenAIClient) -> Vec<AuditFinding> {
         let mut ai_findings = Vec::new();
+        let mut files_analyzed = 0;
+        let mut files_failed = 0;
 
         // Analyze Rust source files
         if let Ok(entries) = std::fs::read_dir("src") {
             for entry in entries.flatten() {
                 if let Some(ext) = entry.path().extension() {
-                    //    if ext == "rs" {
-                    if let Ok(content) = std::fs::read_to_string(&entry.path()) {
-                        // Limit content size to avoid API limits
-                        if content.len() < 80000 {
-                            match ai_client
-                                .analyze_code(&content, &entry.path().display().to_string())
-                                .await
-                            {
-                                Ok(findings) => ai_findings.extend(findings),
-                                Err(e) => println!(
-                                    "⚠️  AI analysis failed for {}: {}",
-                                    entry.path().display(),
-                                    e
-                                ),
+                    if ext == "rs" {
+                        if let Ok(content) = std::fs::read_to_string(&entry.path()) {
+                            // Limit content size to avoid API limits
+                            if content.len() < 80000 {
+                                match ai_client
+                                    .analyze_code(&content, &entry.path().display().to_string())
+                                    .await
+                                {
+                                    Ok(findings) => {
+                                        ai_findings.extend(findings);
+                                        files_analyzed += 1;
+                                    }
+                                    Err(e) => {
+                                        EnhancedAIErrorHandler::handle_ai_error(
+                                            &e,
+                                            &format!("file {}", entry.path().display()),
+                                        );
+                                        files_failed += 1;
+
+                                        // If too many files fail or critical error, stop AI analysis
+                                        if EnhancedAIErrorHandler::should_disable_ai(&e)
+                                            || files_failed > 5
+                                        {
+                                            log::warn!("Stopping AI code analysis due to repeated failures");
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else {
+                                log::info!(
+                                    "Skipping large file for AI analysis: {}",
+                                    entry.path().display()
+                                );
                             }
                         }
                     }
-                    //   }
                 }
             }
+        }
+
+        if files_analyzed > 0 || files_failed > 0 {
+            log::info!(
+                "AI code analysis completed: {} files analyzed, {} files failed",
+                files_analyzed,
+                files_failed
+            );
         }
 
         ai_findings
     }
 
-    /// Enhance existing findings with AI analysis
-    async fn enhance_findings_with_ai(
+    /// Enhance existing findings with AI analysis with improved error handling
+    async fn enhance_findings_with_ai_internal(
         &self,
         ai_client: &OpenAIClient,
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
         let mut enhanced_findings = Vec::new();
+        let mut ai_failures = 0;
+        let mut ai_successes = 0;
 
         for finding in findings {
             if finding.severity == AuditSeverity::Critical
                 || finding.severity == AuditSeverity::High
             {
+                // Check circuit breaker before each AI call
+                if self.ai_circuit_breaker.is_open() {
+                    log::warn!(
+                        "AI circuit breaker is open, skipping AI enhancement for finding {}",
+                        finding.id
+                    );
+                    enhanced_findings.push(finding);
+                    continue;
+                }
+
                 match ai_client.analyze_finding(&finding).await {
                     Ok(ai_analysis) => {
                         let mut enhanced_finding = finding.clone();
@@ -710,18 +1232,50 @@ impl AuditCoordinator {
                             enhanced_finding.recommendation, ai_analysis.mitigation_strategy
                         );
                         enhanced_findings.push(enhanced_finding);
+                        ai_successes += 1;
+
+                        // Record success with circuit breaker
+                        self.ai_circuit_breaker.record_success();
                     }
                     Err(e) => {
-                        println!(
-                            "⚠️  AI enhancement failed for finding {}: {}",
-                            finding.id, e
-                        );
+                        // Record failure with circuit breaker
+                        self.ai_circuit_breaker.record_failure();
+
+                        // Handle error with enhanced error handler
+                        if let Some(fallback_msg) = EnhancedAIErrorHandler::handle_ai_error(
+                            &e,
+                            &format!("finding {}", finding.id),
+                        ) {
+                            log::warn!(
+                                "AI enhancement failed for finding {}: {}",
+                                finding.id,
+                                fallback_msg
+                            );
+                        }
+
+                        // Check if we should disable AI after too many failures
+                        ai_failures += 1;
+                        if EnhancedAIErrorHandler::should_disable_ai(&e) {
+                            log::error!("Disabling AI analysis due to: {}", e);
+                            // For this instance only, we'll continue without further AI enhancement
+                            enhanced_findings.push(finding);
+                            break;
+                        }
+
                         enhanced_findings.push(finding);
                     }
                 }
             } else {
                 enhanced_findings.push(finding);
             }
+        }
+
+        if ai_failures > 0 {
+            log::info!(
+                "AI enhancement completed: {} successes, {} failures",
+                ai_successes,
+                ai_failures
+            );
         }
 
         enhanced_findings
@@ -1304,6 +1858,26 @@ impl AuditCoordinator {
 
         // Check for program deployment and upgrade security
         findings.extend(self.check_solana_deployment_security(content, file_path, finding_id));
+
+        // Enhanced Solana security checks based on vulnerability guide
+        findings.extend(self.check_account_data_matching(content, file_path, finding_id));
+        findings.extend(self.check_account_data_reallocation(content, file_path, finding_id));
+        findings.extend(self.check_account_reloading(content, file_path, finding_id));
+        findings.extend(self.check_arbitrary_cpi(content, file_path, finding_id));
+        findings.extend(self.check_authority_transfer(content, file_path, finding_id));
+        findings.extend(self.check_bump_seed_canonicalization(content, file_path, finding_id));
+        findings.extend(self.check_closing_accounts_enhanced(content, file_path, finding_id));
+        findings.extend(self.check_duplicate_mutable_accounts(content, file_path, finding_id));
+        findings.extend(self.check_frontrunning_vulnerabilities(content, file_path, finding_id));
+        findings.extend(self.check_insecure_initialization(content, file_path, finding_id));
+        findings.extend(self.check_precision_loss(content, file_path, finding_id));
+        findings.extend(self.check_overflow_underflow_enhanced(content, file_path, finding_id));
+        findings.extend(self.check_pda_sharing_vulnerabilities(content, file_path, finding_id));
+        findings
+            .extend(self.check_remaining_accounts_vulnerabilities(content, file_path, finding_id));
+        findings.extend(self.check_rust_specific_errors(content, file_path, finding_id));
+        findings.extend(self.check_type_cosplay_vulnerabilities(content, file_path, finding_id));
+        findings.extend(self.check_financial_math_precision(content, file_path, finding_id));
 
         findings
     }
@@ -2675,6 +3249,1122 @@ impl AuditCoordinator {
                 });
                 *finding_id += 1;
             }
+        }
+
+        findings
+    }
+
+    /// Check for Account Data Matching vulnerabilities (Solana Vulnerability #1)
+    fn check_account_data_matching(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for missing key validation
+        if content.contains("ctx.accounts")
+            && !content.contains("key()")
+            && !content.contains("has_one")
+            && !content.contains("constraint")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing account key validation".to_string(),
+                description: format!(
+                    "File {} accesses accounts without validating keys match expected values",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Malicious accounts could be processed instead of expected accounts".to_string(),
+                recommendation: "Use ctx.accounts.account.key() checks or Anchor's has_one/constraint attributes".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for config data without admin validation
+        if (content.contains("config_data") || content.contains("admin_settings"))
+            && !content.contains("admin.key()")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Config data modification without admin validation".to_string(),
+                description: format!(
+                    "File {} modifies config data without validating admin authority",
+                    file_path
+                ),
+                severity: AuditSeverity::Critical,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-862".to_string()),
+                cvss_score: Some(9.0),
+                impact: "Unauthorized users could modify critical configuration data".to_string(),
+                recommendation:
+                    "Validate admin.key() matches config_data.admin before modifications"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Account Data Reallocation vulnerabilities (Solana Vulnerability #2)
+    fn check_account_data_reallocation(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for unsafe realloc usage
+        if content.contains("realloc") && content.contains("false") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Unsafe account reallocation".to_string(),
+                description: format!(
+                    "File {} uses realloc with zero_init=false, potentially exposing stale data",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-200".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Stale data could be exposed when account size decreases".to_string(),
+                recommendation: "Use realloc with zero_init=true when decreasing account size"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for realloc without proper length calculation
+        if content.contains("realloc")
+            && !content.contains("required_data_len")
+            && !content.contains("size")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Realloc without proper size calculation".to_string(),
+                description: format!(
+                    "File {} uses realloc without calculating required data length",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Inefficient compute unit usage or incorrect memory allocation".to_string(),
+                recommendation: "Calculate required_data_len before realloc operations".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Account Reloading vulnerabilities (Solana Vulnerability #3)
+    fn check_account_reloading(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for CPI without reload
+        if content.contains("cpi::")
+            && content.contains("ctx.accounts")
+            && !content.contains("reload()")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing account reload after CPI".to_string(),
+                description: format!(
+                    "File {} performs CPI but doesn't reload accounts, potentially using stale data",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-362".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Using stale account data after CPI can lead to incorrect program behavior".to_string(),
+                recommendation: "Use ctx.accounts.account.reload() after CPI calls".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for specific reward/staking patterns
+        if content.contains("rewards")
+            && content.contains("staking_account")
+            && content.contains("msg!")
+            && !content.contains("reload")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Staking rewards accessed without account reload".to_string(),
+                description: format!(
+                    "File {} accesses staking rewards after potential CPI without reload",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-362".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Incorrect reward calculations due to stale account data".to_string(),
+                recommendation: "Reload staking_account after reward distribution CPI".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Arbitrary CPI vulnerabilities (Solana Vulnerability #4)
+    fn check_arbitrary_cpi(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for invoke without program ID verification
+        if content.contains("invoke(")
+            && !content.contains("program.key()")
+            && !content.contains("::ID")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Arbitrary CPI without program verification".to_string(),
+                description: format!(
+                    "File {} performs CPI without verifying target program identity",
+                    file_path
+                ),
+                severity: AuditSeverity::Critical,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(9.0),
+                impact: "Malicious programs could be invoked, compromising security".to_string(),
+                recommendation:
+                    "Verify target program ID before CPI: if program.key() != &expected_program::ID"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for ledger program usage without verification
+        if content.contains("ledger_program") && !content.contains("IncorrectProgramId") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Ledger program CPI without verification".to_string(),
+                description: format!(
+                    "File {} uses ledger program CPI without program ID verification",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(8.0),
+                impact: "Malicious ledger program could be invoked".to_string(),
+                recommendation: "Verify ledger_program.key() == &custom_ledger_program::ID"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Authority Transfer vulnerabilities (Solana Vulnerability #5)
+    fn check_authority_transfer(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for direct authority transfer without two-step process
+        if content.contains("authority")
+            && content.contains("=")
+            && !content.contains("pending_authority")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Direct authority transfer without nomination".to_string(),
+                description: format!(
+                    "File {} transfers authority directly without two-step nominate-accept process",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-266".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Authority could be transferred to wrong address, causing lockout"
+                    .to_string(),
+                recommendation: "Implement two-step authority transfer: nominate then accept"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for missing authority acceptance
+        if content.contains("require_keys_eq!")
+            && content.contains("current_admin")
+            && !content.contains("new_authority")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Authority verification without acceptance step".to_string(),
+                description: format!(
+                    "File {} verifies current admin but lacks new authority acceptance",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-284".to_string()),
+                cvss_score: Some(6.0),
+                impact: "Incomplete authority transfer process".to_string(),
+                recommendation: "Implement pending_authority nomination and acceptance verification".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Bump Seed Canonicalization vulnerabilities (Solana Vulnerability #6)
+    fn check_bump_seed_canonicalization(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for create_program_address usage instead of find_program_address
+        if content.contains("create_program_address") && !content.contains("find_program_address") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Non-canonical PDA creation".to_string(),
+                description: format!(
+                    "File {} uses create_program_address instead of find_program_address",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Non-canonical bump seeds allow PDA manipulation attacks".to_string(),
+                recommendation: "Use find_program_address for canonical bump generation"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for missing bump validation in account
+        if content.contains("find_program_address")
+            && content.contains("bump")
+            && !content.contains("profile_pda.bump")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Bump seed not stored in account".to_string(),
+                description: format!(
+                    "File {} generates bump but doesn't store it in account for validation",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(5.5),
+                impact: "PDA validation may be incomplete without stored bump".to_string(),
+                recommendation: "Store bump in account: profile_pda.bump = bump".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Closing Accounts vulnerabilities (Solana Vulnerability #7)
+    fn check_closing_accounts_enhanced(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for improper account closure (lamports only)
+        if content.contains("**account.lamports.borrow_mut() = 0")
+            && !content.contains("CLOSED_ACCOUNT_DISCRIMINATOR")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Incomplete account closure".to_string(),
+                description: format!(
+                    "File {} only zeros lamports without proper data cleanup",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-404".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Account data remains accessible, enabling reinitialization attacks"
+                    .to_string(),
+                recommendation:
+                    "Zero data, set CLOSED_ACCOUNT_DISCRIMINATOR, then transfer lamports"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for missing Anchor close attribute usage
+        if content.contains("close")
+            && content.contains("account")
+            && !content.contains("#[account(close = destination)]")
+            && !content.contains("try_borrow_mut_data")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Manual account closure without Anchor helper".to_string(),
+                description: format!(
+                    "File {} manually closes accounts instead of using Anchor's close attribute",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-404".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Manual closure may miss security steps".to_string(),
+                recommendation: "Use #[account(close = destination)] for safe account closure"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Duplicate Mutable Accounts vulnerabilities (Solana Vulnerability #8)
+    fn check_duplicate_mutable_accounts(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for potential duplicate account usage in balance operations
+        if content.contains("reward_account.balance")
+            && content.contains("bonus_account.balance")
+            && !content.contains("reward_account.key() == bonus_account.key()")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing duplicate account check".to_string(),
+                description: format!(
+                    "File {} operates on multiple accounts without checking for duplicates",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-841".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Same account passed multiple times could cause double spending"
+                    .to_string(),
+                recommendation:
+                    "Check account distinctness: reward_account.key() != bonus_account.key()"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for Anchor constraint usage for duplicate prevention
+        if content.contains("#[derive(Accounts)]")
+            && content.contains("mut")
+            && !content.contains("constraint")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Missing constraints for mutable accounts".to_string(),
+                description: format!(
+                    "File {} has mutable accounts without distinctness constraints",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-841".to_string()),
+                cvss_score: Some(6.0),
+                impact: "Duplicate mutable accounts could cause unintended state changes"
+                    .to_string(),
+                recommendation: "Add #[account(constraint = account1.key() != account2.key())]"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Frontrunning vulnerabilities (Solana Vulnerability #9)
+    fn check_frontrunning_vulnerabilities(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for purchase operations without price validation
+        if content.contains("purchase")
+            && !content.contains("expected_price")
+            && !content.contains("assert!")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Purchase operation vulnerable to frontrunning".to_string(),
+                description: format!(
+                    "File {} performs purchase without price validation against expected value",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-362".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Transaction could be frontrun with price manipulation".to_string(),
+                recommendation:
+                    "Include expected price validation: assert!(sale_price <= expected_price)"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for swap operations without slippage protection
+        if (content.contains("swap") || content.contains("dex"))
+            && !content.contains("slippage")
+            && !content.contains("min_out")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Swap operation without slippage protection".to_string(),
+                description: format!(
+                    "File {} performs swaps without slippage or minimum output protection",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-362".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Swaps vulnerable to frontrunning and sandwich attacks".to_string(),
+                recommendation: "Implement slippage protection and minimum output validation"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Insecure Initialization vulnerabilities (Solana Vulnerability #10)
+    fn check_insecure_initialization(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for initialization without upgrade authority check
+        if content.contains("central_state.authority")
+            && !content.contains("upgrade_authority_address")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Initialization without upgrade authority validation".to_string(),
+                description: format!(
+                    "File {} initializes state without verifying upgrade authority",
+                    file_path
+                ),
+                severity: AuditSeverity::Critical,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-862".to_string()),
+                cvss_score: Some(9.0),
+                impact: "Unauthorized initialization could compromise the entire program"
+                    .to_string(),
+                recommendation: "Restrict initialization to program upgrade authority".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for missing program data validation
+        if content.contains("program_data") && !content.contains("constraint") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Program data used without validation".to_string(),
+                description: format!(
+                    "File {} uses program_data without proper constraint validation",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Invalid program data could be used for initialization".to_string(),
+                recommendation:
+                    "Add constraint validation for program_data.upgrade_authority_address"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Precision Loss vulnerabilities (Solana Vulnerability #11)
+    fn check_precision_loss(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for multiplication after division
+        if content.contains("/ c")
+            && content.contains("* b")
+            && content
+                .lines()
+                .any(|line| line.contains("/ c") && line.contains("* b"))
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Multiplication after division causing precision loss".to_string(),
+                description: format!(
+                    "File {} performs division before multiplication, causing precision loss",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Precision loss in calculations could lead to incorrect token amounts"
+                    .to_string(),
+                recommendation: "Perform multiplication before division: (a * b) / c".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for saturating arithmetic usage
+        if content.contains("saturating_mul")
+            || content.contains("saturating_add")
+            || content.contains("saturating_sub")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Saturating arithmetic usage".to_string(),
+                description: format!(
+                    "File {} uses saturating arithmetic which silently caps values",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-190".to_string()),
+                cvss_score: Some(6.0),
+                impact: "Silent value capping could hide overflow conditions".to_string(),
+                recommendation:
+                    "Use checked_* functions instead of saturating_* for explicit error handling"
+                        .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for rounding without proper handling
+        if content.contains("try_round_u64") && !content.contains("try_floor_u64") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Rounding method may cause inflation".to_string(),
+                description: format!(
+                    "File {} uses try_round_u64 which may cause token inflation",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Rounding up could create more tokens than intended".to_string(),
+                recommendation: "Use try_floor_u64 for rounding to avoid inflation".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Overflow and Underflow vulnerabilities (Solana Vulnerability #14)
+    fn check_overflow_underflow_enhanced(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for unchecked arithmetic operations
+        let arithmetic_patterns = ["+", "-", "*", "/"];
+        for op in &arithmetic_patterns {
+            if content.contains(&format!("balance {}", op)) && !content.contains("checked_") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Unchecked arithmetic operation".to_string(),
+                    description: format!(
+                        "File {} performs {} operation without overflow/underflow checks",
+                        file_path, op
+                    ),
+                    severity: AuditSeverity::High,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-190".to_string()),
+                    cvss_score: Some(7.5),
+                    impact: "Integer overflow/underflow could alter balances unexpectedly"
+                        .to_string(),
+                    recommendation: "Use checked_* functions for arithmetic operations".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                    ],
+                });
+                *finding_id += 1;
+                break; // Only report once per file
+            }
+        }
+
+        // Check for unsafe casting
+        if content.contains("as u64") || content.contains("as u32") {
+            if !content.contains("try_from") {
+                findings.push(AuditFinding {
+                    id: format!("OSVM-SOL-{:03}", *finding_id),
+                    title: "Unsafe type casting".to_string(),
+                    description: format!(
+                        "File {} performs unsafe casting without bounds checking",
+                        file_path
+                    ),
+                    severity: AuditSeverity::Medium,
+                    category: "Solana Security".to_string(),
+                    cwe_id: Some("CWE-190".to_string()),
+                    cvss_score: Some(6.0),
+                    impact: "Casting could truncate values or cause overflows".to_string(),
+                    recommendation: "Use try_from for safe casting with error handling".to_string(),
+                    code_location: Some(file_path.to_string()),
+                    references: vec![
+                        "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                    ],
+                });
+                *finding_id += 1;
+            }
+        }
+
+        findings
+    }
+
+    /// Check for PDA Sharing vulnerabilities (Solana Vulnerability #15)
+    fn check_pda_sharing_vulnerabilities(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for shared PDA seeds
+        if content.contains("seeds = [b\"staking_pool_pda\"]")
+            && !content.contains("staking_pool.key()")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "PDA seeds lack uniqueness".to_string(),
+                description: format!(
+                    "File {} uses non-unique PDA seeds that could be shared across roles",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-345".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Same PDA used for multiple roles enables unauthorized access".to_string(),
+                recommendation: "Use unique seeds per functionality with specific identifiers"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Remaining Accounts vulnerabilities (Solana Vulnerability #16)
+    fn check_remaining_accounts_vulnerabilities(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for unvalidated remaining accounts
+        if content.contains("ctx.remaining_accounts.iter()") && !content.contains("owner") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Unvalidated remaining accounts".to_string(),
+                description: format!(
+                    "File {} processes remaining accounts without validation",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-20".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Malicious accounts could be processed in remaining accounts".to_string(),
+                recommendation: "Validate ownership and data of all remaining accounts".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Rust-Specific Errors (Solana Vulnerability #17)
+    fn check_rust_specific_errors(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for unsafe blocks
+        if content.contains("unsafe {") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Unsafe code block detected".to_string(),
+                description: format!(
+                    "File {} contains unsafe code that bypasses Rust's safety guarantees",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-119".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Unsafe code could lead to memory corruption or security vulnerabilities"
+                    .to_string(),
+                recommendation: "Minimize unsafe usage, document thoroughly, and audit carefully"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for array indexing without bounds checking
+        if content.contains("array[") && !content.contains("get(") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Potential array bounds violation".to_string(),
+                description: format!(
+                    "File {} uses direct array indexing without bounds checking",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-125".to_string()),
+                cvss_score: Some(6.0),
+                impact: "Out-of-bounds access could cause panics or memory corruption".to_string(),
+                recommendation: "Use safe array access with .get() method".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec!["https://doc.rust-lang.org/book/ch08-01-vectors.html".to_string()],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for unwrap usage
+        if content.contains(".unwrap()") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Panic-inducing unwrap usage".to_string(),
+                description: format!(
+                    "File {} uses unwrap which can cause panics on None/Err values",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-703".to_string()),
+                cvss_score: Some(5.0),
+                impact: "Panics could crash the program or cause denial of service".to_string(),
+                recommendation: "Use pattern matching or proper error handling instead of unwrap"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://doc.rust-lang.org/book/ch09-00-error-handling.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Type Cosplay vulnerabilities (Solana Vulnerability #19)
+    fn check_type_cosplay_vulnerabilities(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for manual deserialization without discriminator check
+        if content.contains("try_from_slice") && !content.contains("discriminant") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Deserialization without discriminator check".to_string(),
+                description: format!(
+                    "File {} deserializes accounts without checking discriminator",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-20".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Wrong account types could be accepted, leading to type confusion"
+                    .to_string(),
+                recommendation: "Always check discriminator during deserialization".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for missing Anchor Account type usage
+        if content.contains("AccountInfo")
+            && content.contains("data.borrow()")
+            && !content.contains("Account<")
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Manual account handling instead of Anchor types".to_string(),
+                description: format!(
+                    "File {} manually handles accounts instead of using Anchor's Account type",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-20".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Manual account handling may miss type validation".to_string(),
+                recommendation: "Use Anchor's Account<'info, T> type for automatic validation"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_references/accounts.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        findings
+    }
+
+    /// Check for Financial Math Precision vulnerabilities (Solana Vulnerability #20-23)
+    fn check_financial_math_precision(
+        &self,
+        content: &str,
+        file_path: &str,
+        finding_id: &mut usize,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for floating-point in financial calculations
+        if (content.contains("f64") || content.contains("f32"))
+            && (content.contains("balance")
+                || content.contains("amount")
+                || content.contains("interest"))
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Floating-point usage in financial calculations".to_string(),
+                description: format!(
+                    "File {} uses floating-point arithmetic for financial calculations",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(7.5),
+                impact: "Floating-point precision errors could cause token loss or inflation".to_string(),
+                recommendation: "Use integers and minor units (lamports) for financial calculations".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for inconsistent rounding
+        if content.contains("try_round_u64") && content.contains("try_floor_u64") {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Inconsistent rounding methods".to_string(),
+                description: format!(
+                    "File {} uses different rounding methods inconsistently",
+                    file_path
+                ),
+                severity: AuditSeverity::Medium,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(5.5),
+                impact: "Inconsistent rounding could be exploited for token manipulation"
+                    .to_string(),
+                recommendation: "Define consistent rounding policy and use uniformly".to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
+        }
+
+        // Check for compound interest with floats
+        if content.contains("powf")
+            && (content.contains("interest") || content.contains("compound"))
+        {
+            findings.push(AuditFinding {
+                id: format!("OSVM-SOL-{:03}", *finding_id),
+                title: "Floating-point compound interest calculation".to_string(),
+                description: format!(
+                    "File {} uses floating-point for compound interest calculations",
+                    file_path
+                ),
+                severity: AuditSeverity::High,
+                category: "Solana Security".to_string(),
+                cwe_id: Some("CWE-682".to_string()),
+                cvss_score: Some(7.0),
+                impact: "Floating-point compound interest leads to precision errors".to_string(),
+                recommendation: "Use fixed-point arithmetic libraries like spl-math::PreciseNumber"
+                    .to_string(),
+                code_location: Some(file_path.to_string()),
+                references: vec![
+                    "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
+                ],
+            });
+            *finding_id += 1;
         }
 
         findings
@@ -4068,11 +5758,274 @@ impl AuditCoordinator {
         notes
     }
 
-    /// Generate Typst document from audit report
+    /// Generate Typst document from audit report using template system
     pub fn generate_typst_document(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
-        let typst_content = self.create_typst_content(report)?;
-        std::fs::write(output_path, typst_content).context("Failed to write Typst document")?;
-        Ok(())
+        self.template_generator
+            .generate_typst_document(report, output_path)
+    }
+
+    /// Generate JSON report using template system
+    pub fn generate_json_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
+        self.template_generator
+            .generate_json_report(report, output_path)
+    }
+
+    /// Generate HTML report using template system
+    pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
+        self.template_generator
+            .generate_html_report(report, output_path)
+    }
+
+    /// Enhanced dependency security checks
+    fn check_dependency_security_enhanced(&self) -> Result<Vec<AuditFinding>> {
+        let mut findings = Vec::new();
+
+        if let Ok(content) = std::fs::read_to_string("Cargo.toml") {
+            // Use proper TOML parsing for more accurate dependency analysis
+            match toml::from_str::<toml::Value>(&content) {
+                Ok(parsed_toml) => {
+                    // Check dependencies section
+                    if let Some(dependencies) =
+                        parsed_toml.get("dependencies").and_then(|d| d.as_table())
+                    {
+                        findings
+                            .extend(self.analyze_dependencies_toml(dependencies, "dependencies"));
+                    }
+
+                    // Check dev-dependencies section
+                    if let Some(dev_deps) = parsed_toml
+                        .get("dev-dependencies")
+                        .and_then(|d| d.as_table())
+                    {
+                        findings
+                            .extend(self.analyze_dependencies_toml(dev_deps, "dev-dependencies"));
+                    }
+
+                    // Check build-dependencies section
+                    if let Some(build_deps) = parsed_toml
+                        .get("build-dependencies")
+                        .and_then(|d| d.as_table())
+                    {
+                        findings.extend(
+                            self.analyze_dependencies_toml(build_deps, "build-dependencies"),
+                        );
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to parse Cargo.toml as TOML, falling back to string matching: {}",
+                        e
+                    );
+                    // Fallback to original string-based analysis
+                    findings.extend(self.check_dependency_security_fallback(&content));
+                }
+            }
+        }
+
+        Ok(findings)
+    }
+
+    /// Analyze dependencies using parsed TOML structure
+    fn analyze_dependencies_toml(
+        &self,
+        dependencies: &toml::map::Map<String, toml::Value>,
+        section_name: &str,
+    ) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        for (dep_name, dep_config) in dependencies {
+            // Check for wildcard versions
+            if let Some(version_str) = dep_config.as_str() {
+                if version_str == "*" {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_id(),
+                        title: format!("Wildcard version dependency: {}", dep_name),
+                        description: format!("Dependency '{}' uses wildcard version (*) in [{}]", dep_name, section_name),
+                        severity: AuditSeverity::Medium,
+                        category: "Dependencies".to_string(),
+                        cwe_id: Some("CWE-1104".to_string()),
+                        cvss_score: Some(4.5),
+                        impact: "Unpredictable dependency versions may introduce vulnerabilities".to_string(),
+                        recommendation: format!("Use specific version constraints for dependency '{}'", dep_name),
+                        code_location: Some("Cargo.toml".to_string()),
+                        references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string()],
+                    });
+                }
+            }
+
+            // Check for git dependencies without commit specification
+            if let Some(dep_table) = dep_config.as_table() {
+                if dep_table.contains_key("git")
+                    && !dep_table.contains_key("rev")
+                    && !dep_table.contains_key("tag")
+                {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_id(),
+                        title: format!("Git dependency without fixed revision: {}", dep_name),
+                        description: format!("Dependency '{}' uses git source without pinned revision", dep_name),
+                        severity: AuditSeverity::Medium,
+                        category: "Dependencies".to_string(),
+                        cwe_id: Some("CWE-1104".to_string()),
+                        cvss_score: Some(4.0),
+                        impact: "Git dependencies without fixed revision may introduce supply chain vulnerabilities".to_string(),
+                        recommendation: format!("Pin dependency '{}' to specific commit, tag, or branch", dep_name),
+                        code_location: Some("Cargo.toml".to_string()),
+                        references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
+                    });
+                }
+
+                // Check for path dependencies that might be security risks
+                if dep_table.contains_key("path") {
+                    if let Some(path_str) = dep_table.get("path").and_then(|p| p.as_str()) {
+                        if path_str.starts_with("..") {
+                            findings.push(AuditFinding {
+                                id: FindingIdAllocator::next_id(),
+                                title: format!("External path dependency: {}", dep_name),
+                                description: format!("Dependency '{}' references path outside project: {}", dep_name, path_str),
+                                severity: AuditSeverity::Low,
+                                category: "Dependencies".to_string(),
+                                cwe_id: Some("CWE-426".to_string()),
+                                cvss_score: Some(3.0),
+                                impact: "External path dependencies may not be version controlled".to_string(),
+                                recommendation: format!("Consider using published crate for dependency '{}'", dep_name),
+                                code_location: Some("Cargo.toml".to_string()),
+                                references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-path-dependencies".to_string()],
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Check for known vulnerable dependencies
+            let vulnerable_deps = [
+                ("openssl", vec!["1.0", "0.10"]),
+                ("serde", vec!["0.8", "0.9"]),
+                ("reqwest", vec!["0.9", "0.8"]),
+            ];
+
+            for (vuln_dep, vuln_versions) in &vulnerable_deps {
+                if dep_name == vuln_dep {
+                    if let Some(version_str) = dep_config.as_str() {
+                        for vuln_version in vuln_versions {
+                            if version_str.starts_with(vuln_version) {
+                                findings.push(AuditFinding {
+                                    id: FindingIdAllocator::next_id(),
+                                    title: format!("Potentially vulnerable dependency: {}", dep_name),
+                                    description: format!("Dependency '{}' version '{}' may contain known vulnerabilities", dep_name, version_str),
+                                    severity: AuditSeverity::High,
+                                    category: "Dependencies".to_string(),
+                                    cwe_id: Some("CWE-937".to_string()),
+                                    cvss_score: Some(7.0),
+                                    impact: "Known vulnerabilities in dependencies could be exploited".to_string(),
+                                    recommendation: format!("Update '{}' to the latest secure version", dep_name),
+                                    code_location: Some("Cargo.toml".to_string()),
+                                    references: vec!["https://rustsec.org/".to_string()],
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        findings
+    }
+
+    /// Fallback dependency analysis using string matching
+    fn check_dependency_security_fallback(&self, content: &str) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+
+        // Check for wildcard dependencies
+        if content.contains("\"*\"") {
+            findings.push(AuditFinding {
+                id: FindingIdAllocator::next_id(),
+                title: "Wildcard dependency version detected".to_string(),
+                description: "Cargo.toml contains wildcard (*) version dependencies".to_string(),
+                severity: AuditSeverity::Medium,
+                category: "Dependencies".to_string(),
+                cwe_id: Some("CWE-1104".to_string()),
+                cvss_score: Some(4.5),
+                impact: "Unpredictable dependency versions may introduce vulnerabilities"
+                    .to_string(),
+                recommendation: "Use specific version constraints for all dependencies".to_string(),
+                code_location: Some("Cargo.toml".to_string()),
+                references: vec![
+                    "https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html"
+                        .to_string(),
+                ],
+            });
+        }
+
+        // Check for git dependencies
+        if content.contains("git = ") {
+            findings.push(AuditFinding {
+                id: FindingIdAllocator::next_id(),
+                title: "Git repository dependency detected".to_string(),
+                description: "Cargo.toml contains dependencies from git repositories".to_string(),
+                severity: AuditSeverity::Low,
+                category: "Dependencies".to_string(),
+                cwe_id: Some("CWE-1104".to_string()),
+                cvss_score: Some(3.0),
+                impact: "Git dependencies may not be as reliable as published crates".to_string(),
+                recommendation: "Use published crates from crates.io when possible, pin git dependencies to specific commits".to_string(),
+                code_location: Some("Cargo.toml".to_string()),
+                references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
+            });
+        }
+
+        findings
+    }
+
+    /// Enhanced configuration security checks
+    fn check_configuration_security_enhanced(&self) -> Result<Vec<AuditFinding>> {
+        let mut findings = Vec::new();
+
+        // Check for .env files with potential secrets
+        if let Ok(content) = std::fs::read_to_string(".env") {
+            if content.contains("PASSWORD=")
+                || content.contains("SECRET=")
+                || content.contains("KEY=")
+            {
+                findings.push(AuditFinding {
+                    id: FindingIdAllocator::next_id(),
+                    title: "Secrets in .env file".to_string(),
+                    description: ".env file contains potential secrets that may be committed to version control".to_string(),
+                    severity: AuditSeverity::High,
+                    category: "Configuration".to_string(),
+                    cwe_id: Some("CWE-532".to_string()),
+                    cvss_score: Some(7.0),
+                    impact: "Secrets in configuration files could be exposed in version control".to_string(),
+                    recommendation: "Use secure secret management and add .env to .gitignore".to_string(),
+                    code_location: Some(".env".to_string()),
+                    references: vec!["https://cwe.mitre.org/data/definitions/532.html".to_string()],
+                });
+            }
+        }
+
+        // Check for missing .gitignore patterns
+        if let Ok(content) = std::fs::read_to_string(".gitignore") {
+            let important_patterns = [".env", "*.key", "*.pem", "target/"];
+            for pattern in &important_patterns {
+                if !content.contains(pattern) {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_id(),
+                        title: format!("Missing .gitignore pattern: {}", pattern),
+                        description: format!("Important pattern {} is not in .gitignore", pattern),
+                        severity: AuditSeverity::Low,
+                        category: "Configuration".to_string(),
+                        cwe_id: Some("CWE-200".to_string()),
+                        cvss_score: Some(3.0),
+                        impact: "Sensitive files may be accidentally committed to version control"
+                            .to_string(),
+                        recommendation: format!("Add {} to .gitignore file", pattern),
+                        code_location: Some(".gitignore".to_string()),
+                        references: vec!["https://git-scm.com/docs/gitignore".to_string()],
+                    });
+                }
+            }
+        }
+
+        Ok(findings)
     }
 
     /// Create a test audit report for demonstration
@@ -4506,18 +6459,102 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         println!("📥 Cloning repository to: {}", temp_dir.display());
 
-        let output = Command::new("git")
-            .args(&["clone", "--branch", branch, "--single-branch", repo_url])
-            .arg(&temp_dir)
-            .output()
-            .context("Failed to execute git clone")?;
+        // Use timeout for git operations to prevent hanging
+        let output = self.execute_git_with_timeout(
+            &[
+                "clone",
+                "--branch",
+                branch,
+                "--single-branch",
+                repo_url,
+                temp_dir.to_str().unwrap(),
+            ],
+            Some(&std::env::temp_dir()),
+            Duration::from_secs(300), // 5 minute timeout
+        )?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Git clone failed: {}", error_msg);
         }
 
+        // Verify the repository was cloned successfully
+        if !temp_dir.exists() {
+            anyhow::bail!(
+                "Repository clone directory does not exist: {}",
+                temp_dir.display()
+            );
+        }
+
         Ok(temp_dir)
+    }
+
+    /// Execute git command with timeout to prevent hanging operations
+    fn execute_git_with_timeout(
+        &self,
+        args: &[&str],
+        current_dir: Option<&Path>,
+        timeout: Duration,
+    ) -> Result<std::process::Output> {
+        use std::process::{Command, Stdio};
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Instant;
+
+        let start_time = Instant::now();
+        let mut command = Command::new("git");
+        command
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        if let Some(dir) = current_dir {
+            command.current_dir(dir);
+        }
+
+        let mut child = command.spawn().context("Failed to spawn git command")?;
+
+        let (tx, rx) = mpsc::channel();
+        let child_id = child.id();
+
+        // Spawn a thread to wait for the process
+        thread::spawn(move || {
+            let result = child.wait_with_output();
+            let _ = tx.send(result);
+        });
+
+        // Wait for completion or timeout
+        match rx.recv_timeout(timeout) {
+            Ok(Ok(output)) => {
+                log::debug!("Git command completed in {:?}", start_time.elapsed());
+                Ok(output)
+            }
+            Ok(Err(e)) => Err(anyhow::anyhow!("Git command failed: {}", e)),
+            Err(_) => {
+                // Timeout occurred, try to kill the process
+                log::warn!(
+                    "Git command timed out after {:?}, attempting to terminate",
+                    timeout
+                );
+
+                // On Unix systems, try to kill the process
+                #[cfg(unix)]
+                {
+                    unsafe {
+                        libc::kill(child_id as i32, libc::SIGTERM);
+                    }
+                }
+
+                // On Windows, there's no direct equivalent, but the process should
+                // be cleaned up when the program exits
+                #[cfg(windows)]
+                {
+                    log::warn!("Process termination on Windows not implemented, process may continue running");
+                }
+
+                Err(anyhow::anyhow!("Git command timed out after {:?}", timeout))
+            }
+        }
     }
 
     /// Create audit branch with timestamp and commit hash
@@ -4526,11 +6563,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         let datetime = now.format("%Y%m%d-%H%M%S");
 
         // Get current commit hash
-        let commit_output = Command::new("git")
-            .args(&["rev-parse", "--short", "HEAD"])
-            .current_dir(repo_dir)
-            .output()
-            .context("Failed to get commit hash")?;
+        let commit_output = self.execute_git_with_timeout(
+            &["rev-parse", "--short", "HEAD"],
+            Some(repo_dir),
+            Duration::from_secs(30),
+        )?;
 
         if !commit_output.status.success() {
             anyhow::bail!("Failed to get commit hash");
@@ -4542,11 +6579,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         println!("🌿 Creating audit branch: {}", audit_branch);
 
         // Create and checkout new branch
-        let output = Command::new("git")
-            .args(&["checkout", "-b", &audit_branch])
-            .current_dir(repo_dir)
-            .output()
-            .context("Failed to create audit branch")?;
+        let output = self.execute_git_with_timeout(
+            &["checkout", "-b", &audit_branch],
+            Some(repo_dir),
+            Duration::from_secs(30),
+        )?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
@@ -4607,11 +6644,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         println!("💾 Committing audit results...");
 
         // Add audit files
-        let output = Command::new("git")
-            .args(&["add", "osvm-audit/"])
-            .current_dir(repo_dir)
-            .output()
-            .context("Failed to add audit files")?;
+        let output = self.execute_git_with_timeout(
+            &["add", "osvm-audit/"],
+            Some(repo_dir),
+            Duration::from_secs(60),
+        )?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
@@ -4623,11 +6660,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
             "Add OSVM security audit report ({})",
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         );
-        let output = Command::new("git")
-            .args(&["commit", "-m", &commit_message])
-            .current_dir(repo_dir)
-            .output()
-            .context("Failed to commit audit files")?;
+        let output = self.execute_git_with_timeout(
+            &["commit", "-m", &commit_message],
+            Some(repo_dir),
+            Duration::from_secs(60),
+        )?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
@@ -4636,11 +6673,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         // Push branch
         println!("🚀 Pushing audit branch to origin...");
-        let output = Command::new("git")
-            .args(&["push", "origin", branch])
-            .current_dir(repo_dir)
-            .output()
-            .context("Failed to push audit branch")?;
+        let output = self.execute_git_with_timeout(
+            &["push", "origin", branch],
+            Some(repo_dir),
+            Duration::from_secs(120), // Longer timeout for push
+        )?;
 
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);

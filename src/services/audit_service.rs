@@ -61,30 +61,38 @@ impl AuditService {
         }
     }
 
+    pub fn with_optional_ai(api_key: Option<String>) -> Self {
+        Self {
+            coordinator: AuditCoordinator::with_optional_ai(api_key),
+        }
+    }
+
     pub fn validate_environment(request: &AuditRequest) -> Result<(), AuditError> {
-        // Check for OpenAI API key if AI analysis is enabled
+        // Check for OpenAI API key if AI analysis is explicitly requested
         if request.ai_analysis {
             match std::env::var("OPENAI_API_KEY") {
-                Ok(key) if !key.is_empty() => {}
+                Ok(key) if !key.trim().is_empty() => {
+                    println!("🤖 AI analysis will be enabled with provided API key");
+                }
                 Ok(_) => {
                     return Err(AuditError::EnvironmentError(
-                        "OPENAI_API_KEY environment variable is empty".to_string(),
-                    ))
+                        "OPENAI_API_KEY is empty but AI analysis was requested. Please provide a valid API key or disable AI analysis.".to_string()
+                    ));
                 }
                 Err(_) => {
                     return Err(AuditError::EnvironmentError(
-                        "OPENAI_API_KEY environment variable not found".to_string(),
-                    ))
+                        "OPENAI_API_KEY not found but AI analysis was requested. Please set the environment variable or disable AI analysis.".to_string()
+                    ));
                 }
             }
         }
 
         // Validate output format
         match request.format.as_str() {
-            "typst" | "pdf" | "both" => {}
+            "typst" | "pdf" | "both" | "json" | "html" | "markdown" => {}
             _ => {
                 return Err(AuditError::ConfigurationError(format!(
-                    "Invalid format '{}'. Valid formats: typst, pdf, both",
+                    "Invalid format '{}'. Valid formats: typst, pdf, both, json, html, markdown",
                     request.format
                 )))
             }
