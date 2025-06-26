@@ -310,8 +310,6 @@ sequenceDiagram
     AI->>Audit: Return enhanced finding
     Audit->>Report: Generate report with AI insights
     Report->>CLI: Output enhanced report
-    
-    classDef techDebt fill:#f6f6f6,stroke:#d9534f,color:#d9534f,font-family:Consolas,monospace,font-weight:bold
 ```
 
 ### AI Enhancement Features
@@ -460,7 +458,7 @@ flowchart TD
     VERIFY --> MONITOR
     MONITOR --> SCAN
     
-    classDef techDebt fill:#f6f6f6,stroke:#d9534f,color:#d9534f,font-family:Consolas,monospace,font-weight:bold
+    classDef TD fill:#f6f6f6,stroke:#d9534f,color:#d9534f,font-family:Consolas,monospace,font-weight:bold
 ```
 
 ### Recommended Practices
