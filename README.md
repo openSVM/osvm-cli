@@ -160,7 +160,7 @@ OSVM CLI now includes a dedicated GitHub Action for seamless CI/CD integration! 
 - 📊 **Detailed Logging**: Comprehensive deployment logs
 - 🔄 **Reusable**: Includes reusable workflows for common patterns
 
-[📖 View Complete Documentation](.github/actions/svm-deploy/README.md) | [🔧 See Examples](examples/github-actions/)
+[📖 Complete Deployment Guide](docs/deployment/github-actions.md) | [🚀 Action Reference](.github/actions/svm-deploy/README.md) | [🔧 Examples](examples/github-actions/)
 
 ---
 
@@ -354,7 +354,8 @@ osvm svm dashboard
 
 ## 📚 Documentation
 
-- [📖 GitHub Actions Integration](.github/actions/svm-deploy/README.md) - Complete guide for CI/CD integration
+- [📖 GitHub Actions Deployment Guide](docs/deployment/github-actions.md) - Comprehensive CI/CD integration guide
+- [🚀 GitHub Actions Integration](.github/actions/svm-deploy/README.md) - Complete action reference
 - [🔧 GitHub Actions Examples](examples/github-actions/) - Ready-to-use workflow examples
 - [📋 Command Reference](#-command-reference) - All available commands and options
 - [🎯 Usage Examples](#-usage-examples) - Common use cases and scenarios
