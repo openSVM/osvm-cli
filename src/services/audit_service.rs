@@ -75,10 +75,14 @@ impl AuditService {
                     println!("🤖 AI analysis will be enabled with provided API key");
                 }
                 Ok(_) => {
-                    println!("⚠️  OPENAI_API_KEY is empty, AI analysis will be disabled");
+                    return Err(AuditError::EnvironmentError(
+                        "OPENAI_API_KEY is empty but AI analysis was requested. Please provide a valid API key or disable AI analysis.".to_string()
+                    ));
                 }
                 Err(_) => {
-                    println!("⚠️  OPENAI_API_KEY not found, AI analysis will be disabled");
+                    return Err(AuditError::EnvironmentError(
+                        "OPENAI_API_KEY not found but AI analysis was requested. Please set the environment variable or disable AI analysis.".to_string()
+                    ));
                 }
             }
         }
