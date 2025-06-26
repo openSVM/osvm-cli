@@ -8,8 +8,8 @@
     
     <!-- Marked.js for markdown parsing - try multiple CDNs for reliability -->
     <script src="https://unpkg.com/marked/marked.min.js"></script>
-    <!-- Mermaid.js for diagram rendering -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+    <!-- Mermaid.js for diagram rendering - local fallback -->
+    <script src="mermaid.min.js"></script>
     <script>
         // Fallback if marked.js fails to load
         if (typeof marked === 'undefined') {
@@ -411,7 +411,7 @@
             const codeBlocks = document.querySelectorAll('pre code');
             
             codeBlocks.forEach((codeBlock, index) => {
-                const text = codeBlock.textContent.trim();
+                let text = codeBlock.textContent.trim();
                 const parentPre = codeBlock.parentElement;
                 
                 // Check if this is a mermaid diagram - look for mermaid language or text starting with flowchart/graph/sequenceDiagram etc.
@@ -429,6 +429,13 @@
                                         text.includes('subgraph');
                 
                 if (isMermaidLang || isMermaidContent) {
+                    // Clean up the text - remove "mermaid" prefix if it exists
+                    if (text.startsWith('mermaid\n') || text.startsWith('mermaid\r\n')) {
+                        text = text.substring(text.indexOf('\n') + 1).trim();
+                    } else if (text.startsWith('mermaidflowchart')) {
+                        text = text.substring(7); // Remove "mermaid" prefix
+                    }
+                    
                     // Create a new div for the mermaid diagram
                     const mermaidDiv = document.createElement('div');
                     mermaidDiv.className = 'mermaid';
