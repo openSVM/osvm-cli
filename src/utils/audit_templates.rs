@@ -232,7 +232,7 @@ impl EnhancedAIErrorHandler {
     pub fn new() -> Self {
         Self {
             last_error_log: std::sync::Arc::new(std::sync::Mutex::new(
-                std::time::Instant::now() - std::time::Duration::from_secs(60)
+                std::time::Instant::now() - std::time::Duration::from_secs(60),
             )),
             error_log_threshold: std::time::Duration::from_secs(30), // Log at most once every 30 seconds
         }
@@ -254,12 +254,16 @@ impl EnhancedAIErrorHandler {
     }
 
     /// Handle AI analysis error with comprehensive but rate-limited logging
-    pub fn handle_ai_error_with_context(&self, error: &anyhow::Error, context: &str) -> Option<String> {
+    pub fn handle_ai_error_with_context(
+        &self,
+        error: &anyhow::Error,
+        context: &str,
+    ) -> Option<String> {
         // Always log the first occurrence or after the threshold period
         if self.should_log_error() {
             log::error!("AI Analysis Error in {}: {}", context, error);
             log::warn!("AI error logging rate-limited to prevent log flooding");
-            
+
             // Log the full error chain for detailed diagnostics
             let mut current_error = error.source();
             let mut error_level = 1;
