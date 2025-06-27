@@ -88,14 +88,14 @@ jobs:
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
           WORKDIR=$(pwd)
           PKG=osvm-$VERSION
-          TARBALL="$WORKDIR/osvm_${VERSION}.orig.tar.gz"
+          TARBALL="../osvm_${VERSION}.orig.tar.gz"  # Create tarball in parent directory
           # Clean up any old stuff
           rm -rf "$PKG"
           rm -f "$TARBALL"
           # Prepare source dir
           mkdir -p "$PKG"
           cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
-          # Pack source tarball in the working dir
+          # Pack source tarball in the parent dir
           tar czvf "$TARBALL" "$PKG"
           # Move into the package dir
           cd "$PKG"
