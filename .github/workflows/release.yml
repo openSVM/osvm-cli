@@ -88,26 +88,30 @@ jobs:
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
           WORKDIR=$(pwd)
           PKG=osvm-$VERSION
-          TARBALL="osvm_${VERSION}.orig.tar.gz"  # Create tarball in current directory
+          TARBALL="osvm_${VERSION}.orig.tar.gz"
+          TEMP_TARBALL="temp_${TARBALL}"  # Use temporary name to avoid same-file error
           # Clean up any old stuff
           rm -rf "$PKG"
-          rm -f "$TARBALL"
+          rm -f "$TARBALL" "$TEMP_TARBALL"
           # Prepare source dir
           mkdir -p "$PKG"
           cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
-          # Pack source tarball in the current dir
-          tar czvf "$TARBALL" "$PKG"
+          # Pack source tarball with temporary name first
+          tar czvf "$TEMP_TARBALL" "$PKG"
           # Ensure the tarball exists
-          if [ ! -f "$TARBALL" ]; then
-            echo "Error: $TARBALL not found!"
+          if [ ! -f "$TEMP_TARBALL" ]; then
+            echo "Error: $TEMP_TARBALL not found!"
             exit 1
           fi
           # Move into the package dir
           cd "$PKG"
-          # Run dh_make using relative path to the tarball
-          dh_make -y -s -c apache -e rin@opensvm.com -f "../$TARBALL"
+          # Run dh_make using the temporary tarball - this avoids same-file error
+          # dh_make will copy the temp tarball to the correct orig.tar.gz location
+          dh_make -y -s -c apache -e rin@opensvm.com -f "../$TEMP_TARBALL"
           # Move back to the working dir
           cd "$WORKDIR"
+          # Clean up temporary tarball
+          rm -f "$TEMP_TARBALL"
           # Build the .deb package
           dpkg-buildpackage -us -uc
           
