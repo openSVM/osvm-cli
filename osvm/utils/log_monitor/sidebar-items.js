@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["IssueType","Severity"],"fn":["apply_fix","init_log_patterns","install_ngrok","is_ngrok_installed","monitor_log_file","monitor_logs_continuous","setup_ngrok_tunnels"],"struct":["DetectedIssue","FixResult","LogMonitorConfig","LogPattern","MonitorState"]};
