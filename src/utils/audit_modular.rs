@@ -165,7 +165,9 @@ impl FindingIdAllocator {
             .as_nanos()
             .hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
-        FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst).hash(&mut hasher);
+        FINDING_ID_COUNTER
+            .fetch_add(1, Ordering::SeqCst)
+            .hash(&mut hasher);
         category.hash(&mut hasher);
 
         let hash = hasher.finish();
@@ -191,7 +193,9 @@ impl FindingIdAllocator {
             .as_nanos()
             .hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
-        FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst).hash(&mut hasher);
+        FINDING_ID_COUNTER
+            .fetch_add(1, Ordering::SeqCst)
+            .hash(&mut hasher);
 
         let hash = hasher.finish();
         format!("OSVM-{:016x}", hash)
@@ -572,10 +576,21 @@ impl SolanaSecurityCheck {
     fn is_likely_solana_key(&self, value: &str, context: &str) -> bool {
         // Skip common false positives
         let false_positive_indicators = [
-            "test", "mock", "example", "dummy", "placeholder", "lorem", "ipsum",
-            "comment", "doc", "readme", "license", "copyright", "author"
+            "test",
+            "mock",
+            "example",
+            "dummy",
+            "placeholder",
+            "lorem",
+            "ipsum",
+            "comment",
+            "doc",
+            "readme",
+            "license",
+            "copyright",
+            "author",
         ];
-        
+
         let context_lower = context.to_lowercase();
         for indicator in &false_positive_indicators {
             if context_lower.contains(indicator) {
@@ -585,11 +600,26 @@ impl SolanaSecurityCheck {
 
         // Look for Solana-specific context clues
         let solana_indicators = [
-            "pubkey", "program_id", "account", "signer", "authority", "mint", 
-            "token", "pda", "system_program", "spl_token", "metaplex", "anchor",
-            "lamports", "rent", "solana", "devnet", "mainnet", "testnet"
+            "pubkey",
+            "program_id",
+            "account",
+            "signer",
+            "authority",
+            "mint",
+            "token",
+            "pda",
+            "system_program",
+            "spl_token",
+            "metaplex",
+            "anchor",
+            "lamports",
+            "rent",
+            "solana",
+            "devnet",
+            "mainnet",
+            "testnet",
         ];
-        
+
         for indicator in &solana_indicators {
             if context_lower.contains(indicator) {
                 return true;
@@ -613,8 +643,9 @@ impl SolanaSecurityCheck {
             // Check for potential base58 encoded Solana public keys
             if Self::is_valid_base58_pubkey(&string_lit.value) {
                 // Reduce false positives by checking context
-                let is_likely_key = self.is_likely_solana_key(&string_lit.value, &string_lit.context);
-                
+                let is_likely_key =
+                    self.is_likely_solana_key(&string_lit.value, &string_lit.context);
+
                 if is_likely_key {
                     findings.push(AuditFinding {
                         id: FindingIdAllocator::next_category_id("solana"),
@@ -1168,7 +1199,7 @@ mod tests {
         assert!(id1.starts_with("OSVM-") && id1.len() == 21); // OSVM- + 16 hex chars
         assert!(id2.starts_with("OSVM-") && id2.len() == 21);
         assert!(id3.starts_with("OSVM-SOL-") && id3.len() == 25); // OSVM-SOL- + 16 hex chars
-        
+
         // IDs should be different
         assert_ne!(id1, id2);
         assert_ne!(id1, id3);

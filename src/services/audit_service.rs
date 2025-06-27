@@ -299,7 +299,10 @@ impl AuditService {
                 self.coordinator
                     .generate_markdown_summary(&report, &markdown_path)
                     .map_err(|e| {
-                        AuditError::OutputError(format!("Failed to generate Markdown summary: {}", e))
+                        AuditError::OutputError(format!(
+                            "Failed to generate Markdown summary: {}",
+                            e
+                        ))
                     })?;
 
                 if request.verbose > 0 {
