@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OSVM CLI - Solana Virtual Machine Management Tool</title>
-    <meta name="description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks. Monitor, deploy, and manage your SVM infrastructure with a single tool.">
-    <meta name="keywords" content="Solana, SVM, CLI, blockchain, validator, RPC, node management, OSVM">
+    <meta name="description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment. Monitor, deploy, and secure your SVM infrastructure with a single tool.">
+    <meta name="keywords" content="Solana, SVM, CLI, blockchain, validator, RPC, node management, OSVM, security audit, AI analysis, self-hosted RPC">
     
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
-    <meta property="og:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks.">
+    <meta property="og:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://opensvm.github.io/osvm-cli/">
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
-    <meta name="twitter:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks.">
+    <meta name="twitter:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment.">
     
     <style>
         * {
@@ -329,7 +329,7 @@
     <header>
         <div class="container">
             <div class="logo">OSVM CLI 🚀</div>
-            <div class="tagline">A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks</div>
+            <div class="tagline">A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment</div>
             <div class="badges">
                 <span class="badge">MIT License</span>
                 <span class="badge">Rust 1.80.0+</span>
@@ -347,9 +347,21 @@
         <div class="container">
             <section class="section">
                 <h2 class="section-title">Key Features</h2>
-                <p class="section-subtitle">Everything you need to manage your Solana Virtual Machine infrastructure</p>
+                <p class="section-subtitle">Everything you need to manage your Solana infrastructure - with advanced security auditing and free RPC hosting</p>
                 
                 <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <div class="feature-title">AI-Powered Security Audit</div>
+                        <div class="feature-description">Comprehensive Solana program analysis with 23+ security vulnerability checks, AI-enhanced insights, and automated compliance reporting. Detect critical issues like account validation flaws, CPI vulnerabilities, and arithmetic overflows.</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🌐</div>
+                        <div class="feature-title">Free Self-Hosted RPC</div>
+                        <div class="feature-description">Deploy your own Solana RPC node for free in just one command. Support for mainnet, testnet, and devnet with optimized configurations, load balancing, and response caching.</div>
+                    </div>
+                    
                     <div class="feature-card">
                         <div class="feature-icon">🔧</div>
                         <div class="feature-title">SVM Management</div>
@@ -369,21 +381,9 @@
                     </div>
                     
                     <div class="feature-card">
-                        <div class="feature-icon">🌐</div>
-                        <div class="feature-title">Network Configuration</div>
-                        <div class="feature-description">Configure nodes for mainnet, testnet, or devnet with optimized settings for each environment.</div>
-                    </div>
-                    
-                    <div class="feature-card">
                         <div class="feature-icon">📈</div>
                         <div class="feature-title">Performance Metrics</div>
                         <div class="feature-description">Track TPS, latency, and system requirements with detailed performance analytics.</div>
-                    </div>
-                    
-                    <div class="feature-card">
-                        <div class="feature-icon">🎨</div>
-                        <div class="feature-title">Enhanced Output</div>
-                        <div class="feature-description">Colorized output with consistent color-coding for status, commands, and data visualization.</div>
                     </div>
                 </div>
             </section>
@@ -428,12 +428,21 @@
                 
                 <div class="features-grid">
                     <div class="feature-card">
-                        <div class="feature-title">List SVMs</div>
+                        <div class="feature-title">Security Audit</div>
                         <div class="code-block">
-                            <button class="copy-btn" onclick="copyToClipboard('osvm svm list')">Copy</button>
-                            <code>osvm svm list</code>
+                            <button class="copy-btn" onclick="copyToClipboard('osvm audit .')">Copy</button>
+                            <code>osvm audit .</code>
                         </div>
-                        <div class="feature-description">View all installed Solana Virtual Machines</div>
+                        <div class="feature-description">Run comprehensive security analysis on your Solana program</div>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-title">Deploy RPC Node</div>
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="copyToClipboard('osvm rpc-manager local --port 8899')">Copy</button>
+                            <code>osvm rpc-manager local --port 8899</code>
+                        </div>
+                        <div class="feature-description">Start your own Solana RPC node locally for free</div>
                     </div>
                     
                     <div class="feature-card">
@@ -446,21 +455,12 @@
                     </div>
                     
                     <div class="feature-card">
-                        <div class="feature-title">List Nodes</div>
+                        <div class="feature-title">List SVMs</div>
                         <div class="code-block">
-                            <button class="copy-btn" onclick="copyToClipboard('osvm nodes list')">Copy</button>
-                            <code>osvm nodes list</code>
+                            <button class="copy-btn" onclick="copyToClipboard('osvm svm list')">Copy</button>
+                            <code>osvm svm list</code>
                         </div>
-                        <div class="feature-description">View all managed validator and RPC nodes</div>
-                    </div>
-                    
-                    <div class="feature-card">
-                        <div class="feature-title">View Examples</div>
-                        <div class="code-block">
-                            <button class="copy-btn" onclick="copyToClipboard('osvm examples')">Copy</button>
-                            <code>osvm examples</code>
-                        </div>
-                        <div class="feature-description">Show examples for common workflows</div>
+                        <div class="feature-description">View all installed Solana Virtual Machines</div>
                     </div>
                 </div>
             </section>
@@ -486,7 +486,7 @@
                         <div class="feature-description">
                             <a href="docs.html?doc=svm-management" style="color: #667eea; text-decoration: none;">SVM Management</a> | 
                             <a href="docs.html?doc=node-management" style="color: #667eea; text-decoration: none;">Node Management</a> | 
-                            <a href="docs.html?doc=rpc-manager" style="color: #667eea; text-decoration: none;">RPC Manager</a>
+                            <a href="docs.html?doc=rpc-manager" style="color: #667eea; text-decoration: none; font-weight: bold;">🌐 Free RPC Hosting</a>
                         </div>
                     </div>
                     
@@ -514,8 +514,8 @@
                         <div class="feature-icon">🔒</div>
                         <div class="feature-title">Security & Audit</div>
                         <div class="feature-description">
-                            <a href="docs.html?doc=security-audit" style="color: #667eea; text-decoration: none;">Security Audit</a> | 
-                            <span style="color: #666;">AI-powered vulnerability analysis and compliance reporting</span>
+                            <a href="docs.html?doc=security-audit" style="color: #667eea; text-decoration: none; font-weight: bold;">🛡️ AI-Powered Security Audit</a><br>
+                            <span style="color: #666;">23+ vulnerability checks, CWE mapping, CVSS scoring, and automated compliance reporting for Solana programs</span>
                         </div>
                     </div>
                     
