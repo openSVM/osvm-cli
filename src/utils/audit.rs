@@ -1270,12 +1270,31 @@ impl AuditCoordinator {
             }
         }
 
-        if ai_failures > 0 {
+        if ai_failures > 0 || ai_successes > 0 {
             log::info!(
                 "AI enhancement completed: {} successes, {} failures",
                 ai_successes,
                 ai_failures
             );
+
+            // Provide user-facing feedback about AI analysis status
+            if ai_failures > ai_successes {
+                println!(
+                    "⚠️  AI analysis partially unavailable ({} failures, {} successes)",
+                    ai_failures, ai_successes
+                );
+                println!("   Manual review is recommended for enhanced security insights");
+            } else if ai_failures > 0 {
+                println!(
+                    "ℹ️  AI analysis completed with some failures ({} failures, {} successes)",
+                    ai_failures, ai_successes
+                );
+            } else {
+                println!(
+                    "✅ AI analysis completed successfully for {} findings",
+                    ai_successes
+                );
+            }
         }
 
         enhanced_findings
@@ -5774,6 +5793,16 @@ impl AuditCoordinator {
     pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
         self.template_generator
             .generate_html_report(report, output_path)
+    }
+
+    /// Generate Markdown summary using template system
+    pub fn generate_markdown_summary(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+    ) -> Result<()> {
+        self.template_generator
+            .generate_markdown_summary(report, output_path)
     }
 
     /// Enhanced dependency security checks

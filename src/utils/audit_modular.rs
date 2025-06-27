@@ -49,35 +49,43 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
         regex::Regex::new(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#).unwrap(),
     );
 
-    // Command injection patterns - Enhanced with more comprehensive detection
+    // Command injection patterns - Enhanced with comprehensive detection
     cache.insert(
         "command_injection",
-        regex::Regex::new(r#"Command::new\([^)]*(?:format!|user_input|param|arg)"#).unwrap(),
+        regex::Regex::new(r#"(?:Command::new|process::Command::new)\s*\(\s*(?:[^)]*(?:format!|concat!|&|String::from|to_string|user_input|param|arg|input|req\.|query|body|header)[^)]*|[^)]*\+[^)]*|[^)]*format!\([^)]*\))"#).unwrap(),
     );
     cache.insert(
         "shell_command",
-        regex::Regex::new(r#"(?:shell\(|system\(|exec\()"#).unwrap(),
+        regex::Regex::new(r#"(?:shell\(|system\(|exec\(|cmd\(|spawn\(|output\()"#).unwrap(),
     );
     cache.insert(
         "unsafe_exec",
         regex::Regex::new(
-            r#"(?:std::process::Command|tokio::process::Command).*(?:format!|user_input)"#,
+            r#"(?:std::process::Command|tokio::process::Command).*(?:format!|concat!|user_input|input|param|arg|req\.|query|body|String::from)"#,
         )
         .unwrap(),
     );
+    cache.insert(
+        "dynamic_command_args",
+        regex::Regex::new(r#"\.args?\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+    );
 
-    // Path traversal patterns - Enhanced with context awareness
+    // Path traversal patterns - Enhanced with unicode and encoding detection
     cache.insert(
         "path_traversal",
-        regex::Regex::new(r#"(?:\.\./)+"#).unwrap(),
+        regex::Regex::new(r#"(?:\.\.[\\/]|%2e%2e[\\/]|%252e%252e[\\/]|\.\.\\|%2e%2e%5c|%252e%252e%255c|\\\.\\\.[\\/])"#).unwrap(),
     );
     cache.insert(
         "dynamic_path",
-        regex::Regex::new(r#"Path::new\([^)]*(?:format!|user_input|param)"#).unwrap(),
+        regex::Regex::new(r#"Path::new\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|param|input|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
     );
     cache.insert(
         "unsafe_path_join",
-        regex::Regex::new(r#"path\.join\([^)]*(?:format!|user_input)"#).unwrap(),
+        regex::Regex::new(r#"path\.join\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+    );
+    cache.insert(
+        "path_manipulation",
+        regex::Regex::new(r#"(?:canonicalize|read_to_string|write|create|remove_file|remove_dir)\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
     );
 
     // Network patterns
@@ -131,21 +139,44 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
 pub struct FindingIdAllocator;
 
 impl FindingIdAllocator {
-    /// Generate a unique finding ID with session context
+    /// Generate a unique finding ID with session context (using UUID for better collision resistance)
     pub fn next_id() -> String {
+        // Default to UUID-based ID for maximum uniqueness
+        Self::next_uuid_id()
+    }
+
+    /// Generate a legacy timestamp-based finding ID with session context
+    pub fn next_legacy_id() -> String {
         let id = FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
         format!("OSVM-{}-{:03}", &*SESSION_ID, id)
     }
 
-    /// Generate a category-specific finding ID with session context
+    /// Generate a category-specific finding ID with UUID for maximum uniqueness
     pub fn next_category_id(category: &str) -> String {
-        let id = FINDING_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+        // Use UUID-based approach for category IDs as well
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let mut hasher = DefaultHasher::new();
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .hash(&mut hasher);
+        std::thread::current().id().hash(&mut hasher);
+        FINDING_ID_COUNTER
+            .fetch_add(1, Ordering::SeqCst)
+            .hash(&mut hasher);
+        category.hash(&mut hasher);
+
+        let hash = hasher.finish();
         match category {
-            "solana" => format!("OSVM-{}-SOL-{:03}", &*SESSION_ID, id),
-            "crypto" => format!("OSVM-{}-CRYPTO-{:03}", &*SESSION_ID, id),
-            "network" => format!("OSVM-{}-NET-{:03}", &*SESSION_ID, id),
-            "auth" => format!("OSVM-{}-AUTH-{:03}", &*SESSION_ID, id),
-            _ => format!("OSVM-{}-{:03}", &*SESSION_ID, id),
+            "solana" => format!("OSVM-SOL-{:016x}", hash),
+            "crypto" => format!("OSVM-CRYPTO-{:016x}", hash),
+            "network" => format!("OSVM-NET-{:016x}", hash),
+            "auth" => format!("OSVM-AUTH-{:016x}", hash),
+            _ => format!("OSVM-{:016x}", hash),
         }
     }
 
@@ -162,10 +193,12 @@ impl FindingIdAllocator {
             .as_nanos()
             .hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
-        FINDING_ID_COUNTER.load(Ordering::SeqCst).hash(&mut hasher);
+        FINDING_ID_COUNTER
+            .fetch_add(1, Ordering::SeqCst)
+            .hash(&mut hasher);
 
         let hash = hasher.finish();
-        format!("OSVM-UUID-{:016x}", hash)
+        format!("OSVM-{:016x}", hash)
     }
 
     /// Reset counter (for testing)
@@ -539,6 +572,65 @@ impl SolanaSecurityCheck {
         }
     }
 
+    /// Determine if a base58 string is likely a Solana key based on context
+    fn is_likely_solana_key(&self, value: &str, context: &str) -> bool {
+        // Skip common false positives
+        let false_positive_indicators = [
+            "test",
+            "mock",
+            "example",
+            "dummy",
+            "placeholder",
+            "lorem",
+            "ipsum",
+            "comment",
+            "doc",
+            "readme",
+            "license",
+            "copyright",
+            "author",
+        ];
+
+        let context_lower = context.to_lowercase();
+        for indicator in &false_positive_indicators {
+            if context_lower.contains(indicator) {
+                return false;
+            }
+        }
+
+        // Look for Solana-specific context clues
+        let solana_indicators = [
+            "pubkey",
+            "program_id",
+            "account",
+            "signer",
+            "authority",
+            "mint",
+            "token",
+            "pda",
+            "system_program",
+            "spl_token",
+            "metaplex",
+            "anchor",
+            "lamports",
+            "rent",
+            "solana",
+            "devnet",
+            "mainnet",
+            "testnet",
+        ];
+
+        for indicator in &solana_indicators {
+            if context_lower.contains(indicator) {
+                return true;
+            }
+        }
+
+        // If no specific context, assume it might be a key (conservative approach)
+        // but lower severity if no clear context
+        true
+    }
+
     /// Check for additional Solana security patterns using regex cache
     fn check_solana_patterns(
         &self,
@@ -546,29 +638,35 @@ impl SolanaSecurityCheck {
         file_path: &str,
         findings: &mut Vec<AuditFinding>,
     ) {
-        // Check for hardcoded program IDs or keys in string literals
+        // Check for hardcoded program IDs or keys in string literals with context awareness
         for string_lit in &analysis.string_literals {
             // Check for potential base58 encoded Solana public keys
             if Self::is_valid_base58_pubkey(&string_lit.value) {
-                findings.push(AuditFinding {
-                    id: FindingIdAllocator::next_category_id("solana"),
-                    title: "Potential hardcoded Solana public key".to_string(),
-                    description: format!(
-                        "File {} contains what appears to be a hardcoded base58-encoded public key at line {}",
-                        file_path, string_lit.line
-                    ),
-                    severity: AuditSeverity::Medium,
-                    category: "Solana Security".to_string(),
-                    cwe_id: Some("CWE-798".to_string()),
-                    cvss_score: Some(5.0),
-                    impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
-                    recommendation: "Use environment variables or configuration for public keys, or use the Pubkey::from_str() function with constants".to_string(),
-                    code_location: Some(format!("{}:{}", file_path, string_lit.line)),
-                    references: vec![
-                        "https://docs.solana.com/developing/programming-model/accounts".to_string(),
-                        "https://docs.rs/solana-sdk/latest/solana_sdk/pubkey/struct.Pubkey.html".to_string(),
-                    ],
-                });
+                // Reduce false positives by checking context
+                let is_likely_key =
+                    self.is_likely_solana_key(&string_lit.value, &string_lit.context);
+
+                if is_likely_key {
+                    findings.push(AuditFinding {
+                        id: FindingIdAllocator::next_category_id("solana"),
+                        title: "Potential hardcoded Solana public key".to_string(),
+                        description: format!(
+                            "File {} contains what appears to be a hardcoded base58-encoded public key at line {}: '{}'",
+                            file_path, string_lit.line, &string_lit.value[..12] // Show only first 12 chars
+                        ),
+                        severity: AuditSeverity::Medium,
+                        category: "Solana Security".to_string(),
+                        cwe_id: Some("CWE-798".to_string()),
+                        cvss_score: Some(5.0),
+                        impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
+                        recommendation: "Use environment variables or configuration for public keys, or use the Pubkey::from_str() function with constants".to_string(),
+                        code_location: Some(format!("{}:{}", file_path, string_lit.line)),
+                        references: vec![
+                            "https://docs.solana.com/developing/programming-model/accounts".to_string(),
+                            "https://docs.rs/solana-sdk/latest/solana_sdk/pubkey/struct.Pubkey.html".to_string(),
+                        ],
+                    });
+                }
             }
         }
 
@@ -1097,9 +1195,15 @@ mod tests {
         let id2 = FindingIdAllocator::next_id();
         let id3 = FindingIdAllocator::next_category_id("solana");
 
-        assert_eq!(id1, "OSVM-001");
-        assert_eq!(id2, "OSVM-002");
-        assert_eq!(id3, "OSVM-SOL-003");
+        // IDs should now be UUID-based (16-character hex)
+        assert!(id1.starts_with("OSVM-") && id1.len() == 21); // OSVM- + 16 hex chars
+        assert!(id2.starts_with("OSVM-") && id2.len() == 21);
+        assert!(id3.starts_with("OSVM-SOL-") && id3.len() == 25); // OSVM-SOL- + 16 hex chars
+
+        // IDs should be different
+        assert_ne!(id1, id2);
+        assert_ne!(id1, id3);
+        assert_ne!(id2, id3);
     }
 
     #[test]
