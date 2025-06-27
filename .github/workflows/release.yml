@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - 'main'
 
 env:
   CARGO_TERM_COLOR: always
@@ -88,19 +88,24 @@ jobs:
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
           WORKDIR=$(pwd)
           PKG=osvm-$VERSION
-          TARBALL="../osvm_${VERSION}.orig.tar.gz"  # Create tarball in parent directory
+          TARBALL="osvm_${VERSION}.orig.tar.gz"  # Create tarball in current directory
           # Clean up any old stuff
           rm -rf "$PKG"
           rm -f "$TARBALL"
           # Prepare source dir
           mkdir -p "$PKG"
           cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
-          # Pack source tarball in the parent dir
+          # Pack source tarball in the current dir
           tar czvf "$TARBALL" "$PKG"
+          # Ensure the tarball exists
+          if [ ! -f "$TARBALL" ]; then
+            echo "Error: $TARBALL not found!"
+            exit 1
+          fi
           # Move into the package dir
           cd "$PKG"
           # Run dh_make using relative path to the tarball
-          dh_make -y -s -c apache -e rin@opensvm.com -f "../osvm_${VERSION}.orig.tar.gz"
+          dh_make -y -s -c apache -e rin@opensvm.com -f "../$TARBALL"
           # Move back to the working dir
           cd "$WORKDIR"
           # Build the .deb package
