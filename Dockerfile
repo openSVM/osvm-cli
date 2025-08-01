@@ -23,6 +23,9 @@ COPY vendor/ ./vendor/
 # Copy source code
 COPY src/ ./src/
 
+# Copy templates directory (required by include_str! macros in audit_templates.rs)
+COPY templates/ ./templates/
+
 # Build the application
 RUN cargo build --release
 
