@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -186,7 +186,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -216,7 +216,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
