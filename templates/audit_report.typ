@@ -119,8 +119,8 @@ This report presents the results of a comprehensive security audit conducted on 
   [Findings with CVSS], [{{ statistics.findings_with_cvss }}],
   [Findings with Location], [{{ statistics.findings_with_location }}],
   [Unique Categories], [{{ statistics.unique_categories }}],
-  [Average CVSS Score], [{{ "%.1f" | format(statistics.average_cvss_score) }}],
-  [Coverage Percentage], [{{ "%.1f" | format(statistics.coverage_percentage) }}%],
+  [Average CVSS Score], [{{ statistics.average_cvss_score | round(precision=1) }}],
+  [Coverage Percentage], [{{ statistics.coverage_percentage | round(precision=1) }}%],
 )
 
 = Conclusion
