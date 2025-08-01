@@ -35,6 +35,7 @@ pub struct AuditRequest {
     pub ai_analysis: bool,
     pub gh_repo: Option<String>,
     pub template_path: Option<String>,
+    pub no_commit: bool,
 }
 
 pub struct AuditResult {
@@ -167,6 +168,13 @@ impl AuditService {
             if request.ai_analysis {
                 println!("🤖 AI analysis: enabled");
             }
+            if request.no_commit {
+                if request.output_dir == "." {
+                    println!("📂 No-commit mode: files will be saved to current directory");
+                } else {
+                    println!("📂 No-commit mode: files will be saved but not committed to repository");
+                }
+            }
             if let Some(repo) = &request.gh_repo {
                 println!("🐙 GitHub repository: {}", repo);
             }
@@ -180,7 +188,7 @@ impl AuditService {
             }
 
             self.coordinator
-                .audit_github_repository(repo_spec)
+                .audit_github_repository(repo_spec, request.no_commit)
                 .await
                 .map_err(|e| {
                     AuditError::AuditExecutionError(format!("GitHub audit failed: {}", e))
@@ -360,6 +368,24 @@ impl AuditService {
                         .map_err(|e| {
                             AuditError::OutputError(format!("Failed to generate HTML report: {}", e))
                         })?;
+                }
+
+                // Copy to public/audit.html if not using --no-commit (for web accessibility)
+                if !request.no_commit {
+                    let public_dir = std::path::Path::new("public");
+                    let public_audit_path = public_dir.join("audit.html");
+                    
+                    if let Err(e) = std::fs::create_dir_all(&public_dir) {
+                        if request.verbose > 0 {
+                            println!("⚠️  Could not create public directory: {}", e);
+                        }
+                    } else if let Err(e) = std::fs::copy(&html_path, &public_audit_path) {
+                        if request.verbose > 0 {
+                            println!("⚠️  Could not copy HTML audit to public/audit.html: {}", e);
+                        }
+                    } else if request.verbose > 0 {
+                        println!("📄 HTML audit copied to: {}", public_audit_path.display());
+                    }
                 }
 
                 if request.verbose > 0 {

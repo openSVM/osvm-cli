@@ -6090,110 +6090,117 @@ impl AuditCoordinator {
     pub fn create_test_audit_report(&self) -> AuditReport {
         let mut findings = Vec::new();
 
-        // Add some example findings
-        findings.push(AuditFinding {
-            id: "OSVM-001".to_string(),
-            title: "Example security finding".to_string(),
-            description: "This is an example security finding for demonstration purposes"
-                .to_string(),
-            severity: AuditSeverity::Medium,
-            category: "Security".to_string(),
-            cwe_id: Some("CWE-200".to_string()),
-            cvss_score: Some(5.0),
-            impact: "Potential information disclosure".to_string(),
-            recommendation: "Review and implement proper access controls".to_string(),
-            code_location: Some("src/example.rs".to_string()),
-            references: vec!["https://cwe.mitre.org/data/definitions/200.html".to_string()],
-        });
+        // Add enhanced example findings with detailed descriptions and line-specific locations
 
-        // Add Solana-specific test findings
+        // Critical Solana Security Findings
         findings.push(AuditFinding {
             id: "OSVM-SOL-001".to_string(),
-            title: "Missing signer validation in Solana program".to_string(),
-            description:
-                "Detected potential missing signer validation in program instruction handling"
-                    .to_string(),
+            title: "Missing signer validation in Solana program instruction handler".to_string(),
+            description: "Critical security vulnerability: Program instruction handler accepts accounts without validating required signers. This allows unauthorized users to execute privileged operations by providing any account as a signer. The vulnerability occurs in the instruction processing logic where account.is_signer is not properly checked before performing sensitive operations like token transfers or account modifications.".to_string(),
             severity: AuditSeverity::Critical,
-            category: "Solana Security".to_string(),
+            category: "Authentication & Authorization".to_string(),
             cwe_id: Some("CWE-862".to_string()),
-            cvss_score: Some(9.0),
-            impact: "Unauthorized users could execute privileged operations".to_string(),
-            recommendation:
-                "Always validate that required accounts are signers using is_signer checks"
-                    .to_string(),
-            code_location: Some("src/solana/program.rs".to_string()),
+            cvss_score: Some(9.1),
+            impact: "Complete compromise of access control - unauthorized users can execute any privileged operation, leading to potential theft of funds, unauthorized account modifications, and complete program compromise.".to_string(),
+            recommendation: "Implement mandatory signer validation: 1) Add explicit is_signer checks for all authority accounts, 2) Use Anchor's Signer<'info> type for automatic validation, 3) Validate that the signer's public key matches expected authorities, 4) Add comprehensive unit tests for all authorization paths.".to_string(),
+            code_location: Some("/home/runner/work/solana-program/src/instruction/mod.rs:L44-L67".to_string()),
             references: vec![
                 "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                 "https://solana.com/developers/guides/getstarted/intro-to-anchor".to_string(),
+                "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/0-signer-authorization".to_string(),
             ],
         });
 
         findings.push(AuditFinding {
             id: "OSVM-SOL-002".to_string(),
-            title: "Potential PDA verification bypass".to_string(),
-            description:
-                "Program uses PDA operations without proper verification of derived addresses"
-                    .to_string(),
+            title: "Program Derived Address (PDA) verification bypass vulnerability".to_string(),
+            description: "High-severity vulnerability in PDA handling: The program accepts arbitrary accounts as PDAs without verifying they were derived using the correct seeds and program ID. This bypasses the fundamental security guarantee of PDAs and allows attackers to provide malicious accounts that can be used to manipulate program state or drain funds.".to_string(),
             severity: AuditSeverity::High,
-            category: "Solana Security".to_string(),
+            category: "Account Validation".to_string(),
             cwe_id: Some("CWE-345".to_string()),
-            cvss_score: Some(8.0),
-            impact: "Attackers could provide arbitrary accounts instead of valid PDAs".to_string(),
-            recommendation: "Always verify PDA derivation matches expected seeds and program ID"
-                .to_string(),
-            code_location: Some("src/solana/pda.rs".to_string()),
+            cvss_score: Some(8.2),
+            impact: "Attackers can substitute legitimate PDAs with malicious accounts, potentially leading to: unauthorized state modifications, fund drainage from escrow accounts, bypass of access controls, and manipulation of program logic that depends on PDA integrity.".to_string(),
+            recommendation: "Implement comprehensive PDA validation: 1) Always call find_program_address() to verify PDA derivation, 2) Compare derived PDA with provided account address, 3) Validate all seeds used in derivation, 4) Use Anchor's seeds constraint for automatic validation, 5) Add extensive testing for PDA edge cases.".to_string(),
+            code_location: Some("/home/runner/work/solana-program/src/state/escrow.rs:L156-L178".to_string()),
             references: vec![
-                "https://solanacookbook.com/references/programs.html#how-to-create-a-pda"
-                    .to_string(),
+                "https://solanacookbook.com/references/programs.html#how-to-create-a-pda".to_string(),
+                "https://book.anchor-lang.com/anchor_bts/PDAs.html".to_string(),
+                "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/1-account-data-matching".to_string(),
             ],
         });
 
         findings.push(AuditFinding {
             id: "OSVM-SOL-003".to_string(),
-            title: "SPL token operations without authority checks".to_string(),
-            description: "Token operations performed without proper authority validation"
-                .to_string(),
+            title: "SPL Token authority validation completely missing in transfer operations".to_string(),
+            description: "Critical security flaw in token operations: The program performs SPL token transfers and other operations without validating that the transaction signer has the necessary authority over the token accounts. This creates a complete bypass of token ownership controls, allowing any user to transfer tokens from any account.".to_string(),
             severity: AuditSeverity::High,
-            category: "Solana Security".to_string(),
+            category: "Token Security".to_string(),
             cwe_id: Some("CWE-862".to_string()),
-            cvss_score: Some(8.0),
-            impact: "Unauthorized token operations could lead to fund theft".to_string(),
-            recommendation: "Always verify token authorities before performing operations"
-                .to_string(),
-            code_location: Some("src/solana/token.rs".to_string()),
-            references: vec!["https://spl.solana.com/token".to_string()],
+            cvss_score: Some(8.5),
+            impact: "Complete token security compromise: Any user can transfer tokens from any account, drain token vaults, manipulate token supplies, and perform unauthorized token operations, resulting in direct financial losses for all token holders.".to_string(),
+            recommendation: "Implement robust token authority validation: 1) Verify token account ownership before transfers, 2) Check delegate permissions for delegated operations, 3) Validate mint authority for minting operations, 4) Use SPL Token program's built-in authority checks, 5) Implement comprehensive integration tests with various token account configurations.".to_string(),
+            code_location: Some("/home/runner/work/solana-program/src/instructions/token_transfer.rs:L89-L112".to_string()),
+            references: vec![
+                "https://spl.solana.com/token".to_string(),
+                "https://docs.rs/spl-token/latest/spl_token/".to_string(),
+                "https://github.com/solana-labs/solana-program-library/tree/master/token/program".to_string(),
+            ],
         });
 
+        // Medium Priority Findings
         findings.push(AuditFinding {
-            id: "OSVM-SOL-004".to_string(),
-            title: "Missing MEV protection in trading operations".to_string(),
-            description: "Trading operations lack protection against MEV attacks".to_string(),
+            id: "OSVM-DEX-001".to_string(),
+            title: "MEV vulnerabilities in DEX operations - missing slippage and deadline protection".to_string(),
+            description: "Trading operations lack essential MEV (Maximal Extractable Value) protection mechanisms. The current implementation does not enforce slippage limits or transaction deadlines, making trades vulnerable to front-running, sandwich attacks, and other MEV exploitation strategies. This particularly affects AMM interactions and large trades that can significantly impact token prices.".to_string(),
             severity: AuditSeverity::Medium,
-            category: "Solana Security".to_string(),
+            category: "Trading Security".to_string(),
             cwe_id: Some("CWE-841".to_string()),
-            cvss_score: Some(4.5),
-            impact: "Transactions vulnerable to front-running and sandwich attacks".to_string(),
-            recommendation: "Implement slippage protection and transaction deadlines".to_string(),
-            code_location: Some("src/solana/dex.rs".to_string()),
+            cvss_score: Some(6.1),
+            impact: "Financial losses due to MEV attacks: Users experience unexpected slippage, reduced trade value from sandwich attacks, failed transactions due to stale pricing, and overall degraded trading experience with potential significant financial impact on large trades.".to_string(),
+            recommendation: "Implement comprehensive MEV protection: 1) Add configurable slippage tolerance checks, 2) Implement transaction deadlines with proper timestamp validation, 3) Consider using private mempools or MEV protection services, 4) Add price impact warnings for large trades, 5) Implement trade size limits to reduce MEV attractiveness.".to_string(),
+            code_location: Some("/home/runner/work/solana-dex/src/amm/swap.rs:L234-L267".to_string()),
             references: vec![
                 "https://docs.solana.com/developing/programming-model/transactions".to_string(),
+                "https://www.paradigm.xyz/2020/08/ethereum-is-a-dark-forest".to_string(),
+                "https://github.com/project-serum/anchor/blob/master/tests/misc/programs/misc/src/lib.rs".to_string(),
             ],
         });
 
         findings.push(AuditFinding {
-            id: "OSVM-SOL-005".to_string(),
-            title: "Insecure Solana RPC endpoint usage".to_string(),
-            description: "Application uses public or insecure RPC endpoints".to_string(),
+            id: "OSVM-RPC-001".to_string(),
+            title: "Insecure RPC endpoint configuration exposes application to network attacks".to_string(),
+            description: "The application is configured to use public, potentially insecure RPC endpoints for Solana network communication. This configuration includes unencrypted HTTP connections and public RPC providers that may have rate limiting, reliability issues, or could be compromised. The lack of RPC endpoint validation and fallback mechanisms creates single points of failure.".to_string(),
             severity: AuditSeverity::Medium,
-            category: "Solana Security".to_string(),
+            category: "Network Security".to_string(),
             cwe_id: Some("CWE-319".to_string()),
-            cvss_score: Some(5.0),
-            impact: "Rate limiting, censorship, or man-in-the-middle attacks on RPC calls"
-                .to_string(),
-            recommendation: "Use HTTPS RPC endpoints and consider private/dedicated RPC providers"
-                .to_string(),
-            code_location: Some("src/config/rpc.rs".to_string()),
-            references: vec!["https://docs.solana.com/cluster/rpc-endpoints".to_string()],
+            cvss_score: Some(5.3),
+            impact: "Network security risks including: exposure to man-in-the-middle attacks on RPC calls, potential censorship or manipulation of blockchain data, service disruption due to rate limiting or unreliable public endpoints, and privacy leaks through request monitoring.".to_string(),
+            recommendation: "Secure RPC configuration: 1) Use HTTPS endpoints exclusively, 2) Implement multiple RPC endpoint fallbacks, 3) Consider dedicated/private RPC providers for production, 4) Add RPC response validation and integrity checks, 5) Implement proper error handling and retry logic for RPC failures.".to_string(),
+            code_location: Some("/home/runner/work/solana-app/src/config/network.rs:L45-L52".to_string()),
+            references: vec![
+                "https://docs.solana.com/cluster/rpc-endpoints".to_string(),
+                "https://solana.com/rpc".to_string(),
+                "https://github.com/solana-labs/solana-web3.js/blob/master/src/connection.ts".to_string(),
+            ],
+        });
+
+        // Low Priority Informational Finding
+        findings.push(AuditFinding {
+            id: "OSVM-INFO-001".to_string(),
+            title: "Outdated dependency versions detected with known security advisories".to_string(),
+            description: "Several project dependencies are using outdated versions that have known security vulnerabilities or performance issues. While not immediately exploitable in the current context, these outdated dependencies represent potential attack vectors and should be updated to maintain security best practices and benefit from bug fixes.".to_string(),
+            severity: AuditSeverity::Low,
+            category: "Dependency Management".to_string(),
+            cwe_id: Some("CWE-1104".to_string()),
+            cvss_score: Some(3.1),
+            impact: "Potential future security risks: exposure to known vulnerabilities as attack surface evolves, missing security patches and performance improvements, compatibility issues with ecosystem updates, and increased maintenance burden.".to_string(),
+            recommendation: "Update dependency management: 1) Run cargo audit to identify vulnerable dependencies, 2) Update to latest stable versions where possible, 3) Implement automated dependency checking in CI/CD pipeline, 4) Subscribe to security advisories for critical dependencies, 5) Regular dependency review and update cycles.".to_string(),
+            code_location: Some("/home/runner/work/solana-program/Cargo.toml:L23-L45".to_string()),
+            references: vec![
+                "https://rustsec.org/advisories/".to_string(),
+                "https://doc.rust-lang.org/cargo/commands/cargo-audit.html".to_string(),
+                "https://github.com/RustSec/advisory-db".to_string(),
+            ],
         });
 
         // Use hardcoded system info to avoid triggering diagnostics
@@ -6462,7 +6469,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
     }
 
     /// Perform GitHub repository audit workflow
-    pub async fn audit_github_repository(&self, repo_spec: &str) -> Result<AuditReport> {
+    pub async fn audit_github_repository(&self, repo_spec: &str, no_commit: bool) -> Result<AuditReport> {
         println!("🐙 Starting GitHub repository audit for: {}", repo_spec);
 
         // Parse repository specification (owner/repo#branch)
@@ -6481,13 +6488,20 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         self.generate_audit_files_in_repo(&temp_dir, &report)
             .await?;
 
-        // Commit and push audit results
-        self.commit_and_push_audit(&temp_dir, &audit_branch)?;
+        if !no_commit {
+            // Commit and push audit results
+            self.commit_and_push_audit(&temp_dir, &audit_branch)?;
 
-        println!(
-            "✅ GitHub repository audit completed and pushed to branch: {}",
-            audit_branch
-        );
+            println!(
+                "✅ GitHub repository audit completed and pushed to branch: {}",
+                audit_branch
+            );
+        } else {
+            println!(
+                "✅ GitHub repository audit completed. Files generated but not committed (--no-commit flag used)."
+            );
+            println!("📁 Audit files are available in: {}", temp_dir.display());
+        }
 
         Ok(report)
     }
@@ -6680,18 +6694,37 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let typst_path = audit_dir.join(format!("osvm_audit_report_{}.typ", timestamp));
         let pdf_path = audit_dir.join(format!("osvm_audit_report_{}.pdf", timestamp));
+        let html_path = audit_dir.join(format!("osvm_audit_report_{}.html", timestamp));
 
         // Generate Typst document
         self.generate_typst_document(report, &typst_path)?;
 
+        // Generate HTML report
+        self.generate_html_report(report, &html_path)?;
+
         // Try to compile to PDF
         if let Err(e) = self.compile_to_pdf(&typst_path, &pdf_path) {
             println!("⚠️  PDF compilation failed (Typst not installed?): {}", e);
-            println!("📄 Typst source file generated: {}", typst_path.display());
+            println!("📄 Audit files generated:");
+            println!("  - Typst: {}", typst_path.display());
+            println!("  - HTML: {}", html_path.display());
         } else {
             println!("📄 Generated audit files:");
             println!("  - Typst: {}", typst_path.display());
             println!("  - PDF: {}", pdf_path.display());
+            println!("  - HTML: {}", html_path.display());
+        }
+
+        // Copy HTML file to public/audit.html for web accessibility
+        let public_dir = repo_dir.join("public");
+        let public_audit_path = public_dir.join("audit.html");
+        
+        if let Err(e) = std::fs::create_dir_all(&public_dir) {
+            println!("⚠️  Could not create public directory: {}", e);
+        } else if let Err(e) = std::fs::copy(&html_path, &public_audit_path) {
+            println!("⚠️  Could not copy HTML audit to public/audit.html: {}", e);
+        } else {
+            println!("📄 HTML audit copied to: {}", public_audit_path.display());
         }
 
         Ok(())
@@ -6711,6 +6744,20 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Failed to add audit files: {}", error_msg);
+        }
+
+        // Add public directory if it exists
+        if repo_dir.join("public").exists() {
+            let output = self.execute_git_with_timeout(
+                &["add", "public/"],
+                Some(repo_dir),
+                Duration::from_secs(60),
+            )?;
+
+            if !output.status.success() {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                println!("⚠️  Warning: Failed to add public directory: {}", error_msg);
+            }
         }
 
         // Commit changes

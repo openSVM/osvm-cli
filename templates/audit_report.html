@@ -5,14 +5,101 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OSVM Security Audit Report</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
             line-height: 1.6;
             color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 0 20px;
         }
+        
+        .site-header {
+            text-align: center;
+            padding: 40px 0;
+            color: white;
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tagline {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            opacity: 0.95;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .btn-primary {
+            background: #fff;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+        }
+        
+        main {
+            background: white;
+            margin-top: -30px;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 1;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
         .header {
             text-align: center;
             border-bottom: 3px solid #007acc;
@@ -91,126 +178,161 @@
             background-color: #f2f2f2;
             font-weight: bold;
         }
+        
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 2rem;
+            }
+            
+            .tagline {
+                font-size: 1rem;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>OSVM Security Audit Report</h1>
-        <p><strong>Generated:</strong> {{ timestamp }}</p>
-        <p><strong>Version:</strong> {{ version }}</p>
-        <div class="score-badge 
-            {% if summary.security_score >= 90 %}score-excellent
-            {% elif summary.security_score >= 70 %}score-good
-            {% elif summary.security_score >= 50 %}score-fair
-            {% else %}score-poor{% endif %}">
-            Security Score: {{ summary.security_score }}/100
-        </div>
-        <p><strong>Compliance Level:</strong> {{ summary.compliance_level }}</p>
-    </div>
-
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-number">{{ summary.total_findings }}</div>
-            <div>Total Findings</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number severity-critical">{{ summary.critical_findings }}</div>
-            <div>Critical</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number severity-high">{{ summary.high_findings }}</div>
-            <div>High</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number severity-medium">{{ summary.medium_findings }}</div>
-            <div>Medium</div>
-        </div>
-    </div>
-
-    {% if has_critical or has_high %}
-    <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
-        <strong>⚠️ Warning:</strong> This audit identified {{ total_serious }} critical or high severity findings that require immediate attention.
-    </div>
-    {% endif %}
-
-    <h2>System Information</h2>
-    <table>
-        <tr><th>Component</th><th>Version</th></tr>
-        <tr><td>Rust</td><td>{{ system_info.rust_version }}</td></tr>
-        <tr><td>Solana</td><td>{{ system_info.solana_version | default(value="Not installed") }}</td></tr>
-        <tr><td>OS</td><td>{{ system_info.os_info }}</td></tr>
-        <tr><td>Architecture</td><td>{{ system_info.architecture }}</td></tr>
-    </table>
-
-    <h2>Security Findings</h2>
-    {% for category, findings in categorized_findings %}
-    <h3>{{ category }} ({{ findings | length }} findings)</h3>
-    
-    {% for finding in findings %}
-    <div class="finding">
-        <div class="finding-header">
-            <h4>{{ finding.title }}</h4>
-            <div>
-                <span class="finding-id">{{ finding.id }}</span>
-                <span class="severity-{{ finding.severity | lower }}">{{ finding.severity }}</span>
+    <header class="site-header">
+        <div class="container">
+            <div class="logo">OSVM CLI 🔒</div>
+            <div class="tagline">Security Audit Report</div>
+            <div class="nav-buttons">
+                <a href="index.html" class="btn btn-primary">🏠 Home</a>
+                <a href="docs.html?doc=README" class="btn btn-secondary">📚 Documentation</a>
+                <a href="https://github.com/openSVM/osvm-cli" class="btn btn-secondary" target="_blank">GitHub</a>
             </div>
         </div>
-        
-        <p><strong>Description:</strong> {{ finding.description }}</p>
-        <p><strong>Impact:</strong> {{ finding.impact }}</p>
-        <p><strong>Recommendation:</strong> {{ finding.recommendation }}</p>
-        
-        {% if finding.cwe_id or finding.cvss_score %}
-        <p>
-            {% if finding.cwe_id %}<strong>CWE ID:</strong> {{ finding.cwe_id }} {% endif %}
-            {% if finding.cvss_score %}<strong>CVSS Score:</strong> {{ finding.cvss_score }}{% endif %}
-        </p>
-        {% endif %}
-        
-        {% if finding.code_location %}
-        <p><strong>Code Location:</strong> <code>{{ finding.code_location }}</code></p>
-        {% endif %}
-        
-        {% if finding.references %}
-        <p><strong>References:</strong></p>
-        <ul>
-            {% for reference in finding.references %}
-            <li><a href="{{ reference }}" target="_blank">{{ reference }}</a></li>
+    </header>
+
+    <main>
+        <div class="content">
+            <div class="header">
+                <h1>OSVM Security Audit Report</h1>
+                <p><strong>Generated:</strong> {{ timestamp }}</p>
+                <p><strong>Version:</strong> {{ version }}</p>
+                <div class="score-badge 
+                    {% if summary.security_score >= 90 %}score-excellent
+                    {% elif summary.security_score >= 70 %}score-good
+                    {% elif summary.security_score >= 50 %}score-fair
+                    {% else %}score-poor{% endif %}">
+                    Security Score: {{ summary.security_score }}/100
+                </div>
+                <p><strong>Compliance Level:</strong> {{ summary.compliance_level }}</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{ summary.total_findings }}</div>
+                    <div>Total Findings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-critical">{{ summary.critical_findings }}</div>
+                    <div>Critical</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-high">{{ summary.high_findings }}</div>
+                    <div>High</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-medium">{{ summary.medium_findings }}</div>
+                    <div>Medium</div>
+                </div>
+            </div>
+
+            {% if has_critical or has_high %}
+            <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <strong>⚠️ Warning:</strong> This audit identified {{ total_serious }} critical or high severity findings that require immediate attention.
+            </div>
+            {% endif %}
+
+            <h2>System Information</h2>
+            <table>
+                <tr><th>Component</th><th>Version</th></tr>
+                <tr><td>Rust</td><td>{{ system_info.rust_version }}</td></tr>
+                <tr><td>Solana</td><td>{{ system_info.solana_version | default(value="Not installed") }}</td></tr>
+                <tr><td>OS</td><td>{{ system_info.os_info }}</td></tr>
+                <tr><td>Architecture</td><td>{{ system_info.architecture }}</td></tr>
+            </table>
+
+            <h2>Security Findings</h2>
+            {% for category, findings in categorized_findings %}
+            <h3>{{ category }} ({{ findings | length }} findings)</h3>
+            
+            {% for finding in findings %}
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>{{ finding.title }}</h4>
+                    <div>
+                        <span class="finding-id">{{ finding.id }}</span>
+                        <span class="severity-{{ finding.severity | lower }}">{{ finding.severity }}</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> {{ finding.description }}</p>
+                <p><strong>Impact:</strong> {{ finding.impact }}</p>
+                <p><strong>Recommendation:</strong> {{ finding.recommendation }}</p>
+                
+                {% if finding.cwe_id or finding.cvss_score %}
+                <p>
+                    {% if finding.cwe_id %}<strong>CWE ID:</strong> {{ finding.cwe_id }} {% endif %}
+                    {% if finding.cvss_score %}<strong>CVSS Score:</strong> {{ finding.cvss_score }}{% endif %}
+                </p>
+                {% endif %}
+                
+                {% if finding.code_location %}
+                <p><strong>Code Location:</strong> <code>{{ finding.code_location }}</code></p>
+                {% endif %}
+                
+                {% if finding.references %}
+                <p><strong>References:</strong></p>
+                <ul>
+                    {% for reference in finding.references %}
+                    <li><a href="{{ reference }}" target="_blank">{{ reference }}</a></li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
             {% endfor %}
-        </ul>
-        {% endif %}
-    </div>
-    {% endfor %}
-    {% endfor %}
+            {% endfor %}
 
-    <h2>Security Recommendations</h2>
-    <ol>
-        {% for recommendation in recommendations %}
-        <li>{{ recommendation }}</li>
-        {% endfor %}
-    </ol>
+            <h2>Security Recommendations</h2>
+            <ol>
+                {% for recommendation in recommendations %}
+                <li>{{ recommendation }}</li>
+                {% endfor %}
+            </ol>
 
-    <h2>Compliance Notes</h2>
-    <ul>
-        {% for note in compliance_notes %}
-        <li>{{ note }}</li>
-        {% endfor %}
-    </ul>
+            <h2>Compliance Notes</h2>
+            <ul>
+                {% for note in compliance_notes %}
+                <li>{{ note }}</li>
+                {% endfor %}
+            </ul>
 
-    <h2>Audit Statistics</h2>
-    <table>
-        <tr><th>Metric</th><th>Value</th></tr>
-        <tr><td>Total Findings</td><td>{{ statistics.total_findings }}</td></tr>
-        <tr><td>Findings with CWE</td><td>{{ statistics.findings_with_cwe }}</td></tr>
-        <tr><td>Findings with CVSS</td><td>{{ statistics.findings_with_cvss }}</td></tr>
-        <tr><td>Unique Categories</td><td>{{ statistics.unique_categories }}</td></tr>
-        <tr><td>Average CVSS Score</td><td>{{ statistics.average_cvss_score | round(precision=1) }}</td></tr>
-        <tr><td>Coverage Percentage</td><td>{{ statistics.coverage_percentage | round(precision=1) }}%</td></tr>
-    </table>
+            <h2>Audit Statistics</h2>
+            <table>
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Findings</td><td>{{ statistics.total_findings }}</td></tr>
+                <tr><td>Findings with CWE</td><td>{{ statistics.findings_with_cwe }}</td></tr>
+                <tr><td>Findings with CVSS</td><td>{{ statistics.findings_with_cvss }}</td></tr>
+                <tr><td>Unique Categories</td><td>{{ statistics.unique_categories }}</td></tr>
+                <tr><td>Average CVSS Score</td><td>{{ statistics.average_cvss_score | round(precision=1) }}</td></tr>
+                <tr><td>Coverage Percentage</td><td>{{ statistics.coverage_percentage | round(precision=1) }}%</td></tr>
+            </table>
 
-    <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; color: #666;">
-        <p><em>Generated by OSVM Security Audit System</em></p>
-        <p><em>End of Report</em></p>
-    </div>
+            <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; color: #666;">
+                <p><em>Generated by OSVM Security Audit System</em></p>
+                <p><em>End of Report</em></p>
+            </div>
+        </div>
+    </main>
 </body>
 </html>
