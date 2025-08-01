@@ -869,6 +869,12 @@ Examples:
 
 If not specified, built-in templates embedded in the binary will be used.")
                 )
+                .arg(
+                    Arg::new("no-commit")
+                        .long("no-commit")
+                        .action(ArgAction::SetTrue)
+                        .help("Don't commit audit results to repository. If no output directory is provided, files will be copied to the current folder.")
+                )
         )
         .subcommand(
             Command::new("new_feature_command")

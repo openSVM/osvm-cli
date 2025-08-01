@@ -128,7 +128,16 @@ async fn handle_audit_command(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::audit_service::{AuditRequest, AuditService};
 
-    let output_dir = matches.get_one::<String>("output").unwrap().to_string();
+    let no_commit = matches.get_flag("no-commit");
+    let default_output_dir = matches.get_one::<String>("output").unwrap().to_string();
+    
+    // If --no-commit is used and output directory is the default, use current directory
+    let output_dir = if no_commit && default_output_dir == "audit_reports" {
+        ".".to_string()
+    } else {
+        default_output_dir
+    };
+    
     let format = matches.get_one::<String>("format").unwrap().to_string();
     let verbose = matches.get_count("verbose");
     let test_mode = matches.get_flag("test");
@@ -144,6 +153,7 @@ async fn handle_audit_command(
         ai_analysis,
         gh_repo,
         template_path,
+        no_commit,
     };
 
     // Create the audit service with or without AI
