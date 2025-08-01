@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM Security Audit Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .site-header {
+            text-align: center;
+            padding: 40px 0;
+            color: white;
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tagline {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            opacity: 0.95;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .btn-primary {
+            background: #fff;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+        }
+        
+        main {
+            background: white;
+            margin-top: -30px;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -5px 30px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 1;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007acc;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007acc;
+            margin-bottom: 10px;
+        }
+        .score-badge {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .score-excellent { background-color: #d4edda; color: #155724; }
+        .score-good { background-color: #d1ecf1; color: #0c5460; }
+        .score-fair { background-color: #fff3cd; color: #856404; }
+        .score-poor { background-color: #f8d7da; color: #721c24; }
+        .severity-critical { color: #dc3545; font-weight: bold; }
+        .severity-high { color: #fd7e14; font-weight: bold; }
+        .severity-medium { color: #ffc107; font-weight: bold; }
+        .severity-low { color: #28a745; }
+        .severity-info { color: #17a2b8; }
+        .finding {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 15px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .finding-id {
+            background-color: #007acc;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007acc;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        @media (max-width: 768px) {
+            .logo {
+                font-size: 2rem;
+            }
+            
+            .tagline {
+                font-size: 1rem;
+            }
+            
+            .nav-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <div class="logo">OSVM CLI 🔒</div>
+            <div class="tagline">Security Audit Report</div>
+            <div class="nav-buttons">
+                <a href="index.html" class="btn btn-primary">🏠 Home</a>
+                <a href="docs.html?doc=README" class="btn btn-secondary">📚 Documentation</a>
+                <a href="https://github.com/openSVM/osvm-cli" class="btn btn-secondary" target="_blank">GitHub</a>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="content">
+            <div class="header">
+                <h1>OSVM Security Audit Report</h1>
+                <p><strong>Generated:</strong> 2025-08-01 23:33:21 UTC</p>
+                <p><strong>Version:</strong> 0.4.5</p>
+                <div class="score-badge 
+                    score-good
+                    ">
+                    Security Score: 75/100
+                </div>
+                <p><strong>Compliance Level:</strong> Moderate</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">6</div>
+                    <div>Total Findings</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-critical">1</div>
+                    <div>Critical</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-high">2</div>
+                    <div>High</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number severity-medium">3</div>
+                    <div>Medium</div>
+                </div>
+            </div>
+
+            
+            <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <strong>⚠️ Warning:</strong> This audit identified 3 critical or high severity findings that require immediate attention.
+            </div>
+            
+
+            <h2>System Information</h2>
+            <table>
+                <tr><th>Component</th><th>Version</th></tr>
+                <tr><td>Rust</td><td>rustc 1.87.0 (example)</td></tr>
+                <tr><td>Solana</td><td>solana-cli 2.2.7 (example)</td></tr>
+                <tr><td>OS</td><td>Linux x86_64</td></tr>
+                <tr><td>Architecture</td><td>x86_64</td></tr>
+            </table>
+
+            <h2>Security Findings</h2>
+            
+            <h3>Account Validation (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>Program Derived Address (PDA) verification bypass vulnerability</h4>
+                    <div>
+                        <span class="finding-id">OSVM-SOL-002</span>
+                        <span class="severity-high">High</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> High-severity vulnerability in PDA handling: The program accepts arbitrary accounts as PDAs without verifying they were derived using the correct seeds and program ID. This bypasses the fundamental security guarantee of PDAs and allows attackers to provide malicious accounts that can be used to manipulate program state or drain funds.</p>
+                <p><strong>Impact:</strong> Attackers can substitute legitimate PDAs with malicious accounts, potentially leading to: unauthorized state modifications, fund drainage from escrow accounts, bypass of access controls, and manipulation of program logic that depends on PDA integrity.</p>
+                <p><strong>Recommendation:</strong> Implement comprehensive PDA validation: 1) Always call find_program_address() to verify PDA derivation, 2) Compare derived PDA with provided account address, 3) Validate all seeds used in derivation, 4) Use Anchor&#x27;s seeds constraint for automatic validation, 5) Add extensive testing for PDA edge cases.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-345 
+                    <strong>CVSS Score:</strong> 8.199999809265137
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-program&#x2F;src&#x2F;state&#x2F;escrow.rs:L156-L178</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;solanacookbook.com&#x2F;references&#x2F;programs.html#how-to-create-a-pda" target="_blank">https:&#x2F;&#x2F;solanacookbook.com&#x2F;references&#x2F;programs.html#how-to-create-a-pda</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;book.anchor-lang.com&#x2F;anchor_bts&#x2F;PDAs.html" target="_blank">https:&#x2F;&#x2F;book.anchor-lang.com&#x2F;anchor_bts&#x2F;PDAs.html</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;coral-xyz&#x2F;sealevel-attacks&#x2F;tree&#x2F;master&#x2F;programs&#x2F;1-account-data-matching" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;coral-xyz&#x2F;sealevel-attacks&#x2F;tree&#x2F;master&#x2F;programs&#x2F;1-account-data-matching</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+            <h3>Authentication &amp; Authorization (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>Missing signer validation in Solana program instruction handler</h4>
+                    <div>
+                        <span class="finding-id">OSVM-SOL-001</span>
+                        <span class="severity-critical">Critical</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> Critical security vulnerability: Program instruction handler accepts accounts without validating required signers. This allows unauthorized users to execute privileged operations by providing any account as a signer. The vulnerability occurs in the instruction processing logic where account.is_signer is not properly checked before performing sensitive operations like token transfers or account modifications.</p>
+                <p><strong>Impact:</strong> Complete compromise of access control - unauthorized users can execute any privileged operation, leading to potential theft of funds, unauthorized account modifications, and complete program compromise.</p>
+                <p><strong>Recommendation:</strong> Implement mandatory signer validation: 1) Add explicit is_signer checks for all authority accounts, 2) Use Anchor&#x27;s Signer&lt;&#x27;info&gt; type for automatic validation, 3) Validate that the signer&#x27;s public key matches expected authorities, 4) Add comprehensive unit tests for all authorization paths.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-862 
+                    <strong>CVSS Score:</strong> 9.100000381469727
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-program&#x2F;src&#x2F;instruction&#x2F;mod.rs:L44-L67</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;book.anchor-lang.com&#x2F;anchor_bts&#x2F;security.html" target="_blank">https:&#x2F;&#x2F;book.anchor-lang.com&#x2F;anchor_bts&#x2F;security.html</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;solana.com&#x2F;developers&#x2F;guides&#x2F;getstarted&#x2F;intro-to-anchor" target="_blank">https:&#x2F;&#x2F;solana.com&#x2F;developers&#x2F;guides&#x2F;getstarted&#x2F;intro-to-anchor</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;coral-xyz&#x2F;sealevel-attacks&#x2F;tree&#x2F;master&#x2F;programs&#x2F;0-signer-authorization" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;coral-xyz&#x2F;sealevel-attacks&#x2F;tree&#x2F;master&#x2F;programs&#x2F;0-signer-authorization</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+            <h3>Dependency Management (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>Outdated dependency versions detected with known security advisories</h4>
+                    <div>
+                        <span class="finding-id">OSVM-INFO-001</span>
+                        <span class="severity-low">Low</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> Several project dependencies are using outdated versions that have known security vulnerabilities or performance issues. While not immediately exploitable in the current context, these outdated dependencies represent potential attack vectors and should be updated to maintain security best practices and benefit from bug fixes.</p>
+                <p><strong>Impact:</strong> Potential future security risks: exposure to known vulnerabilities as attack surface evolves, missing security patches and performance improvements, compatibility issues with ecosystem updates, and increased maintenance burden.</p>
+                <p><strong>Recommendation:</strong> Update dependency management: 1) Run cargo audit to identify vulnerable dependencies, 2) Update to latest stable versions where possible, 3) Implement automated dependency checking in CI&#x2F;CD pipeline, 4) Subscribe to security advisories for critical dependencies, 5) Regular dependency review and update cycles.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-1104 
+                    <strong>CVSS Score:</strong> 3.0999999046325684
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-program&#x2F;Cargo.toml:L23-L45</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;rustsec.org&#x2F;advisories&#x2F;" target="_blank">https:&#x2F;&#x2F;rustsec.org&#x2F;advisories&#x2F;</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;doc.rust-lang.org&#x2F;cargo&#x2F;commands&#x2F;cargo-audit.html" target="_blank">https:&#x2F;&#x2F;doc.rust-lang.org&#x2F;cargo&#x2F;commands&#x2F;cargo-audit.html</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;RustSec&#x2F;advisory-db" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;RustSec&#x2F;advisory-db</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+            <h3>Network Security (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>Insecure RPC endpoint configuration exposes application to network attacks</h4>
+                    <div>
+                        <span class="finding-id">OSVM-RPC-001</span>
+                        <span class="severity-medium">Medium</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> The application is configured to use public, potentially insecure RPC endpoints for Solana network communication. This configuration includes unencrypted HTTP connections and public RPC providers that may have rate limiting, reliability issues, or could be compromised. The lack of RPC endpoint validation and fallback mechanisms creates single points of failure.</p>
+                <p><strong>Impact:</strong> Network security risks including: exposure to man-in-the-middle attacks on RPC calls, potential censorship or manipulation of blockchain data, service disruption due to rate limiting or unreliable public endpoints, and privacy leaks through request monitoring.</p>
+                <p><strong>Recommendation:</strong> Secure RPC configuration: 1) Use HTTPS endpoints exclusively, 2) Implement multiple RPC endpoint fallbacks, 3) Consider dedicated&#x2F;private RPC providers for production, 4) Add RPC response validation and integrity checks, 5) Implement proper error handling and retry logic for RPC failures.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-319 
+                    <strong>CVSS Score:</strong> 5.300000190734863
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-app&#x2F;src&#x2F;config&#x2F;network.rs:L45-L52</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;docs.solana.com&#x2F;cluster&#x2F;rpc-endpoints" target="_blank">https:&#x2F;&#x2F;docs.solana.com&#x2F;cluster&#x2F;rpc-endpoints</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;solana.com&#x2F;rpc" target="_blank">https:&#x2F;&#x2F;solana.com&#x2F;rpc</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;solana-labs&#x2F;solana-web3.js&#x2F;blob&#x2F;master&#x2F;src&#x2F;connection.ts" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;solana-labs&#x2F;solana-web3.js&#x2F;blob&#x2F;master&#x2F;src&#x2F;connection.ts</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+            <h3>Token Security (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>SPL Token authority validation completely missing in transfer operations</h4>
+                    <div>
+                        <span class="finding-id">OSVM-SOL-003</span>
+                        <span class="severity-high">High</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> Critical security flaw in token operations: The program performs SPL token transfers and other operations without validating that the transaction signer has the necessary authority over the token accounts. This creates a complete bypass of token ownership controls, allowing any user to transfer tokens from any account.</p>
+                <p><strong>Impact:</strong> Complete token security compromise: Any user can transfer tokens from any account, drain token vaults, manipulate token supplies, and perform unauthorized token operations, resulting in direct financial losses for all token holders.</p>
+                <p><strong>Recommendation:</strong> Implement robust token authority validation: 1) Verify token account ownership before transfers, 2) Check delegate permissions for delegated operations, 3) Validate mint authority for minting operations, 4) Use SPL Token program&#x27;s built-in authority checks, 5) Implement comprehensive integration tests with various token account configurations.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-862 
+                    <strong>CVSS Score:</strong> 8.5
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-program&#x2F;src&#x2F;instructions&#x2F;token_transfer.rs:L89-L112</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;spl.solana.com&#x2F;token" target="_blank">https:&#x2F;&#x2F;spl.solana.com&#x2F;token</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;docs.rs&#x2F;spl-token&#x2F;latest&#x2F;spl_token&#x2F;" target="_blank">https:&#x2F;&#x2F;docs.rs&#x2F;spl-token&#x2F;latest&#x2F;spl_token&#x2F;</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;solana-labs&#x2F;solana-program-library&#x2F;tree&#x2F;master&#x2F;token&#x2F;program" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;solana-labs&#x2F;solana-program-library&#x2F;tree&#x2F;master&#x2F;token&#x2F;program</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+            <h3>Trading Security (1 findings)</h3>
+            
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>MEV vulnerabilities in DEX operations - missing slippage and deadline protection</h4>
+                    <div>
+                        <span class="finding-id">OSVM-DEX-001</span>
+                        <span class="severity-medium">Medium</span>
+                    </div>
+                </div>
+                
+                <p><strong>Description:</strong> Trading operations lack essential MEV (Maximal Extractable Value) protection mechanisms. The current implementation does not enforce slippage limits or transaction deadlines, making trades vulnerable to front-running, sandwich attacks, and other MEV exploitation strategies. This particularly affects AMM interactions and large trades that can significantly impact token prices.</p>
+                <p><strong>Impact:</strong> Financial losses due to MEV attacks: Users experience unexpected slippage, reduced trade value from sandwich attacks, failed transactions due to stale pricing, and overall degraded trading experience with potential significant financial impact on large trades.</p>
+                <p><strong>Recommendation:</strong> Implement comprehensive MEV protection: 1) Add configurable slippage tolerance checks, 2) Implement transaction deadlines with proper timestamp validation, 3) Consider using private mempools or MEV protection services, 4) Add price impact warnings for large trades, 5) Implement trade size limits to reduce MEV attractiveness.</p>
+                
+                
+                <p>
+                    <strong>CWE ID:</strong> CWE-841 
+                    <strong>CVSS Score:</strong> 6.099999904632568
+                </p>
+                
+                
+                
+                <p><strong>Code Location:</strong> <code>&#x2F;home&#x2F;runner&#x2F;work&#x2F;solana-dex&#x2F;src&#x2F;amm&#x2F;swap.rs:L234-L267</code></p>
+                
+                
+                
+                <p><strong>References:</strong></p>
+                <ul>
+                    
+                    <li><a href="https:&#x2F;&#x2F;docs.solana.com&#x2F;developing&#x2F;programming-model&#x2F;transactions" target="_blank">https:&#x2F;&#x2F;docs.solana.com&#x2F;developing&#x2F;programming-model&#x2F;transactions</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;www.paradigm.xyz&#x2F;2020&#x2F;08&#x2F;ethereum-is-a-dark-forest" target="_blank">https:&#x2F;&#x2F;www.paradigm.xyz&#x2F;2020&#x2F;08&#x2F;ethereum-is-a-dark-forest</a></li>
+                    
+                    <li><a href="https:&#x2F;&#x2F;github.com&#x2F;project-serum&#x2F;anchor&#x2F;blob&#x2F;master&#x2F;tests&#x2F;misc&#x2F;programs&#x2F;misc&#x2F;src&#x2F;lib.rs" target="_blank">https:&#x2F;&#x2F;github.com&#x2F;project-serum&#x2F;anchor&#x2F;blob&#x2F;master&#x2F;tests&#x2F;misc&#x2F;programs&#x2F;misc&#x2F;src&#x2F;lib.rs</a></li>
+                    
+                </ul>
+                
+            </div>
+            
+            
+
+            <h2>Security Recommendations</h2>
+            <ol>
+                
+                <li>Implement regular security audits</li>
+                
+                <li>Keep dependencies up to date</li>
+                
+                <li>Follow security best practices</li>
+                
+                <li>Implement proper Solana account validation</li>
+                
+                <li>Use secure RPC endpoints and MEV protection</li>
+                
+                <li>Follow Solana security guidelines and best practices</li>
+                
+            </ol>
+
+            <h2>Compliance Notes</h2>
+            <ul>
+                
+                <li>This audit follows industry security standards</li>
+                
+                <li>Findings are categorized using CWE framework</li>
+                
+                <li>Solana-specific security checks included</li>
+                
+                <li>Critical Solana vulnerabilities require immediate attention</li>
+                
+            </ul>
+
+            <h2>Audit Statistics</h2>
+            <table>
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Total Findings</td><td>6</td></tr>
+                <tr><td>Findings with CWE</td><td>6</td></tr>
+                <tr><td>Findings with CVSS</td><td>6</td></tr>
+                <tr><td>Unique Categories</td><td>6</td></tr>
+                <tr><td>Average CVSS Score</td><td>6.7</td></tr>
+                <tr><td>Coverage Percentage</td><td>100%</td></tr>
+            </table>
+
+            <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; color: #666;">
+                <p><em>Generated by OSVM Security Audit System</em></p>
+                <p><em>End of Report</em></p>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

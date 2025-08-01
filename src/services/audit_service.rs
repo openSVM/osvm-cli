@@ -370,6 +370,24 @@ impl AuditService {
                         })?;
                 }
 
+                // Copy to public/audit.html if not using --no-commit (for web accessibility)
+                if !request.no_commit {
+                    let public_dir = std::path::Path::new("public");
+                    let public_audit_path = public_dir.join("audit.html");
+                    
+                    if let Err(e) = std::fs::create_dir_all(&public_dir) {
+                        if request.verbose > 0 {
+                            println!("⚠️  Could not create public directory: {}", e);
+                        }
+                    } else if let Err(e) = std::fs::copy(&html_path, &public_audit_path) {
+                        if request.verbose > 0 {
+                            println!("⚠️  Could not copy HTML audit to public/audit.html: {}", e);
+                        }
+                    } else if request.verbose > 0 {
+                        println!("📄 HTML audit copied to: {}", public_audit_path.display());
+                    }
+                }
+
                 if request.verbose > 0 {
                     if request.template_path.is_some() {
                         println!("📄 HTML report generated with external template: {}", html_path.display());

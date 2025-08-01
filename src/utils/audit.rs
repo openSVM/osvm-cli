@@ -6694,18 +6694,37 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let typst_path = audit_dir.join(format!("osvm_audit_report_{}.typ", timestamp));
         let pdf_path = audit_dir.join(format!("osvm_audit_report_{}.pdf", timestamp));
+        let html_path = audit_dir.join(format!("osvm_audit_report_{}.html", timestamp));
 
         // Generate Typst document
         self.generate_typst_document(report, &typst_path)?;
 
+        // Generate HTML report
+        self.generate_html_report(report, &html_path)?;
+
         // Try to compile to PDF
         if let Err(e) = self.compile_to_pdf(&typst_path, &pdf_path) {
             println!("⚠️  PDF compilation failed (Typst not installed?): {}", e);
-            println!("📄 Typst source file generated: {}", typst_path.display());
+            println!("📄 Audit files generated:");
+            println!("  - Typst: {}", typst_path.display());
+            println!("  - HTML: {}", html_path.display());
         } else {
             println!("📄 Generated audit files:");
             println!("  - Typst: {}", typst_path.display());
             println!("  - PDF: {}", pdf_path.display());
+            println!("  - HTML: {}", html_path.display());
+        }
+
+        // Copy HTML file to public/audit.html for web accessibility
+        let public_dir = repo_dir.join("public");
+        let public_audit_path = public_dir.join("audit.html");
+        
+        if let Err(e) = std::fs::create_dir_all(&public_dir) {
+            println!("⚠️  Could not create public directory: {}", e);
+        } else if let Err(e) = std::fs::copy(&html_path, &public_audit_path) {
+            println!("⚠️  Could not copy HTML audit to public/audit.html: {}", e);
+        } else {
+            println!("📄 HTML audit copied to: {}", public_audit_path.display());
         }
 
         Ok(())
@@ -6725,6 +6744,20 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         if !output.status.success() {
             let error_msg = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("Failed to add audit files: {}", error_msg);
+        }
+
+        // Add public directory if it exists
+        if repo_dir.join("public").exists() {
+            let output = self.execute_git_with_timeout(
+                &["add", "public/"],
+                Some(repo_dir),
+                Duration::from_secs(60),
+            )?;
+
+            if !output.status.success() {
+                let error_msg = String::from_utf8_lossy(&output.stderr);
+                println!("⚠️  Warning: Failed to add public directory: {}", error_msg);
+            }
         }
 
         // Commit changes
