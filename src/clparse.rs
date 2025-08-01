@@ -814,9 +814,9 @@ pub fn parse_command_line() -> clap::ArgMatches {
                     Arg::new("format")
                         .long("format")
                         .value_name("FORMAT")
-                        .value_parser(clap::builder::PossibleValuesParser::new(["typst", "pdf", "both"]))
+                        .value_parser(clap::builder::PossibleValuesParser::new(["typst", "pdf", "both", "json", "html", "markdown"]))
                         .default_value("both")
-                        .help("Output format: typst source, PDF, or both")
+                        .help("Output format: typst source, PDF, both, JSON, HTML, or Markdown")
                 )
                 .arg(
                     Arg::new("verbose")
@@ -854,6 +854,20 @@ The command will:
 3. Run comprehensive security analysis
 4. Generate audit reports (Typst/PDF)
 5. Commit and push results to the new branch")
+                )
+                .arg(
+                    Arg::new("template")
+                        .long("template")
+                        .value_name("PATH")
+                        .help("Path to external template file to use instead of built-in templates
+                               
+Examples:
+  --template ./templates/custom.typst    # Use custom Typst template
+  --template ./templates/custom.html     # Use custom HTML template
+  --template ./templates/custom.json     # Use custom JSON template
+  --template ./templates/custom.md       # Use custom Markdown template
+
+If not specified, built-in templates embedded in the binary will be used.")
                 )
         )
         .subcommand(

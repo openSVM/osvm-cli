@@ -18,7 +18,7 @@ pub struct TemplateReportGenerator {
 impl TemplateReportGenerator {
     /// Create a new template report generator
     pub fn new() -> Result<Self> {
-        let mut tera = Tera::new("templates/**/*").unwrap_or_else(|_| Tera::new("").unwrap());
+        let mut tera = Tera::default();
 
         // Register built-in templates
         let typst_template = include_str!("../../templates/audit_report.typ");
@@ -50,11 +50,39 @@ impl TemplateReportGenerator {
         template_name: &str,
         output_path: &Path,
     ) -> Result<()> {
+        self.generate_report_with_optional_template(report, template_name, output_path, None)
+    }
+
+    /// Generate report using template with optional external template override
+    pub fn generate_report_with_optional_template(
+        &self,
+        report: &AuditReport,
+        template_name: &str,
+        output_path: &Path,
+        external_template_path: Option<&str>,
+    ) -> Result<()> {
         let context = self.create_template_context(report)?;
-        let rendered = self
-            .tera
-            .render(template_name, &context)
-            .context(format!("Failed to render template: {}", template_name))?;
+
+        let rendered = if let Some(external_path) = external_template_path {
+            // Use external template
+            let external_content = std::fs::read_to_string(external_path)
+                .context(format!("Failed to read external template: {}", external_path))?;
+            
+            // Create a temporary Tera instance for the external template
+            let mut temp_tera = Tera::default();
+            temp_tera
+                .add_raw_template("external", &external_content)
+                .context(format!("Failed to parse external template: {}", external_path))?;
+            
+            temp_tera
+                .render("external", &context)
+                .context(format!("Failed to render external template: {}", external_path))?
+        } else {
+            // Use built-in template
+            self.tera
+                .render(template_name, &context)
+                .context(format!("Failed to render template: {}", template_name))?
+        };
 
         std::fs::write(output_path, rendered).context("Failed to write rendered report")?;
 
@@ -66,14 +94,29 @@ impl TemplateReportGenerator {
         self.generate_report(report, "audit_report.typ", output_path)
     }
 
+    /// Generate Typst document with optional external template
+    pub fn generate_typst_document_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.generate_report_with_optional_template(report, "audit_report.typ", output_path, external_template)
+    }
+
     /// Generate JSON report
     pub fn generate_json_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
         self.generate_report(report, "audit_report.json", output_path)
     }
 
+    /// Generate JSON report with optional external template
+    pub fn generate_json_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.generate_report_with_optional_template(report, "audit_report.json", output_path, external_template)
+    }
+
     /// Generate HTML report
     pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
         self.generate_report(report, "audit_report.html", output_path)
+    }
+
+    /// Generate HTML report with optional external template
+    pub fn generate_html_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.generate_report_with_optional_template(report, "audit_report.html", output_path, external_template)
     }
 
     /// Generate Markdown summary
@@ -83,6 +126,16 @@ impl TemplateReportGenerator {
         output_path: &Path,
     ) -> Result<()> {
         self.generate_report(report, "audit_summary.md", output_path)
+    }
+
+    /// Generate Markdown summary with optional external template
+    pub fn generate_markdown_summary_with_template(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+        external_template: Option<&str>,
+    ) -> Result<()> {
+        self.generate_report_with_optional_template(report, "audit_summary.md", output_path, external_template)
     }
 
     /// Create template context from audit report
