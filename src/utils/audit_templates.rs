@@ -18,7 +18,7 @@ pub struct TemplateReportGenerator {
 impl TemplateReportGenerator {
     /// Create a new template report generator
     pub fn new() -> Result<Self> {
-        let mut tera = Tera::new("templates/**/*").unwrap_or_else(|_| Tera::default());
+        let mut tera = Tera::default();
 
         // Register built-in templates
         let typst_template = include_str!("../../templates/audit_report.typ");
