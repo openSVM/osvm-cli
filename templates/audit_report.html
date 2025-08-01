@@ -204,8 +204,8 @@
         <tr><td>Findings with CWE</td><td>{{ statistics.findings_with_cwe }}</td></tr>
         <tr><td>Findings with CVSS</td><td>{{ statistics.findings_with_cvss }}</td></tr>
         <tr><td>Unique Categories</td><td>{{ statistics.unique_categories }}</td></tr>
-        <tr><td>Average CVSS Score</td><td>{{ "%.1f" | format(statistics.average_cvss_score) }}</td></tr>
-        <tr><td>Coverage Percentage</td><td>{{ "%.1f" | format(statistics.coverage_percentage) }}%</td></tr>
+        <tr><td>Average CVSS Score</td><td>{{ statistics.average_cvss_score | round(precision=1) }}</td></tr>
+        <tr><td>Coverage Percentage</td><td>{{ statistics.coverage_percentage | round(precision=1) }}%</td></tr>
     </table>
 
     <div style="text-align: center; margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; color: #666;">

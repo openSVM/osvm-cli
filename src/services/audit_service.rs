@@ -34,6 +34,7 @@ pub struct AuditRequest {
     pub test_mode: bool,
     pub ai_analysis: bool,
     pub gh_repo: Option<String>,
+    pub template_path: Option<String>,
 }
 
 pub struct AuditResult {
@@ -93,6 +94,32 @@ impl AuditService {
             }
         }
 
+        // Validate template path if provided
+        if let Some(template_path) = &request.template_path {
+            if !std::path::Path::new(template_path).exists() {
+                return Err(AuditError::ConfigurationError(format!(
+                    "External template file does not exist: {}",
+                    template_path
+                )));
+            }
+            
+            // Check if it's a readable file
+            if !std::path::Path::new(template_path).is_file() {
+                return Err(AuditError::ConfigurationError(format!(
+                    "External template path is not a file: {}",
+                    template_path
+                )));
+            }
+
+            // Validate template can be read
+            if let Err(e) = std::fs::read_to_string(template_path) {
+                return Err(AuditError::ConfigurationError(format!(
+                    "Cannot read external template file '{}': {}",
+                    template_path, e
+                )));
+            }
+        }
+
         // Validate output format
         match request.format.as_str() {
             "typst" | "pdf" | "both" | "json" | "html" | "markdown" => {}
@@ -129,6 +156,11 @@ impl AuditService {
             println!("======================");
             println!("📁 Output directory: {}", request.output_dir);
             println!("📄 Format: {}", request.format);
+            if let Some(template_path) = &request.template_path {
+                println!("🎨 External template: {}", template_path);
+            } else {
+                println!("🎨 Templates: built-in (embedded in binary)");
+            }
             if request.test_mode {
                 println!("🧪 Test mode: generating sample audit report");
             }
@@ -216,14 +248,26 @@ impl AuditService {
 
         match request.format.as_str() {
             "typst" | "both" => {
-                self.coordinator
-                    .generate_typst_document(&report, &typst_path)
-                    .map_err(|e| {
-                        AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
-                    })?;
+                if let Some(template_path) = &request.template_path {
+                    self.coordinator
+                        .generate_typst_document_with_template(&report, &typst_path, Some(template_path))
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate Typst document with external template: {}", e))
+                        })?;
+                } else {
+                    self.coordinator
+                        .generate_typst_document(&report, &typst_path)
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
+                        })?;
+                }
 
                 if request.verbose > 0 {
-                    println!("📄 Typst document generated: {}", typst_path.display());
+                    if request.template_path.is_some() {
+                        println!("📄 Typst document generated with external template: {}", typst_path.display());
+                    } else {
+                        println!("📄 Typst document generated: {}", typst_path.display());
+                    }
                 }
                 output_files.push(typst_path.to_string_lossy().to_string());
 
@@ -251,11 +295,19 @@ impl AuditService {
             }
             "pdf" => {
                 // Generate Typst document first (temporary)
-                self.coordinator
-                    .generate_typst_document(&report, &typst_path)
-                    .map_err(|e| {
-                        AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
-                    })?;
+                if let Some(template_path) = &request.template_path {
+                    self.coordinator
+                        .generate_typst_document_with_template(&report, &typst_path, Some(template_path))
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate Typst document with external template: {}", e))
+                        })?;
+                } else {
+                    self.coordinator
+                        .generate_typst_document(&report, &typst_path)
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate Typst document: {}", e))
+                        })?;
+                }
 
                 self.coordinator
                     .compile_to_pdf(&typst_path, &pdf_path)
@@ -272,41 +324,80 @@ impl AuditService {
                 output_files.push(pdf_path.to_string_lossy().to_string());
             }
             "json" => {
-                self.coordinator
-                    .generate_json_report(&report, &json_path)
-                    .map_err(|e| {
-                        AuditError::OutputError(format!("Failed to generate JSON report: {}", e))
-                    })?;
+                if let Some(template_path) = &request.template_path {
+                    self.coordinator
+                        .generate_json_report_with_template(&report, &json_path, Some(template_path))
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate JSON report with external template: {}", e))
+                        })?;
+                } else {
+                    self.coordinator
+                        .generate_json_report(&report, &json_path)
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate JSON report: {}", e))
+                        })?;
+                }
 
                 if request.verbose > 0 {
-                    println!("📄 JSON report generated: {}", json_path.display());
+                    if request.template_path.is_some() {
+                        println!("📄 JSON report generated with external template: {}", json_path.display());
+                    } else {
+                        println!("📄 JSON report generated: {}", json_path.display());
+                    }
                 }
                 output_files.push(json_path.to_string_lossy().to_string());
             }
             "html" => {
-                self.coordinator
-                    .generate_html_report(&report, &html_path)
-                    .map_err(|e| {
-                        AuditError::OutputError(format!("Failed to generate HTML report: {}", e))
-                    })?;
+                if let Some(template_path) = &request.template_path {
+                    self.coordinator
+                        .generate_html_report_with_template(&report, &html_path, Some(template_path))
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate HTML report with external template: {}", e))
+                        })?;
+                } else {
+                    self.coordinator
+                        .generate_html_report(&report, &html_path)
+                        .map_err(|e| {
+                            AuditError::OutputError(format!("Failed to generate HTML report: {}", e))
+                        })?;
+                }
 
                 if request.verbose > 0 {
-                    println!("📄 HTML report generated: {}", html_path.display());
+                    if request.template_path.is_some() {
+                        println!("📄 HTML report generated with external template: {}", html_path.display());
+                    } else {
+                        println!("📄 HTML report generated: {}", html_path.display());
+                    }
                 }
                 output_files.push(html_path.to_string_lossy().to_string());
             }
             "markdown" => {
-                self.coordinator
-                    .generate_markdown_summary(&report, &markdown_path)
-                    .map_err(|e| {
-                        AuditError::OutputError(format!(
-                            "Failed to generate Markdown summary: {}",
-                            e
-                        ))
-                    })?;
+                if let Some(template_path) = &request.template_path {
+                    self.coordinator
+                        .generate_markdown_summary_with_template(&report, &markdown_path, Some(template_path))
+                        .map_err(|e| {
+                            AuditError::OutputError(format!(
+                                "Failed to generate Markdown summary with external template: {}",
+                                e
+                            ))
+                        })?;
+                } else {
+                    self.coordinator
+                        .generate_markdown_summary(&report, &markdown_path)
+                        .map_err(|e| {
+                            AuditError::OutputError(format!(
+                                "Failed to generate Markdown summary: {}",
+                                e
+                            ))
+                        })?;
+                }
 
                 if request.verbose > 0 {
-                    println!("📄 Markdown summary generated: {}", markdown_path.display());
+                    if request.template_path.is_some() {
+                        println!("📄 Markdown summary generated with external template: {}", markdown_path.display());
+                    } else {
+                        println!("📄 Markdown summary generated: {}", markdown_path.display());
+                    }
                 }
                 output_files.push(markdown_path.to_string_lossy().to_string());
             }

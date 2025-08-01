@@ -134,6 +134,7 @@ async fn handle_audit_command(
     let test_mode = matches.get_flag("test");
     let ai_analysis = matches.get_flag("ai-analysis");
     let gh_repo = matches.get_one::<String>("gh").map(|s| s.to_string());
+    let template_path = matches.get_one::<String>("template").map(|s| s.to_string());
 
     let request = AuditRequest {
         output_dir,
@@ -142,6 +143,7 @@ async fn handle_audit_command(
         test_mode,
         ai_analysis,
         gh_repo,
+        template_path,
     };
 
     // Create the audit service with or without AI
