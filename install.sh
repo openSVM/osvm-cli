@@ -35,7 +35,7 @@ fi
 # Check for Solana CLI tools
 if ! command -v solana >/dev/null 2>&1; then
     echo "${YELLOW}Solana CLI tools not found. It's recommended to install them.${NC}"
-    echo "You can install Solana CLI tools with: sh -c \"\$(curl -sSfL https://release.solana.com/v1.14.29/install)\""
+    echo "You can install Solana CLI tools with: sh -c \"\$(curl --proto '=https' --tlsv1.2 -sSfL https://solana-install.solana.workers.dev | bash)\""
 fi
 
 echo "${BLUE}Installing OSVM CLI...${NC}"
