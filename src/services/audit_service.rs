@@ -35,6 +35,7 @@ pub struct AuditRequest {
     pub ai_analysis: bool,
     pub gh_repo: Option<String>,
     pub template_path: Option<String>,
+    pub no_commit: bool,
 }
 
 pub struct AuditResult {
@@ -167,6 +168,13 @@ impl AuditService {
             if request.ai_analysis {
                 println!("🤖 AI analysis: enabled");
             }
+            if request.no_commit {
+                if request.output_dir == "." {
+                    println!("📂 No-commit mode: files will be saved to current directory");
+                } else {
+                    println!("📂 No-commit mode: files will be saved but not committed to repository");
+                }
+            }
             if let Some(repo) = &request.gh_repo {
                 println!("🐙 GitHub repository: {}", repo);
             }
@@ -180,7 +188,7 @@ impl AuditService {
             }
 
             self.coordinator
-                .audit_github_repository(repo_spec)
+                .audit_github_repository(repo_spec, request.no_commit)
                 .await
                 .map_err(|e| {
                     AuditError::AuditExecutionError(format!("GitHub audit failed: {}", e))
