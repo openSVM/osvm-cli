@@ -29,6 +29,7 @@ mod tests {
                 test_mode: true,
                 ai_analysis: false, // AI not requested, should work
                 gh_repo: None,
+                template_path: None,
             };
 
             // This should succeed since AI is not requested
@@ -65,6 +66,7 @@ mod tests {
                 test_mode: true,
                 ai_analysis: true, // AI requested but key is empty
                 gh_repo: None,
+                template_path: None,
             };
 
             // This should fail with environment error
@@ -106,6 +108,7 @@ mod tests {
                 test_mode: true,
                 ai_analysis: true, // AI requested but key is whitespace
                 gh_repo: None,
+                template_path: None,
             };
 
             // This should fail with environment error

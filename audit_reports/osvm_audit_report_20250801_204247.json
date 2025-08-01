@@ -1,0 +1,24 @@
+{
+  "custom_audit_report": {
+    "metadata": {
+      "generated_at": "2025-08-01 20:42:47 UTC",
+      "version": "0.4.3",
+      "tool": "Custom OSVM Security Audit System",
+      "template_type": "external"
+    },
+    "summary": {
+      "total_findings": 6,
+      "critical_findings": 1,
+      "high_findings": 2,
+      "medium_findings": 3,
+      "low_findings": 0,
+      "security_score": 75,
+      "compliance_level": "Moderate",
+      "custom_template_used": true
+    },
+    "system_info": {
+      "os": "Linux x86_64",
+      "architecture": "x86_64"
+    }
+  }
+}
