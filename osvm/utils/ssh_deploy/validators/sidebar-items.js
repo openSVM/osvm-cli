@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["get_required_resources","validate_cpu_cores","validate_disk_space","validate_memory","validate_system_requirements"]};
