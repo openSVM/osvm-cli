@@ -5783,16 +5783,34 @@ impl AuditCoordinator {
             .generate_typst_document(report, output_path)
     }
 
+    /// Generate Typst document with optional external template
+    pub fn generate_typst_document_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.template_generator
+            .generate_typst_document_with_template(report, output_path, external_template)
+    }
+
     /// Generate JSON report using template system
     pub fn generate_json_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
         self.template_generator
             .generate_json_report(report, output_path)
     }
 
+    /// Generate JSON report with optional external template
+    pub fn generate_json_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.template_generator
+            .generate_json_report_with_template(report, output_path, external_template)
+    }
+
     /// Generate HTML report using template system
     pub fn generate_html_report(&self, report: &AuditReport, output_path: &Path) -> Result<()> {
         self.template_generator
             .generate_html_report(report, output_path)
+    }
+
+    /// Generate HTML report with optional external template
+    pub fn generate_html_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+        self.template_generator
+            .generate_html_report_with_template(report, output_path, external_template)
     }
 
     /// Generate Markdown summary using template system
@@ -5803,6 +5821,17 @@ impl AuditCoordinator {
     ) -> Result<()> {
         self.template_generator
             .generate_markdown_summary(report, output_path)
+    }
+
+    /// Generate Markdown summary with optional external template
+    pub fn generate_markdown_summary_with_template(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+        external_template: Option<&str>,
+    ) -> Result<()> {
+        self.template_generator
+            .generate_markdown_summary_with_template(report, output_path, external_template)
     }
 
     /// Enhanced dependency security checks
