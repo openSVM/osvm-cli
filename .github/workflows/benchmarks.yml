@@ -23,7 +23,7 @@ jobs:
         override: true
 
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config libssl-dev
+      run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config libssl-dev perl
 
     - name: Set environment variables
       run: |
