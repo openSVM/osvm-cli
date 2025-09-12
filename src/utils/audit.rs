@@ -1553,7 +1553,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &command_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "Potential command injection vulnerability".to_string(),
@@ -1597,7 +1598,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &path_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "Potential path traversal vulnerability".to_string(),
@@ -1672,7 +1674,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &tls_bypass_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "TLS certificate verification bypass".to_string(),
