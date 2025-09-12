@@ -24,7 +24,10 @@ mod constants {
     pub const FALSE_POSITIVE_INDICATORS: &[&str] = &[
         "test", "mock", "example", "dummy", "placeholder", 
         "lorem", "ipsum", "comment", "doc", "readme", 
-        "license", "copyright", "author"
+        "license", "copyright", "author", "guid", "uuid", 
+        "id64", "hash", "checksum", "base64", "encoded", 
+        "string", "sample", "fake", "default", "null", 
+        "zero", "empty", "temp", "benchmark", "perf", "stress"
     ];
 }
 
@@ -602,47 +605,97 @@ impl SolanaSecurityCheck {
         }
     }
 
-    /// Determine if a base58 string is likely a Solana key based on context
-    fn is_likely_solana_key(&self, value: &str, context: &str) -> bool {
-        // Skip common false positives
+    /// Determine confidence level and likelihood of Solana key with enhanced analysis
+    fn analyze_solana_key_confidence(&self, value: &str, context: &str) -> (bool, f32, AuditSeverity) {
         let context_lower = context.to_lowercase();
+        
+        // Skip common false positives
         for &indicator in constants::FALSE_POSITIVE_INDICATORS {
             if context_lower.contains(indicator) {
-                return false;
+                return (false, 0.0, AuditSeverity::Info);
             }
         }
 
-        // Look for Solana-specific context clues
-        let solana_indicators = [
-            "pubkey",
-            "program_id",
-            "account",
-            "signer",
-            "authority",
-            "mint",
-            "token",
-            "pda",
-            "system_program",
-            "spl_token",
-            "metaplex",
-            "anchor",
-            "lamports",
-            "rent",
-            "solana",
-            "devnet",
-            "mainnet",
-            "testnet",
+        let mut confidence = 0.0;
+
+        // Check if it matches known Solana program IDs (highest confidence)
+        if self.is_known_solana_program_id(value) {
+            confidence += 0.9;
+        }
+
+        // Strong Solana-specific indicators
+        let strong_indicators = [
+            ("pubkey", 0.8), ("program_id", 0.9), ("account", 0.6), 
+            ("signer", 0.7), ("authority", 0.7), ("mint", 0.8),
+            ("pda", 0.9), ("system_program", 0.9), ("spl_token", 0.8),
+            ("metaplex", 0.8), ("anchor", 0.7), ("solana_sdk", 0.9),
+            ("solana_program", 0.9), ("anchor_lang", 0.8)
         ];
 
-        for indicator in &solana_indicators {
+        for (indicator, weight) in &strong_indicators {
             if context_lower.contains(indicator) {
-                return true;
+                confidence += weight;
+                break; // Only count the highest match
             }
         }
 
-        // If no specific context, assume it might be a key (conservative approach)
-        // but lower severity if no clear context
-        true
+        // Variable naming patterns
+        let naming_patterns = [
+            ("_pubkey", 0.7), ("_program", 0.6), ("_account", 0.5),
+            ("pubkey_", 0.7), ("program_", 0.6), ("solana_", 0.6)
+        ];
+
+        for (pattern, weight) in &naming_patterns {
+            if context_lower.contains(pattern) {
+                confidence += weight * 0.8; // Slightly reduce naming pattern confidence
+                break;
+            }
+        }
+
+        // Crypto/blockchain context (lower confidence)
+        let crypto_indicators = [
+            ("crypto", 0.3), ("blockchain", 0.3), ("defi", 0.4),
+            ("web3", 0.4), ("transaction", 0.2), ("wallet", 0.3)
+        ];
+
+        for (indicator, weight) in &crypto_indicators {
+            if context_lower.contains(indicator) {
+                confidence += weight;
+                break;
+            }
+        }
+
+        // Determine if it's likely a key and appropriate severity
+        let is_likely = confidence > 0.4;
+        let severity = if confidence > 0.8 {
+            AuditSeverity::Medium
+        } else if confidence > 0.6 {
+            AuditSeverity::Low
+        } else if confidence > 0.4 {
+            AuditSeverity::Info
+        } else {
+            AuditSeverity::Info
+        };
+
+        // Cap confidence at 1.0
+        (is_likely, confidence.min(1.0), severity)
+    }
+
+    /// Check if a public key matches known Solana program IDs
+    fn is_known_solana_program_id(&self, value: &str) -> bool {
+        // List of well-known Solana program IDs that should definitely be flagged
+        let known_program_ids = [
+            "11111111111111111111111111111112", // System Program
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program  
+            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
+            "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", // Metaplex Token Metadata
+            "p1exdMJcjVao65QdewkaZRUnU6VPSXhus9n2GzWfh98", // Serum DEX v1
+            "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", // Serum DEX v2
+            "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1", // Orca DEX
+            "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo", // Jupiter Aggregator
+        ];
+        
+        known_program_ids.contains(&value)
     }
 
     /// Check for additional Solana security patterns using regex cache
@@ -652,28 +705,52 @@ impl SolanaSecurityCheck {
         file_path: &str,
         findings: &mut Vec<AuditFinding>,
     ) {
-        // Check for hardcoded program IDs or keys in string literals with context awareness
+        // Check for hardcoded program IDs or keys in string literals with enhanced context awareness
         for string_lit in &analysis.string_literals {
             // Check for potential base58 encoded Solana public keys
             if Self::is_valid_base58_pubkey(&string_lit.value) {
-                // Reduce false positives by checking context
-                let is_likely_key =
-                    self.is_likely_solana_key(&string_lit.value, &string_lit.context);
+                // Use confidence-based analysis to reduce false positives
+                let (is_likely_key, confidence, severity) =
+                    self.analyze_solana_key_confidence(&string_lit.value, &string_lit.context);
 
                 if is_likely_key {
+                    let confidence_desc = if confidence > 0.8 {
+                        "high confidence"
+                    } else if confidence > 0.6 {
+                        "medium confidence"
+                    } else {
+                        "low confidence"
+                    };
+
                     findings.push(AuditFinding {
                         id: FindingIdAllocator::next_category_id("solana"),
-                        title: "Potential hardcoded Solana public key".to_string(),
+                        title: format!("Potential hardcoded Solana public key ({})", confidence_desc),
                         description: format!(
-                            "File {} contains what appears to be a hardcoded base58-encoded public key at line {}: '{}'",
-                            file_path, string_lit.line, &string_lit.value[..12] // Show only first 12 chars
+                            "File {} contains what appears to be a hardcoded base58-encoded public key at line {} (confidence: {:.1}%): '{}'{}",
+                            file_path, 
+                            string_lit.line, 
+                            confidence * 100.0,
+                            &string_lit.value[..12], // Show only first 12 chars
+                            if confidence > 0.8 { "" } else { " - manual review recommended" }
                         ),
-                        severity: AuditSeverity::Medium,
+                        severity,
                         category: "Solana Security".to_string(),
                         cwe_id: Some("CWE-798".to_string()),
-                        cvss_score: Some(5.0),
-                        impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
-                        recommendation: "Use environment variables or configuration for public keys, or use the Pubkey::from_str() function with constants".to_string(),
+                        cvss_score: Some(3.0 + (confidence * 4.0)), // Scale CVSS with confidence
+                        impact: if confidence > 0.8 {
+                            "Hardcoded keys reduce flexibility and may expose sensitive information".to_string()
+                        } else {
+                            "Potential hardcoded key detected - requires manual verification".to_string()
+                        },
+                        recommendation: format!(
+                            "{}. {}",
+                            if confidence > 0.8 {
+                                "Use environment variables or configuration for public keys"
+                            } else {
+                                "Verify if this is actually a Solana public key"
+                            },
+                            "Consider using the Pubkey::from_str() function with constants if this is a legitimate program ID"
+                        ),
                         code_location: Some(format!("{}:{}", file_path, string_lit.line)),
                         references: vec![
                             "https://docs.solana.com/developing/programming-model/accounts".to_string(),
