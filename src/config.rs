@@ -2,7 +2,8 @@ use {
     crate::utils::self_repair::read_keypair_with_repair,
     solana_clap_utils::input_validators::normalize_to_url_if_moniker,
     solana_client::rpc_client::RpcClient,
-    solana_sdk::{commitment_config::CommitmentConfig, native_token::Sol, signature::Signer},
+    solana_commitment_config::CommitmentConfig,
+    solana_sdk::{native_token::Sol, signature::Signer},
     std::env,
 };
 
