@@ -1,6 +1,7 @@
 use osvm::utils::ebpf_deploy::{deploy_to_all_networks, DeployConfig, DeploymentResult};
 use serial_test::serial;
-use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
+use solana_commitment_config::{CommitmentConfig, CommitmentLevel};
+use solana_sdk::pubkey::Pubkey;
 use std::fs::{self, File};
 use std::io::Write;
 use tempfile::tempdir;
@@ -326,13 +327,13 @@ fn test_commitment_config_variations() {
         assert!(
             matches!(
                 config.commitment,
-                solana_sdk::commitment_config::CommitmentLevel::Processed
+                CommitmentLevel::Processed
             ) || matches!(
                 config.commitment,
-                solana_sdk::commitment_config::CommitmentLevel::Confirmed
+                CommitmentLevel::Confirmed
             ) || matches!(
                 config.commitment,
-                solana_sdk::commitment_config::CommitmentLevel::Finalized
+                CommitmentLevel::Finalized
             )
         );
     }
