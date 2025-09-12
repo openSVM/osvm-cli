@@ -299,7 +299,7 @@ fn test_keypair_cloning_error_handling() {
 
     // Test that keypair can be cloned through bytes round-trip
     let cloned_bytes = original_keypair.to_bytes();
-    let cloned = Keypair::from_bytes(&cloned_bytes);
+    let cloned = Keypair::try_from(&cloned_bytes[..]);
 
     assert!(cloned.is_ok());
     assert_eq!(cloned.unwrap().pubkey(), original_keypair.pubkey());
