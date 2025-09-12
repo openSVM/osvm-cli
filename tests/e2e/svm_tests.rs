@@ -92,7 +92,11 @@ fn test_svm_dashboard() {
 
 #[test]
 #[serial]
+#[test]
+#[serial]
 fn test_svm_with_config_file() {
+    setup_test_environment();
+    
     // Create a temporary directory and config file
     let temp_dir = create_temp_dir();
     let config_path = create_mock_config(&temp_dir);
@@ -107,6 +111,8 @@ fn test_svm_with_config_file() {
 #[test]
 #[serial]
 fn test_svm_with_url() {
+    setup_test_environment();
+    
     // Create a mock server
     let mut mock_server = MockServer::new();
     let _mock = mock_server.mock_svm_list();
@@ -125,6 +131,8 @@ fn test_svm_with_url() {
 
 #[test]
 fn test_svm_install() {
+    setup_test_environment();
+    
     let output = run_osvm_command_string(&["svm", "install", "solana", "--host", "user@host"]);
 
     // Verify the output contains expected installation message
