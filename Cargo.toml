@@ -73,6 +73,10 @@ criterion = "0.6.0"
 default = []
 remote-wallet = ["solana-remote-wallet"]
 
+[[bench]]
+name = "deployment_benchmarks"
+harness = false
+
 [patch.crates-io]
 curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }
 crunchy = { path = "vendor/crunchy" }
