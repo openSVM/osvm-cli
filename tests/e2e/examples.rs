@@ -46,7 +46,7 @@ fn example_test_with_assert_cmd() {
 #[serial]
 fn example_test_with_mock_server() {
     setup_test_environment();
-    
+
     // Create a mock server
     let mut mock_server = MockServer::new();
 
@@ -73,7 +73,7 @@ fn example_test_with_mock_server() {
 #[serial]
 fn example_test_with_custom_config() {
     setup_test_environment();
-    
+
     // Create a temporary directory and config file
     let temp_dir = create_temp_dir();
     let config_path = create_mock_config(&temp_dir);
