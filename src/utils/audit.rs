@@ -1555,24 +1555,25 @@ impl AuditCoordinator {
         for pattern in &command_patterns {
             if let Some(regex) = safe_regex_new(pattern) {
                 if regex.is_match(content) {
-                findings.push(AuditFinding {
-                    id: format!("OSVM-{:03}", *finding_id),
-                    title: "Potential command injection vulnerability".to_string(),
-                    description: format!("File {} contains command execution with potentially unsafe input", file_path),
-                    severity: AuditSeverity::High,
-                    category: "Security".to_string(),
-                    cwe_id: Some("CWE-78".to_string()),
-                    cvss_score: Some(7.5),
-                    impact: "Arbitrary command execution on the host system".to_string(),
-                    recommendation: "Validate and sanitize all input before using in commands, use parameterized commands".to_string(),
-                    code_location: Some(file_path.to_string()),
-                    references: vec![
-                        "https://cwe.mitre.org/data/definitions/78.html".to_string(),
-                        "https://owasp.org/Top10/A03_2021-Injection/".to_string(),
-                    ],
-                });
-                *finding_id += 1;
-                break; // Only report once per file
+                    findings.push(AuditFinding {
+                        id: format!("OSVM-{:03}", *finding_id),
+                        title: "Potential command injection vulnerability".to_string(),
+                        description: format!("File {} contains command execution with potentially unsafe input", file_path),
+                        severity: AuditSeverity::High,
+                        category: "Security".to_string(),
+                        cwe_id: Some("CWE-78".to_string()),
+                        cvss_score: Some(7.5),
+                        impact: "Arbitrary command execution on the host system".to_string(),
+                        recommendation: "Validate and sanitize all input before using in commands, use parameterized commands".to_string(),
+                        code_location: Some(file_path.to_string()),
+                        references: vec![
+                            "https://cwe.mitre.org/data/definitions/78.html".to_string(),
+                            "https://owasp.org/Top10/A03_2021-Injection/".to_string(),
+                        ],
+                    });
+                    *finding_id += 1;
+                    break; // Only report once per file
+                }
             }
         }
 
@@ -1600,29 +1601,30 @@ impl AuditCoordinator {
         for pattern in &path_patterns {
             if let Some(regex) = safe_regex_new(pattern) {
                 if regex.is_match(content) {
-                findings.push(AuditFinding {
-                    id: format!("OSVM-{:03}", *finding_id),
-                    title: "Potential path traversal vulnerability".to_string(),
-                    description: format!(
-                        "File {} contains file operations with potentially unsafe paths",
-                        file_path
-                    ),
-                    severity: AuditSeverity::High,
-                    category: "Security".to_string(),
-                    cwe_id: Some("CWE-22".to_string()),
-                    cvss_score: Some(7.0),
-                    impact: "Unauthorized access to files outside intended directory".to_string(),
-                    recommendation:
-                        "Validate and canonicalize file paths, use safe path construction methods"
-                            .to_string(),
-                    code_location: Some(file_path.to_string()),
-                    references: vec![
-                        "https://cwe.mitre.org/data/definitions/22.html".to_string(),
-                        "https://owasp.org/Top10/A01_2021-Broken_Access_Control/".to_string(),
-                    ],
-                });
-                *finding_id += 1;
-                break; // Only report once per file
+                    findings.push(AuditFinding {
+                        id: format!("OSVM-{:03}", *finding_id),
+                        title: "Potential path traversal vulnerability".to_string(),
+                        description: format!(
+                            "File {} contains file operations with potentially unsafe paths",
+                            file_path
+                        ),
+                        severity: AuditSeverity::High,
+                        category: "Security".to_string(),
+                        cwe_id: Some("CWE-22".to_string()),
+                        cvss_score: Some(7.0),
+                        impact: "Unauthorized access to files outside intended directory".to_string(),
+                        recommendation:
+                            "Validate and canonicalize file paths, use safe path construction methods"
+                                .to_string(),
+                        code_location: Some(file_path.to_string()),
+                        references: vec![
+                            "https://cwe.mitre.org/data/definitions/22.html".to_string(),
+                            "https://owasp.org/Top10/A01_2021-Broken_Access_Control/".to_string(),
+                        ],
+                    });
+                    *finding_id += 1;
+                    break; // Only report once per file
+                }
             }
         }
 
@@ -1676,23 +1678,24 @@ impl AuditCoordinator {
         for pattern in &tls_bypass_patterns {
             if let Some(regex) = safe_regex_new(pattern) {
                 if regex.is_match(content) {
-                findings.push(AuditFinding {
-                    id: format!("OSVM-{:03}", *finding_id),
-                    title: "TLS certificate verification bypass".to_string(),
-                    description: format!("File {} disables TLS certificate verification", file_path),
-                    severity: AuditSeverity::High,
-                    category: "Security".to_string(),
-                    cwe_id: Some("CWE-295".to_string()),
-                    cvss_score: Some(7.5),
-                    impact: "Man-in-the-middle attacks, compromised secure communications".to_string(),
-                    recommendation: "Enable proper TLS certificate verification for all connections".to_string(),
-                    code_location: Some(file_path.to_string()),
-                    references: vec![
-                        "https://cwe.mitre.org/data/definitions/295.html".to_string(),
-                    ],
-                });
-                *finding_id += 1;
-                break;
+                    findings.push(AuditFinding {
+                        id: format!("OSVM-{:03}", *finding_id),
+                        title: "TLS certificate verification bypass".to_string(),
+                        description: format!("File {} disables TLS certificate verification", file_path),
+                        severity: AuditSeverity::High,
+                        category: "Security".to_string(),
+                        cwe_id: Some("CWE-295".to_string()),
+                        cvss_score: Some(7.5),
+                        impact: "Man-in-the-middle attacks, compromised secure communications".to_string(),
+                        recommendation: "Enable proper TLS certificate verification for all connections".to_string(),
+                        code_location: Some(file_path.to_string()),
+                        references: vec![
+                            "https://cwe.mitre.org/data/definitions/295.html".to_string(),
+                        ],
+                    });
+                    *finding_id += 1;
+                    break;
+                }
             }
         }
 

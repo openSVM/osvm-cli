@@ -30,6 +30,54 @@ pub mod utils;
 
 // Config struct is now in src/config.rs
 
+/// Check if a command is a known OSVM command
+fn is_known_command(sub_command: &str) -> bool {
+    matches!(sub_command, 
+        "balance" | "svm" | "nodes" | "examples" | "rpc-manager" | "deploy" | 
+        "solana" | "doctor" | "audit" | "new_feature_command" | "v" | "ver" | "version"
+    )
+}
+
+/// Handle AI query command
+async fn handle_ai_query(sub_command: &str, sub_matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+    // For external subcommands, clap provides the additional arguments differently
+    // We need to collect them from the raw args since clap doesn't know about them
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Find where our subcommand starts and collect everything after osvm
+    let mut query_parts = Vec::new();
+    let mut found_osvm = false;
+    
+    for arg in args.iter().skip(1) { // Skip the binary name
+        if !found_osvm {
+            found_osvm = true;
+        }
+        // Skip global flags like --help, --version, etc.
+        if !arg.starts_with('-') {
+            query_parts.push(arg.clone());
+        }
+    }
+    
+    let query = query_parts.join(" ");
+    
+    // Make AI request
+    println!("🔍 Interpreting as AI query: \"{}\"", query);
+    
+    let ai_service = crate::services::ai_service::AiService::new();
+    match ai_service.query(&query).await {
+        Ok(response) => {
+            println!("🤖 AI Response:");
+            println!("{}", response);
+        }
+        Err(e) => {
+            eprintln!("❌ AI query failed: {}", e);
+            eprintln!("💡 Use 'osvm --help' to see available commands");
+        }
+    }
+    
+    Ok(())
+}
+
 /// Show recent logs from devnet RPC node
 fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs;
@@ -228,6 +276,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle audit command early to avoid config loading that might trigger self-repair
     if sub_command == "audit" {
         return handle_audit_command(&app_matches, sub_matches).await;
+    }
+
+    // Handle AI queries early to avoid config loading
+    if !is_known_command(sub_command) {
+        return handle_ai_query(sub_command, sub_matches).await;
     }
 
     // Load configuration using the new Config module
