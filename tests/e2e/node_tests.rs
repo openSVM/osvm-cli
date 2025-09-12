@@ -95,7 +95,7 @@ fn test_nodes_get_invalid() {
 #[serial]
 fn test_examples_command() {
     setup_test_environment();
-    
+
     // Test the examples command
     let output = run_osvm_command_string(&["examples"]);
 
@@ -119,7 +119,7 @@ fn test_examples_command() {
 #[serial]
 fn test_verbose_output() {
     setup_test_environment();
-    
+
     // Test with normal output (without verbose flag)
     let output = run_osvm_command_string(&["node"]);
 
@@ -140,7 +140,7 @@ fn test_verbose_output() {
 #[serial]
 fn test_no_color_flag() {
     setup_test_environment();
-    
+
     // Test with no-color flag
     let output = run_osvm_command_string(&["--no-color", "svm", "list"]);
 
@@ -152,7 +152,7 @@ fn test_no_color_flag() {
 #[serial]
 fn test_with_custom_config() {
     setup_test_environment();
-    
+
     // Create a temporary directory and config file
     let temp_dir = create_temp_dir();
     let config_path = create_mock_config(&temp_dir);
@@ -183,7 +183,7 @@ fn test_help_command() {
 #[serial]
 fn test_new_feature() {
     setup_test_environment();
-    
+
     // Test the new feature
     let output = run_osvm_command_string(&["new_feature_command"]);
 
