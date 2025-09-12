@@ -616,7 +616,7 @@ impl SolanaSecurityCheck {
             }
         }
 
-        let mut confidence = 0.0;
+        let mut confidence: f32 = 0.0;
 
         // Check if it matches known Solana program IDs (highest confidence)
         if self.is_known_solana_program_id(value) {
