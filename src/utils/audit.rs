@@ -18,6 +18,7 @@ use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenera
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
+use crate::services::ai_service::AiService;
 
 /// Helper function to safely create regex patterns in the audit system
 fn safe_regex_new(pattern: &str) -> Option<regex::Regex> {
@@ -557,6 +558,7 @@ pub struct SystemInfo {
 /// Main audit coordinator with enhanced modular architecture and circuit breaker
 pub struct AuditCoordinator {
     ai_client: Option<OpenAIClient>,
+    internal_ai_service: Option<AiService>,
     modular_coordinator: ModularAuditCoordinator,
     template_generator: TemplateReportGenerator,
     ai_disabled: bool,
@@ -574,6 +576,7 @@ impl AuditCoordinator {
     pub fn new() -> Self {
         Self {
             ai_client: None,
+            internal_ai_service: None,
             modular_coordinator: ModularAuditCoordinator::new(),
             template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
                 log::warn!("Failed to initialize template generator: {}", e);
@@ -584,10 +587,26 @@ impl AuditCoordinator {
         }
     }
 
-    /// Create a new audit coordinator with AI capabilities
+    /// Create a new audit coordinator with internal AI capabilities
+    pub fn with_internal_ai() -> Self {
+        Self {
+            ai_client: None,
+            internal_ai_service: Some(AiService::new()),
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
+            ai_circuit_breaker: AICircuitBreaker::new(3, Duration::from_secs(300)), // 3 failures, 5 min recovery
+        }
+    }
+
+    /// Create a new audit coordinator with AI capabilities (legacy OpenAI)
     pub fn with_ai(api_key: String) -> Self {
         Self {
             ai_client: Some(OpenAIClient::new(api_key)),
+            internal_ai_service: None,
             modular_coordinator: ModularAuditCoordinator::new(),
             template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
                 log::warn!("Failed to initialize template generator: {}", e);
@@ -599,16 +618,17 @@ impl AuditCoordinator {
     }
 
     /// Create a new audit coordinator with optional AI capabilities
-    /// If api_key is None or empty, AI analysis will be disabled
+    /// Now defaults to internal AI service, with fallback to OpenAI if api_key is provided
     pub fn with_optional_ai(api_key: Option<String>) -> Self {
         match api_key {
             Some(key) if !key.trim().is_empty() => {
-                println!("🤖 AI analysis enabled with provided API key");
+                println!("🤖 AI analysis enabled with provided OpenAI API key");
                 Self::with_ai(key)
             }
             _ => {
-                println!("🔧 Running audit without AI analysis (no API key provided)");
-                Self::new()
+                // Use internal AI service by default
+                println!("🤖 AI analysis enabled with internal OSVM AI service");
+                Self::with_internal_ai()
             }
         }
     }
@@ -731,10 +751,10 @@ impl AuditCoordinator {
     #[cfg(test)]
     pub async fn enhance_findings_with_ai(
         &self,
-        ai_client: &OpenAIClient,
+        _ai_client: &OpenAIClient, // Kept for backwards compatibility but not used
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
-        self.enhance_findings_with_ai_internal(ai_client, findings)
+        self.enhance_findings_with_ai_internal(findings)
             .await
     }
 
@@ -747,13 +767,15 @@ impl AuditCoordinator {
 
     /// Check if AI should be used based on circuit breaker state
     pub fn should_use_ai(&self) -> bool {
-        self.ai_client.is_some() && !self.ai_disabled && !self.ai_circuit_breaker.is_open()
+        (self.ai_client.is_some() || self.internal_ai_service.is_some()) 
+            && !self.ai_disabled 
+            && !self.ai_circuit_breaker.is_open()
     }
 
     /// Reset AI circuit breaker and re-enable if client is available
     pub fn reset_ai_circuit_breaker(&mut self) {
         self.ai_circuit_breaker.reset();
-        if self.ai_client.is_some() {
+        if self.ai_client.is_some() || self.internal_ai_service.is_some() {
             self.ai_disabled = false;
             log::info!("AI analysis re-enabled after circuit breaker reset");
         }
@@ -783,9 +805,9 @@ impl AuditCoordinator {
                 failure_count
             );
         } else {
-            println!("🔧 Running audit without AI analysis (no API key provided)");
+            println!("🔧 Running audit without AI analysis");
             println!(
-                "💡 Consider setting OPENAI_API_KEY environment variable for enhanced analysis"
+                "💡 Use --ai-analysis flag to enable AI-powered analysis"
             );
         }
 
@@ -810,17 +832,19 @@ impl AuditCoordinator {
         findings.extend(self.run_modular_security_checks().await?);
 
         // If AI is enabled and not disabled, perform AI-enhanced analysis
-        if let Some(ref ai_client) = self.ai_client {
-            if self.should_use_ai() {
-                println!("🤖 Running AI-powered code analysis...");
+        if self.should_use_ai() {
+            println!("🤖 Running AI-powered analysis...");
+            
+            // For OpenAI client, perform code analysis
+            if let Some(ref ai_client) = self.ai_client {
                 let ai_findings = self.perform_ai_code_analysis(ai_client).await;
                 findings.extend(ai_findings);
-
-                // Enhance existing findings with AI analysis (only critical/high)
-                findings = self
-                    .enhance_findings_with_ai_internal(ai_client, findings)
-                    .await;
             }
+
+            // Enhance existing findings with AI analysis (only critical/high)
+            findings = self
+                .enhance_findings_with_ai_internal(findings)
+                .await;
         }
 
         // Generate system information
@@ -1214,10 +1238,57 @@ impl AuditCoordinator {
         ai_findings
     }
 
+    /// Query AI service (either OpenAI client or internal AI service)
+    async fn query_ai_for_finding(&self, finding: &AuditFinding) -> Result<AIAnalysis> {
+        if let Some(ref ai_client) = self.ai_client {
+            // Use OpenAI client
+            ai_client.analyze_finding(finding).await
+        } else if let Some(ref internal_ai) = self.internal_ai_service {
+            // Use internal AI service
+            let prompt = format!(
+                "Analyze this security finding and provide enhanced insights:\n\n\
+                Title: {}\n\
+                Description: {}\n\
+                Severity: {:?}\n\
+                Category: {}\n\
+                Current Recommendation: {}\n\n\
+                Please provide:\n\
+                1. Enhanced description with technical details\n\
+                2. Comprehensive risk assessment\n\
+                3. Specific mitigation strategy\n\
+                4. Confidence score (0.0-1.0)\n\
+                5. Additional relevant CWE IDs if applicable",
+                finding.title,
+                finding.description,
+                finding.severity,
+                finding.category,
+                finding.recommendation
+            );
+
+            match internal_ai.query(&prompt).await {
+                Ok(response) => {
+                    // Try to parse the response as structured data
+                    // For now, we'll create a simple AIAnalysis from the response
+                    Ok(AIAnalysis {
+                        enhanced_description: response.clone(),
+                        risk_assessment: format!("AI analysis: {}", response),
+                        mitigation_strategy: finding.recommendation.clone(),
+                        confidence_score: 0.8, // Default confidence for internal AI
+                        additional_cwe_ids: vec![],
+                    })
+                }
+                Err(e) => {
+                    anyhow::bail!("Internal AI service error: {}", e)
+                }
+            }
+        } else {
+            anyhow::bail!("No AI service available")
+        }
+    }
+
     /// Enhance existing findings with AI analysis with improved error handling
     async fn enhance_findings_with_ai_internal(
         &self,
-        ai_client: &OpenAIClient,
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
         let mut enhanced_findings = Vec::new();
@@ -1238,7 +1309,7 @@ impl AuditCoordinator {
                     continue;
                 }
 
-                match ai_client.analyze_finding(&finding).await {
+                match self.query_ai_for_finding(&finding).await {
                     Ok(ai_analysis) => {
                         let mut enhanced_finding = finding.clone();
                         // Enhance the finding with AI insights
