@@ -206,18 +206,17 @@ async fn handle_audit_command(
 
     // Create the audit service with or without AI
     let service = if ai_analysis {
-        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "OPENAI_API_KEY environment variable not found",
-            )
-        })?;
-
-        if api_key.is_empty() {
-            return Err("OPENAI_API_KEY environment variable is empty".into());
+        // Check if OpenAI API key is available, otherwise use internal AI
+        match std::env::var("OPENAI_API_KEY") {
+            Ok(api_key) if !api_key.trim().is_empty() => {
+                println!("🤖 Using OpenAI API with provided key");
+                AuditService::with_ai(api_key)
+            }
+            _ => {
+                println!("🤖 Using internal OSVM AI service");
+                AuditService::with_internal_ai()
+            }
         }
-
-        AuditService::with_ai(api_key)
     } else {
         AuditService::new()
     };

@@ -63,6 +63,12 @@ impl AuditService {
         }
     }
 
+    pub fn with_internal_ai() -> Self {
+        Self {
+            coordinator: AuditCoordinator::with_internal_ai(),
+        }
+    }
+
     pub fn with_optional_ai(api_key: Option<String>) -> Self {
         Self {
             coordinator: AuditCoordinator::with_optional_ai(api_key),
@@ -70,27 +76,14 @@ impl AuditService {
     }
 
     pub fn validate_environment(request: &AuditRequest) -> Result<(), AuditError> {
-        // Always check OpenAI API key status for better user guidance
-        match std::env::var("OPENAI_API_KEY") {
-            Ok(key) if !key.trim().is_empty() => {
-                if request.ai_analysis {
-                    println!("🤖 AI analysis will be enabled with provided API key");
-                } else {
-                    println!("ℹ️  OPENAI_API_KEY detected but AI analysis is disabled. Use --ai-analysis to enable.");
+        if request.ai_analysis {
+            // Check for OpenAI API key only if explicitly requested via environment variable
+            match std::env::var("OPENAI_API_KEY") {
+                Ok(key) if !key.trim().is_empty() => {
+                    println!("🤖 AI analysis will use OpenAI with provided API key");
                 }
-            }
-            Ok(_) => {
-                if request.ai_analysis {
-                    return Err(AuditError::EnvironmentError(
-                        "OPENAI_API_KEY is empty but AI analysis was requested. Please provide a valid API key or disable AI analysis.".to_string()
-                    ));
-                }
-            }
-            Err(_) => {
-                if request.ai_analysis {
-                    return Err(AuditError::EnvironmentError(
-                        "OPENAI_API_KEY not found but AI analysis was requested. Please set the environment variable or disable AI analysis.".to_string()
-                    ));
+                _ => {
+                    println!("🤖 AI analysis will use internal OSVM AI service");
                 }
             }
         }
