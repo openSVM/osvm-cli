@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -17,6 +18,17 @@ use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenera
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
+
+/// Helper function to safely create regex patterns in the audit system
+fn safe_regex_new(pattern: &str) -> Option<regex::Regex> {
+    match regex::Regex::new(pattern) {
+        Ok(r) => Some(r),
+        Err(e) => {
+            log::warn!("Failed to compile regex pattern '{}': {}", pattern, e);
+            None
+        }
+    }
+}
 
 /// OpenAI API client for AI-powered analysis with rate limiting and retry logic
 pub struct OpenAIClient {
@@ -151,9 +163,16 @@ impl OpenAIClient {
             match self.try_analyze_finding(finding).await {
                 Ok(analysis) => return Ok(analysis),
                 Err(e) if attempt < self.max_retries => {
-                    let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
+                    let (should_retry, base_delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
 
                     if should_retry {
+                        // Implement exponential backoff with attempt count
+                        let backoff_factor = 2_u64.pow(attempt as u32);
+                        let jitter = rand::random::<f64>() * 0.5 + 0.5; // Random factor between 0.5 and 1.0
+                        let delay = std::time::Duration::from_millis(
+                            (base_delay.as_millis() as f64 * backoff_factor as f64 * jitter) as u64
+                        );
+
                         log::warn!(
                             "AI analysis attempt {}/{} failed, retrying in {}ms: {}",
                             attempt + 1,
@@ -1438,8 +1457,10 @@ impl AuditCoordinator {
         ];
 
         for pattern in &secret_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
-                return true;
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
+                    return true;
+                }
             }
         }
         false
@@ -1532,7 +1553,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &command_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "Potential command injection vulnerability".to_string(),
@@ -1576,7 +1598,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &path_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "Potential path traversal vulnerability".to_string(),
@@ -1651,7 +1674,8 @@ impl AuditCoordinator {
         ];
 
         for pattern in &tls_bypass_patterns {
-            if regex::Regex::new(pattern).unwrap().is_match(content) {
+            if let Some(regex) = safe_regex_new(pattern) {
+                if regex.is_match(content) {
                 findings.push(AuditFinding {
                     id: format!("OSVM-{:03}", *finding_id),
                     title: "TLS certificate verification bypass".to_string(),
@@ -6603,28 +6627,66 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
             }
             Ok(Err(e)) => Err(anyhow::anyhow!("Git command failed: {}", e)),
             Err(_) => {
-                // Timeout occurred, try to kill the process
+                // Timeout occurred, try to kill the process using safer cross-platform approach
                 log::warn!(
-                    "Git command timed out after {:?}, attempting to terminate",
-                    timeout
+                    "Git command timed out after {:?}, attempting to terminate process {}",
+                    timeout,
+                    child_id
                 );
 
-                // On Unix systems, try to kill the process
-                #[cfg(unix)]
-                {
-                    unsafe {
-                        libc::kill(child_id as i32, libc::SIGTERM);
-                    }
-                }
-
-                // On Windows, there's no direct equivalent, but the process should
-                // be cleaned up when the program exits
-                #[cfg(windows)]
-                {
-                    log::warn!("Process termination on Windows not implemented, process may continue running");
+                // Cross-platform process termination using standard library methods
+                // This approach is safer than direct libc calls
+                if let Err(e) = Self::terminate_process_safely(child_id) {
+                    log::error!("Failed to terminate git process {}: {}", child_id, e);
                 }
 
                 Err(anyhow::anyhow!("Git command timed out after {:?}", timeout))
+            }
+        }
+    }
+
+    /// Safely terminate a process using cross-platform methods
+    fn terminate_process_safely(process_id: u32) -> Result<()> {
+        #[cfg(unix)]
+        {
+            use std::process::Command;
+            // Use the kill command instead of unsafe libc calls
+            let output = Command::new("kill")
+                .arg("-TERM")
+                .arg(process_id.to_string())
+                .output();
+            
+            match output {
+                Ok(result) if result.status.success() => {
+                    log::info!("Successfully terminated process {} using kill command", process_id);
+                    Ok(())
+                }
+                Ok(result) => {
+                    let stderr = String::from_utf8_lossy(&result.stderr);
+                    Err(anyhow::anyhow!("kill command failed: {}", stderr))
+                }
+                Err(e) => Err(anyhow::anyhow!("Failed to execute kill command: {}", e))
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            use std::process::Command;
+            // Use taskkill on Windows for proper process termination
+            let output = Command::new("taskkill")
+                .args(&["/F", "/PID", &process_id.to_string()])
+                .output();
+                
+            match output {
+                Ok(result) if result.status.success() => {
+                    log::info!("Successfully terminated process {} using taskkill", process_id);
+                    Ok(())
+                }
+                Ok(result) => {
+                    let stderr = String::from_utf8_lossy(&result.stderr);
+                    Err(anyhow::anyhow!("taskkill command failed: {}", stderr))
+                }
+                Err(e) => Err(anyhow::anyhow!("Failed to execute taskkill: {}", e))
             }
         }
     }
