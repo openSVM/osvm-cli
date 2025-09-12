@@ -325,16 +325,9 @@ fn test_commitment_config_variations() {
     for config in configs {
         // Test that commitment configs can be used properly
         assert!(
-            matches!(
-                config.commitment,
-                CommitmentLevel::Processed
-            ) || matches!(
-                config.commitment,
-                CommitmentLevel::Confirmed
-            ) || matches!(
-                config.commitment,
-                CommitmentLevel::Finalized
-            )
+            matches!(config.commitment, CommitmentLevel::Processed)
+                || matches!(config.commitment, CommitmentLevel::Confirmed)
+                || matches!(config.commitment, CommitmentLevel::Finalized)
         );
     }
 }
