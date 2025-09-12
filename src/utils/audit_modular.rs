@@ -10,6 +10,27 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// Constants for security analysis configuration
+mod constants {
+    /// Solana public key length constraints
+    pub const SOLANA_PUBKEY_SIZE_BYTES: usize = 32;
+    pub const SOLANA_PUBKEY_MIN_LENGTH: usize = 32; // Minimum length for base58 encoded key
+    pub const SOLANA_PUBKEY_MAX_LENGTH: usize = 44; // Maximum length for base58 encoded key
+    
+    /// Base58 character set for Solana public keys
+    pub const BASE58_CHARS: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    
+    /// Common false positive indicators for key detection
+    pub const FALSE_POSITIVE_INDICATORS: &[&str] = &[
+        "test", "mock", "example", "dummy", "placeholder", 
+        "lorem", "ipsum", "comment", "doc", "readme", 
+        "license", "copyright", "author", "guid", "uuid", 
+        "id64", "hash", "checksum", "base64", "encoded", 
+        "string", "sample", "fake", "default", "null", 
+        "zero", "empty", "temp", "benchmark", "perf", "stress"
+    ];
+}
+
 /// Global finding ID allocator to ensure unique IDs across sessions
 static FINDING_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
@@ -18,118 +39,127 @@ static SESSION_ID: Lazy<String> = Lazy::new(|| {
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_else(|_| {
+            // Fallback timestamp if system time is before epoch
+            std::time::Duration::from_secs(1640995200) // Jan 1, 2022
+        })
         .as_secs();
     format!("{:08x}", timestamp & 0xFFFFFFFF) // Use lower 32 bits for shorter IDs
 });
 
-/// Cached regex patterns for performance
+/// Helper function to create regex patterns safely at compile time
+fn create_regex(pattern: &str, name: &str) -> regex::Regex {
+    regex::Regex::new(pattern)
+        .unwrap_or_else(|e| panic!("Failed to compile regex pattern '{}' for {}: {}", pattern, name, e))
+}
+
+/// Cached regex patterns for performance with compile-time validation
 static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     let mut cache = HashMap::new();
 
     // Secret patterns
     cache.insert(
         "password_pattern",
-        regex::Regex::new(r#"(?i)password\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+        create_regex(r#"(?i)password\s*=\s*['"'][^'"']+['"']"#, "password_pattern"),
     );
     cache.insert(
         "api_key_pattern",
-        regex::Regex::new(r#"(?i)api_key\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+        create_regex(r#"(?i)api_key\s*=\s*['"'][^'"']+['"']"#, "api_key_pattern"),
     );
     cache.insert(
         "secret_pattern",
-        regex::Regex::new(r#"(?i)secret\s*=\s*['"'][^'"']+['"']"#).unwrap(),
+        create_regex(r#"(?i)secret\s*=\s*['"'][^'"']+['"']"#, "secret_pattern"),
     );
     cache.insert(
         "hex_key_pattern",
-        regex::Regex::new(r#"['"'][0-9a-fA-F]{32,}['"']"#).unwrap(),
+        create_regex(r#"['"'][0-9a-fA-F]{32,}['"']"#, "hex_key_pattern"),
     );
     cache.insert(
         "base64_pattern",
-        regex::Regex::new(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#).unwrap(),
+        create_regex(r#"['"'][A-Za-z0-9+/]{20,}={0,2}['"']"#, "base64_pattern"),
     );
 
     // Command injection patterns - Enhanced with comprehensive detection
     cache.insert(
         "command_injection",
-        regex::Regex::new(r#"(?:Command::new|process::Command::new)\s*\(\s*(?:[^)]*(?:format!|concat!|&|String::from|to_string|user_input|param|arg|input|req\.|query|body|header)[^)]*|[^)]*\+[^)]*|[^)]*format!\([^)]*\))"#).unwrap(),
+        create_regex(r#"(?:Command::new|process::Command::new)\s*\(\s*(?:[^)]*(?:format!|concat!|&|String::from|to_string|user_input|param|arg|input|req\.|query|body|header)[^)]*|[^)]*\+[^)]*|[^)]*format!\([^)]*\))"#, "command_injection"),
     );
     cache.insert(
         "shell_command",
-        regex::Regex::new(r#"(?:shell\(|system\(|exec\(|cmd\(|spawn\(|output\()"#).unwrap(),
+        create_regex(r#"(?:shell\(|system\(|exec\(|cmd\(|spawn\(|output\()"#, "shell_command"),
     );
     cache.insert(
         "unsafe_exec",
-        regex::Regex::new(
+        create_regex(
             r#"(?:std::process::Command|tokio::process::Command).*(?:format!|concat!|user_input|input|param|arg|req\.|query|body|String::from)"#,
-        )
-        .unwrap(),
+            "unsafe_exec"
+        ),
     );
     cache.insert(
         "dynamic_command_args",
-        regex::Regex::new(r#"\.args?\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+        create_regex(r#"\.args?\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#, "dynamic_command_args"),
     );
 
     // Path traversal patterns - Enhanced with unicode and encoding detection
     cache.insert(
         "path_traversal",
-        regex::Regex::new(r#"(?:\.\.[\\/]|%2e%2e[\\/]|%252e%252e[\\/]|\.\.\\|%2e%2e%5c|%252e%252e%255c|\\\.\\\.[\\/])"#).unwrap(),
+        create_regex(r#"(?:\.\.[\\/]|%2e%2e[\\/]|%252e%252e[\\/]|\.\.\\|%2e%2e%5c|%252e%252e%255c|\\\.\\\.[\\/])"#, "path_traversal"),
     );
     cache.insert(
         "dynamic_path",
-        regex::Regex::new(r#"Path::new\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|param|input|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+        create_regex(r#"Path::new\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|param|input|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#, "dynamic_path"),
     );
     cache.insert(
         "unsafe_path_join",
-        regex::Regex::new(r#"path\.join\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+        create_regex(r#"path\.join\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#, "unsafe_path_join"),
     );
     cache.insert(
         "path_manipulation",
-        regex::Regex::new(r#"(?:canonicalize|read_to_string|write|create|remove_file|remove_dir)\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#).unwrap(),
+        create_regex(r#"(?:canonicalize|read_to_string|write|create|remove_file|remove_dir)\s*\(\s*(?:[^)]*(?:format!|concat!|user_input|input|param|req\.|query|body)[^)]*|[^)]*\+[^)]*)"#, "path_manipulation"),
     );
 
     // Network patterns
     cache.insert(
         "http_insecure",
-        regex::Regex::new(r#"http://[^/]*\..*"#).unwrap(),
+        create_regex(r#"http://[^/]*\..*"#, "http_insecure"),
     ); // Simplified pattern for non-localhost HTTP
     cache.insert(
         "tls_bypass",
-        regex::Regex::new(r#"danger_accept_invalid_certs\(true\)"#).unwrap(),
+        create_regex(r#"danger_accept_invalid_certs\(true\)"#, "tls_bypass"),
     );
 
     // Solana-specific patterns - Adding missing patterns
     cache.insert(
         "solana_signer",
-        regex::Regex::new(r#"AccountInfo.*without.*is_signer"#).unwrap(),
+        create_regex(r#"AccountInfo.*without.*is_signer"#, "solana_signer"),
     );
     cache.insert(
         "solana_pda",
-        regex::Regex::new(r#"find_program_address"#).unwrap(),
+        create_regex(r#"find_program_address"#, "solana_pda"),
     );
     cache.insert(
         "solana_owner",
-        regex::Regex::new(r#"AccountInfo.*owner"#).unwrap(),
+        create_regex(r#"AccountInfo.*owner"#, "solana_owner"),
     );
     cache.insert(
         "rent_exempt",
-        regex::Regex::new(r#"(?:rent_exempt|Rent::exempt)"#).unwrap(),
+        create_regex(r#"(?:rent_exempt|Rent::exempt)"#, "rent_exempt"),
     );
     cache.insert(
         "lamports",
-        regex::Regex::new(r#"(?:lamports|try_borrow_mut_lamports)"#).unwrap(),
+        create_regex(r#"(?:lamports|try_borrow_mut_lamports)"#, "lamports"),
     );
     cache.insert(
         "solana_authority",
-        regex::Regex::new(r#"(?:authority|Pubkey::default)"#).unwrap(),
+        create_regex(r#"(?:authority|Pubkey::default)"#, "solana_authority"),
     );
     cache.insert(
         "solana_invoke",
-        regex::Regex::new(r#"(?:invoke|invoke_signed)"#).unwrap(),
+        create_regex(r#"(?:invoke|invoke_signed)"#, "solana_invoke"),
     );
     cache.insert(
         "solana_realloc",
-        regex::Regex::new(r#"realloc\([^)]*,\s*false\)"#).unwrap(),
+        create_regex(r#"realloc\([^)]*,\s*false\)"#, "solana_realloc"),
     );
 
     cache
@@ -161,7 +191,10 @@ impl FindingIdAllocator {
         let mut hasher = DefaultHasher::new();
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_else(|_| {
+                // Fallback to a fixed duration if system time is before epoch
+                std::time::Duration::from_secs(0)
+            })
             .as_nanos()
             .hash(&mut hasher);
         std::thread::current().id().hash(&mut hasher);
@@ -554,81 +587,115 @@ impl AuditCheck for SolanaSecurityCheck {
 impl SolanaSecurityCheck {
     /// Check if a string is a valid base58 encoded Solana public key
     fn is_valid_base58_pubkey(value: &str) -> bool {
-        // Solana public keys are 32 bytes, which when base58 encoded are typically 43-44 characters
-        if value.len() < 32 || value.len() > 44 {
+        // Solana public keys are 32 bytes, which when base58 encoded are typically 32-44 characters
+        if value.len() < constants::SOLANA_PUBKEY_MIN_LENGTH 
+            || value.len() > constants::SOLANA_PUBKEY_MAX_LENGTH {
             return false;
         }
 
         // Check if it contains only valid base58 characters
-        let base58_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-        if !value.chars().all(|c| base58_chars.contains(c)) {
+        if !value.chars().all(|c| constants::BASE58_CHARS.contains(c)) {
             return false;
         }
 
         // Try to decode as base58 and check if it's 32 bytes (Solana pubkey size)
         match bs58::decode(value).into_vec() {
-            Ok(decoded) => decoded.len() == 32,
+            Ok(decoded) => decoded.len() == constants::SOLANA_PUBKEY_SIZE_BYTES,
             Err(_) => false,
         }
     }
 
-    /// Determine if a base58 string is likely a Solana key based on context
-    fn is_likely_solana_key(&self, value: &str, context: &str) -> bool {
-        // Skip common false positives
-        let false_positive_indicators = [
-            "test",
-            "mock",
-            "example",
-            "dummy",
-            "placeholder",
-            "lorem",
-            "ipsum",
-            "comment",
-            "doc",
-            "readme",
-            "license",
-            "copyright",
-            "author",
-        ];
-
+    /// Determine confidence level and likelihood of Solana key with enhanced analysis
+    fn analyze_solana_key_confidence(&self, value: &str, context: &str) -> (bool, f32, AuditSeverity) {
         let context_lower = context.to_lowercase();
-        for indicator in &false_positive_indicators {
+        
+        // Skip common false positives
+        for &indicator in constants::FALSE_POSITIVE_INDICATORS {
             if context_lower.contains(indicator) {
-                return false;
+                return (false, 0.0, AuditSeverity::Info);
             }
         }
 
-        // Look for Solana-specific context clues
-        let solana_indicators = [
-            "pubkey",
-            "program_id",
-            "account",
-            "signer",
-            "authority",
-            "mint",
-            "token",
-            "pda",
-            "system_program",
-            "spl_token",
-            "metaplex",
-            "anchor",
-            "lamports",
-            "rent",
-            "solana",
-            "devnet",
-            "mainnet",
-            "testnet",
+        let mut confidence = 0.0;
+
+        // Check if it matches known Solana program IDs (highest confidence)
+        if self.is_known_solana_program_id(value) {
+            confidence += 0.9;
+        }
+
+        // Strong Solana-specific indicators
+        let strong_indicators = [
+            ("pubkey", 0.8), ("program_id", 0.9), ("account", 0.6), 
+            ("signer", 0.7), ("authority", 0.7), ("mint", 0.8),
+            ("pda", 0.9), ("system_program", 0.9), ("spl_token", 0.8),
+            ("metaplex", 0.8), ("anchor", 0.7), ("solana_sdk", 0.9),
+            ("solana_program", 0.9), ("anchor_lang", 0.8)
         ];
 
-        for indicator in &solana_indicators {
+        for (indicator, weight) in &strong_indicators {
             if context_lower.contains(indicator) {
-                return true;
+                confidence += weight;
+                break; // Only count the highest match
             }
         }
 
-        // If no specific context, assume it might be a key (conservative approach)
-        // but lower severity if no clear context
-        true
+        // Variable naming patterns
+        let naming_patterns = [
+            ("_pubkey", 0.7), ("_program", 0.6), ("_account", 0.5),
+            ("pubkey_", 0.7), ("program_", 0.6), ("solana_", 0.6)
+        ];
+
+        for (pattern, weight) in &naming_patterns {
+            if context_lower.contains(pattern) {
+                confidence += weight * 0.8; // Slightly reduce naming pattern confidence
+                break;
+            }
+        }
+
+        // Crypto/blockchain context (lower confidence)
+        let crypto_indicators = [
+            ("crypto", 0.3), ("blockchain", 0.3), ("defi", 0.4),
+            ("web3", 0.4), ("transaction", 0.2), ("wallet", 0.3)
+        ];
+
+        for (indicator, weight) in &crypto_indicators {
+            if context_lower.contains(indicator) {
+                confidence += weight;
+                break;
+            }
+        }
+
+        // Determine if it's likely a key and appropriate severity
+        let is_likely = confidence > 0.4;
+        let severity = if confidence > 0.8 {
+            AuditSeverity::Medium
+        } else if confidence > 0.6 {
+            AuditSeverity::Low
+        } else if confidence > 0.4 {
+            AuditSeverity::Info
+        } else {
+            AuditSeverity::Info
+        };
+
+        // Cap confidence at 1.0
+        (is_likely, confidence.min(1.0), severity)
+    }
+
+    /// Check if a public key matches known Solana program IDs
+    fn is_known_solana_program_id(&self, value: &str) -> bool {
+        // List of well-known Solana program IDs that should definitely be flagged
+        let known_program_ids = [
+            "11111111111111111111111111111112", // System Program
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program  
+            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
+            "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", // Metaplex Token Metadata
+            "p1exdMJcjVao65QdewkaZRUnU6VPSXhus9n2GzWfh98", // Serum DEX v1
+            "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", // Serum DEX v2
+            "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1", // Orca DEX
+            "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo", // Jupiter Aggregator
+        ];
+        
+        known_program_ids.contains(&value)
     }
 
     /// Check for additional Solana security patterns using regex cache
@@ -638,28 +705,52 @@ impl SolanaSecurityCheck {
         file_path: &str,
         findings: &mut Vec<AuditFinding>,
     ) {
-        // Check for hardcoded program IDs or keys in string literals with context awareness
+        // Check for hardcoded program IDs or keys in string literals with enhanced context awareness
         for string_lit in &analysis.string_literals {
             // Check for potential base58 encoded Solana public keys
             if Self::is_valid_base58_pubkey(&string_lit.value) {
-                // Reduce false positives by checking context
-                let is_likely_key =
-                    self.is_likely_solana_key(&string_lit.value, &string_lit.context);
+                // Use confidence-based analysis to reduce false positives
+                let (is_likely_key, confidence, severity) =
+                    self.analyze_solana_key_confidence(&string_lit.value, &string_lit.context);
 
                 if is_likely_key {
+                    let confidence_desc = if confidence > 0.8 {
+                        "high confidence"
+                    } else if confidence > 0.6 {
+                        "medium confidence"
+                    } else {
+                        "low confidence"
+                    };
+
                     findings.push(AuditFinding {
                         id: FindingIdAllocator::next_category_id("solana"),
-                        title: "Potential hardcoded Solana public key".to_string(),
+                        title: format!("Potential hardcoded Solana public key ({})", confidence_desc),
                         description: format!(
-                            "File {} contains what appears to be a hardcoded base58-encoded public key at line {}: '{}'",
-                            file_path, string_lit.line, &string_lit.value[..12] // Show only first 12 chars
+                            "File {} contains what appears to be a hardcoded base58-encoded public key at line {} (confidence: {:.1}%): '{}'{}",
+                            file_path, 
+                            string_lit.line, 
+                            confidence * 100.0,
+                            &string_lit.value[..12], // Show only first 12 chars
+                            if confidence > 0.8 { "" } else { " - manual review recommended" }
                         ),
-                        severity: AuditSeverity::Medium,
+                        severity,
                         category: "Solana Security".to_string(),
                         cwe_id: Some("CWE-798".to_string()),
-                        cvss_score: Some(5.0),
-                        impact: "Hardcoded keys reduce flexibility and may expose sensitive information".to_string(),
-                        recommendation: "Use environment variables or configuration for public keys, or use the Pubkey::from_str() function with constants".to_string(),
+                        cvss_score: Some(3.0 + (confidence * 4.0)), // Scale CVSS with confidence
+                        impact: if confidence > 0.8 {
+                            "Hardcoded keys reduce flexibility and may expose sensitive information".to_string()
+                        } else {
+                            "Potential hardcoded key detected - requires manual verification".to_string()
+                        },
+                        recommendation: format!(
+                            "{}. {}",
+                            if confidence > 0.8 {
+                                "Use environment variables or configuration for public keys"
+                            } else {
+                                "Verify if this is actually a Solana public key"
+                            },
+                            "Consider using the Pubkey::from_str() function with constants if this is a legitimate program ID"
+                        ),
                         code_location: Some(format!("{}:{}", file_path, string_lit.line)),
                         references: vec![
                             "https://docs.solana.com/developing/programming-model/accounts".to_string(),

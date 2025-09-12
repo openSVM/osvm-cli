@@ -5,6 +5,7 @@
 
 use crate::utils::audit::{AuditFinding, AuditReport, AuditSeverity, AuditSummary, SystemInfo};
 use anyhow::{Context, Result};
+use rand::Rng;
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::Path;
@@ -372,19 +373,26 @@ impl EnhancedAIErrorHandler {
             || error_string.contains("suspended")
     }
 
-    /// Create retry strategy based on error type
+    /// Create retry strategy based on error type with exponential backoff and jitter
     pub fn get_retry_strategy(error: &anyhow::Error) -> (bool, std::time::Duration) {
         let error_string = error.to_string();
 
-        if error_string.contains("rate limit") || error_string.contains("429") {
-            (true, std::time::Duration::from_secs(60)) // Retry after 1 minute
+        // Base delays for different error types
+        let base_delay = if error_string.contains("rate limit") || error_string.contains("429") {
+            60 // 1 minute base for rate limits
         } else if error_string.contains("timeout") || error_string.contains("network") {
-            (true, std::time::Duration::from_secs(5)) // Quick retry for network issues
+            5 // 5 seconds base for network issues
         } else if error_string.contains("server") || error_string.contains("503") {
-            (true, std::time::Duration::from_secs(30)) // Retry after 30 seconds for server issues
+            30 // 30 seconds base for server issues
         } else {
-            (false, std::time::Duration::from_secs(0)) // Don't retry for other errors
-        }
+            return (false, std::time::Duration::from_secs(0)); // Don't retry for other errors
+        };
+
+        // Add exponential backoff with jitter to prevent thundering herd
+        let jitter = rand::random::<f64>() * 0.5 + 0.5; // Random factor between 0.5 and 1.0
+        let backoff_delay = (base_delay as f64 * jitter) as u64;
+
+        (true, std::time::Duration::from_secs(backoff_delay))
     }
 }
 
