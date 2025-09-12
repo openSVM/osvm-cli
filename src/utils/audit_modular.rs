@@ -16,18 +16,43 @@ mod constants {
     pub const SOLANA_PUBKEY_SIZE_BYTES: usize = 32;
     pub const SOLANA_PUBKEY_MIN_LENGTH: usize = 32; // Minimum length for base58 encoded key
     pub const SOLANA_PUBKEY_MAX_LENGTH: usize = 44; // Maximum length for base58 encoded key
-    
+
     /// Base58 character set for Solana public keys
     pub const BASE58_CHARS: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    
+
     /// Common false positive indicators for key detection
     pub const FALSE_POSITIVE_INDICATORS: &[&str] = &[
-        "test", "mock", "example", "dummy", "placeholder", 
-        "lorem", "ipsum", "comment", "doc", "readme", 
-        "license", "copyright", "author", "guid", "uuid", 
-        "id64", "hash", "checksum", "base64", "encoded", 
-        "string", "sample", "fake", "default", "null", 
-        "zero", "empty", "temp", "benchmark", "perf", "stress"
+        "test",
+        "mock",
+        "example",
+        "dummy",
+        "placeholder",
+        "lorem",
+        "ipsum",
+        "comment",
+        "doc",
+        "readme",
+        "license",
+        "copyright",
+        "author",
+        "guid",
+        "uuid",
+        "id64",
+        "hash",
+        "checksum",
+        "base64",
+        "encoded",
+        "string",
+        "sample",
+        "fake",
+        "default",
+        "null",
+        "zero",
+        "empty",
+        "temp",
+        "benchmark",
+        "perf",
+        "stress",
     ];
 }
 
@@ -49,8 +74,12 @@ static SESSION_ID: Lazy<String> = Lazy::new(|| {
 
 /// Helper function to create regex patterns safely at compile time
 fn create_regex(pattern: &str, name: &str) -> regex::Regex {
-    regex::Regex::new(pattern)
-        .unwrap_or_else(|e| panic!("Failed to compile regex pattern '{}' for {}: {}", pattern, name, e))
+    regex::Regex::new(pattern).unwrap_or_else(|e| {
+        panic!(
+            "Failed to compile regex pattern '{}' for {}: {}",
+            pattern, name, e
+        )
+    })
 }
 
 /// Cached regex patterns for performance with compile-time validation
@@ -60,7 +89,10 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     // Secret patterns
     cache.insert(
         "password_pattern",
-        create_regex(r#"(?i)password\s*=\s*['"'][^'"']+['"']"#, "password_pattern"),
+        create_regex(
+            r#"(?i)password\s*=\s*['"'][^'"']+['"']"#,
+            "password_pattern",
+        ),
     );
     cache.insert(
         "api_key_pattern",
@@ -86,7 +118,10 @@ static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
     );
     cache.insert(
         "shell_command",
-        create_regex(r#"(?:shell\(|system\(|exec\(|cmd\(|spawn\(|output\()"#, "shell_command"),
+        create_regex(
+            r#"(?:shell\(|system\(|exec\(|cmd\(|spawn\(|output\()"#,
+            "shell_command",
+        ),
     );
     cache.insert(
         "unsafe_exec",
@@ -588,8 +623,9 @@ impl SolanaSecurityCheck {
     /// Check if a string is a valid base58 encoded Solana public key
     fn is_valid_base58_pubkey(value: &str) -> bool {
         // Solana public keys are 32 bytes, which when base58 encoded are typically 32-44 characters
-        if value.len() < constants::SOLANA_PUBKEY_MIN_LENGTH 
-            || value.len() > constants::SOLANA_PUBKEY_MAX_LENGTH {
+        if value.len() < constants::SOLANA_PUBKEY_MIN_LENGTH
+            || value.len() > constants::SOLANA_PUBKEY_MAX_LENGTH
+        {
             return false;
         }
 
@@ -606,9 +642,13 @@ impl SolanaSecurityCheck {
     }
 
     /// Determine confidence level and likelihood of Solana key with enhanced analysis
-    fn analyze_solana_key_confidence(&self, value: &str, context: &str) -> (bool, f32, AuditSeverity) {
+    fn analyze_solana_key_confidence(
+        &self,
+        value: &str,
+        context: &str,
+    ) -> (bool, f32, AuditSeverity) {
         let context_lower = context.to_lowercase();
-        
+
         // Skip common false positives
         for &indicator in constants::FALSE_POSITIVE_INDICATORS {
             if context_lower.contains(indicator) {
@@ -625,11 +665,20 @@ impl SolanaSecurityCheck {
 
         // Strong Solana-specific indicators
         let strong_indicators = [
-            ("pubkey", 0.8), ("program_id", 0.9), ("account", 0.6), 
-            ("signer", 0.7), ("authority", 0.7), ("mint", 0.8),
-            ("pda", 0.9), ("system_program", 0.9), ("spl_token", 0.8),
-            ("metaplex", 0.8), ("anchor", 0.7), ("solana_sdk", 0.9),
-            ("solana_program", 0.9), ("anchor_lang", 0.8)
+            ("pubkey", 0.8),
+            ("program_id", 0.9),
+            ("account", 0.6),
+            ("signer", 0.7),
+            ("authority", 0.7),
+            ("mint", 0.8),
+            ("pda", 0.9),
+            ("system_program", 0.9),
+            ("spl_token", 0.8),
+            ("metaplex", 0.8),
+            ("anchor", 0.7),
+            ("solana_sdk", 0.9),
+            ("solana_program", 0.9),
+            ("anchor_lang", 0.8),
         ];
 
         for (indicator, weight) in &strong_indicators {
@@ -641,8 +690,12 @@ impl SolanaSecurityCheck {
 
         // Variable naming patterns
         let naming_patterns = [
-            ("_pubkey", 0.7), ("_program", 0.6), ("_account", 0.5),
-            ("pubkey_", 0.7), ("program_", 0.6), ("solana_", 0.6)
+            ("_pubkey", 0.7),
+            ("_program", 0.6),
+            ("_account", 0.5),
+            ("pubkey_", 0.7),
+            ("program_", 0.6),
+            ("solana_", 0.6),
         ];
 
         for (pattern, weight) in &naming_patterns {
@@ -654,8 +707,12 @@ impl SolanaSecurityCheck {
 
         // Crypto/blockchain context (lower confidence)
         let crypto_indicators = [
-            ("crypto", 0.3), ("blockchain", 0.3), ("defi", 0.4),
-            ("web3", 0.4), ("transaction", 0.2), ("wallet", 0.3)
+            ("crypto", 0.3),
+            ("blockchain", 0.3),
+            ("defi", 0.4),
+            ("web3", 0.4),
+            ("transaction", 0.2),
+            ("wallet", 0.3),
         ];
 
         for (indicator, weight) in &crypto_indicators {
@@ -685,16 +742,16 @@ impl SolanaSecurityCheck {
     fn is_known_solana_program_id(&self, value: &str) -> bool {
         // List of well-known Solana program IDs that should definitely be flagged
         let known_program_ids = [
-            "11111111111111111111111111111112", // System Program
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // SPL Token Program  
+            "11111111111111111111111111111112",             // System Program
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // SPL Token Program
             "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL", // Associated Token Program
-            "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s", // Metaplex Token Metadata
-            "p1exdMJcjVao65QdewkaZRUnU6VPSXhus9n2GzWfh98", // Serum DEX v1
+            "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s",  // Metaplex Token Metadata
+            "p1exdMJcjVao65QdewkaZRUnU6VPSXhus9n2GzWfh98",  // Serum DEX v1
             "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", // Serum DEX v2
             "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1", // Orca DEX
-            "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo", // Jupiter Aggregator
+            "JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo",  // Jupiter Aggregator
         ];
-        
+
         known_program_ids.contains(&value)
     }
 
@@ -727,8 +784,8 @@ impl SolanaSecurityCheck {
                         title: format!("Potential hardcoded Solana public key ({})", confidence_desc),
                         description: format!(
                             "File {} contains what appears to be a hardcoded base58-encoded public key at line {} (confidence: {:.1}%): '{}'{}",
-                            file_path, 
-                            string_lit.line, 
+                            file_path,
+                            string_lit.line,
                             confidence * 100.0,
                             &string_lit.value[..12], // Show only first 12 chars
                             if confidence > 0.8 { "" } else { " - manual review recommended" }

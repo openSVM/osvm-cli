@@ -1,6 +1,4 @@
-use osvm::utils::ebpf_deploy::{
-    deploy_to_all_networks, DeployConfig, DeploymentResult,
-};
+use osvm::utils::ebpf_deploy::{deploy_to_all_networks, DeployConfig, DeploymentResult};
 use serial_test::serial;
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 use std::fs::{self, File};
@@ -37,7 +35,10 @@ fn test_deploy_config_validation() {
 
     // This config should fail due to missing owner and fee payer files
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let results = runtime.block_on(deploy_to_all_networks(config, CommitmentConfig::confirmed()));
+    let results = runtime.block_on(deploy_to_all_networks(
+        config,
+        CommitmentConfig::confirmed(),
+    ));
 
     assert_eq!(results.len(), 1);
     assert!(results[0].is_err());
@@ -61,7 +62,7 @@ async fn test_invalid_network_selection() {
     // Create valid keypairs for owner and fee payer
     use solana_sdk::signature::Keypair;
     let test_keypair = Keypair::new();
-    
+
     let owner_file = dir.path().join("owner.json");
     let mut file = File::create(&owner_file).unwrap();
     file.write_all(
@@ -212,7 +213,7 @@ async fn test_all_networks_selection() {
     // Create valid keypairs for owner and fee payer
     use solana_sdk::signature::Keypair;
     let test_keypair = Keypair::new();
-    
+
     let owner_file = dir.path().join("owner.json");
     let mut file = File::create(&owner_file).unwrap();
     file.write_all(
@@ -323,9 +324,16 @@ fn test_commitment_config_variations() {
     for config in configs {
         // Test that commitment configs can be used properly
         assert!(
-            matches!(config.commitment, solana_sdk::commitment_config::CommitmentLevel::Processed) ||
-            matches!(config.commitment, solana_sdk::commitment_config::CommitmentLevel::Confirmed) ||
-            matches!(config.commitment, solana_sdk::commitment_config::CommitmentLevel::Finalized)
+            matches!(
+                config.commitment,
+                solana_sdk::commitment_config::CommitmentLevel::Processed
+            ) || matches!(
+                config.commitment,
+                solana_sdk::commitment_config::CommitmentLevel::Confirmed
+            ) || matches!(
+                config.commitment,
+                solana_sdk::commitment_config::CommitmentLevel::Finalized
+            )
         );
     }
 }
