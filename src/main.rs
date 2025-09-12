@@ -32,23 +32,39 @@ pub mod utils;
 
 /// Check if a command is a known OSVM command
 fn is_known_command(sub_command: &str) -> bool {
-    matches!(sub_command, 
-        "balance" | "svm" | "nodes" | "examples" | "rpc-manager" | "deploy" | 
-        "solana" | "doctor" | "audit" | "new_feature_command" | "v" | "ver" | "version"
+    matches!(
+        sub_command,
+        "balance"
+            | "svm"
+            | "nodes"
+            | "examples"
+            | "rpc-manager"
+            | "deploy"
+            | "solana"
+            | "doctor"
+            | "audit"
+            | "new_feature_command"
+            | "v"
+            | "ver"
+            | "version"
     )
 }
 
 /// Handle AI query command
-async fn handle_ai_query(sub_command: &str, sub_matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
+async fn handle_ai_query(
+    sub_command: &str,
+    sub_matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
     // For external subcommands, clap provides the additional arguments differently
     // We need to collect them from the raw args since clap doesn't know about them
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Find where our subcommand starts and collect everything after osvm
     let mut query_parts = Vec::new();
     let mut found_osvm = false;
-    
-    for arg in args.iter().skip(1) { // Skip the binary name
+
+    for arg in args.iter().skip(1) {
+        // Skip the binary name
         if !found_osvm {
             found_osvm = true;
         }
@@ -57,12 +73,12 @@ async fn handle_ai_query(sub_command: &str, sub_matches: &clap::ArgMatches) -> R
             query_parts.push(arg.clone());
         }
     }
-    
+
     let query = query_parts.join(" ");
-    
+
     // Make AI request
     println!("🔍 Interpreting as AI query: \"{}\"", query);
-    
+
     let ai_service = crate::services::ai_service::AiService::new();
     match ai_service.query(&query).await {
         Ok(response) => {
@@ -74,7 +90,7 @@ async fn handle_ai_query(sub_command: &str, sub_matches: &clap::ArgMatches) -> R
             eprintln!("💡 Use 'osvm --help' to see available commands");
         }
     }
-    
+
     Ok(())
 }
 
@@ -178,14 +194,14 @@ async fn handle_audit_command(
 
     let no_commit = matches.get_flag("no-commit");
     let default_output_dir = matches.get_one::<String>("output").unwrap().to_string();
-    
+
     // If --no-commit is used and output directory is the default, use current directory
     let output_dir = if no_commit && default_output_dir == "audit_reports" {
         ".".to_string()
     } else {
         default_output_dir
     };
-    
+
     let format = matches.get_one::<String>("format").unwrap().to_string();
     let verbose = matches.get_count("verbose");
     let test_mode = matches.get_flag("test");

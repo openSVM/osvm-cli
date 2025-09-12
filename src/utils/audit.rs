@@ -13,12 +13,12 @@ use std::process::Command;
 use std::time::Duration;
 use tokio::time::sleep;
 
+use crate::services::ai_service::AiService;
 use crate::utils::audit_modular::{FindingIdAllocator, ModularAuditCoordinator};
 use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenerator};
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
-use crate::services::ai_service::AiService;
 
 /// Helper function to safely create regex patterns in the audit system
 fn safe_regex_new(pattern: &str) -> Option<regex::Regex> {
@@ -171,7 +171,7 @@ impl OpenAIClient {
                         let backoff_factor = 2_u64.pow(attempt as u32);
                         let jitter = rand::random::<f64>() * 0.5 + 0.5; // Random factor between 0.5 and 1.0
                         let delay = std::time::Duration::from_millis(
-                            (base_delay.as_millis() as f64 * backoff_factor as f64 * jitter) as u64
+                            (base_delay.as_millis() as f64 * backoff_factor as f64 * jitter) as u64,
                         );
 
                         log::warn!(
@@ -754,8 +754,7 @@ impl AuditCoordinator {
         _ai_client: &OpenAIClient, // Kept for backwards compatibility but not used
         findings: Vec<AuditFinding>,
     ) -> Vec<AuditFinding> {
-        self.enhance_findings_with_ai_internal(findings)
-            .await
+        self.enhance_findings_with_ai_internal(findings).await
     }
 
     /// Disable AI analysis due to persistent errors
@@ -767,8 +766,8 @@ impl AuditCoordinator {
 
     /// Check if AI should be used based on circuit breaker state
     pub fn should_use_ai(&self) -> bool {
-        (self.ai_client.is_some() || self.internal_ai_service.is_some()) 
-            && !self.ai_disabled 
+        (self.ai_client.is_some() || self.internal_ai_service.is_some())
+            && !self.ai_disabled
             && !self.ai_circuit_breaker.is_open()
     }
 
@@ -806,9 +805,7 @@ impl AuditCoordinator {
             );
         } else {
             println!("🔧 Running audit without AI analysis");
-            println!(
-                "💡 Use --ai-analysis flag to enable AI-powered analysis"
-            );
+            println!("💡 Use --ai-analysis flag to enable AI-powered analysis");
         }
 
         // Create diagnostic coordinator only when needed
@@ -834,7 +831,7 @@ impl AuditCoordinator {
         // If AI is enabled and not disabled, perform AI-enhanced analysis
         if self.should_use_ai() {
             println!("🤖 Running AI-powered analysis...");
-            
+
             // For OpenAI client, perform code analysis
             if let Some(ref ai_client) = self.ai_client {
                 let ai_findings = self.perform_ai_code_analysis(ai_client).await;
@@ -842,9 +839,7 @@ impl AuditCoordinator {
             }
 
             // Enhance existing findings with AI analysis (only critical/high)
-            findings = self
-                .enhance_findings_with_ai_internal(findings)
-                .await;
+            findings = self.enhance_findings_with_ai_internal(findings).await;
         }
 
         // Generate system information
@@ -1752,16 +1747,22 @@ impl AuditCoordinator {
                     findings.push(AuditFinding {
                         id: format!("OSVM-{:03}", *finding_id),
                         title: "TLS certificate verification bypass".to_string(),
-                        description: format!("File {} disables TLS certificate verification", file_path),
+                        description: format!(
+                            "File {} disables TLS certificate verification",
+                            file_path
+                        ),
                         severity: AuditSeverity::High,
                         category: "Security".to_string(),
                         cwe_id: Some("CWE-295".to_string()),
                         cvss_score: Some(7.5),
-                        impact: "Man-in-the-middle attacks, compromised secure communications".to_string(),
-                        recommendation: "Enable proper TLS certificate verification for all connections".to_string(),
+                        impact: "Man-in-the-middle attacks, compromised secure communications"
+                            .to_string(),
+                        recommendation:
+                            "Enable proper TLS certificate verification for all connections"
+                                .to_string(),
                         code_location: Some(file_path.to_string()),
                         references: vec![
-                            "https://cwe.mitre.org/data/definitions/295.html".to_string(),
+                            "https://cwe.mitre.org/data/definitions/295.html".to_string()
                         ],
                     });
                     *finding_id += 1;
@@ -5882,7 +5883,12 @@ impl AuditCoordinator {
     }
 
     /// Generate Typst document with optional external template
-    pub fn generate_typst_document_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
+    pub fn generate_typst_document_with_template(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+        external_template: Option<&str>,
+    ) -> Result<()> {
         self.template_generator
             .generate_typst_document_with_template(report, output_path, external_template)
     }
@@ -5894,9 +5900,17 @@ impl AuditCoordinator {
     }
 
     /// Generate JSON report with optional external template
-    pub fn generate_json_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
-        self.template_generator
-            .generate_json_report_with_template(report, output_path, external_template)
+    pub fn generate_json_report_with_template(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+        external_template: Option<&str>,
+    ) -> Result<()> {
+        self.template_generator.generate_json_report_with_template(
+            report,
+            output_path,
+            external_template,
+        )
     }
 
     /// Generate HTML report using template system
@@ -5906,9 +5920,17 @@ impl AuditCoordinator {
     }
 
     /// Generate HTML report with optional external template
-    pub fn generate_html_report_with_template(&self, report: &AuditReport, output_path: &Path, external_template: Option<&str>) -> Result<()> {
-        self.template_generator
-            .generate_html_report_with_template(report, output_path, external_template)
+    pub fn generate_html_report_with_template(
+        &self,
+        report: &AuditReport,
+        output_path: &Path,
+        external_template: Option<&str>,
+    ) -> Result<()> {
+        self.template_generator.generate_html_report_with_template(
+            report,
+            output_path,
+            external_template,
+        )
     }
 
     /// Generate Markdown summary using template system
@@ -6567,7 +6589,11 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
     }
 
     /// Perform GitHub repository audit workflow
-    pub async fn audit_github_repository(&self, repo_spec: &str, no_commit: bool) -> Result<AuditReport> {
+    pub async fn audit_github_repository(
+        &self,
+        repo_spec: &str,
+        no_commit: bool,
+    ) -> Result<AuditReport> {
         println!("🐙 Starting GitHub repository audit for: {}", repo_spec);
 
         // Parse repository specification (owner/repo#branch)
@@ -6729,17 +6755,20 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                 .arg("-TERM")
                 .arg(process_id.to_string())
                 .output();
-            
+
             match output {
                 Ok(result) if result.status.success() => {
-                    log::info!("Successfully terminated process {} using kill command", process_id);
+                    log::info!(
+                        "Successfully terminated process {} using kill command",
+                        process_id
+                    );
                     Ok(())
                 }
                 Ok(result) => {
                     let stderr = String::from_utf8_lossy(&result.stderr);
                     Err(anyhow::anyhow!("kill command failed: {}", stderr))
                 }
-                Err(e) => Err(anyhow::anyhow!("Failed to execute kill command: {}", e))
+                Err(e) => Err(anyhow::anyhow!("Failed to execute kill command: {}", e)),
             }
         }
 
@@ -6750,17 +6779,20 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
             let output = Command::new("taskkill")
                 .args(&["/F", "/PID", &process_id.to_string()])
                 .output();
-                
+
             match output {
                 Ok(result) if result.status.success() => {
-                    log::info!("Successfully terminated process {} using taskkill", process_id);
+                    log::info!(
+                        "Successfully terminated process {} using taskkill",
+                        process_id
+                    );
                     Ok(())
                 }
                 Ok(result) => {
                     let stderr = String::from_utf8_lossy(&result.stderr);
                     Err(anyhow::anyhow!("taskkill command failed: {}", stderr))
                 }
-                Err(e) => Err(anyhow::anyhow!("Failed to execute taskkill: {}", e))
+                Err(e) => Err(anyhow::anyhow!("Failed to execute taskkill: {}", e)),
             }
         }
     }
@@ -6854,7 +6886,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         // Copy HTML file to public/audit.html for web accessibility
         let public_dir = repo_dir.join("public");
         let public_audit_path = public_dir.join("audit.html");
-        
+
         if let Err(e) = std::fs::create_dir_all(&public_dir) {
             println!("⚠️  Could not create public directory: {}", e);
         } else if let Err(e) = std::fs::copy(&html_path, &public_audit_path) {

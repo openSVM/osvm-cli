@@ -34,7 +34,7 @@ impl AiService {
         };
 
         println!("🤖 Asking AI: {}", question);
-        
+
         let response = self
             .client
             .post(&self.api_url)
@@ -47,7 +47,11 @@ impl AiService {
         let response_text = response.text().await?;
 
         if !status.is_success() {
-            anyhow::bail!("AI API request failed with status: {} - Response: {}", status, response_text);
+            anyhow::bail!(
+                "AI API request failed with status: {} - Response: {}",
+                status,
+                response_text
+            );
         }
 
         // Try to parse as JSON first
@@ -86,15 +90,18 @@ mod tests {
     #[tokio::test]
     async fn test_ai_service_success() {
         let mut server = Server::new_async().await;
-        
+
         // Mock successful response
         let mock = server
             .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "answer": "This is a test AI response"
-            }).to_string())
+            .with_body(
+                json!({
+                    "answer": "This is a test AI response"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -102,25 +109,28 @@ mod tests {
         ai_service.api_url = server.url() + "/api/getAnswer";
 
         let result = ai_service.query("test question").await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "This is a test AI response");
-        
+
         mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_ai_service_error_response() {
         let mut server = Server::new_async().await;
-        
+
         // Mock error response
         let mock = server
             .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "error": "Invalid query format"
-            }).to_string())
+            .with_body(
+                json!({
+                    "error": "Invalid query format"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -128,17 +138,20 @@ mod tests {
         ai_service.api_url = server.url() + "/api/getAnswer";
 
         let result = ai_service.query("invalid question").await;
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid query format"));
-        
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid query format"));
+
         mock.assert_async().await;
     }
 
     #[tokio::test]
     async fn test_ai_service_plain_text_response() {
         let mut server = Server::new_async().await;
-        
+
         // Mock plain text response
         let mock = server
             .mock("POST", "/api/getAnswer")
@@ -152,10 +165,10 @@ mod tests {
         ai_service.api_url = server.url() + "/api/getAnswer";
 
         let result = ai_service.query("test question").await;
-        
+
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "This is a plain text AI response");
-        
+
         mock.assert_async().await;
     }
 }
