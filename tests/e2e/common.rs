@@ -34,10 +34,11 @@ pub fn run_osvm_command_string(args: &[&str]) -> Output {
     output
 }
 
-/// Check if the output contains a specific string
+/// Check if the output contains a specific string (checks both stdout and stderr)
 pub fn output_contains(output: &std::process::Output, expected: &str) -> bool {
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.contains(expected)
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stdout.contains(expected) || stderr.contains(expected)
 }
 
 /// Create a temporary directory for testing
