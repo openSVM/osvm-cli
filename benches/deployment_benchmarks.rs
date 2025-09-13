@@ -2,7 +2,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use osvm::utils::ebpf_deploy::{load_program, load_program_id, DeployConfig, RpcClientCache};
 use std::fs::File;
 use std::io::Write;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::tempdir;
 
 /// Benchmark program loading performance
@@ -25,7 +25,7 @@ fn benchmark_load_program(c: &mut Criterion) {
         let mut file = File::create(&program_path).unwrap();
         file.write_all(&program_data).unwrap();
 
-        group.benchmark_with_input(
+        group.bench_with_input(
             BenchmarkId::new("load_program", name),
             &program_path.to_string_lossy().to_string(),
             |b, path| {
@@ -157,7 +157,7 @@ fn benchmark_file_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("file_operations");
 
     for (size, file_path) in test_files {
-        group.benchmark_with_input(
+        group.bench_with_input(
             BenchmarkId::new("read_file", size),
             &file_path,
             |b, path| {
@@ -177,7 +177,7 @@ fn benchmark_memory_allocation(c: &mut Criterion) {
     let sizes = vec![10_000, 100_000, 1_000_000, 5_000_000];
 
     for size in sizes {
-        group.benchmark_with_input(
+        group.bench_with_input(
             BenchmarkId::new("vec_allocation", size),
             &size,
             |b, &size| {
