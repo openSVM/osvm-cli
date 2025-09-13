@@ -33,6 +33,10 @@ jobs:
         run: cargo audit
         working-directory: .
 
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+        working-directory: .
+
       - name: Run cargo-deny
         run: cargo deny check advisories
         working-directory: .
