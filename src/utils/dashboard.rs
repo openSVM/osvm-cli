@@ -5,7 +5,7 @@ use {
     crate::utils::nodes::NodeInfo,
     crate::utils::nodes_dashboard::generate_monitoring_dashboard,
     solana_client::rpc_client::RpcClient,
-    solana_sdk::commitment_config::CommitmentConfig,
+    solana_commitment_config::CommitmentConfig,
     std::{error::Error, fmt, fs, path::Path, process::Command},
 };
 

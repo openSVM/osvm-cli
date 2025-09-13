@@ -30,6 +30,70 @@ pub mod utils;
 
 // Config struct is now in src/config.rs
 
+/// Check if a command is a known OSVM command
+fn is_known_command(sub_command: &str) -> bool {
+    matches!(
+        sub_command,
+        "balance"
+            | "svm"
+            | "nodes"
+            | "examples"
+            | "rpc-manager"
+            | "deploy"
+            | "solana"
+            | "doctor"
+            | "audit"
+            | "new_feature_command"
+            | "v"
+            | "ver"
+            | "version"
+    )
+}
+
+/// Handle AI query command
+async fn handle_ai_query(
+    sub_command: &str,
+    sub_matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // For external subcommands, clap provides the additional arguments differently
+    // We need to collect them from the raw args since clap doesn't know about them
+    let args: Vec<String> = std::env::args().collect();
+
+    // Find where our subcommand starts and collect everything after osvm
+    let mut query_parts = Vec::new();
+    let mut found_osvm = false;
+
+    for arg in args.iter().skip(1) {
+        // Skip the binary name
+        if !found_osvm {
+            found_osvm = true;
+        }
+        // Skip global flags like --help, --version, etc.
+        if !arg.starts_with('-') {
+            query_parts.push(arg.clone());
+        }
+    }
+
+    let query = query_parts.join(" ");
+
+    // Make AI request
+    println!("🔍 Interpreting as AI query: \"{}\"", query);
+
+    let ai_service = crate::services::ai_service::AiService::new();
+    match ai_service.query(&query).await {
+        Ok(response) => {
+            println!("🤖 AI Response:");
+            println!("{}", response);
+        }
+        Err(e) => {
+            eprintln!("❌ AI query failed: {}", e);
+            eprintln!("💡 Use 'osvm --help' to see available commands");
+        }
+    }
+
+    Ok(())
+}
+
 /// Show recent logs from devnet RPC node
 fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs;
@@ -130,14 +194,14 @@ async fn handle_audit_command(
 
     let no_commit = matches.get_flag("no-commit");
     let default_output_dir = matches.get_one::<String>("output").unwrap().to_string();
-    
+
     // If --no-commit is used and output directory is the default, use current directory
     let output_dir = if no_commit && default_output_dir == "audit_reports" {
         ".".to_string()
     } else {
         default_output_dir
     };
-    
+
     let format = matches.get_one::<String>("format").unwrap().to_string();
     let verbose = matches.get_count("verbose");
     let test_mode = matches.get_flag("test");
@@ -158,18 +222,17 @@ async fn handle_audit_command(
 
     // Create the audit service with or without AI
     let service = if ai_analysis {
-        let api_key = std::env::var("OPENAI_API_KEY").map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "OPENAI_API_KEY environment variable not found",
-            )
-        })?;
-
-        if api_key.is_empty() {
-            return Err("OPENAI_API_KEY environment variable is empty".into());
+        // Check if OpenAI API key is available, otherwise use internal AI
+        match std::env::var("OPENAI_API_KEY") {
+            Ok(api_key) if !api_key.trim().is_empty() => {
+                println!("🤖 Using OpenAI API with provided key");
+                AuditService::with_ai(api_key)
+            }
+            _ => {
+                println!("🤖 Using internal OSVM AI service");
+                AuditService::with_internal_ai()
+            }
         }
-
-        AuditService::with_ai(api_key)
     } else {
         AuditService::new()
     };
@@ -228,6 +291,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle audit command early to avoid config loading that might trigger self-repair
     if sub_command == "audit" {
         return handle_audit_command(&app_matches, sub_matches).await;
+    }
+
+    // Handle AI queries early to avoid config loading
+    if !is_known_command(sub_command) {
+        return handle_ai_query(sub_command, sub_matches).await;
     }
 
     // Load configuration using the new Config module

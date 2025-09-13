@@ -369,13 +369,26 @@ pub async fn read_keypair_with_repair(
                             println!("  - {:?}", error);
                         }
 
-                        println!(
-                            "\n🛠️  Would you like OSVM to fix these issues automatically? (Y/n):"
-                        );
-                        let mut input = String::new();
-                        std::io::stdin().read_line(&mut input).unwrap();
+                        // Check if running in test environment
+                        let in_test = std::env::var("CARGO_TEST").is_ok()
+                            || std::env::var("OSVM_TEST_MODE").is_ok()
+                            || std::thread::current()
+                                .name()
+                                .map_or(false, |name| name.contains("test"));
 
-                        if input.trim().to_lowercase() != "n" {
+                        let should_repair = if in_test {
+                            println!("🧪 Test environment detected - skipping repair");
+                            false
+                        } else {
+                            println!(
+                                "\n🛠️  Would you like OSVM to fix these issues automatically? (Y/n):"
+                            );
+                            let mut input = String::new();
+                            std::io::stdin().read_line(&mut input).unwrap();
+                            input.trim().to_lowercase() != "n"
+                        };
+
+                        if should_repair {
                             match repair_system.repair_automatically(repairable_errors).await {
                                 Ok(RepairResult::Success(msg)) => {
                                     println!("✅ {}", msg);
