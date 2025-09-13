@@ -5,7 +5,7 @@ use {
     },
     serde::{Deserialize, Serialize},
     solana_client::rpc_client::RpcClient,
-    solana_sdk::commitment_config::CommitmentConfig,
+    solana_commitment_config::CommitmentConfig,
     std::{collections::HashMap, error::Error, fmt, fs, path::PathBuf},
     tokio::runtime::Runtime,
 };

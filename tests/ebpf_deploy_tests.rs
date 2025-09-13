@@ -2,7 +2,8 @@ use osvm::utils::ebpf_deploy::{
     deploy_to_all_networks, load_program, load_program_id, load_program_keypair,
     validate_program_id_for_new_deployment, DeployConfig,
 };
-use solana_sdk::{commitment_config::CommitmentConfig, signature::Signer};
+use solana_commitment_config::CommitmentConfig;
+use solana_sdk::signature::Signer;
 use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;

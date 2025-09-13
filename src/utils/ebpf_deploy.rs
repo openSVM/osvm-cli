@@ -3,14 +3,14 @@
 use {
     crate::utils::ssh_deploy::NetworkType,
     solana_client::rpc_client::RpcClient,
+    solana_commitment_config::CommitmentConfig,
+    solana_loader_v3_interface::instruction as bpf_loader_upgradeable,
     solana_sdk::{
-        bpf_loader_upgradeable,
-        commitment_config::CommitmentConfig,
         pubkey::Pubkey,
         signature::{Keypair, Signer},
-        system_instruction,
         transaction::Transaction,
     },
+    solana_system_interface::instruction as system_instruction,
     std::{
         collections::HashMap,
         fs::File,
@@ -151,12 +151,14 @@ pub struct DeploymentResult {
 
 /// Safe keypair cloning that returns proper error instead of panicking
 fn clone_keypair(keypair: &Keypair, context: &str) -> Result<Keypair, EbpfDeployError> {
-    Keypair::from_bytes(&keypair.to_bytes()).map_err(|e| {
+    let keypair_bytes = keypair.to_bytes();
+    let secret_key: [u8; 32] = keypair_bytes[..32].try_into().map_err(|e| {
         EbpfDeployError::KeypairCloneError(format!(
-            "Failed to clone {} keypair: {}. This indicates memory corruption or invalid keypair data.",
+            "Failed to extract secret key from {} keypair: {}. This indicates memory corruption or invalid keypair data.",
             context, e
         ))
-    })
+    })?;
+    Ok(Keypair::new_from_array(secret_key))
 }
 pub fn load_keypair(path: &str) -> Result<Keypair, EbpfDeployError> {
     // Validate file exists first
