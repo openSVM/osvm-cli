@@ -51,7 +51,14 @@ fn test_nodes_list_with_filters() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
-        .args(["nodes", "list", "--status", "running", "--type", "validator"])
+        .args([
+            "nodes",
+            "list",
+            "--status",
+            "running",
+            "--type",
+            "validator",
+        ])
         .output()
         .expect("Failed to execute command");
 

@@ -370,9 +370,11 @@ pub async fn read_keypair_with_repair(
                         }
 
                         // Check if running in test environment
-                        let in_test = std::env::var("CARGO_TEST").is_ok() 
+                        let in_test = std::env::var("CARGO_TEST").is_ok()
                             || std::env::var("OSVM_TEST_MODE").is_ok()
-                            || std::thread::current().name().map_or(false, |name| name.contains("test"));
+                            || std::thread::current()
+                                .name()
+                                .map_or(false, |name| name.contains("test"));
 
                         let should_repair = if in_test {
                             println!("🧪 Test environment detected - skipping repair");

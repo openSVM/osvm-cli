@@ -41,7 +41,7 @@ fn setup_test_config(keypair_path: &str) {
     let home_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let cli_config_dir = format!("{home_dir}/.config/solana/cli");
     fs::create_dir_all(&cli_config_dir).expect("Failed to create CLI config directory");
-    
+
     let config_path = format!("{cli_config_dir}/config.yml");
     let config_content = format!(
         r#"---
@@ -52,7 +52,7 @@ address_labels:
   "11111111111111111111111111111111": "System Program"
 "#
     );
-    
+
     let mut file = fs::File::create(&config_path).expect("Failed to create config file");
     file.write_all(config_content.as_bytes())
         .expect("Failed to write to config file");
