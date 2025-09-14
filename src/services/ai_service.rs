@@ -47,6 +47,13 @@ impl AiService {
         let response_text = response.text().await?;
 
         if !status.is_success() {
+            // Try to parse error response as JSON first
+            if let Ok(ai_response) = serde_json::from_str::<AiResponse>(&response_text) {
+                if let Some(error) = ai_response.error {
+                    anyhow::bail!("AI API returned error: {}", error);
+                }
+            }
+            // If JSON parsing fails, return the generic error
             anyhow::bail!(
                 "AI API request failed with status: {} - Response: {}",
                 status,
@@ -168,6 +175,69 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "This is a plain text AI response");
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_ai_service_request_format() {
+        let mut server = Server::new_async().await;
+
+        // Mock the API to capture what we're sending
+        let mock = server
+            .mock("POST", "/api/getAnswer")
+            .match_header("content-type", "application/json")
+            .match_body(r#"{"question":"test question"}"#)
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "answer": "Test response"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let mut ai_service = AiService::new();
+        ai_service.api_url = server.url() + "/api/getAnswer";
+
+        let result = ai_service.query("test question").await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Test response");
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_ai_service_error_with_json_response() {
+        let mut server = Server::new_async().await;
+
+        // Mock error response with 500 status and JSON error
+        let mock = server
+            .mock("POST", "/api/getAnswer")
+            .with_status(500)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "error": "Failed to process query"
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let mut ai_service = AiService::new();
+        ai_service.api_url = server.url() + "/api/getAnswer";
+
+        let result = ai_service.query("invalid question").await;
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("AI API returned error: Failed to process query"));
 
         mock.assert_async().await;
     }
