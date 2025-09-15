@@ -520,6 +520,85 @@ pub struct AuditFinding {
     pub references: Vec<String>,
 }
 
+/// Location where a finding was detected
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FindingLocation {
+    pub file_path: String,
+    pub line_number: usize,
+    pub code_context: Option<String>,
+}
+
+/// Grouped audit findings of the same type in the same file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupedFinding {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub severity: AuditSeverity,
+    pub category: String,
+    pub cwe_id: Option<String>,
+    pub cvss_score: Option<f32>,
+    pub impact: String,
+    pub recommendation: String,
+    pub references: Vec<String>,
+    pub locations: Vec<FindingLocation>,
+    pub instance_count: usize,
+    pub ai_analysis: Option<AIAnalysis>,
+}
+
+impl GroupedFinding {
+    /// Create a new grouped finding from a single finding
+    pub fn from_finding(finding: &AuditFinding) -> Self {
+        let location = if let Some(file_path) = &finding.code_location {
+            vec![FindingLocation {
+                file_path: file_path.clone(),
+                line_number: 1, // Default for now, will be improved with proper line detection
+                code_context: None,
+            }]
+        } else {
+            vec![]
+        };
+
+        Self {
+            id: finding.id.clone(),
+            title: finding.title.clone(),
+            description: finding.description.clone(),
+            severity: finding.severity.clone(),
+            category: finding.category.clone(),
+            cwe_id: finding.cwe_id.clone(),
+            cvss_score: finding.cvss_score,
+            impact: finding.impact.clone(),
+            recommendation: finding.recommendation.clone(),
+            references: finding.references.clone(),
+            locations: location,
+            instance_count: 1,
+            ai_analysis: None,
+        }
+    }
+
+    /// Add a finding instance to this group
+    pub fn add_instance(&mut self, finding: &AuditFinding) {
+        if let Some(file_path) = &finding.code_location {
+            self.locations.push(FindingLocation {
+                file_path: file_path.clone(),
+                line_number: 1, // Will be improved with proper line detection
+                code_context: None,
+            });
+        }
+        self.instance_count += 1;
+    }
+
+    /// Get a unique key for grouping findings
+    pub fn grouping_key(finding: &AuditFinding) -> String {
+        format!("{}::{}", finding.title, finding.category)
+    }
+
+    /// Check if a finding belongs to this group
+    pub fn matches_finding(&self, finding: &AuditFinding) -> bool {
+        self.title == finding.title && self.category == finding.category
+    }
+}
+
 /// Audit summary statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditSummary {
@@ -789,6 +868,164 @@ impl AuditCoordinator {
         )
     }
 
+    /// Group findings by type and file for better reporting
+    fn group_findings(&self, findings: Vec<AuditFinding>) -> Vec<GroupedFinding> {
+        let mut groups: HashMap<String, GroupedFinding> = HashMap::new();
+        
+        for finding in findings {
+            let grouping_key = GroupedFinding::grouping_key(&finding);
+            
+            match groups.get_mut(&grouping_key) {
+                Some(group) => {
+                    group.add_instance(&finding);
+                }
+                None => {
+                    let group = GroupedFinding::from_finding(&finding);
+                    groups.insert(grouping_key, group);
+                }
+            }
+        }
+        
+        // Convert to vector and sort by severity and instance count
+        let mut grouped_findings: Vec<GroupedFinding> = groups.into_values().collect();
+        grouped_findings.sort_by(|a, b| {
+            // Sort by severity first (Critical > High > Medium > Low > Info)
+            let severity_order = |severity: &AuditSeverity| match severity {
+                AuditSeverity::Critical => 0,
+                AuditSeverity::High => 1,
+                AuditSeverity::Medium => 2,
+                AuditSeverity::Low => 3,
+                AuditSeverity::Info => 4,
+            };
+            
+            let severity_cmp = severity_order(&a.severity).cmp(&severity_order(&b.severity));
+            if severity_cmp != std::cmp::Ordering::Equal {
+                return severity_cmp;
+            }
+            
+            // Then by instance count (descending)
+            b.instance_count.cmp(&a.instance_count)
+        });
+        
+        grouped_findings
+    }
+
+    /// Convert grouped findings back to individual findings for compatibility
+    fn ungrouped_findings_from_groups(&self, groups: &[GroupedFinding]) -> Vec<AuditFinding> {
+        let mut findings = Vec::new();
+        
+        for group in groups {
+            for (index, location) in group.locations.iter().enumerate() {
+                let finding_id = if index == 0 {
+                    group.id.clone()
+                } else {
+                    format!("{}-{}", group.id, index + 1)
+                };
+                
+                findings.push(AuditFinding {
+                    id: finding_id,
+                    title: group.title.clone(),
+                    description: if group.instance_count > 1 {
+                        format!("{} (Instance {} of {})", group.description, index + 1, group.instance_count)
+                    } else {
+                        group.description.clone()
+                    },
+                    severity: group.severity.clone(),
+                    category: group.category.clone(),
+                    cwe_id: group.cwe_id.clone(),
+                    cvss_score: group.cvss_score,
+                    impact: group.impact.clone(),
+                    recommendation: group.recommendation.clone(),
+                    code_location: Some(format!("{}:{}", location.file_path, location.line_number)),
+                    references: group.references.clone(),
+                });
+            }
+        }
+        
+        findings
+    }
+
+    /// Enhance grouped findings with AI analysis (more efficient than per-finding analysis)
+    async fn enhance_grouped_findings_with_ai(&self, mut groups: Vec<GroupedFinding>) -> Vec<GroupedFinding> {
+        let mut ai_failures = 0;
+        let mut ai_successes = 0;
+
+        for group in &mut groups {
+            // Only analyze Critical and High severity findings
+            if group.severity == AuditSeverity::Critical || group.severity == AuditSeverity::High {
+                // Check circuit breaker before each AI call
+                if self.ai_circuit_breaker.is_open() {
+                    log::warn!(
+                        "AI circuit breaker is open, skipping AI enhancement for group {}",
+                        group.id
+                    );
+                    continue;
+                }
+
+                // Create a representative finding for AI analysis
+                let representative_finding = AuditFinding {
+                    id: group.id.clone(),
+                    title: group.title.clone(),
+                    description: format!(
+                        "{} (Found in {} locations with {} instances)",
+                        group.description, group.locations.len(), group.instance_count
+                    ),
+                    severity: group.severity.clone(),
+                    category: group.category.clone(),
+                    cwe_id: group.cwe_id.clone(),
+                    cvss_score: group.cvss_score,
+                    impact: group.impact.clone(),
+                    recommendation: group.recommendation.clone(),
+                    code_location: group.locations.first().map(|loc| loc.file_path.clone()),
+                    references: group.references.clone(),
+                };
+
+                match self.query_ai_for_finding(&representative_finding).await {
+                    Ok(ai_analysis) => {
+                        println!("🤖 AI analysis completed for group: {} ({} instances)", group.title, group.instance_count);
+                        group.ai_analysis = Some(ai_analysis);
+                        ai_successes += 1;
+
+                        // Record success with circuit breaker
+                        self.ai_circuit_breaker.record_success();
+                    }
+                    Err(e) => {
+                        // Record failure with circuit breaker
+                        self.ai_circuit_breaker.record_failure();
+
+                        // Handle error with enhanced error handler
+                        if let Some(fallback_msg) = EnhancedAIErrorHandler::handle_ai_error(
+                            &e,
+                            &format!("grouped finding {}", group.id),
+                        ) {
+                            log::warn!(
+                                "AI enhancement failed for group {}: {}",
+                                group.id,
+                                fallback_msg
+                            );
+                        }
+
+                        ai_failures += 1;
+                        if EnhancedAIErrorHandler::should_disable_ai(&e) {
+                            log::error!("Disabling AI analysis due to: {}", e);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if ai_failures > 0 || ai_successes > 0 {
+            log::info!(
+                "AI enhancement completed for grouped findings: {} successes, {} failures",
+                ai_successes,
+                ai_failures
+            );
+        }
+
+        groups
+    }
+
     /// Run comprehensive security audit with enhanced modular architecture
     pub async fn run_security_audit(&self) -> Result<AuditReport> {
         println!("🔍 Starting comprehensive security audit with enhanced modular system...");
@@ -828,19 +1065,35 @@ impl AuditCoordinator {
         // Run enhanced modular security checks
         findings.extend(self.run_modular_security_checks().await?);
 
-        // If AI is enabled and not disabled, perform AI-enhanced analysis
-        if self.should_use_ai() {
-            println!("🤖 Running AI-powered analysis...");
+        // Group findings for better reporting and optimized AI analysis
+        println!("📊 Grouping findings for enhanced reporting...");
+        let mut grouped_findings = self.group_findings(findings);
+        
+        // Print grouping summary
+        let total_instances: usize = grouped_findings.iter().map(|g| g.instance_count).sum();
+        let total_groups = grouped_findings.len();
+        println!("📋 Grouped {} findings into {} groups", total_instances, total_groups);
 
-            // For OpenAI client, perform code analysis
+        // If AI is enabled and not disabled, perform AI-enhanced analysis on groups
+        if self.should_use_ai() {
+            println!("🤖 Running optimized AI-powered analysis on grouped findings...");
+
+            // For OpenAI client, perform code analysis (if needed)
             if let Some(ref ai_client) = self.ai_client {
                 let ai_findings = self.perform_ai_code_analysis(ai_client).await;
-                findings.extend(ai_findings);
+                if !ai_findings.is_empty() {
+                    println!("🔍 Integrating {} AI-discovered findings...", ai_findings.len());
+                    let ai_groups = self.group_findings(ai_findings);
+                    grouped_findings.extend(ai_groups);
+                }
             }
 
-            // Enhance existing findings with AI analysis (only critical/high)
-            findings = self.enhance_findings_with_ai_internal(findings).await;
+            // Enhance grouped findings with AI analysis (much more efficient)
+            grouped_findings = self.enhance_grouped_findings_with_ai(grouped_findings).await;
         }
+
+        // Convert back to individual findings for report compatibility
+        let findings = self.ungrouped_findings_from_groups(&grouped_findings);
 
         // Generate system information
         let system_info = self.collect_system_info().await?;
@@ -891,6 +1144,16 @@ impl AuditCoordinator {
             code_location: None,
             references: vec!["https://cwe.mitre.org/data/definitions/754.html".to_string()],
         });
+
+        // Group findings for better reporting
+        println!("📊 Grouping findings for enhanced reporting...");
+        let grouped_findings = self.group_findings(findings);
+        let total_instances: usize = grouped_findings.iter().map(|g| g.instance_count).sum();
+        let total_groups = grouped_findings.len();
+        println!("📋 Grouped {} findings into {} groups", total_instances, total_groups);
+
+        // Convert back to individual findings for report compatibility
+        let findings = self.ungrouped_findings_from_groups(&grouped_findings);
 
         let system_info = self.collect_system_info().await?;
         let summary = self.calculate_audit_summary(&findings);
