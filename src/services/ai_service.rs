@@ -73,11 +73,27 @@ impl AiService {
             println!("🤖 Asking OSVM AI ({}): {}", self.api_url, question);
         }
 
-        if self.use_openai {
+        let result = if self.use_openai {
             self.query_openai(question).await
         } else {
             self.query_osvm_ai(question).await
+        };
+
+        match &result {
+            Ok(response) => {
+                println!("🔍 AI Response received ({} chars): {}", response.len(), 
+                    if response.len() > 200 { 
+                        format!("{}...", &response[..200])
+                    } else { 
+                        response.clone() 
+                    });
+            }
+            Err(e) => {
+                println!("❌ AI Response error: {}", e);
+            }
         }
+
+        result
     }
 
     pub fn get_endpoint_info(&self) -> String {
@@ -93,6 +109,8 @@ impl AiService {
             question: question.to_string(),
         };
 
+        println!("📤 OSVM AI Request: {}", serde_json::to_string_pretty(&request_body)?);
+
         let response = self
             .client
             .post(&self.api_url)
@@ -103,6 +121,8 @@ impl AiService {
 
         let status = response.status();
         let response_text = response.text().await?;
+
+        println!("📥 OSVM AI Response ({}): {}", status, response_text);
 
         if !status.is_success() {
             // Try to parse error response as JSON first
@@ -152,6 +172,8 @@ impl AiService {
             temperature: 0.7,
         };
 
+        println!("📤 OpenAI Request: {}", serde_json::to_string_pretty(&request_body)?);
+
         let response = self
             .client
             .post(&self.api_url)
@@ -163,6 +185,8 @@ impl AiService {
 
         let status = response.status();
         let response_text = response.text().await?;
+
+        println!("📥 OpenAI Response ({}): {}", status, response_text);
 
         if !status.is_success() {
             anyhow::bail!(
