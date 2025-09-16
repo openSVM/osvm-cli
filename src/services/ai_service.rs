@@ -1,6 +1,13 @@
+use crate::utils::circuit_breaker::{
+    AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
+};
+use crate::utils::prompt_templates::{
+    AnalysisVector as TemplateAnalysisVector, PromptTemplateManager, TemplateCategory,
+};
 use anyhow::{Context, Result};
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 
 #[derive(Serialize)]
@@ -45,6 +52,8 @@ pub struct AiService {
     api_url: String,
     api_key: Option<String>,
     use_openai: bool,
+    circuit_breaker: GranularCircuitBreaker,
+    template_manager: PromptTemplateManager,
 }
 
 impl AiService {
@@ -87,15 +96,36 @@ impl AiService {
             None
         };
 
+        let mut circuit_breaker = GranularCircuitBreaker::new();
+        let mut template_manager = PromptTemplateManager::new();
+
+        // Initialize template manager
+        if let Err(e) = template_manager.load_from_directory("./templates/ai_prompts") {
+            println!("⚠️  Failed to load AI prompt templates: {}", e);
+        }
+
         Self {
             client: reqwest::Client::new(),
             api_url,
             api_key,
             use_openai,
+            circuit_breaker,
+            template_manager,
         }
     }
 
     pub async fn query(&self, question: &str) -> Result<String> {
+        let endpoint = if self.use_openai {
+            EndpointId::openai()
+        } else {
+            EndpointId::osvm_ai()
+        };
+
+        // Check circuit breaker
+        if !self.circuit_breaker.can_execute_endpoint(&endpoint) {
+            anyhow::bail!("Circuit breaker is open for endpoint: {:?}", endpoint);
+        }
+
         if self.use_openai {
             println!("🤖 Asking OpenAI ({}): {}", self.api_url, question);
         } else {
@@ -108,21 +138,83 @@ impl AiService {
             self.query_osvm_ai(question).await
         };
 
+        // Record success/failure with circuit breaker
         match &result {
-            Ok(response) => {
+            Ok(_) => {
+                self.circuit_breaker.on_success_endpoint(&endpoint);
                 println!(
-                    "🔍 AI Response received ({} chars): {}",
-                    response.len(),
-                    if response.len() > 200 {
-                        format!("{}...", &response[..200])
-                    } else {
-                        response.clone()
-                    }
+                    "🔍 AI Response received ({} chars)",
+                    result.as_ref().unwrap().len()
                 );
             }
             Err(e) => {
+                self.circuit_breaker.on_failure_endpoint(&endpoint);
                 println!("❌ AI Response error: {}", e);
             }
+        }
+
+        result
+    }
+
+    /// Enhanced DeepLogic analysis with configurable templates
+    pub async fn analyze_deeplogic(
+        &self,
+        code: &str,
+        filename: &str,
+        vulnerability_description: &str,
+        analysis_vector: TemplateAnalysisVector,
+    ) -> Result<String> {
+        let circuit_vector = match analysis_vector {
+            TemplateAnalysisVector::StateTransition => CircuitAnalysisVector::StateTransition,
+            TemplateAnalysisVector::EconomicExploit => CircuitAnalysisVector::EconomicExploit,
+            TemplateAnalysisVector::AccessControl => CircuitAnalysisVector::AccessControl,
+            TemplateAnalysisVector::MathematicalIntegrity => {
+                CircuitAnalysisVector::MathematicalIntegrity
+            }
+            TemplateAnalysisVector::General => CircuitAnalysisVector::General,
+        };
+
+        // Check circuit breaker for this analysis vector
+        if !self.circuit_breaker.can_execute_vector(&circuit_vector) {
+            anyhow::bail!(
+                "Circuit breaker is open for analysis vector: {:?}",
+                circuit_vector
+            );
+        }
+
+        // Get appropriate template
+        let template = self
+            .template_manager
+            .get_best_template(&TemplateCategory::DeepLogic, Some(&analysis_vector))
+            .ok_or_else(|| anyhow::anyhow!("No suitable DeepLogic template found"))?;
+
+        // Prepare template variables
+        let mut variables = HashMap::new();
+        variables.insert("code".to_string(), code.to_string());
+        variables.insert("filename".to_string(), filename.to_string());
+        variables.insert(
+            "vulnerability_description".to_string(),
+            vulnerability_description.to_string(),
+        );
+
+        // Render the prompt
+        let prompt = self
+            .template_manager
+            .render_template(&template.id, &variables)
+            .with_context(|| "Failed to render DeepLogic template")?;
+
+        println!(
+            "🧠 Performing DeepLogic analysis using template: {}",
+            template.name
+        );
+
+        // Execute the query
+        let result = self.query(&prompt).await;
+
+        // Record success/failure for the analysis vector
+        match &result {
+            Ok(_) => self.circuit_breaker.on_success_vector(&circuit_vector),
+            Err(_) => self.circuit_breaker.on_failure_vector(&circuit_vector),
         }
 
         result
