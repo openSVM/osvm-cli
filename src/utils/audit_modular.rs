@@ -334,6 +334,7 @@ impl AuditCheck for MemorySafetyCheck {
                     "https://doc.rust-lang.org/book/ch19-01-unsafe-rust.html".to_string(),
                     "https://cwe.mitre.org/data/definitions/119.html".to_string(),
                 ],
+                    ai_analysis: None,
             });
         }
 
@@ -358,6 +359,7 @@ impl AuditCheck for MemorySafetyCheck {
                     "https://doc.rust-lang.org/book/ch09-00-error-handling.html".to_string(),
                     "https://cwe.mitre.org/data/definitions/248.html".to_string(),
                 ],
+                    ai_analysis: None,
             });
         }
 
@@ -397,6 +399,8 @@ impl AuditCheck for CryptographyCheck {
                 recommendation: "Remove hardcoded secrets and use environment variables or secure key management".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://cwe.mitre.org/data/definitions/798.html".to_string()],
+                    ai_analysis: None,
+                    ai_analysis: None,
             });
         }
 
@@ -419,6 +423,8 @@ impl AuditCheck for CryptographyCheck {
                     recommendation: "Use strong, modern cryptographic algorithms".to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://cwe.mitre.org/data/definitions/327.html".to_string()],
+                    ai_analysis: None,
+                    ai_analysis: None,
                 });
             }
         }
@@ -464,6 +470,7 @@ impl AuditCheck for NetworkSecurityCheck {
                         "https://cwe.mitre.org/data/definitions/319.html".to_string(),
                         "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -509,6 +516,7 @@ impl AuditCheck for SolanaSecurityCheck {
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                         "https://solana-labs.github.io/solana-program-library/anchor/lang/macro.Program.html".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
 
@@ -531,6 +539,7 @@ impl AuditCheck for SolanaSecurityCheck {
                     references: vec![
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
 
@@ -554,6 +563,7 @@ impl AuditCheck for SolanaSecurityCheck {
                         "https://docs.solana.com/developing/programming-model/calling-between-programs".to_string(),
                         "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/0-arbitrary-cpi".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
 
@@ -577,6 +587,7 @@ impl AuditCheck for SolanaSecurityCheck {
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                         "https://github.com/coral-xyz/sealevel-attacks/tree/master/programs/3-pda-sharing".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
 
@@ -601,6 +612,7 @@ impl AuditCheck for SolanaSecurityCheck {
                     references: vec![
                         "https://book.anchor-lang.com/anchor_bts/security.html".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -813,6 +825,7 @@ impl SolanaSecurityCheck {
                             "https://docs.solana.com/developing/programming-model/accounts".to_string(),
                             "https://docs.rs/solana-sdk/latest/solana_sdk/pubkey/struct.Pubkey.html".to_string(),
                         ],
+                    ai_analysis: None,
                     });
                 }
             }
@@ -855,6 +868,7 @@ impl SolanaSecurityCheck {
                         references: vec![
                             "https://book.anchor-lang.com/anchor_bts/security.html".to_string()
                         ],
+                    ai_analysis: None,
                     });
                 }
             }
@@ -908,6 +922,7 @@ impl SolanaSecurityCheck {
                         "https://docs.solana.com/developing/programming-model/transactions#atomic-transaction-processing".to_string(),
                         "https://book.anchor-lang.com/anchor_bts/security.html#mev-protection".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -949,6 +964,7 @@ impl SolanaSecurityCheck {
                         "https://book.anchor-lang.com/anchor_bts/security.html#authority-transfer".to_string(),
                         "https://docs.solana.com/developing/programming-model/accounts#ownership".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -992,6 +1008,7 @@ impl SolanaSecurityCheck {
                     references: vec![
                         "https://book.anchor-lang.com/anchor_bts/security.html#duplicate-accounts".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -1028,6 +1045,7 @@ impl SolanaSecurityCheck {
                 references: vec![
                     "https://book.anchor-lang.com/anchor_bts/security.html#numerical-precision".to_string(),
                 ],
+                    ai_analysis: None,
             });
         }
 
@@ -1059,6 +1077,7 @@ impl SolanaSecurityCheck {
                 references: vec![
                     "https://book.anchor-lang.com/anchor_bts/security.html#numerical-precision".to_string(),
                 ],
+                    ai_analysis: None,
             });
         }
     }
@@ -1105,6 +1124,7 @@ impl SolanaSecurityCheck {
                     "https://book.anchor-lang.com/anchor_bts/security.html#account-reloading".to_string(),
                     "https://docs.solana.com/developing/programming-model/calling-between-programs#reentrancy".to_string(),
                 ],
+                    ai_analysis: None,
             });
         }
 
@@ -1135,6 +1155,7 @@ impl SolanaSecurityCheck {
                         "https://book.anchor-lang.com/anchor_bts/security.html#atomic-operations".to_string(),
                         "https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -1204,6 +1225,7 @@ impl AuditCheck for InputValidationCheck {
                         "https://owasp.org/Top10/A03_2021-Injection/".to_string(),
                         "https://docs.rs/shellwords/latest/shellwords/".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
@@ -1257,6 +1279,7 @@ impl AuditCheck for InputValidationCheck {
                         "https://cwe.mitre.org/data/definitions/22.html".to_string(),
                         "https://owasp.org/Top10/A01_2021-Broken_Access_Control/".to_string(),
                     ],
+                    ai_analysis: None,
                 });
             }
         }
