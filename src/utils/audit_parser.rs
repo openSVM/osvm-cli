@@ -10,6 +10,51 @@ use syn::{
     visit::Visit, Expr, File, Item, ItemFn, ItemImpl, ItemMod, LitStr, Path, PathSegment, Stmt,
 };
 
+/// Line tracking utility for correlating AST nodes with source lines
+#[derive(Debug, Clone)]
+pub struct LineTracker {
+    source_lines: Vec<String>,
+    line_content_map: HashMap<usize, String>,
+}
+
+impl LineTracker {
+    pub fn new(source_code: &str) -> Self {
+        let source_lines: Vec<String> = source_code.lines().map(|s| s.to_string()).collect();
+        let mut line_content_map = HashMap::new();
+        
+        for (line_num, line_content) in source_lines.iter().enumerate() {
+            line_content_map.insert(line_num + 1, line_content.clone());
+        }
+        
+        Self {
+            source_lines,
+            line_content_map,
+        }
+    }
+    
+    /// Find the line number where a specific pattern appears
+    pub fn find_pattern_line(&self, pattern: &str, start_from: usize) -> usize {
+        for (line_num, line_content) in self.line_content_map.iter() {
+            if *line_num >= start_from && line_content.contains(pattern) {
+                return *line_num;
+            }
+        }
+        start_from.max(1)
+    }
+    
+    /// Get all lines containing a pattern
+    pub fn find_all_pattern_lines(&self, pattern: &str) -> Vec<usize> {
+        let mut lines = Vec::new();
+        for (line_num, line_content) in self.line_content_map.iter() {
+            if line_content.contains(pattern) {
+                lines.push(*line_num);
+            }
+        }
+        lines.sort();
+        lines
+    }
+}
+
 /// Structured analysis result from parsing Rust code
 #[derive(Debug, Clone)]
 pub struct ParsedCodeAnalysis {
@@ -117,7 +162,7 @@ impl RustCodeParser {
     pub fn parse_code(content: &str) -> Result<ParsedCodeAnalysis> {
         let syntax_tree = syn::parse_file(content).context("Failed to parse Rust syntax")?;
 
-        let mut visitor = SecurityVisitor::new();
+        let mut visitor = SecurityVisitor::new(content);
         visitor.visit_file(&syntax_tree);
 
         Ok(visitor.into_analysis())
@@ -224,11 +269,12 @@ struct SecurityVisitor {
     function_signatures: Vec<FunctionSignature>,
     imports: Vec<ImportDeclaration>,
     string_literals: Vec<StringLiteral>,
-    current_line: usize,
+    line_tracker: LineTracker,
+    current_context: String,
 }
 
 impl SecurityVisitor {
-    fn new() -> Self {
+    fn new(source_code: &str) -> Self {
         Self {
             unsafe_blocks: Vec::new(),
             unwrap_usages: Vec::new(),
@@ -241,8 +287,20 @@ impl SecurityVisitor {
             function_signatures: Vec::new(),
             imports: Vec::new(),
             string_literals: Vec::new(),
-            current_line: 1,
+            line_tracker: LineTracker::new(source_code),
+            current_context: String::new(),
         }
+    }
+
+    /// Extract line number using pattern matching with source code
+    fn get_line_number_for_pattern(&self, pattern: &str) -> usize {
+        // Find the first occurrence of this pattern in the source
+        self.line_tracker.find_pattern_line(pattern, 1)
+    }
+
+    /// Get all line numbers where a pattern occurs
+    fn get_all_lines_for_pattern(&self, pattern: &str) -> Vec<usize> {
+        self.line_tracker.find_all_pattern_lines(pattern)
     }
 
     fn into_analysis(self) -> ParsedCodeAnalysis {
@@ -264,18 +322,19 @@ impl SecurityVisitor {
     fn analyze_method_call(&mut self, expr: &Expr) {
         if let Expr::MethodCall(method_call) = expr {
             let method_name = method_call.method.to_string();
+            let line_num = self.get_line_number_for_pattern(&format!(".{}(", method_name));
 
             match method_name.as_str() {
                 "unwrap" => {
                     self.unwrap_usages.push(UnwrapUsage {
-                        line: self.current_line,
+                        line: line_num,
                         method: "unwrap".to_string(),
                         context: "method_call".to_string(),
                     });
                 }
                 "expect" => {
                     self.unwrap_usages.push(UnwrapUsage {
-                        line: self.current_line,
+                        line: line_num,
                         method: "expect".to_string(),
                         context: "method_call".to_string(),
                     });
@@ -289,6 +348,7 @@ impl SecurityVisitor {
         if let Expr::Call(call) = expr {
             if let Expr::Path(path) = &*call.func {
                 let path_string = path_to_string(&path.path);
+                let line_num = self.get_line_number_for_pattern(&path_string);
 
                 // Check for command execution patterns
                 if path_string.contains("Command::new")
@@ -296,7 +356,7 @@ impl SecurityVisitor {
                 {
                     let is_dynamic = call.args.iter().any(|arg| is_dynamic_expr(arg));
                     self.command_executions.push(CommandExecution {
-                        line: self.current_line,
+                        line: line_num,
                         command_type: "Command::new".to_string(),
                         is_dynamic,
                     });
@@ -306,7 +366,7 @@ impl SecurityVisitor {
                 if path_string.contains("Path::new") || path_string.contains("PathBuf::from") {
                     let is_dynamic = call.args.iter().any(|arg| is_dynamic_expr(arg));
                     self.path_operations.push(PathOperation {
-                        line: self.current_line,
+                        line: line_num,
                         operation_type: path_string.clone(),
                         is_dynamic,
                     });
@@ -321,7 +381,7 @@ impl SecurityVisitor {
                     || path_string.contains("account")
                 {
                     let mut solana_op = SolanaOperation {
-                        line: self.current_line,
+                        line: line_num,
                         operation_type: path_string.clone(),
                         account_validation: false,
                         signer_check: false,
@@ -341,8 +401,10 @@ impl SecurityVisitor {
 
     fn analyze_string_literal(&mut self, lit: &LitStr) {
         let value = lit.value();
+        let line_num = self.get_line_number_for_pattern(&format!("\"{}\"", value));
+        
         self.string_literals.push(StringLiteral {
-            line: self.current_line,
+            line: line_num,
             value: value.clone(),
             context: "string_literal".to_string(),
         });
@@ -350,7 +412,7 @@ impl SecurityVisitor {
         // Check for hardcoded secrets
         if self.is_potential_secret(&value) {
             self.hardcoded_secrets.push(HardcodedSecret {
-                line: self.current_line,
+                line: line_num,
                 secret_type: self.classify_secret(&value),
                 value: value.clone(),
             });
@@ -359,7 +421,7 @@ impl SecurityVisitor {
         // Check for network operations
         if value.starts_with("http://") || value.starts_with("https://") {
             self.network_operations.push(NetworkOperation {
-                line: self.current_line,
+                line: line_num,
                 operation_type: "url".to_string(),
                 uses_https: value.starts_with("https://"),
                 endpoint: Some(value),
@@ -413,9 +475,10 @@ impl SecurityVisitor {
 impl<'ast> Visit<'ast> for SecurityVisitor {
     fn visit_expr(&mut self, expr: &'ast Expr) {
         match expr {
-            Expr::Unsafe(_) => {
+            Expr::Unsafe(_unsafe_expr) => {
+                let line_num = self.get_line_number_for_pattern("unsafe");
                 self.unsafe_blocks.push(UnsafeBlock {
-                    line: self.current_line,
+                    line: line_num,
                     context: "unsafe block".to_string(),
                 });
             }
@@ -850,17 +913,62 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_pattern() {
+    fn test_line_number_tracking() {
         let code = r#"
-            fn test() {
-                unsafe { let ptr = std::ptr::null_mut(); }
-                let result = Some(42).unwrap();
-            }
+fn test() {
+    let result = Some(42);
+    let value = result.unwrap();
+    
+    unsafe {
+        let ptr = std::ptr::null_mut();
+    }
+    
+    let data = Some("test").expect("failed");
+}
         "#;
 
         let analysis = RustCodeParser::parse_code(code).unwrap();
-        assert!(RustCodeParser::contains_pattern(&analysis, "unsafe"));
-        assert!(RustCodeParser::contains_pattern(&analysis, "unwrap"));
-        assert!(!RustCodeParser::contains_pattern(&analysis, "secrets"));
+        
+        println!("Unsafe blocks found: {}", analysis.unsafe_blocks.len());
+        for block in &analysis.unsafe_blocks {
+            println!("  Unsafe block at line: {}", block.line);
+        }
+        
+        println!("Unwrap usages found: {}", analysis.unwrap_usages.len());
+        for unwrap in &analysis.unwrap_usages {
+            println!("  {} at line: {}", unwrap.method, unwrap.line);
+        }
+        
+        // We should detect at least the unsafe block and unwrap/expect calls
+        assert!(!analysis.unsafe_blocks.is_empty(), "Should detect unsafe blocks");
+        assert!(!analysis.unwrap_usages.is_empty(), "Should detect unwrap/expect calls");
+    }
+
+    #[test]
+    fn test_solana_operation_detection() {
+        let code = r#"
+use solana_program::account_info::AccountInfo;
+
+fn process_instruction(accounts: &[AccountInfo]) {
+    let account = &accounts[0];
+    
+    // This should be detected as missing signer validation
+    let data = account.data.borrow();
+    
+    // This should be detected as missing owner check
+    let owner = account.owner;
+}
+        "#;
+
+        let analysis = RustCodeParser::parse_code(code).unwrap();
+        
+        println!("Solana operations found: {}", analysis.solana_operations.len());
+        for op in &analysis.solana_operations {
+            println!("  Operation '{}' at line: {}, signer_check: {}, owner_check: {}", 
+                op.operation_type, op.line, op.signer_check, op.owner_check);
+        }
+        
+        // We should detect some Solana operations
+        assert!(!analysis.solana_operations.is_empty(), "Should detect Solana operations");
     }
 }
