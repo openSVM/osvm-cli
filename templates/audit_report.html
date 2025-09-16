@@ -303,6 +303,63 @@
             {% endfor %}
             {% endfor %}
 
+            {% if deeplogic_findings %}
+            <h2>🧠 DeepLogic AI Analysis</h2>
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                <h3 style="color: white; margin-top: 0;">AI-Powered Logical Vulnerability Analysis</h3>
+                <p>The following findings represent complex logical vulnerabilities detected through advanced AI analysis, including problematic code identification and suggested remediation.</p>
+            </div>
+            
+            {% for analysis in deeplogic_findings %}
+            <div class="finding deeplogic-finding" style="border-left: 4px solid #667eea; background: #f8f9ff;">
+                <div class="finding-header">
+                    <h4>🧠 {{ analysis.title }}</h4>
+                    <div>
+                        <span class="finding-id">{{ analysis.category }}</span>
+                        <span class="severity-{{ analysis.severity | lower }}">{{ analysis.severity }}</span>
+                        <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">Confidence: {{ (analysis.confidence_score * 100) | round }}%</span>
+                    </div>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #667eea; margin-bottom: 8px;">🤖 AI-Powered Analysis:</h5>
+                    <p>{{ analysis.ai_powered_analysis }}</p>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #dc3545; margin-bottom: 8px;">⚠️ Risk Scenario:</h5>
+                    <p>{{ analysis.risk_scenario }}</p>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #dc3545; margin-bottom: 8px;">🔴 Problematic Code ({{ analysis.problematic_code.file_path }}:{{ analysis.problematic_code.start_line }}-{{ analysis.problematic_code.end_line }}):</h5>
+                    <pre style="background: #ffe6e6; border: 1px solid #ffb3b3; padding: 15px; border-radius: 5px; overflow-x: auto;"><code class="rust">{{ analysis.problematic_code.content }}</code></pre>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #28a745; margin-bottom: 8px;">🟢 Suggested Fix:</h5>
+                    <pre style="background: #e6ffe6; border: 1px solid #b3ffb3; padding: 15px; border-radius: 5px; overflow-x: auto;"><code class="rust">{{ analysis.suggested_fix.content }}</code></pre>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #667eea; margin-bottom: 8px;">💡 Explanation of Fix:</h5>
+                    <p>{{ analysis.explanation_of_fix }}</p>
+                </div>
+                
+                {% if analysis.additional_considerations %}
+                <div style="margin: 15px 0;">
+                    <h5 style="color: #ffc107; margin-bottom: 8px;">🔧 Additional Considerations:</h5>
+                    <ul>
+                        {% for consideration in analysis.additional_considerations %}
+                        <li>{{ consideration }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+
             <h2>Security Recommendations</h2>
             <ol>
                 {% for recommendation in recommendations %}

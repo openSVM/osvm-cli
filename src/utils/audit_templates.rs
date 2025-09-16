@@ -216,6 +216,9 @@ impl TemplateReportGenerator {
         context.insert("recommendations", &report.recommendations);
         context.insert("compliance_notes", &report.compliance_notes);
 
+        // DeepLogic findings
+        context.insert("deeplogic_findings", &report.deeplogic_findings);
+
         // Helper data
         context.insert("has_critical", &(report.summary.critical_findings > 0));
         context.insert("has_high", &(report.summary.high_findings > 0));

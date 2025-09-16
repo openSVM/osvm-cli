@@ -519,9 +519,6 @@ impl OpenAIClient {
             recommendation,
             code_location: Some(file_path.to_string()),
             references: vec!["AI-generated finding".to_string()],
-                ai_analysis: None,
-            ai_analysis: None,
-            ai_analysis: None,
         })
     }
 
@@ -775,7 +772,6 @@ pub struct AuditFinding {
     pub recommendation: String,
     pub code_location: Option<String>,
     pub references: Vec<String>,
-    pub ai_analysis: Option<AIAnalysis>,
 }
 
 /// Location where a finding was detected
@@ -880,6 +876,8 @@ pub struct AuditReport {
     pub system_info: SystemInfo,
     pub recommendations: Vec<String>,
     pub compliance_notes: Vec<String>,
+    #[serde(default)]
+    pub deeplogic_findings: Vec<DeepLogicAnalysis>,
 }
 
 /// System information for audit context
@@ -1196,7 +1194,6 @@ impl AuditCoordinator {
                     recommendation: group.recommendation.clone(),
                     code_location: Some(format!("{}:{}", location.file_path, location.line_number)),
                     references: group.references.clone(),
-                    ai_analysis: group.ai_analysis.clone(), // Preserve AI analysis data
                 });
             }
         }
@@ -1238,7 +1235,6 @@ impl AuditCoordinator {
                     recommendation: group.recommendation.clone(),
                     code_location: group.locations.first().map(|loc| loc.file_path.clone()),
                     references: group.references.clone(),
-                    ai_analysis: None,
                 };
 
                 match self.query_ai_for_finding(&representative_finding).await {
@@ -1375,6 +1371,9 @@ impl AuditCoordinator {
         // Convert back to individual findings for report compatibility
         let findings = self.ungrouped_findings_from_groups(&grouped_findings);
 
+        // Extract DeepLogic findings from grouped findings
+        let deeplogic_findings = self.extract_deeplogic_findings(&grouped_findings);
+
         // Generate system information
         let system_info = self.collect_system_info().await?;
 
@@ -1395,6 +1394,7 @@ impl AuditCoordinator {
             system_info,
             recommendations,
             compliance_notes,
+            deeplogic_findings,
         };
 
         println!("✅ Enhanced security audit completed");
@@ -1423,7 +1423,6 @@ impl AuditCoordinator {
             recommendation: "Review system configuration and ensure all dependencies are properly installed".to_string(),
             code_location: None,
             references: vec!["https://cwe.mitre.org/data/definitions/754.html".to_string()],
-                ai_analysis: None,
         });
 
         // Group findings for better reporting
@@ -1449,6 +1448,7 @@ impl AuditCoordinator {
             system_info,
             recommendations,
             compliance_notes,
+            deeplogic_findings: vec![], // No DeepLogic analysis in modular-only mode
         })
     }
 
@@ -1590,7 +1590,6 @@ impl AuditCoordinator {
             recommendation: "Review system configuration and ensure all dependencies are properly installed".to_string(),
             code_location: None,
             references: vec!["https://cwe.mitre.org/data/definitions/754.html".to_string()],
-                ai_analysis: None,
         });
 
         let system_info = self.collect_system_info().await?;
@@ -1606,6 +1605,7 @@ impl AuditCoordinator {
             system_info,
             recommendations,
             compliance_notes,
+            deeplogic_findings: vec![], // No DeepLogic analysis in fallback mode
         })
     }
 
@@ -1958,7 +1958,6 @@ impl AuditCoordinator {
                                     recommendation: "Review and remove any hardcoded secrets, use environment variables or secure key management".to_string(),
                                     code_location: Some(file_path.clone()),
                                     references: vec!["https://cwe.mitre.org/data/definitions/798.html".to_string()],
-                ai_analysis: None,
                                 });
                                 finding_id += 1;
                             }
@@ -2359,7 +2358,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://cwe.mitre.org/data/definitions/209.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
                 break;
@@ -2422,7 +2420,6 @@ impl AuditCoordinator {
                         .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://cwe.mitre.org/data/definitions/330.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -2466,7 +2463,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://cwe.mitre.org/data/definitions/20.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
                 break;
@@ -2742,7 +2738,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://docs.solana.com/cluster/rpc-endpoints".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
                 break;
@@ -3069,7 +3064,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://spl.solana.com/token".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3137,7 +3131,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://github.com/coral-xyz/sealevel-attacks".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3196,7 +3189,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://spl.solana.com/token".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3222,7 +3214,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://spl.solana.com/token".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3248,7 +3239,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://spl.solana.com/associated-token-account".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3272,7 +3262,6 @@ impl AuditCoordinator {
                     recommendation: "Validate token extension types and configurations".to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://spl.solana.com/token-2022".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3399,7 +3388,6 @@ impl AuditCoordinator {
                             .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://docs.solana.com/developing/deploying".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3733,7 +3721,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://docs.switchboard.xyz/solana/feeds".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3800,7 +3787,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://github.com/solana-labs/governance-ui".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3822,7 +3808,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://github.com/solana-labs/governance".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -3844,7 +3829,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(file_path.to_string()),
                     references: vec!["https://github.com/solana-labs/governance".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -4867,7 +4851,6 @@ impl AuditCoordinator {
                 recommendation: "Use safe array access with .get() method".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch08-01-vectors.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5288,7 +5271,6 @@ impl AuditCoordinator {
                     recommendation: "Continue using static analysis tools like Clippy".to_string(),
                     code_location: Some("Cargo.toml".to_string()),
                     references: vec!["https://github.com/rust-lang/rust-clippy".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -5309,7 +5291,6 @@ impl AuditCoordinator {
                     recommendation: "Keep Cargo.lock in version control for reproducible builds".to_string(),
                     code_location: Some("Cargo.lock".to_string()),
                     references: vec!["https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -5330,7 +5311,6 @@ impl AuditCoordinator {
                 recommendation: "Continue maintaining comprehensive test coverage".to_string(),
                 code_location: Some("tests/".to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch11-00-testing.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5375,7 +5355,6 @@ impl AuditCoordinator {
                 recommendation: "Maintain clear licensing terms for transparency".to_string(),
                 code_location: Some("LICENSE".to_string()),
                 references: vec!["https://choosealicense.com/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5401,7 +5380,6 @@ impl AuditCoordinator {
                 recommendation: "Continue using automated CI/CD for security and quality assurance".to_string(),
                 code_location: Some(".github/workflows/".to_string()),
                 references: vec!["https://owasp.org/www-project-devsecops-toolkit/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5432,7 +5410,6 @@ impl AuditCoordinator {
                     recommendation: "Continue using reputable security libraries for cryptographic and network operations".to_string(),
                     code_location: Some("Cargo.toml".to_string()),
                     references: vec!["https://www.rust-lang.org/governance/wgs/wg-secure-code".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -5465,7 +5442,6 @@ impl AuditCoordinator {
                         .to_string(),
                     code_location: Some(".gitignore".to_string()),
                     references: vec!["https://git-scm.com/docs/gitignore".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -5487,7 +5463,6 @@ impl AuditCoordinator {
                 recommendation: "Continue pinning toolchain versions for consistency".to_string(),
                 code_location: Some("rust-toolchain.toml".to_string()),
                 references: vec!["https://doc.rust-lang.org/edition-guide/rust-2018/rustup-for-managing-rust-versions.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5509,7 +5484,6 @@ impl AuditCoordinator {
                         recommendation: "Keep security documentation up to date".to_string(),
                         code_location: Some(file_name.to_string()),
                         references: vec!["https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/".to_string()],
-                ai_analysis: None,
                     });
                     *finding_id += 1;
                     break; // Only report once
@@ -5569,7 +5543,6 @@ impl AuditCoordinator {
                 recommendation: "Continue using serde for structured data handling".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://serde.rs/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5664,7 +5637,6 @@ impl AuditCoordinator {
                     .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://rust-lang.github.io/async-book/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5706,7 +5678,6 @@ impl AuditCoordinator {
                 recommendation: "Continue leveraging Rust's type system for security".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch05-00-structs.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5748,7 +5719,6 @@ impl AuditCoordinator {
                 recommendation: "Continue organizing code into logical modules".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch07-00-managing-growing-projects-with-packages-crates-and-modules.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5769,7 +5739,6 @@ impl AuditCoordinator {
                 recommendation: "Continue using appropriate string types for performance and safety".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch08-02-strings.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5788,7 +5757,6 @@ impl AuditCoordinator {
                 recommendation: "Continue using Rust's safe collection types".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/std/collections/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5810,7 +5778,6 @@ impl AuditCoordinator {
                 recommendation: "Continue providing detailed error context".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://docs.rs/anyhow/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5830,7 +5797,6 @@ impl AuditCoordinator {
                 recommendation: "Continue using traits for safe polymorphism".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch10-02-traits.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5876,7 +5842,6 @@ impl AuditCoordinator {
                     .to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/book/ch06-02-match.html".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5916,7 +5881,6 @@ impl AuditCoordinator {
                 recommendation: "Continue documenting code for maintainability and security".to_string(),
                 code_location: Some(file_path.to_string()),
                 references: vec!["https://doc.rust-lang.org/rustdoc/".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -5995,7 +5959,6 @@ impl AuditCoordinator {
                     recommendation: "Continue maintaining organized codebase structure".to_string(),
                     code_location: Some("src/".to_string()),
                     references: vec!["https://doc.rust-lang.org/book/ch07-00-managing-growing-projects-with-packages-crates-and-modules.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6017,7 +5980,6 @@ impl AuditCoordinator {
                     recommendation: "Continue maintaining professional project organization".to_string(),
                     code_location: Some(format!("{}/", dir)),
                     references: vec!["https://doc.rust-lang.org/cargo/guide/project-layout.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6044,7 +6006,6 @@ impl AuditCoordinator {
                     recommendation: "Keep security governance documents up to date".to_string(),
                     code_location: Some(file.to_string()),
                     references: vec!["https://owasp.org/www-project-security-culture/".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6071,7 +6032,6 @@ impl AuditCoordinator {
                     recommendation: "Continue using well-maintained ecosystem libraries".to_string(),
                     code_location: Some("Cargo.toml".to_string()),
                     references: vec!["https://crates.io/".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6095,7 +6055,6 @@ impl AuditCoordinator {
                     recommendation: "Continue explicitly versioning all dependencies".to_string(),
                     code_location: Some("Cargo.toml".to_string()),
                     references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6144,7 +6103,6 @@ impl AuditCoordinator {
                     recommendation: "Continue maintaining code quality as codebase grows".to_string(),
                     code_location: Some("src/".to_string()),
                     references: vec!["https://www.rust-lang.org/governance/wgs/wg-secure-code".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6162,7 +6120,6 @@ impl AuditCoordinator {
                     recommendation: "Continue leveraging Rust's advanced safety features".to_string(),
                     code_location: Some("src/".to_string()),
                     references: vec!["https://doc.rust-lang.org/book/".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6194,7 +6151,6 @@ impl AuditCoordinator {
                             recommendation: "Continue organizing security functionality in dedicated modules".to_string(),
                             code_location: Some(entry.path().display().to_string()),
                             references: vec!["https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/".to_string()],
-                ai_analysis: None,
                         });
                         *finding_id += 1;
                     }
@@ -6219,7 +6175,6 @@ impl AuditCoordinator {
                         recommendation: "Continue organizing utility functions in logical modules".to_string(),
                         code_location: Some("src/utils/".to_string()),
                         references: vec!["https://doc.rust-lang.org/book/ch07-00-managing-growing-projects-with-packages-crates-and-modules.html".to_string()],
-                ai_analysis: None,
                     });
                     *finding_id += 1;
                 }
@@ -6241,7 +6196,6 @@ impl AuditCoordinator {
                     recommendation: "Continue using latest stable Rust editions".to_string(),
                     code_location: Some("Cargo.toml".to_string()),
                     references: vec!["https://doc.rust-lang.org/edition-guide/".to_string()],
-                ai_analysis: None,
                 });
                 *finding_id += 1;
             }
@@ -6262,7 +6216,6 @@ impl AuditCoordinator {
                 recommendation: "Continue following Rust security best practices and guidelines".to_string(),
                 code_location: Some("Project-wide".to_string()),
                 references: vec!["https://www.rust-lang.org/governance/wgs/wg-secure-code".to_string()],
-                ai_analysis: None,
             });
             *finding_id += 1;
         }
@@ -6620,7 +6573,6 @@ impl AuditCoordinator {
                         recommendation: format!("Use specific version constraints for dependency '{}'", dep_name),
                         code_location: Some("Cargo.toml".to_string()),
                         references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html".to_string()],
-                ai_analysis: None,
                     });
                 }
             }
@@ -6643,7 +6595,6 @@ impl AuditCoordinator {
                         recommendation: format!("Pin dependency '{}' to specific commit, tag, or branch", dep_name),
                         code_location: Some("Cargo.toml".to_string()),
                         references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
-                ai_analysis: None,
                     });
                 }
 
@@ -6663,7 +6614,6 @@ impl AuditCoordinator {
                                 recommendation: format!("Consider using published crate for dependency '{}'", dep_name),
                                 code_location: Some("Cargo.toml".to_string()),
                                 references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-path-dependencies".to_string()],
-                ai_analysis: None,
                             });
                         }
                     }
@@ -6694,7 +6644,6 @@ impl AuditCoordinator {
                                     recommendation: format!("Update '{}' to the latest secure version", dep_name),
                                     code_location: Some("Cargo.toml".to_string()),
                                     references: vec!["https://rustsec.org/".to_string()],
-                ai_analysis: None,
                                 });
                             }
                         }
@@ -6745,7 +6694,6 @@ impl AuditCoordinator {
                 recommendation: "Use published crates from crates.io when possible, pin git dependencies to specific commits".to_string(),
                 code_location: Some("Cargo.toml".to_string()),
                 references: vec!["https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories".to_string()],
-                ai_analysis: None,
             });
         }
 
@@ -6774,7 +6722,6 @@ impl AuditCoordinator {
                     recommendation: "Use secure secret management and add .env to .gitignore".to_string(),
                     code_location: Some(".env".to_string()),
                     references: vec!["https://cwe.mitre.org/data/definitions/532.html".to_string()],
-                ai_analysis: None,
                 });
             }
         }
@@ -6797,7 +6744,6 @@ impl AuditCoordinator {
                         recommendation: format!("Add {} to .gitignore file", pattern),
                         code_location: Some(".gitignore".to_string()),
                         references: vec!["https://git-scm.com/docs/gitignore".to_string()],
-                ai_analysis: None,
                     });
                 }
             }
@@ -7558,6 +7504,21 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         }
 
         Ok(())
+    }
+
+    /// Extract DeepLogic findings from grouped findings
+    fn extract_deeplogic_findings(&self, groups: &[GroupedFinding]) -> Vec<DeepLogicAnalysis> {
+        let mut deeplogic_findings = Vec::new();
+        
+        for group in groups {
+            if let Some(ref ai_analysis) = group.ai_analysis {
+                if let Some(ref deeplogic_analysis) = ai_analysis.deeplogic_analysis {
+                    deeplogic_findings.push(deeplogic_analysis.clone());
+                }
+            }
+        }
+        
+        deeplogic_findings
     }
 
     /// Determine if a finding qualifies for DeepLogic analysis
