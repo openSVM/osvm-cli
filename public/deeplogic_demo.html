@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM DeepLogic Analysis Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .deeplogic-intro {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .finding {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+        }
+        
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .finding-header h4 {
+            margin: 0;
+            color: #333;
+        }
+        
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        
+        .severity-high {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .confidence-score {
+            background: #667eea;
+            color: white;
+        }
+        
+        .section-title {
+            color: #667eea;
+            margin: 15px 0 8px 0;
+            font-weight: bold;
+        }
+        
+        .risk-title {
+            color: #dc3545;
+            margin: 15px 0 8px 0;
+            font-weight: bold;
+        }
+        
+        .fix-title {
+            color: #28a745;
+            margin: 15px 0 8px 0;
+            font-weight: bold;
+        }
+        
+        .warning-title {
+            color: #ffc107;
+            margin: 15px 0 8px 0;
+            font-weight: bold;
+        }
+        
+        pre {
+            border-radius: 5px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9em;
+        }
+        
+        .problematic-code {
+            background: #ffe6e6;
+            border: 1px solid #ffb3b3;
+        }
+        
+        .suggested-fix {
+            background: #e6ffe6;
+            border: 1px solid #b3ffb3;
+        }
+        
+        ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+        
+        li {
+            margin: 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 OSVM DeepLogic AI Analysis</h1>
+            <p>Advanced Logical Vulnerability Detection with Code Remediation</p>
+        </div>
+        
+        <div class="content">
+            <div class="deeplogic-intro">
+                <h3 style="margin-top: 0; color: white;">AI-Powered Logical Vulnerability Analysis</h3>
+                <p>The following findings represent complex logical vulnerabilities detected through advanced AI analysis, including problematic code identification and suggested remediation.</p>
+            </div>
+            
+            <div class="finding">
+                <div class="finding-header">
+                    <h4>🧠 DeepLogic: Potential Unfair Reward Capture via Transactional Liquidity</h4>
+                    <div>
+                        <span class="badge">DeepLogic - Economic Exploit</span>
+                        <span class="badge severity-high">High</span>
+                        <span class="badge confidence-score">Confidence: 85%</span>
+                    </div>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="section-title">🤖 AI-Powered Analysis:</h5>
+                    <p>The <code>claim_rewards</code> function calculates a user's reward share based on their instantaneous contribution to <code>pool_state.total_liquidity</code>. There appears to be no time-lock, vesting, or snapshot mechanism to ensure the liquidity was provided for a minimum duration. This makes the system vulnerable to flash-deposit/withdraw attacks within a single transaction, allowing an attacker to unfairly claim a large portion of accrued rewards.</p>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="risk-title">⚠️ Risk Scenario:</h5>
+                    <p>An attacker with significant capital could execute an atomic transaction: 1) deposit massive liquidity, 2) call <code>claim_rewards</code>, 3) withdraw massive liquidity. This exploits the instantaneous calculation, draining rewards from genuine, long-term liquidity providers.</p>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="risk-title">🔴 Problematic Code (src/lib.rs:150-153):</h5>
+                    <pre class="problematic-code"><code>// This calculation is based on current liquidity, vulnerable to flash-deposit attacks.
+let user_share = get_user_liquidity(user.key) / pool_state.total_liquidity;
+let rewards_to_claim = pool_state.accumulated_rewards * user_share;
+// ... further logic using rewards_to_claim ...</code></pre>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="fix-title">🟢 Suggested Fix:</h5>
+                    <pre class="suggested-fix"><code>// Implement a time-weighted average or snapshot system for reward calculation.
+// This example uses a hypothetical get_time_weighted_user_liquidity function.
+// Requires additional state management (e.g., user_liquidity_snapshots, last_snapshot_time).
+
+// Add necessary imports if needed
+use solana_program::clock::Clock;
+use solana_program::sysvar::Sysvar;
+
+let clock = Clock::get()?;
+let current_timestamp = clock.unix_timestamp;
+
+// A more robust calculation considering time spent with liquidity
+let user_share = get_time_weighted_user_liquidity(user.key, &pool_state, current_timestamp)
+    / pool_state.total_time_weighted_liquidity; // Requires total_time_weighted_liquidity
+let rewards_to_claim = pool_state.accumulated_rewards * user_share;
+// ... further logic using rewards_to_claim ...</code></pre>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="section-title">💡 Explanation of Fix:</h5>
+                    <p>The proposed fix introduces the concept of time-weighted liquidity. Instead of using the current liquidity amount, the system would track how much liquidity a user has provided over time. This requires modifying <code>get_user_liquidity</code> and potentially adding new state fields to the <code>Pool</code> and <code>User</code> structs (e.g., <code>last_deposit_time</code>, <code>cumulative_liquidity_seconds</code>). A simplified <code>get_time_weighted_user_liquidity</code> and <code>total_time_weighted_liquidity</code> are placeholder for the necessary new logic.</p>
+                </div>
+                
+                <div style="margin: 15px 0;">
+                    <h5 class="warning-title">🔧 Additional Considerations:</h5>
+                    <ul>
+                        <li>This fix is conceptual and requires careful implementation of state tracking for time-weighted liquidity</li>
+                        <li>Consider the gas costs and complexity of maintaining such state</li>
+                        <li>A simpler alternative might be a lock-up period for rewards</li>
+                        <li>Implement comprehensive unit tests for the new logic</li>
+                        <li>Consider edge cases like partial withdrawals and multiple deposits</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 30px; text-align: center;">
+                <h4 style="color: #667eea; margin-top: 0;">✨ DeepLogic AI Analysis Complete</h4>
+                <p>This analysis was generated using advanced AI techniques to identify logical vulnerabilities and provide actionable remediation strategies.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
