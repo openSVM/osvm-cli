@@ -49,19 +49,45 @@ pub struct AiService {
 
 impl AiService {
     pub fn new() -> Self {
-        let openai_url = env::var("OPENAI_URL").ok();
-        let openai_key = env::var("OPENAI_KEY").ok();
-        
-        let (api_url, use_openai) = if let (Some(url), Some(_)) = (&openai_url, &openai_key) {
-            (url.clone(), true)
+        Self::with_api_url(None)
+    }
+
+    pub fn with_api_url(custom_api_url: Option<String>) -> Self {
+        let (api_url, use_openai) = match custom_api_url {
+            Some(url) => {
+                // Check if it's an OpenAI URL and we have an API key
+                if url.contains("openai.com") || url.contains("api.openai.com") {
+                    if let Some(key) = env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty()) {
+                        (url, true)
+                    } else {
+                        eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
+                        ("https://osvm.ai/api/getAnswer".to_string(), false)
+                    }
+                } else {
+                    // Custom URL, treat as external API
+                    (url, false)
+                }
+            }
+            None => {
+                // Default behavior: use osvm.ai unless explicitly configured for OpenAI
+                if let (Some(url), Some(_)) = (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok()) {
+                    (url, true)
+                } else {
+                    ("https://osvm.ai/api/getAnswer".to_string(), false)
+                }
+            }
+        };
+
+        let api_key = if use_openai {
+            env::var("OPENAI_KEY").ok()
         } else {
-            ("https://osvm.ai/api/getAnswer".to_string(), false)
+            None
         };
 
         Self {
             client: reqwest::Client::new(),
             api_url,
-            api_key: openai_key,
+            api_key,
             use_openai,
         }
     }

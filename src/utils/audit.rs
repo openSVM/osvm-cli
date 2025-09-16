@@ -952,6 +952,21 @@ impl AuditCoordinator {
         }
     }
 
+    /// Create a new audit coordinator with custom AI API
+    pub fn with_custom_ai(api_url: String) -> Self {
+        Self {
+            ai_client: None,
+            internal_ai_service: Some(AiService::with_api_url(Some(api_url))),
+            modular_coordinator: ModularAuditCoordinator::new(),
+            template_generator: TemplateReportGenerator::new().unwrap_or_else(|e| {
+                log::warn!("Failed to initialize template generator: {}", e);
+                panic!("Template generator is required for audit functionality");
+            }),
+            ai_disabled: false,
+            ai_circuit_breaker: AICircuitBreaker::new(3, Duration::from_secs(300)), // 3 failures, 5 min recovery
+        }
+    }
+
     /// Create a new audit coordinator with optional AI capabilities
     /// Now defaults to internal AI service, with fallback to OpenAI if api_key is provided
     pub fn with_optional_ai(api_key: Option<String>) -> Self {
@@ -7176,57 +7191,87 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         Ok(report)
     }
 
-    /// Parse repository specification (owner/repo#branch)
+    /// Parse repository specification (owner/repo#branch or owner/repo)
     fn parse_repo_spec(&self, repo_spec: &str) -> Result<(String, String)> {
         let parts: Vec<&str> = repo_spec.split('#').collect();
-        if parts.len() != 2 {
-            anyhow::bail!("Invalid repository specification. Expected format: owner/repo#branch");
+        
+        if parts.len() > 2 {
+            anyhow::bail!("Invalid repository specification. Expected format: owner/repo or owner/repo#branch");
         }
 
         let repo_path = parts[0];
-        let branch = parts[1];
+        let branch = if parts.len() == 2 {
+            parts[1].to_string()
+        } else {
+            // No branch specified, default to "main"
+            "main".to_string()
+        };
 
         if !repo_path.contains('/') {
             anyhow::bail!("Invalid repository path. Expected format: owner/repo");
         }
 
         let repo_url = format!("https://github.com/{}.git", repo_path);
-        Ok((repo_url, branch.to_string()))
+        Ok((repo_url, branch))
     }
 
-    /// Clone repository to temporary directory
+    /// Clone repository to temporary directory with branch fallback
     fn clone_repository(&self, repo_url: &str, branch: &str) -> Result<std::path::PathBuf> {
         let temp_dir =
             std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
 
         println!("📥 Cloning repository to: {}", temp_dir.display());
 
-        // Use timeout for git operations to prevent hanging
-        let output = self.execute_git_with_timeout(
-            &[
-                "clone",
-                "--branch",
-                branch,
-                "--single-branch",
-                repo_url,
-                temp_dir.to_str().unwrap(),
-            ],
-            Some(&std::env::temp_dir()),
-            Duration::from_secs(300), // 5 minute timeout
-        )?;
+        // Try to clone with the specified branch first
+        let branches_to_try = if branch == "main" {
+            // If user didn't specify a branch and we defaulted to "main", try fallbacks
+            vec!["main", "master", "develop"]
+        } else {
+            // User specified a branch, only try that one
+            vec![branch]
+        };
 
-        if !output.status.success() {
-            let error_msg = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("Git clone failed: {}", error_msg);
+        let mut last_error = String::new();
+
+        for branch_name in branches_to_try {
+            println!("🌿 Trying branch: {}", branch_name);
+            
+            // Use timeout for git operations to prevent hanging
+            let output = self.execute_git_with_timeout(
+                &[
+                    "clone",
+                    "--branch",
+                    branch_name,
+                    "--single-branch",
+                    repo_url,
+                    temp_dir.to_str().unwrap(),
+                ],
+                Some(&std::env::temp_dir()),
+                Duration::from_secs(180), // 3 minute timeout per attempt
+            )?;
+
+            if output.status.success() {
+                // Verify the repository was cloned successfully
+                if temp_dir.exists() {
+                    println!("✅ Successfully cloned with branch: {}", branch_name);
+                    return Ok(temp_dir);
+                } else {
+                    last_error = format!("Repository clone directory does not exist: {}", temp_dir.display());
+                    break;
+                }
+            } else {
+                last_error = String::from_utf8_lossy(&output.stderr).to_string();
+                println!("❌ Failed to clone with branch '{}': {}", branch_name, last_error);
+                
+                // Clean up any partial clone attempt
+                if temp_dir.exists() {
+                    let _ = std::fs::remove_dir_all(&temp_dir);
+                }
+            }
         }
 
-        // Verify the repository was cloned successfully
-        if !temp_dir.exists() {
-            anyhow::bail!(
-                "Repository clone directory does not exist: {}",
-                temp_dir.display()
-            );
-        }
+        anyhow::bail!("Git clone failed for all attempted branches. Last error: {}", last_error)
+    }
 
         Ok(temp_dir)
     }
