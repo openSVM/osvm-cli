@@ -612,7 +612,7 @@ mod tests {
             id: "test".to_string(),
             name: "Test".to_string(),
             description: "Test template".to_string(),
-            category: TemplateCategory::General,
+            category: TemplateCategory::DeepLogic,
             analysis_vector: None,
             template: "Hello {name}, welcome to {place}!".to_string(),
             variables: vec![
