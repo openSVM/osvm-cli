@@ -32,8 +32,16 @@ pub mod audit_templates;
 /// Integration tests for audit system with AI fallback scenarios
 #[cfg(test)]
 pub mod audit_tests;
+/// Code snippet extraction for DeepLogic AI Analysis
+pub mod code_extractor;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
+/// Simple devnet proxy for development
+pub mod devnet_proxy;
+/// Simple devnet proxy implementation  
+pub mod simple_devnet_proxy;
+/// Mainnet RPC connectivity
+pub mod mainnet_rpc;
 /// eBPF deployment utilities for program deployment
 pub mod ebpf_deploy;
 /// Local RPC node deployment and management
