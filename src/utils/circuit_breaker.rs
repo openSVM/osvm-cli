@@ -87,8 +87,8 @@ impl Default for CircuitBreakerConfig {
     fn default() -> Self {
         Self {
             failure_threshold: 5,
-            failure_window: Duration::from_minutes(5),
-            recovery_timeout: Duration::from_minutes(1),
+            failure_window: Duration::from_secs(5 * 60), // 5 minutes
+            recovery_timeout: Duration::from_secs(60),   // 1 minute
             success_threshold: 3,
             half_open_max_calls: 3,
         }
