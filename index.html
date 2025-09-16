@@ -4,19 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OSVM CLI - Solana Virtual Machine Management Tool</title>
-    <meta name="description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment. Monitor, deploy, and secure your SVM infrastructure with a single tool.">
-    <meta name="keywords" content="Solana, SVM, CLI, blockchain, validator, RPC, node management, OSVM, security audit, AI analysis, self-hosted RPC">
+    <meta name="description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered DeepLogic security auditing and free self-hosted RPC deployment. Monitor, deploy, and secure your SVM infrastructure with a single tool.">
+    <meta name="keywords" content="Solana, SVM, CLI, blockchain, validator, RPC, node management, OSVM, security audit, AI analysis, self-hosted RPC, DeepLogic">
     
     <!-- Open Graph Meta Tags -->
     <meta property="og:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
-    <meta property="og:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment.">
+    <meta property="og:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered DeepLogic security auditing and free self-hosted RPC deployment.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://opensvm.github.io/osvm-cli/">
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="OSVM CLI - Solana Virtual Machine Management Tool">
-    <meta name="twitter:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered security auditing and free self-hosted RPC deployment.">
+    <meta name="twitter:description" content="A powerful command-line interface for managing Solana Virtual Machines (SVMs) with AI-powered DeepLogic security auditing and free self-hosted RPC deployment.">
     
     <style>
         * {
@@ -26,11 +26,34 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
             line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #00ff41;
+            background: #0a0e0a;
             min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Terminal-like background with matrix effect */
+        .terminal-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0e0a;
+            z-index: -2;
+        }
+        
+        .matrix-rain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.1;
+            z-index: -1;
+            pointer-events: none;
         }
         
         .container {
@@ -39,15 +62,478 @@
             padding: 0 20px;
         }
         
+        /* ASCII Art Header */
+        .ascii-header {
+            text-align: center;
+            padding: 40px 0;
+            color: #00ff41;
+            font-family: monospace;
+            font-size: 0.7rem;
+            line-height: 1.1;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        
         header {
             text-align: center;
-            padding: 60px 0;
-            color: white;
+            padding: 20px 0 60px 0;
+            color: #00ff41;
+            border-bottom: 2px solid #00ff41;
+            margin-bottom: 40px;
         }
         
         .logo {
-            font-size: 4rem;
+            font-size: 3rem;
             font-weight: bold;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #00ff41;
+            font-family: monospace;
+        }
+        
+        .tagline {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            opacity: 0.9;
+            color: #66ff66;
+        }
+        
+        .version-badge {
+            display: inline-block;
+            background: #001a00;
+            color: #00ff41;
+            padding: 5px 15px;
+            border: 1px solid #00ff41;
+            border-radius: 0;
+            font-family: monospace;
+            margin-bottom: 30px;
+        }
+        
+        .terminal-command {
+            background: #1a1a1a;
+            border: 2px solid #00ff41;
+            border-radius: 0;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: monospace;
+            color: #00ff41;
+            position: relative;
+        }
+        
+        .terminal-command::before {
+            content: "$ ";
+            color: #66ff66;
+            font-weight: bold;
+        }
+        
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            border: 2px solid #00ff41;
+            background: transparent;
+            color: #00ff41;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
+        
+        .btn:hover {
+            background: #00ff41;
+            color: #0a0e0a;
+            box-shadow: 0 0 20px #00ff41;
+        }
+        
+        .btn-primary {
+            background: #00ff41;
+            color: #0a0e0a;
+        }
+        
+        .btn-primary:hover {
+            background: transparent;
+            color: #00ff41;
+        }
+        
+        main {
+            background: #0f1b0f;
+            border: 2px solid #00ff41;
+            padding: 40px;
+            margin: 20px 0;
+        }
+        
+        .section {
+            padding: 40px 0;
+            border-bottom: 1px solid #004400;
+        }
+        
+        .section:last-child {
+            border-bottom: none;
+        }
+        
+        .section-title {
+            text-align: center;
+            font-size: 2rem;
+            margin-bottom: 20px;
+            color: #00ff41;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
+        
+        .section-subtitle {
+            text-align: center;
+            font-size: 1.1rem;
+            color: #66ff66;
+            margin-bottom: 40px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .feature-card {
+            background: #001a00;
+            border: 1px solid #004400;
+            padding: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            border-color: #00ff41;
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+        }
+        
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            color: #00ff41;
+        }
+        
+        .feature-title {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            color: #00ff41;
+            font-family: monospace;
+        }
+        
+        .feature-description {
+            color: #66ff66;
+            line-height: 1.5;
+        }
+        
+        .code-block {
+            background: #1a1a1a;
+            border: 1px solid #004400;
+            padding: 20px;
+            margin: 20px 0;
+            font-family: monospace;
+            color: #00ff41;
+            overflow-x: auto;
+        }
+        
+        .highlight {
+            color: #66ff66;
+            font-weight: bold;
+        }
+        
+        .deeplogic-section {
+            background: linear-gradient(45deg, #001a00, #002200);
+            border: 2px solid #00ff41;
+            padding: 40px;
+            margin: 40px 0;
+        }
+        
+        .deeplogic-title {
+            font-size: 2.5rem;
+            color: #00ff41;
+            text-align: center;
+            margin-bottom: 20px;
+            font-family: monospace;
+            text-shadow: 0 0 10px #00ff41;
+        }
+        
+        .analysis-vectors {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .vector-card {
+            background: #0a1a0a;
+            border: 1px solid #004400;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .vector-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #00ff41;
+        }
+        
+        .vector-name {
+            font-size: 1.1rem;
+            color: #00ff41;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+        
+        .vector-desc {
+            color: #66ff66;
+            font-size: 0.9rem;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 2px solid #00ff41;
+            margin-top: 60px;
+            color: #66ff66;
+        }
+        
+        .nav-menu {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+        
+        .nav-link {
+            color: #00ff41;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 1px solid #004400;
+            transition: all 0.3s ease;
+            font-family: monospace;
+            text-transform: uppercase;
+        }
+        
+        .nav-link:hover {
+            border-color: #00ff41;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .ascii-header {
+                font-size: 0.5rem;
+            }
+            
+            .logo {
+                font-size: 2rem;
+            }
+            
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            main {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="terminal-bg"></div>
+    
+    <div class="ascii-header">░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░
+......███░░░░░███..███░░░░░███░░███...░░███.░░██████.██████.......▐█░░░░
+.....███.....░░███░███....░░░..░███....░███..░███░█████░███.........▐█░░
+....░███......░███░░█████████..░███....░███..░███░░███░░███...........▐█
+....░███......░███.░░░░░░░░███.░░███...███...░███░░░░░░░███.........▐█░░
+....░░███.....███..███....░███..░░░█████░....░███░░░░░░░███.......▐█░░░░
+░░░░░░░░███████░░░░░█████████░░░░░░░███░░░░░░░███░░░░░░░███░░░░░▐█░░░░░░
+ ███████████████████████████████████████████████████████████████████████</div>
+
+    <div class="container">
+        <header>
+            <h1 class="logo">OSVM CLI</h1>
+            <div class="version-badge">v0.6.0 - Now with DeepLogic AI</div>
+            <p class="tagline">Advanced Solana Virtual Machine Management with AI-Powered Security Auditing</p>
+            
+            <div class="terminal-command">curl -sSf https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.sh | bash</div>
+            
+            <div class="cta-buttons">
+                <a href="#install" class="btn btn-primary">Install Now</a>
+                <a href="#deeplogic" class="btn">DeepLogic AI</a>
+                <a href="https://github.com/openSVM/osvm-cli" class="btn">View Source</a>
+            </div>
+            
+            <div class="nav-menu">
+                <a href="docs.html?doc=README" class="nav-link">Documentation</a>
+                <a href="docs.html?doc=deeplogic-ai-analysis" class="nav-link">DeepLogic Guide</a>
+                <a href="docs.html?doc=security-audit" class="nav-link">Security Audit</a>
+                <a href="audit.html" class="nav-link">Demo Report</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="section" id="quickstart">
+                <h2 class="section-title">Quick Start</h2>
+                <p class="section-subtitle">Get started with OSVM in seconds</p>
+                
+                <div class="code-block">
+<span class="highlight"># Install OSVM CLI</span>
+curl -sSf https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.sh | bash
+
+<span class="highlight"># Audit any GitHub repository with AI-powered DeepLogic analysis</span>
+osvm audit opensvm/aeamcp
+
+<span class="highlight"># Audit local project</span>
+osvm audit ./my-solana-project
+
+<span class="highlight"># Deploy Solana validator</span>
+osvm solana validator user@host --network mainnet
+
+<span class="highlight"># Start local RPC node</span>
+osvm rpc local --port 8899
+                </div>
+            </section>
+
+            <div class="deeplogic-section" id="deeplogic">
+                <h2 class="deeplogic-title">🧠 DeepLogic AI Analysis</h2>
+                <p class="section-subtitle">Advanced AI-powered security analysis that goes beyond traditional scanning</p>
+                
+                <div class="analysis-vectors">
+                    <div class="vector-card">
+                        <div class="vector-icon">🔄</div>
+                        <div class="vector-name">State Transition</div>
+                        <div class="vector-desc">Analyzes how state changes might be exploited</div>
+                    </div>
+                    <div class="vector-card">
+                        <div class="vector-icon">💰</div>
+                        <div class="vector-name">Economic Exploit</div>
+                        <div class="vector-desc">Detects financial attack scenarios and MEV vulnerabilities</div>
+                    </div>
+                    <div class="vector-card">
+                        <div class="vector-icon">🔐</div>
+                        <div class="vector-name">Access Control</div>
+                        <div class="vector-desc">Finds permission bypass and authorization issues</div>
+                    </div>
+                    <div class="vector-card">
+                        <div class="vector-icon">🧮</div>
+                        <div class="vector-name">Mathematical Integrity</div>
+                        <div class="vector-desc">Identifies overflow, precision, and calculation errors</div>
+                    </div>
+                </div>
+                
+                <div class="code-block">
+<span class="highlight"># AI analysis enabled by default</span>
+osvm audit opensvm/aeamcp
+
+<span class="highlight"># Custom AI endpoint</span>
+osvm audit opensvm/aeamcp --api-url http://localhost:3000/api/getAnswer
+
+<span class="highlight"># Disable AI analysis</span>
+osvm audit opensvm/aeamcp --noai
+                </div>
+            </section>
+
+            <section class="section" id="features">
+                <h2 class="section-title">Core Features</h2>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🧠</div>
+                        <h3 class="feature-title">AI-Powered Security</h3>
+                        <p class="feature-description">DeepLogic AI analysis identifies complex logical vulnerabilities with specific code snippets and fix suggestions.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🐙</div>
+                        <h3 class="feature-title">GitHub Integration</h3>
+                        <p class="feature-description">Direct repository auditing with intelligent branch detection. Just run: osvm audit owner/repo</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🚀</div>
+                        <h3 class="feature-title">SVM Deployment</h3>
+                        <p class="feature-description">Deploy Solana validators, RPC nodes, and manage multiple SVM implementations effortlessly.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3 class="feature-title">Comprehensive Reports</h3>
+                        <p class="feature-description">Beautiful HTML reports with risk scenarios, code examples, and actionable remediation steps.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">🔧</div>
+                        <h3 class="feature-title">Self-Healing</h3>
+                        <p class="feature-description">Automatic system diagnostics and repair capabilities for consistent performance.</p>
+                    </div>
+                    
+                    <div class="feature-card">
+                        <div class="feature-icon">⚡</div>
+                        <h3 class="feature-title">Zero Config</h3>
+                        <p class="feature-description">Works out of the box with sensible defaults. AI analysis enabled automatically.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section" id="install">
+                <h2 class="section-title">Installation</h2>
+                <div class="code-block">
+<span class="highlight"># Quick install (recommended)</span>
+curl -sSf https://raw.githubusercontent.com/openSVM/osvm-cli/main/install.sh | bash
+
+<span class="highlight"># Manual install from source</span>
+git clone https://github.com/openSVM/osvm-cli.git
+cd osvm-cli
+cargo build --release
+
+<span class="highlight"># Verify installation</span>
+osvm --version
+                </div>
+            </section>
+
+            <section class="section" id="examples">
+                <h2 class="section-title">Usage Examples</h2>
+                <div class="code-block">
+<span class="highlight"># Security Auditing</span>
+osvm audit opensvm/aeamcp                    # Audit GitHub repo
+osvm audit ./solana-project --format html   # Local project audit
+osvm audit myorg/defi-protocol#develop      # Specific branch
+
+<span class="highlight"># Node Management</span>
+osvm nodes list --network mainnet           # List all nodes
+osvm nodes status node-id-123               # Check node status
+osvm nodes deploy --svm solana --host server.com
+
+<span class="highlight"># RPC Operations</span>
+osvm rpc local --port 8899                  # Local test RPC
+osvm rpc devnet --background                # Devnet sync
+osvm rpc query-solana mainnet --health      # Network health
+
+<span class="highlight"># SVM Management</span>
+osvm svm list                                # Available SVMs
+osvm svm install solana user@host           # Remote install
+osvm svm dashboard                           # Interactive dashboard
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 OpenSVM. Licensed under MIT.</p>
+            <p>Built for the Solana ecosystem with ❤️</p>
+        </footer>
+    </div>
+</body>
+</html>
             margin-bottom: 20px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
