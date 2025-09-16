@@ -173,7 +173,7 @@ fn test_deployment_result_json_serialization() {
     // Test deserialization
     let deserialized: DeploymentResult = serde_json::from_str(&json).unwrap();
     assert_eq!(deserialized.network, "devnet");
-    assert_eq!(deserialized.success, true);
+    assert!(deserialized.success); // Use assert! instead of assert_eq! with bool literal
     assert_eq!(deserialized.duration_ms, 5000);
 }
 

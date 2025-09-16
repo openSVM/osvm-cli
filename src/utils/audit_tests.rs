@@ -28,6 +28,7 @@ mod tests {
                 verbose: 0,
                 test_mode: true,
                 ai_analysis: false, // AI not requested, should work
+                api_url: None,      // No custom API URL for this test
                 gh_repo: None,
                 template_path: None,
                 no_commit: false,
@@ -66,6 +67,7 @@ mod tests {
                 verbose: 0,
                 test_mode: true,
                 ai_analysis: true, // AI requested but key is empty
+                api_url: None,     // No custom API URL for this test
                 gh_repo: None,
                 template_path: None,
                 no_commit: false,
@@ -109,6 +111,7 @@ mod tests {
                 verbose: 0,
                 test_mode: true,
                 ai_analysis: true, // AI requested but key is whitespace
+                api_url: None,     // No custom API URL for this test
                 gh_repo: None,
                 template_path: None,
                 no_commit: false,

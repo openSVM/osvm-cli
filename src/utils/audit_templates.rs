@@ -485,6 +485,7 @@ mod tests {
             version: "1.0.0".to_string(),
             summary,
             findings,
+            deeplogic_findings: Vec::new(), // No DeepLogic findings in this test
             system_info,
             recommendations: vec!["Test recommendation".to_string()],
             compliance_notes: vec!["Test compliance note".to_string()],
