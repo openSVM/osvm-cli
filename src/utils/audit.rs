@@ -19,6 +19,7 @@ use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenera
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
+use crate::utils::git_manager::GitRepositoryManager;
 
 /// Helper function to safely create regex patterns in the audit system
 fn safe_regex_new(pattern: &str) -> Option<regex::Regex> {

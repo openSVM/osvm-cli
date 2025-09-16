@@ -3,51 +3,336 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OSVM Security Audit Report</title>
+    <title>OSVM Security Audit Report - Blueprint Theme</title>
     <style>
+        /* OSVM Blueprint Theme - Audit Report CSS */
+        :root {
+            /* Blueprint Theme Color Variables */
+            --bp-blue: #0078D4;
+            --bp-dark-blue: #004578;
+            --bp-light-blue: #40E0D0;
+            --bg-primary: #0A0E0A;
+            --bg-secondary: #1A1E1A;
+            --bg-tertiary: #2A2E2A;
+            --text-primary: #E8E8E8;
+            --text-secondary: #B8B8B8;
+            --text-muted: #888888;
+            --success: #00C851;
+            --warning: #FFA726;
+            --error: #FF3547;
+            --info: #33B5E5;
+            --critical: #FF1744;
+            --high: #FF5722;
+            --medium: #FF9800;
+            --low: #4CAF50;
+            --border-primary: #404040;
+            --border-secondary: #303030;
+            --hover: #2A4A5A;
+            --active: #3A5A6A;
+            
+            /* Typography */
+            --font-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+
+        /* Base Styles */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: var(--font-mono);
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            line-height: 1.5;
             min-height: 100vh;
         }
-        
+
+        /* Container */
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
+            padding: 0 2rem;
         }
-        
+
+        /* Header with Blueprint Grid Pattern */
         .site-header {
-            text-align: center;
-            padding: 40px 0;
+            background: linear-gradient(45deg, var(--bp-dark-blue), var(--bp-blue));
             color: white;
+            padding: 2rem 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        
+
+        .site-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+
         .logo {
-            font-size: 2.5rem;
-            font-weight: bold;
-            margin-bottom: 10px;
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            position: relative;
+            z-index: 1;
         }
-        
+
         .tagline {
-            font-size: 1.1rem;
-            margin-bottom: 20px;
-            opacity: 0.95;
+            font-size: 1.125rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
         }
-        
-        .nav-buttons {
+
+        /* Main Content */
+        main {
+            background: var(--bg-tertiary);
+            margin-top: -2rem;
+            border-radius: 1.5rem 1.5rem 0 0;
+            position: relative;
+            z-index: 1;
+            min-height: calc(100vh - 200px);
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.3);
+        }
+
+        .content {
+            padding: 3rem 2rem;
+        }
+
+        /* Sections with Blueprint Styling */
+        .section {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-primary);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--bp-blue), var(--bp-light-blue));
+            border-radius: 0.75rem 0.75rem 0 0;
+        }
+
+        /* DeepLogic Section Special Styling */
+        .deeplogic-section {
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-primary));
+            border: 2px solid var(--bp-blue);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .deeplogic-section::before {
+            background: linear-gradient(90deg, var(--bp-blue), var(--bp-light-blue), var(--bp-blue));
+        }
+
+        /* Headings */
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        h1 { font-size: 1.875rem; }
+        h2 { font-size: 1.5rem; color: var(--bp-light-blue); }
+        h3 { font-size: 1.25rem; }
+        h4 { font-size: 1.125rem; }
+
+        /* Code Blocks with Blueprint Theme */
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-primary);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            position: relative;
+        }
+
+        .code-problematic {
+            background: rgba(255, 53, 71, 0.1);
+            border-left: 4px solid var(--error);
+        }
+
+        .code-problematic::before {
+            content: '🔴 Problematic Code';
+            position: absolute;
+            top: -0.5rem;
+            left: 1rem;
+            background: var(--error);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .code-fixed {
+            background: rgba(0, 200, 81, 0.1);
+            border-left: 4px solid var(--success);
+        }
+
+        .code-fixed::before {
+            content: '🟢 Suggested Fix';
+            position: absolute;
+            top: -0.5rem;
+            left: 1rem;
+            background: var(--success);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        /* Severity Badges */
+        .severity-critical { background: var(--critical); color: white; }
+        .severity-high { background: var(--high); color: white; }
+        .severity-medium { background: var(--medium); color: white; }
+        .severity-low { background: var(--low); color: white; }
+
+        .severity-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Finding Cards */
+        .finding {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-primary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .finding:hover {
+            border-color: var(--bp-blue);
+            box-shadow: 0 8px 30px rgba(0, 120, 212, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .finding-header {
             display: flex;
-            justify-content: center;
-            gap: 15px;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        .finding-id {
+            font-family: var(--font-mono);
+            background: var(--bg-secondary);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-tertiary);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        th {
+            background: var(--bp-blue);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--bp-light-blue);
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-secondary);
+        }
+
+        tr:nth-child(even) {
+            background: var(--bg-secondary);
+        }
+
+        tr:hover {
+            background: var(--hover);
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .finding-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+            
+            .code-block {
+                padding: 1rem;
+                font-size: 0.875rem;
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                background: white;
+                color: black;
+            }
+            
+            .site-header {
+                background: var(--bp-blue);
+                color: white;
+            }
+            
+            main {
+                background: white;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
             margin-bottom: 20px;
             flex-wrap: wrap;
         }

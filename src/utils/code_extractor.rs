@@ -1,17 +1,25 @@
-//! Code Snippet Extractor for DeepLogic AI Analysis
+//! Enhanced Code Snippet Extractor for DeepLogic AI Analysis
 //!
 //! This module provides functionality to extract relevant code snippets from source files
-//! based on audit findings, and to generate AI-powered fix suggestions.
+//! based on audit findings, and to generate AI-powered fix suggestions using AST analysis.
 
+use crate::utils::ast_analyzer::AstAnalyzer;
 use crate::utils::audit::{AuditFinding, CodeSnippet};
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::Path;
 
-/// Code extractor for retrieving relevant code segments
-pub struct CodeExtractor;
+/// Enhanced code extractor with AST analysis capabilities
+pub struct CodeExtractor {
+    ast_analyzer: AstAnalyzer,
+}
 
 impl CodeExtractor {
+    pub fn new() -> Self {
+        Self {
+            ast_analyzer: AstAnalyzer::new(),
+        }
+    }
+
     /// Extract code snippet around a specific line with context
     pub fn extract_snippet_around_line(
         file_path: &str,
@@ -159,12 +167,37 @@ impl CodeExtractor {
         patterns
     }
 
-    /// Generate a suggested fix snippet based on the problematic code and AI analysis
+    /// Generate enhanced fix suggestions using AST analysis
+    pub fn generate_enhanced_fix(
+        &self,
+        problematic_code: &CodeSnippet,
+        finding: &AuditFinding,
+    ) -> Result<CodeSnippet> {
+        // Try AST-based analysis first
+        match self
+            .ast_analyzer
+            .generate_ast_based_fix(finding, problematic_code)
+        {
+            Ok(enhanced_fix) => {
+                println!("✨ Generated AST-based fix suggestion");
+                Ok(enhanced_fix)
+            }
+            Err(e) => {
+                println!(
+                    "⚠️  AST analysis failed, falling back to pattern-based: {}",
+                    e
+                );
+                // Fallback to the original pattern-based approach
+                Self::generate_suggested_fix(problematic_code, finding)
+            }
+        }
+    }
+
+    /// Generate a suggested fix snippet based on the problematic code (fallback method)
     pub fn generate_suggested_fix(
         problematic_code: &CodeSnippet,
         finding: &AuditFinding,
     ) -> Result<CodeSnippet> {
-        // This is a simplified version - in a real implementation, this would use AI
         let fixed_content = Self::apply_basic_fixes(&problematic_code.content, finding);
 
         Ok(CodeSnippet {
@@ -172,17 +205,16 @@ impl CodeExtractor {
             start_line: problematic_code.start_line,
             end_line: problematic_code.end_line,
             content: fixed_content,
-            context: Some("AI-generated fix suggestion".to_string()),
+            context: Some("Pattern-based fix suggestion".to_string()),
         })
     }
 
-    /// Apply basic pattern-based fixes (placeholder for AI-powered fixes)
+    /// Apply basic pattern-based fixes
     fn apply_basic_fixes(content: &str, finding: &AuditFinding) -> String {
         let mut fixed_content = content.to_string();
 
         match finding.category.as_str() {
             "Authentication & Authorization" => {
-                // Add signer checks
                 if !content.contains("is_signer") && content.contains("AccountInfo") {
                     fixed_content = fixed_content.replace(
                         "let user_account = &ctx.accounts.user_account;",
@@ -191,7 +223,6 @@ impl CodeExtractor {
                 }
             }
             "Solana Security" => {
-                // Add key validation
                 if content.contains("user_account") && !content.contains("key()") {
                     fixed_content = fixed_content.replace(
                         "user_account.balance += amount;",
@@ -200,7 +231,6 @@ impl CodeExtractor {
                 }
             }
             "Trading Security" => {
-                // Add slippage protection
                 if content.contains("claim_rewards") && !content.contains("slippage") {
                     fixed_content = fixed_content.replace(
                         "let rewards_to_claim = pool_state.accumulated_rewards * user_share;",
@@ -209,7 +239,6 @@ impl CodeExtractor {
                 }
             }
             _ => {
-                // Generic improvements
                 if content.contains("unwrap()") {
                     fixed_content = fixed_content
                         .replace("unwrap()", "map_err(|_| ErrorCode::OperationFailed)?");
@@ -218,6 +247,12 @@ impl CodeExtractor {
         }
 
         fixed_content
+    }
+}
+
+impl Default for CodeExtractor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
