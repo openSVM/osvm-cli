@@ -329,7 +329,7 @@ impl OpenAIClient {
         // Parse the JSON response from OpenAI
         let mut ai_analysis: AIAnalysis =
             serde_json::from_str(content).context("Failed to parse AI analysis JSON")?;
-        
+
         // Set deeplogic_analysis to None for regular analysis (it's only set by dedicated DeepLogic analysis)
         ai_analysis.deeplogic_analysis = None;
 
@@ -528,7 +528,7 @@ impl OpenAIClient {
         finding: &AuditFinding,
         problematic_code: &crate::utils::audit::CodeSnippet,
     ) -> Result<crate::utils::audit::DeepLogicAnalysis> {
-        use crate::utils::audit::{DeepLogicAnalysis, AnalysisVector, CodeSnippet};
+        use crate::utils::audit::{AnalysisVector, CodeSnippet, DeepLogicAnalysis};
         use crate::utils::code_extractor::CodeExtractor;
 
         for attempt in 0..=self.max_retries {
@@ -536,7 +536,7 @@ impl OpenAIClient {
                 Ok(analysis) => return Ok(analysis),
                 Err(e) if attempt < self.max_retries => {
                     let (should_retry, delay) = EnhancedAIErrorHandler::get_retry_strategy(&e);
-                    
+
                     if should_retry {
                         log::warn!(
                             "DeepLogic analysis attempt {}/{} failed, retrying in {}ms: {}",
@@ -570,7 +570,7 @@ impl OpenAIClient {
         finding: &AuditFinding,
         problematic_code: &crate::utils::audit::CodeSnippet,
     ) -> Result<crate::utils::audit::DeepLogicAnalysis> {
-        use crate::utils::audit::{DeepLogicAnalysis, AnalysisVector, CodeSnippet};
+        use crate::utils::audit::{AnalysisVector, CodeSnippet, DeepLogicAnalysis};
         use crate::utils::code_extractor::CodeExtractor;
 
         let prompt = format!(
@@ -656,8 +656,8 @@ impl OpenAIClient {
             .ok_or_else(|| anyhow::anyhow!("Invalid OpenAI response format"))?;
 
         // Parse the JSON response
-        let deeplogic_json: serde_json::Value = serde_json::from_str(content)
-            .context("Failed to parse DeepLogic analysis JSON")?;
+        let deeplogic_json: serde_json::Value =
+            serde_json::from_str(content).context("Failed to parse DeepLogic analysis JSON")?;
 
         // Extract analysis vector
         let analysis_vector_str = deeplogic_json
@@ -1142,10 +1142,10 @@ impl AuditCoordinator {
     /// Group findings by type and file for better reporting
     fn group_findings(&self, findings: Vec<AuditFinding>) -> Vec<GroupedFinding> {
         let mut groups: HashMap<String, GroupedFinding> = HashMap::new();
-        
+
         for finding in findings {
             let grouping_key = GroupedFinding::grouping_key(&finding);
-            
+
             match groups.get_mut(&grouping_key) {
                 Some(group) => {
                     group.add_instance(&finding);
@@ -1156,7 +1156,7 @@ impl AuditCoordinator {
                 }
             }
         }
-        
+
         // Convert to vector and sort by severity and instance count
         let mut grouped_findings: Vec<GroupedFinding> = groups.into_values().collect();
         grouped_findings.sort_by(|a, b| {
@@ -1168,23 +1168,23 @@ impl AuditCoordinator {
                 AuditSeverity::Low => 3,
                 AuditSeverity::Info => 4,
             };
-            
+
             let severity_cmp = severity_order(&a.severity).cmp(&severity_order(&b.severity));
             if severity_cmp != std::cmp::Ordering::Equal {
                 return severity_cmp;
             }
-            
+
             // Then by instance count (descending)
             b.instance_count.cmp(&a.instance_count)
         });
-        
+
         grouped_findings
     }
 
     /// Convert grouped findings back to individual findings for compatibility
     fn ungrouped_findings_from_groups(&self, groups: &[GroupedFinding]) -> Vec<AuditFinding> {
         let mut findings = Vec::new();
-        
+
         for group in groups {
             for (index, location) in group.locations.iter().enumerate() {
                 let finding_id = if index == 0 {
@@ -1192,12 +1192,17 @@ impl AuditCoordinator {
                 } else {
                     format!("{}-{}", group.id, index + 1)
                 };
-                
+
                 findings.push(AuditFinding {
                     id: finding_id,
                     title: group.title.clone(),
                     description: if group.instance_count > 1 {
-                        format!("{} (Instance {} of {})", group.description, index + 1, group.instance_count)
+                        format!(
+                            "{} (Instance {} of {})",
+                            group.description,
+                            index + 1,
+                            group.instance_count
+                        )
                     } else {
                         group.description.clone()
                     },
@@ -1212,12 +1217,15 @@ impl AuditCoordinator {
                 });
             }
         }
-        
+
         findings
     }
 
     /// Enhance grouped findings with AI analysis (more efficient than per-finding analysis)
-    async fn enhance_grouped_findings_with_ai(&self, mut groups: Vec<GroupedFinding>) -> Vec<GroupedFinding> {
+    async fn enhance_grouped_findings_with_ai(
+        &self,
+        mut groups: Vec<GroupedFinding>,
+    ) -> Vec<GroupedFinding> {
         let mut ai_failures = 0;
         let mut ai_successes = 0;
         let mut deeplogic_analyses = 0;
@@ -1240,7 +1248,9 @@ impl AuditCoordinator {
                     title: group.title.clone(),
                     description: format!(
                         "{} (Found in {} locations with {} instances)",
-                        group.description, group.locations.len(), group.instance_count
+                        group.description,
+                        group.locations.len(),
+                        group.instance_count
                     ),
                     severity: group.severity.clone(),
                     category: group.category.clone(),
@@ -1254,13 +1264,19 @@ impl AuditCoordinator {
 
                 match self.query_ai_for_finding(&representative_finding).await {
                     Ok(mut ai_analysis) => {
-                        println!("🤖 AI analysis completed for group: {} ({} instances)", group.title, group.instance_count);
-                        
+                        println!(
+                            "🤖 AI analysis completed for group: {} ({} instances)",
+                            group.title, group.instance_count
+                        );
+
                         // Check if this finding qualifies for DeepLogic analysis
                         if self.should_perform_deeplogic_analysis(&representative_finding) {
                             println!("🧠 Performing DeepLogic AI analysis for: {}", group.title);
-                            
-                            if let Ok(deeplogic_analysis) = self.perform_deeplogic_analysis(&representative_finding).await {
+
+                            if let Ok(deeplogic_analysis) = self
+                                .perform_deeplogic_analysis(&representative_finding)
+                                .await
+                            {
                                 ai_analysis.deeplogic_analysis = Some(deeplogic_analysis);
                                 deeplogic_analyses += 1;
                                 println!("✨ DeepLogic analysis completed for: {}", group.title);
@@ -1268,7 +1284,7 @@ impl AuditCoordinator {
                                 log::warn!("DeepLogic analysis failed for group: {}", group.id);
                             }
                         }
-                        
+
                         group.ai_analysis = Some(ai_analysis);
                         ai_successes += 1;
 
@@ -1308,9 +1324,12 @@ impl AuditCoordinator {
                 ai_failures,
                 deeplogic_analyses
             );
-            
+
             if deeplogic_analyses > 0 {
-                println!("🧠 DeepLogic AI Analysis completed for {} critical vulnerabilities", deeplogic_analyses);
+                println!(
+                    "🧠 DeepLogic AI Analysis completed for {} critical vulnerabilities",
+                    deeplogic_analyses
+                );
             }
         }
 
@@ -1359,11 +1378,14 @@ impl AuditCoordinator {
         // Group findings for better reporting and optimized AI analysis
         println!("📊 Grouping findings for enhanced reporting...");
         let mut grouped_findings = self.group_findings(findings);
-        
+
         // Print grouping summary
         let total_instances: usize = grouped_findings.iter().map(|g| g.instance_count).sum();
         let total_groups = grouped_findings.len();
-        println!("📋 Grouped {} findings into {} groups", total_instances, total_groups);
+        println!(
+            "📋 Grouped {} findings into {} groups",
+            total_instances, total_groups
+        );
 
         // If AI is enabled and not disabled, perform AI-enhanced analysis on groups
         if self.should_use_ai() {
@@ -1373,14 +1395,19 @@ impl AuditCoordinator {
             if let Some(ref ai_client) = self.ai_client {
                 let ai_findings = self.perform_ai_code_analysis(ai_client).await;
                 if !ai_findings.is_empty() {
-                    println!("🔍 Integrating {} AI-discovered findings...", ai_findings.len());
+                    println!(
+                        "🔍 Integrating {} AI-discovered findings...",
+                        ai_findings.len()
+                    );
                     let ai_groups = self.group_findings(ai_findings);
                     grouped_findings.extend(ai_groups);
                 }
             }
 
             // Enhance grouped findings with AI analysis (much more efficient)
-            grouped_findings = self.enhance_grouped_findings_with_ai(grouped_findings).await;
+            grouped_findings = self
+                .enhance_grouped_findings_with_ai(grouped_findings)
+                .await;
         }
 
         // Convert back to individual findings for report compatibility
@@ -1445,7 +1472,10 @@ impl AuditCoordinator {
         let grouped_findings = self.group_findings(findings);
         let total_instances: usize = grouped_findings.iter().map(|g| g.instance_count).sum();
         let total_groups = grouped_findings.len();
-        println!("📋 Grouped {} findings into {} groups", total_instances, total_groups);
+        println!(
+            "📋 Grouped {} findings into {} groups",
+            total_instances, total_groups
+        );
 
         // Convert back to individual findings for report compatibility
         let findings = self.ungrouped_findings_from_groups(&grouped_findings);
@@ -6918,6 +6948,7 @@ impl AuditCoordinator {
             version: env!("CARGO_PKG_VERSION").to_string(),
             summary,
             findings,
+            deeplogic_findings: Vec::new(), // No DeepLogic findings in this basic test report
             system_info,
             recommendations: vec![
                 "Implement regular security audits".to_string(),
@@ -7194,7 +7225,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
     /// Parse repository specification (owner/repo#branch or owner/repo)
     fn parse_repo_spec(&self, repo_spec: &str) -> Result<(String, String)> {
         let parts: Vec<&str> = repo_spec.split('#').collect();
-        
+
         if parts.len() > 2 {
             anyhow::bail!("Invalid repository specification. Expected format: owner/repo or owner/repo#branch");
         }
@@ -7235,7 +7266,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         for branch_name in branches_to_try {
             println!("🌿 Trying branch: {}", branch_name);
-            
+
             // Use timeout for git operations to prevent hanging
             let output = self.execute_git_with_timeout(
                 &[
@@ -7256,13 +7287,19 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                     println!("✅ Successfully cloned with branch: {}", branch_name);
                     return Ok(temp_dir);
                 } else {
-                    last_error = format!("Repository clone directory does not exist: {}", temp_dir.display());
+                    last_error = format!(
+                        "Repository clone directory does not exist: {}",
+                        temp_dir.display()
+                    );
                     break;
                 }
             } else {
                 last_error = String::from_utf8_lossy(&output.stderr).to_string();
-                println!("❌ Failed to clone with branch '{}': {}", branch_name, last_error);
-                
+                println!(
+                    "❌ Failed to clone with branch '{}': {}",
+                    branch_name, last_error
+                );
+
                 // Clean up any partial clone attempt
                 if temp_dir.exists() {
                     let _ = std::fs::remove_dir_all(&temp_dir);
@@ -7270,10 +7307,10 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
             }
         }
 
-        anyhow::bail!("Git clone failed for all attempted branches. Last error: {}", last_error)
-    }
-
-        Ok(temp_dir)
+        anyhow::bail!(
+            "Git clone failed for all attempted branches. Last error: {}",
+            last_error
+        )
     }
 
     /// Execute git command with timeout to prevent hanging operations
@@ -7554,7 +7591,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
     /// Extract DeepLogic findings from grouped findings
     fn extract_deeplogic_findings(&self, groups: &[GroupedFinding]) -> Vec<DeepLogicAnalysis> {
         let mut deeplogic_findings = Vec::new();
-        
+
         for group in groups {
             if let Some(ref ai_analysis) = group.ai_analysis {
                 if let Some(ref deeplogic_analysis) = ai_analysis.deeplogic_analysis {
@@ -7562,7 +7599,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                 }
             }
         }
-        
+
         deeplogic_findings
     }
 
@@ -7576,7 +7613,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         // Check if the finding is related to logical vulnerabilities that benefit from DeepLogic analysis
         let categories_for_deeplogic = [
             "Solana Security",
-            "Authentication & Authorization", 
+            "Authentication & Authorization",
             "Trading Security",
             "Economic Exploit",
             "State Management",
@@ -7587,7 +7624,7 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
             "logic",
             "reward",
             "economic",
-            "exploit", 
+            "exploit",
             "state",
             "authority",
             "permission",
@@ -7600,17 +7637,29 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         ];
 
         // Check category match
-        if categories_for_deeplogic.iter().any(|&cat| finding.category.contains(cat)) {
+        if categories_for_deeplogic
+            .iter()
+            .any(|&cat| finding.category.contains(cat))
+        {
             return true;
         }
 
         // Check title/description for relevant keywords
-        let text_to_check = format!("{} {}", finding.title.to_lowercase(), finding.description.to_lowercase());
-        title_keywords.iter().any(|&keyword| text_to_check.contains(keyword))
+        let text_to_check = format!(
+            "{} {}",
+            finding.title.to_lowercase(),
+            finding.description.to_lowercase()
+        );
+        title_keywords
+            .iter()
+            .any(|&keyword| text_to_check.contains(keyword))
     }
 
     /// Perform DeepLogic AI analysis for a finding
-    async fn perform_deeplogic_analysis(&self, finding: &AuditFinding) -> Result<DeepLogicAnalysis> {
+    async fn perform_deeplogic_analysis(
+        &self,
+        finding: &AuditFinding,
+    ) -> Result<DeepLogicAnalysis> {
         use crate::utils::code_extractor::CodeExtractor;
 
         // Extract problematic code snippet
@@ -7619,10 +7668,13 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
         // Only proceed with OpenAI client for now (can extend to internal AI later)
         if let Some(ref ai_client) = self.ai_client {
-            ai_client.analyze_deeplogic(finding, &problematic_code).await
+            ai_client
+                .analyze_deeplogic(finding, &problematic_code)
+                .await
         } else {
             // Fallback to basic analysis structure if no AI client
-            self.create_fallback_deeplogic_analysis(finding, &problematic_code).await
+            self.create_fallback_deeplogic_analysis(finding, &problematic_code)
+                .await
         }
     }
 
@@ -7635,8 +7687,14 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
         use crate::utils::code_extractor::CodeExtractor;
 
         let analysis_vector = match finding.category.as_str() {
-            category if category.contains("Trading") || category.contains("Economic") => AnalysisVector::EconomicExploit,
-            category if category.contains("Authentication") || category.contains("Authorization") => AnalysisVector::AccessControl,
+            category if category.contains("Trading") || category.contains("Economic") => {
+                AnalysisVector::EconomicExploit
+            }
+            category
+                if category.contains("Authentication") || category.contains("Authorization") =>
+            {
+                AnalysisVector::AccessControl
+            }
             category if category.contains("State") => AnalysisVector::StateTransition,
             _ => AnalysisVector::MathematicalIntegrity,
         };

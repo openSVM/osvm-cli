@@ -205,10 +205,10 @@ async fn handle_audit_command(
     let format = matches.get_one::<String>("format").unwrap().to_string();
     let verbose = matches.get_count("verbose");
     let test_mode = matches.get_flag("test");
-    
+
     // AI analysis is enabled by default, disabled only if --noai is provided
     let ai_analysis = !matches.get_flag("noai");
-    
+
     // Handle repository parsing - check positional argument first, then --gh flag
     let gh_repo = if let Some(repo) = matches.get_one::<String>("repository") {
         // Parse positional argument as GitHub repo
@@ -227,7 +227,7 @@ async fn handle_audit_command(
     } else {
         matches.get_one::<String>("gh").map(|s| s.to_string())
     };
-    
+
     let template_path = matches.get_one::<String>("template").map(|s| s.to_string());
     let api_url = matches.get_one::<String>("api-url").map(|s| s.to_string());
 

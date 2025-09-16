@@ -1,4 +1,3 @@
-use serde_yaml;
 use std::fs;
 use std::path::Path;
 

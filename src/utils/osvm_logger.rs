@@ -24,6 +24,7 @@ pub enum LogCategory {
     Config,
     CLI,
     Performance,
+    Rpc, // Added for RPC operations
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +142,7 @@ impl OsvmLogger {
             LogCategory::Config => "CFG",
             LogCategory::CLI => "CLI",
             LogCategory::Performance => "PERF",
+            LogCategory::Rpc => "RPC", // Added RPC category
         };
 
         let time = entry.timestamp.format("%H:%M:%S%.3f");

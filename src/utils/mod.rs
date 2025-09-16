@@ -34,20 +34,20 @@ pub mod audit_templates;
 pub mod audit_tests;
 /// Code snippet extraction for DeepLogic AI Analysis
 pub mod code_extractor;
-/// Devnet RPC node that syncs with real blockchain
-pub mod devnet_rpc;
 /// Simple devnet proxy for development
 pub mod devnet_proxy;
-/// Simple devnet proxy implementation  
-pub mod simple_devnet_proxy;
-/// Mainnet RPC connectivity
-pub mod mainnet_rpc;
+/// Devnet RPC node that syncs with real blockchain
+pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
 pub mod ebpf_deploy;
 /// Local RPC node deployment and management
 pub mod local_rpc;
+/// Mainnet RPC connectivity
+pub mod mainnet_rpc;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
+/// Simple devnet proxy implementation  
+pub mod simple_devnet_proxy;
 /// Solana RPC connectivity and monitoring
 pub mod solana_rpc;
 /// SSH deployment utilities for remote node deployment

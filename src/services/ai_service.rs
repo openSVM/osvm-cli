@@ -57,7 +57,8 @@ impl AiService {
             Some(url) => {
                 // Check if it's an OpenAI URL and we have an API key
                 if url.contains("openai.com") || url.contains("api.openai.com") {
-                    if let Some(key) = env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty()) {
+                    if let Some(key) = env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty())
+                    {
                         (url, true)
                     } else {
                         eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
@@ -70,7 +71,9 @@ impl AiService {
             }
             None => {
                 // Default behavior: use osvm.ai unless explicitly configured for OpenAI
-                if let (Some(url), Some(_)) = (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok()) {
+                if let (Some(url), Some(_)) =
+                    (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok())
+                {
                     (url, true)
                 } else {
                     ("https://osvm.ai/api/getAnswer".to_string(), false)
@@ -107,12 +110,15 @@ impl AiService {
 
         match &result {
             Ok(response) => {
-                println!("🔍 AI Response received ({} chars): {}", response.len(), 
-                    if response.len() > 200 { 
+                println!(
+                    "🔍 AI Response received ({} chars): {}",
+                    response.len(),
+                    if response.len() > 200 {
                         format!("{}...", &response[..200])
-                    } else { 
-                        response.clone() 
-                    });
+                    } else {
+                        response.clone()
+                    }
+                );
             }
             Err(e) => {
                 println!("❌ AI Response error: {}", e);
@@ -135,7 +141,10 @@ impl AiService {
             question: question.to_string(),
         };
 
-        println!("📤 OSVM AI Request: {}", serde_json::to_string_pretty(&request_body)?);
+        println!(
+            "📤 OSVM AI Request: {}",
+            serde_json::to_string_pretty(&request_body)?
+        );
 
         let response = self
             .client
@@ -187,7 +196,7 @@ impl AiService {
 
     async fn query_openai(&self, question: &str) -> Result<String> {
         let api_key = self.api_key.as_ref().unwrap();
-        
+
         let request_body = OpenAiRequest {
             model: "gpt-3.5-turbo".to_string(),
             messages: vec![OpenAiMessage {
@@ -198,7 +207,10 @@ impl AiService {
             temperature: 0.7,
         };
 
-        println!("📤 OpenAI Request: {}", serde_json::to_string_pretty(&request_body)?);
+        println!(
+            "📤 OpenAI Request: {}",
+            serde_json::to_string_pretty(&request_body)?
+        );
 
         let response = self
             .client
@@ -222,8 +234,8 @@ impl AiService {
             );
         }
 
-        let openai_response: OpenAiResponse = serde_json::from_str(&response_text)
-            .context("Failed to parse OpenAI response")?;
+        let openai_response: OpenAiResponse =
+            serde_json::from_str(&response_text).context("Failed to parse OpenAI response")?;
 
         if let Some(choice) = openai_response.choices.first() {
             Ok(choice.message.content.clone())
@@ -488,16 +500,19 @@ mod tests {
         // Test environment variable detection
         std::env::set_var("OPENAI_URL", "https://api.openai.com/v1/chat/completions");
         std::env::set_var("OPENAI_KEY", "test_key");
-        
+
         let ai_service = AiService::new();
         assert!(ai_service.use_openai);
-        assert_eq!(ai_service.api_url, "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            ai_service.api_url,
+            "https://api.openai.com/v1/chat/completions"
+        );
         assert_eq!(ai_service.api_key, Some("test_key".to_string()));
-        
+
         // Clean up
         std::env::remove_var("OPENAI_URL");
         std::env::remove_var("OPENAI_KEY");
-        
+
         // Test fallback to osvm.ai
         let ai_service_fallback = AiService::new();
         assert!(!ai_service_fallback.use_openai);

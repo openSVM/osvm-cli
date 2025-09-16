@@ -2,7 +2,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use osvm::utils::ebpf_deploy::{load_program, load_program_id, DeployConfig, RpcClientCache};
 use std::fs::File;
 use std::io::Write;
-use std::time::Duration;
 use tempfile::tempdir;
 
 /// Benchmark program loading performance
