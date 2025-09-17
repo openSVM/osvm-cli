@@ -21,6 +21,8 @@ pub mod examples;
 pub mod nodes_dashboard;
 
 // Core functionality
+/// AST-based code analysis for enhanced fix suggestions
+pub mod ast_analyzer;
 /// Security audit system for comprehensive vulnerability analysis
 pub mod audit;
 /// Modular audit system with structured vulnerability checks
@@ -32,14 +34,30 @@ pub mod audit_templates;
 /// Integration tests for audit system with AI fallback scenarios
 #[cfg(test)]
 pub mod audit_tests;
+/// Blueprint theme system for consistent UI styling
+pub mod blueprint_theme;
+/// Granular circuit breaker system for AI services
+pub mod circuit_breaker;
+/// Code snippet extraction for DeepLogic AI Analysis
+pub mod code_extractor;
+/// Simple devnet proxy for development
+pub mod devnet_proxy;
 /// Devnet RPC node that syncs with real blockchain
 pub mod devnet_rpc;
 /// eBPF deployment utilities for program deployment
 pub mod ebpf_deploy;
+/// Enhanced Git repository management with dynamic branch detection
+pub mod git_manager;
 /// Local RPC node deployment and management
 pub mod local_rpc;
+/// Mainnet RPC connectivity
+pub mod mainnet_rpc;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
+/// Configurable AI prompt templates system
+pub mod prompt_templates;
+/// Simple devnet proxy implementation  
+pub mod simple_devnet_proxy;
 /// Solana RPC connectivity and monitoring
 pub mod solana_rpc;
 /// SSH deployment utilities for remote node deployment

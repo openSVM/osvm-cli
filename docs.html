@@ -43,10 +43,10 @@
         }
         
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
             line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #00ff41;
+            background: #0a0e0a;
             min-height: 100vh;
         }
         
@@ -59,20 +59,23 @@
         header {
             text-align: center;
             padding: 40px 0;
-            color: white;
+            color: #00ff41;
+            border-bottom: 2px solid #00ff41;
         }
         
         .logo {
             font-size: 2.5rem;
             font-weight: bold;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 0 0 10px #00ff41;
+            font-family: monospace;
         }
         
         .tagline {
             font-size: 1.1rem;
             margin-bottom: 20px;
-            opacity: 0.95;
+            opacity: 0.9;
+            color: #66ff66;
         }
         
         .nav-buttons {
@@ -86,44 +89,43 @@
         .btn {
             display: inline-block;
             padding: 10px 20px;
-            border-radius: 5px;
+            border: 2px solid #00ff41;
+            background: transparent;
+            color: #00ff41;
             text-decoration: none;
             font-weight: bold;
             transition: all 0.3s ease;
-            border: none;
-            cursor: pointer;
-            font-size: 0.9rem;
+            font-family: monospace;
+            text-transform: uppercase;
         }
         
         .btn-primary {
-            background: #fff;
-            color: #667eea;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            background: #00ff41;
+            color: #0a0e0a;
         }
         
         .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            background: transparent;
+            color: #00ff41;
+            box-shadow: 0 0 10px #00ff41;
         }
         
         .btn-secondary {
             background: transparent;
-            color: white;
-            border: 2px solid white;
+            color: #00ff41;
+            border: 1px solid #004400;
         }
         
         .btn-secondary:hover {
-            background: white;
-            color: #667eea;
+            border-color: #00ff41;
+            box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
         }
         
         main {
-            background: white;
-            margin-top: -30px;
-            border-radius: 20px 20px 0 0;
-            box-shadow: 0 -5px 30px rgba(0,0,0,0.1);
-            position: relative;
-            z-index: 1;
+            background: #0f1b0f;
+            border: 2px solid #00ff41;
+            margin: 20px auto;
+            max-width: 1200px;
             min-height: calc(100vh - 200px);
         }
         
@@ -133,41 +135,47 @@
         
         /* Markdown content styling */
         .markdown-content h1 {
-            color: #667eea;
+            color: #00ff41;
             font-size: 2.5rem;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
+            border-bottom: 3px solid #00ff41;
+            font-family: monospace;
         }
         
         .markdown-content h2 {
-            color: #333;
+            color: #00ff41;
             font-size: 2rem;
             margin: 30px 0 15px 0;
             padding-bottom: 8px;
-            border-bottom: 2px solid #e9ecef;
+            border-bottom: 2px solid #004400;
+            font-family: monospace;
         }
         
         .markdown-content h3 {
-            color: #333;
+            color: #66ff66;
             font-size: 1.5rem;
             margin: 25px 0 10px 0;
+            font-family: monospace;
         }
         
         .markdown-content h4 {
-            color: #555;
+            color: #66ff66;
             font-size: 1.2rem;
             margin: 20px 0 8px 0;
+            font-family: monospace;
         }
         
         .markdown-content p {
             margin-bottom: 15px;
             line-height: 1.7;
+            color: #66ff66;
         }
         
         .markdown-content ul, .markdown-content ol {
             margin: 15px 0;
             padding-left: 30px;
+            color: #66ff66;
         }
         
         .markdown-content li {
@@ -175,24 +183,24 @@
         }
         
         .markdown-content a {
-            color: #667eea;
+            color: #00ff41;
             text-decoration: none;
             font-weight: 500;
             transition: color 0.3s ease;
         }
         
         .markdown-content a:hover {
-            color: #5a67d8;
+            color: #66ff66;
             text-decoration: underline;
         }
         
         .markdown-content code {
-            background: #f8f9fa;
+            background: #001a00;
             padding: 2px 6px;
-            border-radius: 3px;
+            border: 1px solid #004400;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 0.9em;
-            color: #e53e3e;
+            color: #00ff41;
         }
         
         .markdown-content pre {

@@ -16,6 +16,19 @@ pub fn parse_command_line() -> clap::ArgMatches {
     command!()
         .disable_version_flag(true) // Disable the auto-generated --version flag
         .arg_required_else_help(true)
+        .before_help("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░
+......███░░░░░███..███░░░░░███░░███...░░███.░░██████.██████.......▐█░░░░
+.....███.....░░███░███....░░░..░███....░███..░███░█████░███.........▐█░░
+....░███......░███░░█████████..░███....░███..░███░░███░░███...........▐█
+....░███......░███.░░░░░░░░███.░░███...███...░███░░░░░░░███.........▐█░░
+....░░███.....███..███....░███..░░░█████░....░███░░░░░░░███.......▐█░░░░
+░░░░░░░░███████░░░░░█████████░░░░░░░███░░░░░░░███░░░░░░░███░░░░░▐█░░░░░░
+ ███████████████████████████████████████████████████████████████████████
+
+🚀 OSVM CLI - OpenSVM Command Line Interface
+   Advanced Solana Virtual Machine management with AI-powered security auditing")
         // Add version aliases as subcommands
         .subcommand(Command::new("v").about("Show version information"))
         .subcommand(Command::new("ver").about("Show version information"))
@@ -803,6 +816,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
             Command::new("audit")
                 .about("Generate comprehensive security audit report")
                 .arg(
+                    Arg::new("repository")
+                        .help("Repository to audit (format: owner/repo or owner/repo#branch)")
+                        .value_name("REPOSITORY")
+                        .index(1)
+                )
+                .arg(
                     Arg::new("output")
                         .long("output")
                         .short('o')
@@ -832,10 +851,16 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .help("Generate test audit report with sample data")
                 )
                 .arg(
-                    Arg::new("ai-analysis")
-                        .long("ai-analysis")
+                    Arg::new("noai")
+                        .long("noai")
                         .action(ArgAction::SetTrue)
-                        .help("Enable AI-powered security analysis using OpenAI (requires OPENAI_API_KEY)")
+                        .help("Disable AI-powered security analysis")
+                )
+                .arg(
+                    Arg::new("api-url")
+                        .long("api-url")
+                        .value_name("URL")
+                        .help("Custom API URL for AI analysis (default: https://osvm.ai/api/getAnswer)")
                 )
                 .arg(
                     Arg::new("gh")

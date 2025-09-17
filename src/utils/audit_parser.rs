@@ -21,17 +21,17 @@ impl LineTracker {
     pub fn new(source_code: &str) -> Self {
         let source_lines: Vec<String> = source_code.lines().map(|s| s.to_string()).collect();
         let mut line_content_map = HashMap::new();
-        
+
         for (line_num, line_content) in source_lines.iter().enumerate() {
             line_content_map.insert(line_num + 1, line_content.clone());
         }
-        
+
         Self {
             source_lines,
             line_content_map,
         }
     }
-    
+
     /// Find the line number where a specific pattern appears
     pub fn find_pattern_line(&self, pattern: &str, start_from: usize) -> usize {
         for (line_num, line_content) in self.line_content_map.iter() {
@@ -41,7 +41,7 @@ impl LineTracker {
         }
         start_from.max(1)
     }
-    
+
     /// Get all lines containing a pattern
     pub fn find_all_pattern_lines(&self, pattern: &str) -> Vec<usize> {
         let mut lines = Vec::new();
@@ -402,7 +402,7 @@ impl SecurityVisitor {
     fn analyze_string_literal(&mut self, lit: &LitStr) {
         let value = lit.value();
         let line_num = self.get_line_number_for_pattern(&format!("\"{}\"", value));
-        
+
         self.string_literals.push(StringLiteral {
             line: line_num,
             value: value.clone(),
@@ -928,20 +928,26 @@ fn test() {
         "#;
 
         let analysis = RustCodeParser::parse_code(code).unwrap();
-        
+
         println!("Unsafe blocks found: {}", analysis.unsafe_blocks.len());
         for block in &analysis.unsafe_blocks {
             println!("  Unsafe block at line: {}", block.line);
         }
-        
+
         println!("Unwrap usages found: {}", analysis.unwrap_usages.len());
         for unwrap in &analysis.unwrap_usages {
             println!("  {} at line: {}", unwrap.method, unwrap.line);
         }
-        
+
         // We should detect at least the unsafe block and unwrap/expect calls
-        assert!(!analysis.unsafe_blocks.is_empty(), "Should detect unsafe blocks");
-        assert!(!analysis.unwrap_usages.is_empty(), "Should detect unwrap/expect calls");
+        assert!(
+            !analysis.unsafe_blocks.is_empty(),
+            "Should detect unsafe blocks"
+        );
+        assert!(
+            !analysis.unwrap_usages.is_empty(),
+            "Should detect unwrap/expect calls"
+        );
     }
 
     #[test]
@@ -961,14 +967,22 @@ fn process_instruction(accounts: &[AccountInfo]) {
         "#;
 
         let analysis = RustCodeParser::parse_code(code).unwrap();
-        
-        println!("Solana operations found: {}", analysis.solana_operations.len());
+
+        println!(
+            "Solana operations found: {}",
+            analysis.solana_operations.len()
+        );
         for op in &analysis.solana_operations {
-            println!("  Operation '{}' at line: {}, signer_check: {}, owner_check: {}", 
-                op.operation_type, op.line, op.signer_check, op.owner_check);
+            println!(
+                "  Operation '{}' at line: {}, signer_check: {}, owner_check: {}",
+                op.operation_type, op.line, op.signer_check, op.owner_check
+            );
         }
-        
+
         // We should detect some Solana operations
-        assert!(!analysis.solana_operations.is_empty(), "Should detect Solana operations");
+        assert!(
+            !analysis.solana_operations.is_empty(),
+            "Should detect Solana operations"
+        );
     }
 }

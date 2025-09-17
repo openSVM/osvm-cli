@@ -36,6 +36,7 @@ pub struct AuditRequest {
     pub gh_repo: Option<String>,
     pub template_path: Option<String>,
     pub no_commit: bool,
+    pub api_url: Option<String>,
 }
 
 pub struct AuditResult {
@@ -66,6 +67,12 @@ impl AuditService {
     pub fn with_internal_ai() -> Self {
         Self {
             coordinator: AuditCoordinator::with_internal_ai(),
+        }
+    }
+
+    pub fn with_custom_ai(api_url: String) -> Self {
+        Self {
+            coordinator: AuditCoordinator::with_custom_ai(api_url),
         }
     }
 

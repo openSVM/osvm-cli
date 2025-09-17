@@ -216,6 +216,9 @@ impl TemplateReportGenerator {
         context.insert("recommendations", &report.recommendations);
         context.insert("compliance_notes", &report.compliance_notes);
 
+        // DeepLogic findings
+        context.insert("deeplogic_findings", &report.deeplogic_findings);
+
         // Helper data
         context.insert("has_critical", &(report.summary.critical_findings > 0));
         context.insert("has_high", &(report.summary.high_findings > 0));
@@ -482,6 +485,7 @@ mod tests {
             version: "1.0.0".to_string(),
             summary,
             findings,
+            deeplogic_findings: Vec::new(), // No DeepLogic findings in this test
             system_info,
             recommendations: vec!["Test recommendation".to_string()],
             compliance_notes: vec!["Test compliance note".to_string()],
