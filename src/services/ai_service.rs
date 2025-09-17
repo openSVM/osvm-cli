@@ -1,6 +1,13 @@
+use crate::utils::circuit_breaker::{
+    AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
+};
+use crate::utils::prompt_templates::{
+    AnalysisVector as TemplateAnalysisVector, PromptTemplateManager, TemplateCategory,
+};
 use anyhow::{Context, Result};
 use reqwest;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 
 #[derive(Serialize)]
@@ -45,28 +52,80 @@ pub struct AiService {
     api_url: String,
     api_key: Option<String>,
     use_openai: bool,
+    circuit_breaker: GranularCircuitBreaker,
+    template_manager: PromptTemplateManager,
 }
 
 impl AiService {
     pub fn new() -> Self {
-        let openai_url = env::var("OPENAI_URL").ok();
-        let openai_key = env::var("OPENAI_KEY").ok();
-        
-        let (api_url, use_openai) = if let (Some(url), Some(_)) = (&openai_url, &openai_key) {
-            (url.clone(), true)
-        } else {
-            ("https://osvm.ai/api/getAnswer".to_string(), false)
+        Self::with_api_url(None)
+    }
+
+    pub fn with_api_url(custom_api_url: Option<String>) -> Self {
+        let (api_url, use_openai) = match custom_api_url {
+            Some(url) => {
+                // Check if it's an OpenAI URL and we have an API key
+                if url.contains("openai.com") || url.contains("api.openai.com") {
+                    if let Some(key) = env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty())
+                    {
+                        (url, true)
+                    } else {
+                        eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
+                        ("https://osvm.ai/api/getAnswer".to_string(), false)
+                    }
+                } else {
+                    // Custom URL, treat as external API
+                    (url, false)
+                }
+            }
+            None => {
+                // Default behavior: use osvm.ai unless explicitly configured for OpenAI
+                if let (Some(url), Some(_)) =
+                    (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok())
+                {
+                    (url, true)
+                } else {
+                    ("https://osvm.ai/api/getAnswer".to_string(), false)
+                }
+            }
         };
+
+        let api_key = if use_openai {
+            env::var("OPENAI_KEY").ok()
+        } else {
+            None
+        };
+
+        let mut circuit_breaker = GranularCircuitBreaker::new();
+        let mut template_manager = PromptTemplateManager::new();
+
+        // Initialize template manager
+        if let Err(e) = template_manager.load_from_directory("./templates/ai_prompts") {
+            println!("⚠️  Failed to load AI prompt templates: {}", e);
+        }
 
         Self {
             client: reqwest::Client::new(),
             api_url,
-            api_key: openai_key,
+            api_key,
             use_openai,
+            circuit_breaker,
+            template_manager,
         }
     }
 
     pub async fn query(&self, question: &str) -> Result<String> {
+        let endpoint = if self.use_openai {
+            EndpointId::openai()
+        } else {
+            EndpointId::osvm_ai()
+        };
+
+        // Check circuit breaker
+        if !self.circuit_breaker.can_execute_endpoint(&endpoint) {
+            anyhow::bail!("Circuit breaker is open for endpoint: {:?}", endpoint);
+        }
+
         if self.use_openai {
             println!("🤖 Asking OpenAI ({}): {}", self.api_url, question);
         } else {
@@ -79,18 +138,83 @@ impl AiService {
             self.query_osvm_ai(question).await
         };
 
+        // Record success/failure with circuit breaker
         match &result {
-            Ok(response) => {
-                println!("🔍 AI Response received ({} chars): {}", response.len(), 
-                    if response.len() > 200 { 
-                        format!("{}...", &response[..200])
-                    } else { 
-                        response.clone() 
-                    });
+            Ok(_) => {
+                self.circuit_breaker.on_success_endpoint(&endpoint);
+                println!(
+                    "🔍 AI Response received ({} chars)",
+                    result.as_ref().unwrap().len()
+                );
             }
             Err(e) => {
+                self.circuit_breaker.on_failure_endpoint(&endpoint);
                 println!("❌ AI Response error: {}", e);
             }
+        }
+
+        result
+    }
+
+    /// Enhanced DeepLogic analysis with configurable templates
+    pub async fn analyze_deeplogic(
+        &self,
+        code: &str,
+        filename: &str,
+        vulnerability_description: &str,
+        analysis_vector: TemplateAnalysisVector,
+    ) -> Result<String> {
+        let circuit_vector = match analysis_vector {
+            TemplateAnalysisVector::StateTransition => CircuitAnalysisVector::StateTransition,
+            TemplateAnalysisVector::EconomicExploit => CircuitAnalysisVector::EconomicExploit,
+            TemplateAnalysisVector::AccessControl => CircuitAnalysisVector::AccessControl,
+            TemplateAnalysisVector::MathematicalIntegrity => {
+                CircuitAnalysisVector::MathematicalIntegrity
+            }
+            TemplateAnalysisVector::General => CircuitAnalysisVector::General,
+        };
+
+        // Check circuit breaker for this analysis vector
+        if !self.circuit_breaker.can_execute_vector(&circuit_vector) {
+            anyhow::bail!(
+                "Circuit breaker is open for analysis vector: {:?}",
+                circuit_vector
+            );
+        }
+
+        // Get appropriate template
+        let template = self
+            .template_manager
+            .get_best_template(&TemplateCategory::DeepLogic, Some(&analysis_vector))
+            .ok_or_else(|| anyhow::anyhow!("No suitable DeepLogic template found"))?;
+
+        // Prepare template variables
+        let mut variables = HashMap::new();
+        variables.insert("code".to_string(), code.to_string());
+        variables.insert("filename".to_string(), filename.to_string());
+        variables.insert(
+            "vulnerability_description".to_string(),
+            vulnerability_description.to_string(),
+        );
+
+        // Render the prompt
+        let prompt = self
+            .template_manager
+            .render_template(&template.id, &variables)
+            .with_context(|| "Failed to render DeepLogic template")?;
+
+        println!(
+            "🧠 Performing DeepLogic analysis using template: {}",
+            template.name
+        );
+
+        // Execute the query
+        let result = self.query(&prompt).await;
+
+        // Record success/failure for the analysis vector
+        match &result {
+            Ok(_) => self.circuit_breaker.on_success_vector(&circuit_vector),
+            Err(_) => self.circuit_breaker.on_failure_vector(&circuit_vector),
         }
 
         result
@@ -109,7 +233,10 @@ impl AiService {
             question: question.to_string(),
         };
 
-        println!("📤 OSVM AI Request: {}", serde_json::to_string_pretty(&request_body)?);
+        println!(
+            "📤 OSVM AI Request: {}",
+            serde_json::to_string_pretty(&request_body)?
+        );
 
         let response = self
             .client
@@ -161,7 +288,7 @@ impl AiService {
 
     async fn query_openai(&self, question: &str) -> Result<String> {
         let api_key = self.api_key.as_ref().unwrap();
-        
+
         let request_body = OpenAiRequest {
             model: "gpt-3.5-turbo".to_string(),
             messages: vec![OpenAiMessage {
@@ -172,7 +299,10 @@ impl AiService {
             temperature: 0.7,
         };
 
-        println!("📤 OpenAI Request: {}", serde_json::to_string_pretty(&request_body)?);
+        println!(
+            "📤 OpenAI Request: {}",
+            serde_json::to_string_pretty(&request_body)?
+        );
 
         let response = self
             .client
@@ -196,8 +326,8 @@ impl AiService {
             );
         }
 
-        let openai_response: OpenAiResponse = serde_json::from_str(&response_text)
-            .context("Failed to parse OpenAI response")?;
+        let openai_response: OpenAiResponse =
+            serde_json::from_str(&response_text).context("Failed to parse OpenAI response")?;
 
         if let Some(choice) = openai_response.choices.first() {
             Ok(choice.message.content.clone())
@@ -462,16 +592,19 @@ mod tests {
         // Test environment variable detection
         std::env::set_var("OPENAI_URL", "https://api.openai.com/v1/chat/completions");
         std::env::set_var("OPENAI_KEY", "test_key");
-        
+
         let ai_service = AiService::new();
         assert!(ai_service.use_openai);
-        assert_eq!(ai_service.api_url, "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            ai_service.api_url,
+            "https://api.openai.com/v1/chat/completions"
+        );
         assert_eq!(ai_service.api_key, Some("test_key".to_string()));
-        
+
         // Clean up
         std::env::remove_var("OPENAI_URL");
         std::env::remove_var("OPENAI_KEY");
-        
+
         // Test fallback to osvm.ai
         let ai_service_fallback = AiService::new();
         assert!(!ai_service_fallback.use_openai);

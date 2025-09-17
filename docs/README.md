@@ -12,6 +12,7 @@ Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Mac
 
 ### Advanced Features
 - [Security Audit](security-audit.md) - Comprehensive security analysis and reporting
+- [DeepLogic AI Analysis](deeplogic-ai-analysis.md) - AI-powered logical vulnerability detection with code remediation
 - [Self-Repair System](self-repair-system.md) - Automatic error detection and repair
 - [Log Monitoring](log-monitoring.md) - Real-time log analysis and auto-repair
 - [Validator Enhancements](validator-enhancements.md) - Hardware optimization and configuration

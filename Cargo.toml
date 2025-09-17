@@ -1,6 +1,6 @@
 [package]
 name = "osvm"
-version = "0.6.1"
+version = "0.6.4"
 edition = "2021"
 license = "MIT"
 description = "OpenSVM CLI tool for managing SVM nodes and deployments"
@@ -80,7 +80,7 @@ remote-wallet = ["solana-remote-wallet"]
 
 [[bench]]
 name = "deployment_benchmarks"
-harness = false
+path = "benches/deployment_benchmarks.rs"
 
 [patch.crates-io]
 curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }

@@ -2,41 +2,42 @@
 //!
 //! This module provides a very simple local proxy to Solana devnet RPC
 
-use anyhow::{Result, Context};
-use std::process::{Command, Stdio};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use tokio::process::Command as TokioCommand;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use std::net::TcpListener;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
+use tokio::process::Command as TokioCommand;
 
 /// Start a simple HTTP proxy server for devnet RPC
 pub async fn start_simple_devnet_proxy(port: u16) -> Result<()> {
     println!("🚀 Starting simple devnet RPC proxy on port {}", port);
     println!("🔗 Proxying to: https://api.devnet.solana.com");
     println!("📡 Local RPC URL: http://localhost:{}", port);
-    
+
     // Bind to the local port
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
+        .await
         .context("Failed to bind to port")?;
-    
+
     println!("✅ Proxy server listening on port {}", port);
     println!("🛑 Press Ctrl+C to stop");
-    
+
     // Accept connections in a loop
-    for stream in listener.incoming() {
-        if let Ok(mut stream) = stream {
+    loop {
+        if let Ok((mut stream, _)) = listener.accept().await {
             tokio::spawn(async move {
                 let mut buffer = [0; 4096];
-                
+
                 // Read the request
-                if let Ok(n) = tokio::io::AsyncReadExt::read(&mut stream, &mut buffer).await {
+                if let Ok(n) = stream.read(&mut buffer).await {
                     let request = String::from_utf8_lossy(&buffer[..n]);
-                    
+
                     // Extract the body (simple parsing for JSON-RPC)
                     if let Some(body_start) = request.find("\r\n\r\n") {
                         let body = &request[body_start + 4..];
-                        
+
                         // Forward to devnet using curl
                         let output = TokioCommand::new("curl")
                             .arg("-s")
@@ -49,7 +50,7 @@ pub async fn start_simple_devnet_proxy(port: u16) -> Result<()> {
                             .arg("https://api.devnet.solana.com")
                             .output()
                             .await;
-                        
+
                         if let Ok(output) = output {
                             if output.status.success() {
                                 let response_body = String::from_utf8_lossy(&output.stdout);
@@ -58,8 +59,8 @@ pub async fn start_simple_devnet_proxy(port: u16) -> Result<()> {
                                     response_body.len(),
                                     response_body
                                 );
-                                
-                                let _ = tokio::io::AsyncWriteExt::write_all(&mut stream, response.as_bytes()).await;
+
+                                let _ = stream.write_all(response.as_bytes()).await;
                             }
                         }
                     }
@@ -67,14 +68,14 @@ pub async fn start_simple_devnet_proxy(port: u16) -> Result<()> {
             });
         }
     }
-    
+
     Ok(())
 }
 
 /// Test if devnet RPC is accessible
 pub async fn test_devnet_connection() -> Result<bool> {
     println!("🔍 Testing connection to Solana devnet...");
-    
+
     let output = Command::new("curl")
         .arg("-s")
         .arg("-X")
@@ -86,7 +87,7 @@ pub async fn test_devnet_connection() -> Result<bool> {
         .arg("https://api.devnet.solana.com")
         .output()
         .context("Failed to execute curl")?;
-    
+
     if output.status.success() {
         let response = String::from_utf8_lossy(&output.stdout);
         if response.contains("\"result\":\"ok\"") {
@@ -94,7 +95,7 @@ pub async fn test_devnet_connection() -> Result<bool> {
             return Ok(true);
         }
     }
-    
+
     println!("❌ Failed to connect to Solana devnet");
     Ok(false)
 }
