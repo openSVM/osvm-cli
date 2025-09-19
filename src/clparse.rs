@@ -81,6 +81,13 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .help("Disable colorized output (also respects NO_COLOR environment variable)"),
         )
         .arg(
+            Arg::new("debug")
+                .long("debug")
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Show debug information"),
+        )
+        .arg(
             Arg::new("json_rpc_url")
                 .short('u')
                 .long("url")

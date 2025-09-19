@@ -58,10 +58,18 @@ pub struct AiService {
 
 impl AiService {
     pub fn new() -> Self {
-        Self::with_api_url(None)
+        Self::new_with_debug(true)
+    }
+
+    pub fn new_with_debug(debug_mode: bool) -> Self {
+        Self::with_api_url_and_debug(None, debug_mode)
     }
 
     pub fn with_api_url(custom_api_url: Option<String>) -> Self {
+        Self::with_api_url_and_debug(custom_api_url, true)
+    }
+
+    pub fn with_api_url_and_debug(custom_api_url: Option<String>, debug_mode: bool) -> Self {
         let (api_url, use_openai) = match custom_api_url {
             Some(url) => {
                 // Check if it's an OpenAI URL and we have an API key
@@ -100,8 +108,10 @@ impl AiService {
         let mut template_manager = PromptTemplateManager::new();
 
         // Initialize template manager
-        if let Err(e) = template_manager.load_from_directory("./templates/ai_prompts") {
-            println!("⚠️  Failed to load AI prompt templates: {}", e);
+        if let Err(e) = template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode) {
+            if debug_mode {
+                println!("⚠️  Failed to load AI prompt templates: {}", e);
+            }
         }
 
         Self {
@@ -115,6 +125,10 @@ impl AiService {
     }
 
     pub async fn query(&self, question: &str) -> Result<String> {
+        self.query_with_debug(question, true).await
+    }
+
+    pub async fn query_with_debug(&self, question: &str, debug_mode: bool) -> Result<String> {
         let endpoint = if self.use_openai {
             EndpointId::openai()
         } else {
@@ -127,29 +141,37 @@ impl AiService {
         }
 
         if self.use_openai {
-            println!("🤖 Asking OpenAI ({}): {}", self.api_url, question);
+            if debug_mode {
+                println!("🤖 Asking OpenAI ({}): {}", self.api_url, question);
+            }
         } else {
-            println!("🤖 Asking OSVM AI ({}): {}", self.api_url, question);
+            if debug_mode {
+                println!("🤖 Asking OSVM AI ({}): {}", self.api_url, question);
+            }
         }
 
         let result = if self.use_openai {
-            self.query_openai(question).await
+            self.query_openai(question, debug_mode).await
         } else {
-            self.query_osvm_ai(question).await
+            self.query_osvm_ai(question, debug_mode).await
         };
 
         // Record success/failure with circuit breaker
         match &result {
             Ok(_) => {
                 self.circuit_breaker.on_success_endpoint(&endpoint);
-                println!(
-                    "🔍 AI Response received ({} chars)",
-                    result.as_ref().unwrap().len()
-                );
+                if debug_mode {
+                    println!(
+                        "🔍 AI Response received ({} chars)",
+                        result.as_ref().unwrap().len()
+                    );
+                }
             }
             Err(e) => {
                 self.circuit_breaker.on_failure_endpoint(&endpoint);
-                println!("❌ AI Response error: {}", e);
+                if debug_mode {
+                    println!("❌ AI Response error: {}", e);
+                }
             }
         }
 
@@ -228,15 +250,17 @@ impl AiService {
         }
     }
 
-    async fn query_osvm_ai(&self, question: &str) -> Result<String> {
+    async fn query_osvm_ai(&self, question: &str, debug_mode: bool) -> Result<String> {
         let request_body = AiRequest {
             question: question.to_string(),
         };
 
-        println!(
-            "📤 OSVM AI Request: {}",
-            serde_json::to_string_pretty(&request_body)?
-        );
+        if debug_mode {
+            println!(
+                "📤 OSVM AI Request: {}",
+                serde_json::to_string_pretty(&request_body)?
+            );
+        }
 
         let response = self
             .client
@@ -249,7 +273,9 @@ impl AiService {
         let status = response.status();
         let response_text = response.text().await?;
 
-        println!("📥 OSVM AI Response ({}): {}", status, response_text);
+        if debug_mode {
+            println!("📥 OSVM AI Response ({}): {}", status, response_text);
+        }
 
         if !status.is_success() {
             // Try to parse error response as JSON first
@@ -286,7 +312,7 @@ impl AiService {
         }
     }
 
-    async fn query_openai(&self, question: &str) -> Result<String> {
+    async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
         let api_key = self.api_key.as_ref().unwrap();
 
         let request_body = OpenAiRequest {
@@ -299,10 +325,12 @@ impl AiService {
             temperature: 0.7,
         };
 
-        println!(
-            "📤 OpenAI Request: {}",
-            serde_json::to_string_pretty(&request_body)?
-        );
+        if debug_mode {
+            println!(
+                "📤 OpenAI Request: {}",
+                serde_json::to_string_pretty(&request_body)?
+            );
+        }
 
         let response = self
             .client
@@ -316,7 +344,9 @@ impl AiService {
         let status = response.status();
         let response_text = response.text().await?;
 
-        println!("📥 OpenAI Response ({}): {}", status, response_text);
+        if debug_mode {
+            println!("📥 OpenAI Response ({}): {}", status, response_text);
+        }
 
         if !status.is_success() {
             anyhow::bail!(
