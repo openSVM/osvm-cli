@@ -135,11 +135,17 @@ impl PromptTemplateManager {
 
     /// Load templates from a directory
     pub fn load_from_directory(&mut self, dir_path: &str) -> Result<usize> {
+        self.load_from_directory_with_debug(dir_path, true)
+    }
+
+    pub fn load_from_directory_with_debug(&mut self, dir_path: &str, debug_mode: bool) -> Result<usize> {
         self.template_dirs.push(dir_path.to_string());
 
         let dir = Path::new(dir_path);
         if !dir.exists() {
-            println!("📁 Creating template directory: {}", dir_path);
+            if debug_mode {
+                println!("📁 Creating template directory: {}", dir_path);
+            }
             fs::create_dir_all(dir)?;
             self.create_default_templates(dir)?;
         }
@@ -157,10 +163,14 @@ impl PromptTemplateManager {
                 match self.load_template_file(&path) {
                     Ok(count) => {
                         loaded_count += count;
-                        println!("✅ Loaded {} templates from {}", count, path.display());
+                        if debug_mode {
+                            println!("✅ Loaded {} templates from {}", count, path.display());
+                        }
                     }
                     Err(e) => {
-                        println!("⚠️  Failed to load template file {}: {}", path.display(), e);
+                        if debug_mode {
+                            println!("⚠️  Failed to load template file {}: {}", path.display(), e);
+                        }
                     }
                 }
             }
