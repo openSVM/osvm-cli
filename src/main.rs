@@ -54,6 +54,7 @@ fn is_known_command(sub_command: &str) -> bool {
 async fn handle_ai_query(
     sub_command: &str,
     sub_matches: &clap::ArgMatches,
+    app_matches: &clap::ArgMatches,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // For external subcommands, clap provides the additional arguments differently
     // We need to collect them from the raw args since clap doesn't know about them
@@ -76,13 +77,20 @@ async fn handle_ai_query(
 
     let query = query_parts.join(" ");
 
-    // Make AI request
-    println!("🔍 Interpreting as AI query: \"{}\"", query);
+    // Get debug flag from global args
+    let debug_mode = app_matches.get_flag("debug");
 
-    let ai_service = crate::services::ai_service::AiService::new();
-    match ai_service.query(&query).await {
+    // Make AI request
+    if debug_mode {
+        println!("🔍 Interpreting as AI query: \"{}\"", query);
+    }
+
+    let ai_service = crate::services::ai_service::AiService::new_with_debug(debug_mode);
+    match ai_service.query_with_debug(&query, debug_mode).await {
         Ok(response) => {
-            println!("🤖 AI Response:");
+            if debug_mode {
+                println!("🤖 AI Response:");
+            }
             println!("{}", response);
         }
         Err(e) => {
@@ -316,7 +324,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle AI queries early to avoid config loading
     if !is_known_command(sub_command) {
-        return handle_ai_query(sub_command, sub_matches).await;
+        return handle_ai_query(sub_command, sub_matches, &app_matches).await;
     }
 
     // Load configuration using the new Config module
