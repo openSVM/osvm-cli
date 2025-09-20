@@ -61,6 +61,8 @@ solana-sdk-ids = "3.0.0"
 solana-program = "3.0.0"
 solana-system-interface = "2.0.0"
 solana-loader-v3-interface = { version = "6.1.0", features = ["bincode"] }
+# Terminal markdown rendering
+termimad = "0.30"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

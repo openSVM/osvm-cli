@@ -5,6 +5,7 @@ use {
     crate::config::Config, // Added
     crate::utils::diagnostics::DiagnosticCoordinator,
     crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::markdown_renderer::MarkdownRenderer,
     clparse::parse_command_line,
     solana_client::rpc_client::RpcClient,
     solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer}, // Modified (removed CommitmentConfig) - bad formatting
@@ -91,7 +92,13 @@ async fn handle_ai_query(
             if debug_mode {
                 println!("🤖 AI Response:");
             }
-            println!("{}", response);
+            // Render the response as markdown for better formatting
+            let renderer = MarkdownRenderer::new();
+            if let Err(e) = renderer.render(&response) {
+                // Fallback to plain text if markdown rendering fails
+                eprintln!("⚠️  Markdown rendering failed: {}", e);
+                println!("{}", response);
+            }
         }
         Err(e) => {
             eprintln!("❌ AI query failed: {}", e);
