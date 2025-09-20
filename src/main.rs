@@ -2,13 +2,18 @@
 #![allow(unused)]
 
 use {
-    crate::config::Config, // Added
+    crate::config::Config,
     crate::utils::diagnostics::DiagnosticCoordinator,
     crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
+    crate::utils::markdown_renderer::MarkdownRenderer,
     clparse::parse_command_line,
     solana_client::rpc_client::RpcClient,
-    solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer}, // Modified (removed CommitmentConfig) - bad formatting
-    std::{process::exit, str::FromStr},                                 // Modified
+    solana_sdk::{
+        native_token::Sol, 
+        pubkey::Pubkey, 
+        signature::Signer
+    },
+    std::{process::exit, str::FromStr},
 };
 
 // Helper function to handle the type mismatch between clap v2 and v4
@@ -56,22 +61,30 @@ async fn handle_ai_query(
     sub_matches: &clap::ArgMatches,
     app_matches: &clap::ArgMatches,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // For external subcommands, clap provides the additional arguments differently
-    // We need to collect them from the raw args since clap doesn't know about them
-    let args: Vec<String> = std::env::args().collect();
-
-    // Find where our subcommand starts and collect everything after osvm
-    let mut query_parts = Vec::new();
-    let mut found_osvm = false;
-
-    for arg in args.iter().skip(1) {
-        // Skip the binary name
-        if !found_osvm {
-            found_osvm = true;
-        }
-        // Skip global flags like --help, --version, etc.
-        if !arg.starts_with('-') {
-            query_parts.push(arg.clone());
+    // For external subcommands, clap collects additional arguments in subcommand_value
+    // This is the proper way to handle external subcommands with clap
+    let mut query_parts = vec![sub_command.to_string()];
+    
+    // Get additional arguments from clap's external subcommand handling
+    if let Some(external_args) = sub_matches.get_many::<String>("") {
+        query_parts.extend(external_args.cloned());
+    }
+    
+    // If clap doesn't provide args (fallback), parse from environment
+    // This maintains compatibility while documenting the limitation
+    if query_parts.len() == 1 {
+        let args: Vec<String> = std::env::args().collect();
+        
+        // Collect non-flag arguments starting from the subcommand
+        let mut found_subcommand = false;
+        for arg in args.iter().skip(1) {
+            if found_subcommand {
+                if !arg.starts_with('-') {
+                    query_parts.push(arg.clone());
+                }
+            } else if arg == sub_command {
+                found_subcommand = true;
+            }
         }
     }
 
@@ -91,7 +104,9 @@ async fn handle_ai_query(
             if debug_mode {
                 println!("🤖 AI Response:");
             }
-            println!("{}", response);
+            // Render the response as markdown for better formatting
+            let renderer = MarkdownRenderer::new();
+            renderer.render(&response);
         }
         Err(e) => {
             eprintln!("❌ AI query failed: {}", e);
