@@ -52,6 +52,8 @@ pub mod git_manager;
 pub mod local_rpc;
 /// Mainnet RPC connectivity
 pub mod mainnet_rpc;
+/// Markdown rendering for terminal output
+pub mod markdown_renderer;
 /// Node management utilities for monitoring and controlling nodes
 pub mod nodes;
 /// Configurable AI prompt templates system
