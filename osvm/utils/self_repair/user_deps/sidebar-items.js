@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["UserDepsError"],"fn":["check_config_directory","get_default_keypair_path"],"struct":["SolanaConfigInfo","UserDependencyManager"]};

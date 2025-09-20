@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AiRequest","AiResponse","AiService","OpenAiChoice","OpenAiMessage","OpenAiRequest","OpenAiResponse"]};
