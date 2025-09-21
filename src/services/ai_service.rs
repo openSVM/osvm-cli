@@ -1,9 +1,11 @@
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
+use crate::utils::debug_logger::VerbosityLevel;
 use crate::utils::prompt_templates::{
     AnalysisVector as TemplateAnalysisVector, PromptTemplateManager, TemplateCategory,
 };
+use crate::{debug_error, debug_print, debug_success, debug_warn};
 use anyhow::{Context, Result};
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -70,6 +72,19 @@ impl AiService {
     }
 
     pub fn with_api_url_and_debug(custom_api_url: Option<String>, debug_mode: bool) -> Self {
+        // Set debug verbosity based on debug mode
+        if debug_mode {
+            crate::utils::debug_logger::set_verbosity(VerbosityLevel::Detailed);
+        } else {
+            crate::utils::debug_logger::set_verbosity(VerbosityLevel::Silent);
+        }
+
+        debug_print!(
+            VerbosityLevel::Basic,
+            "Initializing AI service with debug mode: {}",
+            debug_mode
+        );
+
         let (api_url, use_openai) = match custom_api_url {
             Some(url) => {
                 // Check if it's an OpenAI URL and we have an API key
@@ -112,7 +127,7 @@ impl AiService {
             template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode)
         {
             if debug_mode {
-                println!("⚠️  Failed to load AI prompt templates: {}", e);
+                debug_warn!("Failed to load AI prompt templates: {}", e);
             }
         }
 

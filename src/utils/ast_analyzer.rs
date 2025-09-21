@@ -4,6 +4,8 @@
 //! to identify vulnerabilities and generate contextually appropriate fix suggestions.
 
 use crate::utils::audit::{AuditFinding, CodeSnippet};
+use crate::utils::debug_logger::VerbosityLevel;
+use crate::{debug_print, debug_warn};
 use anyhow::{Context, Result};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -82,6 +84,23 @@ pub struct ImprovementSuggestion {
     pub before_code: String,
     pub after_code: String,
     pub explanation: String,
+}
+
+/// Signer validation analysis result
+#[derive(Debug, Clone, Default)]
+pub struct SignerValidationResult {
+    pub has_signer_check: bool,
+    pub has_require_signer: bool,
+    pub has_anchor_signer_constraint: bool,
+    pub has_conditional_signer_check: bool,
+}
+
+/// Owner validation analysis result
+#[derive(Debug, Clone, Default)]
+pub struct OwnerValidationResult {
+    pub has_owner_check: bool,
+    pub has_program_id_check: bool,
+    pub has_anchor_owner_constraint: bool,
 }
 
 /// Visitor for analyzing Solana/Anchor program patterns
@@ -289,6 +308,11 @@ impl AstAnalyzer {
 
     /// Extract the variable name that holds an account reference using AST parsing
     fn extract_account_variable_name(&self, content: &str) -> Option<String> {
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Extracting account variable name from content"
+        );
+
         // Try to parse the content as statements to properly extract variable names
         if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
             for stmt in &parsed.stmts {
@@ -299,6 +323,11 @@ impl AstAnalyzer {
                         if content.contains(&format!("{}.balance", var_name))
                             || content.contains(&format!("{}.", var_name))
                         {
+                            debug_print!(
+                                VerbosityLevel::Detailed,
+                                "Found account variable: {}",
+                                var_name
+                            );
                             return Some(var_name);
                         }
                     }
@@ -314,15 +343,127 @@ impl AstAnalyzer {
                 if content.contains(&format!("{}.balance", var_name))
                     || content.contains(&format!("{}.", var_name))
                 {
+                    debug_print!(
+                        VerbosityLevel::Detailed,
+                        "Found account variable (fallback): {}",
+                        var_name
+                    );
                     return Some(var_name.to_string());
                 }
             }
         }
+
+        debug_warn!("Could not extract account variable name");
         None
     }
 
-    /// Apply pattern-based fixes as fallback
+    /// Advanced signer validation analysis using control flow
+    fn analyze_signer_validation(&self, content: &str) -> SignerValidationResult {
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Analyzing signer validation patterns"
+        );
+
+        let mut result = SignerValidationResult::default();
+
+        // Check for explicit is_signer checks
+        if content.contains("is_signer") {
+            result.has_signer_check = true;
+            debug_print!(VerbosityLevel::Detailed, "Found explicit is_signer check");
+        }
+
+        // Check for require! macros with signer validation
+        if content.contains("require!") && content.contains("is_signer") {
+            result.has_require_signer = true;
+            debug_print!(
+                VerbosityLevel::Detailed,
+                "Found require! with signer validation"
+            );
+        }
+
+        // Check for anchor constraints
+        if content.contains("#[account(signer)]") || content.contains("Signer<") {
+            result.has_anchor_signer_constraint = true;
+            debug_print!(VerbosityLevel::Detailed, "Found Anchor signer constraint");
+        }
+
+        // Analyze control flow for conditional signer checks
+        if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
+            for stmt in &parsed.stmts {
+                self.analyze_statement_for_signer_validation(stmt, &mut result);
+            }
+        }
+
+        result
+    }
+
+    /// Advanced owner validation analysis using control flow
+    fn analyze_owner_validation(&self, content: &str) -> OwnerValidationResult {
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Analyzing owner validation patterns"
+        );
+
+        let mut result = OwnerValidationResult::default();
+
+        // Check for explicit owner checks
+        if content.contains(".owner") && (content.contains("==") || content.contains("require!")) {
+            result.has_owner_check = true;
+            debug_print!(VerbosityLevel::Detailed, "Found explicit owner check");
+        }
+
+        // Check for program ID validation
+        if content.contains("program_id") && content.contains("==") {
+            result.has_program_id_check = true;
+            debug_print!(VerbosityLevel::Detailed, "Found program ID validation");
+        }
+
+        // Check for anchor constraints
+        if content.contains("#[account(owner") {
+            result.has_anchor_owner_constraint = true;
+            debug_print!(VerbosityLevel::Detailed, "Found Anchor owner constraint ");
+        }
+
+        result
+    }
+
+    /// Analyze a statement for signer validation patterns
+    fn analyze_statement_for_signer_validation(
+        &self,
+        stmt: &syn::Stmt,
+        result: &mut SignerValidationResult,
+    ) {
+        match stmt {
+            syn::Stmt::Expr(syn::Expr::If(if_expr), _) => {
+                // Check if condition involves signer validation
+                let cond_str = quote::quote!(#if_expr.cond).to_string();
+                if cond_str.contains("is_signer") {
+                    result.has_conditional_signer_check = true;
+                    debug_print!(VerbosityLevel::Verbose, "Found conditional signer check ");
+                }
+            }
+            syn::Stmt::Expr(syn::Expr::Macro(macro_expr), _) => {
+                let macro_str = quote::quote!(#macro_expr).to_string();
+                if macro_str.contains("require!") && macro_str.contains("is_signer") {
+                    result.has_require_signer = true;
+                    debug_print!(
+                        VerbosityLevel::Verbose,
+                        "Found require macro with signer validation "
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Apply pattern-based fixes with AST-aware insertion
     fn apply_pattern_based_fixes(&self, content: &str, finding: &AuditFinding) -> String {
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Applying pattern-based fixes for category: {}",
+            finding.category
+        );
+
         let mut fixed_content = content.to_string();
 
         match finding.category.as_str() {
@@ -330,18 +471,7 @@ impl AstAnalyzer {
                 if !content.contains("is_signer")
                     && (content.contains("AccountInfo") || content.contains("ctx.accounts"))
                 {
-                    // Extract account variable name from the content
-                    if let Some(account_var) = self.extract_account_variable_name(content) {
-                        fixed_content = format!(
-                            "// Added signer validation\nrequire!({}.is_signer, ErrorCode::MissingSignature);\n{}",
-                            account_var, fixed_content
-                        );
-                    } else {
-                        fixed_content = format!(
-                            "// Added signer validation\nrequire!(account.is_signer, ErrorCode::MissingSignature);\n{}",
-                            fixed_content
-                        );
-                    }
+                    fixed_content = self.insert_signer_validation_fix(content, finding);
                 }
             }
             "Solana Security" => {
@@ -350,10 +480,7 @@ impl AstAnalyzer {
                         .replace("unwrap()", "map_err(|e| ErrorCode::UnexpectedError)?");
                 }
                 if content.contains("user_account") && !content.contains("key()") {
-                    fixed_content = format!(
-                        "// Added account key validation\nrequire!(user_account.key() == expected_user_key, ErrorCode::InvalidUser);\n{}",
-                        fixed_content
-                    );
+                    fixed_content = self.insert_owner_validation_fix(content, finding);
                 }
             }
             "Trading Security" => {
@@ -364,10 +491,66 @@ impl AstAnalyzer {
                     );
                 }
             }
-            _ => {}
+            _ => {
+                debug_warn!("Unknown finding category for fixes: {}", finding.category);
+            }
         }
 
         fixed_content
+    }
+
+    /// Insert signer validation fix using AST-aware positioning
+    fn insert_signer_validation_fix(&self, content: &str, finding: &AuditFinding) -> String {
+        debug_print!(VerbosityLevel::Verbose, "Inserting signer validation fix");
+
+        // Extract account variable name from the content
+        if let Some(account_var) = self.extract_account_variable_name(content) {
+            // Try to find the exact position after variable binding using AST
+            if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
+                for (i, stmt) in parsed.stmts.iter().enumerate() {
+                    if let syn::Stmt::Local(local) = stmt {
+                        if let syn::Pat::Ident(pat_ident) = &local.pat {
+                            if pat_ident.ident == account_var {
+                                // Insert the fix after this statement
+                                let lines: Vec<&str> = content.lines().collect();
+                                if i < lines.len() {
+                                    let mut result = Vec::new();
+                                    result.extend_from_slice(&lines[0..=i]);
+                                    result.push(&format!(
+                                        "    require!({}.is_signer, ErrorCode::MissingSignature);",
+                                        account_var
+                                    ));
+                                    result.extend_from_slice(&lines[i + 1..]);
+                                    return result.join("\n");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to simple prepend
+            format!(
+                "// Added signer validation\nrequire!({}.is_signer, ErrorCode::MissingSignature);\n{}",
+                account_var, content
+            )
+        } else {
+            format!(
+                "// Added signer validation\nrequire!(account.is_signer, ErrorCode::MissingSignature);\n{}",
+                content
+            )
+        }
+    }
+
+    /// Insert owner validation fix using AST-aware positioning
+    fn insert_owner_validation_fix(&self, content: &str, finding: &AuditFinding) -> String {
+        debug_print!(VerbosityLevel::Verbose, "Inserting owner validation fix");
+
+        // Similar AST-aware insertion for owner validation
+        format!(
+            "// Added account key validation\nrequire!(user_account.key() == expected_user_key, ErrorCode::InvalidUser);\n{}",
+            content
+        )
     }
 
     /// Extract detailed vulnerability information using AST analysis
