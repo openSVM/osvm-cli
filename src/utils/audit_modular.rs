@@ -218,56 +218,23 @@ impl FindingIdAllocator {
 
     /// Generate a category-specific finding ID with UUID for maximum uniqueness
     pub fn next_category_id(category: &str) -> String {
-        // Use UUID-based approach for category IDs as well
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let mut hasher = DefaultHasher::new();
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_else(|_| {
-                // Fallback to a fixed duration if system time is before epoch
-                std::time::Duration::from_secs(0)
-            })
-            .as_nanos()
-            .hash(&mut hasher);
-        std::thread::current().id().hash(&mut hasher);
-        FINDING_ID_COUNTER
-            .fetch_add(1, Ordering::SeqCst)
-            .hash(&mut hasher);
-        category.hash(&mut hasher);
-
-        let hash = hasher.finish();
+        // Use UUID for guaranteed uniqueness instead of hash-based approach
+        let uuid = uuid::Uuid::new_v4();
         match category {
-            "solana" => format!("OSVM-SOL-{}-{:08x}", &*SESSION_ID, hash),
-            "crypto" => format!("OSVM-CRYPTO-{}-{:08x}", &*SESSION_ID, hash),
-            "network" => format!("OSVM-NET-{}-{:08x}", &*SESSION_ID, hash),
-            "auth" => format!("OSVM-AUTH-{}-{:08x}", &*SESSION_ID, hash),
-            _ => format!("OSVM-{}-{:08x}", &*SESSION_ID, hash),
+            "solana" => format!("OSVM-SOL-{}-{}", &*SESSION_ID, uuid.simple()),
+            "crypto" => format!("OSVM-CRYPTO-{}-{}", &*SESSION_ID, uuid.simple()),
+            "network" => format!("OSVM-NET-{}-{}", &*SESSION_ID, uuid.simple()),
+            "auth" => format!("OSVM-AUTH-{}-{}", &*SESSION_ID, uuid.simple()),
+            _ => format!("OSVM-{}-{}", &*SESSION_ID, uuid.simple()),
         }
     }
 
     /// Generate UUID-based finding ID for maximum uniqueness
     pub fn next_uuid_id() -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        use std::time::{SystemTime, UNIX_EPOCH};
-
-        let mut hasher = DefaultHasher::new();
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-            .hash(&mut hasher);
-        std::thread::current().id().hash(&mut hasher);
-        FINDING_ID_COUNTER
-            .fetch_add(1, Ordering::SeqCst)
-            .hash(&mut hasher);
-
-        let hash = hasher.finish();
+        // Use proper UUID instead of DefaultHasher for guaranteed uniqueness
+        let uuid = uuid::Uuid::new_v4();
         // Include session ID for session context while maintaining uniqueness
-        format!("OSVM-{}-{:08x}", &*SESSION_ID, hash)
+        format!("OSVM-{}-{}", &*SESSION_ID, uuid.simple())
     }
 
     /// Reset counter (for testing)

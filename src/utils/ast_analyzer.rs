@@ -287,9 +287,26 @@ impl AstAnalyzer {
         None
     }
 
-    /// Extract the variable name that holds an account reference
+    /// Extract the variable name that holds an account reference using AST parsing
     fn extract_account_variable_name(&self, content: &str) -> Option<String> {
-        // Look for patterns like "let var_name = &ctx.accounts.something"
+        // Try to parse the content as statements to properly extract variable names
+        if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
+            for stmt in &parsed.stmts {
+                if let syn::Stmt::Local(local) = stmt {
+                    if let syn::Pat::Ident(pat_ident) = &local.pat {
+                        let var_name = pat_ident.ident.to_string();
+                        // Check if this variable is used in the content for account operations
+                        if content.contains(&format!("{}.balance", var_name))
+                            || content.contains(&format!("{}.", var_name))
+                        {
+                            return Some(var_name);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback to the original string-based approach if AST parsing fails
         if let Some(start) = content.find("let ") {
             let after_let = &content[start + 4..];
             if let Some(equals_pos) = after_let.find(" = ") {
