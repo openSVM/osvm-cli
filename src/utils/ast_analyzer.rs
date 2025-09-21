@@ -294,8 +294,9 @@ impl AstAnalyzer {
             let after_let = &content[start + 4..];
             if let Some(equals_pos) = after_let.find(" = ") {
                 let var_name = after_let[..equals_pos].trim();
-                if content.contains(&format!("{}.balance", var_name)) || 
-                   content.contains(&format!("{}.", var_name)) {
+                if content.contains(&format!("{}.balance", var_name))
+                    || content.contains(&format!("{}.", var_name))
+                {
                     return Some(var_name.to_string());
                 }
             }
@@ -309,7 +310,9 @@ impl AstAnalyzer {
 
         match finding.category.as_str() {
             "Authentication & Authorization" => {
-                if !content.contains("is_signer") && (content.contains("AccountInfo") || content.contains("ctx.accounts")) {
+                if !content.contains("is_signer")
+                    && (content.contains("AccountInfo") || content.contains("ctx.accounts"))
+                {
                     // Extract account variable name from the content
                     if let Some(account_var) = self.extract_account_variable_name(content) {
                         fixed_content = format!(
@@ -419,8 +422,9 @@ impl SolanaSecurityVisitor {
 
         // Check for missing signer validation
         // Token stream format: "ctx . accounts" instead of "ctx.accounts"
-        if (func_str.contains("ctx . accounts") || func_str.contains("ctx.accounts")) && 
-           !func_str.contains("is_signer") {
+        if (func_str.contains("ctx . accounts") || func_str.contains("ctx.accounts"))
+            && !func_str.contains("is_signer")
+        {
             self.context.security_issues.push(SecurityIssue {
                 issue_type: SecurityIssueType::MissingSignerCheck,
                 location: CodeLocation {

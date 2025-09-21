@@ -108,7 +108,9 @@ impl AiService {
         let mut template_manager = PromptTemplateManager::new();
 
         // Initialize template manager
-        if let Err(e) = template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode) {
+        if let Err(e) =
+            template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode)
+        {
             if debug_mode {
                 println!("⚠️  Failed to load AI prompt templates: {}", e);
             }

@@ -75,7 +75,7 @@ mod tests {
 
             // With empty API key, this should succeed and use internal OSVM AI service
             match AuditService::validate_environment(&request) {
-                Ok(()) => true,  // Success expected when using internal service
+                Ok(()) => true, // Success expected when using internal service
                 Err(_) => false,
             }
         });
@@ -119,7 +119,7 @@ mod tests {
 
             // With whitespace API key, this should succeed and use internal OSVM AI service
             match AuditService::validate_environment(&request) {
-                Ok(()) => true,  // Success expected when using internal service
+                Ok(()) => true, // Success expected when using internal service
                 Err(_) => false,
             }
         });
