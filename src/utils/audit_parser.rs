@@ -319,9 +319,54 @@ impl SecurityVisitor {
         }
     }
 
+    fn analyze_field_access(&mut self, expr: &Expr, field_expr: &syn::ExprField) {
+        let field_name = field_expr.member.to_token_stream().to_string();
+        let receiver_str = quote::quote!(#expr).to_string();
+        
+        // Look for Solana account field access patterns
+        if receiver_str.contains("account") {
+            let line_num = self.get_line_number_for_pattern(&format!(".{}", field_name));
+            
+            match field_name.as_str() {
+                "owner" => {
+                    let mut solana_op = SolanaOperation {
+                        line: line_num,
+                        operation_type: "account_owner_access".to_string(),
+                        account_validation: false,
+                        signer_check: false,
+                        pda_seeds: Vec::new(),
+                        program_id_check: false,
+                        owner_check: false, // Will be set to true if there's validation
+                        account_data_validation: false,
+                    };
+
+                    // This is just accessing the owner, not validating it
+                    // The test expects detection of missing validation
+                    self.solana_operations.push(solana_op);
+                }
+                "data" | "lamports" | "key" => {
+                    let mut solana_op = SolanaOperation {
+                        line: line_num,
+                        operation_type: format!("account_{}_access", field_name),
+                        account_validation: false,
+                        signer_check: false,
+                        pda_seeds: Vec::new(),
+                        program_id_check: false,
+                        owner_check: false,
+                        account_data_validation: false,
+                    };
+
+                    self.solana_operations.push(solana_op);
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn analyze_method_call(&mut self, expr: &Expr) {
         if let Expr::MethodCall(method_call) = expr {
             let method_name = method_call.method.to_string();
+            let receiver_str = quote::quote!(#method_call).to_string();
             let line_num = self.get_line_number_for_pattern(&format!(".{}(", method_name));
 
             match method_name.as_str() {
@@ -338,6 +383,28 @@ impl SecurityVisitor {
                         method: "expect".to_string(),
                         context: "method_call".to_string(),
                     });
+                }
+                "borrow" | "borrow_mut" => {
+                    // Check if this is a Solana account data access
+                    if receiver_str.contains("account") && receiver_str.contains("data") {
+                        let mut solana_op = SolanaOperation {
+                            line: line_num,
+                            operation_type: "account_data_access".to_string(),
+                            account_validation: false,
+                            signer_check: false,
+                            pda_seeds: Vec::new(),
+                            program_id_check: false,
+                            owner_check: false,
+                            account_data_validation: false,
+                        };
+
+                        // Check if there's any signer validation in the context
+                        if receiver_str.contains("is_signer") {
+                            solana_op.signer_check = true;
+                        }
+
+                        self.solana_operations.push(solana_op);
+                    }
                 }
                 _ => {}
             }
@@ -492,6 +559,9 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
             }
             Expr::Call(_) => {
                 self.analyze_function_call(expr);
+            }
+            Expr::Field(field_expr) => {
+                self.analyze_field_access(expr, field_expr);
             }
             _ => {}
         }

@@ -649,10 +649,12 @@ impl SolanaSecurityCheck {
     ) -> (bool, f32, AuditSeverity) {
         let context_lower = context.to_lowercase();
 
-        // Skip common false positives
-        for &indicator in constants::FALSE_POSITIVE_INDICATORS {
-            if context_lower.contains(indicator) {
-                return (false, 0.0, AuditSeverity::Info);
+        // Skip common false positives (but exclude generic contexts)
+        if context_lower != "string_literal" {
+            for &indicator in constants::FALSE_POSITIVE_INDICATORS {
+                if context_lower.contains(indicator) {
+                    return (false, 0.0, AuditSeverity::Info);
+                }
             }
         }
 
@@ -1420,6 +1422,7 @@ mod tests {
         let findings_hardcoded = check
             .check_content(code_with_hardcoded_key, "test.rs")
             .unwrap();
+        
         let hardcoded_findings: Vec<_> = findings_hardcoded
             .iter()
             .filter(|f| f.title.contains("hardcoded Solana public key"))
