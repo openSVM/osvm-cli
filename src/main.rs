@@ -66,8 +66,9 @@ async fn handle_ai_query(
     let mut query_parts = vec![sub_command.to_string()];
     
     // Get additional arguments from clap's external subcommand handling
-    if let Some(external_args) = sub_matches.get_many::<String>("") {
-        query_parts.extend(external_args.cloned());
+    // External subcommands store arguments as OsString, not String
+    if let Some(external_args) = sub_matches.get_many::<std::ffi::OsString>("") {
+        query_parts.extend(external_args.map(|os_str| os_str.to_string_lossy().to_string()));
     }
     
     // If clap doesn't provide args (fallback), parse from environment
