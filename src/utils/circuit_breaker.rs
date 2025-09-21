@@ -9,15 +9,17 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-/// Circuit breaker states
+/// Circuit breaker states with enhanced granularity
 #[derive(Debug, Clone, PartialEq)]
 pub enum CircuitState {
-    Closed,   // Normal operation
-    Open,     // Failing, requests blocked
-    HalfOpen, // Testing if service has recovered
+    Closed,                             // Normal operation
+    Open,                               // Failing, requests blocked
+    HalfOpen,                           // Testing if service has recovered
+    ThrottledOpen,                      // Partially blocking with rate limiting
+    VectorSpecificOpen(AnalysisVector), // Only specific vector blocked
 }
 
-/// Analysis vector types for granular control
+/// Enhanced analysis vector types for granular control
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum AnalysisVector {
     StateTransition,
@@ -25,6 +27,7 @@ pub enum AnalysisVector {
     AccessControl,
     MathematicalIntegrity,
     General,
+    CustomVector(String), // Allow dynamic vectors
 }
 
 /// API endpoint identifier
@@ -438,6 +441,49 @@ impl GranularCircuitBreaker {
         }
 
         println!("🔄 All circuit breakers have been reset");
+    }
+
+    /// Enable/disable circuit breaker for specific analysis vector
+    pub fn set_vector_enabled(&self, vector: AnalysisVector, enabled: bool) {
+        let mut breakers = self.vector_breakers.write().unwrap();
+        if let Some(breaker) = breakers.get_mut(&vector) {
+            if enabled {
+                breaker.close_circuit();
+                println!("✅ Enabled circuit breaker for vector: {:?}", vector);
+            } else {
+                breaker.stats.state = CircuitState::VectorSpecificOpen(vector.clone());
+                println!("🚫 Disabled circuit breaker for vector: {:?}", vector);
+            }
+        }
+    }
+
+    /// Check if analysis vector is available
+    pub fn is_vector_available(&self, vector: &AnalysisVector) -> bool {
+        let breakers = self.vector_breakers.read().unwrap();
+        if let Some(breaker) = breakers.get(vector) {
+            match &breaker.stats.state {
+                CircuitState::Closed | CircuitState::HalfOpen => true,
+                CircuitState::VectorSpecificOpen(disabled_vector) => disabled_vector != vector,
+                _ => false,
+            }
+        } else {
+            true // If not tracked, assume available
+        }
+    }
+
+    /// Get analysis vector health score (0.0 to 1.0)
+    pub fn get_vector_health_score(&self, vector: &AnalysisVector) -> f64 {
+        let breakers = self.vector_breakers.read().unwrap();
+        if let Some(breaker) = breakers.get(vector) {
+            if breaker.stats.total_requests == 0 {
+                return 1.0;
+            }
+            let success_rate =
+                1.0 - (breaker.stats.total_failures as f64 / breaker.stats.total_requests as f64);
+            success_rate.max(0.0).min(1.0)
+        } else {
+            1.0
+        }
     }
 }
 
