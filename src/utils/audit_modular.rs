@@ -1423,7 +1423,7 @@ mod tests {
         let findings_hardcoded = check
             .check_content(code_with_hardcoded_key, "test.rs")
             .unwrap();
-        
+
         let hardcoded_findings: Vec<_> = findings_hardcoded
             .iter()
             .filter(|f| f.title.contains("hardcoded Solana public key"))

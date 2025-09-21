@@ -4,15 +4,11 @@
 use {
     crate::config::Config,
     crate::utils::diagnostics::DiagnosticCoordinator,
-    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     crate::utils::markdown_renderer::MarkdownRenderer,
+    crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
     solana_client::rpc_client::RpcClient,
-    solana_sdk::{
-        native_token::Sol, 
-        pubkey::Pubkey, 
-        signature::Signer
-    },
+    solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer},
     std::{process::exit, str::FromStr},
 };
 
@@ -64,18 +60,18 @@ async fn handle_ai_query(
     // For external subcommands, clap collects additional arguments in subcommand_value
     // This is the proper way to handle external subcommands with clap
     let mut query_parts = vec![sub_command.to_string()];
-    
+
     // Get additional arguments from clap's external subcommand handling
     // External subcommands store arguments as OsString, not String
     if let Some(external_args) = sub_matches.get_many::<std::ffi::OsString>("") {
         query_parts.extend(external_args.map(|os_str| os_str.to_string_lossy().to_string()));
     }
-    
+
     // If clap doesn't provide args (fallback), parse from environment
     // This maintains compatibility while documenting the limitation
     if query_parts.len() == 1 {
         let args: Vec<String> = std::env::args().collect();
-        
+
         // Collect non-flag arguments starting from the subcommand
         let mut found_subcommand = false;
         for arg in args.iter().skip(1) {

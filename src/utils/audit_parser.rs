@@ -322,11 +322,11 @@ impl SecurityVisitor {
     fn analyze_field_access(&mut self, expr: &Expr, field_expr: &syn::ExprField) {
         let field_name = field_expr.member.to_token_stream().to_string();
         let receiver_str = quote::quote!(#expr).to_string();
-        
+
         // Look for Solana account field access patterns
         if receiver_str.contains("account") {
             let line_num = self.get_line_number_for_pattern(&format!(".{}", field_name));
-            
+
             match field_name.as_str() {
                 "owner" => {
                     let mut solana_op = SolanaOperation {
