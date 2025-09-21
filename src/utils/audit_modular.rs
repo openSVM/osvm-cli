@@ -240,11 +240,11 @@ impl FindingIdAllocator {
 
         let hash = hasher.finish();
         match category {
-            "solana" => format!("OSVM-SOL-{:016x}", hash),
-            "crypto" => format!("OSVM-CRYPTO-{:016x}", hash),
-            "network" => format!("OSVM-NET-{:016x}", hash),
-            "auth" => format!("OSVM-AUTH-{:016x}", hash),
-            _ => format!("OSVM-{:016x}", hash),
+            "solana" => format!("OSVM-SOL-{}-{:08x}", &*SESSION_ID, hash),
+            "crypto" => format!("OSVM-CRYPTO-{}-{:08x}", &*SESSION_ID, hash),
+            "network" => format!("OSVM-NET-{}-{:08x}", &*SESSION_ID, hash),
+            "auth" => format!("OSVM-AUTH-{}-{:08x}", &*SESSION_ID, hash),
+            _ => format!("OSVM-{}-{:08x}", &*SESSION_ID, hash),
         }
     }
 
@@ -266,7 +266,8 @@ impl FindingIdAllocator {
             .hash(&mut hasher);
 
         let hash = hasher.finish();
-        format!("OSVM-{:016x}", hash)
+        // Include session ID for session context while maintaining uniqueness
+        format!("OSVM-{}-{:08x}", &*SESSION_ID, hash)
     }
 
     /// Reset counter (for testing)
@@ -1345,10 +1346,10 @@ mod tests {
         let id2 = FindingIdAllocator::next_id();
         let id3 = FindingIdAllocator::next_category_id("solana");
 
-        // IDs should now be UUID-based (16-character hex)
-        assert!(id1.starts_with("OSVM-") && id1.len() == 21); // OSVM- + 16 hex chars
-        assert!(id2.starts_with("OSVM-") && id2.len() == 21);
-        assert!(id3.starts_with("OSVM-SOL-") && id3.len() == 25); // OSVM-SOL- + 16 hex chars
+        // IDs should now be UUID-based with session context
+        assert!(id1.starts_with("OSVM-") && id1.contains("-")); // OSVM-{session}-{hash}
+        assert!(id2.starts_with("OSVM-") && id2.contains("-"));
+        assert!(id3.starts_with("OSVM-SOL-") && id3.contains("-")); // OSVM-SOL-{hash}
 
         // IDs should be different
         assert_ne!(id1, id2);
