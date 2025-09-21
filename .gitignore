@@ -67,3 +67,4 @@ solana-validator-*.log
 sonic-*.log
 eclipse-*.log
 osvm-*.log
+audit_reports/
