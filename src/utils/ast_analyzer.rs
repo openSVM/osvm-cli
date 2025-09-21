@@ -287,17 +287,41 @@ impl AstAnalyzer {
         None
     }
 
+    /// Extract the variable name that holds an account reference
+    fn extract_account_variable_name(&self, content: &str) -> Option<String> {
+        // Look for patterns like "let var_name = &ctx.accounts.something"
+        if let Some(start) = content.find("let ") {
+            let after_let = &content[start + 4..];
+            if let Some(equals_pos) = after_let.find(" = ") {
+                let var_name = after_let[..equals_pos].trim();
+                if content.contains(&format!("{}.balance", var_name)) || 
+                   content.contains(&format!("{}.", var_name)) {
+                    return Some(var_name.to_string());
+                }
+            }
+        }
+        None
+    }
+
     /// Apply pattern-based fixes as fallback
     fn apply_pattern_based_fixes(&self, content: &str, finding: &AuditFinding) -> String {
         let mut fixed_content = content.to_string();
 
         match finding.category.as_str() {
             "Authentication & Authorization" => {
-                if !content.contains("is_signer") && content.contains("AccountInfo") {
-                    fixed_content = format!(
-                        "// Added signer validation\nrequire!(account.is_signer, ErrorCode::MissingSignature);\n{}",
-                        fixed_content
-                    );
+                if !content.contains("is_signer") && (content.contains("AccountInfo") || content.contains("ctx.accounts")) {
+                    // Extract account variable name from the content
+                    if let Some(account_var) = self.extract_account_variable_name(content) {
+                        fixed_content = format!(
+                            "// Added signer validation\nrequire!({}.is_signer, ErrorCode::MissingSignature);\n{}",
+                            account_var, fixed_content
+                        );
+                    } else {
+                        fixed_content = format!(
+                            "// Added signer validation\nrequire!(account.is_signer, ErrorCode::MissingSignature);\n{}",
+                            fixed_content
+                        );
+                    }
                 }
             }
             "Solana Security" => {
@@ -394,7 +418,9 @@ impl SolanaSecurityVisitor {
         let func_str = func.to_token_stream().to_string();
 
         // Check for missing signer validation
-        if func_str.contains("ctx.accounts") && !func_str.contains("is_signer") {
+        // Token stream format: "ctx . accounts" instead of "ctx.accounts"
+        if (func_str.contains("ctx . accounts") || func_str.contains("ctx.accounts")) && 
+           !func_str.contains("is_signer") {
             self.context.security_issues.push(SecurityIssue {
                 issue_type: SecurityIssueType::MissingSignerCheck,
                 location: CodeLocation {
