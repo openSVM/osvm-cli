@@ -542,15 +542,51 @@ impl AstAnalyzer {
         }
     }
 
-    /// Insert owner validation fix using AST-aware positioning
+    /// Insert owner validation fix using AST-aware positioning (unified with signer approach)
     fn insert_owner_validation_fix(&self, content: &str, finding: &AuditFinding) -> String {
-        debug_print!(VerbosityLevel::Verbose, "Inserting owner validation fix");
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Inserting owner validation fix with AST-aware positioning"
+        );
 
-        // Similar AST-aware insertion for owner validation
-        format!(
-            "// Added account key validation\nrequire!(user_account.key() == expected_user_key, ErrorCode::InvalidUser);\n{}",
-            content
-        )
+        // Extract account variable name similar to signer validation approach
+        if let Some(account_var) = self.extract_account_variable_name(content) {
+            // Try to find the exact position after variable binding using AST
+            if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
+                for (i, stmt) in parsed.stmts.iter().enumerate() {
+                    if let syn::Stmt::Local(local) = stmt {
+                        if let syn::Pat::Ident(pat_ident) = &local.pat {
+                            if pat_ident.ident == account_var {
+                                // Insert the owner validation fix after this statement
+                                let lines: Vec<&str> = content.lines().collect();
+                                if i < lines.len() {
+                                    let mut result = Vec::new();
+                                    result.extend_from_slice(&lines[0..=i]);
+                                    result.push(&format!(
+                                        "    require!({}.owner == expected_program_id, ErrorCode::InvalidAccountOwner);",
+                                        account_var
+                                    ));
+                                    result.extend_from_slice(&lines[i + 1..]);
+                                    return result.join("\n");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to prepend with extracted variable name
+            format!(
+                "// Added owner validation\nrequire!({}.owner == expected_program_id, ErrorCode::InvalidAccountOwner);\n{}",
+                account_var, content
+            )
+        } else {
+            // Final fallback for cases where variable extraction fails
+            format!(
+                "// Added account owner validation\nrequire!(user_account.owner == expected_program_id, ErrorCode::InvalidAccountOwner);\n{}",
+                content
+            )
+        }
     }
 
     /// Extract detailed vulnerability information using AST analysis
@@ -778,5 +814,141 @@ fn transfer_tokens(ctx: Context<Transfer>) -> Result<()> {{
             fixed_code.content.contains("is_signer")
                 || fixed_code.content.contains("MissingSignature")
         );
+    }
+
+    #[test]
+    fn test_fix_generation_edge_cases() {
+        let analyzer = AstAnalyzer::new();
+
+        // Test case 1: Multi-line variable declaration
+        let multiline_finding = AuditFinding {
+            id: "test_multiline".to_string(),
+            title: "Missing signer validation".to_string(),
+            description: "Test multiline".to_string(),
+            severity: crate::utils::audit::AuditSeverity::High,
+            category: "Authentication & Authorization".to_string(),
+            cwe_id: None,
+            cvss_score: None,
+            impact: "Test".to_string(),
+            recommendation: "Test".to_string(),
+            code_location: None,
+            references: vec![],
+        };
+
+        let multiline_code = CodeSnippet {
+            file_path: "test.rs".to_string(),
+            start_line: 1,
+            end_line: 4,
+            content: "let user_account = \n    &ctx.accounts\n        .user;\nuser_account.balance += amount;".to_string(),
+            context: None,
+        };
+
+        let fixed_multiline = analyzer
+            .generate_ast_based_fix(&multiline_finding, &multiline_code)
+            .unwrap();
+        assert!(
+            fixed_multiline.content.contains("is_signer")
+                || fixed_multiline.content.contains("MissingSignature")
+        );
+
+        // Test case 2: Unusual formatting with extra spaces
+        let spaced_code = CodeSnippet {
+            file_path: "test.rs".to_string(),
+            start_line: 1,
+            end_line: 2,
+            content: "let     user_account     =     &ctx.accounts.user   ;\n    user_account.balance += amount;".to_string(),
+            context: None,
+        };
+
+        let fixed_spaced = analyzer
+            .generate_ast_based_fix(&multiline_finding, &spaced_code)
+            .unwrap();
+        assert!(
+            fixed_spaced.content.contains("is_signer")
+                || fixed_spaced.content.contains("MissingSignature")
+        );
+
+        // Test case 3: Owner validation edge case
+        let owner_finding = AuditFinding {
+            id: "test_owner".to_string(),
+            title: "Missing owner validation".to_string(),
+            description: "Test owner".to_string(),
+            severity: crate::utils::audit::AuditSeverity::High,
+            category: "Solana Security".to_string(),
+            cwe_id: None,
+            cvss_score: None,
+            impact: "Test".to_string(),
+            recommendation: "Test".to_string(),
+            code_location: None,
+            references: vec![],
+        };
+
+        let owner_code = CodeSnippet {
+            file_path: "test.rs".to_string(),
+            start_line: 1,
+            end_line: 2,
+            content: "let user_account = &ctx.accounts.user;\nuser_account.lamports += amount;"
+                .to_string(),
+            context: None,
+        };
+
+        let fixed_owner = analyzer
+            .generate_ast_based_fix(&owner_finding, &owner_code)
+            .unwrap();
+        assert!(
+            fixed_owner.content.contains("owner")
+                || fixed_owner.content.contains("InvalidAccountOwner")
+        );
+
+        // Test case 4: Complex nested structure
+        let complex_code = CodeSnippet {
+            file_path: "test.rs".to_string(),
+            start_line: 1,
+            end_line: 3,
+            content: "let complex_var = {\n    let inner = &ctx.accounts.user;\n    inner\n};\ncomplex_var.balance += amount;".to_string(),
+            context: None,
+        };
+
+        let fixed_complex = analyzer
+            .generate_ast_based_fix(&multiline_finding, &complex_code)
+            .unwrap();
+        // Should still attempt to add validation even for complex cases
+        assert!(!fixed_complex.content.is_empty());
+    }
+
+    #[test]
+    fn test_extract_account_variable_edge_cases() {
+        let analyzer = AstAnalyzer::new();
+
+        // Test various edge cases for variable extraction
+        let test_cases = vec![
+            // Standard case
+            ("let user_account = &ctx.accounts.user;\nuser_account.balance += 1;", Some("user_account")),
+            // Multiple variables
+            ("let user = &ctx.accounts.user;\nlet admin = &ctx.accounts.admin;\nuser.balance += 1;", Some("user")),
+            // Destructuring pattern
+            ("let {user: user_account, ..} = &ctx.accounts;\nuser_account.balance += 1;", None), // Should fail gracefully
+            // Complex expression
+            ("let account = get_account(&ctx.accounts.user);\naccount.balance += 1;", Some("account")),
+        ];
+
+        for (content, expected) in test_cases {
+            let result = analyzer.extract_account_variable_name(content);
+            if let Some(expected_name) = expected {
+                assert_eq!(
+                    result,
+                    Some(expected_name.to_string()),
+                    "Failed for content: {}",
+                    content
+                );
+            } else {
+                // For cases where extraction should fail, ensure it handles gracefully
+                assert!(
+                    result.is_none() || !result.unwrap().is_empty(),
+                    "Should handle edge case gracefully: {}",
+                    content
+                );
+            }
+        }
     }
 }

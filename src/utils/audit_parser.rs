@@ -370,17 +370,70 @@ impl SecurityVisitor {
     }
 
     /// Check for owner validation patterns in the surrounding context
-    fn check_for_owner_validation(&self, _receiver_str: &str) -> bool {
-        // This could be enhanced to check the surrounding context for owner validation
-        // For now, return false to indicate missing validation (as per test expectations)
-        false
+    fn check_for_owner_validation(&self, receiver_str: &str) -> bool {
+        // Enhanced owner validation detection with deeper context analysis
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Checking for owner validation in context: {}",
+            receiver_str
+        );
+
+        // Check for explicit owner validation patterns in the surrounding code
+        let code_context = &self.source_code; // Access to full source for context analysis
+
+        // Look for common owner validation patterns
+        let has_owner_check = code_context.contains("owner ==")
+            || code_context.contains("owner !=")
+            || code_context.contains("require!(") && code_context.contains(".owner")
+            || code_context.contains("assert_eq!(") && code_context.contains(".owner")
+            || code_context.contains("program_id") && code_context.contains("==")
+            || code_context.contains("#[account(owner")
+            || code_context.contains("owner_id");
+
+        // Check for Anchor constraint-based validation
+        let has_anchor_owner_constraint = code_context.contains("#[account(owner =")
+            || code_context.contains("owner @ ")
+            || code_context.contains("owner: ");
+
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Owner validation found: {}",
+            has_owner_check || has_anchor_owner_constraint
+        );
+        has_owner_check || has_anchor_owner_constraint
     }
 
-    /// Check for signer validation patterns in the surrounding context
-    fn check_for_signer_validation(&self, _receiver_str: &str) -> bool {
-        // This could be enhanced to check the surrounding context for signer validation
-        // For now, return false to indicate missing validation (as per test expectations)
-        false
+    /// Check for signer validation patterns in the surrounding context  
+    fn check_for_signer_validation(&self, receiver_str: &str) -> bool {
+        // Enhanced signer validation detection with deeper context analysis
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Checking for signer validation in context: {}",
+            receiver_str
+        );
+
+        // Check for explicit signer validation patterns in the surrounding code
+        let code_context = &self.source_code;
+
+        // Look for common signer validation patterns
+        let has_signer_check = code_context.contains("is_signer")
+            || code_context.contains("require!(")
+                && (code_context.contains("signer") || code_context.contains("signed"))
+            || code_context.contains("assert!(") && code_context.contains("is_signer")
+            || code_context.contains("#[account(signer")
+            || code_context.contains("Signer<");
+
+        // Check for conditional signer validation patterns
+        let has_conditional_signer = code_context.contains("if")
+            && code_context.contains("is_signer")
+            || code_context.contains("match") && code_context.contains("signer");
+
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Signer validation found: {}",
+            has_signer_check || has_conditional_signer
+        );
+        has_signer_check || has_conditional_signer
     }
 
     fn analyze_method_call(&mut self, expr: &Expr) {
