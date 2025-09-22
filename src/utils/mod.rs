@@ -40,6 +40,8 @@ pub mod blueprint_theme;
 pub mod circuit_breaker;
 /// Code snippet extraction for DeepLogic AI Analysis
 pub mod code_extractor;
+/// Debug logging utilities with configurable verbosity levels
+pub mod debug_logger;
 /// Simple devnet proxy for development
 pub mod devnet_proxy;
 /// Devnet RPC node that syncs with real blockchain

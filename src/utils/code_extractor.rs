@@ -215,7 +215,9 @@ impl CodeExtractor {
 
         match finding.category.as_str() {
             "Authentication & Authorization" => {
-                if !content.contains("is_signer") && content.contains("AccountInfo") {
+                if !content.contains("is_signer")
+                    && (content.contains("AccountInfo") || content.contains("ctx.accounts"))
+                {
                     fixed_content = fixed_content.replace(
                         "let user_account = &ctx.accounts.user_account;",
                         "let user_account = &ctx.accounts.user_account;\n    require!(user_account.is_signer, ErrorCode::MissingSignature);"

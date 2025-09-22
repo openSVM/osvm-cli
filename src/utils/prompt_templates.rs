@@ -138,7 +138,11 @@ impl PromptTemplateManager {
         self.load_from_directory_with_debug(dir_path, true)
     }
 
-    pub fn load_from_directory_with_debug(&mut self, dir_path: &str, debug_mode: bool) -> Result<usize> {
+    pub fn load_from_directory_with_debug(
+        &mut self,
+        dir_path: &str,
+        debug_mode: bool,
+    ) -> Result<usize> {
         self.template_dirs.push(dir_path.to_string());
 
         let dir = Path::new(dir_path);
@@ -578,6 +582,35 @@ mod tests {
     #[test]
     fn test_template_loading() {
         let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path();
+
+        // Create a simple template file for testing
+        let template_content = r#"id: test_template
+name: Test Template
+description: A test template
+category: deeplogic
+analysis_vector: general
+template: |-
+  Testing {filename} with {code}
+variables:
+- name: filename
+  description: File name
+  required: true
+  default_value: null
+  variable_type: string
+- name: code
+  description: Code content
+  required: true
+  default_value: null
+  variable_type: string
+version: 1.0.0
+enabled: true
+metadata: {}
+"#;
+
+        let template_file = temp_path.join("test_template.yaml");
+        std::fs::write(&template_file, template_content).unwrap();
+
         let mut manager = PromptTemplateManager::new();
 
         let loaded = manager
@@ -592,11 +625,52 @@ mod tests {
     #[test]
     fn test_template_rendering() {
         let mut manager = PromptTemplateManager::new();
-        let temp_dir = TempDir::new().unwrap();
 
-        manager
-            .load_from_directory(temp_dir.path().to_str().unwrap())
-            .unwrap();
+        // Load from the actual templates directory
+        let templates_dir = "templates/ai_prompts";
+        let loaded = manager.load_from_directory(templates_dir).unwrap_or(0);
+
+        // If no templates in the actual directory, create a test template
+        if loaded == 0 {
+            let temp_dir = TempDir::new().unwrap();
+            let temp_path = temp_dir.path();
+
+            // Create the specific template the test expects
+            let template_content = r#"id: deeplogic_economic_exploit
+name: DeepLogic Economic Exploit Analysis
+description: Analyzes code for potential economic exploitation vulnerabilities
+category: deeplogic
+analysis_vector: economic_exploit
+template: |-
+  Testing {filename} with {code} for {vulnerability_description}
+variables:
+- name: filename
+  description: Path to the source file being analyzed
+  required: true
+  default_value: null
+  variable_type: filename
+- name: code
+  description: The source code to analyze
+  required: true
+  default_value: null
+  variable_type: code
+- name: vulnerability_description
+  description: Description of the identified vulnerability
+  required: true
+  default_value: null
+  variable_type: string
+version: 1.0.0
+enabled: true
+metadata: {}
+"#;
+
+            let template_file = temp_path.join("deeplogic_economic_exploit.yaml");
+            std::fs::write(&template_file, template_content).unwrap();
+
+            manager
+                .load_from_directory(temp_dir.path().to_str().unwrap())
+                .unwrap();
+        }
 
         let mut variables = HashMap::new();
         variables.insert("filename".to_string(), "test.rs".to_string());

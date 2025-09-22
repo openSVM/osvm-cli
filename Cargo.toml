@@ -1,6 +1,6 @@
 [package]
 name = "osvm"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 license = "MIT"
 description = "OpenSVM CLI tool for managing SVM nodes and deployments"
@@ -46,6 +46,7 @@ regex = "1.11.2"
 reqwest = { version = "0.12.23", features = ["json"] }
 base64 = "0.22.1"
 bs58 = "0.5.1"
+uuid = { version = "1.0", features = ["v4"] }
 # Enhanced audit dependencies
 syn = { version = "2.0", features = ["full", "visit"] }
 quote = "1.0"

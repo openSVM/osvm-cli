@@ -9,7 +9,7 @@ fn test_ai_query_without_debug_flag() {
         .expect("Failed to execute command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Should not contain debug information
     assert!(!stdout.contains("🔍 Interpreting as AI query"));
     assert!(!stdout.contains("✅ Loaded"));
@@ -17,7 +17,7 @@ fn test_ai_query_without_debug_flag() {
     assert!(!stdout.contains("📥 OSVM AI Response"));
     assert!(!stdout.contains("🔍 AI Response received"));
     assert!(!stdout.contains("🤖 AI Response:"));
-    
+
     // Should contain the actual response (without debug prefix)
     assert!(!stdout.is_empty());
 }
@@ -30,7 +30,7 @@ fn test_ai_query_with_debug_flag() {
         .expect("Failed to execute command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Should contain debug information
     assert!(stdout.contains("🔍 Interpreting as AI query"));
     assert!(stdout.contains("✅ Loaded"));
@@ -48,7 +48,7 @@ fn test_debug_flag_appears_in_help() {
         .expect("Failed to execute command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Should contain debug flag in help
     assert!(stdout.contains("--debug"));
     assert!(stdout.contains("Show debug information"));
