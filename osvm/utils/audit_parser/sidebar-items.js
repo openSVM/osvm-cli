@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["is_dynamic_expr","path_to_string"],"struct":["CommandExecution","CryptoOperation","FunctionSignature","HardcodedSecret","ImportDeclaration","LineTracker","NetworkOperation","ParsedCodeAnalysis","PathOperation","RustCodeParser","SecurityVisitor","SolanaOperation","StringLiteral","UnsafeBlock","UnwrapUsage"]};

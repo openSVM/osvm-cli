@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["VerbosityLevel"],"fn":["get_verbosity","set_verbosity","should_log"],"static":["VERBOSITY_LEVEL"]};
