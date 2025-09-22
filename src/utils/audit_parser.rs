@@ -384,14 +384,29 @@ impl SecurityVisitor {
         // Look for common owner validation patterns in the code
         let has_owner_check = self.line_tracker.find_all_pattern_lines("owner ==").len() > 0
             || self.line_tracker.find_all_pattern_lines("owner !=").len() > 0
-            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0 && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
-            || (self.line_tracker.find_all_pattern_lines("assert_eq!(").len() > 0 && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
-            || (self.line_tracker.find_all_pattern_lines("program_id").len() > 0 && self.line_tracker.find_all_pattern_lines("==").len() > 0)
-            || self.line_tracker.find_all_pattern_lines("#[account(owner").len() > 0
+            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0
+                && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self
+                .line_tracker
+                .find_all_pattern_lines("assert_eq!(")
+                .len()
+                > 0
+                && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("program_id").len() > 0
+                && self.line_tracker.find_all_pattern_lines("==").len() > 0)
+            || self
+                .line_tracker
+                .find_all_pattern_lines("#[account(owner")
+                .len()
+                > 0
             || self.line_tracker.find_all_pattern_lines("owner_id").len() > 0;
 
         // Check for Anchor constraint-based validation
-        let has_anchor_owner_constraint = self.line_tracker.find_all_pattern_lines("#[account(owner =").len() > 0
+        let has_anchor_owner_constraint = self
+            .line_tracker
+            .find_all_pattern_lines("#[account(owner =")
+            .len()
+            > 0
             || self.line_tracker.find_all_pattern_lines("owner @ ").len() > 0
             || self.line_tracker.find_all_pattern_lines("owner: ").len() > 0;
 
@@ -416,15 +431,22 @@ impl SecurityVisitor {
         // Look for common signer validation patterns in the code
         let has_signer_check = self.line_tracker.find_all_pattern_lines("is_signer").len() > 0
             || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0
-                && (self.line_tracker.find_all_pattern_lines("signer").len() > 0 || self.line_tracker.find_all_pattern_lines("signed").len() > 0))
-            || (self.line_tracker.find_all_pattern_lines("assert!(").len() > 0 && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
-            || self.line_tracker.find_all_pattern_lines("#[account(signer").len() > 0
+                && (self.line_tracker.find_all_pattern_lines("signer").len() > 0
+                    || self.line_tracker.find_all_pattern_lines("signed").len() > 0))
+            || (self.line_tracker.find_all_pattern_lines("assert!(").len() > 0
+                && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
+            || self
+                .line_tracker
+                .find_all_pattern_lines("#[account(signer")
+                .len()
+                > 0
             || self.line_tracker.find_all_pattern_lines("Signer<").len() > 0;
 
         // Check for conditional signer validation patterns
         let has_conditional_signer = (self.line_tracker.find_all_pattern_lines("if").len() > 0
             && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
-            || (self.line_tracker.find_all_pattern_lines("match").len() > 0 && self.line_tracker.find_all_pattern_lines("signer").len() > 0);
+            || (self.line_tracker.find_all_pattern_lines("match").len() > 0
+                && self.line_tracker.find_all_pattern_lines("signer").len() > 0);
 
         debug_print!(
             VerbosityLevel::Detailed,
