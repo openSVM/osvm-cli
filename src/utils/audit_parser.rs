@@ -3,6 +3,8 @@
 //! This module provides structured parsing of Rust code using the `syn` crate
 //! to eliminate false positives from text-based pattern matching.
 
+use crate::utils::debug_logger::VerbosityLevel;
+use crate::{debug_print, debug_warn};
 use anyhow::{Context, Result};
 use quote::ToTokens;
 use std::collections::HashMap;
@@ -378,22 +380,20 @@ impl SecurityVisitor {
             receiver_str
         );
 
-        // Check for explicit owner validation patterns in the surrounding code
-        let code_context = &self.source_code; // Access to full source for context analysis
-
-        // Look for common owner validation patterns
-        let has_owner_check = code_context.contains("owner ==")
-            || code_context.contains("owner !=")
-            || code_context.contains("require!(") && code_context.contains(".owner")
-            || code_context.contains("assert_eq!(") && code_context.contains(".owner")
-            || code_context.contains("program_id") && code_context.contains("==")
-            || code_context.contains("#[account(owner")
-            || code_context.contains("owner_id");
+        // Check for explicit owner validation patterns using line tracker
+        // Look for common owner validation patterns in the code
+        let has_owner_check = self.line_tracker.find_all_pattern_lines("owner ==").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner !=").len() > 0
+            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0 && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("assert_eq!(").len() > 0 && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("program_id").len() > 0 && self.line_tracker.find_all_pattern_lines("==").len() > 0)
+            || self.line_tracker.find_all_pattern_lines("#[account(owner").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner_id").len() > 0;
 
         // Check for Anchor constraint-based validation
-        let has_anchor_owner_constraint = code_context.contains("#[account(owner =")
-            || code_context.contains("owner @ ")
-            || code_context.contains("owner: ");
+        let has_anchor_owner_constraint = self.line_tracker.find_all_pattern_lines("#[account(owner =").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner @ ").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner: ").len() > 0;
 
         debug_print!(
             VerbosityLevel::Detailed,
@@ -412,21 +412,19 @@ impl SecurityVisitor {
             receiver_str
         );
 
-        // Check for explicit signer validation patterns in the surrounding code
-        let code_context = &self.source_code;
-
-        // Look for common signer validation patterns
-        let has_signer_check = code_context.contains("is_signer")
-            || code_context.contains("require!(")
-                && (code_context.contains("signer") || code_context.contains("signed"))
-            || code_context.contains("assert!(") && code_context.contains("is_signer")
-            || code_context.contains("#[account(signer")
-            || code_context.contains("Signer<");
+        // Check for explicit signer validation patterns using line tracker
+        // Look for common signer validation patterns in the code
+        let has_signer_check = self.line_tracker.find_all_pattern_lines("is_signer").len() > 0
+            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0
+                && (self.line_tracker.find_all_pattern_lines("signer").len() > 0 || self.line_tracker.find_all_pattern_lines("signed").len() > 0))
+            || (self.line_tracker.find_all_pattern_lines("assert!(").len() > 0 && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
+            || self.line_tracker.find_all_pattern_lines("#[account(signer").len() > 0
+            || self.line_tracker.find_all_pattern_lines("Signer<").len() > 0;
 
         // Check for conditional signer validation patterns
-        let has_conditional_signer = code_context.contains("if")
-            && code_context.contains("is_signer")
-            || code_context.contains("match") && code_context.contains("signer");
+        let has_conditional_signer = (self.line_tracker.find_all_pattern_lines("if").len() > 0
+            && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("match").len() > 0 && self.line_tracker.find_all_pattern_lines("signer").len() > 0);
 
         debug_print!(
             VerbosityLevel::Detailed,

@@ -138,6 +138,14 @@ impl CircuitBreakerInstance {
                     false
                 }
             }
+            CircuitState::ThrottledOpen => {
+                // Allow some requests through with throttling
+                self.half_open_calls < self.config.half_open_max_calls / 2
+            }
+            CircuitState::VectorSpecificOpen(_) => {
+                // For vector-specific open, allow other requests
+                true
+            }
         }
     }
 
@@ -161,6 +169,15 @@ impl CircuitBreakerInstance {
                 // Reset failure count on success
                 self.stats.failure_count = 0;
                 self.failure_times.clear();
+            }
+            CircuitState::ThrottledOpen => {
+                // Gradually improve throttling on success
+                if self.stats.success_count >= self.config.success_threshold / 2 {
+                    self.stats.state = CircuitState::HalfOpen;
+                }
+            }
+            CircuitState::VectorSpecificOpen(_) => {
+                // No special handling for vector-specific states on success
             }
         }
     }
@@ -208,6 +225,18 @@ impl CircuitBreakerInstance {
                 if self.failure_times.is_empty() {
                     self.stats.failure_count = 0;
                 }
+            }
+            CircuitState::ThrottledOpen => {
+                // For throttled state, may transition to half-open after some time
+                if let Some(last_failure) = self.stats.last_failure_time {
+                    if Instant::now().duration_since(last_failure) >= self.config.recovery_timeout / 2 {
+                        self.half_open_circuit();
+                    }
+                }
+            }
+            CircuitState::VectorSpecificOpen(_) => {
+                // Vector-specific states have their own transition logic
+                // No general state updates needed here
             }
         }
     }
