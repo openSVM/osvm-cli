@@ -229,7 +229,9 @@ impl CircuitBreakerInstance {
             CircuitState::ThrottledOpen => {
                 // For throttled state, may transition to half-open after some time
                 if let Some(last_failure) = self.stats.last_failure_time {
-                    if Instant::now().duration_since(last_failure) >= self.config.recovery_timeout / 2 {
+                    if Instant::now().duration_since(last_failure)
+                        >= self.config.recovery_timeout / 2
+                    {
                         self.half_open_circuit();
                     }
                 }
