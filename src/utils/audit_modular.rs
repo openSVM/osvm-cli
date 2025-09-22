@@ -1395,21 +1395,24 @@ mod tests {
     #[test]
     fn test_lazy_regex_performance() {
         use std::time::Instant;
-        
+
         // Test that multiple calls to the same pattern are fast (cached)
         let start = Instant::now();
         for _ in 0..100 {
             get_regex("password_pattern");
         }
         let cached_duration = start.elapsed();
-        
+
         // Test that the pattern works correctly
         let pattern = get_regex("password_pattern").unwrap();
         assert!(pattern.is_match(r#"password = "secret123""#));
-        
+
         // Cached calls should be very fast
-        assert!(cached_duration.as_millis() < 100, "Cached regex calls should be fast");
-        
+        assert!(
+            cached_duration.as_millis() < 100,
+            "Cached regex calls should be fast"
+        );
+
         // Test unknown pattern handling
         let unknown = get_regex("nonexistent_pattern");
         assert!(unknown.is_none());

@@ -516,10 +516,11 @@ impl AstAnalyzer {
                                 if i < lines.len() {
                                     let mut result = Vec::new();
                                     result.extend_from_slice(&lines[0..=i]);
-                                    result.push(&format!(
+                                    let signer_check = format!(
                                         "    require!({}.is_signer, ErrorCode::MissingSignature);",
                                         account_var
-                                    ));
+                                    );
+                                    result.push(&signer_check);
                                     result.extend_from_slice(&lines[i + 1..]);
                                     return result.join("\n");
                                 }
@@ -562,10 +563,11 @@ impl AstAnalyzer {
                                 if i < lines.len() {
                                     let mut result = Vec::new();
                                     result.extend_from_slice(&lines[0..=i]);
-                                    result.push(&format!(
+                                    let owner_check = format!(
                                         "    require!({}.owner == expected_program_id, ErrorCode::InvalidAccountOwner);",
                                         account_var
-                                    ));
+                                    );
+                                    result.push(&owner_check);
                                     result.extend_from_slice(&lines[i + 1..]);
                                     return result.join("\n");
                                 }
