@@ -1,4 +1,4 @@
-use termimad::{MadSkin};
+use termimad::MadSkin;
 
 /// A markdown renderer for CLI output
 #[derive(Debug, Clone)]

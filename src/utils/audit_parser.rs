@@ -3,6 +3,8 @@
 //! This module provides structured parsing of Rust code using the `syn` crate
 //! to eliminate false positives from text-based pattern matching.
 
+use crate::utils::debug_logger::VerbosityLevel;
+use crate::{debug_print, debug_warn};
 use anyhow::{Context, Result};
 use quote::ToTokens;
 use std::collections::HashMap;
@@ -319,9 +321,145 @@ impl SecurityVisitor {
         }
     }
 
+    fn analyze_field_access(&mut self, expr: &Expr, field_expr: &syn::ExprField) {
+        let field_name = field_expr.member.to_token_stream().to_string();
+        let receiver_str = quote::quote!(#expr).to_string();
+
+        // Look for Solana account field access patterns with improved detection
+        if self.is_likely_account_access(&receiver_str) {
+            let line_num = self.get_line_number_for_pattern(&format!(".{}", field_name));
+
+            match field_name.as_str() {
+                "owner" => {
+                    let mut solana_op = SolanaOperation {
+                        line: line_num,
+                        operation_type: "account_owner_access".to_string(),
+                        account_validation: false,
+                        signer_check: false,
+                        pda_seeds: Vec::new(),
+                        program_id_check: false,
+                        owner_check: self.check_for_owner_validation(&receiver_str),
+                        account_data_validation: false,
+                    };
+
+                    self.solana_operations.push(solana_op);
+                }
+                "data" | "lamports" | "key" => {
+                    let mut solana_op = SolanaOperation {
+                        line: line_num,
+                        operation_type: format!("account_{}_access", field_name),
+                        account_validation: false,
+                        signer_check: self.check_for_signer_validation(&receiver_str),
+                        pda_seeds: Vec::new(),
+                        program_id_check: false,
+                        owner_check: false,
+                        account_data_validation: field_name == "data",
+                    };
+
+                    self.solana_operations.push(solana_op);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Check if the expression is likely an account access
+    fn is_likely_account_access(&self, receiver_str: &str) -> bool {
+        receiver_str.contains("account")
+            || receiver_str.contains("ctx . accounts")
+            || receiver_str.contains("ctx.accounts")
+            || receiver_str.contains("AccountInfo")
+    }
+
+    /// Check for owner validation patterns in the surrounding context
+    fn check_for_owner_validation(&self, receiver_str: &str) -> bool {
+        // Enhanced owner validation detection with deeper context analysis
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Checking for owner validation in context: {}",
+            receiver_str
+        );
+
+        // Check for explicit owner validation patterns using line tracker
+        // Look for common owner validation patterns in the code
+        let has_owner_check = self.line_tracker.find_all_pattern_lines("owner ==").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner !=").len() > 0
+            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0
+                && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self
+                .line_tracker
+                .find_all_pattern_lines("assert_eq!(")
+                .len()
+                > 0
+                && self.line_tracker.find_all_pattern_lines(".owner").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("program_id").len() > 0
+                && self.line_tracker.find_all_pattern_lines("==").len() > 0)
+            || self
+                .line_tracker
+                .find_all_pattern_lines("#[account(owner")
+                .len()
+                > 0
+            || self.line_tracker.find_all_pattern_lines("owner_id").len() > 0;
+
+        // Check for Anchor constraint-based validation
+        let has_anchor_owner_constraint = self
+            .line_tracker
+            .find_all_pattern_lines("#[account(owner =")
+            .len()
+            > 0
+            || self.line_tracker.find_all_pattern_lines("owner @ ").len() > 0
+            || self.line_tracker.find_all_pattern_lines("owner: ").len() > 0;
+
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Owner validation found: {}",
+            has_owner_check || has_anchor_owner_constraint
+        );
+        has_owner_check || has_anchor_owner_constraint
+    }
+
+    /// Check for signer validation patterns in the surrounding context  
+    fn check_for_signer_validation(&self, receiver_str: &str) -> bool {
+        // Enhanced signer validation detection with deeper context analysis
+        debug_print!(
+            VerbosityLevel::Verbose,
+            "Checking for signer validation in context: {}",
+            receiver_str
+        );
+
+        // Check for explicit signer validation patterns using line tracker
+        // Look for common signer validation patterns in the code
+        let has_signer_check = self.line_tracker.find_all_pattern_lines("is_signer").len() > 0
+            || (self.line_tracker.find_all_pattern_lines("require!(").len() > 0
+                && (self.line_tracker.find_all_pattern_lines("signer").len() > 0
+                    || self.line_tracker.find_all_pattern_lines("signed").len() > 0))
+            || (self.line_tracker.find_all_pattern_lines("assert!(").len() > 0
+                && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
+            || self
+                .line_tracker
+                .find_all_pattern_lines("#[account(signer")
+                .len()
+                > 0
+            || self.line_tracker.find_all_pattern_lines("Signer<").len() > 0;
+
+        // Check for conditional signer validation patterns
+        let has_conditional_signer = (self.line_tracker.find_all_pattern_lines("if").len() > 0
+            && self.line_tracker.find_all_pattern_lines("is_signer").len() > 0)
+            || (self.line_tracker.find_all_pattern_lines("match").len() > 0
+                && self.line_tracker.find_all_pattern_lines("signer").len() > 0);
+
+        debug_print!(
+            VerbosityLevel::Detailed,
+            "Signer validation found: {}",
+            has_signer_check || has_conditional_signer
+        );
+        has_signer_check || has_conditional_signer
+    }
+
     fn analyze_method_call(&mut self, expr: &Expr) {
         if let Expr::MethodCall(method_call) = expr {
             let method_name = method_call.method.to_string();
+            let receiver_str = quote::quote!(#method_call).to_string();
             let line_num = self.get_line_number_for_pattern(&format!(".{}(", method_name));
 
             match method_name.as_str() {
@@ -338,6 +476,28 @@ impl SecurityVisitor {
                         method: "expect".to_string(),
                         context: "method_call".to_string(),
                     });
+                }
+                "borrow" | "borrow_mut" => {
+                    // Check if this is a Solana account data access
+                    if receiver_str.contains("account") && receiver_str.contains("data") {
+                        let mut solana_op = SolanaOperation {
+                            line: line_num,
+                            operation_type: "account_data_access".to_string(),
+                            account_validation: false,
+                            signer_check: false,
+                            pda_seeds: Vec::new(),
+                            program_id_check: false,
+                            owner_check: false,
+                            account_data_validation: false,
+                        };
+
+                        // Check if there's any signer validation in the context
+                        if receiver_str.contains("is_signer") {
+                            solana_op.signer_check = true;
+                        }
+
+                        self.solana_operations.push(solana_op);
+                    }
                 }
                 _ => {}
             }
@@ -492,6 +652,9 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
             }
             Expr::Call(_) => {
                 self.analyze_function_call(expr);
+            }
+            Expr::Field(field_expr) => {
+                self.analyze_field_access(expr, field_expr);
             }
             _ => {}
         }
