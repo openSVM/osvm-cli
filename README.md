@@ -1,4 +1,4 @@
-# OSVM CLI 🚀
+# OSVM CLI. pvv4fu1RvQBkKXozyH5A843sp1mt6gTy9rPoZrBBAGS 🚀
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.80.0+-orange.svg)](https://www.rust-lang.org/)
