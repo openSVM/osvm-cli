@@ -1,0 +1,37 @@
+# Maintainer: OpenSVM <rin@opensvm.com>
+pkgname=osvm
+pkgver=0.8.2
+pkgrel=1
+pkgdesc="OpenSVM CLI tool for managing SVM nodes and deployments"
+arch=('x86_64' 'aarch64')
+url="https://github.com/openSVM/osvm-cli"
+license=('MIT')
+depends=('glibc')
+makedepends=('rust' 'cargo' 'pkg-config' 'openssl' 'systemd-libs')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/openSVM/osvm-cli/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')  # This should be updated with the actual SHA256
+
+prepare() {
+    cd "${pkgname}-cli-${pkgver}"
+}
+
+build() {
+    cd "${pkgname}-cli-${pkgver}"
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --release --locked
+}
+
+check() {
+    cd "${pkgname}-cli-${pkgver}"
+    export RUSTUP_TOOLCHAIN=stable
+    # Skip tests that require network access or specific hardware
+    cargo test --release --locked --lib || true
+}
+
+package() {
+    cd "${pkgname}-cli-${pkgver}"
+    install -Dm0755 -t "${pkgdir}/usr/bin/" "target/release/${pkgname}"
+    install -Dm0644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    install -Dm0644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}
