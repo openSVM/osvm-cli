@@ -4,6 +4,10 @@
 
 set -e
 
+# Source packaging configuration
+SCRIPT_DIR="$(dirname "$0")"
+source "$SCRIPT_DIR/../config.sh"
+
 # Get version from command line or git tag
 VERSION="${1:-$(git describe --tags --abbrev=0 | sed 's/^v//')}"
 WORKDIR=$(pwd)
@@ -37,37 +41,32 @@ fi
 cd "$PKG"
 
 # Set environment variables for dh_make to use correct maintainer info
-export DEBFULLNAME="OpenSVM"
-export DEBEMAIL="rin@opensvm.com"
+export DEBFULLNAME="$OSVM_MAINTAINER_NAME"
+export DEBEMAIL="$OSVM_MAINTAINER_EMAIL"
 
 # Run dh_make using the temporary tarball - this avoids same-file error
 # dh_make will copy the temp tarball to the correct orig.tar.gz location
-dh_make -y -s -c apache -e rin@opensvm.com -f "../$TEMP_TARBALL"
+dh_make -y -s -c apache -e "$OSVM_MAINTAINER_EMAIL" -f "../$TEMP_TARBALL"
 
 # Fix maintainer name in generated files (dh_make sometimes ignores DEBFULLNAME)
-sed -i 's/Maintainer: unknown/Maintainer: OpenSVM/' debian/control
-sed -i 's/ -- unknown/ -- OpenSVM/' debian/changelog
+sed -i "s/Maintainer: unknown/Maintainer: $OSVM_MAINTAINER_NAME/" debian/control
+sed -i "s/ -- unknown/ -- $OSVM_MAINTAINER_NAME/" debian/changelog
 
 # Customize the debian/control file for better dependencies
-cat > debian/control << 'EOF'
+cat > debian/control << EOF
 Source: osvm
 Section: utils
 Priority: optional
-Maintainer: OpenSVM <rin@opensvm.com>
+Maintainer: $OSVM_MAINTAINER_NAME <$OSVM_MAINTAINER_EMAIL>
 Build-Depends: debhelper (>= 10), cargo, rustc, pkg-config, libssl-dev, libudev-dev, libusb-1.0-0-dev
 Standards-Version: 4.1.3
-Homepage: https://github.com/openSVM/osvm-cli
+Homepage: $OSVM_PROJECT_URL
 
 Package: osvm
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: OpenSVM CLI tool for managing SVM nodes and deployments
- OSVM CLI is a comprehensive tool for managing Solana Virtual Machine (SVM)
- nodes and deployments. It provides functionality for:
- - Node deployment and management
- - SVM blockchain interactions
- - Audit capabilities
- - SSH-based deployment automation
+Depends: \${shlibs:Depends}, \${misc:Depends}
+Description: $OSVM_DESCRIPTION_SHORT
+ $OSVM_DESCRIPTION_LONG
  .
  This tool is designed to simplify the process of working with SVM-based
  blockchain networks including Solana, Sonic, and other compatible chains.
@@ -108,9 +107,21 @@ dpkg-buildpackage -us -uc
 # Move back to the working directory
 cd "$WORKDIR"
 
+# Create a dedicated output directory for .deb files
+mkdir -p debian-packages
+
+# Move .deb files to a known location for reliable artifact upload
+if ls ../*.deb 1> /dev/null 2>&1; then
+    mv ../*.deb debian-packages/
+    echo "Moved .deb files to debian-packages/ directory"
+else
+    echo "Error: No .deb files found after build"
+    exit 1
+fi
+
 # Clean up temporary tarball
 rm -f "$TEMP_TARBALL"
 
 echo "Debian package built successfully!"
-echo "Package files are in the current directory:"
-ls -la *.deb 2>/dev/null || echo "No .deb files found in current directory, check parent directory"
+echo "Package files are in debian-packages/ directory:"
+ls -la debian-packages/*.deb

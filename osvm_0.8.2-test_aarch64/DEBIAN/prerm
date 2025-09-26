@@ -1,0 +1,4 @@
+#!/bin/sh
+# Clean up any cached data
+rm -rf "$HOME/.osvm" 2>/dev/null || true
+exit 0
