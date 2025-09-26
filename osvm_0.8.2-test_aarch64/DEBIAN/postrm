@@ -1,0 +1,5 @@
+#!/bin/sh
+# Clean up after removal
+echo "OpenSVM CLI has been removed."
+echo "Configuration files in ~/.osvm have been preserved."
+exit 0

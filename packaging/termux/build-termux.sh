@@ -4,6 +4,10 @@
 
 set -e
 
+# Source packaging configuration
+SCRIPT_DIR="$(dirname "$0")"
+source "$SCRIPT_DIR/../config.sh"
+
 # Get version and architecture from command line or defaults
 VERSION="${1:-$(git describe --tags --abbrev=0 | sed 's/^v//')}"
 ARCH="${2:-aarch64}"
@@ -23,23 +27,20 @@ PACKAGE_DIR="${PACKAGE_NAME}_${VERSION}_${ARCH}"
 rm -rf "$PACKAGE_DIR"
 
 mkdir -p "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin
-mkdir -p "$PACKAGE_DIR"/control
+mkdir -p "$PACKAGE_DIR"/DEBIAN
 
 # Copy binary
 cp target/release/osvm "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin/
 
 # Create control file
-cat > "$PACKAGE_DIR"/control/control << EOF
+cat > "$PACKAGE_DIR"/DEBIAN/control << EOF
 Package: $PACKAGE_NAME
 Version: $VERSION
 Architecture: $ARCH
-Maintainer: OpenSVM <rin@opensvm.com>
-Description: OpenSVM CLI tool for managing SVM nodes and deployments
- OSVM CLI is a comprehensive tool for managing Solana Virtual Machine (SVM)
- nodes and deployments. It provides functionality for node deployment,
- SVM blockchain interactions, audit capabilities, and SSH-based deployment
- automation.
-Homepage: https://github.com/openSVM/osvm-cli
+Maintainer: $OSVM_MAINTAINER_NAME <$OSVM_MAINTAINER_EMAIL>
+Description: $OSVM_DESCRIPTION_SHORT
+ $OSVM_DESCRIPTION_LONG
+Homepage: $OSVM_PROJECT_URL
 Section: utils
 Priority: optional
 Depends: rust
@@ -47,34 +48,34 @@ Installed-Size: $(du -k "$PACKAGE_DIR"/data | tail -1 | cut -f1)
 EOF
 
 # Create prerm script to handle cleanup
-cat > "$PACKAGE_DIR"/control/prerm << 'EOF'
+cat > "$PACKAGE_DIR"/DEBIAN/prerm << 'EOF'
 #!/bin/sh
 # Clean up any cached data
 rm -rf "$HOME/.osvm" 2>/dev/null || true
 exit 0
 EOF
-chmod +x "$PACKAGE_DIR"/control/prerm
+chmod +x "$PACKAGE_DIR"/DEBIAN/prerm
 
 # Create postinst script
-cat > "$PACKAGE_DIR"/control/postinst << 'EOF'
+cat > "$PACKAGE_DIR"/DEBIAN/postinst << 'EOF'
 #!/bin/sh
 # Ensure binary is executable
-chmod +x "$PREFIX/bin/osvm" 2>/dev/null || true
+chmod +x "/data/data/com.termux/files/usr/bin/osvm" 2>/dev/null || true
 echo "OpenSVM CLI installed successfully!"
 echo "Run 'osvm --help' to get started."
 exit 0
 EOF
-chmod +x "$PACKAGE_DIR"/control/postinst
+chmod +x "$PACKAGE_DIR"/DEBIAN/postinst
 
 # Create postrm script
-cat > "$PACKAGE_DIR"/control/postrm << 'EOF'
+cat > "$PACKAGE_DIR"/DEBIAN/postrm << 'EOF'
 #!/bin/sh
 # Clean up after removal
 echo "OpenSVM CLI has been removed."
 echo "Configuration files in ~/.osvm have been preserved."
 exit 0
 EOF
-chmod +x "$PACKAGE_DIR"/control/postrm
+chmod +x "$PACKAGE_DIR"/DEBIAN/postrm
 
 # Create the .deb package for Termux
 echo "Building package..."
