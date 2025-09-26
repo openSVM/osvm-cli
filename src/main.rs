@@ -787,6 +787,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_mcp_command(&app_matches, sub_matches).await;
     }
 
+    // Handle chat command early to avoid config loading that might trigger self-repair  
+    if sub_command == "chat" {
+        return crate::utils::agent_chat::run_agent_chat().await
+            .map_err(|e| e.into());
+    }
+
     // Handle AI queries early to avoid config loading
     if !is_known_command(sub_command) {
         return handle_ai_query(sub_command, sub_matches, &app_matches).await;
@@ -1133,20 +1139,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 // Display all examples
                 examples::display_all_examples();
-            }
-        }
-        "chat" => {
-            // Handle the agent chat interface
-            println!("🚀 Launching OSVM Agent Chat Interface...");
-            
-            match crate::utils::agent_chat::run_agent_chat().await {
-                Ok(_) => {
-                    println!("Chat session ended. Goodbye! 👋");
-                }
-                Err(e) => {
-                    eprintln!("❌ Error running chat interface: {}", e);
-                    exit(1);
-                }
             }
         }
         "rpc-manager" => {

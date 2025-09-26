@@ -437,11 +437,66 @@ fn show_help(siv: &mut Cursive) {
 pub async fn run_agent_chat() -> Result<()> {
     println!("🚀 Starting OSVM Agent Chat Interface...");
     
+    // Check if we're in a terminal environment
+    if std::env::var("TERM").is_err() || std::env::var("CI").is_ok() {
+        return run_demo_mode().await;
+    }
+    
     let mut chat_ui = AgentChatUI::new()
         .context("Failed to initialize chat UI")?;
     
     chat_ui.run().await
         .context("Failed to run chat interface")?;
+
+    Ok(())
+}
+
+/// Run demo mode for non-terminal environments
+async fn run_demo_mode() -> Result<()> {
+    println!("📱 Running in demo mode (terminal UI not available)");
+    println!();
+
+    // Initialize chat state to show MCP integration
+    let state = ChatState::new()?;
+    state.refresh_tools_sync()?;
+    
+    // Show what the interface provides
+    println!("🎯 OSVM Agent Chat Interface Features:");
+    println!("   • Interactive chat interface using cursive-multiplex");
+    println!("   • Integration with configured MCP servers");
+    println!("   • Real-time tool calling and blockchain operations");
+    println!("   • Multi-panel layout with chat history and tool status");
+    println!();
+
+    // Show MCP server status
+    let tools = state.available_tools.lock().unwrap();
+    if tools.is_empty() {
+        println!("⚠️  No MCP servers configured.");
+        println!("   Use 'osvm mcp setup' to configure Solana MCP server");
+        println!("   or 'osvm mcp add <server_id> --server-url <url>' to add custom servers");
+    } else {
+        println!("🔌 Configured MCP Servers:");
+        for (server_id, server_tools) in tools.iter() {
+            println!("   • {}: Available (tools would be fetched in interactive mode)", server_id);
+        }
+    }
+    
+    println!();
+    println!("💡 Sample Chat Interaction:");
+    println!("   User: What's the balance of my Solana wallet?");
+    println!("   Agent: I'll check your wallet balance using the Solana MCP tools...");
+    println!("   Agent: [Calls solana_get_balance tool with your wallet address]");
+    println!("   Agent: Your wallet balance is 2.5 SOL");
+    println!();
+    
+    println!("   User: Show me recent transactions");
+    println!("   Agent: [Calls solana_get_signatures tool]");
+    println!("   Agent: Here are your recent transactions: [transaction list]");
+    println!();
+    
+    println!("💻 To use the full interactive interface:");
+    println!("   Run 'osvm chat' in a proper terminal environment");
+    println!();
 
     Ok(())
 }
