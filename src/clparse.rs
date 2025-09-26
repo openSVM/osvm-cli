@@ -384,6 +384,16 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
         )
         .subcommand(
+            Command::new("chat")
+                .about("Launch interactive agent chat interface with MCP tools")
+                .arg(
+                    Arg::new("debug")
+                        .long("debug")
+                        .action(ArgAction::SetTrue)
+                        .help("Enable debug mode for chat interface")
+                )
+        )
+        .subcommand(
             Command::new("svm")
                 .about("Manage Solana Virtual Machines (SVMs)")
                 .arg_required_else_help(true)
