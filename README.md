@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.80.0+-orange.svg)](https://www.rust-lang.org/)
 [![Solana](https://img.shields.io/badge/Solana-1.14.29+-purple.svg)](https://solana.com/)
 
-A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks. Monitor, deploy, and manage your SVM infrastructure with a single tool.
+A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks with integrated AI and MCP (Model Context Protocol) capabilities. Monitor, deploy, and manage your SVM infrastructure while leveraging AI assistance and blockchain data services through a single tool.
 
 ## 📚 Documentation
 
@@ -25,6 +25,8 @@ For comprehensive documentation, please visit the [docs](docs/) directory:
 
 ### Advanced Features Documentation
 
+- **[🤖 AI Integration](docs/ai-endpoint-configuration.md)** - AI-powered assistance and analysis
+- **[🔗 MCP Integration](docs/mcp-integration.md)** - Model Context Protocol server support
 - **[🔧 Self-Repair System](docs/self-repair-system.md)** - Automated maintenance
 - **[📋 Log Monitoring](docs/log-monitoring.md)** - Real-time log analysis
 - **[⚡ Validator Enhancements](docs/validator-enhancements.md)** - Performance optimization
@@ -154,6 +156,8 @@ alias osvm='docker run --rm -it -v $(pwd):/workspace ghcr.io/opensvm/osvm-cli:la
 - **SVM Management**: List and inspect Solana Virtual Machines
 - **Node Deployment**: Deploy validator or dedicated RPC nodes with a single command
 - **Interactive Dashboard**: Real-time monitoring with a terminal-based UI
+- **🤖 AI Integration**: Built-in AI assistance for security analysis and blockchain queries
+- **🔗 MCP Server Support**: Connect to Model Context Protocol servers for enhanced blockchain data access
 - **Network Configuration**: Configure nodes for mainnet, testnet, or devnet
 - **Performance Metrics**: Track TPS, latency, and system requirements
 - **Colorized Output**: Enhanced readability with consistent color-coding for status, commands, and data
@@ -329,6 +333,74 @@ or plain string:
 HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS
 ```
 
+### AI Integration
+
+OSVM CLI includes built-in AI capabilities for blockchain analysis and assistance:
+
+```bash
+# Ask AI questions about Solana security
+osvm "What are the best practices for Solana smart contract security?"
+
+# Get AI analysis of a specific topic
+osvm "Explain the differences between Solana mainnet and testnet"
+
+# Use custom AI models (OpenAI, Ollama, LocalAI, etc.)
+export OPENAI_URL="https://api.openai.com/v1/chat/completions"
+export OPENAI_KEY="sk-your-openai-api-key"
+osvm "Help me optimize my validator performance"
+
+# Local AI models for privacy
+export OPENAI_URL="http://localhost:11434/v1/chat/completions"
+export OPENAI_KEY="ollama-key"
+osvm "Analyze this smart contract for vulnerabilities"
+```
+
+**AI Features:**
+- 🎯 **Smart Contract Analysis**: AI-powered security auditing and vulnerability detection
+- 🔍 **Code Review**: Automated analysis of Solana programs and smart contracts  
+- 💡 **Best Practices**: AI guidance on Solana development and deployment
+- 🔒 **Privacy Options**: Support for local models (Ollama, LocalAI) for sensitive projects
+- 🌐 **Multi-Provider**: Works with OpenAI, Anthropic, and OpenAI-compatible APIs
+
+### MCP Server Integration
+
+Connect to Model Context Protocol servers for enhanced blockchain data access:
+
+```bash
+# Quick setup with Solana MCP server
+osvm mcp setup --auto-enable
+
+# Add MCP server manually
+osvm mcp add solana-server \
+  --server-url https://api.solana-mcp.com \
+  --auth-type bearer \
+  --auth-token your-token \
+  --enabled
+
+# Add MCP server from GitHub repository (automatic building)
+osvm mcp add-github solana-mcp https://github.com/openSVM/solana-mcp-server --enabled
+
+# List configured servers
+osvm mcp list
+
+# Discover available tools
+osvm mcp tools solana-server
+
+# Execute blockchain queries
+osvm mcp call solana-server getBalance --args '{"pubkey":"11111111111111111111111111111112"}'
+
+# Get account information  
+osvm mcp call solana-server getAccountInfo --args '{"pubkey":"your-account-pubkey"}'
+```
+
+**MCP Features:**
+- 🔗 **Multi-Transport**: HTTP, WebSocket, and stdio transport support
+- 🔐 **Authentication**: Bearer tokens, API keys, and basic auth
+- 🛡️ **Circuit Breaker**: Automatic failure recovery and error handling
+- 📊 **Tool Discovery**: Automatically find available blockchain tools
+- 🚀 **GitHub Integration**: Clone and build MCP servers directly from repositories
+- 🤖 **AI-Ready**: Perfect integration with AI tools for enhanced blockchain analysis
+
 ## 🔧 Detailed Installation
 
 ### Prerequisites
@@ -380,6 +452,8 @@ osvm svm dashboard
 
 - [📖 GitHub Actions Integration](.github/actions/svm-deploy/README.md) - Complete guide for CI/CD integration
 - [🔧 GitHub Actions Examples](examples/github-actions/) - Ready-to-use workflow examples
+- [🤖 AI Integration Guide](docs/ai-endpoint-configuration.md) - AI-powered analysis and assistance
+- [🔗 MCP Integration Guide](docs/mcp-integration.md) - Model Context Protocol server setup
 - [📋 Command Reference](#-command-reference) - All available commands and options
 - [🎯 Usage Examples](#-usage-examples) - Common use cases and scenarios
 - [🔧 Installation Guide](#-detailed-installation) - Step-by-step setup instructions
