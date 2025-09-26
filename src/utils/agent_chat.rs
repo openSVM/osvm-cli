@@ -9,11 +9,12 @@ use cursive::traits::*;
 use cursive::direction::Orientation;
 use cursive_multiplex::{Mux, Id};
 use crate::services::mcp_service::{McpService, McpTool};
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, anyhow};
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use std::sync::{Arc, Mutex, RwLock};
+use tokio::sync::{mpsc, oneshot};
 use std::collections::HashMap;
+use log::{error, warn, debug};
 
 /// Message types in the chat interface
 #[derive(Clone, Debug)]
@@ -26,12 +27,109 @@ pub enum ChatMessage {
     Error(String),
 }
 
-/// Shared chat state
+/// Tool refresh commands for async worker
+#[derive(Debug)]
+pub enum ToolRefreshCommand {
+    RefreshAll,
+    RefreshServer(String),
+    GetStatus(oneshot::Sender<HashMap<String, Vec<McpTool>>>),
+}
+
+/// Sanitized message for safe display
+#[derive(Clone, Debug)]
+pub struct SanitizedMessage {
+    pub message_type: String,
+    pub content: String,
+    pub metadata: Option<String>,
+}
+
+impl ChatMessage {
+    /// Convert to sanitized message for safe display
+    pub fn sanitize(&self) -> SanitizedMessage {
+        match self {
+            ChatMessage::User(text) => SanitizedMessage {
+                message_type: "user".to_string(),
+                content: sanitize_text(text),
+                metadata: None,
+            },
+            ChatMessage::Agent(text) => SanitizedMessage {
+                message_type: "agent".to_string(),
+                content: sanitize_text(text),
+                metadata: None,
+            },
+            ChatMessage::System(text) => SanitizedMessage {
+                message_type: "system".to_string(),
+                content: sanitize_text(text),
+                metadata: None,
+            },
+            ChatMessage::ToolCall(tool_name, description, args) => {
+                let sanitized_args = args.as_ref()
+                    .map(|v| sanitize_json(v))
+                    .unwrap_or_else(|| "{}".to_string());
+                SanitizedMessage {
+                    message_type: "tool_call".to_string(),
+                    content: format!("{}: {}", sanitize_text(tool_name), sanitize_text(description)),
+                    metadata: Some(sanitized_args),
+                }
+            },
+            ChatMessage::ToolResult(tool_name, result) => SanitizedMessage {
+                message_type: "tool_result".to_string(),
+                content: sanitize_text(tool_name),
+                metadata: Some(sanitize_json(result)),
+            },
+            ChatMessage::Error(text) => SanitizedMessage {
+                message_type: "error".to_string(),
+                content: sanitize_text(text),
+                metadata: None,
+            },
+        }
+    }
+}
+
+/// Sanitize text content to prevent injection and redact sensitive data
+fn sanitize_text(text: &str) -> String {
+    let mut sanitized = text.to_string();
+    
+    // Redact potential private keys (base58 patterns that look like keys)
+    let key_pattern = regex::Regex::new(r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b").unwrap_or_else(|_| {
+        // Fallback if regex fails
+        return sanitized;
+    });
+    
+    sanitized = key_pattern.replace_all(&sanitized, "[REDACTED_KEY]").to_string();
+    
+    // Limit length to prevent display overflow
+    if sanitized.len() > 1000 {
+        sanitized.truncate(997);
+        sanitized.push_str("...");
+    }
+    
+    sanitized
+}
+
+/// Sanitize JSON data for safe display
+fn sanitize_json(value: &Value) -> String {
+    match serde_json::to_string_pretty(value) {
+        Ok(json_str) => {
+            let sanitized = sanitize_text(&json_str);
+            // Truncate large JSON for display
+            if sanitized.len() > 500 {
+                format!("{}...\n}}", &sanitized[..497])
+            } else {
+                sanitized
+            }
+        }
+        Err(_) => "[Invalid JSON]".to_string()
+    }
+}
+
+/// Shared chat state with optimized performance
 #[derive(Clone)]
 pub struct ChatState {
-    pub messages: Arc<Mutex<Vec<ChatMessage>>>,
+    pub messages: Arc<RwLock<Vec<ChatMessage>>>,
     pub mcp_service: Arc<Mutex<McpService>>,
-    pub available_tools: Arc<Mutex<HashMap<String, Vec<McpTool>>>>, // server_id -> tools
+    pub available_tools: Arc<RwLock<HashMap<String, Vec<McpTool>>>>,
+    pub tool_refresh_sender: Arc<Mutex<Option<mpsc::UnboundedSender<ToolRefreshCommand>>>>,
 }
 
 impl ChatState {
@@ -40,28 +138,85 @@ impl ChatState {
         
         // Load existing MCP configurations
         if let Err(e) = mcp_service.load_config() {
-            eprintln!("⚠️  Warning: Failed to load MCP config: {}", e);
+            warn!("Failed to load MCP config: {}", e);
         }
 
         Ok(ChatState {
-            messages: Arc::new(Mutex::new(Vec::new())),
+            messages: Arc::new(RwLock::new(Vec::new())),
             mcp_service: Arc::new(Mutex::new(mcp_service)),
-            available_tools: Arc::new(Mutex::new(HashMap::new())),
+            available_tools: Arc::new(RwLock::new(HashMap::new())),
+            tool_refresh_sender: Arc::new(Mutex::new(None)),
         })
     }
 
+    /// Initialize async tool refresh worker
+    pub async fn start_tool_refresh_worker(&self) -> Result<()> {
+        let (sender, mut receiver) = mpsc::unbounded_channel::<ToolRefreshCommand>();
+        
+        // Store sender for use by UI
+        if let Ok(mut sender_guard) = self.tool_refresh_sender.lock() {
+            *sender_guard = Some(sender);
+        } else {
+            return Err(anyhow!("Failed to store tool refresh sender"));
+        }
+        
+        let mcp_service = self.mcp_service.clone();
+        let available_tools = self.available_tools.clone();
+        
+        // Spawn async worker task
+        tokio::spawn(async move {
+            while let Some(command) = receiver.recv().await {
+                match command {
+                    ToolRefreshCommand::RefreshAll => {
+                        if let Err(e) = refresh_all_tools(&mcp_service, &available_tools).await {
+                            error!("Failed to refresh all tools: {}", e);
+                        }
+                    },
+                    ToolRefreshCommand::RefreshServer(server_id) => {
+                        if let Err(e) = refresh_server_tools(&mcp_service, &available_tools, &server_id).await {
+                            error!("Failed to refresh tools for server {}: {}", server_id, e);
+                        }
+                    },
+                    ToolRefreshCommand::GetStatus(response_sender) => {
+                        if let Ok(tools) = available_tools.read() {
+                            let _ = response_sender.send(tools.clone());
+                        }
+                    }
+                }
+            }
+        });
+        
+        Ok(())
+    }
+
+    /// Request async tool refresh
+    pub fn refresh_tools_async(&self) -> Result<()> {
+        if let Ok(sender_guard) = self.tool_refresh_sender.lock() {
+            if let Some(sender) = sender_guard.as_ref() {
+                sender.send(ToolRefreshCommand::RefreshAll)
+                    .map_err(|e| anyhow!("Failed to send refresh command: {}", e))?;
+            } else {
+                return Err(anyhow!("Tool refresh worker not initialized"));
+            }
+        } else {
+            return Err(anyhow!("Failed to access tool refresh sender"));
+        }
+        Ok(())
+    }
+
+    /// Synchronous fallback for tool refresh (marks servers as available)
     pub fn refresh_tools_sync(&self) -> Result<()> {
-        // For now, just load available servers without making async calls
-        // In a full implementation, this would use a background task to refresh tools
-        let mcp_service = self.mcp_service.lock().unwrap();
+        let mcp_service = self.mcp_service.lock()
+            .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
         let servers = mcp_service.list_servers();
-        let mut available_tools = self.available_tools.lock().unwrap();
+        let mut available_tools = self.available_tools.write()
+            .map_err(|e| anyhow!("Failed to lock available tools: {}", e))?;
+        
         available_tools.clear();
 
         for (server_id, config) in servers {
             if config.enabled {
-                // For the initial implementation, we'll just mark servers as available
-                // without actually fetching their tools
+                // Mark servers as available without actually fetching tools
                 available_tools.insert(server_id.clone(), vec![]);
             }
         }
@@ -70,13 +225,105 @@ impl ChatState {
     }
 
     pub fn add_message(&self, message: ChatMessage) {
-        let mut messages = self.messages.lock().unwrap();
-        messages.push(message);
+        if let Ok(mut messages) = self.messages.write() {
+            messages.push(message);
+            
+            // Limit message history to prevent memory growth
+            if messages.len() > 1000 {
+                messages.drain(0..100); // Remove oldest 100 messages
+            }
+        } else {
+            error!("Failed to add message to chat history");
+        }
     }
 
     pub fn get_messages(&self) -> Vec<ChatMessage> {
-        let messages = self.messages.lock().unwrap();
-        messages.clone()
+        self.messages.read()
+            .map(|messages| messages.clone())
+            .unwrap_or_else(|_| {
+                error!("Failed to read messages");
+                vec![]
+            })
+    }
+    
+    pub fn clear_messages(&self) {
+        if let Ok(mut messages) = self.messages.write() {
+            messages.clear();
+        } else {
+            error!("Failed to clear messages");
+        }
+    }
+}
+
+/// Async function to refresh tools from all servers
+async fn refresh_all_tools(
+    mcp_service: &Arc<Mutex<McpService>>,
+    available_tools: &Arc<RwLock<HashMap<String, Vec<McpTool>>>>
+) -> Result<()> {
+    let servers = {
+        let service = mcp_service.lock()
+            .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
+        service.list_servers()
+    };
+    
+    let mut new_tools = HashMap::new();
+    
+    for (server_id, config) in servers {
+        if config.enabled {
+            match refresh_server_tools_inner(&mcp_service, &server_id).await {
+                Ok(tools) => {
+                    new_tools.insert(server_id, tools);
+                }
+                Err(e) => {
+                    warn!("Failed to fetch tools from server {}: {}", server_id, e);
+                    new_tools.insert(server_id, vec![]);
+                }
+            }
+        }
+    }
+    
+    if let Ok(mut tools) = available_tools.write() {
+        *tools = new_tools;
+    }
+    
+    Ok(())
+}
+
+/// Async function to refresh tools from specific server
+async fn refresh_server_tools(
+    mcp_service: &Arc<Mutex<McpService>>,
+    available_tools: &Arc<RwLock<HashMap<String, Vec<McpTool>>>>,
+    server_id: &str
+) -> Result<()> {
+    match refresh_server_tools_inner(mcp_service, server_id).await {
+        Ok(tools) => {
+            if let Ok(mut available) = available_tools.write() {
+                available.insert(server_id.to_string(), tools);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            warn!("Failed to refresh tools for server {}: {}", server_id, e);
+            Err(e)
+        }
+    }
+}
+
+/// Inner function to actually fetch tools from a server
+async fn refresh_server_tools_inner(
+    mcp_service: &Arc<Mutex<McpService>>,
+    server_id: &str
+) -> Result<Vec<McpTool>> {
+    let service = mcp_service.lock()
+        .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
+    
+    // Use timeout to prevent hanging
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        service.list_tools(server_id)
+    ).await {
+        Ok(result) => result.map_err(|e| anyhow!("MCP service error: {}", e)),
+        Err(_) => Err(anyhow!("Tool fetch timeout for server {}", server_id))
     }
 }
 
@@ -93,6 +340,11 @@ impl AgentChatUI {
     }
 
     pub async fn run(&mut self) -> Result<()> {
+        // Initialize async tool refresh worker
+        if let Err(e) = self.state.start_tool_refresh_worker().await {
+            warn!("Failed to start async tool refresh worker: {}", e);
+        }
+        
         // Refresh available tools at startup
         self.state.refresh_tools_sync()?;
 
@@ -107,12 +359,19 @@ impl AgentChatUI {
         
         // Show available tools
         {
-            let tools = self.state.available_tools.lock().unwrap();
-            if tools.is_empty() {
-                self.state.add_message(ChatMessage::System("No MCP servers are currently configured. Use 'osvm mcp setup' to get started.".to_string()));
-            } else {
-                let server_names: Vec<String> = tools.keys().cloned().collect();
-                self.state.add_message(ChatMessage::System(format!("Available MCP servers: {}", server_names.join(", "))));
+            match self.state.available_tools.read() {
+                Ok(tools) => {
+                    if tools.is_empty() {
+                        self.state.add_message(ChatMessage::System("No MCP servers are currently configured. Use 'osvm mcp setup' to get started.".to_string()));
+                    } else {
+                        let server_names: Vec<String> = tools.keys().cloned().collect();
+                        self.state.add_message(ChatMessage::System(format!("Available MCP servers: {}", server_names.join(", "))));
+                    }
+                }
+                Err(_) => {
+                    error!("Failed to read available tools during initialization");
+                    self.state.add_message(ChatMessage::System("Error reading MCP server configuration".to_string()));
+                }
             }
         }
 
@@ -212,56 +471,88 @@ impl AgentChatUI {
         let mut display_text = String::new();
 
         for message in messages {
-            match message {
-                ChatMessage::User(text) => {
-                    display_text.push_str(&format!("👤 You: {}\n\n", text));
+            let sanitized = message.sanitize();
+            match sanitized.message_type.as_str() {
+                "user" => {
+                    display_text.push_str(&format!("👤 You: {}\n\n", sanitized.content));
                 }
-                ChatMessage::Agent(text) => {
-                    display_text.push_str(&format!("🤖 Agent: {}\n\n", text));
+                "agent" => {
+                    display_text.push_str(&format!("🤖 Agent: {}\n\n", sanitized.content));
                 }
-                ChatMessage::System(text) => {
-                    display_text.push_str(&format!("ℹ️  System: {}\n\n", text));
+                "system" => {
+                    display_text.push_str(&format!("ℹ️  System: {}\n\n", sanitized.content));
                 }
-                ChatMessage::ToolCall(tool_name, description, args) => {
-                    display_text.push_str(&format!("🔧 Calling tool: {} - {}\n", tool_name, description));
-                    if let Some(args) = args {
-                        display_text.push_str(&format!("   Args: {}\n\n", args));
+                "tool_call" => {
+                    display_text.push_str(&format!("🔧 Calling tool: {}\n", sanitized.content));
+                    if let Some(metadata) = sanitized.metadata {
+                        display_text.push_str(&format!("   Args: {}\n\n", metadata));
                     } else {
                         display_text.push_str("\n");
                     }
                 }
-                ChatMessage::ToolResult(tool_name, result) => {
-                    display_text.push_str(&format!("✅ Tool {} result:\n{}\n\n", tool_name, 
-                        serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{}", result))));
+                "tool_result" => {
+                    display_text.push_str(&format!("✅ Tool {} result:\n", sanitized.content));
+                    if let Some(metadata) = sanitized.metadata {
+                        display_text.push_str(&format!("{}\n\n", metadata));
+                    } else {
+                        display_text.push_str("[No result data]\n\n");
+                    }
                 }
-                ChatMessage::Error(text) => {
-                    display_text.push_str(&format!("❌ Error: {}\n\n", text));
+                "error" => {
+                    display_text.push_str(&format!("❌ Error: {}\n\n", sanitized.content));
+                }
+                _ => {
+                    display_text.push_str(&format!("❓ Unknown: {}\n\n", sanitized.content));
                 }
             }
         }
 
-        if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
-            chat_display.set_content(display_text);
+        // Safely update the chat display
+        match siv.find_name::<TextView>("chat_display") {
+            Some(mut chat_display) => {
+                chat_display.set_content(display_text);
+            }
+            None => {
+                error!("Failed to find chat_display TextView - UI may be corrupted");
+            }
         }
     }
 
     fn update_tools_display(&self, siv: &mut Cursive) {
-        let tools = self.state.available_tools.lock().unwrap();
-        let mut tools_text = String::new();
-
-        if tools.is_empty() {
-            tools_text.push_str("No MCP servers configured. Use 'osvm mcp setup' to add tools.");
-        } else {
-            for (server_id, server_tools) in tools.iter() {
-                tools_text.push_str(&format!("🔌 {}: ", server_id));
-                let tool_names: Vec<String> = server_tools.iter().map(|t| t.name.clone()).collect();
-                tools_text.push_str(&tool_names.join(", "));
-                tools_text.push('\n');
+        let tools_result = self.state.available_tools.read();
+        let tools_text = match tools_result {
+            Ok(tools) => {
+                let mut text = String::new();
+                if tools.is_empty() {
+                    text.push_str("No MCP servers configured. Use 'osvm mcp setup' to add tools.");
+                } else {
+                    for (server_id, server_tools) in tools.iter() {
+                        text.push_str(&format!("🔌 {}: ", server_id));
+                        if server_tools.is_empty() {
+                            text.push_str("Available (tools not fetched)");
+                        } else {
+                            let tool_names: Vec<String> = server_tools.iter().map(|t| t.name.clone()).collect();
+                            text.push_str(&tool_names.join(", "));
+                        }
+                        text.push('\n');
+                    }
+                }
+                text
             }
-        }
+            Err(_) => {
+                error!("Failed to read available tools");
+                "Error: Unable to display tools".to_string()
+            }
+        };
 
-        if let Some(mut tools_display) = siv.find_name::<TextView>("tools_display") {
-            tools_display.set_content(tools_text);
+        // Safely update the tools display
+        match siv.find_name::<TextView>("tools_display") {
+            Some(mut tools_display) => {
+                tools_display.set_content(tools_text);
+            }
+            None => {
+                error!("Failed to find tools_display TextView - UI may be corrupted");
+            }
         }
     }
 
@@ -302,20 +593,27 @@ fn process_user_message(siv: &mut Cursive, message: String, state: ChatState) {
     if message_lower.contains("help") {
         state.add_message(ChatMessage::Agent("I can help you with blockchain operations using MCP tools. Try asking about account balances, transactions, or network status.".to_string()));
     } else if message_lower.contains("tools") || message_lower.contains("what can you do") {
-        let tools = state.available_tools.lock().unwrap();
-        if tools.is_empty() {
-            state.add_message(ChatMessage::Agent("I don't have any MCP tools configured. Please configure some MCP servers first.".to_string()));
-        } else {
-            let mut response = "I have access to these tools:\n\n".to_string();
-            for (server_id, server_tools) in tools.iter() {
-                response.push_str(&format!("From {}:\n", server_id));
-                for tool in server_tools {
-                    response.push_str(&format!("  • {}: {}\n", tool.name, 
-                        tool.description.as_deref().unwrap_or("No description")));
+        match state.available_tools.read() {
+            Ok(tools) => {
+                if tools.is_empty() {
+                    state.add_message(ChatMessage::Agent("I don't have any MCP tools configured. Please configure some MCP servers first.".to_string()));
+                } else {
+                    let mut response = "I have access to these tools:\n\n".to_string();
+                    for (server_id, server_tools) in tools.iter() {
+                        response.push_str(&format!("From {}:\n", server_id));
+                        for tool in server_tools {
+                            response.push_str(&format!("  • {}: {}\n", tool.name, 
+                                tool.description.as_deref().unwrap_or("No description")));
+                        }
+                        response.push('\n');
+                    }
+                    state.add_message(ChatMessage::Agent(response));
                 }
-                response.push('\n');
             }
-            state.add_message(ChatMessage::Agent(response));
+            Err(_) => {
+                error!("Failed to read available tools for user query");
+                state.add_message(ChatMessage::Error("Failed to access tool information".to_string()));
+            }
         }
     } else {
         // Default response for now
@@ -367,20 +665,32 @@ fn update_chat_display_handler(siv: &mut Cursive, state: ChatState) {
 
 /// Refresh tools handler
 fn refresh_tools_handler(siv: &mut Cursive, state: ChatState) {
-    // In a real implementation, this would be async
-    state.add_message(ChatMessage::System("Refreshing available tools...".to_string()));
-    update_chat_display_handler(siv, state.clone());
+    // Try async refresh first, fall back to sync
+    match state.refresh_tools_async() {
+        Ok(_) => {
+            state.add_message(ChatMessage::System("Refreshing available tools...".to_string()));
+        }
+        Err(_) => {
+            // Fallback to sync refresh
+            match state.refresh_tools_sync() {
+                Ok(_) => {
+                    state.add_message(ChatMessage::System("Tools refreshed (sync mode)".to_string()));
+                }
+                Err(e) => {
+                    error!("Failed to refresh tools: {}", e);
+                    state.add_message(ChatMessage::Error("Failed to refresh tools".to_string()));
+                }
+            }
+        }
+    }
     
-    // For now, just update the tools display
+    update_chat_display_handler(siv, state.clone());
     update_tools_display_handler(siv, state);
 }
 
 /// Clear chat handler
 fn clear_chat_handler(siv: &mut Cursive, state: ChatState) {
-    {
-        let mut messages = state.messages.lock().unwrap();
-        messages.clear();
-    }
+    state.clear_messages();
     
     // Add welcome message back
     state.add_message(ChatMessage::System("Chat cleared. Welcome back! 🤖".to_string()));
@@ -389,26 +699,40 @@ fn clear_chat_handler(siv: &mut Cursive, state: ChatState) {
 
 /// Update tools display helper
 fn update_tools_display_handler(siv: &mut Cursive, state: ChatState) {
-    let tools = state.available_tools.lock().unwrap();
-    let mut tools_text = String::new();
-
-    if tools.is_empty() {
-        tools_text.push_str("No MCP servers configured. Use 'osvm mcp setup' to add tools.");
-    } else {
-        for (server_id, server_tools) in tools.iter() {
-            tools_text.push_str(&format!("🔌 {}: ", server_id));
-            if server_tools.is_empty() {
-                tools_text.push_str("Available (tools not fetched)");
+    let tools_result = state.available_tools.read();
+    let tools_text = match tools_result {
+        Ok(tools) => {
+            let mut text = String::new();
+            if tools.is_empty() {
+                text.push_str("No MCP servers configured. Use 'osvm mcp setup' to add tools.");
             } else {
-                let tool_names: Vec<String> = server_tools.iter().map(|t| t.name.clone()).collect();
-                tools_text.push_str(&tool_names.join(", "));
+                for (server_id, server_tools) in tools.iter() {
+                    text.push_str(&format!("🔌 {}: ", server_id));
+                    if server_tools.is_empty() {
+                        text.push_str("Available (tools not fetched)");
+                    } else {
+                        let tool_names: Vec<String> = server_tools.iter().map(|t| t.name.clone()).collect();
+                        text.push_str(&tool_names.join(", "));
+                    }
+                    text.push('\n');
+                }
             }
-            tools_text.push('\n');
+            text
         }
-    }
+        Err(_) => {
+            error!("Failed to read available tools");
+            "Error: Unable to display tools".to_string()
+        }
+    };
 
-    if let Some(mut tools_display) = siv.find_name::<TextView>("tools_display") {
-        tools_display.set_content(tools_text);
+    // Safely update the tools display
+    match siv.find_name::<TextView>("tools_display") {
+        Some(mut tools_display) => {
+            tools_display.set_content(tools_text);
+        }
+        None => {
+            error!("Failed to find tools_display TextView - UI may be corrupted");
+        }
     }
 }
 
@@ -677,27 +1001,33 @@ async fn run_demo_mode() -> Result<()> {
     println!();
 
     // Show MCP server status with more detail
-    let tools = state.available_tools.lock().unwrap();
-    if tools.is_empty() {
-        println!("⚠️  No MCP servers configured.");
-        println!("   📥 To set up MCP servers:");
-        println!("      1. osvm mcp setup                    # Quick Solana setup");
-        println!("      2. osvm mcp add custom --server-url <url> --enabled");
-        println!("      3. osvm mcp list                     # View configured servers");
-    } else {
-        println!("🔌 MCP Server Integration Status:");
-        for (server_id, server_tools) in tools.iter() {
-            println!("   ✅ {}: Connected & Available", server_id);
-            println!("      └─ Tools would be dynamically loaded in interactive mode");
+    match state.available_tools.read() {
+        Ok(tools) => {
+            if tools.is_empty() {
+                println!("⚠️  No MCP servers configured.");
+                println!("   📥 To set up MCP servers:");
+                println!("      1. osvm mcp setup                    # Quick Solana setup");
+                println!("      2. osvm mcp add custom --server-url <url> --enabled");
+                println!("      3. osvm mcp list                     # View configured servers");
+            } else {
+                println!("🔌 MCP Server Integration Status:");
+                for (server_id, server_tools) in tools.iter() {
+                    println!("   ✅ {}: Connected & Available", server_id);
+                    println!("      └─ Tools would be dynamically loaded in interactive mode");
+                }
+                
+                // Simulate tool loading
+                println!();
+                println!("📊 Simulated Tool Discovery:");
+                for (server_id, _) in tools.iter() {
+                    println!("   🔍 Discovering tools from '{}'...", server_id);
+                    println!("      └─ Found: get_balance, get_transactions, send_transaction");
+                    println!("      └─ Status: Ready for chat interactions");
+                }
+            }
         }
-        
-        // Simulate tool loading
-        println!();
-        println!("📊 Simulated Tool Discovery:");
-        for (server_id, _) in tools.iter() {
-            println!("   🔍 Discovering tools from '{}'...", server_id);
-            println!("      └─ Found: get_balance, get_transactions, send_transaction");
-            println!("      └─ Status: Ready for chat interactions");
+        Err(_) => {
+            println!("❌ Error: Failed to read MCP server status");
         }
     }
     
