@@ -1,6 +1,0 @@
-#!/bin/sh
-# Ensure binary is executable
-chmod +x "/data/data/com.termux/files/usr/bin/osvm" 2>/dev/null || true
-echo "OpenSVM CLI installed successfully!"
-echo "Run 'osvm --help' to get started."
-exit 0
