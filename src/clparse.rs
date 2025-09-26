@@ -392,6 +392,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .action(ArgAction::SetTrue)
                         .help("Enable debug mode for chat interface")
                 )
+                .arg(
+                    Arg::new("test")
+                        .long("test")
+                        .action(ArgAction::SetTrue)
+                        .help("Run comprehensive UI tests and show screenshots")
+                )
         )
         .subcommand(
             Command::new("svm")

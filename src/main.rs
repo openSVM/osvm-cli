@@ -789,8 +789,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle chat command early to avoid config loading that might trigger self-repair  
     if sub_command == "chat" {
-        return crate::utils::agent_chat::run_agent_chat().await
-            .map_err(|e| e.into());
+        // Check if test mode is requested
+        if sub_matches.get_flag("test") {
+            return crate::utils::agent_chat::run_chat_ui_tests().await
+                .map_err(|e| e.into());
+        } else {
+            return crate::utils::agent_chat::run_agent_chat().await
+                .map_err(|e| e.into());
+        }
     }
 
     // Handle AI queries early to avoid config loading
