@@ -8,6 +8,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Centralized maintainer information - can be overridden in repository secrets
+  OSVM_MAINTAINER_NAME: "OpenSVM"
+  OSVM_MAINTAINER_EMAIL: "rin@opensvm.com"
 
 jobs:
   build:
@@ -80,59 +83,28 @@ jobs:
       - name: Set up Debian packaging environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y debhelper dh-make devscripts
+          sudo apt-get install -y debhelper dh-make devscripts dpkg-dev
       
       - name: Create Debian package
         run: |
           # Get version by stripping 'v' prefix from tag
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          WORKDIR=$(pwd)
-          PKG=osvm-$VERSION
-          TARBALL="osvm_${VERSION}.orig.tar.gz"
-          TEMP_TARBALL="temp_${TARBALL}"  # Use temporary name to avoid same-file error
-          # Clean up any old stuff
-          rm -rf "$PKG"
-          rm -f "$TARBALL" "$TEMP_TARBALL"
-          # Prepare source dir
-          mkdir -p "$PKG"
-          cp -r src Cargo.toml Cargo.lock README.md LICENSE "$PKG/"
-          # Pack source tarball with temporary name first
-          tar czvf "$TEMP_TARBALL" "$PKG"
-          # Ensure the tarball exists
-          if [ ! -f "$TEMP_TARBALL" ]; then
-            echo "Error: $TEMP_TARBALL not found!"
-            exit 1
-          fi
-          # Move into the package dir
-          cd "$PKG"
-          # Set environment variables for dh_make to use correct maintainer info
-          export DEBFULLNAME="OpenSVM"
-          export DEBEMAIL="rin@opensvm.com"
-          # Run dh_make using the temporary tarball - this avoids same-file error
-          # dh_make will copy the temp tarball to the correct orig.tar.gz location
-          dh_make -y -s -c apache -e rin@opensvm.com -f "../$TEMP_TARBALL"
-          # Fix maintainer name in generated files
-          sed -i 's/Maintainer: unknown/Maintainer: OpenSVM/' debian/control
-          sed -i 's/ -- unknown/ -- OpenSVM/' debian/changelog
-          # Build the .deb package from within the package directory where debian/ folder was created
-          dpkg-buildpackage -us -uc
-          # Move back to the working dir
-          cd "$WORKDIR"
-          # Clean up temporary tarball
-          rm -f "$TEMP_TARBALL"
+          cd packaging/debian
+          ./build-deb.sh "$VERSION"
           
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
           name: osvm-deb-package
-          path: ./*.deb
+          path: packaging/debian/debian-packages/*.deb
       
       - name: Deploy to APT repository
         run: |
-          # This is a placeholder for the actual APT repository deployment
+          # TODO: Implement actual APT repository deployment
+          # This is a placeholder for the actual APR repository deployment
           # In a real scenario, you would use a service like Launchpad or a custom APT repository
           echo "Deploying to APT repository..."
-          # Example: scp ../osvm_*.deb user@apt-repo:/path/to/repo/
+          # Example: scp debian-packages/osvm_*.deb user@apt-repo:/path/to/repo/
           # Then update the repository index
 
   deploy-termux:
@@ -151,58 +123,22 @@ jobs:
       - name: Make binary executable
         run: chmod +x ./osvm
       
+      - name: Set up Termux packaging environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+      
       - name: Create Termux package structure
         run: |
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          PACKAGE_NAME="osvm"
-          PACKAGE_DIR="${PACKAGE_NAME}_${VERSION}_aarch64"
-          
-          # Create package directory structure
-          mkdir -p "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin
-          mkdir -p "$PACKAGE_DIR"/control
-          
-          # Copy binary
-          cp ./osvm "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin/
-          
-          # Create control file
-          cat > "$PACKAGE_DIR"/control/control << EOF
-          Package: $PACKAGE_NAME
-          Version: $VERSION
-          Architecture: aarch64
-          Maintainer: OpenSVM <rin@opensvm.com>
-          Description: OpenSVM CLI tool for managing SVM nodes and deployments
-          Homepage: https://github.com/${{ github.repository }}
-          Section: utils
-          Priority: optional
-          Depends: rust
-          EOF
-          
-          # Create prerm script to handle cleanup
-          cat > "$PACKAGE_DIR"/control/prerm << 'EOF'
-          #!/bin/sh
-          # Clean up any cached data
-          rm -rf "$HOME/.osvm" 2>/dev/null || true
-          EOF
-          chmod +x "$PACKAGE_DIR"/control/prerm
-          
-          # Create postinst script
-          cat > "$PACKAGE_DIR"/control/postinst << 'EOF'
-          #!/bin/sh
-          # Ensure binary is executable
-          chmod +x "$PREFIX/bin/osvm" 2>/dev/null || true
-          echo "OpenSVM CLI installed successfully!"
-          echo "Run 'osvm --help' to get started."
-          EOF
-          chmod +x "$PACKAGE_DIR"/control/postinst
-          
-          # Create the .deb package for Termux
-          dpkg-deb --build "$PACKAGE_DIR"
+          cd packaging/termux
+          ./build-termux.sh "$VERSION" aarch64
           
       - name: Upload Termux package
         uses: actions/upload-artifact@v4
         with:
           name: osvm-termux-package
-          path: ./*.deb
+          path: packaging/termux/*.deb
 
   deploy-archlinux:
     name: Deploy ArchLinux Package
@@ -214,86 +150,26 @@ jobs:
       - name: Create ArchLinux PKGBUILD
         run: |
           VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          SHA=$(curl -sL https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
-          
-          cat > PKGBUILD << EOF
-          # Maintainer: OpenSVM <rin@opensvm.com>
-          pkgname=osvm
-          pkgver=${VERSION}
-          pkgrel=1
-          pkgdesc="OpenSVM CLI tool for managing SVM nodes and deployments"
-          arch=('x86_64' 'aarch64')
-          url="https://github.com/${{ github.repository }}"
-          license=('MIT')
-          depends=('glibc')
-          makedepends=('rust' 'cargo' 'pkg-config' 'openssl' 'libudev0-shim')
-          source=("\${pkgname}-\${pkgver}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz")
-          sha256sums=('${SHA}')
-          
-          prepare() {
-              cd "\${pkgname}-cli-\${pkgver}"
-          }
-          
-          build() {
-              cd "\${pkgname}-cli-\${pkgver}"
-              export RUSTUP_TOOLCHAIN=stable
-              export CARGO_TARGET_DIR=target
-              cargo build --release --locked
-          }
-          
-          check() {
-              cd "\${pkgname}-cli-\${pkgver}"
-              export RUSTUP_TOOLCHAIN=stable
-              # Skip tests that require network access or specific hardware
-              cargo test --release --locked || true
-          }
-          
-          package() {
-              cd "\${pkgname}-cli-\${pkgver}"
-              install -Dm0755 -t "\${pkgdir}/usr/bin/" "target/release/\${pkgname}"
-              install -Dm0644 LICENSE "\${pkgdir}/usr/share/licenses/\${pkgname}/LICENSE"
-              install -Dm0644 README.md "\${pkgdir}/usr/share/doc/\${pkgname}/README.md"
-          }
-          EOF
-          
-          # Create .SRCINFO file for AUR
-          cat > .SRCINFO << EOF
-          pkgbase = osvm
-          	pkgdesc = OpenSVM CLI tool for managing SVM nodes and deployments
-          	pkgver = ${VERSION}
-          	pkgrel = 1
-          	url = https://github.com/${{ github.repository }}
-          	arch = x86_64
-          	arch = aarch64
-          	license = MIT
-          	makedepends = rust
-          	makedepends = cargo
-          	makedepends = pkg-config
-          	makedepends = openssl
-          	makedepends = libudev0-shim
-          	depends = glibc
-          	source = osvm-${VERSION}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz
-          	sha256sums = ${SHA}
-          
-          pkgname = osvm
-          EOF
+          cd packaging/archlinux
+          ./build-arch.sh "$VERSION"
       
       - name: Upload ArchLinux package files
         uses: actions/upload-artifact@v4
         with:
           name: osvm-archlinux-package
           path: |
-            ./PKGBUILD
-            ./.SRCINFO
+            packaging/archlinux/PKGBUILD
+            packaging/archlinux/.SRCINFO
       
       - name: Submit to AUR (placeholder)
         run: |
+          # TODO: Implement actual AUR submission
           # This is a placeholder for the actual AUR submission
           # In a real scenario, you would clone the AUR repository and update the PKGBUILD
           echo "Submitting to AUR..."
           # Example steps:
           # git clone ssh://aur@aur.archlinux.org/osvm.git
-          # cp PKGBUILD .SRCINFO osvm/
+          # cp packaging/archlinux/PKGBUILD packaging/archlinux/.SRCINFO osvm/
           # cd osvm && git add . && git commit -m "Update to ${VERSION}" && git push
 
   deploy-homebrew:
@@ -340,6 +216,7 @@ jobs:
       
       - name: Submit to Homebrew
         run: |
+          # TODO: Implement actual Homebrew submission
           # This is a placeholder for the actual Homebrew submission
           # In a real scenario, you would create a PR to homebrew-core or a custom tap
           echo "Submitting to Homebrew..."
