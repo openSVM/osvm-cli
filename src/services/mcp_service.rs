@@ -1092,6 +1092,54 @@ impl McpService {
         
         Ok(())
     }
+
+    /// Search for MCP servers by name, description, or features  
+    pub fn search_servers(
+        &self,
+        query: &str,
+        transport_filter: Option<&str>,
+        enabled_only: bool,
+    ) -> Vec<(&String, &McpServerConfig)> {
+        let query_lower = query.to_lowercase();
+        
+        self.servers
+            .iter()
+            .filter(|(_, config)| {
+                // Filter by enabled status if requested
+                if enabled_only && !config.enabled {
+                    return false;
+                }
+                
+                // Filter by transport type if specified
+                if let Some(transport) = transport_filter {
+                    if transport != "any" {
+                        let config_transport = match config.transport_type {
+                            McpTransportType::Http => "http",
+                            McpTransportType::Websocket => "websocket", 
+                            McpTransportType::Stdio => "stdio",
+                        };
+                        if config_transport != transport {
+                            return false;
+                        }
+                    }
+                }
+                
+                // Search in name, URL, and GitHub URL
+                let name_matches = config.name.to_lowercase().contains(&query_lower);
+                let url_matches = config.url.to_lowercase().contains(&query_lower);
+                let github_matches = config.github_url.as_ref()
+                    .map(|url| url.to_lowercase().contains(&query_lower))
+                    .unwrap_or(false);
+                
+                // Also search in auth type if configured
+                let auth_matches = config.auth.as_ref()
+                    .map(|auth| auth.auth_type.to_lowercase().contains(&query_lower))
+                    .unwrap_or(false);
+                
+                name_matches || url_matches || github_matches || auth_matches
+            })
+            .collect()
+    }
 }
 
 impl Default for McpService {
