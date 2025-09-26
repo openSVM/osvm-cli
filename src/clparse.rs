@@ -1048,6 +1048,36 @@ pub fn parse_command_line() -> clap::ArgMatches {
                                 .help("Automatically enable the server after setup")
                         )
                 )
+                .subcommand(
+                    Command::new("search")
+                        .about("Search for MCP servers by name, description, or features")
+                        .arg(
+                            Arg::new("query")
+                                .help("Search query (searches name, description, and features)")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("transport")
+                                .long("transport")
+                                .value_name("TYPE")
+                                .value_parser(clap::builder::PossibleValuesParser::new(["http", "stdio", "any"]))
+                                .default_value("any")
+                                .help("Filter by transport type")
+                        )
+                        .arg(
+                            Arg::new("enabled_only")
+                                .long("enabled-only")
+                                .action(ArgAction::SetTrue)
+                                .help("Only show enabled servers")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output results in JSON format")
+                        )
+                )
         )
         .subcommand(
             Command::new("audit")

@@ -662,6 +662,73 @@ async fn handle_mcp_command(
             }
         }
 
+        "search" => {
+            let query = mcp_sub_matches.get_one::<String>("query")
+                .expect("query is required by clap");
+            let transport = mcp_sub_matches.get_one::<String>("transport");
+            let enabled_only = mcp_sub_matches.get_flag("enabled_only");
+            let json_output = mcp_sub_matches.get_flag("json");
+            
+            let transport_filter = transport.map(|t| if t == "any" { None } else { Some(t.as_str()) }).flatten();
+            let results = mcp_service.search_servers(query, transport_filter, enabled_only);
+            
+            if results.is_empty() {
+                println!("🔍 No MCP servers found matching query: '{}'", query);
+                if enabled_only {
+                    println!("💡 Try removing the --enabled-only filter to see all servers");
+                }
+                if transport_filter.is_some() {
+                    println!("💡 Try changing the transport filter or use --transport=any");
+                }
+            } else {
+                if json_output {
+                    let json_results: Vec<serde_json::Value> = results.iter().map(|(id, config)| {
+                        serde_json::json!({
+                            "id": id,
+                            "name": config.name,
+                            "url": config.url,
+                            "transport": match config.transport_type {
+                                McpTransportType::Http => "http",
+                                McpTransportType::Websocket => "websocket",
+                                McpTransportType::Stdio => "stdio"
+                            },
+                            "enabled": config.enabled,
+                            "has_auth": config.auth.is_some(),
+                            "github_url": config.github_url
+                        })
+                    }).collect();
+                    println!("{}", serde_json::to_string_pretty(&json_results)?);
+                } else {
+                    println!("🔍 Found {} MCP server(s) matching '{}:'", results.len(), query);
+                    println!();
+                    
+                    for (id, config) in results {
+                        let status_icon = if config.enabled { "🟢" } else { "🔴" };
+                        let transport_icon = match config.transport_type {
+                            McpTransportType::Http => "🌐",
+                            McpTransportType::Websocket => "🔗", 
+                            McpTransportType::Stdio => "⚡",
+                        };
+                        let auth_badge = if config.auth.is_some() { " 🔐" } else { "" };
+                        
+                        println!("  {} {} {} {}{}", status_icon, transport_icon, id, config.name, auth_badge);
+                        println!("     URL: {}", config.url);
+                        
+                        if let Some(github_url) = &config.github_url {
+                            println!("     GitHub: {}", github_url);
+                        }
+                        
+                        if let Some(local_path) = &config.local_path {
+                            println!("     Local: {}", local_path);
+                        }
+                        
+                        println!("     Transport: {:?}", config.transport_type);
+                        println!();
+                    }
+                }
+            }
+        }
+
         _ => {
             eprintln!("Unknown MCP subcommand: {}", mcp_sub_command);
             std::process::exit(1);
