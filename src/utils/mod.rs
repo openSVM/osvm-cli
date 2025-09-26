@@ -11,6 +11,8 @@ use serde::de::DeserializeOwned;
 use std::{fs::File, io, path::Path};
 
 // UI and display utilities
+/// Agent chat interface using cursive-multiplex with MCP tools
+pub mod agent_chat;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Dashboard utilities for interactive SVM monitoring

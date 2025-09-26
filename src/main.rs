@@ -44,6 +44,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "doctor"
             | "audit"
             | "mcp"
+            | "chat"
             | "new_feature_command"
             | "v"
             | "ver"
@@ -1132,6 +1133,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 // Display all examples
                 examples::display_all_examples();
+            }
+        }
+        "chat" => {
+            // Handle the agent chat interface
+            println!("🚀 Launching OSVM Agent Chat Interface...");
+            
+            match crate::utils::agent_chat::run_agent_chat().await {
+                Ok(_) => {
+                    println!("Chat session ended. Goodbye! 👋");
+                }
+                Err(e) => {
+                    eprintln!("❌ Error running chat interface: {}", e);
+                    exit(1);
+                }
             }
         }
         "rpc-manager" => {
