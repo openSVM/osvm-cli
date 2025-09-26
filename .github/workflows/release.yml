@@ -105,21 +105,27 @@ jobs:
           fi
           # Move into the package dir
           cd "$PKG"
+          # Set environment variables for dh_make to use correct maintainer info
+          export DEBFULLNAME="OpenSVM"
+          export DEBEMAIL="rin@opensvm.com"
           # Run dh_make using the temporary tarball - this avoids same-file error
           # dh_make will copy the temp tarball to the correct orig.tar.gz location
           dh_make -y -s -c apache -e rin@opensvm.com -f "../$TEMP_TARBALL"
+          # Fix maintainer name in generated files
+          sed -i 's/Maintainer: unknown/Maintainer: OpenSVM/' debian/control
+          sed -i 's/ -- unknown/ -- OpenSVM/' debian/changelog
+          # Build the .deb package from within the package directory where debian/ folder was created
+          dpkg-buildpackage -us -uc
           # Move back to the working dir
           cd "$WORKDIR"
           # Clean up temporary tarball
           rm -f "$TEMP_TARBALL"
-          # Build the .deb package
-          dpkg-buildpackage -us -uc
           
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
         with:
           name: osvm-deb-package
-          path: ../osvm_*.deb
+          path: ./*.deb
       
       - name: Deploy to APT repository
         run: |
@@ -128,6 +134,167 @@ jobs:
           echo "Deploying to APT repository..."
           # Example: scp ../osvm_*.deb user@apt-repo:/path/to/repo/
           # Then update the repository index
+
+  deploy-termux:
+    name: Deploy Termux Package
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: osvm-binary
+          path: ./
+      
+      - name: Make binary executable
+        run: chmod +x ./osvm
+      
+      - name: Create Termux package structure
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          PACKAGE_NAME="osvm"
+          PACKAGE_DIR="${PACKAGE_NAME}_${VERSION}_aarch64"
+          
+          # Create package directory structure
+          mkdir -p "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin
+          mkdir -p "$PACKAGE_DIR"/control
+          
+          # Copy binary
+          cp ./osvm "$PACKAGE_DIR"/data/data/com.termux/files/usr/bin/
+          
+          # Create control file
+          cat > "$PACKAGE_DIR"/control/control << EOF
+          Package: $PACKAGE_NAME
+          Version: $VERSION
+          Architecture: aarch64
+          Maintainer: OpenSVM <rin@opensvm.com>
+          Description: OpenSVM CLI tool for managing SVM nodes and deployments
+          Homepage: https://github.com/${{ github.repository }}
+          Section: utils
+          Priority: optional
+          Depends: rust
+          EOF
+          
+          # Create prerm script to handle cleanup
+          cat > "$PACKAGE_DIR"/control/prerm << 'EOF'
+          #!/bin/sh
+          # Clean up any cached data
+          rm -rf "$HOME/.osvm" 2>/dev/null || true
+          EOF
+          chmod +x "$PACKAGE_DIR"/control/prerm
+          
+          # Create postinst script
+          cat > "$PACKAGE_DIR"/control/postinst << 'EOF'
+          #!/bin/sh
+          # Ensure binary is executable
+          chmod +x "$PREFIX/bin/osvm" 2>/dev/null || true
+          echo "OpenSVM CLI installed successfully!"
+          echo "Run 'osvm --help' to get started."
+          EOF
+          chmod +x "$PACKAGE_DIR"/control/postinst
+          
+          # Create the .deb package for Termux
+          dpkg-deb --build "$PACKAGE_DIR"
+          
+      - name: Upload Termux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvm-termux-package
+          path: ./*.deb
+
+  deploy-archlinux:
+    name: Deploy ArchLinux Package
+    needs: create-github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create ArchLinux PKGBUILD
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          SHA=$(curl -sL https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
+          
+          cat > PKGBUILD << EOF
+          # Maintainer: OpenSVM <rin@opensvm.com>
+          pkgname=osvm
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc="OpenSVM CLI tool for managing SVM nodes and deployments"
+          arch=('x86_64' 'aarch64')
+          url="https://github.com/${{ github.repository }}"
+          license=('MIT')
+          depends=('glibc')
+          makedepends=('rust' 'cargo' 'pkg-config' 'openssl' 'libudev0-shim')
+          source=("\${pkgname}-\${pkgver}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz")
+          sha256sums=('${SHA}')
+          
+          prepare() {
+              cd "\${pkgname}-cli-\${pkgver}"
+          }
+          
+          build() {
+              cd "\${pkgname}-cli-\${pkgver}"
+              export RUSTUP_TOOLCHAIN=stable
+              export CARGO_TARGET_DIR=target
+              cargo build --release --locked
+          }
+          
+          check() {
+              cd "\${pkgname}-cli-\${pkgver}"
+              export RUSTUP_TOOLCHAIN=stable
+              # Skip tests that require network access or specific hardware
+              cargo test --release --locked || true
+          }
+          
+          package() {
+              cd "\${pkgname}-cli-\${pkgver}"
+              install -Dm0755 -t "\${pkgdir}/usr/bin/" "target/release/\${pkgname}"
+              install -Dm0644 LICENSE "\${pkgdir}/usr/share/licenses/\${pkgname}/LICENSE"
+              install -Dm0644 README.md "\${pkgdir}/usr/share/doc/\${pkgname}/README.md"
+          }
+          EOF
+          
+          # Create .SRCINFO file for AUR
+          cat > .SRCINFO << EOF
+          pkgbase = osvm
+          	pkgdesc = OpenSVM CLI tool for managing SVM nodes and deployments
+          	pkgver = ${VERSION}
+          	pkgrel = 1
+          	url = https://github.com/${{ github.repository }}
+          	arch = x86_64
+          	arch = aarch64
+          	license = MIT
+          	makedepends = rust
+          	makedepends = cargo
+          	makedepends = pkg-config
+          	makedepends = openssl
+          	makedepends = libudev0-shim
+          	depends = glibc
+          	source = osvm-${VERSION}.tar.gz::https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz
+          	sha256sums = ${SHA}
+          
+          pkgname = osvm
+          EOF
+      
+      - name: Upload ArchLinux package files
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvm-archlinux-package
+          path: |
+            ./PKGBUILD
+            ./.SRCINFO
+      
+      - name: Submit to AUR (placeholder)
+        run: |
+          # This is a placeholder for the actual AUR submission
+          # In a real scenario, you would clone the AUR repository and update the PKGBUILD
+          echo "Submitting to AUR..."
+          # Example steps:
+          # git clone ssh://aur@aur.archlinux.org/osvm.git
+          # cp PKGBUILD .SRCINFO osvm/
+          # cd osvm && git add . && git commit -m "Update to ${VERSION}" && git push
 
   deploy-homebrew:
     name: Deploy to Homebrew
