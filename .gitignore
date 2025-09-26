@@ -68,3 +68,15 @@ sonic-*.log
 eclipse-*.log
 osvm-*.log
 audit_reports/
+
+# Packaging artifacts and test files
+*.deb
+*.tar.gz
+osvm-*/
+osvm_*/
+temp_*.tar.gz
+debian-packages/
+packaging/archlinux/.SRCINFO
+packaging/termux/osvm_*
+packaging/debian/osvm-*
+packaging/debian/debian-packages/

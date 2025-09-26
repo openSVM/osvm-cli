@@ -4,6 +4,10 @@
 
 set -e
 
+# Source packaging configuration
+SCRIPT_DIR="$(dirname "$0")"
+source "$SCRIPT_DIR/../config.sh"
+
 # Get version from command line or git tag
 VERSION="${1:-$(git describe --tags --abbrev=0 | sed 's/^v//')}"
 
@@ -16,8 +20,23 @@ cd "$(dirname "$0")/../.."
 SOURCE_NAME="osvm-${VERSION}.tar.gz"
 git archive --format=tar.gz --prefix="osvm-cli-${VERSION}/" HEAD > "$SOURCE_NAME"
 
-# Calculate SHA256
-SHA256=$(sha256sum "$SOURCE_NAME" | cut -d ' ' -f 1)
+# Verify the tarball was created successfully
+if [ ! -f "$SOURCE_NAME" ]; then
+    echo "Error: Failed to create source tarball $SOURCE_NAME"
+    exit 1
+fi
+
+# Calculate SHA256 with error checking
+if ! SHA256=$(sha256sum "$SOURCE_NAME" 2>/dev/null | cut -d ' ' -f 1); then
+    echo "Error: Failed to calculate SHA256 for $SOURCE_NAME"
+    exit 1
+fi
+
+# Verify SHA256 is not empty
+if [ -z "$SHA256" ]; then
+    echo "Error: SHA256 calculation resulted in empty value"
+    exit 1
+fi
 
 # Update PKGBUILD with current version and SHA
 sed -i "s/pkgver=.*/pkgver=${VERSION}/" packaging/archlinux/PKGBUILD

@@ -1,0 +1,39 @@
+# Git attributes for OSVM CLI project
+# Ensures clean git archive exports by excluding unnecessary files
+
+# Exclude development and CI files from archives
+.github/ export-ignore
+.git* export-ignore
+.devcontainer/ export-ignore
+.dockerignore export-ignore
+.cline_rules export-ignore
+*.tmp export-ignore
+target/ export-ignore
+node_modules/ export-ignore
+
+# Exclude test and development files
+test-deployment.sh export-ignore
+comprehensive_test.sh export-ignore
+basic_test.sh export-ignore
+validate_full_history.sh export-ignore
+tunnel-dashboard.py export-ignore
+stderr.txt export-ignore
+stdout.txt export-ignore
+
+# Exclude audit and documentation build artifacts
+audit_reports/ export-ignore
+osvm_audit_report_*.html export-ignore
+docs.html export-ignore
+index.html export-ignore
+
+# Exclude vendor directory if present
+vendor/ export-ignore
+
+# Ensure proper line endings
+* text=auto
+*.sh text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
