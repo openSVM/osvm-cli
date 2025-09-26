@@ -15,6 +15,7 @@ use tokio::process::{Child, Command as TokioCommand};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use dirs;
 use base64::{Engine as _, engine::general_purpose};
+use toml;
 
 // Constants for MCP protocol
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
@@ -22,6 +23,11 @@ const MCP_JSONRPC_VERSION: &str = "2.0";
 const CLIENT_NAME: &str = "osvm-cli";
 const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
 const MAX_REQUEST_ID: u64 = u64::MAX - 1000; // Leave some buffer for overflow
+
+// MCP method names
+const MCP_METHOD_INITIALIZE: &str = "initialize";
+const MCP_METHOD_TOOLS_LIST: &str = "tools/list";
+const MCP_METHOD_TOOLS_CALL: &str = "tools/call";
 
 // Security warnings
 const GITHUB_CLONE_WARNING: &str = "\n⚠️  SECURITY WARNING: You are about to clone and build code from a remote repository.\nThis will execute arbitrary build scripts and binaries on your system.\nOnly proceed if you trust the source repository.\n";
@@ -207,6 +213,15 @@ pub struct McpService {
 }
 
 impl McpService {
+    /// Centralized error printing helper
+    fn print_error(&self, message: &str, error: &anyhow::Error) {
+        if self.debug_mode {
+            debug_error!("{}: {}", message, error);
+        } else {
+            eprintln!("❌ {}: {}", message, error);
+        }
+    }
+
     /// Create an authenticated HTTP request builder
     fn create_authenticated_request(
         &self,
@@ -441,7 +456,7 @@ impl McpService {
     }
 
     /// Add MCP server from GitHub URL
-    pub async fn add_server_from_github(&mut self, server_id: String, github_url: String, name: Option<String>) -> Result<()> {
+    pub async fn add_server_from_github(&mut self, server_id: String, github_url: String, name: Option<String>, skip_confirmation: bool) -> Result<()> {
         // Validate GitHub URL to prevent malicious inputs
         if !self.is_valid_github_url(&github_url) {
             return Err(anyhow::anyhow!("Invalid GitHub URL. Must be a valid GitHub repository URL."));
@@ -450,8 +465,8 @@ impl McpService {
         // Display security warning
         eprintln!("{}", GITHUB_CLONE_WARNING);
         
-        // Prompt for confirmation (in production, this would be configurable)
-        if !self.confirm_github_clone(&github_url)? {
+        // Prompt for confirmation unless --yes flag is used
+        if !skip_confirmation && !self.confirm_github_clone(&github_url)? {
             return Err(anyhow::anyhow!("Operation cancelled by user"));
         }
 
@@ -566,54 +581,29 @@ impl McpService {
         Ok(input == "y" || input == "yes")
     }
 
-    /// Get binary name from Cargo.toml with improved parsing
+    /// Get binary name from Cargo.toml with proper TOML parsing
     fn get_binary_name_from_cargo_toml(&self, cargo_toml_path: &Path) -> Result<String> {
         let content = std::fs::read_to_string(cargo_toml_path)
             .context("Failed to read Cargo.toml")?;
         
-        // Try to parse as TOML first (more robust)
-        match self.parse_toml_package_name(&content) {
-            Ok(name) => Ok(name),
+        // Try to parse as TOML first (most robust)
+        match toml::from_str::<toml::Value>(&content) {
+            Ok(toml_value) => {
+                if let Some(package) = toml_value.get("package") {
+                    if let Some(name) = package.get("name") {
+                        if let Some(name_str) = name.as_str() {
+                            return Ok(name_str.to_string());
+                        }
+                    }
+                }
+                // If no package name found in TOML, fall back to manual parsing
+                self.parse_simple_package_name(&content)
+            }
             Err(_) => {
-                // Fallback to simple string parsing
+                // If TOML parsing fails, fall back to manual parsing
                 self.parse_simple_package_name(&content)
             }
         }
-    }
-
-    /// Parse package name using basic TOML-like parsing
-    fn parse_toml_package_name(&self, content: &str) -> Result<String> {
-        let mut in_package_section = false;
-        
-        for line in content.lines() {
-            let line = line.trim();
-            
-            // Check for [package] section
-            if line == "[package]" {
-                in_package_section = true;
-                continue;
-            }
-            
-            // Check for other sections
-            if line.starts_with('[') && line.ends_with(']') && line != "[package]" {
-                in_package_section = false;
-                continue;
-            }
-            
-            // If we're in the package section, look for name
-            if in_package_section && line.starts_with("name") {
-                if let Some(eq_pos) = line.find('=') {
-                    let name_part = &line[eq_pos + 1..].trim();
-                    // Remove quotes
-                    let name = name_part.trim_matches('"').trim_matches('\'');
-                    if !name.is_empty() {
-                        return Ok(name.to_string());
-                    }
-                }
-            }
-        }
-        
-        Err(anyhow::anyhow!("Could not find package name in [package] section"))
     }
 
     /// Simple fallback parsing for package name
@@ -725,7 +715,7 @@ impl McpService {
         let request = McpRequest {
             jsonrpc: MCP_JSONRPC_VERSION.to_string(),
             id: self.next_request_id(),
-            method: "initialize".to_string(),
+            method: MCP_METHOD_INITIALIZE.to_string(),
             params: Some(serde_json::to_value(&init_request)?),
         };
 
@@ -809,7 +799,7 @@ impl McpService {
         let request = McpRequest {
             jsonrpc: MCP_JSONRPC_VERSION.to_string(),
             id: self.next_request_id(),
-            method: "initialize".to_string(),
+            method: MCP_METHOD_INITIALIZE.to_string(),
             params: Some(serde_json::to_value(&init_request)?),
         };
 
@@ -900,7 +890,7 @@ impl McpService {
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
             id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            method: "tools/list".to_string(),
+            method: MCP_METHOD_TOOLS_LIST.to_string(),
             params: None,
         };
 
@@ -996,7 +986,7 @@ impl McpService {
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
             id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
-            method: "tools/call".to_string(),
+            method: MCP_METHOD_TOOLS_CALL.to_string(),
             params: Some(tool_call),
         };
 
