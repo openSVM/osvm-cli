@@ -1,4 +1,3 @@
-#![allow(clippy::all)]
 #![allow(unused)]
 
 use {
@@ -316,13 +315,16 @@ async fn handle_mcp_command(
 
     match mcp_sub_command {
         "add" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            let url = mcp_sub_matches.get_one::<String>("server_url").unwrap();
+            let server_id = mcp_sub_matches.get_one::<String>("server_id")
+                .expect("server_id is required by clap");
+            let url = mcp_sub_matches.get_one::<String>("server_url")
+                .expect("server_url is required by clap");
             let name = mcp_sub_matches.get_one::<String>("name")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| server_id.clone());
             
-            let transport_str = mcp_sub_matches.get_one::<String>("transport").unwrap();
+            let transport_str = mcp_sub_matches.get_one::<String>("transport")
+                .expect("transport has a default value");
             let transport_type = match transport_str.as_str() {
                 "http" => McpTransportType::Http,
                 "websocket" => McpTransportType::Websocket,
@@ -330,8 +332,10 @@ async fn handle_mcp_command(
                 _ => McpTransportType::Http,
             };
 
-            let auth = if mcp_sub_matches.get_one::<String>("auth_type").unwrap() != "none" {
-                let auth_type = mcp_sub_matches.get_one::<String>("auth_type").unwrap().clone();
+            let auth = if mcp_sub_matches.get_one::<String>("auth_type")
+                .expect("auth_type has a default value") != "none" {
+                let auth_type = mcp_sub_matches.get_one::<String>("auth_type")
+                    .expect("auth_type checked above").clone();
                 Some(McpAuthConfig {
                     auth_type,
                     token: mcp_sub_matches.get_one::<String>("auth_token").cloned(),
@@ -370,14 +374,17 @@ async fn handle_mcp_command(
         }
 
         "add-github" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            let github_url = mcp_sub_matches.get_one::<String>("github_url").unwrap();
+            let server_id = mcp_sub_matches.get_one::<String>("server_id")
+                .expect("server_id is required by clap");
+            let github_url = mcp_sub_matches.get_one::<String>("github_url")
+                .expect("github_url is required by clap");
             let name = mcp_sub_matches.get_one::<String>("name").cloned();
             let enabled = mcp_sub_matches.get_flag("enabled");
+            let skip_confirmation = mcp_sub_matches.get_flag("yes");
 
             println!("🔄 Cloning MCP server from GitHub: {}", github_url);
             
-            match mcp_service.add_server_from_github(server_id.clone(), github_url.clone(), name).await {
+            match mcp_service.add_server_from_github(server_id.clone(), github_url.clone(), name, skip_confirmation).await {
                 Ok(_) => {
                     println!("✅ Successfully cloned and configured MCP server '{}'", server_id);
                     println!("   Repository: {}", github_url);

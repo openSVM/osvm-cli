@@ -913,6 +913,13 @@ pub fn parse_command_line() -> clap::ArgMatches {
                                 .action(ArgAction::SetTrue)
                                 .help("Enable the server immediately after adding")
                         )
+                        .arg(
+                            Arg::new("yes")
+                                .long("yes")
+                                .short('y')
+                                .action(ArgAction::SetTrue)
+                                .help("Skip interactive confirmation (for automation and CI)")
+                        )
                 )
                 .subcommand(
                     Command::new("remove")
