@@ -1,174 +1,76 @@
-# OSVM CLI. pvv4fu1RvQBkKXozyH5A843sp1mt6gTy9rPoZrBBAGS 🚀
+# OSVM CLI
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.80.0+-orange.svg)](https://www.rust-lang.org/)
-[![Solana](https://img.shields.io/badge/Solana-1.14.29+-purple.svg)](https://solana.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-gray.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.80.0+-gray.svg)](https://www.rust-lang.org/)
+[![Solana](https://img.shields.io/badge/Solana-1.14.29+-gray.svg)](https://solana.com/)
 
-A powerful command-line interface for managing Solana Virtual Machines (SVMs) across various networks with integrated AI and MCP (Model Context Protocol) capabilities. Monitor, deploy, and manage your SVM infrastructure while leveraging AI assistance and blockchain data services through a single tool.
+A command-line interface for managing Solana Virtual Machines (SVMs) across networks with AI and MCP server integration. Deploy, monitor, and manage SVM infrastructure with automated AI assistance and blockchain data services.
 
-## 📚 Documentation
+## Installation
 
-For comprehensive documentation, please visit the [docs](docs/) directory:
-
-- **[📖 Complete Documentation Index](docs/README.md)** - Start here for all documentation
-- **[🚀 Quick Start Guide](docs/installation.md)** - Installation and setup
-- **[💡 Examples & Patterns](docs/examples.md)** - Usage examples and workflows
-- **[⚙️ Configuration Guide](docs/configuration.md)** - Configuration management
-
-### Core Features Documentation
-
-- **[🖥️ SVM Management](docs/svm-management.md)** - Manage Solana Virtual Machines
-- **[🏗️ Node Management](docs/node-management.md)** - Deploy and monitor nodes
-- **[🌐 SSH Deployment](docs/ssh-deployment.md)** - Remote deployment capabilities
-- **[🔗 RPC Manager](docs/rpc-manager.md)** - RPC node management
-- **[📊 Dashboard](docs/dashboard.md)** - Interactive monitoring interfaces
-
-### Advanced Features Documentation
-
-- **[🤖 AI Integration](docs/ai-endpoint-configuration.md)** - AI-powered assistance and analysis
-- **[🔗 MCP Integration](docs/mcp-integration.md)** - Model Context Protocol server support
-- **[🔧 Self-Repair System](docs/self-repair-system.md)** - Automated maintenance
-- **[📋 Log Monitoring](docs/log-monitoring.md)** - Real-time log analysis
-- **[⚡ Validator Enhancements](docs/validator-enhancements.md)** - Performance optimization
-- **[📦 eBPF Deployment](docs/ebpf-deployment.md)** - Smart contract deployment
-
-```mermaid
-graph TB
-    User((User))
-
-    subgraph "OSVM CLI System"
-        subgraph "CLI Interface"
-            MainCLI["Main CLI<br>Rust/Clap"]
-            CommandParser["Command Parser<br>Clap"]
-            
-            subgraph "Core Commands"
-                SVMCommands["SVM Commands<br>Rust"]
-                NodeCommands["Node Commands<br>Rust"]
-                SolanaCommands["Solana Commands<br>Rust"]
-                RPCCommands["RPC Commands<br>Rust"]
-            end
-        end
-        
-        subgraph "Node Management"
-            NodeManager["Node Manager<br>Rust"]
-            
-            subgraph "Node Components"
-                NodeDB["Node Database<br>JSON"]
-                NodeMonitor["Node Monitor<br>Rust"]
-                NodeDashboard["Node Dashboard<br>Ratatui"]
-                NodeMetrics["Node Metrics<br>Rust"]
-                NodeLogs["Log Manager<br>Rust"]
-            end
-        end
-        
-        subgraph "SSH Deployment"
-            SSHManager["SSH Manager<br>SSH2"]
-            
-            subgraph "Deployment Components"
-                DeployConfig["Deployment Config<br>Rust"]
-                DiskManager["Disk Manager<br>Rust"]
-                ServiceManager["Service Manager<br>Rust"]
-                HotSwap["Hot Swap Manager<br>Rust"]
-                Dependencies["Dependency Manager<br>Rust"]
-            end
-        end
-        
-        subgraph "Utilities"
-            Logger["Logger<br>env_logger"]
-            Config["Config Manager<br>YAML"]
-            Dashboard["Dashboard Generator<br>HTML/CSS"]
-            Examples["Examples Manager<br>Rust"]
-        end
-    end
-
-    subgraph "External Systems"
-        SolanaNode["Solana Node<br>Rust"]
-        RPCNode["RPC Node<br>JSON-RPC"]
-        RemoteServer["Remote Server<br>Linux"]
-    end
-
-    User -->|Uses| MainCLI
-    MainCLI -->|Parses| CommandParser
-    CommandParser -->|Executes| SVMCommands
-    CommandParser -->|Executes| NodeCommands
-    CommandParser -->|Executes| SolanaCommands
-    CommandParser -->|Executes| RPCCommands
-
-    NodeCommands -->|Manages| NodeManager
-    NodeManager -->|Stores| NodeDB
-    NodeManager -->|Monitors| NodeMonitor
-    NodeMonitor -->|Displays| NodeDashboard
-    NodeMonitor -->|Collects| NodeMetrics
-    NodeManager -->|Manages| NodeLogs
-
-    SolanaCommands -->|Deploys| SSHManager
-    RPCCommands -->|Deploys| SSHManager
-    SSHManager -->|Uses| DeployConfig
-    SSHManager -->|Manages| DiskManager
-    SSHManager -->|Controls| ServiceManager
-    SSHManager -->|Handles| HotSwap
-    SSHManager -->|Installs| Dependencies
-
-    MainCLI -->|Uses| Logger
-    MainCLI -->|Reads| Config
-    NodeDashboard -->|Generates| Dashboard
-    MainCLI -->|Shows| Examples
-
-    SSHManager -->|Connects to| RemoteServer
-    NodeMonitor -->|Monitors| SolanaNode
-    NodeMonitor -->|Monitors| RPCNode
-```
-
-## ⚡ One-Line Installation
-
-### Linux/macOS
+### Quick Install
 
 ```bash
 curl -sSf https://raw.githubusercontent.com/opensvm/osvm-cli/main/install.sh | sh
 ```
 
-### Windows
+### Alternative Methods
 
+**Windows:**
 ```bash
 powershell -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/opensvm/osvm-cli/main/install.ps1' -OutFile 'install.ps1'; .\install.ps1"
 ```
 
-### Docker
-
-Run OSVM CLI in a Docker container without installing it locally:
-
+**Docker:**
 ```bash
-# Pull the latest image
 docker pull ghcr.io/opensvm/osvm-cli:latest
-
-# Run with version check
 docker run --rm ghcr.io/opensvm/osvm-cli:latest --version
-
-# Run with interactive mode (mount current directory)
-docker run --rm -it -v $(pwd):/workspace ghcr.io/opensvm/osvm-cli:latest
-
-# Use as an alias
-alias osvm='docker run --rm -it -v $(pwd):/workspace ghcr.io/opensvm/osvm-cli:latest'
 ```
 
-## 🌟 Key Features
+**From Source:**
+```bash
+git clone https://github.com/opensvm/osvm-cli.git
+cd osvm-cli && cargo build --release
+sudo cp target/release/osvm /usr/local/bin/
+```
 
-- **SVM Management**: List and inspect Solana Virtual Machines
-- **Node Deployment**: Deploy validator or dedicated RPC nodes with a single command
-- **Interactive Dashboard**: Real-time monitoring with a terminal-based UI
-- **🤖 AI Integration**: Built-in AI assistance for security analysis and blockchain queries
-- **🔗 MCP Server Support**: Connect to Model Context Protocol servers for enhanced blockchain data access
-- **Network Configuration**: Configure nodes for mainnet, testnet, or devnet
-- **Performance Metrics**: Track TPS, latency, and system requirements
-- **Colorized Output**: Enhanced readability with consistent color-coding for status, commands, and data
-- **Command Examples**: Built-in examples for common workflows and operations
-- **SSH Deployment**: Remote deployment and management capabilities
+## Core Features
 
-## 🚀 GitHub Actions Integration
+- **SVM Management** - List, inspect, and manage Solana Virtual Machines
+- **Node Deployment** - Deploy validator and RPC nodes with automated configuration
+- **AI Integration** - Built-in AI assistance for security analysis and blockchain queries
+- **MCP Server Support** - Connect to Model Context Protocol servers for enhanced data access
+- **Interactive Dashboard** - Real-time monitoring with terminal-based interface
+- **Remote Management** - SSH deployment and management capabilities
+- **Performance Monitoring** - Track TPS, latency, and system requirements
+- **Automated Maintenance** - Self-repair systems and log monitoring
+- **Multi-Network Support** - Configure for mainnet, testnet, or devnet
+- **Command Examples** - Built-in help and workflow examples
 
-OSVM CLI now includes a dedicated GitHub Action for seamless CI/CD integration! Deploy SVM nodes directly from your workflows with minimal configuration.
+## Basic Usage
 
-### Quick Start
+```bash
+# List all SVMs
+osvm svm list
+
+# Get SVM information  
+osvm svm get sonic
+
+# Deploy node to remote server
+osvm user@host --svm sonic --node-type validator --network mainnet
+
+# Launch interactive dashboard
+osvm svm dashboard
+
+# Get help and examples
+osvm examples
+```
+
+
+
+## CI/CD Integration
+
+Deploy SVM nodes directly from GitHub workflows with minimal configuration.
 
 ```yaml
 - name: Deploy SVM Node
@@ -181,18 +83,15 @@ OSVM CLI now includes a dedicated GitHub Action for seamless CI/CD integration! 
     node-type: 'validator'
 ```
 
-### Features
+**Features:**
+- Secure deployment using GitHub Secrets
+- Configurable for different networks and node types  
+- Detailed deployment logging
+- Reusable workflows for common patterns
 
-- 🔒 **Secure**: Uses GitHub Secrets for sensitive data
-- 🎯 **Configurable**: Support for different networks and node types  
-- 📊 **Detailed Logging**: Comprehensive deployment logs
-- 🔄 **Reusable**: Includes reusable workflows for common patterns
+[View Complete Documentation](.github/actions/svm-deploy/README.md)
 
-[📖 View Complete Documentation](.github/actions/svm-deploy/README.md) | [🔧 See Examples](examples/github-actions/)
-
----
-
-## 📋 Command Reference
+## Command Reference
 
 ### SVM Management
 
@@ -333,16 +232,13 @@ or plain string:
 HN4tEEGheziD9dqcWg4xZd29htcerjXKGoGiQXM5hxiS
 ```
 
-### AI Integration
+## AI Integration
 
-OSVM CLI includes built-in AI capabilities for blockchain analysis and assistance:
+Built-in AI capabilities for blockchain analysis and assistance:
 
 ```bash
 # Ask AI questions about Solana security
 osvm "What are the best practices for Solana smart contract security?"
-
-# Get AI analysis of a specific topic
-osvm "Explain the differences between Solana mainnet and testnet"
 
 # Use custom AI models (OpenAI, Ollama, LocalAI, etc.)
 export OPENAI_URL="https://api.openai.com/v1/chat/completions"
@@ -356,13 +252,13 @@ osvm "Analyze this smart contract for vulnerabilities"
 ```
 
 **AI Features:**
-- 🎯 **Smart Contract Analysis**: AI-powered security auditing and vulnerability detection
-- 🔍 **Code Review**: Automated analysis of Solana programs and smart contracts  
-- 💡 **Best Practices**: AI guidance on Solana development and deployment
-- 🔒 **Privacy Options**: Support for local models (Ollama, LocalAI) for sensitive projects
-- 🌐 **Multi-Provider**: Works with OpenAI, Anthropic, and OpenAI-compatible APIs
+- Smart contract analysis and security auditing
+- Automated code review of Solana programs
+- Best practices guidance for deployment
+- Privacy options with local models (Ollama, LocalAI)
+- Multi-provider support (OpenAI, Anthropic, OpenAI-compatible APIs)
 
-### MCP Server Integration
+## MCP Server Integration
 
 Connect to Model Context Protocol servers for enhanced blockchain data access:
 
@@ -377,91 +273,59 @@ osvm mcp add solana-server \
   --auth-token your-token \
   --enabled
 
-# Add MCP server from GitHub repository (automatic building)
+# Add MCP server from GitHub repository
 osvm mcp add-github solana-mcp https://github.com/openSVM/solana-mcp-server --enabled
-
-# List configured servers
-osvm mcp list
 
 # Discover available tools
 osvm mcp tools solana-server
 
 # Execute blockchain queries
 osvm mcp call solana-server getBalance --args '{"pubkey":"11111111111111111111111111111112"}'
-
-# Get account information  
-osvm mcp call solana-server getAccountInfo --args '{"pubkey":"your-account-pubkey"}'
 ```
 
 **MCP Features:**
-- 🔗 **Multi-Transport**: HTTP, WebSocket, and stdio transport support
-- 🔐 **Authentication**: Bearer tokens, API keys, and basic auth
-- 🛡️ **Circuit Breaker**: Automatic failure recovery and error handling
-- 📊 **Tool Discovery**: Automatically find available blockchain tools
-- 🚀 **GitHub Integration**: Clone and build MCP servers directly from repositories
-- 🤖 **AI-Ready**: Perfect integration with AI tools for enhanced blockchain analysis
+- Multi-transport support (HTTP, WebSocket, stdio)
+- Authentication with bearer tokens, API keys, basic auth
+- Circuit breaker for automatic failure recovery
+- Tool discovery for blockchain operations
+- GitHub integration for server deployment
+- AI-ready integration for enhanced analysis
 
-## 🔧 Detailed Installation
+## Dashboard
 
-### Prerequisites
-
-- Rust 1.80.0 or later
-- Solana CLI tools 1.14.29 or later
-
-### From Source
-
-```bash
-# Clone the repository
-git clone https://github.com/opensvm/osvm-cli.git
-cd osvm-cli
-
-# Build the project
-cargo build --release
-
-# Install the binary
-sudo cp target/release/osvm /usr/local/bin/
-```
-
-## 📊 Dashboard Features
-
-The interactive dashboard provides real-time monitoring of your SVM infrastructure, including:
-
-- Overview of all installed SVMs with status indicators
-- Network details for each SVM (mainnet, testnet, devnet)
-- Performance metrics with real-time visualization
-- Node status monitoring with resource usage
-- Aggregated logs from all nodes
-
-Launch the dashboard with:
+The interactive dashboard provides real-time monitoring:
 
 ```bash
 osvm svm dashboard
 ```
 
-### Keyboard Controls
+**Features:**
+- Overview of all SVMs with status indicators
+- Network details (mainnet, testnet, devnet)
+- Performance metrics with real-time visualization
+- Node status monitoring with resource usage
+- Aggregated logs from all nodes
 
-- `Tab`, `Right Arrow`, `Left Arrow`: Switch between tabs
-- `Up Arrow`, `Down Arrow`: Navigate through items
-- `n`: Select next SVM
-- `v`: Toggle verbosity level (affects displayed information detail)
-- `p`: Select previous SVM
+**Keyboard Controls:**
+- `Tab`, `→`, `←`: Switch between tabs
+- `↑`, `↓`: Navigate through items  
+- `n`/`p`: Select next/previous SVM
+- `v`: Toggle verbosity level
 - `h`: Toggle help overlay
-- `q` or `Ctrl+C`: Quit the dashboard
+- `q` or `Ctrl+C`: Quit
 
-## 📚 Documentation
+## Documentation
 
-- [📖 GitHub Actions Integration](.github/actions/svm-deploy/README.md) - Complete guide for CI/CD integration
-- [🔧 GitHub Actions Examples](examples/github-actions/) - Ready-to-use workflow examples
-- [🤖 AI Integration Guide](docs/ai-endpoint-configuration.md) - AI-powered analysis and assistance
-- [🔗 MCP Integration Guide](docs/mcp-integration.md) - Model Context Protocol server setup
-- [📋 Command Reference](#-command-reference) - All available commands and options
-- [🎯 Usage Examples](#-usage-examples) - Common use cases and scenarios
-- [🔧 Installation Guide](#-detailed-installation) - Step-by-step setup instructions
-- [📊 Dashboard Features](#-dashboard-features) - Interactive monitoring capabilities
+- [Complete Documentation Index](docs/README.md) - Start here for all documentation
+- [AI Integration Guide](docs/ai-endpoint-configuration.md) - AI-powered analysis setup
+- [MCP Integration Guide](docs/mcp-integration.md) - Model Context Protocol server setup
+- [RPC Manager Guide](docs/rpc-manager.md) - RPC node management
+- [GitHub Actions Integration](.github/actions/svm-deploy/README.md) - CI/CD integration guide
+- [Examples & Patterns](docs/examples.md) - Usage examples and workflows
 
 For complete documentation, visit [our official documentation](https://docs.opensvm.org).
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -504,6 +368,6 @@ If you need to skip the pre-commit hook for a specific commit (not recommended),
 git commit --no-verify -m "your message"
 ```
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
