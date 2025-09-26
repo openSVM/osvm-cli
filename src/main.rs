@@ -793,6 +793,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if sub_matches.get_flag("test") {
             return crate::utils::agent_chat::run_chat_ui_tests().await
                 .map_err(|e| e.into());
+        } else if sub_matches.get_flag("advanced") {
+            return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
+                .map_err(|e| e.into());
         } else {
             return crate::utils::agent_chat::run_agent_chat().await
                 .map_err(|e| e.into());
