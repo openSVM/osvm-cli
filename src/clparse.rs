@@ -385,7 +385,20 @@ pub fn parse_command_line() -> clap::ArgMatches {
         )
         .subcommand(
             Command::new("chat")
-                .about("Launch interactive agent chat interface with MCP tools")
+                .about("Launch interactive agent chat interface with MCP tools - now with advanced AI planning!")
+                .long_about("Launch a comprehensive chat interface with AI-powered tool planning and execution.\n\
+                           \n\
+                           Basic Mode (default):\n\
+                           • Simple chat interface with MCP tool integration\n\
+                           • Single chat session\n\
+                           • Basic tool calling\n\
+                           \n\
+                           Advanced Mode (--advanced):\n\
+                           • FAR-style/Borland TUI design with dual panels\n\
+                           • AI-powered input parsing and intelligent tool planning\n\
+                           • Multiple chat sessions with background agent execution\n\
+                           • Session recording and agent control (run/pause/stop)\n\
+                           • Professional multi-session management")
                 .arg(
                     Arg::new("debug")
                         .long("debug")
@@ -397,6 +410,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .long("test")
                         .action(ArgAction::SetTrue)
                         .help("Run comprehensive UI tests and show screenshots")
+                )
+                .arg(
+                    Arg::new("advanced")
+                        .long("advanced")
+                        .action(ArgAction::SetTrue)
+                        .help("Launch advanced FAR-style chat interface with AI planning and multi-session support")
                 )
         )
         .subcommand(
