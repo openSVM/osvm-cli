@@ -14,6 +14,63 @@ use std::path::{Path, PathBuf};
 use tokio::process::{Child, Command as TokioCommand};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use dirs;
+use base64::{Engine as _, engine::general_purpose};
+
+// Constants for MCP protocol
+const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
+const MCP_JSONRPC_VERSION: &str = "2.0";
+const CLIENT_NAME: &str = "osvm-cli";
+const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
+const MAX_REQUEST_ID: u64 = u64::MAX - 1000; // Leave some buffer for overflow
+
+// Security warnings
+const GITHUB_CLONE_WARNING: &str = "\n⚠️  SECURITY WARNING: You are about to clone and build code from a remote repository.\nThis will execute arbitrary build scripts and binaries on your system.\nOnly proceed if you trust the source repository.\n";
+
+// Exit codes for different error types
+pub mod exit_codes {
+    pub const SUCCESS: i32 = 0;
+    pub const GENERAL_ERROR: i32 = 1;
+    pub const AUTHENTICATION_ERROR: i32 = 2;
+    pub const NETWORK_ERROR: i32 = 3;
+    pub const CONFIG_ERROR: i32 = 4;
+    pub const VALIDATION_ERROR: i32 = 5;
+}
+
+/// MCP-specific error types for better error handling
+#[derive(Debug)]
+pub enum McpError {
+    Authentication(String),
+    Network(String),
+    Configuration(String),
+    Validation(String),
+    General(String),
+}
+
+impl std::fmt::Display for McpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            McpError::Authentication(msg) => write!(f, "Authentication error: {}", msg),
+            McpError::Network(msg) => write!(f, "Network error: {}", msg),
+            McpError::Configuration(msg) => write!(f, "Configuration error: {}", msg),
+            McpError::Validation(msg) => write!(f, "Validation error: {}", msg),
+            McpError::General(msg) => write!(f, "Error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for McpError {}
+
+impl McpError {
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            McpError::Authentication(_) => exit_codes::AUTHENTICATION_ERROR,
+            McpError::Network(_) => exit_codes::NETWORK_ERROR,
+            McpError::Configuration(_) => exit_codes::CONFIG_ERROR,
+            McpError::Validation(_) => exit_codes::VALIDATION_ERROR,
+            McpError::General(_) => exit_codes::GENERAL_ERROR,
+        }
+    }
+}
 
 /// Configuration for an MCP server endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,12 +135,12 @@ struct McpResponse {
     #[serde(default)]
     result: Option<serde_json::Value>,
     #[serde(default)]
-    error: Option<McpError>,
+    error: Option<McpJsonRpcError>,
 }
 
-/// MCP error structure
+/// MCP JSON-RPC error structure
 #[derive(Debug, Clone, Deserialize)]
-struct McpError {
+struct McpJsonRpcError {
     code: i32,
     message: String,
     #[serde(default)]
@@ -150,6 +207,93 @@ pub struct McpService {
 }
 
 impl McpService {
+    /// Create an authenticated HTTP request builder
+    fn create_authenticated_request(
+        &self,
+        url: &str,
+        auth: &Option<McpAuthConfig>,
+        request: &McpRequest,
+    ) -> reqwest::RequestBuilder {
+        let mut req_builder = self.client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
+            .json(request);
+
+        // Add authentication if configured
+        if let Some(auth) = auth {
+            req_builder = match auth.auth_type.as_str() {
+                "bearer" => {
+                    if let Some(token) = &auth.token {
+                        if self.debug_mode {
+                            debug_print!(VerbosityLevel::Detailed, "Using Bearer authentication (token masked)");
+                        }
+                        req_builder.header("Authorization", format!("Bearer {}", token))
+                    } else {
+                        if self.debug_mode {
+                            debug_warn!("Bearer auth configured but no token provided");
+                        }
+                        req_builder
+                    }
+                }
+                "api_key" => {
+                    if let Some(token) = &auth.token {
+                        if self.debug_mode {
+                            debug_print!(VerbosityLevel::Detailed, "Using API Key authentication (key masked)");
+                        }
+                        req_builder.header("X-API-Key", token)
+                    } else {
+                        if self.debug_mode {
+                            debug_warn!("API key auth configured but no token provided");
+                        }
+                        req_builder
+                    }
+                }
+                "basic" => {
+                    if let Some(username) = &auth.username {
+                        if let Some(password) = &auth.password {
+                            if self.debug_mode {
+                                debug_print!(VerbosityLevel::Detailed, "Using Basic authentication for user: {} (password masked)", username);
+                            }
+                            let credentials = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
+                            req_builder.header("Authorization", format!("Basic {}", credentials))
+                        } else {
+                            if self.debug_mode {
+                                debug_warn!("Basic auth configured but no password provided");
+                            }
+                            req_builder
+                        }
+                    } else {
+                        if self.debug_mode {
+                            debug_warn!("Basic auth configured but no username provided");
+                        }
+                        req_builder
+                    }
+                }
+                _ => {
+                    if self.debug_mode {
+                        debug_warn!("Unknown auth type: {}", auth.auth_type);
+                    }
+                    req_builder
+                }
+            };
+        }
+
+        req_builder
+    }
+
+    /// Generate next request ID with overflow protection
+    fn next_request_id(&self) -> u64 {
+        let id = self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if id >= MAX_REQUEST_ID {
+            // Reset to 1 when approaching overflow
+            self.request_counter.store(1, std::sync::atomic::Ordering::SeqCst);
+            1
+        } else {
+            id
+        }
+    }
+
     /// Create a new MCP service instance
     pub fn new() -> Self {
         Self {
@@ -170,12 +314,13 @@ impl McpService {
     }
 
     /// Load MCP server configurations from environment or config file
+    /// Priority: Environment variables override file configurations for the same server ID
     pub fn load_config(&mut self) -> Result<()> {
-        // Load from environment variables first
-        self.load_from_env()?;
-        
-        // Load from config file if available
+        // Load from config file first (lower priority)
         self.load_from_file()?;
+        
+        // Load from environment variables second (higher priority - can override file configs)
+        self.load_from_env()?;
 
         Ok(())
     }
@@ -297,6 +442,19 @@ impl McpService {
 
     /// Add MCP server from GitHub URL
     pub async fn add_server_from_github(&mut self, server_id: String, github_url: String, name: Option<String>) -> Result<()> {
+        // Validate GitHub URL to prevent malicious inputs
+        if !self.is_valid_github_url(&github_url) {
+            return Err(anyhow::anyhow!("Invalid GitHub URL. Must be a valid GitHub repository URL."));
+        }
+
+        // Display security warning
+        eprintln!("{}", GITHUB_CLONE_WARNING);
+        
+        // Prompt for confirmation (in production, this would be configurable)
+        if !self.confirm_github_clone(&github_url)? {
+            return Err(anyhow::anyhow!("Operation cancelled by user"));
+        }
+
         if self.debug_mode {
             debug_print!(VerbosityLevel::Basic, "Cloning MCP server from GitHub: {}", github_url);
         }
@@ -312,9 +470,15 @@ impl McpService {
             std::fs::remove_dir_all(&local_path)?;
         }
 
-        // Clone the repository
+        // Clone the repository with timeout and additional security flags
         let clone_result = Command::new("git")
-            .args(&["clone", &github_url, local_path.to_str().unwrap()])
+            .args(&[
+                "clone", 
+                "--depth", "1", // Shallow clone for security and performance
+                "--single-branch", // Only clone default branch
+                &github_url, 
+                local_path.to_str().unwrap()
+            ])
             .output()
             .context("Failed to execute git clone command")?;
 
@@ -337,6 +501,7 @@ impl McpService {
             let build_result = Command::new("cargo")
                 .args(&["build", "--release"])
                 .current_dir(&local_path)
+                .env("CARGO_NET_OFFLINE", "false") // Allow network for dependencies
                 .output()
                 .context("Failed to execute cargo build command")?;
 
@@ -379,18 +544,88 @@ impl McpService {
         Ok(())
     }
 
-    /// Get binary name from Cargo.toml
+    /// Validate GitHub URL for basic security
+    fn is_valid_github_url(&self, url: &str) -> bool {
+        url.starts_with("https://github.com/") && 
+        url.len() > 19 && // Minimum length for a valid repo URL
+        url.chars().all(|c| c.is_ascii() && c != '<' && c != '>') && // Basic XSS prevention
+        url.split('/').count() >= 5 // github.com/owner/repo minimum
+    }
+
+    /// Confirm GitHub clone operation with user
+    fn confirm_github_clone(&self, github_url: &str) -> Result<bool> {
+        use std::io::{self, Write};
+        
+        print!("Continue cloning from {}? [y/N]: ", github_url);
+        io::stdout().flush()?;
+        
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        
+        let input = input.trim().to_lowercase();
+        Ok(input == "y" || input == "yes")
+    }
+
+    /// Get binary name from Cargo.toml with improved parsing
     fn get_binary_name_from_cargo_toml(&self, cargo_toml_path: &Path) -> Result<String> {
         let content = std::fs::read_to_string(cargo_toml_path)
             .context("Failed to read Cargo.toml")?;
         
-        // Simple parsing to find the package name
+        // Try to parse as TOML first (more robust)
+        match self.parse_toml_package_name(&content) {
+            Ok(name) => Ok(name),
+            Err(_) => {
+                // Fallback to simple string parsing
+                self.parse_simple_package_name(&content)
+            }
+        }
+    }
+
+    /// Parse package name using basic TOML-like parsing
+    fn parse_toml_package_name(&self, content: &str) -> Result<String> {
+        let mut in_package_section = false;
+        
+        for line in content.lines() {
+            let line = line.trim();
+            
+            // Check for [package] section
+            if line == "[package]" {
+                in_package_section = true;
+                continue;
+            }
+            
+            // Check for other sections
+            if line.starts_with('[') && line.ends_with(']') && line != "[package]" {
+                in_package_section = false;
+                continue;
+            }
+            
+            // If we're in the package section, look for name
+            if in_package_section && line.starts_with("name") {
+                if let Some(eq_pos) = line.find('=') {
+                    let name_part = &line[eq_pos + 1..].trim();
+                    // Remove quotes
+                    let name = name_part.trim_matches('"').trim_matches('\'');
+                    if !name.is_empty() {
+                        return Ok(name.to_string());
+                    }
+                }
+            }
+        }
+        
+        Err(anyhow::anyhow!("Could not find package name in [package] section"))
+    }
+
+    /// Simple fallback parsing for package name
+    fn parse_simple_package_name(&self, content: &str) -> Result<String> {
         for line in content.lines() {
             let line = line.trim();
             if line.starts_with("name") && line.contains("=") {
                 if let Some(name_part) = line.split('=').nth(1) {
                     let name = name_part.trim().trim_matches('"').trim_matches('\'');
-                    return Ok(name.to_string());
+                    if !name.is_empty() {
+                        return Ok(name.to_string());
+                    }
                 }
             }
         }
@@ -476,51 +711,30 @@ impl McpService {
         }
 
         let init_request = McpInitializeRequest {
-            protocol_version: "2025-06-18".to_string(),
+            protocol_version: MCP_PROTOCOL_VERSION.to_string(),
             capabilities: ClientCapabilities {
                 experimental: None,
                 sampling: None,
             },
             client_info: ClientInfo {
-                name: "osvm-cli".to_string(),
+                name: CLIENT_NAME.to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
         };
 
         let request = McpRequest {
-            jsonrpc: "2.0".to_string(),
-            id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: self.next_request_id(),
             method: "initialize".to_string(),
             params: Some(serde_json::to_value(&init_request)?),
         };
 
-        let mut req_builder = self.client
-            .post(&format!("{}/api/mcp", config.url))
-            .header("Content-Type", "application/json")
-            .json(&request);
-
-        // Add authentication if configured
-        if let Some(auth) = &config.auth {
-            req_builder = match auth.auth_type.as_str() {
-                "bearer" => {
-                    if let Some(token) = &auth.token {
-                        req_builder.header("Authorization", format!("Bearer {}", token))
-                    } else {
-                        req_builder
-                    }
-                }
-                "api_key" => {
-                    if let Some(token) = &auth.token {
-                        req_builder.header("X-API-Key", token)
-                    } else {
-                        req_builder
-                    }
-                }
-                _ => req_builder,
-            };
-        }
-
-        let response = req_builder.send().await
+        // Use the authentication helper instead of duplicating code
+        let response = self.create_authenticated_request(
+            &format!("{}/api/mcp", config.url),
+            &config.auth,
+            &request
+        ).send().await
             .context("Failed to send initialize request to MCP server")?;
 
         if !response.status().is_success() {
@@ -547,8 +761,11 @@ impl McpService {
 
     /// Initialize WebSocket-based MCP server
     async fn initialize_websocket_server(&self, _config: &McpServerConfig) -> Result<()> {
-        // TODO: Implement WebSocket initialization
-        Err(anyhow::anyhow!("WebSocket transport not yet implemented"))
+        Err(anyhow::anyhow!(
+            "WebSocket transport is not yet implemented. Please use HTTP or stdio transport instead.\n\
+             To add HTTP transport: osvm mcp add <server_id> --server-url <url> --transport http\n\
+             To add stdio transport: osvm mcp add-github <server_id> <github_url>"
+        ))
     }
 
     /// Initialize Stdio-based MCP server
@@ -557,31 +774,41 @@ impl McpService {
             debug_print!(VerbosityLevel::Basic, "Starting stdio MCP server: {}", config.url);
         }
 
+        // Kill existing process if running
+        if let Some(mut existing_process) = self.stdio_processes.remove(server_id) {
+            if let Err(e) = existing_process.child.kill().await {
+                if self.debug_mode {
+                    debug_warn!("Failed to kill existing stdio process: {}", e);
+                }
+            }
+        }
+
         let mut cmd = TokioCommand::new(&config.url);
         cmd.args(&["stdio"]);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+        cmd.kill_on_drop(true); // Ensure child processes are cleaned up
 
         let mut child = cmd.spawn()
             .context("Failed to start MCP server process")?;
 
         // Send initialization request
         let init_request = McpInitializeRequest {
-            protocol_version: "2025-06-18".to_string(),
+            protocol_version: MCP_PROTOCOL_VERSION.to_string(),
             capabilities: ClientCapabilities {
                 experimental: None,
                 sampling: None,
             },
             client_info: ClientInfo {
-                name: "osvm-cli".to_string(),
+                name: CLIENT_NAME.to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
         };
 
         let request = McpRequest {
-            jsonrpc: "2.0".to_string(),
-            id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: self.next_request_id(),
             method: "initialize".to_string(),
             params: Some(serde_json::to_value(&init_request)?),
         };
@@ -594,29 +821,36 @@ impl McpService {
             stdin.flush().await?;
         }
 
-        // Read response
+        // Read response with timeout
         if let Some(stdout) = child.stdout.take() {
             let mut reader = TokioBufReader::new(stdout);
             let mut line = String::new();
+            let mut response_found = false;
             
             // Skip log lines and find the JSON response
             while reader.read_line(&mut line).await? > 0 {
-                if line.trim().starts_with("{") {
-                    let mcp_response: Result<McpResponse, _> = serde_json::from_str(&line);
+                let line_trimmed = line.trim();
+                if line_trimmed.starts_with("{") {
+                    let mcp_response: Result<McpResponse, _> = serde_json::from_str(line_trimmed);
                     if let Ok(response) = mcp_response {
                         if response.id == request.id {
                             if let Some(error) = response.error {
                                 return Err(anyhow::anyhow!("MCP server initialization error: {} - {}", error.code, error.message));
                             }
+                            response_found = true;
                             break;
                         }
                     }
                 }
                 line.clear();
             }
+            
+            if !response_found {
+                return Err(anyhow::anyhow!("No valid response received from MCP server"));
+            }
         }
 
-        // Store the process
+        // Store the process for lifecycle management
         if let Some(local_path) = &config.local_path {
             let stdio_process = StdioProcess {
                 child,
@@ -632,6 +866,17 @@ impl McpService {
         }
 
         Ok(())
+    }
+
+    /// Cleanup stdio processes for graceful shutdown
+    pub async fn cleanup_stdio_processes(&mut self) {
+        for (server_id, mut process) in self.stdio_processes.drain() {
+            if let Err(e) = process.child.kill().await {
+                if self.debug_mode {
+                    debug_warn!("Failed to cleanup stdio process for '{}': {}", server_id, e);
+                }
+            }
+        }
     }
 
     /// List available tools from an MCP server

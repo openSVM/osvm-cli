@@ -849,9 +849,9 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("transport")
                                 .long("transport")
                                 .value_name("TYPE")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["http", "websocket", "stdio"]))
+                                .value_parser(clap::builder::PossibleValuesParser::new(["http", "stdio"]))
                                 .default_value("http")
-                                .help("Transport type for communication")
+                                .help("Transport type for communication (websocket not yet implemented)")
                         )
                         .arg(
                             Arg::new("auth_type")
