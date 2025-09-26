@@ -351,6 +351,8 @@ async fn handle_mcp_command(
                 auth,
                 enabled,
                 extra_config: std::collections::HashMap::new(),
+                github_url: None,
+                local_path: None,
             };
 
             mcp_service.add_server(server_id.clone(), config);
@@ -363,6 +365,38 @@ async fn handle_mcp_command(
                     eprintln!("   The server was added but may not be accessible.");
                 } else {
                     println!("✅ Server connectivity test passed!");
+                }
+            }
+        }
+
+        "add-github" => {
+            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let github_url = mcp_sub_matches.get_one::<String>("github_url").unwrap();
+            let name = mcp_sub_matches.get_one::<String>("name").cloned();
+            let enabled = mcp_sub_matches.get_flag("enabled");
+
+            println!("🔄 Cloning MCP server from GitHub: {}", github_url);
+            
+            match mcp_service.add_server_from_github(server_id.clone(), github_url.clone(), name).await {
+                Ok(_) => {
+                    println!("✅ Successfully cloned and configured MCP server '{}'", server_id);
+                    println!("   Repository: {}", github_url);
+                    
+                    if enabled {
+                        println!("🔄 Testing server connectivity...");
+                        if let Err(e) = mcp_service.test_server(server_id).await {
+                            eprintln!("⚠️  Warning: Server test failed: {}", e);
+                            eprintln!("   The server was configured but may not be accessible.");
+                        } else {
+                            println!("✅ Server connectivity test passed!");
+                        }
+                    } else {
+                        println!("💡 Use 'osvm mcp enable {}' to activate it", server_id);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to clone and configure MCP server: {}", e);
+                    std::process::exit(1);
                 }
             }
         }
@@ -587,6 +621,8 @@ async fn handle_mcp_command(
                 auth: None,
                 enabled: auto_enable,
                 extra_config: std::collections::HashMap::new(),
+                github_url: None,
+                local_path: None,
             };
             
             mcp_service.add_server("solana".to_string(), config);
