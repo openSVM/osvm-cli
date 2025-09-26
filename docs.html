@@ -45,8 +45,8 @@
         body {
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
             line-height: 1.6;
-            color: #00ff41;
-            background: #0a0e0a;
+            color: #e0e0e0;
+            background: #1a1a1a;
             min-height: 100vh;
         }
         
@@ -59,15 +59,15 @@
         header {
             text-align: center;
             padding: 40px 0;
-            color: #00ff41;
-            border-bottom: 2px solid #00ff41;
+            color: #e0e0e0;
+            border-bottom: 2px solid #808080;
         }
         
         .logo {
             font-size: 2.5rem;
             font-weight: bold;
             margin-bottom: 10px;
-            text-shadow: 0 0 10px #00ff41;
+            text-shadow: 0 0 10px #808080;
             font-family: monospace;
         }
         
@@ -75,7 +75,74 @@
             font-size: 1.1rem;
             margin-bottom: 20px;
             opacity: 0.9;
-            color: #66ff66;
+            color: #c0c0c0;
+        }
+
+        .token-mint-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #333333;
+            border: 1px solid #555555;
+            border-radius: 8px;
+        }
+
+        .token-mint-header {
+            font-size: 1.2rem;
+            color: #e0e0e0;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .token-mint-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .token-mint-input {
+            flex: 1;
+            min-width: 300px;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #555555;
+            color: #e0e0e0;
+            font-family: monospace;
+            font-size: 0.9rem;
+            border-radius: 4px;
+        }
+
+        .copy-button {
+            padding: 12px 16px;
+            background: #808080;
+            color: #1a1a1a;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .copy-button:hover {
+            background: #999999;
+            transform: translateY(-1px);
+        }
+
+        .copy-button:active {
+            transform: translateY(0);
+        }
+
+        .copy-feedback {
+            color: #90EE90;
+            font-size: 0.9rem;
+            margin-left: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .copy-feedback.show {
+            opacity: 1;
         }
         
         .nav-buttons {
@@ -89,9 +156,9 @@
         .btn {
             display: inline-block;
             padding: 10px 20px;
-            border: 2px solid #00ff41;
+            border: 2px solid #808080;
             background: transparent;
-            color: #00ff41;
+            color: #e0e0e0;
             text-decoration: none;
             font-weight: bold;
             transition: all 0.3s ease;
@@ -100,30 +167,30 @@
         }
         
         .btn-primary {
-            background: #00ff41;
-            color: #0a0e0a;
+            background: #808080;
+            color: #1a1a1a;
         }
         
         .btn-primary:hover {
             background: transparent;
-            color: #00ff41;
-            box-shadow: 0 0 10px #00ff41;
+            color: #e0e0e0;
+            box-shadow: 0 0 10px #808080;
         }
         
         .btn-secondary {
             background: transparent;
-            color: #00ff41;
-            border: 1px solid #004400;
+            color: #e0e0e0;
+            border: 1px solid #555555;
         }
         
         .btn-secondary:hover {
-            border-color: #00ff41;
-            box-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+            border-color: #808080;
+            box-shadow: 0 0 10px rgba(128, 128, 128, 0.5);
         }
         
         main {
-            background: #0f1b0f;
-            border: 2px solid #00ff41;
+            background: #2a2a2a;
+            border: 2px solid #808080;
             margin: 20px auto;
             max-width: 1200px;
             min-height: calc(100vh - 200px);
@@ -135,32 +202,32 @@
         
         /* Markdown content styling */
         .markdown-content h1 {
-            color: #00ff41;
+            color: #e0e0e0;
             font-size: 2.5rem;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 3px solid #00ff41;
+            border-bottom: 3px solid #808080;
             font-family: monospace;
         }
         
         .markdown-content h2 {
-            color: #00ff41;
+            color: #e0e0e0;
             font-size: 2rem;
             margin: 30px 0 15px 0;
             padding-bottom: 8px;
-            border-bottom: 2px solid #004400;
+            border-bottom: 2px solid #555555;
             font-family: monospace;
         }
         
         .markdown-content h3 {
-            color: #66ff66;
+            color: #d0d0d0;
             font-size: 1.5rem;
             margin: 25px 0 10px 0;
             font-family: monospace;
         }
         
         .markdown-content h4 {
-            color: #66ff66;
+            color: #d0d0d0;
             font-size: 1.2rem;
             margin: 20px 0 8px 0;
             font-family: monospace;
@@ -169,13 +236,13 @@
         .markdown-content p {
             margin-bottom: 15px;
             line-height: 1.7;
-            color: #66ff66;
+            color: #c0c0c0;
         }
         
         .markdown-content ul, .markdown-content ol {
             margin: 15px 0;
             padding-left: 30px;
-            color: #66ff66;
+            color: #c0c0c0;
         }
         
         .markdown-content li {
@@ -183,21 +250,21 @@
         }
         
         .markdown-content a {
-            color: #00ff41;
+            color: #e0e0e0;
             text-decoration: none;
             font-weight: 500;
             transition: color 0.3s ease;
         }
         
         .markdown-content a:hover {
-            color: #66ff66;
+            color: #f0f0f0;
             text-decoration: underline;
         }
         
         .markdown-content code {
-            background: #001a00;
+            background: #333333;
             padding: 2px 6px;
-            border: 1px solid #004400;
+            border: 1px solid #555555;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 0.9em;
             color: #00ff41;
@@ -359,6 +426,16 @@
         <div class="container">
             <div class="logo">OSVM CLI 📚</div>
             <div class="tagline" id="page-title">Documentation</div>
+            
+            <div class="token-mint-section">
+                <div class="token-mint-header">🪙 OSVM Token Mint Address</div>
+                <div class="token-mint-container">
+                    <input type="text" id="tokenMint" class="token-mint-input" value="pvv4fu1RvQBkKXozyH5A843sp1mt6gTy9rPoZrBBAGS" readonly>
+                    <button class="copy-button" onclick="copyTokenMint()">📋 Copy</button>
+                    <span id="copyFeedback" class="copy-feedback">Copied!</span>
+                </div>
+            </div>
+            
             <div class="nav-buttons">
                 <a href="index.html" class="btn btn-primary">🏠 Home</a>
                 <a href="docs.html?doc=README" class="btn btn-secondary">📖 Docs Index</a>
@@ -553,6 +630,39 @@
             const docName = getDocumentName();
             loadDocument(docName);
         });
+
+        // Copy token mint function
+        function copyTokenMint() {
+            const tokenInput = document.getElementById('tokenMint');
+            const feedback = document.getElementById('copyFeedback');
+            
+            // Select and copy the text
+            tokenInput.select();
+            tokenInput.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {
+                document.execCommand('copy');
+                
+                // Show feedback
+                feedback.classList.add('show');
+                setTimeout(() => {
+                    feedback.classList.remove('show');
+                }, 2000);
+            } catch (err) {
+                // Fallback for modern browsers
+                navigator.clipboard.writeText(tokenInput.value).then(() => {
+                    feedback.classList.add('show');
+                    setTimeout(() => {
+                        feedback.classList.remove('show');
+                    }, 2000);
+                }).catch(() => {
+                    console.error('Failed to copy token mint address');
+                });
+            }
+            
+            // Deselect the input
+            tokenInput.blur();
+        }
     </script>
 </body>
 </html>
