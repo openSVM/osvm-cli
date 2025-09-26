@@ -887,6 +887,34 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         )
                 )
                 .subcommand(
+                    Command::new("add-github")
+                        .about("Add MCP server from GitHub repository")
+                        .arg(
+                            Arg::new("server_id")
+                                .help("Server identifier")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("github_url")
+                                .help("GitHub repository URL (e.g., https://github.com/openSVM/solana-mcp-server)")
+                                .required(true)
+                                .index(2)
+                        )
+                        .arg(
+                            Arg::new("name")
+                                .long("name")
+                                .value_name("NAME")
+                                .help("Human-readable name for the server")
+                        )
+                        .arg(
+                            Arg::new("enabled")
+                                .long("enabled")
+                                .action(ArgAction::SetTrue)
+                                .help("Enable the server immediately after adding")
+                        )
+                )
+                .subcommand(
                     Command::new("remove")
                         .about("Remove an MCP server configuration")
                         .arg(

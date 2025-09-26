@@ -8,13 +8,19 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
+use tokio::process::{Child, Command as TokioCommand};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
+use dirs;
 
 /// Configuration for an MCP server endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     /// Human-readable name for the MCP server
     pub name: String,
-    /// Base URL for HTTP/WebSocket MCP server
+    /// Base URL for HTTP/WebSocket MCP server or path for stdio
     pub url: String,
     /// Server type (stdio, http, websocket)
     pub transport_type: McpTransportType,
@@ -24,6 +30,10 @@ pub struct McpServerConfig {
     pub enabled: bool,
     /// Additional configuration specific to the server
     pub extra_config: HashMap<String, String>,
+    /// GitHub repository URL (if cloned from GitHub)
+    pub github_url: Option<String>,
+    /// Local path to cloned repository (for stdio transport)
+    pub local_path: Option<String>,
 }
 
 /// Transport types supported by MCP servers
@@ -115,6 +125,14 @@ pub struct McpTool {
     pub input_schema: serde_json::Value,
 }
 
+/// Stdio process manager for MCP servers
+#[derive(Debug)]
+pub struct StdioProcess {
+    pub child: Child,
+    pub server_id: String,
+    pub local_path: PathBuf,
+}
+
 /// Service for managing MCP (Model Context Protocol) server connections
 pub struct McpService {
     /// Configured MCP servers
@@ -127,6 +145,8 @@ pub struct McpService {
     debug_mode: bool,
     /// Request counter for JSON-RPC ID generation
     request_counter: std::sync::atomic::AtomicU64,
+    /// Active stdio processes
+    stdio_processes: HashMap<String, StdioProcess>,
 }
 
 impl McpService {
@@ -138,6 +158,7 @@ impl McpService {
             circuit_breaker: GranularCircuitBreaker::new(),
             debug_mode: false,
             request_counter: std::sync::atomic::AtomicU64::new(1),
+            stdio_processes: HashMap::new(),
         }
     }
 
@@ -152,10 +173,61 @@ impl McpService {
     pub fn load_config(&mut self) -> Result<()> {
         // Load from environment variables first
         self.load_from_env()?;
+        
+        // Load from config file if available
+        self.load_from_file()?;
 
-        // TODO: Load from config file if available
-        // self.load_from_file()?;
+        Ok(())
+    }
 
+    /// Load configurations from JSON file
+    fn load_from_file(&mut self) -> Result<()> {
+        let config_path = dirs::config_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("osvm")
+            .join("mcp_servers.json");
+
+        if !config_path.exists() {
+            return Ok(()); // No config file is fine
+        }
+
+        let content = std::fs::read_to_string(&config_path)
+            .context("Failed to read MCP config file")?;
+            
+        let servers: HashMap<String, McpServerConfig> = serde_json::from_str(&content)
+            .context("Failed to parse MCP config file")?;
+            
+        for (server_id, config) in servers {
+            self.servers.insert(server_id, config);
+        }
+        
+        if self.debug_mode {
+            debug_success!("Loaded {} MCP servers from config file", self.servers.len());
+        }
+        
+        Ok(())
+    }
+
+    /// Save configurations to JSON file
+    pub fn save_config(&self) -> Result<()> {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .join("osvm");
+            
+        std::fs::create_dir_all(&config_dir)?;
+        
+        let config_path = config_dir.join("mcp_servers.json");
+        
+        let content = serde_json::to_string_pretty(&self.servers)
+            .context("Failed to serialize MCP servers")?;
+            
+        std::fs::write(&config_path, content)
+            .context("Failed to write MCP config file")?;
+            
+        if self.debug_mode {
+            debug_success!("Saved {} MCP servers to config file", self.servers.len());
+        }
+        
         Ok(())
     }
 
@@ -170,6 +242,8 @@ impl McpService {
                 auth: None,
                 enabled: true,
                 extra_config: HashMap::new(),
+                github_url: None,
+                local_path: None,
             };
             
             self.servers.insert("solana".to_string(), config);
@@ -196,6 +270,8 @@ impl McpService {
                     auth: None,
                     enabled: true,
                     extra_config: HashMap::new(),
+                    github_url: None,
+                    local_path: None,
                 };
 
                 self.servers.insert(server_name.clone(), config);
@@ -212,11 +288,127 @@ impl McpService {
     /// Add or update an MCP server configuration
     pub fn add_server(&mut self, server_id: String, config: McpServerConfig) {
         self.servers.insert(server_id, config);
+        if let Err(e) = self.save_config() {
+            if self.debug_mode {
+                debug_warn!("Failed to save config: {}", e);
+            }
+        }
+    }
+
+    /// Add MCP server from GitHub URL
+    pub async fn add_server_from_github(&mut self, server_id: String, github_url: String, name: Option<String>) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(VerbosityLevel::Basic, "Cloning MCP server from GitHub: {}", github_url);
+        }
+
+        // Create a temp directory for cloning
+        let temp_dir = std::env::temp_dir().join("osvm-mcp-servers");
+        std::fs::create_dir_all(&temp_dir)?;
+        
+        let local_path = temp_dir.join(&server_id);
+        
+        // Remove existing directory if present
+        if local_path.exists() {
+            std::fs::remove_dir_all(&local_path)?;
+        }
+
+        // Clone the repository
+        let clone_result = Command::new("git")
+            .args(&["clone", &github_url, local_path.to_str().unwrap()])
+            .output()
+            .context("Failed to execute git clone command")?;
+
+        if !clone_result.status.success() {
+            let error_msg = String::from_utf8_lossy(&clone_result.stderr);
+            return Err(anyhow::anyhow!("Git clone failed: {}", error_msg));
+        }
+
+        if self.debug_mode {
+            debug_success!("Successfully cloned {} to {:?}", github_url, local_path);
+        }
+
+        // Check if it's a Rust project and build it
+        let cargo_toml_path = local_path.join("Cargo.toml");
+        if cargo_toml_path.exists() {
+            if self.debug_mode {
+                debug_print!(VerbosityLevel::Basic, "Building Rust project at {:?}", local_path);
+            }
+
+            let build_result = Command::new("cargo")
+                .args(&["build", "--release"])
+                .current_dir(&local_path)
+                .output()
+                .context("Failed to execute cargo build command")?;
+
+            if !build_result.status.success() {
+                let error_msg = String::from_utf8_lossy(&build_result.stderr);
+                return Err(anyhow::anyhow!("Cargo build failed: {}", error_msg));
+            }
+
+            if self.debug_mode {
+                debug_success!("Successfully built MCP server at {:?}", local_path);
+            }
+        }
+
+        // Find the binary name from Cargo.toml
+        let binary_name = self.get_binary_name_from_cargo_toml(&cargo_toml_path)?;
+        let binary_path = local_path.join("target/release").join(&binary_name);
+
+        if !binary_path.exists() {
+            return Err(anyhow::anyhow!("Built binary not found at {:?}", binary_path));
+        }
+
+        // Create server configuration
+        let config = McpServerConfig {
+            name: name.unwrap_or_else(|| format!("{} (from GitHub)", server_id)),
+            url: binary_path.to_str().unwrap().to_string(),
+            transport_type: McpTransportType::Stdio,
+            auth: None,
+            enabled: true,
+            extra_config: HashMap::new(),
+            github_url: Some(github_url),
+            local_path: Some(local_path.to_str().unwrap().to_string()),
+        };
+
+        self.servers.insert(server_id, config);
+        if let Err(e) = self.save_config() {
+            if self.debug_mode {
+                debug_warn!("Failed to save config: {}", e);
+            }
+        }
+        Ok(())
+    }
+
+    /// Get binary name from Cargo.toml
+    fn get_binary_name_from_cargo_toml(&self, cargo_toml_path: &Path) -> Result<String> {
+        let content = std::fs::read_to_string(cargo_toml_path)
+            .context("Failed to read Cargo.toml")?;
+        
+        // Simple parsing to find the package name
+        for line in content.lines() {
+            let line = line.trim();
+            if line.starts_with("name") && line.contains("=") {
+                if let Some(name_part) = line.split('=').nth(1) {
+                    let name = name_part.trim().trim_matches('"').trim_matches('\'');
+                    return Ok(name.to_string());
+                }
+            }
+        }
+        
+        Err(anyhow::anyhow!("Could not find package name in Cargo.toml"))
     }
 
     /// Remove an MCP server configuration
     pub fn remove_server(&mut self, server_id: &str) -> Option<McpServerConfig> {
-        self.servers.remove(server_id)
+        let result = self.servers.remove(server_id);
+        if result.is_some() {
+            if let Err(e) = self.save_config() {
+                if self.debug_mode {
+                    debug_warn!("Failed to save config: {}", e);
+                }
+            }
+        }
+        result
     }
 
     /// List all configured MCP servers
@@ -240,13 +432,20 @@ impl McpService {
             debug_print!(VerbosityLevel::Basic, "Server '{}' {}", server_id, if enabled { "enabled" } else { "disabled" });
         }
         
+        if let Err(e) = self.save_config() {
+            if self.debug_mode {
+                debug_warn!("Failed to save config: {}", e);
+            }
+        }
+        
         Ok(())
     }
 
     /// Initialize connection with an MCP server
-    pub async fn initialize_server(&self, server_id: &str) -> Result<()> {
+    pub async fn initialize_server(&mut self, server_id: &str) -> Result<()> {
         let config = self.servers.get(server_id)
-            .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?;
+            .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?
+            .clone(); // Clone the config to avoid borrowing issues
 
         if !config.enabled {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
@@ -254,13 +453,13 @@ impl McpService {
 
         match config.transport_type {
             McpTransportType::Http => {
-                self.initialize_http_server(config).await
+                self.initialize_http_server(&config).await
             }
             McpTransportType::Websocket => {
-                self.initialize_websocket_server(config).await
+                self.initialize_websocket_server(&config).await
             }
             McpTransportType::Stdio => {
-                Err(anyhow::anyhow!("Stdio transport not yet implemented"))
+                self.initialize_stdio_server(server_id, &config).await
             }
         }
     }
@@ -350,6 +549,89 @@ impl McpService {
     async fn initialize_websocket_server(&self, _config: &McpServerConfig) -> Result<()> {
         // TODO: Implement WebSocket initialization
         Err(anyhow::anyhow!("WebSocket transport not yet implemented"))
+    }
+
+    /// Initialize Stdio-based MCP server
+    async fn initialize_stdio_server(&mut self, server_id: &str, config: &McpServerConfig) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(VerbosityLevel::Basic, "Starting stdio MCP server: {}", config.url);
+        }
+
+        let mut cmd = TokioCommand::new(&config.url);
+        cmd.args(&["stdio"]);
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()
+            .context("Failed to start MCP server process")?;
+
+        // Send initialization request
+        let init_request = McpInitializeRequest {
+            protocol_version: "2025-06-18".to_string(),
+            capabilities: ClientCapabilities {
+                experimental: None,
+                sampling: None,
+            },
+            client_info: ClientInfo {
+                name: "osvm-cli".to_string(),
+                version: env!("CARGO_PKG_VERSION").to_string(),
+            },
+        };
+
+        let request = McpRequest {
+            jsonrpc: "2.0".to_string(),
+            id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            method: "initialize".to_string(),
+            params: Some(serde_json::to_value(&init_request)?),
+        };
+
+        let request_json = serde_json::to_string(&request)?;
+        
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin.write_all(request_json.as_bytes()).await?;
+            stdin.write_all(b"\n").await?;
+            stdin.flush().await?;
+        }
+
+        // Read response
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = TokioBufReader::new(stdout);
+            let mut line = String::new();
+            
+            // Skip log lines and find the JSON response
+            while reader.read_line(&mut line).await? > 0 {
+                if line.trim().starts_with("{") {
+                    let mcp_response: Result<McpResponse, _> = serde_json::from_str(&line);
+                    if let Ok(response) = mcp_response {
+                        if response.id == request.id {
+                            if let Some(error) = response.error {
+                                return Err(anyhow::anyhow!("MCP server initialization error: {} - {}", error.code, error.message));
+                            }
+                            break;
+                        }
+                    }
+                }
+                line.clear();
+            }
+        }
+
+        // Store the process
+        if let Some(local_path) = &config.local_path {
+            let stdio_process = StdioProcess {
+                child,
+                server_id: server_id.to_string(),
+                local_path: PathBuf::from(local_path),
+            };
+            
+            self.stdio_processes.insert(server_id.to_string(), stdio_process);
+        }
+
+        if self.debug_mode {
+            debug_success!("Successfully initialized stdio MCP server '{}'", config.name);
+        }
+
+        Ok(())
     }
 
     /// List available tools from an MCP server
@@ -560,7 +842,7 @@ impl McpService {
     }
 
     /// Test connectivity to an MCP server
-    pub async fn test_server(&self, server_id: &str) -> Result<()> {
+    pub async fn test_server(&mut self, server_id: &str) -> Result<()> {
         // First try to initialize
         self.initialize_server(server_id).await
             .context("Failed to initialize MCP server")?;
@@ -611,6 +893,8 @@ mod tests {
             auth: None,
             enabled: true,
             extra_config: HashMap::new(),
+            github_url: None,
+            local_path: None,
         };
         
         service.add_server("test".to_string(), config);
@@ -628,6 +912,8 @@ mod tests {
             auth: None,
             enabled: true,
             extra_config: HashMap::new(),
+            github_url: None,
+            local_path: None,
         };
         
         service.add_server("test".to_string(), config);
@@ -648,6 +934,8 @@ mod tests {
             auth: None,
             enabled: true,
             extra_config: HashMap::new(),
+            github_url: None,
+            local_path: None,
         };
         
         service.add_server("test".to_string(), config);
