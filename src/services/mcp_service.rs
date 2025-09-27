@@ -8,7 +8,7 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
-use std::process::{Command, Stdio};
+use std::process::{Command, Stdio, ChildStdout};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use tokio::process::{Child, Command as TokioCommand};
@@ -982,6 +982,18 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
+        // Handle different transport types
+        match config.transport_type {
+            McpTransportType::Http => self.list_tools_http(server_id, config).await,
+            McpTransportType::Stdio => self.list_tools_stdio(server_id, config).await,
+            McpTransportType::Websocket => {
+                Err(anyhow::anyhow!("WebSocket transport not yet implemented"))
+            }
+        }
+    }
+
+    /// List tools from HTTP-based MCP server
+    async fn list_tools_http(&self, _server_id: &str, config: &McpServerConfig) -> Result<Vec<McpTool>> {
         let endpoint_id = EndpointId {
             service: "mcp".to_string(),
             endpoint: config.url.clone(),
@@ -995,7 +1007,7 @@ impl McpService {
             jsonrpc: "2.0".to_string(),
             id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             method: MCP_METHOD_TOOLS_LIST.to_string(),
-            params: None,
+            params: Some(serde_json::json!({})),  // Empty object, not None
         };
 
         let mut req_builder = self.client
@@ -1059,11 +1071,207 @@ impl McpService {
         Ok(tools)
     }
 
+    /// List tools from stdio-based MCP server
+    async fn list_tools_stdio(&self, server_id: &str, config: &McpServerConfig) -> Result<Vec<McpTool>> {
+        // For stdio, we need to use synchronous I/O since we're not keeping the process handle
+        // We'll spawn a new process for each request (not ideal but works for now)
+
+        if self.debug_mode {
+            debug_print!(VerbosityLevel::Basic, "Listing tools from stdio MCP server: {}", config.name);
+        }
+
+        // Parse the command from the URL field
+        let mut parts = config.url.split_whitespace();
+        let program = parts.next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
+        let args: Vec<&str> = parts.collect();
+
+        // Create the process
+        let mut child = Command::new(program)
+            .args(&args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Failed to spawn stdio MCP server process")?;
+
+        let mut stdin = child.stdin.take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdin for stdio process"))?;
+        let mut stdout = child.stdout.take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout for stdio process"))?;
+
+        // Send initialize request first
+        let init_request = McpRequest {
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: 1,
+            method: MCP_METHOD_INITIALIZE.to_string(),
+            params: Some(serde_json::json!({
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": CLIENT_NAME,
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            })),
+        };
+
+        let init_request_str = serde_json::to_string(&init_request)?;
+        stdin.write_all(init_request_str.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+
+        // Read initialize response
+        let mut reader = BufReader::new(stdout);
+
+        // Find the first valid MCP response (filter out log messages)
+        let init_response_str = self.read_mcp_response(&mut reader, "initialization")
+            .context("Failed to read initialization response from stdio MCP server")?;
+
+        let _init_response: McpResponse = serde_json::from_str(&init_response_str)
+            .context("Failed to parse initialize response from stdio MCP server")?;
+
+        // Now send the tools/list request
+        let tools_request = McpRequest {
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: 2,
+            method: MCP_METHOD_TOOLS_LIST.to_string(),
+            params: Some(serde_json::json!({})),  // Empty object, not None
+        };
+
+        let tools_request_str = serde_json::to_string(&tools_request)?;
+        stdin.write_all(tools_request_str.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+
+        // Read tools response with filtering
+        let tools_response_str = self.read_mcp_response(&mut reader, "tools/list")
+            .context("Failed to read tools response from stdio MCP server")?;
+
+        let tools_response: McpResponse = serde_json::from_str(&tools_response_str)
+            .context("Failed to parse tools response from stdio MCP server")?;
+
+        // Kill the process
+        let _ = child.kill();
+
+        if let Some(error) = tools_response.error {
+            return Err(anyhow::anyhow!("MCP server tools/list error: {} - {}", error.code, error.message));
+        }
+
+        let result = tools_response.result
+            .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/list"))?;
+
+        let tools_list: serde_json::Value = result.get("tools")
+            .ok_or_else(|| anyhow::anyhow!("MCP server response missing 'tools' field"))?
+            .clone();
+
+        let tools: Vec<McpTool> = serde_json::from_value(tools_list)
+            .context("Failed to parse tools from MCP server response")?;
+
+        if self.debug_mode {
+            debug_success!("Retrieved {} tools from stdio MCP server '{}'", tools.len(), config.name);
+        }
+
+        Ok(tools)
+    }
+
+    /// Read and filter MCP protocol response from mixed stdout (logs + protocol)
+    fn read_mcp_response(&self, reader: &mut BufReader<ChildStdout>, operation: &str) -> Result<String> {
+        let mut line = String::new();
+        let mut attempts = 0;
+        const MAX_ATTEMPTS: usize = 50; // Prevent infinite loops
+
+        loop {
+            attempts += 1;
+            if attempts > MAX_ATTEMPTS {
+                return Err(anyhow::anyhow!("Timeout waiting for MCP response during {}", operation));
+            }
+
+            line.clear();
+            let bytes_read = reader.read_line(&mut line)
+                .context("Failed to read line from stdio process")?;
+
+            if bytes_read == 0 {
+                return Err(anyhow::anyhow!("Unexpected EOF from stdio MCP server during {}", operation));
+            }
+
+            let trimmed = line.trim();
+
+            // Skip empty lines
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Check if this looks like a JSON-RPC response
+            if trimmed.starts_with('{') && trimmed.contains("jsonrpc") {
+                // Try to parse as JSON to verify it's valid
+                match serde_json::from_str::<serde_json::Value>(trimmed) {
+                    Ok(json) => {
+                        // Check if it has the expected JSON-RPC structure
+                        if json.get("jsonrpc").is_some() &&
+                           (json.get("result").is_some() || json.get("error").is_some()) {
+                            if self.debug_mode {
+                                debug_print!(VerbosityLevel::Detailed, "Found valid MCP response for {}", operation);
+                            }
+                            return Ok(trimmed.to_string());
+                        }
+                    }
+                    Err(_) => {
+                        // Not valid JSON, might be a log message that starts with '{'
+                        if self.debug_mode {
+                            debug_print!(VerbosityLevel::Detailed, "Skipping invalid JSON line: {}", trimmed);
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // Skip lines that look like structured logs
+            if self.is_log_message(trimmed) {
+                if self.debug_mode {
+                    debug_print!(VerbosityLevel::Detailed, "Skipping log message: {}", trimmed);
+                }
+                continue;
+            }
+
+            // Skip other non-protocol messages
+            if self.debug_mode {
+                debug_print!(VerbosityLevel::Detailed, "Skipping non-protocol line: {}", trimmed);
+            }
+        }
+    }
+
+    /// Check if a line looks like a structured log message rather than MCP protocol
+    fn is_log_message(&self, line: &str) -> bool {
+        // Common log patterns
+        if line.contains("\"level\":") ||
+           line.contains("\"timestamp\":") ||
+           line.contains("\"message\":") ||
+           line.contains("\"time\":") ||
+           line.contains("\"msg\":") {
+            return true;
+        }
+
+        // Specific patterns from solana-mcp-server
+        if line.contains("Starting Solana MCP server") ||
+           line.contains("Loaded config:") ||
+           line.contains("Opened stdio transport") ||
+           line.contains("Starting message loop") {
+            return true;
+        }
+
+        // JSON that doesn't look like JSON-RPC
+        if line.starts_with('{') && !line.contains("jsonrpc") {
+            return true;
+        }
+
+        false
+    }
+
     /// Call a tool on an MCP server
     pub async fn call_tool(
-        &self, 
-        server_id: &str, 
-        tool_name: &str, 
+        &self,
+        server_id: &str,
+        tool_name: &str,
         arguments: Option<serde_json::Value>
     ) -> Result<serde_json::Value> {
         let config = self.servers.get(server_id)
@@ -1073,6 +1281,25 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
+        // Route to appropriate implementation based on transport type
+        match config.transport_type {
+            McpTransportType::Http | McpTransportType::Websocket => {
+                self.call_tool_http(server_id, tool_name, arguments, config).await
+            }
+            McpTransportType::Stdio => {
+                self.call_tool_stdio(server_id, tool_name, arguments, config).await
+            }
+        }
+    }
+
+    /// Call a tool on an HTTP/WebSocket MCP server
+    async fn call_tool_http(
+        &self,
+        server_id: &str,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+        config: &McpServerConfig
+    ) -> Result<serde_json::Value> {
         let endpoint_id = EndpointId {
             service: "mcp".to_string(),
             endpoint: config.url.clone(),
@@ -1143,6 +1370,108 @@ impl McpService {
 
         if self.debug_mode {
             debug_success!("Successfully called tool '{}' on MCP server '{}'", tool_name, config.name);
+        }
+
+        Ok(result)
+    }
+
+    /// Call a tool on a stdio-based MCP server
+    async fn call_tool_stdio(
+        &self,
+        server_id: &str,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+        config: &McpServerConfig
+    ) -> Result<serde_json::Value> {
+        if self.debug_mode {
+            debug_print!(VerbosityLevel::Basic, "Calling tool '{}' on stdio MCP server: {}", tool_name, config.name);
+        }
+
+        // Parse the command from the URL field
+        let mut parts = config.url.split_whitespace();
+        let program = parts.next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
+        let args: Vec<&str> = parts.collect();
+
+        // Create the process
+        let mut child = Command::new(program)
+            .args(&args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("Failed to spawn stdio MCP server process")?;
+
+        let mut stdin = child.stdin.take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdin for stdio process"))?;
+        let mut stdout = child.stdout.take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout for stdio process"))?;
+
+        // Send initialize request first
+        let init_request = McpRequest {
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: 1,
+            method: MCP_METHOD_INITIALIZE.to_string(),
+            params: Some(serde_json::json!({
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": CLIENT_NAME,
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            })),
+        };
+
+        let init_request_str = serde_json::to_string(&init_request)?;
+        stdin.write_all(init_request_str.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+
+        // Read initialize response
+        let mut reader = BufReader::new(stdout);
+        let init_response_str = self.read_mcp_response(&mut reader, "initialization")
+            .context("Failed to read initialization response from stdio MCP server")?;
+
+        let _init_response: McpResponse = serde_json::from_str(&init_response_str)
+            .context("Failed to parse initialize response from stdio MCP server")?;
+
+        // Now send the tools/call request
+        let tool_call = serde_json::json!({
+            "name": tool_name,
+            "arguments": arguments
+        });
+
+        let call_request = McpRequest {
+            jsonrpc: MCP_JSONRPC_VERSION.to_string(),
+            id: 2,
+            method: MCP_METHOD_TOOLS_CALL.to_string(),
+            params: Some(tool_call),
+        };
+
+        let call_request_str = serde_json::to_string(&call_request)?;
+        stdin.write_all(call_request_str.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()?;
+
+        // Read tool call response with filtering
+        let call_response_str = self.read_mcp_response(&mut reader, "tools/call")
+            .context("Failed to read tools/call response from stdio MCP server")?;
+
+        let call_response: McpResponse = serde_json::from_str(&call_response_str)
+            .context("Failed to parse tools/call response from stdio MCP server")?;
+
+        // Kill the process
+        let _ = child.kill();
+
+        if let Some(error) = call_response.error {
+            return Err(anyhow::anyhow!("MCP server tools/call error: {} - {}", error.code, error.message));
+        }
+
+        let result = call_response.result
+            .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
+
+        if self.debug_mode {
+            debug_success!("Successfully called tool '{}' on stdio MCP server '{}'", tool_name, config.name);
         }
 
         Ok(result)

@@ -46,9 +46,12 @@ pub enum ChatMessage {
         execution_id: String,
     },
     Error(String),
-    AgentThinking(String), // Shows AI planning process
-    AgentPlan(String),     // Shows planned actions
-    Processing { message: String, spinner_index: usize }, // Shows processing with spinner
+    AgentThinking(String),
+    AgentPlan(Vec<PlannedTool>),
+    Processing {
+        message: String,
+        spinner_index: usize,
+    }, // Shows processing with spinner
 }
 
 /// Agent execution state
@@ -177,67 +180,33 @@ pub struct AdvancedChatState {
 
 impl AdvancedChatState {
     pub fn new() -> Result<Self> {
-        let mut mcp_service = McpService::new_with_debug(false);
-        let ai_service = AiService::new_with_debug(false);
-        
-        // Load existing MCP configurations
-        if let Err(e) = mcp_service.load_config() {
-            warn!("Failed to load MCP config: {}", e);
-        }
-
-        Ok(AdvancedChatState {
+        let state = Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_session_id: Arc::new(RwLock::new(None)),
-            mcp_service: Arc::new(Mutex::new(mcp_service)),
-            ai_service: Arc::new(ai_service),
+            mcp_service: Arc::new(Mutex::new(McpService::new())),
+            ai_service: Arc::new(AiService::new()),
             available_tools: Arc::new(RwLock::new(HashMap::new())),
             agent_command_sender: Arc::new(Mutex::new(None)),
+            spinner_state: Arc::new(AtomicUsize::new(0)),
             current_suggestions: Arc::new(RwLock::new(Vec::new())),
             suggestions_visible: Arc::new(RwLock::new(false)),
-            spinner_state: Arc::new(AtomicUsize::new(0)),
-        })
+        };
+
+        // Don't block on tool refresh during creation - it will be done asynchronously
+        Ok(state)
     }
 
-    pub fn start_spinner_animation(&self, cb_sink: cursive::CbSink) {
-        let spinner_state = self.spinner_state.clone();
-
-        // Spawn a background thread to update spinner
-        std::thread::spawn(move || {
-            loop {
-                // Update spinner index
-                spinner_state.fetch_add(1, Ordering::Relaxed);
-
-                // Request UI refresh
-                cb_sink.send(Box::new(move |siv| {
-                    update_ui_displays(siv);
-                })).ok();
-
-                // Wait a bit before next update
-                std::thread::sleep(Duration::from_millis(100));
-            }
-        });
-    }
-
-    pub fn create_session(&self, name: String) -> Result<Uuid> {
-        let session = ChatSession::new(name);
-        let session_id = session.id;
-        
+    pub async fn initialize(&self) -> Result<()> {
+        // Load MCP configuration first
         {
-            let mut sessions = self.sessions.write()
-                .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
-            sessions.insert(session_id, session);
-        }
-
-        // Set as active if it's the first session
-        {
-            let mut active_id = self.active_session_id.write()
-                .map_err(|e| anyhow!("Failed to lock active session: {}", e))?;
-            if active_id.is_none() {
-                *active_id = Some(session_id);
+            let mut service = self.mcp_service.lock().await;
+            if let Err(e) = service.load_config() {
+                warn!("Failed to load MCP config: {}", e);
             }
         }
 
-        Ok(session_id)
+        // Perform the initial refresh of tools after creation
+        self.refresh_tools_from_mcp().await
     }
 
     pub fn get_session_names(&self) -> Vec<(Uuid, String, AgentState)> {
@@ -340,7 +309,7 @@ impl AdvancedChatState {
         use std::time::Duration;
         // Use the proper AI service method to create tool plan
         let tool_plan_result = tokio::time::timeout(
-            Duration::from_secs(30),  // Increased timeout for better AI responses
+            Duration::from_secs(120),  // Extended timeout for comprehensive AI responses
             self.ai_service.create_tool_plan(&input, &available_tools)
         ).await;
 
@@ -371,7 +340,7 @@ impl AdvancedChatState {
             }
             Ok(Ok(tool_plan)) => {
                 // Successfully got tool plan from AI service
-                self.add_message_to_session(session_id, ChatMessage::AgentPlan(tool_plan.reasoning.clone()))?;
+                self.add_message_to_session(session_id, ChatMessage::AgentPlan(tool_plan.osvm_tools_to_use.clone()))?;
 
                 if tool_plan.osvm_tools_to_use.is_empty() {
                     // No tools needed according to AI
@@ -379,7 +348,7 @@ impl AdvancedChatState {
                         // Try heuristic plan instead
                         let heur = build_heuristic_plan(&input);
                         if !heur.is_empty() {
-                            self.add_message_to_session(session_id, ChatMessage::AgentPlan("Using heuristic plan (no tools suggested by AI).".to_string()))?;
+                            self.add_message_to_session(session_id, ChatMessage::AgentPlan(heur.clone()))?;
                             self.run_heuristic_fallback(session_id, &input, heur).await?;
                         } else {
                             self.simple_response(session_id, &input).await?;
@@ -457,7 +426,7 @@ impl AdvancedChatState {
             // Nothing heuristic matched; fall back to simple
             return self.simple_response(session_id, original_input).await;
         }
-        self.add_message_to_session(session_id, ChatMessage::AgentPlan("Executing heuristic simulated tools...".to_string()))?;
+        self.add_message_to_session(session_id, ChatMessage::AgentPlan(tools.clone()))?;
         for planned_tool in tools {
             self.execute_planned_tool(session_id, planned_tool).await?;
         }
@@ -704,10 +673,15 @@ impl AdvancedChatState {
         // Create prompt for AI to generate suggestions
         let prompt = format!(
             "Based on this conversation context:\n{}\n\n\
-            Generate exactly 5 concise follow-up questions or commands the user might want to ask next. \
-            Each suggestion should be on a new line, numbered 1-5. \
-            Keep suggestions short (max 10 words each). \
-            Focus on practical next steps or clarifications.",
+            Generate exactly 5 short, practical follow-up questions or commands. \
+            Focus on blockchain operations, wallet actions, or clarifying questions. \
+            Format: Just list them as:\n\
+            1. Check wallet balance\n\
+            2. View recent transactions\n\
+            3. Get network status\n\
+            4. Show stake accounts\n\
+            5. Export transaction history\n\n\
+            Keep each suggestion under 6 words and directly actionable.",
             recent_messages
         );
 
@@ -871,6 +845,52 @@ impl AdvancedChatState {
             });
         });
     }
+
+    /// Create a new chat session
+    pub fn create_session(&self, name: String) -> Result<Uuid> {
+        let session_id = Uuid::new_v4();
+        let session = ChatSession {
+            id: session_id,
+            name,
+            created_at: chrono::Utc::now(),
+            messages: Vec::new(),
+            agent_state: AgentState::Idle,
+            recording: false,
+            recording_file: None,
+        };
+
+        let mut sessions = self.sessions.write()
+            .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
+        sessions.insert(session_id, session);
+
+        // Set as active session if it's the first one
+        if sessions.len() == 1 {
+            drop(sessions); // Release the write lock
+            self.set_active_session(session_id)?;
+        }
+
+        Ok(session_id)
+    }
+
+    /// Start spinner animation for processing states
+    pub fn start_spinner_animation(&self, cb_sink: cursive::CbSink) {
+        let spinner_state = self.spinner_state.clone();
+        
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let current = spinner_state.load(std::sync::atomic::Ordering::Relaxed);
+                spinner_state.store((current + 1) % 10, std::sync::atomic::Ordering::Relaxed);
+                
+                // Send callback to update UI
+                if cb_sink.send(Box::new(|siv| {
+                    // UI update handled by periodic refresh
+                })).is_err() {
+                    break; // Exit if UI is closed
+                }
+            }
+        });
+    }
 }
 
 /// FAR-style/Borland UI implementation
@@ -899,9 +919,22 @@ impl AdvancedChatUI {
         let chat_panel = self.create_chat_panel();
         main_layout.add_child(chat_panel.full_width());
         
-        // Wrap in main dialog
+        // Wrap in main dialog with dynamic title showing agent status
+        let title = if let Some(session) = self.state.get_active_session() {
+            match session.agent_state {
+                AgentState::Idle => "OSVM Agent - Idle".to_string(),
+                AgentState::Thinking => "OSVM Agent - Thinking...".to_string(),
+                AgentState::Planning => "OSVM Agent - Planning...".to_string(),
+                AgentState::ExecutingTool(ref tool) => format!("OSVM Agent - Executing {}", tool),
+                AgentState::Waiting => "OSVM Agent - Waiting".to_string(),
+                AgentState::Paused => "OSVM Agent - Paused".to_string(),
+                AgentState::Error(ref err) => format!("OSVM Agent - Error: {}", err),
+            }
+        } else {
+            "OSVM Agent".to_string()
+        };
         let dialog = Dialog::around(main_layout)
-            .title("OSVM Agent")
+            .title(title)
             .title_position(cursive::align::HAlign::Center);
         
         siv.add_fullscreen_layer(dialog);
@@ -949,6 +982,15 @@ impl AdvancedChatUI {
             .child(Button::new("Stop Rec", |siv| stop_recording(siv)))
         );
         
+        chat_list_layout.add_child(DummyView.fixed_height(1));
+
+        // MCP Tools Panel
+        let mcp_tools_view = TextView::new("").with_name("mcp_tools_list");
+        let mcp_panel = Panel::new(ScrollView::new(mcp_tools_view))
+            .title("MCP Tools")
+            .max_height(10);
+        chat_list_layout.add_child(mcp_panel);
+
         chat_list_layout
     }
 
@@ -969,20 +1011,10 @@ impl AdvancedChatUI {
         
         chat_layout.add_child(chat_panel.full_height());
         
-        // Agent status bar
-        let status_view = TextView::new("Agent: Idle")
-            .with_name("agent_status")
-            .full_width();
-        chat_layout.add_child(Panel::new(status_view).title("Agent Status"));
-        
-        // Suggestions area (shown when available)
-        let suggestions_view = TextView::new("")
-            .with_name("suggestions_display");
-        chat_layout.add_child(
-            Panel::new(suggestions_view)
-                .title("Reply Suggestions (press 1-5 to insert)")
-                .with_name("suggestions_panel")
-        );
+        // Suggestions area (shown when available) - no frame, just colored text
+        let suggestions_view = LinearLayout::vertical()
+            .with_name("suggestions_container");
+        chat_layout.add_child(suggestions_view);
 
         // Input area
         let input_layout = LinearLayout::horizontal()
@@ -1018,27 +1050,51 @@ impl AdvancedChatUI {
         self.update_chat_list(siv);
         self.update_chat_display(siv);
         self.update_agent_status(siv);
+        self.update_mcp_tools_list(siv);
     }
 
     fn update_chat_list(&self, siv: &mut Cursive) {
         let session_names = self.state.get_session_names();
-        
+        let active_id = self.state.active_session_id.read().ok().and_then(|id| *id);
         if let Some(mut chat_select) = siv.find_name::<SelectView<Uuid>>("chat_list") {
             chat_select.clear();
-            
-            for (id, name, agent_state) in session_names {
+            let mut selected_idx = 0;
+            for (i, (id, name, agent_state)) in session_names.iter().enumerate() {
                 let status_icon = match agent_state {
-                    AgentState::Idle => "...",
-                    AgentState::Thinking => "*thinking*",
-                    AgentState::Planning => "*planning*",
-                    AgentState::ExecutingTool(_) => "*tool*",
-                    AgentState::Waiting => "*waiting*",
-                    AgentState::Paused => "*paused*",
-                    AgentState::Error(_) => "*error*",
+                    AgentState::Idle => "●",
+                    AgentState::Thinking => "◐",
+                    AgentState::Planning => "◑",
+                    AgentState::ExecutingTool(_) => "◒",
+                    AgentState::Waiting => "◯",
+                    AgentState::Paused => "⏸",
+                    AgentState::Error(_) => "⚠",
                 };
-                
-                chat_select.add_item(format!("{} {}", status_icon, name), id);
+                let display_name = format!("{} {}", status_icon, name);
+                chat_select.add_item(display_name, *id);
+                if Some(*id) == active_id {
+                    selected_idx = i;
+                }
             }
+            // Set selection to active session
+            if !session_names.is_empty() {
+                chat_select.set_selection(selected_idx);
+            }
+        }
+    }
+
+    fn update_mcp_tools_list(&self, siv: &mut Cursive) {
+        let tools = self.state.available_tools.read().unwrap();
+        let mut content = String::new();
+        if tools.is_empty() {
+            content.push_str("No tools available.");
+        } else {
+            for (server_id, tool_list) in tools.iter() {
+                content.push_str(&format!("- {} ({} tools)\n", server_id, tool_list.len()));
+            }
+        }
+
+        if let Some(mut mcp_tools_view) = siv.find_name::<TextView>("mcp_tools_list") {
+            mcp_tools_view.set_content(content);
         }
     }
 
@@ -1047,9 +1103,9 @@ impl AdvancedChatUI {
             let mut display_text = String::new();
             
             for message in &session.messages {
-                let sanitized = self.sanitize_message(message);
                 match message {
                     ChatMessage::User(text) => {
+                        let sanitized = self.sanitize_text(text);
                         display_text.push_str(&format!("You: {}\n", sanitized));
                         display_text.push_str("   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n");
                     }
@@ -1060,10 +1116,13 @@ impl AdvancedChatUI {
                         display_text.push_str("\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n");
                     }
                     ChatMessage::System(text) => {
+                        let sanitized = self.sanitize_text(text);
                         display_text.push_str(&format!("System: {}\n\n", sanitized));
                     }
                     ChatMessage::ToolCall { tool_name, description, args, execution_id } => {
-                        display_text.push_str(&format!("Calling tool: {} - {}\n", tool_name, description));
+                        let sanitized_tool_name = self.sanitize_text(tool_name);
+                        let sanitized_description = self.sanitize_text(description);
+                        display_text.push_str(&format!("Calling tool: {} - {}\n", sanitized_tool_name, sanitized_description));
                         if let Some(args) = args {
                             let sanitized_args = self.sanitize_json(args);
                             display_text.push_str(&format!("   Args: {}\n", sanitized_args));
@@ -1071,28 +1130,32 @@ impl AdvancedChatUI {
                         display_text.push_str(&format!("   ID: {}\n\n", execution_id));
                     }
                     ChatMessage::ToolResult { tool_name, result, execution_id } => {
-                        display_text.push_str(&format!("Tool {} result (ID: {}):\n", tool_name, execution_id));
+                        let sanitized_tool_name = self.sanitize_text(tool_name);
+                        display_text.push_str(&format!("Tool {} result (ID: {}):\n", sanitized_tool_name, execution_id));
                         let sanitized_result = self.sanitize_json(result);
                         display_text.push_str(&format!("{}\n\n", sanitized_result));
                     }
                     ChatMessage::Error(text) => {
+                        let sanitized = self.sanitize_text(text);
                         display_text.push_str(&format!("Error: {}\n\n", sanitized));
                     }
                     ChatMessage::AgentThinking(text) => {
                         let rendered = self.render_markdown(text);
                         let sanitized = self.sanitize_text(&rendered);
-                        // Format thinking messages in gray (using dim style)
-                        display_text.push_str(&format!("\x1b[2mThinking:\n{}\x1b[0m\n\n", sanitized));
+                        display_text.push_str(&format!("Thinking:\n{}\n\n", sanitized));
                     }
-                    ChatMessage::AgentPlan(text) => {
-                        let rendered = self.render_markdown(text);
-                        let sanitized = self.sanitize_text(&rendered);
-                        display_text.push_str(&format!("Plan:\n{}\n\n", sanitized));
+                    ChatMessage::AgentPlan(plan) => {
+                        let plan_str = plan.iter()
+                            .map(|tool| tool.tool_name.clone())
+                            .collect::<Vec<String>>()
+                            .join(" -> ");
+                        display_text.push_str(&format!("Plan: {}\n\n", plan_str));
                     }
                     ChatMessage::Processing { message, spinner_index } => {
-                        let spinners = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                        let spinners = vec!["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/"];
                         let spinner = spinners[spinner_index % spinners.len()];
-                        display_text.push_str(&format!("\x1b[36m{} {}\x1b[0m\n\n", spinner, message));
+                        let sanitized = self.sanitize_text(message);
+                        display_text.push_str(&format!("{} {}\n\n", spinner, sanitized));
                     }
                 }
             }
@@ -1104,38 +1167,11 @@ impl AdvancedChatUI {
     }
 
     fn update_agent_status(&self, siv: &mut Cursive) {
-        // Update suggestions display if visible
+        // Update suggestions display
         self.update_suggestions_display(siv);
-
-        if let Some(session) = self.state.get_active_session() {
-            let status_text = match &session.agent_state {
-                AgentState::Idle => "Agent: Idle".to_string(),
-                AgentState::Thinking => "Agent: Thinking".to_string(),
-                AgentState::Planning => "Agent: Planning".to_string(),
-                AgentState::ExecutingTool(tool) => format!("Agent: Executing {}", tool),
-                AgentState::Waiting => "Agent: Waiting".to_string(),
-                AgentState::Paused => "Agent: Paused".to_string(),
-                AgentState::Error(err) => format!("Agent: Error - {}", err),
-            };
-            
-            if let Some(mut status_display) = siv.find_name::<TextView>("agent_status") {
-                status_display.set_content(status_text);
-            }
-        }
-    }
-
-    fn sanitize_message(&self, message: &ChatMessage) -> String {
-        // Implement the same sanitization logic as before
-        match message {
-            ChatMessage::User(text) |
-            ChatMessage::Agent(text) |
-            ChatMessage::System(text) |
-            ChatMessage::Error(text) |
-            ChatMessage::AgentThinking(text) |
-            ChatMessage::AgentPlan(text) => self.sanitize_text(text),
-            ChatMessage::Processing { message, .. } => self.sanitize_text(message),
-            _ => "Complex message".to_string(),
-        }
+        
+        // Agent status is now shown in session list and title
+        // No separate status panel needed
     }
 
     fn render_markdown(&self, text: &str) -> String {
@@ -1167,9 +1203,9 @@ impl AdvancedChatUI {
         }
 
         // Convert bullet points
-        rendered = rendered.replace("\n- ", "\n  • ");
-        rendered = rendered.replace("\n* ", "\n  • ");
-        rendered = rendered.replace("\n+ ", "\n  • ");
+        rendered = rendered.replace("\n- ", "\n  - ");
+        rendered = rendered.replace("\n* ", "\n  * ");
+        rendered = rendered.replace("\n+ ", "\n  + ");
 
         // Convert numbered lists
         for i in 1..=20 {
@@ -1191,9 +1227,14 @@ impl AdvancedChatUI {
     fn sanitize_text(&self, text: &str) -> String {
         let mut sanitized = text.to_string();
 
-        // Remove common ANSI escape sequences (colors, cursor movement) which break TUI layout
+        // Remove ANSI escape sequences (colors, cursor movement, etc.)
         if let Ok(ansi_re) = Regex::new(r"\x1B\[[0-9;?]*[ -/]*[@-~]") {
             sanitized = ansi_re.replace_all(&sanitized, "").to_string();
+        }
+
+        // Remove all emoji (unicode ranges for emoji and symbols)
+        if let Ok(emoji_re) = Regex::new(r"[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2300}-\u{23FF}\u{2B50}\u{2B06}\u{2194}-\u{21AA}\u{2934}-\u{2935}\u{25A0}-\u{25FF}\u{2B05}-\u{2B07}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F251}]+") {
+            sanitized = emoji_re.replace_all(&sanitized, "").to_string();
         }
 
         // Convert tabs to 4 spaces to keep columns aligned
@@ -1300,39 +1341,44 @@ impl AdvancedChatUI {
     }
 
     fn update_suggestions_display(&self, siv: &mut Cursive) {
+        use cursive::theme::{Color, BaseColor, ColorStyle};
+        use cursive::utils::markup::StyledString;
+
         let suggestions_visible = self.state.suggestions_visible.read()
             .map(|v| *v)
             .unwrap_or(false);
 
-        if suggestions_visible {
-            let suggestions = self.state.current_suggestions.read()
-                .map(|s| s.clone())
-                .unwrap_or_default();
+        if let Some(mut container) = siv.find_name::<LinearLayout>("suggestions_container") {
+            container.clear();
 
-            if !suggestions.is_empty() {
-                let mut display_text = String::new();
-                for (i, sugg) in suggestions.iter().enumerate() {
-                    display_text.push_str(&format!("{}. {}\n", i + 1, sugg));
-                }
+            if suggestions_visible {
+                let suggestions = self.state.current_suggestions.read()
+                    .map(|s| s.clone())
+                    .unwrap_or_default();
 
-                if let Some(mut sugg_display) = siv.find_name::<TextView>("suggestions_display") {
-                    sugg_display.set_content(display_text);
-                }
+                if !suggestions.is_empty() {
+                    // Add up to 5 suggestions with blue background and white text
+                    for (i, sugg) in suggestions.iter().take(5).enumerate() {
+                        let mut styled = StyledString::new();
 
-                // Show the panel
-                if let Some(mut panel) = siv.find_name::<Panel<TextView>>("suggestions_panel") {
-                    panel.set_title("Reply Suggestions (press 1-5 to insert)");
+                        // Create blue background with white text style
+                        let blue_style = ColorStyle::new(
+                            Color::Light(BaseColor::White),
+                            Color::Dark(BaseColor::Blue)
+                        );
+
+                        // Format: "1. Suggestion text" with full blue background
+                        let display_text = format!(" {}. {} ", i + 1, sugg);
+                        styled.append_styled(display_text, blue_style);
+
+                        // Add as a styled TextView
+                        let suggestion_view = TextView::new(styled);
+                        container.add_child(suggestion_view);
+                    }
+
+                    // Add a small spacer after suggestions
+                    container.add_child(DummyView.fixed_height(1));
                 }
-            } else {
-                // Hide if no suggestions
-                if let Some(mut sugg_display) = siv.find_name::<TextView>("suggestions_display") {
-                    sugg_display.set_content("");
-                }
-            }
-        } else {
-            // Hide suggestions
-            if let Some(mut sugg_display) = siv.find_name::<TextView>("suggestions_display") {
-                sugg_display.set_content("");
             }
         }
     }
@@ -1376,11 +1422,30 @@ fn copy_last_message(siv: &mut Cursive, state: AdvancedChatState) {
             };
 
             if !text_to_copy.is_empty() {
-                // Copy to clipboard (simplified - in real app would use clipboard crate)
-                siv.add_layer(
-                    Dialog::info(format!("Message copied:\n{}", text_to_copy))
-                        .title("Copied to Clipboard")
-                );
+                // Copy to actual system clipboard
+                match arboard::Clipboard::new() {
+                    Ok(mut clipboard) => {
+                        if let Err(e) = clipboard.set_text(&text_to_copy) {
+                            siv.add_layer(
+                                Dialog::info(format!("Failed to copy to clipboard: {}", e))
+                                    .title("Error")
+                            );
+                        } else {
+                            siv.add_layer(
+                                Dialog::info("Message copied to clipboard!")
+                                    .title("Success")
+                                    .button("OK", |s| { s.pop_layer(); })
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        siv.add_layer(
+                            Dialog::info(format!("Clipboard not available: {}\nText:\n{}", e, text_to_copy))
+                                .title("Clipboard Error")
+                                .button("OK", |s| { s.pop_layer(); })
+                        );
+                    }
+                }
             }
         }
     }
@@ -1404,23 +1469,18 @@ fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
     if let Some(current_session) = state.get_active_session() {
         // Create a new session with the same messages
         let forked_name = format!("{} (Fork)", current_session.name);
+        
         if let Ok(new_session_id) = state.create_session(forked_name) {
             // Copy messages to the new session
-            if let Ok(sessions) = state.sessions.read() {
-                if let Some(new_session) = sessions.get(&new_session_id) {
-                    let mut new_session = new_session.clone();
+            if let Ok(mut sessions) = state.sessions.write() {
+                if let Some(new_session) = sessions.get_mut(&new_session_id) {
                     new_session.messages = current_session.messages.clone();
-
-                    // Update the forked session
-                    if let Ok(mut sessions_write) = state.sessions.write() {
-                        sessions_write.insert(new_session_id, new_session);
-                    }
-
-                    // Switch to the forked session
-                    let _ = state.set_active_session(new_session_id);
-                    update_ui_displays(siv);
                 }
             }
+
+            // Switch to the forked session
+            let _ = state.set_active_session(new_session_id);
+            update_ui_displays(siv);
         }
     }
 }
@@ -1759,7 +1819,9 @@ fn update_ui_displays(siv: &mut Cursive) {
                         display_text.push_str(&format!("System: {}\n\n", sanitized));
                     }
                     ChatMessage::ToolCall { tool_name, description, args, execution_id } => {
-                        display_text.push_str(&format!("Calling tool: {} - {}\n", tool_name, description));
+                        let sanitized_tool_name = sanitize_text_for_ui(tool_name);
+                        let sanitized_description = sanitize_text_for_ui(description);
+                        display_text.push_str(&format!("Calling tool: {} - {}\n", sanitized_tool_name, sanitized_description));
                         if let Some(args) = args {
                             let sanitized_args = sanitize_json_for_ui(args);
                             display_text.push_str(&format!("   Args: {}\n", sanitized_args));
@@ -1767,7 +1829,8 @@ fn update_ui_displays(siv: &mut Cursive) {
                         display_text.push_str(&format!("   ID: {}\n\n", execution_id));
                     }
                     ChatMessage::ToolResult { tool_name, result, execution_id } => {
-                        display_text.push_str(&format!("Tool {} result (ID: {}):\n", tool_name, execution_id));
+                        let sanitized_tool_name = sanitize_text_for_ui(tool_name);
+                        display_text.push_str(&format!("Tool {} result (ID: {}):\n", sanitized_tool_name, execution_id));
                         let sanitized_result = sanitize_json_for_ui(result);
                         display_text.push_str(&format!("{}\n\n", sanitized_result));
                     }
@@ -1783,20 +1846,17 @@ fn update_ui_displays(siv: &mut Cursive) {
 
                         let sanitized = sanitize_text_for_ui(&rendered);
                         // Format thinking messages in gray (using dim style)
-                        display_text.push_str(&format!("\x1b[2mThinking:\n{}\x1b[0m\n\n", sanitized));
+                        display_text.push_str(&format!("Thinking:\n{}\n\n", sanitized));
                     }
-                    ChatMessage::AgentPlan(text) => {
-                        // Render markdown for plan messages
-                        let mut rendered = text.to_string();
-                        rendered = rendered.replace("**", "");
-                        rendered = rendered.replace("\n- ", "\n  • ");
-                        rendered = rendered.replace("\n* ", "\n  • ");
-
-                        let sanitized = sanitize_text_for_ui(&rendered);
-                        display_text.push_str(&format!("Plan:\n{}\n\n", sanitized));
+                    ChatMessage::AgentPlan(plan) => {
+                        let plan_str = plan.iter()
+                            .map(|tool| tool.tool_name.clone())
+                            .collect::<Vec<String>>()
+                            .join(" -> ");
+                        display_text.push_str(&format!("Plan: {}\n\n", plan_str));
                     }
                     ChatMessage::Processing { message, spinner_index } => {
-                        let spinners = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                        let spinners = vec!["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/"];
                         let spinner = spinners[spinner_index % spinners.len()];
                         let sanitized = sanitize_text_for_ui(message);
                         display_text.push_str(&format!("\x1b[36m{} {}\x1b[0m\n\n", spinner, sanitized));
@@ -1872,6 +1932,7 @@ fn sanitize_json_for_ui(value: &Value) -> String {
                 format!("{}...", &sanitized[..take])
             } else {
                 sanitized
+           
             }
         }
         Err(_) => "[Invalid JSON]".to_string()
@@ -1889,6 +1950,7 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
     // Initialize the state and start workers
     let state = AdvancedChatState::new()?;
+    state.initialize().await?;
     state.start_agent_worker().await?;
 
     // Create default session
@@ -1914,6 +1976,8 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
 /// Synchronous UI runner to avoid async runtime conflicts
 fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
+    // Create Cursive - it will panic if no terminal is available
+    // This is handled by the caller which falls back to demo mode
     let mut siv = Cursive::default();
 
     // Set the state as user data for the UI
@@ -1945,11 +2009,45 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
 async fn run_advanced_demo_mode() -> Result<()> {
     println!("Running Advanced Agent Chat in demo mode");
     println!();
+
+    // Initialize services to show real MCP status
+    let state = AdvancedChatState::new()?;
+    state.initialize().await?;
+
     println!("Advanced Features:");
     println!("   • AI-powered input parsing and tool planning");
     println!("   • Multiple chat sessions with background agent execution");
     println!("   • Session recording and agent control (run/pause/stop)");
     println!("   • Comprehensive MCP tool integration");
+    println!();
+
+    // Show available MCP tools
+    println!("Available MCP Tools:");
+    let available_tools = state.available_tools.read()
+        .map_err(|e| anyhow!("Failed to read tools: {}", e))?;
+
+    if available_tools.is_empty() {
+        println!("   ⚠️  No MCP servers configured");
+        println!("   Run 'osvm mcp setup' to configure Solana tools");
+    } else {
+        for (server_id, tools) in available_tools.iter() {
+            println!("   📦 Server: {}", server_id);
+            if tools.is_empty() {
+                println!("      Loading tools...");
+            } else {
+                for (i, tool) in tools.iter().enumerate() {
+                    if i < 5 {
+                        println!("      • {}: {}",
+                            tool.name,
+                            tool.description.as_ref().unwrap_or(&"No description".to_string()));
+                    }
+                }
+                if tools.len() > 5 {
+                    println!("      ... and {} more tools", tools.len() - 5);
+                }
+            }
+        }
+    }
     println!();
     println!("Advanced FAR-Style Layout:");
     println!("   ┌─ Chat Sessions ─┬─ Active Chat History ─────────────────┐");
@@ -1974,22 +2072,20 @@ async fn run_advanced_demo_mode() -> Result<()> {
     println!("   • Session recording and replay capabilities");
     println!("   • Multi-chat support with independent agent states");
     println!();
-    println!("NEW: AI-Powered Reply Suggestions!");
-    println!("   ┌─────────────────────────────────────────────────────┐");
-    println!("   | Reply Suggestions (press 1-5 to insert):          |");
-    println!("   │ 1. Show recent transactions                        │");
-    println!("   │ 2. What's the current SOL price?                   │");
-    println!("   │ 3. How do I stake my SOL?                          │");
-    println!("   │ 4. Send 0.5 SOL to address                         │");
-    println!("   │ 5. Check my staking rewards                        │");
-    println!("   └─────────────────────────────────────────────────────┘");
+    println!("Reply Suggestions (press 1-5 to insert, ESC to hide):");
+    println!();
+    // Show suggestions with blue background simulation (in terminal would be colored)
+    println!("\x1b[44;37m 1. Show recent transactions                         \x1b[0m");
+    println!("\x1b[44;37m 2. What's the current SOL price?                    \x1b[0m");
+    println!("\x1b[44;37m 3. How do I stake my SOL?                           \x1b[0m");
+    println!("\x1b[44;37m 4. Send 0.5 SOL to address                          \x1b[0m");
+    println!("\x1b[44;37m 5. Check my staking rewards                         \x1b[0m");
     println!();
     println!("   Suggestions Features:");
     println!("   • Generated by AI using chat context");
-    println!("   • Appears after agent completes execution");
-    println!("   • Press 1-5 to insert at cursor position");
-    println!("   • Doesn't clear existing text");
-    println!("   • Press ESC to hide suggestions");
+    println!("   • Blue background with white text for visibility");
+    println!("   • Press number key (1-5) to insert at cursor");
+    println!("   • ESC hides suggestions");
     println!();
 
     // Run in demo mode if terminal not available
