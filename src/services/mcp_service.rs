@@ -506,9 +506,12 @@ impl McpService {
             debug_success!("Successfully cloned {} to {:?}", github_url, local_path);
         }
 
-        // Check if it's a Rust project and build it
+        // Detect project type and build accordingly
         let cargo_toml_path = local_path.join("Cargo.toml");
-        if cargo_toml_path.exists() {
+        let package_json_path = local_path.join("package.json");
+
+        let execution_command = if cargo_toml_path.exists() {
+            // Rust project - build with cargo
             if self.debug_mode {
                 debug_print!(VerbosityLevel::Basic, "Building Rust project at {:?}", local_path);
             }
@@ -526,22 +529,74 @@ impl McpService {
             }
 
             if self.debug_mode {
-                debug_success!("Successfully built MCP server at {:?}", local_path);
+                debug_success!("Successfully built Rust MCP server at {:?}", local_path);
             }
-        }
 
-        // Find the binary name from Cargo.toml
-        let binary_name = self.get_binary_name_from_cargo_toml(&cargo_toml_path)?;
-        let binary_path = local_path.join("target/release").join(&binary_name);
+            // Find the binary name from Cargo.toml
+            let binary_name = self.get_binary_name_from_cargo_toml(&cargo_toml_path)?;
+            let binary_path = local_path.join("target/release").join(&binary_name);
 
-        if !binary_path.exists() {
-            return Err(anyhow::anyhow!("Built binary not found at {:?}", binary_path));
-        }
+            if !binary_path.exists() {
+                return Err(anyhow::anyhow!("Built binary not found at {:?}", binary_path));
+            }
+
+            binary_path.to_str().unwrap().to_string()
+
+        } else if package_json_path.exists() {
+            // Node.js project - install dependencies with npm
+            if self.debug_mode {
+                debug_print!(VerbosityLevel::Basic, "Building Node.js project at {:?}", local_path);
+            }
+
+            // Run npm install
+            let install_result = Command::new("npm")
+                .args(&["install"])
+                .current_dir(&local_path)
+                .output()
+                .context("Failed to execute npm install command")?;
+
+            if !install_result.status.success() {
+                let error_msg = String::from_utf8_lossy(&install_result.stderr);
+                return Err(anyhow::anyhow!("npm install failed: {}", error_msg));
+            }
+
+            if self.debug_mode {
+                debug_success!("Successfully installed npm dependencies for MCP server at {:?}", local_path);
+            }
+
+            // Get package info from package.json
+            let (package_name, main_script) = self.get_package_info_from_package_json(&package_json_path)?;
+
+            // Determine the script to run
+            let script_path = if let Some(script) = main_script {
+                if script.starts_with("./") {
+                    local_path.join(&script[2..])
+                } else if script.starts_with("/") {
+                    PathBuf::from(script)
+                } else {
+                    local_path.join(script)
+                }
+            } else {
+                return Err(anyhow::anyhow!("No main script found in package.json for package '{}'", package_name));
+            };
+
+            if !script_path.exists() {
+                return Err(anyhow::anyhow!("Main script not found at {:?}", script_path));
+            }
+
+            // For Node.js MCP servers, we'll use a wrapper command that calls node
+            format!("node {}", script_path.to_str().unwrap())
+        } else {
+            return Err(anyhow::anyhow!(
+                "No Cargo.toml or package.json found in the cloned repository. \
+                Only Rust (Cargo) and Node.js (npm) MCP servers are currently supported."
+            ));
+        };
 
         // Create server configuration
         let config = McpServerConfig {
             name: name.unwrap_or_else(|| format!("{} (from GitHub)", server_id)),
-            url: binary_path.to_str().unwrap().to_string(),
+            url: execution_command,
             transport_type: McpTransportType::Stdio,
             auth: None,
             enabled: true,
@@ -585,7 +640,7 @@ impl McpService {
     fn get_binary_name_from_cargo_toml(&self, cargo_toml_path: &Path) -> Result<String> {
         let content = std::fs::read_to_string(cargo_toml_path)
             .context("Failed to read Cargo.toml")?;
-        
+
         // Try to parse as TOML first (most robust)
         match toml::from_str::<toml::Value>(&content) {
             Ok(toml_value) => {
@@ -604,6 +659,43 @@ impl McpService {
                 self.parse_simple_package_name(&content)
             }
         }
+    }
+
+    /// Get package info from package.json for npm-based MCP servers
+    fn get_package_info_from_package_json(&self, package_json_path: &Path) -> Result<(String, Option<String>)> {
+        let content = std::fs::read_to_string(package_json_path)
+            .context("Failed to read package.json")?;
+
+        let package_json: serde_json::Value = serde_json::from_str(&content)
+            .context("Failed to parse package.json")?;
+
+        let name = package_json.get("name")
+            .and_then(|n| n.as_str())
+            .ok_or_else(|| anyhow::anyhow!("No 'name' field found in package.json"))?
+            .to_string();
+
+        // Check for main entry point or bin scripts
+        let main_script = if let Some(bin) = package_json.get("bin") {
+            // Handle both string and object bin definitions
+            match bin {
+                serde_json::Value::String(script) => Some(script.clone()),
+                serde_json::Value::Object(bin_obj) => {
+                    // Try to find the main binary or use the first one
+                    bin_obj.get(&name)
+                        .or_else(|| bin_obj.values().next())
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                }
+                _ => None,
+            }
+        } else if let Some(main) = package_json.get("main") {
+            main.as_str().map(|s| s.to_string())
+        } else {
+            // Default to index.js if no main specified
+            Some("index.js".to_string())
+        };
+
+        Ok((name, main_script))
     }
 
     /// Simple fallback parsing for package name
@@ -773,8 +865,20 @@ impl McpService {
             }
         }
 
-        let mut cmd = TokioCommand::new(&config.url);
-        cmd.args(&["stdio"]);
+        // Parse the command and arguments from the URL field
+        let mut cmd_parts = config.url.split_whitespace();
+        let command = cmd_parts.next()
+            .ok_or_else(|| anyhow::anyhow!("Invalid command in server URL: {}", config.url))?;
+
+        let mut cmd = TokioCommand::new(command);
+
+        // Add any command arguments first
+        for arg in cmd_parts {
+            cmd.arg(arg);
+        }
+
+        // Then add the stdio argument for MCP protocol
+        cmd.arg("stdio");
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
@@ -1233,5 +1337,69 @@ mod tests {
         
         // Test non-existent server
         assert!(service.toggle_server("nonexistent", true).is_err());
+    }
+
+    #[test]
+    fn test_get_package_info_from_package_json() {
+        use std::io::Write;
+
+        let service = McpService::new();
+
+        // Test package.json with simple main field
+        let temp_dir = std::env::temp_dir();
+        let package_json_path = temp_dir.join("test_package.json");
+
+        let package_content = r#"{
+            "name": "test-mcp-server",
+            "version": "1.0.0",
+            "main": "index.js"
+        }"#;
+
+        let mut file = std::fs::File::create(&package_json_path).unwrap();
+        file.write_all(package_content.as_bytes()).unwrap();
+
+        let result = service.get_package_info_from_package_json(&package_json_path);
+        assert!(result.is_ok());
+        let (name, main_script) = result.unwrap();
+        assert_eq!(name, "test-mcp-server");
+        assert_eq!(main_script, Some("index.js".to_string()));
+
+        // Test package.json with bin field (string)
+        let bin_content = r#"{
+            "name": "bin-mcp-server",
+            "version": "1.0.0",
+            "bin": "bin/server.js"
+        }"#;
+
+        file = std::fs::File::create(&package_json_path).unwrap();
+        file.write_all(bin_content.as_bytes()).unwrap();
+
+        let result = service.get_package_info_from_package_json(&package_json_path);
+        assert!(result.is_ok());
+        let (name, main_script) = result.unwrap();
+        assert_eq!(name, "bin-mcp-server");
+        assert_eq!(main_script, Some("bin/server.js".to_string()));
+
+        // Test package.json with bin field (object)
+        let bin_obj_content = r#"{
+            "name": "obj-mcp-server",
+            "version": "1.0.0",
+            "bin": {
+                "obj-mcp-server": "bin/server.js",
+                "other-cmd": "bin/other.js"
+            }
+        }"#;
+
+        file = std::fs::File::create(&package_json_path).unwrap();
+        file.write_all(bin_obj_content.as_bytes()).unwrap();
+
+        let result = service.get_package_info_from_package_json(&package_json_path);
+        assert!(result.is_ok());
+        let (name, main_script) = result.unwrap();
+        assert_eq!(name, "obj-mcp-server");
+        assert_eq!(main_script, Some("bin/server.js".to_string()));
+
+        // Cleanup
+        std::fs::remove_file(&package_json_path).ok();
     }
 }
