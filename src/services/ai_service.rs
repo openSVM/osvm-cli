@@ -15,6 +15,10 @@ use std::env;
 #[derive(Serialize)]
 struct AiRequest {
     question: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system_prompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "onlyPlan")]
+    only_plan: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -142,7 +146,7 @@ impl AiService {
     }
 
     pub async fn query(&self, question: &str) -> Result<String> {
-        self.query_with_debug(question, true).await
+        self.query_with_debug(question, false).await
     }
 
     pub async fn query_with_debug(&self, question: &str, debug_mode: bool) -> Result<String> {
@@ -268,8 +272,20 @@ impl AiService {
     }
 
     async fn query_osvm_ai(&self, question: &str, debug_mode: bool) -> Result<String> {
+        self.query_osvm_ai_with_options(question, None, None, debug_mode).await
+    }
+
+    async fn query_osvm_ai_with_options(
+        &self,
+        question: &str,
+        system_prompt: Option<String>,
+        only_plan: Option<bool>,
+        debug_mode: bool,
+    ) -> Result<String> {
         let request_body = AiRequest {
             question: question.to_string(),
+            system_prompt,
+            only_plan,
         };
 
         if debug_mode {
@@ -382,6 +398,274 @@ impl AiService {
             anyhow::bail!("No response choices returned from OpenAI API");
         }
     }
+
+    /// Plan which tools to use for a given user request
+    pub async fn create_tool_plan(
+        &self,
+        user_request: &str,
+        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
+    ) -> Result<ToolPlan> {
+        let (planning_prompt, system_prompt) = self.build_planning_prompt(user_request, available_tools)?;
+
+        // Use the new method with onlyPlan:true and systemPrompt
+        let ai_response = if self.use_openai {
+            self.query_with_debug(&planning_prompt, false).await?
+        } else {
+            self.query_osvm_ai_with_options(&planning_prompt, Some(system_prompt), Some(true), false).await?
+        };
+        
+        // Parse the AI response into a ToolPlan
+        self.parse_tool_plan_response(&ai_response)
+    }
+
+    /// Build a structured prompt for tool planning
+    fn build_planning_prompt(
+        &self,
+        user_request: &str,
+        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
+    ) -> Result<(String, String)> {
+        let mut tools_context = String::new();
+        
+        if available_tools.is_empty() {
+            tools_context.push_str("No MCP tools are currently available.\n");
+        } else {
+            tools_context.push_str("Available MCP Tools:\n");
+            for (server_id, tools) in available_tools {
+                tools_context.push_str(&format!("\nServer: {}\n", server_id));
+                for tool in tools {
+                    let description = tool.description.as_deref().unwrap_or("No description available");
+                    tools_context.push_str(&format!("  - {}: {}\n", tool.name, description));
+                    
+                    // Include schema information if available
+                    if let Ok(schema_str) = serde_json::to_string_pretty(&tool.input_schema) {
+                        if schema_str.len() < 2000 { // Only include small schemas inline
+                            tools_context.push_str(&format!("    Schema: {}\n", schema_str));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Create system prompt with all tool descriptions
+        let system_prompt = format!(r#"You are an OSVM Agent assistant that creates execution plans.
+
+{}
+
+IMPORTANT RESPONSE FORMAT:
+- You MUST respond with an OSVM plan in XML format
+- Your response MUST start with <osvm_plan> and end with </osvm_plan>
+- Do not include any text outside the XML tags
+- Only use tools from the available list above
+- Match tool names and server_ids exactly as provided
+- Provide realistic arguments based on the tool schemas
+
+Required XML structure:
+<osvm_plan>
+  <reasoning>Explain your analysis of the request and why you chose these tools</reasoning>
+  <confidence>0.0 to 1.0</confidence>
+  <tools>
+    <tool>
+      <server_id>exact_server_id</server_id>
+      <tool_name>exact_tool_name</tool_name>
+      <args>{{json_object}}</args>
+      <reason>Why this specific tool is needed</reason>
+    </tool>
+  </tools>
+  <expected_outcome>What the user should expect as a result</expected_outcome>
+</osvm_plan>"#, tools_context);
+
+        // Create user prompt
+        let user_prompt = format!("Create an OSVM execution plan for this request: {}", user_request);
+
+        Ok((user_prompt, system_prompt))
+    }
+
+    /// Parse AI response into structured ToolPlan from OSVM XML format
+    fn parse_tool_plan_response(&self, ai_response: &str) -> Result<ToolPlan> {
+        // Extract OSVM plan XML
+        let plan_start = ai_response.find("<osvm_plan>").ok_or_else(|| {
+            anyhow::anyhow!("No <osvm_plan> tag found in AI response: {}", ai_response)
+        })?;
+
+        let plan_end = ai_response.find("</osvm_plan>").ok_or_else(|| {
+            anyhow::anyhow!("No </osvm_plan> tag found in AI response: {}", ai_response)
+        })? + "</osvm_plan>".len();
+
+        let xml_str = &ai_response[plan_start..plan_end];
+
+        // Parse XML using simple string extraction (could use an XML parser for robustness)
+        let reasoning = self.extract_xml_value(xml_str, "reasoning")?;
+        let expected_outcome = self.extract_xml_value(xml_str, "expected_outcome")?;
+
+        // Extract tools
+        let mut tools = Vec::new();
+        if let Some(tools_section) = self.extract_xml_section(xml_str, "tools") {
+            // Find all tool sections
+            let mut pos = 0;
+            while let Some(tool_start) = tools_section[pos..].find("<tool>") {
+                let start = pos + tool_start;
+                if let Some(tool_end) = tools_section[start..].find("</tool>") {
+                    let tool_xml = &tools_section[start..start + tool_end + 7];
+
+                    // Extract tool fields
+                    let server_id = self.extract_xml_value(tool_xml, "server_id")
+                        .unwrap_or_else(|_| "default".to_string());
+                    let tool_name = self.extract_xml_value(tool_xml, "tool_name")?;
+                    let reason = self.extract_xml_value(tool_xml, "reason")
+                        .unwrap_or_else(|_| "Tool execution".to_string());
+
+                    // Extract args as JSON object
+                    let args = if let Some(args_section) = self.extract_xml_section(tool_xml, "args") {
+                        self.parse_args_to_json(args_section)
+                    } else {
+                        serde_json::json!({})
+                    };
+
+                    tools.push(PlannedTool {
+                        server_id,
+                        tool_name,
+                        args,
+                        reason,
+                    });
+
+                    pos = start + tool_end + 7;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(ToolPlan {
+            reasoning,
+            osvm_tools_to_use: tools,
+            expected_outcome,
+        })
+    }
+
+    /// Extract value from XML tag
+    fn extract_xml_value(&self, xml: &str, tag: &str) -> Result<String> {
+        let start_tag = format!("<{}>", tag);
+        let end_tag = format!("</{}>", tag);
+
+        let start = xml.find(&start_tag)
+            .ok_or_else(|| anyhow::anyhow!("Tag {} not found", tag))? + start_tag.len();
+        let end = xml.find(&end_tag)
+            .ok_or_else(|| anyhow::anyhow!("Closing tag {} not found", tag))?;
+
+        Ok(xml[start..end].trim().to_string())
+    }
+
+    /// Extract XML section content
+    fn extract_xml_section(&self, xml: &str, tag: &str) -> Option<String> {
+        let start_tag = format!("<{}>", tag);
+        let end_tag = format!("</{}>", tag);
+
+        let start = xml.find(&start_tag)? + start_tag.len();
+        let end = xml.find(&end_tag)?;
+
+        Some(xml[start..end].to_string())
+    }
+
+    /// Parse args XML section to JSON
+    fn parse_args_to_json(&self, args_xml: String) -> serde_json::Value {
+        let mut args_object = serde_json::Map::new();
+
+        // Simple XML to JSON conversion - find all tags
+        let mut remaining = args_xml.trim();
+        while !remaining.is_empty() {
+            // Find next tag
+            if let Some(tag_start) = remaining.find('<') {
+                if let Some(tag_end) = remaining[tag_start..].find('>') {
+                    let tag = &remaining[tag_start + 1..tag_start + tag_end];
+                    if !tag.starts_with('/') {
+                        // Opening tag found
+                        let close_tag = format!("</{}>", tag);
+                        if let Some(close_pos) = remaining.find(&close_tag) {
+                            let value_start = tag_start + tag_end + 1;
+                            let value = remaining[value_start..close_pos].trim();
+                            args_object.insert(tag.to_string(), serde_json::Value::String(value.to_string()));
+                            remaining = &remaining[close_pos + close_tag.len()..];
+                            continue;
+                        }
+                    }
+                }
+            }
+            break;
+        }
+
+        serde_json::Value::Object(args_object)
+    }
+
+    /// Generate a contextual response based on tool results
+    pub async fn generate_contextual_response(
+        &self,
+        original_request: &str,
+        tool_results: &[(String, serde_json::Value)], // (tool_name, result)
+        expected_outcome: &str,
+    ) -> Result<String> {
+        let results_summary = tool_results.iter()
+            .map(|(tool, result)| {
+                format!("Tool '{}' returned: {}", tool, 
+                    serde_json::to_string_pretty(result)
+                        .unwrap_or_else(|_| format!("{}", result))
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let response_prompt = format!(r#"
+You are an OSVM Agent assistant helping with blockchain operations.
+
+Original User Request: "{}"
+Expected Outcome: "{}"
+
+Tool Execution Results:
+{}
+
+Generate a helpful response to the user based on the tool results.
+Be conversational and explain what was found or accomplished.
+If tools failed, explain what went wrong and suggest alternatives.
+Focus on what matters to the user.
+"#, original_request, expected_outcome, results_summary);
+
+        self.query_with_debug(&response_prompt, false).await
+    }
+}
+
+/// Enhanced tool plan structure for better planning
+#[derive(Debug, Serialize, Deserialize)]
+struct EnhancedToolPlan {
+    reasoning: String,
+    confidence: f32,
+    osvm_tools_to_use: Vec<EnhancedPlannedTool>,
+    expected_outcome: String,
+    fallback_plan: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EnhancedPlannedTool {
+    server_id: String,
+    tool_name: String,
+    args: serde_json::Value,
+    reason: String,
+    sequence_order: u32,
+    depends_on: Vec<String>,
+}
+
+/// Tool planning structures
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ToolPlan {
+    pub reasoning: String,
+    pub osvm_tools_to_use: Vec<PlannedTool>,
+    pub expected_outcome: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlannedTool {
+    pub server_id: String,
+    pub tool_name: String,
+    pub args: serde_json::Value,
+    pub reason: String,
 }
 
 impl Default for AiService {
