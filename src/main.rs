@@ -798,7 +798,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
                 .map_err(|e| e.into());
         } else {
-            return crate::utils::agent_chat::run_agent_chat().await
+            return crate::utils::agent_chat::run_agent_chat_ui().await
                 .map_err(|e| e.into());
         }
     }
