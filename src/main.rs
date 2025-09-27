@@ -44,6 +44,8 @@ fn is_known_command(sub_command: &str) -> bool {
             | "doctor"
             | "audit"
             | "mcp"
+            | "chat"
+            | "agent"
             | "new_feature_command"
             | "v"
             | "ver"
@@ -784,6 +786,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle MCP command early to avoid config loading that might trigger self-repair  
     if sub_command == "mcp" {
         return handle_mcp_command(&app_matches, sub_matches).await;
+    }
+
+    // Handle chat command early to avoid config loading that might trigger self-repair
+    if sub_command == "chat" {
+        // Check if test mode is requested
+        if sub_matches.get_flag("test") {
+            return crate::utils::agent_chat::run_chat_ui_tests().await
+                .map_err(|e| e.into());
+        } else if sub_matches.get_flag("advanced") {
+            return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
+                .map_err(|e| e.into());
+        } else {
+            return crate::utils::agent_chat::run_agent_chat_ui().await
+                .map_err(|e| e.into());
+        }
+    }
+
+    // Handle agent command for CLI-based agent execution
+    if sub_command == "agent" {
+        let prompt = sub_matches.get_one::<String>("prompt")
+            .ok_or("No prompt provided for agent command")?;
+
+        let json_output = sub_matches.get_flag("json");
+        let verbose = sub_matches.get_count("verbose");
+        let no_tools = sub_matches.get_flag("no-tools");
+        let timeout = sub_matches.get_one::<String>("timeout")
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
+
+        return crate::utils::agent_cli::execute_agent_command(
+            prompt,
+            json_output,
+            verbose,
+            no_tools,
+            timeout
+        ).await.map_err(|e| e.into());
     }
 
     // Handle AI queries early to avoid config loading

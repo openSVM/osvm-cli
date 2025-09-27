@@ -1,0 +1,9 @@
+{
+  "id": "c4164f9c-2b3d-4bc5-b862-b90018aec48a",
+  "name": "New Chat",
+  "created_at": "2025-09-27T00:14:55.533345349Z",
+  "messages": [],
+  "agent_state": "Idle",
+  "recording": false,
+  "recording_file": null
+}

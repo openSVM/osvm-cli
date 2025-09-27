@@ -384,6 +384,90 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
         )
         .subcommand(
+            Command::new("chat")
+                .about("Launch interactive agent chat interface with MCP tools - now with advanced AI planning!")
+                .long_about("Launch a comprehensive chat interface with AI-powered tool planning and execution.\n\
+                           \n\
+                           Basic Mode (default):\n\
+                           • Simple chat interface with MCP tool integration\n\
+                           • Single chat session\n\
+                           • Basic tool calling\n\
+                           \n\
+                           Advanced Mode (--advanced):\n\
+                           • FAR-style/Borland TUI design with dual panels\n\
+                           • AI-powered input parsing and intelligent tool planning\n\
+                           • Multiple chat sessions with background agent execution\n\
+                           • Session recording and agent control (run/pause/stop)\n\
+                           • Professional multi-session management")
+                .arg(
+                    Arg::new("debug")
+                        .long("debug")
+                        .action(ArgAction::SetTrue)
+                        .help("Enable debug mode for chat interface")
+                )
+                .arg(
+                    Arg::new("test")
+                        .long("test")
+                        .action(ArgAction::SetTrue)
+                        .help("Run comprehensive UI tests and show screenshots")
+                )
+                .arg(
+                    Arg::new("advanced")
+                        .long("advanced")
+                        .action(ArgAction::SetTrue)
+                        .help("Launch advanced FAR-style chat interface with AI planning and multi-session support")
+                )
+        )
+        .subcommand(
+            Command::new("agent")
+                .about("Execute agent commands with AI planning and MCP tool execution")
+                .long_about("Execute a single agent command with AI-powered planning and tool execution.\n\
+                           \n\
+                           The agent will:\n\
+                           • Analyze your request using AI\n\
+                           • Create an execution plan with available MCP tools\n\
+                           • Execute the tools in sequence\n\
+                           • Provide a contextual response\n\
+                           \n\
+                           Examples:\n\
+                           • osvm agent \"What's my wallet balance?\"\n\
+                           • osvm agent \"Show recent transactions\"\n\
+                           • osvm agent \"Deploy a validator node\"")
+                .arg(
+                    Arg::new("prompt")
+                        .value_name("PROMPT")
+                        .help("The prompt or command for the agent to execute")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output results in JSON format")
+                )
+                .arg(
+                    Arg::new("verbose")
+                        .long("verbose")
+                        .short('v')
+                        .action(ArgAction::Count)
+                        .help("Show detailed execution steps")
+                )
+                .arg(
+                    Arg::new("no-tools")
+                        .long("no-tools")
+                        .action(ArgAction::SetTrue)
+                        .help("Disable MCP tool execution (AI response only)")
+                )
+                .arg(
+                    Arg::new("timeout")
+                        .long("timeout")
+                        .value_name("SECONDS")
+                        .default_value("30")
+                        .help("Maximum execution time in seconds")
+                )
+        )
+        .subcommand(
             Command::new("svm")
                 .about("Manage Solana Virtual Machines (SVMs)")
                 .arg_required_else_help(true)
