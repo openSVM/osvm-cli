@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. [Core Utilities](#core-utilities)
 7. [SSH Deployment System](#ssh-deployment-system)
 8. [AI Integration](#ai-integration)
+
 9. [MCP Server Integration](#mcp-server-integration)
 10. [Testing Strategy](#testing-strategy)
 11. [Error Handling](#error-handling)

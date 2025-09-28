@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM CLI - Solana Virtual Machine Management</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="css/multipage.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <meta name="description" content="Command-line interface for managing Solana Virtual Machines with AI assistance, MCP integration, and plugin support">
+</head>
+<body>
+    <!-- Terminal Window Frame -->
+    <div class="terminal-window">
+        <!-- Terminal Header with Navigation -->
+        <div class="terminal-header">
+            <div class="terminal-buttons">
+                <span class="btn-close"></span>
+                <span class="btn-minimize"></span>
+                <span class="btn-maximize"></span>
+            </div>
+            <div class="terminal-title">osvm-cli@docs:~$</div>
+            <div class="terminal-nav">
+                <button class="search-trigger" onclick="toggleSearch()" title="Search (Ctrl+K)">
+                    <span class="search-icon">🔍</span>
+                    <span class="search-label">Search</span>
+                    <span class="search-kbd">⌘K</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Navigation Bar -->
+        <nav class="main-navigation">
+            <div class="nav-container">
+                <div class="nav-brand">
+                    <span class="nav-logo">⚡</span>
+                    <span class="nav-title">OSVM CLI</span>
+                </div>
+
+                <ul class="nav-menu">
+                    <li><a href="#" data-page="home" class="nav-link active">Home</a></li>
+                    <li><a href="#" data-page="installation" class="nav-link">Install</a></li>
+                    <li><a href="#" data-page="plugins" class="nav-link">Plugins</a></li>
+                    <li><a href="#" data-page="themes" class="nav-link">Themes</a></li>
+                    <li><a href="#" data-page="ai-integration" class="nav-link">AI</a></li>
+                    <li><a href="#" data-page="mcp-servers" class="nav-link">MCP</a></li>
+                    <li><a href="#" data-page="node-deployment" class="nav-link">Deploy</a></li>
+                    <li><a href="#" data-page="api-reference" class="nav-link">API</a></li>
+                </ul>
+
+                <div class="nav-actions">
+                    <button class="search-btn" onclick="toggleSearch()">
+                        <span>Search</span>
+                        <kbd>Ctrl+K</kbd>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Breadcrumb Navigation -->
+        <div class="breadcrumb-container">
+            <nav class="breadcrumb" id="breadcrumb">
+                <span class="breadcrumb-item">
+                    <span class="prompt">~/</span>
+                    <span id="current-page-breadcrumb">home</span>
+                </span>
+            </nav>
+        </div>
+
+        <!-- Main Content Container -->
+        <main class="page-content" id="main-content">
+            <!-- ASCII Art Header (for home page) -->
+            <div class="ascii-container" style="display:none;" id="home-ascii">
+                <pre class="ascii-art">
+                    ╔═══════════════════════════════════════════════╗
+                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+                    ║░░░░░░██████╗░██╗░░░██╗███████╗███╗░░░███╗░░░░░║
+                    ║░░░░░██╔═══██╗██║░░░██║██╔════╝████╗░████║░░░░░║
+                    ║░░░░░██║░░░██║██║░░░██║███████╗██╔████╔██║░░░░░║
+                    ║░░░░░██║░░░██║╚██╗░██╔╝╚════██║██║╚██╔╝██║░░░░░║
+                    ║░░░░░╚██████╔╝░╚████╔╝░███████║██║░╚═╝░██║░░░░░║
+                    ║░░░░░░╚═════╝░░░╚═══╝░░╚══════╝╚═╝░░░░░╚═╝░░░░░║
+                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+                    ╚═══════════════════════════════════════════════╝
+                </pre>
+                <p class="ascii-subtitle">Open Solana Virtual Machine</p>
+            </div>
+
+            <!-- Content will be loaded dynamically -->
+            <div class="loading-container">
+                <div class="loading-spinner">⠋</div>
+                <p>Loading OSVM documentation...</p>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="terminal-footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>RESOURCES</h4>
+                    <ul>
+                        <li><a href="https://github.com/opensvm/osvm-cli">GitHub</a></li>
+                        <li><a href="https://github.com/opensvm/osvm-cli/releases">Releases</a></li>
+                        <li><a href="https://github.com/opensvm/osvm-cli/issues">Issues</a></li>
+                        <li><a href="https://discord.gg/opensvm">Discord</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h4>DOCUMENTATION</h4>
+                    <ul>
+                        <li><a href="#" data-page="installation">Installation</a></li>
+                        <li><a href="#" data-page="plugins">Plugin Development</a></li>
+                        <li><a href="#" data-page="api-reference">API Reference</a></li>
+                        <li><a href="#" data-page="node-deployment">Deployment Guide</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h4>COMMUNITY</h4>
+                    <ul>
+                        <li><a href="https://twitter.com/opensvm">Twitter</a></li>
+                        <li><a href="https://t.me/opensvm">Telegram</a></li>
+                        <li><a href="mailto:hello@opensvm.org">Contact</a></li>
+                        <li><a href="https://blog.opensvm.org">Blog</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h4>SHORTCUTS</h4>
+                    <ul>
+                        <li><kbd>Ctrl+K</kbd> Search</li>
+                        <li><kbd>Alt+1-8</kbd> Navigate pages</li>
+                        <li><kbd>Esc</kbd> Close modals</li>
+                        <li><kbd>Tab</kbd> Focus navigation</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="copyright">
+                <div class="command-line">
+                    <span class="prompt">osvm@docs:~$</span>
+                    <span class="command">echo "MIT License © 2024 OpenSVM"</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Scripts -->
+    <script src="script.js"></script>
+    <script src="js/navigation.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/animations.js"></script>
+
+    <script>
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 OSVM CLI Documentation Loading...');
+
+            // Initialize all systems
+            initNavigation();
+
+            // Add initialization complete message
+            setTimeout(() => {
+                console.log('✅ Documentation system ready');
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -13,9 +13,17 @@ use std::{fs::File, io, path::Path};
 // UI and display utilities
 /// Agent chat interface using cursive-multiplex with MCP tools
 pub mod agent_chat;
+#[cfg(test)]
+pub mod agent_chat_tests;
 pub mod agent_chat_v2;
 /// CLI-based agent execution without UI
 pub mod agent_cli;
+/// Custom keybinding system for agent interfaces
+pub mod keybindings;
+/// Advanced theme customization system
+pub mod themes;
+/// Plugin system for extending functionality
+pub mod plugins;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Dashboard utilities for interactive SVM monitoring
@@ -65,7 +73,7 @@ pub mod markdown_renderer;
 pub mod nodes;
 /// Configurable AI prompt templates system
 pub mod prompt_templates;
-/// Simple devnet proxy implementation  
+/// Simple devnet proxy implementation
 pub mod simple_devnet_proxy;
 /// Solana RPC connectivity and monitoring
 pub mod solana_rpc;
