@@ -3587,6 +3587,7 @@ dependencies = [
  "arboard",
  "askama",
  "assert_cmd",
+ "async-trait",
  "base64 0.22.1",
  "bincode 2.0.1",
  "borsh",
