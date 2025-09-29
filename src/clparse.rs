@@ -15,7 +15,7 @@ fn validate_url_or_moniker(s: &str) -> Result<String, String> {
 pub fn parse_command_line() -> clap::ArgMatches {
     command!()
         .disable_version_flag(true) // Disable the auto-generated --version flag
-        .arg_required_else_help(true)
+        .arg_required_else_help(false) // Allow no args to default to advanced chat
         .before_help("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░

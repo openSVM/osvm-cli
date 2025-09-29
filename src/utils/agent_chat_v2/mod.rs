@@ -73,13 +73,19 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // This is handled by the caller which falls back to demo mode
     let mut siv = Cursive::default();
 
-    // Check minimum terminal size to prevent crashes - use more reasonable minimums
+    // Check terminal size - but allow 0x0 for automated environments
     let term_size = siv.screen_size();
     println!("Terminal size: {}x{}", term_size.x, term_size.y);
-    if term_size.x < 60 || term_size.y < 15 {
+
+    // Only fail on very specific size constraints (not 0x0 which means "unknown")
+    if (term_size.x > 0 && term_size.x < 60) || (term_size.y > 0 && term_size.y < 15) {
         eprintln!("Terminal too small: {}x{} (minimum: 60x15)", term_size.x, term_size.y);
         eprintln!("Please resize your terminal and try again.");
         return Err(anyhow::anyhow!("Terminal size too small for advanced chat interface"));
+    }
+
+    if term_size.x == 0 || term_size.y == 0 {
+        println!("Unknown terminal size, attempting to initialize anyway...");
     }
 
     // Enable mouse support for better interaction
@@ -88,6 +94,15 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
 
     // Configure better key handling
     siv.set_autorefresh(true);
+
+    // Add resize handling with error protection
+    siv.add_global_callback(cursive::event::Event::WindowResize, |siv| {
+        // Wrap resize handling in error protection to prevent crashes
+        if let Err(e) = handle_window_resize(siv) {
+            eprintln!("⚠️ Resize handling error: {}", e);
+            // Continue running even if resize handling fails
+        }
+    });
 
     // Set the state as user data for the UI
     siv.set_user_data(state.clone());
@@ -206,6 +221,53 @@ async fn run_advanced_demo_mode() -> Result<()> {
     println!("   Run 'osvm chat --advanced' in a terminal to see the full UI.");
 
     Ok(())
+}
+
+/// Handle window resize events safely
+fn handle_window_resize(siv: &mut Cursive) -> anyhow::Result<()> {
+    println!("\n🔄 Window resize detected, refreshing layout...");
+
+    // Get new terminal size safely
+    let new_size = siv.screen_size();
+    println!("📐 New terminal size: {}x{}", new_size.x, new_size.y);
+
+    // Check if terminal is still usable
+    if (new_size.x > 0 && new_size.x < 60) || (new_size.y > 0 && new_size.y < 15) {
+        println!("⚠️ Terminal too small after resize: {}x{}", new_size.x, new_size.y);
+
+        // Try to show warning dialog, but don't crash if it fails
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            siv.add_layer(
+                cursive::views::Dialog::info(
+                    format!("Terminal too small: {}x{} (minimum: 60x15)\nPlease resize your terminal.",
+                            new_size.x, new_size.y)
+                ).title("Resize Required")
+                .button("OK", |s| { s.pop_layer(); })
+            );
+        }));
+
+        if result.is_err() {
+            println!("⚠️ Could not show resize warning dialog");
+        }
+
+        return Ok(());
+    }
+
+    // Safely refresh all UI displays to adapt to new size
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        update_ui_displays(siv);
+    }));
+
+    match result {
+        Ok(_) => {
+            println!("✅ Layout refreshed successfully for size {}x{}", new_size.x, new_size.y);
+            Ok(())
+        }
+        Err(_) => {
+            println!("⚠️ Layout refresh failed, but continuing...");
+            Err(anyhow::anyhow!("Layout refresh failed during resize"))
+        }
+    }
 }
 
 /// Set up periodic UI updates every 30 seconds as requested

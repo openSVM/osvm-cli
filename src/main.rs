@@ -761,10 +761,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Check for subcommands (including version subcommands)
-    let Some((sub_command, sub_matches)) = app_matches.subcommand() else {
-        // If no subcommand is provided, parse_command_line should handle it or exit.
-        // This return is a fallback.
-        return Err("No subcommand provided. Use --help for more information.".into());
+    let (sub_command, sub_matches) = match app_matches.subcommand() {
+        Some((cmd, matches)) => (cmd, matches),
+        None => {
+            // No subcommand provided - default to advanced chat interface
+            println!("🚀 Welcome to OSVM! Starting Advanced Agent Chat Interface...");
+            println!("💡 Tip: Use 'osvm --help' to see all available commands\n");
+
+            // Launch advanced chat directly
+            return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
+                .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+        }
     };
 
     // Check for version subcommands

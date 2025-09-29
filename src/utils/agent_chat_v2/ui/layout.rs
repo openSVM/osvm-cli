@@ -33,13 +33,22 @@ impl AdvancedChatUI {
         // Main horizontal layout: Chat List | Chat History
         let mut main_layout = LinearLayout::horizontal();
 
-        // Left panel: Chat sessions list - responsive width
+        // Left panel: Chat sessions list - responsive width based on terminal size
+        let terminal_size = siv.screen_size();
+        let left_width = if terminal_size.x > 120 {
+            35 // Wide terminal - more space for session list
+        } else if terminal_size.x > 80 {
+            30 // Medium terminal
+        } else {
+            25 // Narrow terminal - minimal session list width
+        };
+
         let chat_list_panel = self.create_chat_list_panel();
-        main_layout.add_child(ResizedView::with_min_width(25, chat_list_panel).max_width(40));
+        main_layout.add_child(ResizedView::with_fixed_width(left_width, chat_list_panel));
 
         // Right panel: Active chat and controls - takes remaining space
         let chat_panel = self.create_chat_panel();
-        main_layout.add_child(ResizedView::with_min_width(50, chat_panel).full_width());
+        main_layout.add_child(chat_panel.full_width());
 
         // Wrap in main dialog with dynamic title showing agent status
         let title = if let Some(session) = self.state.get_active_session() {
