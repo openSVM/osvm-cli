@@ -4,17 +4,17 @@ use crate::utils::circuit_breaker::{
 use crate::utils::debug_logger::VerbosityLevel;
 use crate::{debug_error, debug_print, debug_success, debug_warn};
 use anyhow::{Context, Result};
+use base64::{engine::general_purpose, Engine as _};
+use dirs;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
-use std::process::{Command, Stdio, ChildStdout};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-use tokio::process::{Child, Command as TokioCommand};
+use std::process::{ChildStdout, Command, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
-use dirs;
-use base64::{Engine as _, engine::general_purpose};
+use tokio::process::{Child, Command as TokioCommand};
 use toml;
 
 // Constants for MCP protocol
@@ -229,7 +229,8 @@ impl McpService {
         auth: &Option<McpAuthConfig>,
         request: &McpRequest,
     ) -> reqwest::RequestBuilder {
-        let mut req_builder = self.client
+        let mut req_builder = self
+            .client
             .post(url)
             .header("Content-Type", "application/json")
             .timeout(std::time::Duration::from_secs(DEFAULT_HTTP_TIMEOUT_SECS))
@@ -241,7 +242,10 @@ impl McpService {
                 "bearer" => {
                     if let Some(token) = &auth.token {
                         if self.debug_mode {
-                            debug_print!(VerbosityLevel::Detailed, "Using Bearer authentication (token masked)");
+                            debug_print!(
+                                VerbosityLevel::Detailed,
+                                "Using Bearer authentication (token masked)"
+                            );
                         }
                         req_builder.header("Authorization", format!("Bearer {}", token))
                     } else {
@@ -254,7 +258,10 @@ impl McpService {
                 "api_key" => {
                     if let Some(token) = &auth.token {
                         if self.debug_mode {
-                            debug_print!(VerbosityLevel::Detailed, "Using API Key authentication (key masked)");
+                            debug_print!(
+                                VerbosityLevel::Detailed,
+                                "Using API Key authentication (key masked)"
+                            );
                         }
                         req_builder.header("X-API-Key", token)
                     } else {
@@ -268,9 +275,14 @@ impl McpService {
                     if let Some(username) = &auth.username {
                         if let Some(password) = &auth.password {
                             if self.debug_mode {
-                                debug_print!(VerbosityLevel::Detailed, "Using Basic authentication for user: {} (password masked)", username);
+                                debug_print!(
+                                    VerbosityLevel::Detailed,
+                                    "Using Basic authentication for user: {} (password masked)",
+                                    username
+                                );
                             }
-                            let credentials = general_purpose::STANDARD.encode(format!("{}:{}", username, password));
+                            let credentials = general_purpose::STANDARD
+                                .encode(format!("{}:{}", username, password));
                             req_builder.header("Authorization", format!("Basic {}", credentials))
                         } else {
                             if self.debug_mode {
@@ -299,10 +311,13 @@ impl McpService {
 
     /// Generate next request ID with overflow protection
     fn next_request_id(&self) -> u64 {
-        let id = self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .request_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if id >= MAX_REQUEST_ID {
             // Reset to 1 when approaching overflow
-            self.request_counter.store(1, std::sync::atomic::Ordering::SeqCst);
+            self.request_counter
+                .store(1, std::sync::atomic::Ordering::SeqCst);
             1
         } else {
             id
@@ -333,7 +348,7 @@ impl McpService {
     pub fn load_config(&mut self) -> Result<()> {
         // Load from config file first (lower priority)
         self.load_from_file()?;
-        
+
         // Load from environment variables second (higher priority - can override file configs)
         self.load_from_env()?;
 
@@ -351,20 +366,20 @@ impl McpService {
             return Ok(()); // No config file is fine
         }
 
-        let content = std::fs::read_to_string(&config_path)
-            .context("Failed to read MCP config file")?;
-            
-        let servers: HashMap<String, McpServerConfig> = serde_json::from_str(&content)
-            .context("Failed to parse MCP config file")?;
-            
+        let content =
+            std::fs::read_to_string(&config_path).context("Failed to read MCP config file")?;
+
+        let servers: HashMap<String, McpServerConfig> =
+            serde_json::from_str(&content).context("Failed to parse MCP config file")?;
+
         for (server_id, config) in servers {
             self.servers.insert(server_id, config);
         }
-        
+
         if self.debug_mode {
             debug_success!("Loaded {} MCP servers from config file", self.servers.len());
         }
-        
+
         Ok(())
     }
 
@@ -373,21 +388,20 @@ impl McpService {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| std::env::current_dir().unwrap())
             .join("osvm");
-            
+
         std::fs::create_dir_all(&config_dir)?;
-        
+
         let config_path = config_dir.join("mcp_servers.json");
-        
+
         let content = serde_json::to_string_pretty(&self.servers)
             .context("Failed to serialize MCP servers")?;
-            
-        std::fs::write(&config_path, content)
-            .context("Failed to write MCP config file")?;
-            
+
+        std::fs::write(&config_path, content).context("Failed to write MCP config file")?;
+
         if self.debug_mode {
             debug_success!("Saved {} MCP servers to config file", self.servers.len());
         }
-        
+
         Ok(())
     }
 
@@ -405,9 +419,9 @@ impl McpService {
                 github_url: None,
                 local_path: None,
             };
-            
+
             self.servers.insert("solana".to_string(), config);
-            
+
             if self.debug_mode {
                 debug_success!("Loaded Solana MCP server from environment");
             }
@@ -456,30 +470,42 @@ impl McpService {
     }
 
     /// Add MCP server from GitHub URL
-    pub async fn add_server_from_github(&mut self, server_id: String, github_url: String, name: Option<String>, skip_confirmation: bool) -> Result<()> {
+    pub async fn add_server_from_github(
+        &mut self,
+        server_id: String,
+        github_url: String,
+        name: Option<String>,
+        skip_confirmation: bool,
+    ) -> Result<()> {
         // Validate GitHub URL to prevent malicious inputs
         if !self.is_valid_github_url(&github_url) {
-            return Err(anyhow::anyhow!("Invalid GitHub URL. Must be a valid GitHub repository URL."));
+            return Err(anyhow::anyhow!(
+                "Invalid GitHub URL. Must be a valid GitHub repository URL."
+            ));
         }
 
         // Display security warning
         eprintln!("{}", GITHUB_CLONE_WARNING);
-        
+
         // Prompt for confirmation unless --yes flag is used
         if !skip_confirmation && !self.confirm_github_clone(&github_url)? {
             return Err(anyhow::anyhow!("Operation cancelled by user"));
         }
 
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "Cloning MCP server from GitHub: {}", github_url);
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Cloning MCP server from GitHub: {}",
+                github_url
+            );
         }
 
         // Create a temp directory for cloning
         let temp_dir = std::env::temp_dir().join("osvm-mcp-servers");
         std::fs::create_dir_all(&temp_dir)?;
-        
+
         let local_path = temp_dir.join(&server_id);
-        
+
         // Remove existing directory if present
         if local_path.exists() {
             std::fs::remove_dir_all(&local_path)?;
@@ -488,11 +514,12 @@ impl McpService {
         // Clone the repository with timeout and additional security flags
         let clone_result = Command::new("git")
             .args(&[
-                "clone", 
-                "--depth", "1", // Shallow clone for security and performance
+                "clone",
+                "--depth",
+                "1",               // Shallow clone for security and performance
                 "--single-branch", // Only clone default branch
-                &github_url, 
-                local_path.to_str().unwrap()
+                &github_url,
+                local_path.to_str().unwrap(),
             ])
             .output()
             .context("Failed to execute git clone command")?;
@@ -513,7 +540,11 @@ impl McpService {
         let execution_command = if cargo_toml_path.exists() {
             // Rust project - build with cargo
             if self.debug_mode {
-                debug_print!(VerbosityLevel::Basic, "Building Rust project at {:?}", local_path);
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Building Rust project at {:?}",
+                    local_path
+                );
             }
 
             let build_result = Command::new("cargo")
@@ -537,15 +568,21 @@ impl McpService {
             let binary_path = local_path.join("target/release").join(&binary_name);
 
             if !binary_path.exists() {
-                return Err(anyhow::anyhow!("Built binary not found at {:?}", binary_path));
+                return Err(anyhow::anyhow!(
+                    "Built binary not found at {:?}",
+                    binary_path
+                ));
             }
 
             binary_path.to_str().unwrap().to_string()
-
         } else if package_json_path.exists() {
             // Node.js project - install dependencies with npm
             if self.debug_mode {
-                debug_print!(VerbosityLevel::Basic, "Building Node.js project at {:?}", local_path);
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Building Node.js project at {:?}",
+                    local_path
+                );
             }
 
             // Run npm install
@@ -561,11 +598,15 @@ impl McpService {
             }
 
             if self.debug_mode {
-                debug_success!("Successfully installed npm dependencies for MCP server at {:?}", local_path);
+                debug_success!(
+                    "Successfully installed npm dependencies for MCP server at {:?}",
+                    local_path
+                );
             }
 
             // Get package info from package.json
-            let (package_name, main_script) = self.get_package_info_from_package_json(&package_json_path)?;
+            let (package_name, main_script) =
+                self.get_package_info_from_package_json(&package_json_path)?;
 
             // Determine the script to run
             let script_path = if let Some(script) = main_script {
@@ -577,11 +618,17 @@ impl McpService {
                     local_path.join(script)
                 }
             } else {
-                return Err(anyhow::anyhow!("No main script found in package.json for package '{}'", package_name));
+                return Err(anyhow::anyhow!(
+                    "No main script found in package.json for package '{}'",
+                    package_name
+                ));
             };
 
             if !script_path.exists() {
-                return Err(anyhow::anyhow!("Main script not found at {:?}", script_path));
+                return Err(anyhow::anyhow!(
+                    "Main script not found at {:?}",
+                    script_path
+                ));
             }
 
             // For Node.js MCP servers, we'll use a wrapper command that calls node
@@ -625,21 +672,21 @@ impl McpService {
     /// Confirm GitHub clone operation with user
     fn confirm_github_clone(&self, github_url: &str) -> Result<bool> {
         use std::io::{self, Write};
-        
+
         print!("Continue cloning from {}? [y/N]: ", github_url);
         io::stdout().flush()?;
-        
+
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        
+
         let input = input.trim().to_lowercase();
         Ok(input == "y" || input == "yes")
     }
 
     /// Get binary name from Cargo.toml with proper TOML parsing
     fn get_binary_name_from_cargo_toml(&self, cargo_toml_path: &Path) -> Result<String> {
-        let content = std::fs::read_to_string(cargo_toml_path)
-            .context("Failed to read Cargo.toml")?;
+        let content =
+            std::fs::read_to_string(cargo_toml_path).context("Failed to read Cargo.toml")?;
 
         // Try to parse as TOML first (most robust)
         match toml::from_str::<toml::Value>(&content) {
@@ -662,14 +709,18 @@ impl McpService {
     }
 
     /// Get package info from package.json for npm-based MCP servers
-    fn get_package_info_from_package_json(&self, package_json_path: &Path) -> Result<(String, Option<String>)> {
-        let content = std::fs::read_to_string(package_json_path)
-            .context("Failed to read package.json")?;
+    fn get_package_info_from_package_json(
+        &self,
+        package_json_path: &Path,
+    ) -> Result<(String, Option<String>)> {
+        let content =
+            std::fs::read_to_string(package_json_path).context("Failed to read package.json")?;
 
-        let package_json: serde_json::Value = serde_json::from_str(&content)
-            .context("Failed to parse package.json")?;
+        let package_json: serde_json::Value =
+            serde_json::from_str(&content).context("Failed to parse package.json")?;
 
-        let name = package_json.get("name")
+        let name = package_json
+            .get("name")
             .and_then(|n| n.as_str())
             .ok_or_else(|| anyhow::anyhow!("No 'name' field found in package.json"))?
             .to_string();
@@ -681,7 +732,8 @@ impl McpService {
                 serde_json::Value::String(script) => Some(script.clone()),
                 serde_json::Value::Object(bin_obj) => {
                     // Try to find the main binary or use the first one
-                    bin_obj.get(&name)
+                    bin_obj
+                        .get(&name)
                         .or_else(|| bin_obj.values().next())
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string())
@@ -711,7 +763,7 @@ impl McpService {
                 }
             }
         }
-        
+
         Err(anyhow::anyhow!("Could not find package name in Cargo.toml"))
     }
 
@@ -740,27 +792,36 @@ impl McpService {
 
     /// Enable or disable an MCP server
     pub fn toggle_server(&mut self, server_id: &str, enabled: bool) -> Result<()> {
-        let config = self.servers.get_mut(server_id)
+        let config = self
+            .servers
+            .get_mut(server_id)
             .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?;
-        
+
         config.enabled = enabled;
-        
+
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "Server '{}' {}", server_id, if enabled { "enabled" } else { "disabled" });
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Server '{}' {}",
+                server_id,
+                if enabled { "enabled" } else { "disabled" }
+            );
         }
-        
+
         if let Err(e) = self.save_config() {
             if self.debug_mode {
                 debug_warn!("Failed to save config: {}", e);
             }
         }
-        
+
         Ok(())
     }
 
     /// Initialize connection with an MCP server
     pub async fn initialize_server(&mut self, server_id: &str) -> Result<()> {
-        let config = self.servers.get(server_id)
+        let config = self
+            .servers
+            .get(server_id)
             .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?
             .clone(); // Clone the config to avoid borrowing issues
 
@@ -769,15 +830,9 @@ impl McpService {
         }
 
         match config.transport_type {
-            McpTransportType::Http => {
-                self.initialize_http_server(&config).await
-            }
-            McpTransportType::Websocket => {
-                self.initialize_websocket_server(&config).await
-            }
-            McpTransportType::Stdio => {
-                self.initialize_stdio_server(server_id, &config).await
-            }
+            McpTransportType::Http => self.initialize_http_server(&config).await,
+            McpTransportType::Websocket => self.initialize_websocket_server(&config).await,
+            McpTransportType::Stdio => self.initialize_stdio_server(server_id, &config).await,
         }
     }
 
@@ -789,7 +844,10 @@ impl McpService {
         };
 
         if !self.circuit_breaker.can_execute_endpoint(&endpoint_id) {
-            return Err(anyhow::anyhow!("Circuit breaker is open for MCP server '{}'", config.name));
+            return Err(anyhow::anyhow!(
+                "Circuit breaker is open for MCP server '{}'",
+                config.name
+            ));
         }
 
         let init_request = McpInitializeRequest {
@@ -812,24 +870,36 @@ impl McpService {
         };
 
         // Use the authentication helper instead of duplicating code
-        let response = self.create_authenticated_request(
-            &format!("{}/api/mcp", config.url),
-            &config.auth,
-            &request
-        ).send().await
+        let response = self
+            .create_authenticated_request(
+                &format!("{}/api/mcp", config.url),
+                &config.auth,
+                &request,
+            )
+            .send()
+            .await
             .context("Failed to send initialize request to MCP server")?;
 
         if !response.status().is_success() {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server returned error status: {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "MCP server returned error status: {}",
+                response.status()
+            ));
         }
 
-        let mcp_response: McpResponse = response.json().await
+        let mcp_response: McpResponse = response
+            .json()
+            .await
             .context("Failed to parse MCP initialize response")?;
 
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server initialization error: {} - {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "MCP server initialization error: {} - {}",
+                error.code,
+                error.message
+            ));
         }
 
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
@@ -851,9 +921,17 @@ impl McpService {
     }
 
     /// Initialize Stdio-based MCP server
-    async fn initialize_stdio_server(&mut self, server_id: &str, config: &McpServerConfig) -> Result<()> {
+    async fn initialize_stdio_server(
+        &mut self,
+        server_id: &str,
+        config: &McpServerConfig,
+    ) -> Result<()> {
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "Starting stdio MCP server: {}", config.url);
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Starting stdio MCP server: {}",
+                config.url
+            );
         }
 
         // Kill existing process if running
@@ -867,7 +945,8 @@ impl McpService {
 
         // Parse the command and arguments from the URL field
         let mut cmd_parts = config.url.split_whitespace();
-        let command = cmd_parts.next()
+        let command = cmd_parts
+            .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid command in server URL: {}", config.url))?;
 
         let mut cmd = TokioCommand::new(command);
@@ -884,8 +963,7 @@ impl McpService {
         cmd.stderr(Stdio::piped());
         cmd.kill_on_drop(true); // Ensure child processes are cleaned up
 
-        let mut child = cmd.spawn()
-            .context("Failed to start MCP server process")?;
+        let mut child = cmd.spawn().context("Failed to start MCP server process")?;
 
         // Send initialization request
         let init_request = McpInitializeRequest {
@@ -908,7 +986,7 @@ impl McpService {
         };
 
         let request_json = serde_json::to_string(&request)?;
-        
+
         if let Some(stdin) = child.stdin.as_mut() {
             stdin.write_all(request_json.as_bytes()).await?;
             stdin.write_all(b"\n").await?;
@@ -920,7 +998,7 @@ impl McpService {
             let mut reader = TokioBufReader::new(stdout);
             let mut line = String::new();
             let mut response_found = false;
-            
+
             // Skip log lines and find the JSON response
             while reader.read_line(&mut line).await? > 0 {
                 let line_trimmed = line.trim();
@@ -929,7 +1007,11 @@ impl McpService {
                     if let Ok(response) = mcp_response {
                         if response.id == request.id {
                             if let Some(error) = response.error {
-                                return Err(anyhow::anyhow!("MCP server initialization error: {} - {}", error.code, error.message));
+                                return Err(anyhow::anyhow!(
+                                    "MCP server initialization error: {} - {}",
+                                    error.code,
+                                    error.message
+                                ));
                             }
                             response_found = true;
                             break;
@@ -938,9 +1020,11 @@ impl McpService {
                 }
                 line.clear();
             }
-            
+
             if !response_found {
-                return Err(anyhow::anyhow!("No valid response received from MCP server"));
+                return Err(anyhow::anyhow!(
+                    "No valid response received from MCP server"
+                ));
             }
         }
 
@@ -951,12 +1035,16 @@ impl McpService {
                 server_id: server_id.to_string(),
                 local_path: PathBuf::from(local_path),
             };
-            
-            self.stdio_processes.insert(server_id.to_string(), stdio_process);
+
+            self.stdio_processes
+                .insert(server_id.to_string(), stdio_process);
         }
 
         if self.debug_mode {
-            debug_success!("Successfully initialized stdio MCP server '{}'", config.name);
+            debug_success!(
+                "Successfully initialized stdio MCP server '{}'",
+                config.name
+            );
         }
 
         Ok(())
@@ -975,7 +1063,9 @@ impl McpService {
 
     /// List available tools from an MCP server
     pub async fn list_tools(&self, server_id: &str) -> Result<Vec<McpTool>> {
-        let config = self.servers.get(server_id)
+        let config = self
+            .servers
+            .get(server_id)
             .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?;
 
         if !config.enabled {
@@ -993,24 +1083,34 @@ impl McpService {
     }
 
     /// List tools from HTTP-based MCP server
-    async fn list_tools_http(&self, _server_id: &str, config: &McpServerConfig) -> Result<Vec<McpTool>> {
+    async fn list_tools_http(
+        &self,
+        _server_id: &str,
+        config: &McpServerConfig,
+    ) -> Result<Vec<McpTool>> {
         let endpoint_id = EndpointId {
             service: "mcp".to_string(),
             endpoint: config.url.clone(),
         };
 
         if !self.circuit_breaker.can_execute_endpoint(&endpoint_id) {
-            return Err(anyhow::anyhow!("Circuit breaker is open for MCP server '{}'", config.name));
+            return Err(anyhow::anyhow!(
+                "Circuit breaker is open for MCP server '{}'",
+                config.name
+            ));
         }
 
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
-            id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            id: self
+                .request_counter
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             method: MCP_METHOD_TOOLS_LIST.to_string(),
-            params: Some(serde_json::json!({})),  // Empty object, not None
+            params: Some(serde_json::json!({})), // Empty object, not None
         };
 
-        let mut req_builder = self.client
+        let mut req_builder = self
+            .client
             .post(&format!("{}/api/mcp", config.url))
             .header("Content-Type", "application/json")
             .json(&request);
@@ -1036,26 +1136,39 @@ impl McpService {
             };
         }
 
-        let response = req_builder.send().await
+        let response = req_builder
+            .send()
+            .await
             .context("Failed to send tools/list request to MCP server")?;
 
         if !response.status().is_success() {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server returned error status: {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "MCP server returned error status: {}",
+                response.status()
+            ));
         }
 
-        let mcp_response: McpResponse = response.json().await
+        let mcp_response: McpResponse = response
+            .json()
+            .await
             .context("Failed to parse MCP tools/list response")?;
 
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server tools/list error: {} - {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "MCP server tools/list error: {} - {}",
+                error.code,
+                error.message
+            ));
         }
 
-        let result = mcp_response.result
+        let result = mcp_response
+            .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/list"))?;
 
-        let tools_list: serde_json::Value = result.get("tools")
+        let tools_list: serde_json::Value = result
+            .get("tools")
             .ok_or_else(|| anyhow::anyhow!("MCP server response missing 'tools' field"))?
             .clone();
 
@@ -1065,24 +1178,37 @@ impl McpService {
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
 
         if self.debug_mode {
-            debug_success!("Retrieved {} tools from MCP server '{}'", tools.len(), config.name);
+            debug_success!(
+                "Retrieved {} tools from MCP server '{}'",
+                tools.len(),
+                config.name
+            );
         }
 
         Ok(tools)
     }
 
     /// List tools from stdio-based MCP server
-    async fn list_tools_stdio(&self, server_id: &str, config: &McpServerConfig) -> Result<Vec<McpTool>> {
+    async fn list_tools_stdio(
+        &self,
+        server_id: &str,
+        config: &McpServerConfig,
+    ) -> Result<Vec<McpTool>> {
         // For stdio, we need to use synchronous I/O since we're not keeping the process handle
         // We'll spawn a new process for each request (not ideal but works for now)
 
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "Listing tools from stdio MCP server: {}", config.name);
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Listing tools from stdio MCP server: {}",
+                config.name
+            );
         }
 
         // Parse the command from the URL field
         let mut parts = config.url.split_whitespace();
-        let program = parts.next()
+        let program = parts
+            .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
         let args: Vec<&str> = parts.collect();
 
@@ -1095,9 +1221,13 @@ impl McpService {
             .spawn()
             .context("Failed to spawn stdio MCP server process")?;
 
-        let mut stdin = child.stdin.take()
+        let mut stdin = child
+            .stdin
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdin for stdio process"))?;
-        let mut stdout = child.stdout.take()
+        let mut stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdout for stdio process"))?;
 
         // Send initialize request first
@@ -1124,7 +1254,8 @@ impl McpService {
         let mut reader = BufReader::new(stdout);
 
         // Find the first valid MCP response (filter out log messages)
-        let init_response_str = self.read_mcp_response(&mut reader, "initialization")
+        let init_response_str = self
+            .read_mcp_response(&mut reader, "initialization")
             .context("Failed to read initialization response from stdio MCP server")?;
 
         let _init_response: McpResponse = serde_json::from_str(&init_response_str)
@@ -1135,7 +1266,7 @@ impl McpService {
             jsonrpc: MCP_JSONRPC_VERSION.to_string(),
             id: 2,
             method: MCP_METHOD_TOOLS_LIST.to_string(),
-            params: Some(serde_json::json!({})),  // Empty object, not None
+            params: Some(serde_json::json!({})), // Empty object, not None
         };
 
         let tools_request_str = serde_json::to_string(&tools_request)?;
@@ -1144,7 +1275,8 @@ impl McpService {
         stdin.flush()?;
 
         // Read tools response with filtering
-        let tools_response_str = self.read_mcp_response(&mut reader, "tools/list")
+        let tools_response_str = self
+            .read_mcp_response(&mut reader, "tools/list")
             .context("Failed to read tools response from stdio MCP server")?;
 
         let tools_response: McpResponse = serde_json::from_str(&tools_response_str)
@@ -1154,13 +1286,19 @@ impl McpService {
         let _ = child.kill();
 
         if let Some(error) = tools_response.error {
-            return Err(anyhow::anyhow!("MCP server tools/list error: {} - {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "MCP server tools/list error: {} - {}",
+                error.code,
+                error.message
+            ));
         }
 
-        let result = tools_response.result
+        let result = tools_response
+            .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/list"))?;
 
-        let tools_list: serde_json::Value = result.get("tools")
+        let tools_list: serde_json::Value = result
+            .get("tools")
             .ok_or_else(|| anyhow::anyhow!("MCP server response missing 'tools' field"))?
             .clone();
 
@@ -1168,14 +1306,22 @@ impl McpService {
             .context("Failed to parse tools from MCP server response")?;
 
         if self.debug_mode {
-            debug_success!("Retrieved {} tools from stdio MCP server '{}'", tools.len(), config.name);
+            debug_success!(
+                "Retrieved {} tools from stdio MCP server '{}'",
+                tools.len(),
+                config.name
+            );
         }
 
         Ok(tools)
     }
 
     /// Read and filter MCP protocol response from mixed stdout (logs + protocol)
-    fn read_mcp_response(&self, reader: &mut BufReader<ChildStdout>, operation: &str) -> Result<String> {
+    fn read_mcp_response(
+        &self,
+        reader: &mut BufReader<ChildStdout>,
+        operation: &str,
+    ) -> Result<String> {
         let mut line = String::new();
         let mut attempts = 0;
         const MAX_ATTEMPTS: usize = 50; // Prevent infinite loops
@@ -1183,15 +1329,22 @@ impl McpService {
         loop {
             attempts += 1;
             if attempts > MAX_ATTEMPTS {
-                return Err(anyhow::anyhow!("Timeout waiting for MCP response during {}", operation));
+                return Err(anyhow::anyhow!(
+                    "Timeout waiting for MCP response during {}",
+                    operation
+                ));
             }
 
             line.clear();
-            let bytes_read = reader.read_line(&mut line)
+            let bytes_read = reader
+                .read_line(&mut line)
                 .context("Failed to read line from stdio process")?;
 
             if bytes_read == 0 {
-                return Err(anyhow::anyhow!("Unexpected EOF from stdio MCP server during {}", operation));
+                return Err(anyhow::anyhow!(
+                    "Unexpected EOF from stdio MCP server during {}",
+                    operation
+                ));
             }
 
             let trimmed = line.trim();
@@ -1207,10 +1360,15 @@ impl McpService {
                 match serde_json::from_str::<serde_json::Value>(trimmed) {
                     Ok(json) => {
                         // Check if it has the expected JSON-RPC structure
-                        if json.get("jsonrpc").is_some() &&
-                           (json.get("result").is_some() || json.get("error").is_some()) {
+                        if json.get("jsonrpc").is_some()
+                            && (json.get("result").is_some() || json.get("error").is_some())
+                        {
                             if self.debug_mode {
-                                debug_print!(VerbosityLevel::Detailed, "Found valid MCP response for {}", operation);
+                                debug_print!(
+                                    VerbosityLevel::Detailed,
+                                    "Found valid MCP response for {}",
+                                    operation
+                                );
                             }
                             return Ok(trimmed.to_string());
                         }
@@ -1218,7 +1376,11 @@ impl McpService {
                     Err(_) => {
                         // Not valid JSON, might be a log message that starts with '{'
                         if self.debug_mode {
-                            debug_print!(VerbosityLevel::Detailed, "Skipping invalid JSON line: {}", trimmed);
+                            debug_print!(
+                                VerbosityLevel::Detailed,
+                                "Skipping invalid JSON line: {}",
+                                trimmed
+                            );
                         }
                         continue;
                     }
@@ -1228,14 +1390,22 @@ impl McpService {
             // Skip lines that look like structured logs
             if self.is_log_message(trimmed) {
                 if self.debug_mode {
-                    debug_print!(VerbosityLevel::Detailed, "Skipping log message: {}", trimmed);
+                    debug_print!(
+                        VerbosityLevel::Detailed,
+                        "Skipping log message: {}",
+                        trimmed
+                    );
                 }
                 continue;
             }
 
             // Skip other non-protocol messages
             if self.debug_mode {
-                debug_print!(VerbosityLevel::Detailed, "Skipping non-protocol line: {}", trimmed);
+                debug_print!(
+                    VerbosityLevel::Detailed,
+                    "Skipping non-protocol line: {}",
+                    trimmed
+                );
             }
         }
     }
@@ -1243,19 +1413,21 @@ impl McpService {
     /// Check if a line looks like a structured log message rather than MCP protocol
     fn is_log_message(&self, line: &str) -> bool {
         // Common log patterns
-        if line.contains("\"level\":") ||
-           line.contains("\"timestamp\":") ||
-           line.contains("\"message\":") ||
-           line.contains("\"time\":") ||
-           line.contains("\"msg\":") {
+        if line.contains("\"level\":")
+            || line.contains("\"timestamp\":")
+            || line.contains("\"message\":")
+            || line.contains("\"time\":")
+            || line.contains("\"msg\":")
+        {
             return true;
         }
 
         // Specific patterns from solana-mcp-server
-        if line.contains("Starting Solana MCP server") ||
-           line.contains("Loaded config:") ||
-           line.contains("Opened stdio transport") ||
-           line.contains("Starting message loop") {
+        if line.contains("Starting Solana MCP server")
+            || line.contains("Loaded config:")
+            || line.contains("Opened stdio transport")
+            || line.contains("Starting message loop")
+        {
             return true;
         }
 
@@ -1272,9 +1444,11 @@ impl McpService {
         &self,
         server_id: &str,
         tool_name: &str,
-        arguments: Option<serde_json::Value>
+        arguments: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
-        let config = self.servers.get(server_id)
+        let config = self
+            .servers
+            .get(server_id)
             .ok_or_else(|| anyhow::anyhow!("Server '{}' not found", server_id))?;
 
         if !config.enabled {
@@ -1284,10 +1458,12 @@ impl McpService {
         // Route to appropriate implementation based on transport type
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
-                self.call_tool_http(server_id, tool_name, arguments, config).await
+                self.call_tool_http(server_id, tool_name, arguments, config)
+                    .await
             }
             McpTransportType::Stdio => {
-                self.call_tool_stdio(server_id, tool_name, arguments, config).await
+                self.call_tool_stdio(server_id, tool_name, arguments, config)
+                    .await
             }
         }
     }
@@ -1298,7 +1474,7 @@ impl McpService {
         server_id: &str,
         tool_name: &str,
         arguments: Option<serde_json::Value>,
-        config: &McpServerConfig
+        config: &McpServerConfig,
     ) -> Result<serde_json::Value> {
         let endpoint_id = EndpointId {
             service: "mcp".to_string(),
@@ -1306,7 +1482,10 @@ impl McpService {
         };
 
         if !self.circuit_breaker.can_execute_endpoint(&endpoint_id) {
-            return Err(anyhow::anyhow!("Circuit breaker is open for MCP server '{}'", config.name));
+            return Err(anyhow::anyhow!(
+                "Circuit breaker is open for MCP server '{}'",
+                config.name
+            ));
         }
 
         let tool_call = serde_json::json!({
@@ -1316,12 +1495,15 @@ impl McpService {
 
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
-            id: self.request_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+            id: self
+                .request_counter
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             method: MCP_METHOD_TOOLS_CALL.to_string(),
             params: Some(tool_call),
         };
 
-        let mut req_builder = self.client
+        let mut req_builder = self
+            .client
             .post(&format!("{}/api/mcp", config.url))
             .header("Content-Type", "application/json")
             .json(&request);
@@ -1347,29 +1529,45 @@ impl McpService {
             };
         }
 
-        let response = req_builder.send().await
+        let response = req_builder
+            .send()
+            .await
             .context("Failed to send tools/call request to MCP server")?;
 
         if !response.status().is_success() {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server returned error status: {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "MCP server returned error status: {}",
+                response.status()
+            ));
         }
 
-        let mcp_response: McpResponse = response.json().await
+        let mcp_response: McpResponse = response
+            .json()
+            .await
             .context("Failed to parse MCP tools/call response")?;
 
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            return Err(anyhow::anyhow!("MCP server tools/call error: {} - {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "MCP server tools/call error: {} - {}",
+                error.code,
+                error.message
+            ));
         }
 
-        let result = mcp_response.result
+        let result = mcp_response
+            .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
 
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
 
         if self.debug_mode {
-            debug_success!("Successfully called tool '{}' on MCP server '{}'", tool_name, config.name);
+            debug_success!(
+                "Successfully called tool '{}' on MCP server '{}'",
+                tool_name,
+                config.name
+            );
         }
 
         Ok(result)
@@ -1381,15 +1579,21 @@ impl McpService {
         server_id: &str,
         tool_name: &str,
         arguments: Option<serde_json::Value>,
-        config: &McpServerConfig
+        config: &McpServerConfig,
     ) -> Result<serde_json::Value> {
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "Calling tool '{}' on stdio MCP server: {}", tool_name, config.name);
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Calling tool '{}' on stdio MCP server: {}",
+                tool_name,
+                config.name
+            );
         }
 
         // Parse the command from the URL field
         let mut parts = config.url.split_whitespace();
-        let program = parts.next()
+        let program = parts
+            .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
         let args: Vec<&str> = parts.collect();
 
@@ -1402,9 +1606,13 @@ impl McpService {
             .spawn()
             .context("Failed to spawn stdio MCP server process")?;
 
-        let mut stdin = child.stdin.take()
+        let mut stdin = child
+            .stdin
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdin for stdio process"))?;
-        let mut stdout = child.stdout.take()
+        let mut stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdout for stdio process"))?;
 
         // Send initialize request first
@@ -1429,7 +1637,8 @@ impl McpService {
 
         // Read initialize response
         let mut reader = BufReader::new(stdout);
-        let init_response_str = self.read_mcp_response(&mut reader, "initialization")
+        let init_response_str = self
+            .read_mcp_response(&mut reader, "initialization")
             .context("Failed to read initialization response from stdio MCP server")?;
 
         let _init_response: McpResponse = serde_json::from_str(&init_response_str)
@@ -1454,7 +1663,8 @@ impl McpService {
         stdin.flush()?;
 
         // Read tool call response with filtering
-        let call_response_str = self.read_mcp_response(&mut reader, "tools/call")
+        let call_response_str = self
+            .read_mcp_response(&mut reader, "tools/call")
             .context("Failed to read tools/call response from stdio MCP server")?;
 
         let call_response: McpResponse = serde_json::from_str(&call_response_str)
@@ -1464,39 +1674,54 @@ impl McpService {
         let _ = child.kill();
 
         if let Some(error) = call_response.error {
-            return Err(anyhow::anyhow!("MCP server tools/call error: {} - {}", error.code, error.message));
+            return Err(anyhow::anyhow!(
+                "MCP server tools/call error: {} - {}",
+                error.code,
+                error.message
+            ));
         }
 
-        let result = call_response.result
+        let result = call_response
+            .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
 
         if self.debug_mode {
-            debug_success!("Successfully called tool '{}' on stdio MCP server '{}'", tool_name, config.name);
+            debug_success!(
+                "Successfully called tool '{}' on stdio MCP server '{}'",
+                tool_name,
+                config.name
+            );
         }
 
         Ok(result)
     }
 
     /// Query multiple MCP servers with the same request
-    pub async fn query_all_servers(&self, tool_name: &str, arguments: Option<serde_json::Value>) -> Vec<(String, Result<serde_json::Value>)> {
+    pub async fn query_all_servers(
+        &self,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Vec<(String, Result<serde_json::Value>)> {
         let mut results = Vec::new();
-        
+
         for (server_id, config) in &self.servers {
             if !config.enabled {
                 continue;
             }
-            
-            let result = self.call_tool(server_id, tool_name, arguments.clone()).await;
+
+            let result = self
+                .call_tool(server_id, tool_name, arguments.clone())
+                .await;
             results.push((server_id.clone(), result));
         }
-        
+
         results
     }
 
     /// Get the status information of configured MCP servers
     pub fn get_server_status(&self) -> HashMap<String, String> {
         let mut status = HashMap::new();
-        
+
         for (server_id, config) in &self.servers {
             let status_str = if config.enabled {
                 format!("Enabled - {} ({})", config.name, config.url)
@@ -1505,24 +1730,27 @@ impl McpService {
             };
             status.insert(server_id.clone(), status_str);
         }
-        
+
         status
     }
 
     /// Test connectivity to an MCP server
     pub async fn test_server(&mut self, server_id: &str) -> Result<()> {
         // First try to initialize
-        self.initialize_server(server_id).await
+        self.initialize_server(server_id)
+            .await
             .context("Failed to initialize MCP server")?;
-        
+
         // Then try to list tools as a connectivity test
-        let _tools = self.list_tools(server_id).await
+        let _tools = self
+            .list_tools(server_id)
+            .await
             .context("Failed to list tools from MCP server")?;
-        
+
         if self.debug_mode {
             debug_success!("MCP server '{}' connectivity test passed", server_id);
         }
-        
+
         Ok(())
     }
 
@@ -1534,7 +1762,7 @@ impl McpService {
         enabled_only: bool,
     ) -> Vec<(&String, &McpServerConfig)> {
         let query_lower = query.to_lowercase();
-        
+
         self.servers
             .iter()
             .filter(|(_, config)| {
@@ -1542,13 +1770,13 @@ impl McpService {
                 if enabled_only && !config.enabled {
                     return false;
                 }
-                
+
                 // Filter by transport type if specified
                 if let Some(transport) = transport_filter {
                     if transport != "any" {
                         let config_transport = match config.transport_type {
                             McpTransportType::Http => "http",
-                            McpTransportType::Websocket => "websocket", 
+                            McpTransportType::Websocket => "websocket",
                             McpTransportType::Stdio => "stdio",
                         };
                         if config_transport != transport {
@@ -1556,19 +1784,23 @@ impl McpService {
                         }
                     }
                 }
-                
+
                 // Search in name, URL, and GitHub URL
                 let name_matches = config.name.to_lowercase().contains(&query_lower);
                 let url_matches = config.url.to_lowercase().contains(&query_lower);
-                let github_matches = config.github_url.as_ref()
+                let github_matches = config
+                    .github_url
+                    .as_ref()
                     .map(|url| url.to_lowercase().contains(&query_lower))
                     .unwrap_or(false);
-                
+
                 // Also search in auth type if configured
-                let auth_matches = config.auth.as_ref()
+                let auth_matches = config
+                    .auth
+                    .as_ref()
                     .map(|auth| auth.auth_type.to_lowercase().contains(&query_lower))
                     .unwrap_or(false);
-                
+
                 name_matches || url_matches || github_matches || auth_matches
             })
             .collect()
@@ -1612,7 +1844,7 @@ mod tests {
             github_url: None,
             local_path: None,
         };
-        
+
         service.add_server("test".to_string(), config);
         assert_eq!(service.servers.len(), 1);
         assert!(service.get_server("test").is_some());
@@ -1631,10 +1863,10 @@ mod tests {
             github_url: None,
             local_path: None,
         };
-        
+
         service.add_server("test".to_string(), config);
         assert_eq!(service.servers.len(), 1);
-        
+
         let removed = service.remove_server("test");
         assert!(removed.is_some());
         assert_eq!(service.servers.len(), 0);
@@ -1653,17 +1885,17 @@ mod tests {
             github_url: None,
             local_path: None,
         };
-        
+
         service.add_server("test".to_string(), config);
-        
+
         // Test disabling
         assert!(service.toggle_server("test", false).is_ok());
         assert!(!service.get_server("test").unwrap().enabled);
-        
+
         // Test enabling
         assert!(service.toggle_server("test", true).is_ok());
         assert!(service.get_server("test").unwrap().enabled);
-        
+
         // Test non-existent server
         assert!(service.toggle_server("nonexistent", true).is_err());
     }

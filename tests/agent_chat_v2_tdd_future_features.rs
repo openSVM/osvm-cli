@@ -10,9 +10,9 @@ use std::time::Duration;
 use uuid::Uuid;
 
 use osvm::utils::agent_chat_v2::{
-    types::{ChatMessage, AgentState},
     session::ChatSession,
     state::AdvancedChatState,
+    types::{AgentState, ChatMessage},
 };
 
 // ============================================================================
@@ -123,7 +123,7 @@ async fn test_advanced_session_cloning() -> Result<()> {
     for i in 0..5 {
         state.add_message_to_session(
             original_session,
-            ChatMessage::User(format!("Message {}", i))
+            ChatMessage::User(format!("Message {}", i)),
         )?;
     }
 
@@ -218,14 +218,8 @@ async fn test_session_analytics() -> Result<()> {
 
     // Generate activity
     for i in 0..20 {
-        state.add_message_to_session(
-            session_id,
-            ChatMessage::User(format!("Query {}", i))
-        )?;
-        state.add_message_to_session(
-            session_id,
-            ChatMessage::Agent(format!("Response {}", i))
-        )?;
+        state.add_message_to_session(session_id, ChatMessage::User(format!("Query {}", i)))?;
+        state.add_message_to_session(session_id, ChatMessage::Agent(format!("Response {}", i)))?;
     }
 
     // Future API: get_session_analytics(session_id, time_range)
@@ -261,7 +255,7 @@ async fn test_cross_session_insights() -> Result<()> {
         for j in 0..10 {
             state.add_message_to_session(
                 *session_id,
-                ChatMessage::User(format!("Session {} query {}", i, j))
+                ChatMessage::User(format!("Session {} query {}", i, j)),
             )?;
         }
     }
@@ -500,7 +494,10 @@ async fn test_search_performance_at_scale() -> Result<()> {
     for i in 0..10000 {
         state.add_message_to_session(
             session_id,
-            ChatMessage::User(format!("Message {} about blockchain transaction analysis", i))
+            ChatMessage::User(format!(
+                "Message {} about blockchain transaction analysis",
+                i
+            )),
         )?;
     }
 

@@ -1,17 +1,15 @@
 //! Input handling and state management for the chat interface
 
-use super::{Colors, RealtimeSuggestion, FuzzyMatcher};
-use super::responsive_layout::{TerminalRenderer, ComponentArea, wrap_text_smart, format_colored_text};
-use anyhow::{Result, anyhow};
-use std::io::{self, Write, Read};
-use tokio::sync::mpsc;
-use log::debug;
-use serde::{Serialize, Deserialize};
-use crossterm::{
-    cursor::MoveTo,
-    style::Color,
-    execute,
+use super::responsive_layout::{
+    format_colored_text, wrap_text_smart, ComponentArea, TerminalRenderer,
 };
+use super::{Colors, FuzzyMatcher, RealtimeSuggestion};
+use anyhow::{anyhow, Result};
+use crossterm::{cursor::MoveTo, execute, style::Color};
+use log::debug;
+use serde::{Deserialize, Serialize};
+use std::io::{self, Read, Write};
+use tokio::sync::mpsc;
 
 /// Configuration for input handling behavior
 #[derive(Debug, Clone)]
@@ -112,7 +110,8 @@ impl InputState {
     /// Insert character at cursor position (handles UTF-8 properly)
     pub fn insert_char(&mut self, ch: char) {
         // Convert cursor position from char index to byte index
-        let byte_pos = self.input
+        let byte_pos = self
+            .input
             .char_indices()
             .nth(self.cursor_pos)
             .map(|(i, _)| i)
@@ -252,7 +251,10 @@ impl InputState {
     }
 
     /// Generate smart auto-suggestions based on current input and context
-    pub fn generate_auto_suggestions(&mut self, context_history: &[String]) -> Vec<RealtimeSuggestion> {
+    pub fn generate_auto_suggestions(
+        &mut self,
+        context_history: &[String],
+    ) -> Vec<RealtimeSuggestion> {
         if self.input.len() < 2 {
             return Vec::new();
         }
@@ -287,9 +289,17 @@ impl InputState {
 
         // MCP tool suggestions
         let mcp_tools = vec![
-            ("@solana/get_balance", "Get wallet balance via Solana MCP", "mcp"),
+            (
+                "@solana/get_balance",
+                "Get wallet balance via Solana MCP",
+                "mcp",
+            ),
             ("@solana/get_transactions", "Get transaction history", "mcp"),
-            ("@solana/get_network_status", "Check Solana network status", "mcp"),
+            (
+                "@solana/get_network_status",
+                "Check Solana network status",
+                "mcp",
+            ),
             ("@solana/stake_account", "Manage stake accounts", "mcp"),
         ];
 
@@ -324,7 +334,8 @@ impl InputState {
                     "contextual".to_string(),
                 ));
             }
-            if last_message.to_lowercase().contains("transaction") && !input_lower.contains("trans") {
+            if last_message.to_lowercase().contains("transaction") && !input_lower.contains("trans")
+            {
                 suggestions.push(RealtimeSuggestion::new(
                     "/transactions".to_string(),
                     "View recent transactions".to_string(),
@@ -357,7 +368,7 @@ impl InputState {
             // Prioritize exact matches and shorter suggestions
             let a_exact = a.text.to_lowercase() == input_lower;
             let b_exact = b.text.to_lowercase() == input_lower;
-            
+
             if a_exact && !b_exact {
                 std::cmp::Ordering::Less
             } else if !a_exact && b_exact {
@@ -374,12 +385,12 @@ impl InputState {
 
     /// Update suggestions without disturbing terminal state
     pub fn update_suggestions_in_place(
-        &mut self, 
+        &mut self,
         renderer: &mut TerminalRenderer,
-        context_history: &[String]
+        context_history: &[String],
     ) -> Result<()> {
         let suggestions = self.generate_auto_suggestions(context_history);
-        
+
         if suggestions.is_empty() {
             // Clear suggestions area
             let suggestion_area = renderer.areas().suggestions.clone();
@@ -398,11 +409,15 @@ impl InputState {
             }
 
             // Header
-            write!(stdout, "{}╭─ Suggestions (↑/↓ to navigate, Tab to select) ─╮{}", 
-                   Colors::DIM, Colors::RESET)?;
+            write!(
+                stdout,
+                "{}╭─ Suggestions (↑/↓ to navigate, Tab to select) ─╮{}",
+                Colors::DIM,
+                Colors::RESET
+            )?;
 
             let max_suggestions = (area.height.saturating_sub(2) as usize).min(suggestions.len());
-            
+
             for (i, suggestion) in suggestions.iter().enumerate().take(max_suggestions) {
                 if i + 1 >= area.height as usize {
                     break;
@@ -410,7 +425,11 @@ impl InputState {
 
                 execute!(stdout, MoveTo(area.x, area.y + i as u16 + 1))?;
 
-                let selector = if i == self.selected_suggestion { "▶" } else { " " };
+                let selector = if i == self.selected_suggestion {
+                    "▶"
+                } else {
+                    " "
+                };
                 let icon = match suggestion.category.as_str() {
                     "command" => "⌘",
                     "mcp" => "⚙",
@@ -421,8 +440,12 @@ impl InputState {
                     _ => "•",
                 };
 
-                let color = if i == self.selected_suggestion { Color::Yellow } else { Color::Grey };
-                
+                let color = if i == self.selected_suggestion {
+                    Color::Yellow
+                } else {
+                    Color::Grey
+                };
+
                 // Truncate text to fit terminal width - UTF-8 safe
                 let available_width = area.width.saturating_sub(8); // Account for prefix and margins
                 let display_text = if suggestion.text.chars().count() > available_width as usize {
@@ -440,32 +463,41 @@ impl InputState {
                     suggestion.description.clone()
                 };
 
-                write!(stdout, "{}│{} {} {} - {}{}",
-                       Colors::DIM,
-                       selector,
-                       icon,
-                       format_colored_text(&display_text, color),
-                       format_colored_text(&display_desc, Color::White),
-                       Colors::RESET)?;
+                write!(
+                    stdout,
+                    "{}│{} {} {} - {}{}",
+                    Colors::DIM,
+                    selector,
+                    icon,
+                    format_colored_text(&display_text, color),
+                    format_colored_text(&display_desc, Color::White),
+                    Colors::RESET
+                )?;
             }
 
             // Footer
             if max_suggestions < suggestions.len() {
                 let remaining = suggestions.len() - max_suggestions;
                 execute!(stdout, MoveTo(area.x, area.y + max_suggestions as u16 + 1))?;
-                write!(stdout, "{}│ ... {} more suggestions{}",
-                       Colors::DIM,
-                       remaining,
-                       Colors::RESET)?;
+                write!(
+                    stdout,
+                    "{}│ ... {} more suggestions{}",
+                    Colors::DIM,
+                    remaining,
+                    Colors::RESET
+                )?;
             }
 
             // Bottom border (if space)
             if area.height > max_suggestions as u16 + 2 {
                 execute!(stdout, MoveTo(area.x, area.y + area.height - 1))?;
-                write!(stdout, "{}╰{}─╯{}",
-                       Colors::DIM,
-                       "─".repeat(area.width.saturating_sub(3) as usize),
-                       Colors::RESET)?;
+                write!(
+                    stdout,
+                    "{}╰{}─╯{}",
+                    Colors::DIM,
+                    "─".repeat(area.width.saturating_sub(3) as usize),
+                    Colors::RESET
+                )?;
             }
 
             Ok(())
@@ -529,8 +561,8 @@ impl InputHandler {
 
     /// Read escape sequences (arrow keys, etc.)
     fn read_escape_sequence() -> Result<InputChar> {
-        use std::time::Duration;
         use std::io::{ErrorKind, Read};
+        use std::time::Duration;
 
         let mut buffer = [0; 1];
 
@@ -554,14 +586,14 @@ impl InputHandler {
                             let mut discard = [0; 10];
                             let _ = stdin.read(&mut discard);
                             Ok(InputChar::Mouse)
-                        },
+                        }
                         b'0'..=b'9' => {
                             // Possible extended sequence (like mouse events)
                             // Consume the rest of the sequence
                             let mut discard = [0; 10];
                             let _ = stdin.read(&mut discard);
                             Ok(InputChar::Unknown)
-                        },
+                        }
                         _ => Ok(InputChar::Escape),
                     },
                     Err(_) => Ok(InputChar::Escape), // Incomplete sequence
@@ -588,7 +620,9 @@ impl InputHandler {
         let result = match ch {
             InputChar::Enter => {
                 // If a suggestion is selected, apply it instead of submitting
-                if !state.suggestions.is_empty() && state.selected_suggestion < state.suggestions.len() {
+                if !state.suggestions.is_empty()
+                    && state.selected_suggestion < state.suggestions.len()
+                {
                     state.apply_suggestion();
                     should_update_suggestions = true;
                     Ok(None)
@@ -661,9 +695,7 @@ impl InputHandler {
                 Ok(None)
             }
 
-            InputChar::CtrlC => {
-                Err(anyhow!("User interrupted"))
-            }
+            InputChar::CtrlC => Err(anyhow!("User interrupted")),
 
             InputChar::Mouse => {
                 // Silently ignore mouse events to preserve right-click functionality
@@ -748,9 +780,7 @@ impl InputHandler {
                 Ok(None)
             }
 
-            InputChar::CtrlC => {
-                Err(anyhow!("User interrupted"))
-            }
+            InputChar::CtrlC => Err(anyhow!("User interrupted")),
 
             InputChar::Mouse => {
                 // Silently ignore mouse events

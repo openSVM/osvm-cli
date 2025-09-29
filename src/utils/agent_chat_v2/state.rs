@@ -1,21 +1,21 @@
 //! Main application state for advanced chat UI
 
-use anyhow::{Result, Context, anyhow};
-use log::{error, warn, info};
-use std::sync::{Arc, RwLock};
-use tokio::sync::{mpsc, Mutex};
+use anyhow::{anyhow, Context, Result};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
+use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 use crate::services::{
-    mcp_service::{McpService, McpTool, McpServerConfig},
-    ai_service::AiService
+    ai_service::AiService,
+    mcp_service::{McpServerConfig, McpService, McpTool},
 };
 
-use super::types::{ChatMessage, AgentState};
-use super::session::ChatSession;
 use super::agent::AgentCommand;
+use super::session::ChatSession;
+use super::types::{AgentState, ChatMessage};
 
 /// Main application state for advanced chat UI
 #[derive(Clone)]
@@ -73,11 +73,10 @@ impl AdvancedChatState {
 
     pub fn get_session_names(&self) -> Vec<(Uuid, String, AgentState)> {
         match self.sessions.read() {
-            Ok(sessions) => {
-                sessions.values()
-                    .map(|s| (s.id, s.name.clone(), s.agent_state.clone()))
-                    .collect()
-            }
+            Ok(sessions) => sessions
+                .values()
+                .map(|s| (s.id, s.name.clone(), s.agent_state.clone()))
+                .collect(),
             Err(_) => {
                 error!("Failed to read sessions");
                 vec![]
@@ -86,7 +85,9 @@ impl AdvancedChatState {
     }
 
     pub fn set_active_session(&self, session_id: Uuid) -> Result<()> {
-        let mut active_id = self.active_session_id.write()
+        let mut active_id = self
+            .active_session_id
+            .write()
             .map_err(|e| anyhow!("Failed to lock active session: {}", e))?;
         *active_id = Some(session_id);
         Ok(())
@@ -100,7 +101,9 @@ impl AdvancedChatState {
     }
 
     pub fn add_message_to_session(&self, session_id: Uuid, message: ChatMessage) -> Result<()> {
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
 
         if let Some(session) = sessions.get_mut(&session_id) {
@@ -123,13 +126,17 @@ impl AdvancedChatState {
     }
 
     pub fn get_agent_state(&self, session_id: Uuid) -> Option<AgentState> {
-        self.sessions.read().ok()?
+        self.sessions
+            .read()
+            .ok()?
             .get(&session_id)
             .map(|s| s.agent_state.clone())
     }
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|e| anyhow::anyhow!("Failed to write sessions: {}", e))?;
 
         if let Some(session) = sessions.get_mut(&session_id) {
@@ -146,7 +153,8 @@ impl AdvancedChatState {
         let sender_guard = self.agent_command_sender.lock().await;
 
         if let Some(sender) = sender_guard.as_ref() {
-            sender.send(command)
+            sender
+                .send(command)
                 .map_err(|e| anyhow!("Failed to send agent command: {}", e))?;
         } else {
             return Err(anyhow!("Agent worker not initialized"));
@@ -189,7 +197,9 @@ impl AdvancedChatState {
             recording_file: None,
         };
 
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
         sessions.insert(session_id, session);
 
@@ -215,9 +225,12 @@ impl AdvancedChatState {
                 spinner_state.store((current + 1) % 10, std::sync::atomic::Ordering::Relaxed);
 
                 // Send callback to update UI
-                if cb_sink.send(Box::new(|siv| {
-                    // UI update handled by periodic refresh
-                })).is_err() {
+                if cb_sink
+                    .send(Box::new(|siv| {
+                        // UI update handled by periodic refresh
+                    }))
+                    .is_err()
+                {
                     break; // Exit if UI is closed
                 }
             }
@@ -227,7 +240,9 @@ impl AdvancedChatState {
     pub async fn refresh_tools_from_mcp(&self) -> Result<()> {
         let servers = {
             let service = self.mcp_service.lock().await;
-            service.list_servers().into_iter()
+            service
+                .list_servers()
+                .into_iter()
                 .map(|(id, config)| (id.clone(), config.clone()))
                 .collect::<Vec<(String, McpServerConfig)>>()
         };
@@ -243,7 +258,10 @@ impl AdvancedChatState {
                     {
                         let mut service = self.mcp_service.lock().await;
                         if let Err(e) = service.initialize_server(&server_id).await {
-                            warn!("Failed to initialize server {} for tool refresh: {}", server_id, e);
+                            warn!(
+                                "Failed to initialize server {} for tool refresh: {}",
+                                server_id, e
+                            );
                         }
                     }
 
@@ -252,7 +270,10 @@ impl AdvancedChatState {
                     match service.list_tools(&server_id).await {
                         Ok(tools) => tools,
                         Err(e) => {
-                            warn!("Failed to fetch tools from {}: {}, using defaults", server_id, e);
+                            warn!(
+                                "Failed to fetch tools from {}: {}, using defaults",
+                                server_id, e
+                            );
                             // Fallback to default tools
                             vec![
                                 McpTool {
@@ -280,14 +301,24 @@ impl AdvancedChatState {
         Ok(())
     }
 
-    pub fn update_processing_message(&self, session_id: Uuid, message: String, spinner_index: usize) -> Result<()> {
-        let mut sessions = self.sessions.write()
+    pub fn update_processing_message(
+        &self,
+        session_id: Uuid,
+        message: String,
+        spinner_index: usize,
+    ) -> Result<()> {
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|e| anyhow::anyhow!("Failed to write sessions: {}", e))?;
         if let Some(session) = sessions.get_mut(&session_id) {
             if let Some(last_msg) = session.messages.last_mut() {
                 if let ChatMessage::Processing { .. } = last_msg {
                     // Update the existing processing message
-                    *last_msg = ChatMessage::Processing { message, spinner_index };
+                    *last_msg = ChatMessage::Processing {
+                        message,
+                        spinner_index,
+                    };
                 }
             }
         }
@@ -314,9 +345,12 @@ impl AdvancedChatState {
         for (server_id, tool_list) in tools.iter() {
             context.push_str(&format!("\nServer: {}\n", server_id));
             for tool in tool_list.iter() {
-                context.push_str(&format!("  - {}: {}\n",
+                context.push_str(&format!(
+                    "  - {}: {}\n",
                     tool.name,
-                    tool.description.as_ref().unwrap_or(&"No description".to_string())
+                    tool.description
+                        .as_ref()
+                        .unwrap_or(&"No description".to_string())
                 ));
 
                 // Add input schema info if available

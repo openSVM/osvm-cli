@@ -3,15 +3,15 @@
 //! This module provides a comprehensive plugin architecture that allows users
 //! to extend the agent chat interface with custom commands, tools, and behaviors.
 
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use log::{debug, warn, error, info};
 use tokio::process::Command as TokioCommand;
-use async_trait::async_trait;
 
 /// Plugin metadata and configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,7 +147,11 @@ impl EchoPlugin {
                 dependencies: vec![],
                 permissions: vec![],
                 min_osvm_version: "0.8.0".to_string(),
-                supported_platforms: vec!["linux".to_string(), "macos".to_string(), "windows".to_string()],
+                supported_platforms: vec![
+                    "linux".to_string(),
+                    "macos".to_string(),
+                    "windows".to_string(),
+                ],
                 config_schema: None,
                 default_config: None,
             },
@@ -217,7 +221,11 @@ impl TimePlugin {
                 dependencies: vec![],
                 permissions: vec![],
                 min_osvm_version: "0.8.0".to_string(),
-                supported_platforms: vec!["linux".to_string(), "macos".to_string(), "windows".to_string()],
+                supported_platforms: vec![
+                    "linux".to_string(),
+                    "macos".to_string(),
+                    "windows".to_string(),
+                ],
                 config_schema: Some(serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -252,7 +260,9 @@ impl Plugin for TimePlugin {
     }
 
     async fn execute(&self, context: PluginContext) -> Result<PluginResult> {
-        let format = context.config.get("format")
+        let format = context
+            .config
+            .get("format")
             .and_then(|v| v.as_str())
             .unwrap_or("%Y-%m-%d %H:%M:%S UTC");
 
@@ -306,7 +316,8 @@ impl ExternalPlugin {
         let manifest: PluginManifest = serde_json::from_str(&content)
             .map_err(|e| anyhow!("Failed to parse plugin manifest: {}", e))?;
 
-        let plugin_dir = manifest_path.parent()
+        let plugin_dir = manifest_path
+            .parent()
             .ok_or_else(|| anyhow!("Invalid manifest path"))?;
 
         let executable_path = plugin_dir.join(&manifest.entry_point);
@@ -339,28 +350,35 @@ impl Plugin for ExternalPlugin {
         // Execute plugin
         let mut cmd = TokioCommand::new(&self.executable_path);
         cmd.stdin(Stdio::piped())
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         // Add environment variables
         for (key, value) in &context.environment {
             cmd.env(key, value);
         }
 
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| anyhow!("Failed to spawn plugin process: {}", e))?;
 
         // Send input to plugin
         if let Some(stdin) = child.stdin.as_mut() {
             use tokio::io::AsyncWriteExt;
-            stdin.write_all(input_json.as_bytes()).await
+            stdin
+                .write_all(input_json.as_bytes())
+                .await
                 .map_err(|e| anyhow!("Failed to write to plugin stdin: {}", e))?;
-            stdin.shutdown().await
+            stdin
+                .shutdown()
+                .await
                 .map_err(|e| anyhow!("Failed to close plugin stdin: {}", e))?;
         }
 
         // Wait for completion
-        let output = child.wait_with_output().await
+        let output = child
+            .wait_with_output()
+            .await
             .map_err(|e| anyhow!("Plugin execution failed: {}", e))?;
 
         // Parse result
@@ -397,9 +415,7 @@ impl Plugin for ExternalPlugin {
     fn can_handle(&self, input: &str) -> bool {
         // Check if input matches plugin's command pattern
         match &self.manifest.plugin_type {
-            PluginType::Command => {
-                input.starts_with(&format!("/{}", self.manifest.name))
-            },
+            PluginType::Command => input.starts_with(&format!("/{}", self.manifest.name)),
             PluginType::Filter => true, // Filters can process any input
             _ => false,
         }
@@ -441,12 +457,14 @@ impl PluginManager {
         manager.register_plugin(Box::new(TimePlugin::new())).await?;
 
         // Enable built-in plugins by default
-        manager.enabled_plugins.extend(vec![
-            "echo".to_string(),
-            "time".to_string(),
-        ]);
+        manager
+            .enabled_plugins
+            .extend(vec!["echo".to_string(), "time".to_string()]);
 
-        info!("Plugin manager initialized with {} built-in plugins", manager.plugins.len());
+        info!(
+            "Plugin manager initialized with {} built-in plugins",
+            manager.plugins.len()
+        );
         Ok(manager)
     }
 
@@ -456,7 +474,9 @@ impl PluginManager {
 
         // Initialize plugin with default config
         if let Some(default_config) = &plugin.manifest().default_config {
-            if let Ok(config) = serde_json::from_value::<HashMap<String, serde_json::Value>>(default_config.clone()) {
+            if let Ok(config) =
+                serde_json::from_value::<HashMap<String, serde_json::Value>>(default_config.clone())
+            {
                 plugin.initialize(config.clone()).await?;
                 self.plugin_configs.insert(name.clone(), config);
             }
@@ -488,7 +508,7 @@ impl PluginManager {
                         Ok(plugin) => {
                             info!("Loading external plugin from {:?}", path);
                             self.register_plugin(Box::new(plugin)).await?;
-                        },
+                        }
                         Err(e) => {
                             warn!("Failed to load plugin from {:?}: {}", path, e);
                         }
@@ -513,10 +533,12 @@ impl PluginManager {
                             results.push(result);
 
                             // For command plugins, stop after first successful execution
-                            if matches!(plugin.manifest().plugin_type, PluginType::Command) && results.last().unwrap().success {
+                            if matches!(plugin.manifest().plugin_type, PluginType::Command)
+                                && results.last().unwrap().success
+                            {
                                 break;
                             }
-                        },
+                        }
                         Err(e) => {
                             error!("Plugin '{}' execution failed: {}", plugin_name, e);
                             results.push(PluginResult {
@@ -545,12 +567,12 @@ impl PluginManager {
                 match plugin.manifest().plugin_type {
                     PluginType::Command => {
                         commands.push(format!("/{}", plugin.manifest().name));
-                    },
+                    }
                     PluginType::Composite(ref types) => {
                         if types.contains(&PluginType::Command) {
                             commands.push(format!("/{}", plugin.manifest().name));
                         }
-                    },
+                    }
                     _ => {}
                 }
             }
@@ -597,7 +619,7 @@ impl PluginManager {
             match plugin.health_check().await {
                 Ok(healthy) => {
                     results.insert(name.clone(), healthy);
-                },
+                }
                 Err(e) => {
                     warn!("Health check failed for plugin '{}': {}", name, e);
                     results.insert(name.clone(), false);
@@ -640,14 +662,17 @@ impl PluginManager {
         let config: serde_json::Value = serde_json::from_str(&content)?;
 
         if let Some(enabled) = config.get("enabled_plugins").and_then(|v| v.as_array()) {
-            self.enabled_plugins = enabled.iter()
+            self.enabled_plugins = enabled
+                .iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
         }
 
         if let Some(configs) = config.get("plugin_configs").and_then(|v| v.as_object()) {
             for (name, plugin_config) in configs {
-                if let Ok(config_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(plugin_config.clone()) {
+                if let Ok(config_map) = serde_json::from_value::<HashMap<String, serde_json::Value>>(
+                    plugin_config.clone(),
+                ) {
                     self.plugin_configs.insert(name.clone(), config_map);
                 }
             }
@@ -659,15 +684,15 @@ impl PluginManager {
 
     /// Get configuration file path
     fn config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
         Ok(PathBuf::from(home).join(".osvm").join("plugins.json"))
     }
 
     /// Get plugins directory path
     pub fn plugins_dir() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
         Ok(PathBuf::from(home).join(".osvm").join("plugins"))
     }
 }
@@ -727,7 +752,10 @@ impl PluginInstaller {
             }
         }
 
-        info!("Successfully installed plugin '{}' from {}", repo_name, repo_url);
+        info!(
+            "Successfully installed plugin '{}' from {}",
+            repo_name, repo_url
+        );
         Ok(repo_name)
     }
 
@@ -840,11 +868,15 @@ mod tests {
         let installer = PluginInstaller::new().unwrap();
 
         assert_eq!(
-            installer.extract_repo_name("https://github.com/user/repo.git").unwrap(),
+            installer
+                .extract_repo_name("https://github.com/user/repo.git")
+                .unwrap(),
             "repo"
         );
         assert_eq!(
-            installer.extract_repo_name("https://github.com/user/repo").unwrap(),
+            installer
+                .extract_repo_name("https://github.com/user/repo")
+                .unwrap(),
             "repo"
         );
     }

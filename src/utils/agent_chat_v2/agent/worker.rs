@@ -4,9 +4,9 @@ use anyhow::Result;
 use log::error;
 use tokio::sync::mpsc;
 
-use super::commands::AgentCommand;
 use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
+use super::commands::AgentCommand;
 
 impl AdvancedChatState {
     pub async fn start_agent_worker(&self) -> Result<()> {
@@ -38,8 +38,12 @@ impl AdvancedChatState {
                     AgentCommand::StopAgent { session_id } => {
                         state.set_agent_state(session_id, AgentState::Idle);
                     }
-                    AgentCommand::GetStatus { session_id, response } => {
-                        let status = state.get_agent_state(session_id)
+                    AgentCommand::GetStatus {
+                        session_id,
+                        response,
+                    } => {
+                        let status = state
+                            .get_agent_state(session_id)
                             .unwrap_or(AgentState::Error("Session not found".to_string()));
                         let _ = response.send(status);
                     }

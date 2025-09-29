@@ -1,8 +1,8 @@
 //! Command processing logic for handling user input
 
 use super::Colors;
-use crate::services::mcp_service::{McpService, McpServerConfig};
-use anyhow::{Result, anyhow};
+use crate::services::mcp_service::{McpServerConfig, McpService};
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 
 // Command handler functions
@@ -115,7 +115,10 @@ impl CommandProcessor {
 
         // Check for special command patterns
         if command.starts_with('/') {
-            return Ok(CommandResult::Error(format!("Unknown command: {}", command)));
+            return Ok(CommandResult::Error(format!(
+                "Unknown command: {}",
+                command
+            )));
         }
 
         if command.starts_with('@') {
@@ -133,7 +136,7 @@ impl CommandProcessor {
 
         if parts.len() != 2 {
             return Ok(CommandResult::Error(
-                "Invalid tool syntax. Use @server/tool".to_string()
+                "Invalid tool syntax. Use @server/tool".to_string(),
             ));
         }
 
@@ -143,16 +146,18 @@ impl CommandProcessor {
 
         if server.is_empty() || tool.is_empty() {
             return Ok(CommandResult::Error(
-                "Server and tool names cannot be empty".to_string()
+                "Server and tool names cannot be empty".to_string(),
             ));
         }
 
         Ok(CommandResult::Success(format!(
             "{}Executing tool: {}/{}{}",
-            Colors::YELLOW, server, tool, Colors::RESET
+            Colors::YELLOW,
+            server,
+            tool,
+            Colors::RESET
         )))
     }
-
 
     /// Register custom command handler
     pub fn register_command(&mut self, command: &str, handler: CommandHandler) {
@@ -183,12 +188,17 @@ impl CommandProcessor {
         // Safe array access with bounds checking
         let server = server_tool.get(0)?.to_string();
         let tool = server_tool.get(1)?.to_string();
-        
+
         if server.is_empty() || tool.is_empty() {
             return None;
         }
 
-        let args: Vec<String> = parts.get(1..).unwrap_or(&[]).iter().map(|s| s.to_string()).collect();
+        let args: Vec<String> = parts
+            .get(1..)
+            .unwrap_or(&[])
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
         Some((server, tool, args))
     }
@@ -197,7 +207,7 @@ impl CommandProcessor {
 /// Command context for advanced processing
 pub struct CommandContext {
     pub chat_history: Vec<String>,
-    pub mcp_servers: Vec<(String, bool)>,  // (server_id, enabled)
+    pub mcp_servers: Vec<(String, bool)>, // (server_id, enabled)
     pub current_task: Option<String>,
 }
 

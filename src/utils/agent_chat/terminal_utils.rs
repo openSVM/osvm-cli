@@ -1,12 +1,16 @@
 //! Terminal utility functions for display and input management
 
 use super::{Colors, RealtimeSuggestion};
-use std::io::{self, Write};
 use anyhow::Result;
+use std::io::{self, Write};
 
 /// Show input border for visual separation
 pub fn show_input_border() {
-    println!("{}┌──────────────────────────────────────────────────────┐{}", Colors::GREEN, Colors::RESET);
+    println!(
+        "{}┌──────────────────────────────────────────────────────┐{}",
+        Colors::GREEN,
+        Colors::RESET
+    );
 }
 
 /// Print input prompt
@@ -17,7 +21,11 @@ pub fn print_input_prompt() {
 
 /// Close input border
 pub fn close_input_border() {
-    println!("{}└──────────────────────────────────────────────────────┘{}", Colors::GREEN, Colors::RESET);
+    println!(
+        "{}└──────────────────────────────────────────────────────┘{}",
+        Colors::GREEN,
+        Colors::RESET
+    );
 }
 
 /// Clear current line
@@ -34,7 +42,12 @@ pub fn clear_suggestions_display() {
 
 /// Clear inline suggestion (ghost text)
 pub fn clear_inline_suggestion(current_input: &str) {
-    print!("\r\x1b[K{}│ > {}{}", Colors::GREEN, Colors::RESET, current_input);
+    print!(
+        "\r\x1b[K{}│ > {}{}",
+        Colors::GREEN,
+        Colors::RESET,
+        current_input
+    );
     io::stdout().flush().unwrap_or(());
 }
 
@@ -65,10 +78,15 @@ pub fn show_realtime_suggestions_fixed(_suggestions: &[RealtimeSuggestion], _cur
 
 /// Show available tools from MCP servers
 pub fn show_available_tools(servers: &[(String, Vec<String>)]) {
-    println!("\n{}╭─ Available MCP Tools ──────────────────────────╮{}", Colors::CYAN, Colors::RESET);
+    println!(
+        "\n{}╭─ Available MCP Tools ──────────────────────────╮{}",
+        Colors::CYAN,
+        Colors::RESET
+    );
 
     for (server_id, tools) in servers {
-        println!("{}│ {}{}{} ({} tools){}",
+        println!(
+            "{}│ {}{}{} ({} tools){}",
             Colors::CYAN,
             Colors::BLUE,
             server_id,
@@ -78,7 +96,8 @@ pub fn show_available_tools(servers: &[(String, Vec<String>)]) {
         );
 
         for tool in tools.iter().take(3) {
-            println!("{}│   • {}{}{}",
+            println!(
+                "{}│   • {}{}{}",
                 Colors::CYAN,
                 Colors::YELLOW,
                 tool,
@@ -87,7 +106,8 @@ pub fn show_available_tools(servers: &[(String, Vec<String>)]) {
         }
 
         if tools.len() > 3 {
-            println!("{}│   ... and {} more{}",
+            println!(
+                "{}│   ... and {} more{}",
                 Colors::CYAN,
                 tools.len() - 3,
                 Colors::RESET
@@ -95,7 +115,11 @@ pub fn show_available_tools(servers: &[(String, Vec<String>)]) {
         }
     }
 
-    println!("{}╰────────────────────────────────────────────────╯{}\n", Colors::CYAN, Colors::RESET);
+    println!(
+        "{}╰────────────────────────────────────────────────╯{}\n",
+        Colors::CYAN,
+        Colors::RESET
+    );
 }
 
 /// Clear screen and reset cursor

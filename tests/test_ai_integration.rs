@@ -32,10 +32,22 @@ async fn test_enhanced_query_format() {
     );
 
     // Test the format we use in handlers.rs
-    assert!(enhanced_query.contains("OSVM Agent"), "Query should contain OSVM Agent context");
-    assert!(enhanced_query.contains("Solana blockchain operations"), "Query should mention Solana operations");
-    assert!(enhanced_query.contains("MCP"), "Query should mention MCP tools");
-    assert!(enhanced_query.len() > 200, "Enhanced query should be substantial");
+    assert!(
+        enhanced_query.contains("OSVM Agent"),
+        "Query should contain OSVM Agent context"
+    );
+    assert!(
+        enhanced_query.contains("Solana blockchain operations"),
+        "Query should mention Solana operations"
+    );
+    assert!(
+        enhanced_query.contains("MCP"),
+        "Query should mention MCP tools"
+    );
+    assert!(
+        enhanced_query.len() > 200,
+        "Enhanced query should be substantial"
+    );
 
     println!("✓ Enhanced query format: {} chars", enhanced_query.len());
     println!("✓ Contains OSVM context: ✓");
@@ -54,9 +66,15 @@ async fn test_ai_service_with_mock_query() {
     // This will either succeed with real AI or fail gracefully
     match ai_service.query_with_debug(&test_query, true).await {
         Ok(response) => {
-            println!("✓ AI Service SUCCESS: Got response ({} chars)", response.len());
+            println!(
+                "✓ AI Service SUCCESS: Got response ({} chars)",
+                response.len()
+            );
             assert!(!response.is_empty(), "Response should not be empty");
-            println!("✓ Response preview: {}", &response[..std::cmp::min(100, response.len())]);
+            println!(
+                "✓ Response preview: {}",
+                &response[..std::cmp::min(100, response.len())]
+            );
         }
         Err(e) => {
             println!("✓ AI Service handled error gracefully: {}", e);
@@ -78,11 +96,23 @@ fn test_suggestion_query_format() {
         user_input
     );
 
-    assert!(suggestion_query.contains("5 short follow-up"), "Should ask for 5 suggestions");
-    assert!(suggestion_query.contains("Solana/OSVM"), "Should mention Solana/OSVM context");
-    assert!(suggestion_query.contains("one per line"), "Should specify format");
+    assert!(
+        suggestion_query.contains("5 short follow-up"),
+        "Should ask for 5 suggestions"
+    );
+    assert!(
+        suggestion_query.contains("Solana/OSVM"),
+        "Should mention Solana/OSVM context"
+    );
+    assert!(
+        suggestion_query.contains("one per line"),
+        "Should specify format"
+    );
 
-    println!("✓ Suggestion query format: {} chars", suggestion_query.len());
+    println!(
+        "✓ Suggestion query format: {} chars",
+        suggestion_query.len()
+    );
     println!("✓ Asks for structured output: ✓");
 }
 
@@ -101,9 +131,18 @@ fn test_fallback_response_format() {
         mock_error
     );
 
-    assert!(fallback_response.contains("encountered an issue"), "Should explain the error");
-    assert!(fallback_response.contains("can still help"), "Should offer alternative assistance");
-    assert!(fallback_response.len() > 50, "Should provide substantial fallback help");
+    assert!(
+        fallback_response.contains("encountered an issue"),
+        "Should explain the error"
+    );
+    assert!(
+        fallback_response.contains("can still help"),
+        "Should offer alternative assistance"
+    );
+    assert!(
+        fallback_response.len() > 50,
+        "Should provide substantial fallback help"
+    );
 
     println!("✓ Fallback response: {} chars", fallback_response.len());
     println!("✓ Contains error explanation: ✓");
@@ -118,7 +157,8 @@ fn test_modular_architecture() {
     let ai_service = AiService::new();
 
     // Test environment variable access (like the real code does)
-    let openai_url = env::var("OPENAI_URL").unwrap_or_else(|_| "https://api.openai.com/v1/chat/completions".to_string());
+    let openai_url = env::var("OPENAI_URL")
+        .unwrap_or_else(|_| "https://api.openai.com/v1/chat/completions".to_string());
     let has_key = env::var("OPENAI_KEY").is_ok();
 
     println!("✓ AI URL: {}", openai_url);

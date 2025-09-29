@@ -1,6 +1,6 @@
 //! AI-powered suggestion generation and handling
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use log::warn;
 use uuid::Uuid;
 
@@ -10,19 +10,28 @@ use super::super::types::ChatMessage;
 impl AdvancedChatState {
     pub async fn generate_reply_suggestions(&self, session_id: Uuid) -> Result<()> {
         // Get the chat context
-        let session = self.get_session_by_id(session_id)
+        let session = self
+            .get_session_by_id(session_id)
             .ok_or_else(|| anyhow!("Session not found"))?;
 
         // Build context from recent messages (last 10 messages)
-        let recent_messages = session.messages.iter()
+        let recent_messages = session
+            .messages
+            .iter()
             .rev()
             .take(10)
             .rev()
             .map(|msg| match msg {
                 ChatMessage::User(text) => format!("User: {}", text),
                 ChatMessage::Agent(text) => format!("Agent: {}", text),
-                ChatMessage::ToolResult { tool_name, result, .. } => {
-                    format!("Tool Result [{}]: {}", tool_name, serde_json::to_string(result).unwrap_or_default())
+                ChatMessage::ToolResult {
+                    tool_name, result, ..
+                } => {
+                    format!(
+                        "Tool Result [{}]: {}",
+                        tool_name,
+                        serde_json::to_string(result).unwrap_or_default()
+                    )
                 }
                 _ => String::new(),
             })
@@ -89,8 +98,12 @@ impl AdvancedChatState {
                     }
 
                     // Add a system message to show suggestions are available
-                    self.add_message_to_session(session_id,
-                        ChatMessage::System("Reply suggestions available (press 1-5 to insert)".to_string()))?;
+                    self.add_message_to_session(
+                        session_id,
+                        ChatMessage::System(
+                            "Reply suggestions available (press 1-5 to insert)".to_string(),
+                        ),
+                    )?;
 
                     // Note: UI refresh needs to happen from the main thread
                 }

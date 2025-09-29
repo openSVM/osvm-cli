@@ -4,13 +4,13 @@
 //! to ensure the refactored module is production-ready under all conditions.
 
 use anyhow::Result;
+use serde_json::json;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use serde_json::json;
 
 use osvm::utils::agent_chat_v2::{
-    types::{ChatMessage, AgentState},
     state::AdvancedChatState,
+    types::{AgentState, ChatMessage},
 };
 
 /// Test fixture with advanced configuration (no background services for testing)
@@ -35,7 +35,9 @@ impl AdvancedTestFixture {
 
     async fn with_sessions(mut self, count: usize) -> Result<Self> {
         for i in 0..count {
-            let session_id = self.state.create_session(format!("Test Session {}", i + 1))?;
+            let session_id = self
+                .state
+                .create_session(format!("Test Session {}", i + 1))?;
             self.sessions.push(session_id);
         }
         Ok(self)
@@ -50,8 +52,7 @@ impl AdvancedTestFixture {
 
 #[tokio::test]
 async fn test_large_scale_session_management() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(50).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(50).await?;
 
     // Verify all sessions created
     let session_names = fixture.state.get_session_names();
@@ -69,28 +70,33 @@ async fn test_large_scale_session_management() -> Result<()> {
         assert_eq!(active_session.unwrap().id, session_id);
     }
 
-    println!("✅ Large scale session management test completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Large scale session management test completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_high_volume_message_processing() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(5).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(5).await?;
 
     // Add large number of messages to each session
     for session_id in &fixture.sessions {
         for i in 0..500 {
             fixture.state.add_message_to_session(
                 *session_id,
-                ChatMessage::User(format!("Stress test message {} in session {}", i, session_id))
+                ChatMessage::User(format!(
+                    "Stress test message {} in session {}",
+                    i, session_id
+                )),
             )?;
 
             // Add various message types
             if i % 10 == 0 {
                 fixture.state.add_message_to_session(
                     *session_id,
-                    ChatMessage::Agent(format!("Agent response {}", i))
+                    ChatMessage::Agent(format!("Agent response {}", i)),
                 )?;
             }
 
@@ -101,7 +107,7 @@ async fn test_high_volume_message_processing() -> Result<()> {
                         tool_name: "stress_tool".to_string(),
                         result: json!({"iteration": i, "status": "success"}),
                         execution_id: format!("exec_{}", i),
-                    }
+                    },
                 )?;
             }
         }
@@ -110,17 +116,22 @@ async fn test_high_volume_message_processing() -> Result<()> {
     // Verify message limits are enforced
     for session_id in &fixture.sessions {
         let session = fixture.state.get_session_by_id(*session_id).unwrap();
-        assert!(session.messages.len() <= 1000, "Message limit should be enforced");
+        assert!(
+            session.messages.len() <= 1000,
+            "Message limit should be enforced"
+        );
     }
 
-    println!("✅ High volume message processing completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ High volume message processing completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_concurrent_agent_operations() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(10).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(10).await?;
 
     let mut handles = vec![];
 
@@ -143,7 +154,7 @@ async fn test_concurrent_agent_operations() -> Result<()> {
                 // Add messages concurrently
                 let _ = state.add_message_to_session(
                     session_id,
-                    ChatMessage::User(format!("Concurrent input {}", i))
+                    ChatMessage::User(format!("Concurrent input {}", i)),
                 );
 
                 // Small delay to create interleaving
@@ -164,14 +175,16 @@ async fn test_concurrent_agent_operations() -> Result<()> {
         assert!(state.is_some());
     }
 
-    println!("✅ Concurrent agent operations completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Concurrent agent operations completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_recording_under_stress() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(3).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(3).await?;
 
     let process_id = std::process::id();
     let temp_files = vec![
@@ -192,13 +205,13 @@ async fn test_recording_under_stress() -> Result<()> {
         for (i, session_id) in fixture.sessions.iter().enumerate() {
             fixture.state.add_message_to_session(
                 *session_id,
-                ChatMessage::User(format!("Rapid message {} to session {}", round, i))
+                ChatMessage::User(format!("Rapid message {} to session {}", round, i)),
             )?;
 
             if round % 10 == 0 {
                 fixture.state.add_message_to_session(
                     *session_id,
-                    ChatMessage::Agent(format!("Agent burst response {}", round))
+                    ChatMessage::Agent(format!("Agent burst response {}", round)),
                 )?;
             }
         }
@@ -223,14 +236,16 @@ async fn test_recording_under_stress() -> Result<()> {
         std::fs::remove_file(file_path)?;
     }
 
-    println!("✅ Recording under stress completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Recording under stress completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_memory_pressure_and_cleanup() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(1).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(1).await?;
 
     let session_id = fixture.sessions[0];
 
@@ -241,7 +256,7 @@ async fn test_memory_pressure_and_cleanup() -> Result<()> {
             ChatMessage::Processing {
                 message: format!("Processing operation {}", i),
                 spinner_index: i % 10,
-            }
+            },
         )?;
 
         // Periodically clean up processing messages
@@ -261,36 +276,43 @@ async fn test_memory_pressure_and_cleanup() -> Result<()> {
     }
     let cleanup_time = cleanup_start.elapsed();
 
-    assert!(cleanup_time < Duration::from_millis(100), "Cleanup should be fast");
+    assert!(
+        cleanup_time < Duration::from_millis(100),
+        "Cleanup should be fast"
+    );
 
-    println!("✅ Memory pressure test completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Memory pressure test completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_edge_case_scenarios() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(1).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(1).await?;
 
     let session_id = fixture.sessions[0];
 
     // Test empty messages
-    fixture.state.add_message_to_session(session_id, ChatMessage::User("".to_string()))?;
-    fixture.state.add_message_to_session(session_id, ChatMessage::Agent("".to_string()))?;
+    fixture
+        .state
+        .add_message_to_session(session_id, ChatMessage::User("".to_string()))?;
+    fixture
+        .state
+        .add_message_to_session(session_id, ChatMessage::Agent("".to_string()))?;
 
     // Test very long messages
     let long_message = "a".repeat(10000);
-    fixture.state.add_message_to_session(
-        session_id,
-        ChatMessage::User(long_message.clone())
-    )?;
+    fixture
+        .state
+        .add_message_to_session(session_id, ChatMessage::User(long_message.clone()))?;
 
     // Test special characters and unicode
     let unicode_message = "🚀 Testing unicode: 你好 مرحبا Здравствуй 🎉";
-    fixture.state.add_message_to_session(
-        session_id,
-        ChatMessage::User(unicode_message.to_string())
-    )?;
+    fixture
+        .state
+        .add_message_to_session(session_id, ChatMessage::User(unicode_message.to_string()))?;
 
     // Test JSON with complex structure
     let complex_json = json!({
@@ -309,7 +331,7 @@ async fn test_edge_case_scenarios() -> Result<()> {
             tool_name: "complex_tool".to_string(),
             result: complex_json,
             execution_id: "complex_exec".to_string(),
-        }
+        },
     )?;
 
     // Test rapid state changes
@@ -330,14 +352,16 @@ async fn test_edge_case_scenarios() -> Result<()> {
     let session = fixture.state.get_session_by_id(session_id).unwrap();
     assert!(!session.messages.is_empty());
 
-    println!("✅ Edge case scenarios completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Edge case scenarios completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_error_recovery_scenarios() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(1).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(1).await?;
 
     let session_id = fixture.sessions[0];
 
@@ -347,10 +371,12 @@ async fn test_error_recovery_scenarios() -> Result<()> {
     // These should not panic or cause corruption
     fixture.state.add_message_to_session(
         fake_session,
-        ChatMessage::User("Should not crash".to_string())
+        ChatMessage::User("Should not crash".to_string()),
     )?;
 
-    fixture.state.set_agent_state(fake_session, AgentState::Error("Test error".to_string()));
+    fixture
+        .state
+        .set_agent_state(fake_session, AgentState::Error("Test error".to_string()));
 
     let result = fixture.state.remove_last_processing_message(fake_session);
     assert!(result.is_ok()); // Should handle gracefully
@@ -382,15 +408,19 @@ async fn test_error_recovery_scenarios() -> Result<()> {
     // Verify original session is still functional
     fixture.state.add_message_to_session(
         session_id,
-        ChatMessage::User("Recovery test message".to_string())
+        ChatMessage::User("Recovery test message".to_string()),
     )?;
 
     let session = fixture.state.get_session_by_id(session_id).unwrap();
-    assert!(session.messages.iter().any(|msg| {
-        matches!(msg, ChatMessage::User(text) if text.contains("Recovery test"))
-    }));
+    assert!(session
+        .messages
+        .iter()
+        .any(|msg| { matches!(msg, ChatMessage::User(text) if text.contains("Recovery test")) }));
 
-    println!("✅ Error recovery scenarios completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Error recovery scenarios completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
@@ -402,13 +432,21 @@ async fn test_performance_benchmarks() -> Result<()> {
     let session_creation_start = Instant::now();
     let mut session_ids = Vec::new();
     for i in 0..100 {
-        let session_id = fixture.state.create_session(format!("Benchmark Session {}", i))?;
+        let session_id = fixture
+            .state
+            .create_session(format!("Benchmark Session {}", i))?;
         session_ids.push(session_id);
     }
     let session_creation_time = session_creation_start.elapsed();
 
-    println!("📊 Session creation benchmark: 100 sessions in {:?}", session_creation_time);
-    assert!(session_creation_time < Duration::from_millis(500), "Session creation should be fast");
+    println!(
+        "📊 Session creation benchmark: 100 sessions in {:?}",
+        session_creation_time
+    );
+    assert!(
+        session_creation_time < Duration::from_millis(500),
+        "Session creation should be fast"
+    );
 
     // Benchmark message adding
     let message_start = Instant::now();
@@ -416,34 +454,50 @@ async fn test_performance_benchmarks() -> Result<()> {
         for j in 0..100 {
             fixture.state.add_message_to_session(
                 *session_id,
-                ChatMessage::User(format!("Benchmark message {} in session {}", j, i))
+                ChatMessage::User(format!("Benchmark message {} in session {}", j, i)),
             )?;
         }
     }
     let message_time = message_start.elapsed();
 
-    println!("📊 Message adding benchmark: 1000 messages in {:?}", message_time);
-    assert!(message_time < Duration::from_millis(200), "Message adding should be fast");
+    println!(
+        "📊 Message adding benchmark: 1000 messages in {:?}",
+        message_time
+    );
+    assert!(
+        message_time < Duration::from_millis(200),
+        "Message adding should be fast"
+    );
 
     // Benchmark state changes
     let state_change_start = Instant::now();
     for _ in 0..1000 {
         let session_id = session_ids[0]; // Use first session for simplicity
-        fixture.state.set_agent_state(session_id, AgentState::Thinking);
+        fixture
+            .state
+            .set_agent_state(session_id, AgentState::Thinking);
     }
     let state_change_time = state_change_start.elapsed();
 
-    println!("📊 State change benchmark: 1000 state changes in {:?}", state_change_time);
-    assert!(state_change_time < Duration::from_millis(100), "State changes should be fast");
+    println!(
+        "📊 State change benchmark: 1000 state changes in {:?}",
+        state_change_time
+    );
+    assert!(
+        state_change_time < Duration::from_millis(100),
+        "State changes should be fast"
+    );
 
-    println!("✅ Performance benchmarks completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Performance benchmarks completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_data_consistency_under_load() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(5).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(5).await?;
 
     let mut handles = vec![];
 
@@ -457,7 +511,7 @@ async fn test_data_consistency_under_load() -> Result<()> {
                 // Add messages
                 let _ = state.add_message_to_session(
                     session_id,
-                    ChatMessage::User(format!("Task {} message {}", task_id, i))
+                    ChatMessage::User(format!("Task {} message {}", task_id, i)),
                 );
 
                 // Change states
@@ -495,20 +549,22 @@ async fn test_data_consistency_under_load() -> Result<()> {
         assert!(session.messages.len() <= 1000); // Cleanup should have occurred
     }
 
-    println!("✅ Data consistency under load completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Data consistency under load completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }
 
 #[tokio::test]
 async fn test_graceful_shutdown_simulation() -> Result<()> {
-    let fixture = AdvancedTestFixture::new().await?
-        .with_sessions(3).await?;
+    let fixture = AdvancedTestFixture::new().await?.with_sessions(3).await?;
 
     // Start some background activity
     for session_id in &fixture.sessions {
         fixture.state.add_message_to_session(
             *session_id,
-            ChatMessage::User("Pre-shutdown message".to_string())
+            ChatMessage::User("Pre-shutdown message".to_string()),
         )?;
     }
 
@@ -529,7 +585,10 @@ async fn test_graceful_shutdown_simulation() -> Result<()> {
     // Verify all agents are in stopped/idle state
     for session_id in &fixture.sessions {
         let state = fixture.state.get_agent_state(*session_id);
-        assert!(matches!(state, Some(AgentState::Idle) | Some(AgentState::Paused)));
+        assert!(matches!(
+            state,
+            Some(AgentState::Idle) | Some(AgentState::Paused)
+        ));
     }
 
     // Verify sessions are still accessible and consistent
@@ -538,6 +597,9 @@ async fn test_graceful_shutdown_simulation() -> Result<()> {
         assert!(session.is_some());
     }
 
-    println!("✅ Graceful shutdown simulation completed in {:?}", fixture.elapsed());
+    println!(
+        "✅ Graceful shutdown simulation completed in {:?}",
+        fixture.elapsed()
+    );
     Ok(())
 }

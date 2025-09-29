@@ -1,20 +1,20 @@
 //! Main UI layout and setup
 
-use cursive::{Cursive, CursiveExt, View};
-use cursive::views::{
-    Dialog, EditView, LinearLayout, TextView, ScrollView, Panel, Button,
-    ListView, SelectView, ResizedView, DummyView, NamedView
-};
-use cursive::traits::*;
-use cursive::direction::Orientation;
-use cursive_multiplex::{Mux, Id};
 use anyhow::Result;
+use cursive::direction::Orientation;
+use cursive::traits::*;
+use cursive::views::{
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, NamedView, Panel, ResizedView,
+    ScrollView, SelectView, TextView,
+};
+use cursive::{Cursive, CursiveExt, View};
+use cursive_multiplex::{Id, Mux};
 use uuid::Uuid;
 
 use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
-use super::handlers::*;
 use super::handlers::show_context_menu;
+use super::handlers::*;
 
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
@@ -84,14 +84,17 @@ impl AdvancedChatUI {
         });
 
         // Add Shift+Tab for reverse navigation
-        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::Tab), |s| {
-            // Try to focus input first, then chat list as fallback
-            if s.focus_name("input").is_ok() {
-                // Successfully focused input
-            } else {
-                let _ = s.focus_name("chat_list");
-            }
-        });
+        siv.add_global_callback(
+            cursive::event::Event::Shift(cursive::event::Key::Tab),
+            |s| {
+                // Try to focus input first, then chat list as fallback
+                if s.focus_name("input").is_ok() {
+                    // Successfully focused input
+                } else {
+                    let _ = s.focus_name("chat_list");
+                }
+            },
+        );
 
         // Tab and Arrow keys will handle navigation naturally through the ListView buttons
 
@@ -101,9 +104,12 @@ impl AdvancedChatUI {
         });
 
         // Also add Shift+F10 for alternate context menu access
-        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::F10), |s| {
-            show_context_menu(s, cursive::Vec2::new(0, 0));
-        });
+        siv.add_global_callback(
+            cursive::event::Event::Shift(cursive::event::Key::F10),
+            |s| {
+                show_context_menu(s, cursive::Vec2::new(0, 0));
+            },
+        );
 
         // Add resize handling to prevent crashes - gentle approach
         siv.add_global_callback(cursive::event::Event::WindowResize, |s| {
@@ -155,7 +161,9 @@ impl AdvancedChatUI {
 
             siv.add_global_callback(cursive::event::Event::CtrlChar(key_char), move |s| {
                 // Only insert suggestion if suggestions are visible AND input has focus
-                let suggestions_visible = state.suggestions_visible.read()
+                let suggestions_visible = state
+                    .suggestions_visible
+                    .read()
                     .map(|v| *v)
                     .unwrap_or(false);
 
@@ -169,16 +177,21 @@ impl AdvancedChatUI {
         for i in 1..=5 {
             let state = self.state.clone();
 
-            siv.add_global_callback(cursive::event::Event::AltChar(char::from_digit(i as u32, 10).unwrap()), move |s| {
-                // Only insert suggestion if suggestions are visible AND input has focus
-                let suggestions_visible = state.suggestions_visible.read()
-                    .map(|v| *v)
-                    .unwrap_or(false);
+            siv.add_global_callback(
+                cursive::event::Event::AltChar(char::from_digit(i as u32, 10).unwrap()),
+                move |s| {
+                    // Only insert suggestion if suggestions are visible AND input has focus
+                    let suggestions_visible = state
+                        .suggestions_visible
+                        .read()
+                        .map(|v| *v)
+                        .unwrap_or(false);
 
-                if suggestions_visible && s.find_name::<EditView>("input").is_some() {
-                    insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
-                }
-            });
+                    if suggestions_visible && s.find_name::<EditView>("input").is_some() {
+                        insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
+                    }
+                },
+            );
         }
 
         // Hide suggestions on Escape - but don't interfere with other Escape usage

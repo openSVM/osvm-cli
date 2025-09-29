@@ -1,10 +1,10 @@
 //! Core data structures and types for the advanced agent chat interface
 
-use serde::{Serialize, Deserialize};
+use crate::services::ai_service::PlannedTool;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use crate::services::ai_service::PlannedTool;
 
 /// Message types in the advanced chat interface
 #[derive(Clone, Debug, Serialize, Deserialize)]

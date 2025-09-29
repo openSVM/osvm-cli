@@ -8,9 +8,9 @@ use std::collections::HashSet;
 use uuid::Uuid;
 
 use osvm::utils::agent_chat_v2::{
-    types::{ChatMessage, AgentState},
     session::ChatSession,
     state::AdvancedChatState,
+    types::{AgentState, ChatMessage},
 };
 
 // We'll use a simple property testing approach since we don't have proptest as a dependency
@@ -42,9 +42,9 @@ async fn property_message_count_never_exceeds_limit() -> Result<()> {
 
     // Add messages in various patterns
     let patterns = vec![
-        (1500, 1),    // Add 1500 messages one at a time
-        (500, 10),    // Add 500 messages in bursts of 10
-        (2000, 100),  // Add 2000 messages in bursts of 100
+        (1500, 1),   // Add 1500 messages one at a time
+        (500, 10),   // Add 500 messages in bursts of 10
+        (2000, 100), // Add 2000 messages in bursts of 100
     ];
 
     for (total_messages, burst_size) in patterns {
@@ -58,7 +58,7 @@ async fn property_message_count_never_exceeds_limit() -> Result<()> {
             for i in message_count..burst_end {
                 state.add_message_to_session(
                     session_id,
-                    ChatMessage::User(format!("Message {}", i))
+                    ChatMessage::User(format!("Message {}", i)),
                 )?;
             }
 
@@ -117,7 +117,11 @@ async fn property_sessions_remain_independent() -> Result<()> {
 
     // Create multiple sessions
     let session_ids: Vec<Uuid> = (0..10)
-        .map(|i| state.create_session(format!("Independent Session {}", i)).unwrap())
+        .map(|i| {
+            state
+                .create_session(format!("Independent Session {}", i))
+                .unwrap()
+        })
         .collect();
 
     // Add different content to each session
@@ -125,7 +129,7 @@ async fn property_sessions_remain_independent() -> Result<()> {
         for j in 0..10 {
             state.add_message_to_session(
                 *session_id,
-                ChatMessage::User(format!("Session {} Message {}", i, j))
+                ChatMessage::User(format!("Session {} Message {}", i, j)),
             )?;
         }
 
@@ -220,14 +224,24 @@ async fn property_message_serialization_is_stable() -> Result<()> {
             (ChatMessage::System(a), ChatMessage::System(b)) => assert_eq!(a, b),
             (ChatMessage::Error(a), ChatMessage::Error(b)) => assert_eq!(a, b),
             (
-                ChatMessage::ToolCall { tool_name: a, description: ad, args: aa, execution_id: ae },
-                ChatMessage::ToolCall { tool_name: b, description: bd, args: ba, execution_id: be }
+                ChatMessage::ToolCall {
+                    tool_name: a,
+                    description: ad,
+                    args: aa,
+                    execution_id: ae,
+                },
+                ChatMessage::ToolCall {
+                    tool_name: b,
+                    description: bd,
+                    args: ba,
+                    execution_id: be,
+                },
             ) => {
                 assert_eq!(a, b);
                 assert_eq!(ad, bd);
                 assert_eq!(aa, ba);
                 assert_eq!(ae, be);
-            },
+            }
             _ => {} // Other variants are complex, just verify they didn't panic
         }
     }
@@ -239,7 +253,11 @@ async fn property_message_serialization_is_stable() -> Result<()> {
 async fn property_concurrent_operations_maintain_consistency() -> Result<()> {
     let state = AdvancedChatState::new()?;
     let session_ids: Vec<Uuid> = (0..5)
-        .map(|i| state.create_session(format!("Concurrent Session {}", i)).unwrap())
+        .map(|i| {
+            state
+                .create_session(format!("Concurrent Session {}", i))
+                .unwrap()
+        })
         .collect();
 
     let mut handles = vec![];
@@ -256,7 +274,7 @@ async fn property_concurrent_operations_maintain_consistency() -> Result<()> {
                 // Add messages
                 let _ = state_clone.add_message_to_session(
                     session_id,
-                    ChatMessage::User(format!("Task {} Operation {}", task_id, i))
+                    ChatMessage::User(format!("Task {} Operation {}", task_id, i)),
                 );
                 operation_count += 1;
 
@@ -294,12 +312,17 @@ async fn property_concurrent_operations_maintain_consistency() -> Result<()> {
 
     for (i, session_id) in session_ids.iter().enumerate() {
         let session = state.get_session_by_id(*session_id);
-        assert!(session.is_some(), "Session {} should exist after concurrent operations", i);
+        assert!(
+            session.is_some(),
+            "Session {} should exist after concurrent operations",
+            i
+        );
 
         let session = session.unwrap();
         assert!(
             !session.messages.is_empty(),
-            "Session {} should have messages after concurrent operations", i
+            "Session {} should have messages after concurrent operations",
+            i
         );
 
         // Verify message integrity
@@ -308,13 +331,17 @@ async fn property_concurrent_operations_maintain_consistency() -> Result<()> {
                 assert!(
                     text.contains(&format!("Task {}", i)),
                     "Message corruption detected in session {}: {}",
-                    i, text
+                    i,
+                    text
                 );
             }
         }
     }
 
-    println!("✅ Completed {} concurrent operations successfully", total_operations);
+    println!(
+        "✅ Completed {} concurrent operations successfully",
+        total_operations
+    );
     Ok(())
 }
 
@@ -350,16 +377,17 @@ async fn property_recording_preserves_message_order() -> Result<()> {
     let lines: Vec<&str> = content.lines().collect();
 
     // Find message lines (skip header lines that start with #)
-    let message_lines: Vec<&str> = lines.iter()
+    let message_lines: Vec<&str> = lines
+        .iter()
         .filter(|line| !line.starts_with('#') && !line.is_empty())
         .cloned()
         .collect();
 
     // Verify order is preserved in recording
     for (i, expected_msg) in ordered_messages.iter().enumerate() {
-        let found = message_lines.iter().any(|line| {
-            line.contains(expected_msg) && line.contains(&format!("({})", i))
-        });
+        let found = message_lines
+            .iter()
+            .any(|line| line.contains(expected_msg) && line.contains(&format!("({})", i)));
         assert!(
             found,
             "Message '{}' with index {} not found in correct order in recording",
@@ -404,13 +432,13 @@ async fn property_state_changes_are_atomic() -> Result<()> {
                 assert!(
                     matches!(
                         read_state,
-                        AgentState::Idle |
-                        AgentState::Thinking |
-                        AgentState::Planning |
-                        AgentState::ExecutingTool(_) |
-                        AgentState::Waiting |
-                        AgentState::Paused |
-                        AgentState::Error(_)
+                        AgentState::Idle
+                            | AgentState::Thinking
+                            | AgentState::Planning
+                            | AgentState::ExecutingTool(_)
+                            | AgentState::Waiting
+                            | AgentState::Paused
+                            | AgentState::Error(_)
                     ),
                     "Read state should always be valid: {:?}",
                     read_state
@@ -430,13 +458,13 @@ async fn property_state_changes_are_atomic() -> Result<()> {
     assert!(
         matches!(
             final_state,
-            AgentState::Idle |
-            AgentState::Thinking |
-            AgentState::Planning |
-            AgentState::ExecutingTool(_) |
-            AgentState::Waiting |
-            AgentState::Paused |
-            AgentState::Error(_)
+            AgentState::Idle
+                | AgentState::Thinking
+                | AgentState::Planning
+                | AgentState::ExecutingTool(_)
+                | AgentState::Waiting
+                | AgentState::Paused
+                | AgentState::Error(_)
         ),
         "Final state should be valid: {:?}",
         final_state
@@ -452,10 +480,7 @@ async fn property_message_cleanup_preserves_recent_messages() -> Result<()> {
 
     // Add more than the limit to trigger cleanup
     for i in 0..1200 {
-        state.add_message_to_session(
-            session_id,
-            ChatMessage::User(format!("Message {}", i))
-        )?;
+        state.add_message_to_session(session_id, ChatMessage::User(format!("Message {}", i)))?;
     }
 
     let session = state.get_session_by_id(session_id).unwrap();
@@ -478,7 +503,9 @@ async fn property_message_cleanup_preserves_recent_messages() -> Result<()> {
     if let ChatMessage::User(text) = first_message {
         // Should NOT contain the very first messages (0-199 should be removed)
         assert!(
-            !text.contains("Message 0") && !text.contains("Message 1") && !text.contains("Message 199"),
+            !text.contains("Message 0")
+                && !text.contains("Message 1")
+                && !text.contains("Message 199"),
             "Oldest messages should be removed, but found: {}",
             text
         );

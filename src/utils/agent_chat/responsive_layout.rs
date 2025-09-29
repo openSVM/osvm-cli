@@ -1,5 +1,5 @@
 //! Simple sequential layout system for agent_chat with clean terminal rendering
-//! 
+//!
 //! This module provides utilities for rendering TUI components sequentially in the terminal
 //! using simple println! statements that preserve text selection and normal terminal behavior.
 
@@ -48,7 +48,7 @@ impl ComponentAreas {
     /// Calculate responsive component areas based on terminal size
     pub fn calculate(terminal_size: (u16, u16)) -> Self {
         let (cols, rows) = terminal_size;
-        
+
         // Don't use complex overlapping layout - use simple sequential layout
         let mut current_y = 0u16;
 
@@ -57,7 +57,13 @@ impl ComponentAreas {
         current_y += 2; // Status bar + spacing
 
         // Task panel (fixed height, not overlapping)
-        let task_panel_height = if rows >= 20 { 6 } else if rows >= 15 { 4 } else { 0 };
+        let task_panel_height = if rows >= 20 {
+            6
+        } else if rows >= 15 {
+            4
+        } else {
+            0
+        };
         let task_panel = if task_panel_height > 0 {
             let area = ComponentArea::new(0, current_y, cols, task_panel_height);
             current_y += task_panel_height + 1; // Task panel + spacing
@@ -83,21 +89,27 @@ impl ComponentAreas {
         Self {
             terminal_size,
             status_bar,
-            task_panel: ComponentArea { visible: task_panel_height > 0, ..task_panel },
+            task_panel: ComponentArea {
+                visible: task_panel_height > 0,
+                ..task_panel
+            },
             chat_area,
             input_field,
-            suggestions: ComponentArea { visible: false, ..suggestions }, // Hidden by default
+            suggestions: ComponentArea {
+                visible: false,
+                ..suggestions
+            }, // Hidden by default
         }
     }
 
     /// Minimal layout for very small terminals
     fn minimal_layout(terminal_size: (u16, u16)) -> Self {
         let (cols, rows) = terminal_size;
-        
+
         // Only status bar and input field for tiny terminals
         let status_bar = ComponentArea::new(0, 0, cols, 1);
         let input_field = ComponentArea::new(0, rows.saturating_sub(2), cols, 2);
-        
+
         // Hide other components
         let task_panel = ComponentArea::new(0, 0, 0, 0);
         let chat_area = ComponentArea::new(0, 1, cols, rows.saturating_sub(3));
@@ -106,10 +118,16 @@ impl ComponentAreas {
         Self {
             terminal_size,
             status_bar,
-            task_panel: ComponentArea { visible: false, ..task_panel },
+            task_panel: ComponentArea {
+                visible: false,
+                ..task_panel
+            },
             chat_area,
             input_field,
-            suggestions: ComponentArea { visible: false, ..suggestions },
+            suggestions: ComponentArea {
+                visible: false,
+                ..suggestions
+            },
         }
     }
 
@@ -133,7 +151,11 @@ impl TerminalRenderer {
     }
 
     /// Simple sequential rendering - just use println!
-    pub fn render_component_in_place<F>(&mut self, _area: &ComponentArea, render_fn: F) -> Result<()>
+    pub fn render_component_in_place<F>(
+        &mut self,
+        _area: &ComponentArea,
+        render_fn: F,
+    ) -> Result<()>
     where
         F: FnOnce(&mut std::io::Stdout, &ComponentArea) -> Result<()>,
     {
@@ -159,7 +181,8 @@ impl TerminalRenderer {
 pub fn wrap_text_smart(text: &str, width: usize) -> Vec<String> {
     if width < 10 {
         // Very narrow - just split by characters
-        return text.chars()
+        return text
+            .chars()
             .collect::<Vec<char>>()
             .chunks(width)
             .map(|chunk| chunk.iter().collect())
@@ -176,7 +199,7 @@ pub fn wrap_text_smart(text: &str, width: usize) -> Vec<String> {
                 lines.push(current_line.clone());
                 current_line.clear();
             }
-            
+
             // Split long word
             let chars: Vec<char> = word.chars().collect();
             for chunk in chars.chunks(width) {
@@ -231,7 +254,7 @@ pub fn truncate_with_ellipsis(text: &str, max_width: usize) -> String {
 pub fn format_colored_text(text: &str, color: crossterm::style::Color) -> String {
     let color_code = match color {
         crossterm::style::Color::Red => "31",
-        crossterm::style::Color::Green => "32", 
+        crossterm::style::Color::Green => "32",
         crossterm::style::Color::Yellow => "33",
         crossterm::style::Color::Blue => "34",
         crossterm::style::Color::Magenta => "35",
@@ -261,7 +284,7 @@ mod tests {
     #[test]
     fn test_component_areas_calculation() {
         let areas = ComponentAreas::calculate((100, 30));
-        
+
         assert_eq!(areas.terminal_size, (100, 30));
         assert_eq!(areas.status_bar.height, 1);
         assert!(areas.task_panel.height > 0);
@@ -272,7 +295,7 @@ mod tests {
     #[test]
     fn test_minimal_layout() {
         let areas = ComponentAreas::calculate((50, 8));
-        
+
         // Should work even with small terminals
         assert!(!areas.task_panel.visible);
         assert!(!areas.suggestions.visible);
@@ -283,7 +306,7 @@ mod tests {
     #[test]
     fn test_text_wrapping() {
         let wrapped = wrap_text_smart("This is a long line of text that should be wrapped", 20);
-        
+
         assert!(wrapped.len() > 1);
         for line in &wrapped {
             assert!(line.len() <= 20);
