@@ -815,6 +815,23 @@ make dev
 - `cargo clippy` - Linting checks
 - `cargo test` - Test suite
 
+
+## Monetization Strategy & Business Model
+
+### $OVSM Token Economy
+**Tiered Token Gating System:**
+- **Platinum Tier (1M+ tokens):** 1 $OVSM per AI prompt
+- **Gold Tier (100k+ tokens):** 10 $OVSM per AI prompt
+- **Silver Tier (<100k tokens):** 100 $OVSM per AI prompt
+- **Guest Users:** 10 prompts / day free, then 200 $OVSM per AI prompt
+
+**Premium Feature Gates:**
+- **Social Features:** Minimum 100,000 $OVSM token holding required
+- **Advanced Analytics:** Token consumption for complex queries
+- **Unlimited Threads:** Premium tier exclusive (free users limited to 10)
+- **Extended AI Reasoning:** 5 expansions for free, unlimited for premium
+
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

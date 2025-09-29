@@ -10,20 +10,12 @@ use ratatui::{
     text::*,
 };
 
-/// Show the welcome box using simple borders
+/// Show the welcome box using simple borders - compact version
 pub fn show_welcome_box() {
-    println!();
-    println!("{}+==================================================+{}", Colors::CYAN, Colors::RESET);
-    println!("{}|         {}OSVM Agent Chat Interface{}              |{}", Colors::CYAN, Colors::BOLD, Colors::CYAN, Colors::RESET);
-    println!("{}|                                                  |{}", Colors::CYAN, Colors::RESET);
-    println!("{}|  * Real-time AI chat with Solana tools          |{}", Colors::CYAN, Colors::RESET);  
-    println!("{}|  * MCP tool integration                          |{}", Colors::CYAN, Colors::RESET);
-    println!("{}|  * Press Ctrl+T to toggle task navigation       |{}", Colors::CYAN, Colors::RESET);
-    println!("{}|  * Press Ctrl+C to exit                          |{}", Colors::CYAN, Colors::RESET);
-    println!("{}|                                                  |{}", Colors::CYAN, Colors::RESET);
-    println!("{}|  Type your message to chat or /help for help    |{}", Colors::CYAN, Colors::RESET);
-    println!("{}+==================================================+{}", Colors::CYAN, Colors::RESET);
-    println!();
+    println!("{}┌─ OSVM Agent Chat Interface ─────────────────────┐{}", Colors::CYAN, Colors::RESET);
+    println!("{}│ Real-time AI chat • MCP tools • Ctrl+T tasks    │{}", Colors::CYAN, Colors::RESET);
+    println!("{}│ Type your message or /help for commands         │{}", Colors::CYAN, Colors::RESET);
+    println!("{}└──────────────────────────────────────────────────┘{}", Colors::CYAN, Colors::RESET);
 }
 
 /// Show enhanced status bar using simple sequential output
@@ -35,7 +27,7 @@ pub fn show_enhanced_status_bar_in_place(
     Ok(())
 }
 
-/// Show enhanced status bar - simple version
+/// Show enhanced status bar - compact version
 pub fn show_enhanced_status_bar(task_state: &TaskState) {
     let spinner = SPINNER_FRAMES[task_state.spinner_frame];
     let mode_indicator = match task_state.input_mode {
@@ -43,14 +35,14 @@ pub fn show_enhanced_status_bar(task_state: &TaskState) {
         InputMode::TaskSelection => "TASKS",
     };
 
-    println!("{}+-- Status ------------------------------------------+{}", Colors::CYAN, Colors::RESET);
-    println!("{}| {} {} | Mode: {} |{}", 
+    println!("{}┌─ Status ─────────────────────────────────────────┐{}", Colors::CYAN, Colors::RESET);
+    println!("{}│ {} {} • Mode: {} │{}", 
              Colors::CYAN, 
              spinner,
              task_state.current_task,
              mode_indicator,
              Colors::RESET);
-    println!("{}+-----------------------------------------------+{}", Colors::CYAN, Colors::RESET);
+    println!("{}└──────────────────────────────────────────────────┘{}", Colors::CYAN, Colors::RESET);
 }
 
 /// Show task details using simple sequential rendering with boxes
