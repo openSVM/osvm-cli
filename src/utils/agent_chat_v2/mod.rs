@@ -5,22 +5,22 @@
 
 use anyhow::Result;
 use cursive::{Cursive, CursiveExt};
-use log::{info, error, warn};
+use log::{error, info, warn};
 
 // Public module exports
-pub mod types;
+pub mod agent;
 pub mod session;
 pub mod state;
-pub mod agent;
+pub mod types;
 pub mod ui;
 pub mod utils;
 
 // Re-export commonly used types
-pub use types::{ChatMessage, AgentState};
+pub use agent::AgentCommand;
 pub use session::ChatSession;
 pub use state::AdvancedChatState;
-pub use agent::AgentCommand;
-pub use ui::{AdvancedChatUI, update_ui_displays};
+pub use types::{AgentState, ChatMessage};
+pub use ui::{update_ui_displays, AdvancedChatUI};
 
 /// Main entry point for the advanced agent chat UI
 pub async fn run_advanced_agent_chat() -> Result<()> {
@@ -29,7 +29,10 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
     // Check if we're in a terminal environment - only fail if clearly no terminal support
     let term_var = std::env::var("TERM").unwrap_or_default();
     if term_var.is_empty() || term_var == "dumb" {
-        println!("No suitable terminal detected (TERM={}), falling back to demo mode", term_var);
+        println!(
+            "No suitable terminal detected (TERM={}), falling back to demo mode",
+            term_var
+        );
         return run_advanced_demo_mode().await;
     }
 
@@ -40,7 +43,10 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
     // Initialize MCP tools - this should work now that localhost:3000 server is disabled
     if let Err(e) = state.initialize().await {
-        warn!("MCP initialization failed: {}, continuing without MCP tools", e);
+        warn!(
+            "MCP initialization failed: {}, continuing without MCP tools",
+            e
+        );
     }
 
     // Skip agent worker for now as it can still cause issues
@@ -50,9 +56,7 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
     let _default_session_id = state.create_session("Main Chat".to_string())?;
 
     // Run the UI in a blocking task to avoid runtime conflicts
-    let result = tokio::task::spawn_blocking(move || {
-        run_advanced_ui_sync(state)
-    }).await;
+    let result = tokio::task::spawn_blocking(move || run_advanced_ui_sync(state)).await;
 
     match result {
         Ok(Ok(())) => Ok(()),
@@ -79,9 +83,14 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
 
     // Only fail on very specific size constraints (not 0x0 which means "unknown")
     if (term_size.x > 0 && term_size.x < 60) || (term_size.y > 0 && term_size.y < 15) {
-        eprintln!("Terminal too small: {}x{} (minimum: 60x15)", term_size.x, term_size.y);
+        eprintln!(
+            "Terminal too small: {}x{} (minimum: 60x15)",
+            term_size.x, term_size.y
+        );
         eprintln!("Please resize your terminal and try again.");
-        return Err(anyhow::anyhow!("Terminal size too small for advanced chat interface"));
+        return Err(anyhow::anyhow!(
+            "Terminal size too small for advanced chat interface"
+        ));
     }
 
     if term_size.x == 0 || term_size.y == 0 {
@@ -108,7 +117,9 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     siv.set_user_data(state.clone());
 
     // Create UI wrapper to access methods
-    let ui = AdvancedChatUI { state: state.clone() };
+    let ui = AdvancedChatUI {
+        state: state.clone(),
+    };
 
     // Start spinner animation and periodic updates after Cursive is initialized
     state.start_spinner_animation(siv.cb_sink().clone());
@@ -151,7 +162,9 @@ async fn run_advanced_demo_mode() -> Result<()> {
 
     // Show available MCP tools
     println!("Available MCP Tools:");
-    let available_tools = state.available_tools.read()
+    let available_tools = state
+        .available_tools
+        .read()
         .map_err(|e| anyhow::anyhow!("Failed to read tools: {}", e))?;
 
     if available_tools.is_empty() {
@@ -165,9 +178,13 @@ async fn run_advanced_demo_mode() -> Result<()> {
             } else {
                 for (i, tool) in tools.iter().enumerate() {
                     if i < 5 {
-                        println!("      • {}: {}",
+                        println!(
+                            "      • {}: {}",
                             tool.name,
-                            tool.description.as_ref().unwrap_or(&"No description".to_string()));
+                            tool.description
+                                .as_ref()
+                                .unwrap_or(&"No description".to_string())
+                        );
                     }
                 }
                 if tools.len() > 5 {
@@ -233,16 +250,22 @@ fn handle_window_resize(siv: &mut Cursive) -> anyhow::Result<()> {
 
     // Check if terminal is still usable
     if (new_size.x > 0 && new_size.x < 60) || (new_size.y > 0 && new_size.y < 15) {
-        println!("⚠️ Terminal too small after resize: {}x{}", new_size.x, new_size.y);
+        println!(
+            "⚠️ Terminal too small after resize: {}x{}",
+            new_size.x, new_size.y
+        );
 
         // Try to show warning dialog, but don't crash if it fails
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             siv.add_layer(
-                cursive::views::Dialog::info(
-                    format!("Terminal too small: {}x{} (minimum: 60x15)\nPlease resize your terminal.",
-                            new_size.x, new_size.y)
-                ).title("Resize Required")
-                .button("OK", |s| { s.pop_layer(); })
+                cursive::views::Dialog::info(format!(
+                    "Terminal too small: {}x{} (minimum: 60x15)\nPlease resize your terminal.",
+                    new_size.x, new_size.y
+                ))
+                .title("Resize Required")
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
             );
         }));
 
@@ -260,7 +283,10 @@ fn handle_window_resize(siv: &mut Cursive) -> anyhow::Result<()> {
 
     match result {
         Ok(_) => {
-            println!("✅ Layout refreshed successfully for size {}x{}", new_size.x, new_size.y);
+            println!(
+                "✅ Layout refreshed successfully for size {}x{}",
+                new_size.x, new_size.y
+            );
             Ok(())
         }
         Err(_) => {
@@ -283,9 +309,12 @@ fn start_periodic_updates(siv: &mut Cursive, state: AdvancedChatState) {
             thread::sleep(Duration::from_secs(30)); // Update every 30 seconds as requested
 
             // Request UI update
-            if cb_sink.send(Box::new(move |siv| {
-                update_ui_displays(siv);
-            })).is_err() {
+            if cb_sink
+                .send(Box::new(move |siv| {
+                    update_ui_displays(siv);
+                }))
+                .is_err()
+            {
                 break; // Exit if UI is closed
             }
         }

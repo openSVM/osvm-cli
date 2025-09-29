@@ -1,16 +1,19 @@
 //! AI service integration for chat functionality
 
-use crate::services::ai_service::{AiService, ToolPlan, PlannedTool};
-use crate::services::mcp_service::{McpService, McpServerConfig};
 use super::{Colors, RealtimeSuggestion};
+use crate::services::ai_service::{AiService, PlannedTool, ToolPlan};
+use crate::services::mcp_service::{McpServerConfig, McpService};
 use anyhow::Result;
+use log::{debug, error};
+use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
-use log::{error, debug};
-use std::io::{self, Write};
 
 /// Generate real-time suggestions using AI
-pub async fn generate_realtime_suggestions(partial_input: &str, ai_service: &AiService) -> Result<Vec<String>> {
+pub async fn generate_realtime_suggestions(
+    partial_input: &str,
+    ai_service: &AiService,
+) -> Result<Vec<String>> {
     if partial_input.len() < 3 {
         return Ok(Vec::new());
     }
@@ -29,7 +32,7 @@ pub async fn generate_realtime_suggestions(partial_input: &str, ai_service: &AiS
 pub async fn process_with_realtime_ai(
     message: String,
     ai_service: &Arc<AiService>,
-    chat_history: &mut Vec<String>
+    chat_history: &mut Vec<String>,
 ) -> Result<()> {
     // Show processing animation
     show_animated_status("Processing with AI", "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", 80).await;
@@ -66,7 +69,13 @@ pub async fn process_with_realtime_ai(
 
     // Display AI response
     if !ai_response.is_empty() {
-        println!("\n{}• Assistant: {}{}{}", Colors::CYAN, Colors::BOLD, ai_response, Colors::RESET);
+        println!(
+            "\n{}• Assistant: {}{}{}",
+            Colors::CYAN,
+            Colors::BOLD,
+            ai_response,
+            Colors::RESET
+        );
         chat_history.push(format!("Assistant: {}", ai_response));
     }
 
@@ -78,7 +87,14 @@ pub async fn show_animated_status(message: &str, chars: &str, duration_ms: u64) 
     let frames: Vec<char> = chars.chars().collect();
 
     for frame in frames.iter().take(10) {
-        print!("\r{}{}  {} {}{}", Colors::YELLOW, frame, message, Colors::DIM, Colors::RESET);
+        print!(
+            "\r{}{}  {} {}{}",
+            Colors::YELLOW,
+            frame,
+            message,
+            Colors::DIM,
+            Colors::RESET
+        );
         io::stdout().flush().unwrap_or(());
         sleep(Duration::from_millis(duration_ms)).await;
     }
@@ -89,9 +105,19 @@ pub async fn show_animated_status(message: &str, chars: &str, duration_ms: u64) 
 
 /// Display colored plan diagram
 pub fn show_colored_plan_diagram(ai_plan: &ToolPlan) {
-    println!("\n{}╔══════════════════════════════════════════════════╗", Colors::MAGENTA);
-    println!("║              {}EXECUTION PLAN{}                     ║", Colors::BOLD, Colors::MAGENTA);
-    println!("╚══════════════════════════════════════════════════╝{}", Colors::RESET);
+    println!(
+        "\n{}╔══════════════════════════════════════════════════╗",
+        Colors::MAGENTA
+    );
+    println!(
+        "║              {}EXECUTION PLAN{}                     ║",
+        Colors::BOLD,
+        Colors::MAGENTA
+    );
+    println!(
+        "╚══════════════════════════════════════════════════╝{}",
+        Colors::RESET
+    );
 
     // Show reasoning
     println!("\n{}📋 Reasoning:{}", Colors::CYAN, Colors::RESET);
@@ -103,7 +129,8 @@ pub fn show_colored_plan_diagram(ai_plan: &ToolPlan) {
     println!("\n{}🔧 Planned Tools:{}", Colors::YELLOW, Colors::RESET);
     for (i, tool) in ai_plan.osvm_tools_to_use.iter().enumerate() {
         let status_icon = "○";
-        println!("   {} {}. {}{}{} {}({}){}",
+        println!(
+            "   {} {}. {}{}{} {}({}){}",
             status_icon,
             i + 1,
             Colors::GREEN,
@@ -116,7 +143,12 @@ pub fn show_colored_plan_diagram(ai_plan: &ToolPlan) {
 
         // PlannedTool doesn't have a reason field, show args instead
         if !tool.args.is_null() {
-            println!("      {}└─ Args: {}{}", Colors::DIM, tool.args, Colors::RESET);
+            println!(
+                "      {}└─ Args: {}{}",
+                Colors::DIM,
+                tool.args,
+                Colors::RESET
+            );
         }
     }
 
@@ -168,12 +200,17 @@ pub async fn get_user_choice() -> Result<u32> {
 pub async fn execute_ai_plan_with_colors(
     ai_plan: &ToolPlan,
     original_message: &str,
-    ai_service: &Arc<AiService>
+    ai_service: &Arc<AiService>,
 ) -> Result<()> {
-    println!("\n{}═══ Executing Plan ═══{}", Colors::MAGENTA, Colors::RESET);
+    println!(
+        "\n{}═══ Executing Plan ═══{}",
+        Colors::MAGENTA,
+        Colors::RESET
+    );
 
     for (i, tool) in ai_plan.osvm_tools_to_use.iter().enumerate() {
-        println!("\n{}[{}/{}] Executing: {}{}{}",
+        println!(
+            "\n{}[{}/{}] Executing: {}{}{}",
             Colors::CYAN,
             i + 1,
             ai_plan.osvm_tools_to_use.len(),
@@ -186,7 +223,8 @@ pub async fn execute_ai_plan_with_colors(
         show_animated_status(&format!("Running {}", tool.tool_name), "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", 50).await;
 
         // Simulate execution result
-        println!("   {}✓ {} completed successfully{}",
+        println!(
+            "   {}✓ {} completed successfully{}",
             Colors::GREEN,
             tool.tool_name,
             Colors::RESET
@@ -195,18 +233,29 @@ pub async fn execute_ai_plan_with_colors(
         sleep(Duration::from_millis(500)).await;
     }
 
-    println!("\n{}✓ Plan execution complete!{}", Colors::GREEN, Colors::RESET);
+    println!(
+        "\n{}✓ Plan execution complete!{}",
+        Colors::GREEN,
+        Colors::RESET
+    );
 
     Ok(())
 }
 
 /// Show contextual suggestions based on chat history
 pub async fn show_contextual_suggestions(ai_service: &Arc<AiService>, chat_history: &[String]) {
-    println!("\n{}💡 Contextual Suggestions:{}", Colors::YELLOW, Colors::RESET);
+    println!(
+        "\n{}💡 Contextual Suggestions:{}",
+        Colors::YELLOW,
+        Colors::RESET
+    );
 
     let suggestions = vec![
         ("Check wallet balance", "@solana/get_balance"),
-        ("View recent transactions", "@solana/get_recent_transactions"),
+        (
+            "View recent transactions",
+            "@solana/get_recent_transactions",
+        ),
         ("Monitor network status", "/network status"),
     ];
 
@@ -217,9 +266,19 @@ pub async fn show_contextual_suggestions(ai_service: &Arc<AiService>, chat_histo
 
 /// Show help commands
 pub fn show_help_commands() {
-    println!("\n{}╔════════════════════════════════════════════════╗", Colors::CYAN);
-    println!("║              {}HELP - Commands{}                   ║", Colors::BOLD, Colors::CYAN);
-    println!("╚════════════════════════════════════════════════╝{}", Colors::RESET);
+    println!(
+        "\n{}╔════════════════════════════════════════════════╗",
+        Colors::CYAN
+    );
+    println!(
+        "║              {}HELP - Commands{}                   ║",
+        Colors::BOLD,
+        Colors::CYAN
+    );
+    println!(
+        "╚════════════════════════════════════════════════╝{}",
+        Colors::RESET
+    );
 
     let commands = vec![
         ("/help", "Show this help menu"),
@@ -242,13 +301,30 @@ pub fn show_help_commands() {
 }
 
 /// Show context visualization
-pub async fn show_context_visualization(chat_history: &[String], ai_service: &Arc<AiService>) -> Result<()> {
-    println!("\n{}╔════════════════════════════════════════════════╗", Colors::BLUE);
-    println!("║           {}CONVERSATION CONTEXT{}                 ║", Colors::BOLD, Colors::BLUE);
-    println!("╚════════════════════════════════════════════════╝{}", Colors::RESET);
+pub async fn show_context_visualization(
+    chat_history: &[String],
+    ai_service: &Arc<AiService>,
+) -> Result<()> {
+    println!(
+        "\n{}╔════════════════════════════════════════════════╗",
+        Colors::BLUE
+    );
+    println!(
+        "║           {}CONVERSATION CONTEXT{}                 ║",
+        Colors::BOLD,
+        Colors::BLUE
+    );
+    println!(
+        "╚════════════════════════════════════════════════╝{}",
+        Colors::RESET
+    );
 
     if chat_history.is_empty() {
-        println!("{}  No conversation history yet{}", Colors::DIM, Colors::RESET);
+        println!(
+            "{}  No conversation history yet{}",
+            Colors::DIM,
+            Colors::RESET
+        );
     } else {
         println!("\n{}Recent Messages:{}", Colors::CYAN, Colors::RESET);
         for (i, msg) in chat_history.iter().rev().take(5).enumerate() {
@@ -272,19 +348,34 @@ pub async fn show_context_visualization(chat_history: &[String], ai_service: &Ar
 /// Show status overview
 pub async fn show_status_overview(
     servers: &[(&String, &McpServerConfig)],
-    chat_history: &[String]
+    chat_history: &[String],
 ) -> Result<()> {
-    println!("\n{}╔════════════════════════════════════════════════╗", Colors::CYAN);
-    println!("║              {}SYSTEM STATUS{}                     ║", Colors::BOLD, Colors::CYAN);
-    println!("╚════════════════════════════════════════════════╝{}", Colors::RESET);
+    println!(
+        "\n{}╔════════════════════════════════════════════════╗",
+        Colors::CYAN
+    );
+    println!(
+        "║              {}SYSTEM STATUS{}                     ║",
+        Colors::BOLD,
+        Colors::CYAN
+    );
+    println!(
+        "╚════════════════════════════════════════════════╝{}",
+        Colors::RESET
+    );
 
     // MCP Servers
     println!("\n{}MCP Servers:{}", Colors::YELLOW, Colors::RESET);
     for (id, config) in servers {
         let status_icon = if config.enabled { "✓" } else { "✗" };
-        let status_color = if config.enabled { Colors::GREEN } else { Colors::RED };
+        let status_color = if config.enabled {
+            Colors::GREEN
+        } else {
+            Colors::RED
+        };
 
-        println!("  {} {}{}{} - {}",
+        println!(
+            "  {} {}{}{} - {}",
             status_color,
             status_icon,
             Colors::BLUE,
@@ -305,7 +396,11 @@ pub async fn show_status_overview(
 
 /// Run demo mode for testing
 pub async fn run_demo_mode() -> Result<()> {
-    println!("{}🎮 Demo Mode - Simulating chat interactions{}", Colors::MAGENTA, Colors::RESET);
+    println!(
+        "{}🎮 Demo Mode - Simulating chat interactions{}",
+        Colors::MAGENTA,
+        Colors::RESET
+    );
 
     let demo_messages = vec![
         "What's my wallet balance?",

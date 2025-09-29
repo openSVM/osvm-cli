@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 // We'll use the existing structure since our module is properly integrated
 use osvm::utils::agent_chat_v2::{
-    types::{ChatMessage, AgentState},
     session::ChatSession,
+    types::{AgentState, ChatMessage},
 };
 
 #[test]
@@ -36,7 +36,10 @@ fn test_chat_message_serialization() -> Result<()> {
             (ChatMessage::Agent(a), ChatMessage::Agent(b)) => assert_eq!(a, b),
             (ChatMessage::System(a), ChatMessage::System(b)) => assert_eq!(a, b),
             (ChatMessage::Error(a), ChatMessage::Error(b)) => assert_eq!(a, b),
-            (ChatMessage::Processing { message: a, .. }, ChatMessage::Processing { message: b, .. }) => assert_eq!(a, b),
+            (
+                ChatMessage::Processing { message: a, .. },
+                ChatMessage::Processing { message: b, .. },
+            ) => assert_eq!(a, b),
             _ => panic!("Message type mismatch after serialization"),
         }
     }
@@ -117,7 +120,7 @@ fn test_session_message_limit() -> Result<()> {
         ChatMessage::User(text) => {
             // Should start from message 200 (since first 200 were removed)
             assert!(text.contains("Message 200"));
-        },
+        }
         _ => panic!("Expected User message"),
     }
 
@@ -125,7 +128,7 @@ fn test_session_message_limit() -> Result<()> {
     match &session.messages[999] {
         ChatMessage::User(text) => {
             assert!(text.contains("Message 1199"));
-        },
+        }
         _ => panic!("Expected User message"),
     }
 

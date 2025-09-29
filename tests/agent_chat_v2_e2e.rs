@@ -9,15 +9,15 @@
 //! - UI component interaction (headless)
 
 use anyhow::Result;
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
-use serde_json::json;
 
 // Import our refactored modules
 use osvm::utils::agent_chat_v2::{
-    AdvancedChatState, ChatSession, ChatMessage, AgentState, AgentCommand
+    AdvancedChatState, AgentCommand, AgentState, ChatMessage, ChatSession,
 };
 
 /// Mock AI Service for testing
@@ -35,8 +35,12 @@ impl MockAiService {
     }
 
     async fn query_with_debug(&self, _prompt: &str, _debug: bool) -> Result<String> {
-        let index = self.current_index.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Ok(self.responses.get(index % self.responses.len())
+        let index = self
+            .current_index
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(self
+            .responses
+            .get(index % self.responses.len())
             .unwrap_or(&"Default response".to_string())
             .clone())
     }
@@ -101,12 +105,12 @@ async fn test_message_handling_and_state_transitions() -> Result<()> {
     // Test adding messages
     fixture.state.add_message_to_session(
         fixture.session_id,
-        ChatMessage::User("Hello test".to_string())
+        ChatMessage::User("Hello test".to_string()),
     )?;
 
     fixture.state.add_message_to_session(
         fixture.session_id,
-        ChatMessage::Agent("Hello back!".to_string())
+        ChatMessage::Agent("Hello back!".to_string()),
     )?;
 
     // Verify messages are stored
@@ -124,7 +128,9 @@ async fn test_message_handling_and_state_transitions() -> Result<()> {
     }
 
     // Test agent state changes
-    fixture.state.set_agent_state(fixture.session_id, AgentState::Thinking);
+    fixture
+        .state
+        .set_agent_state(fixture.session_id, AgentState::Thinking);
     assert_eq!(
         fixture.state.get_agent_state(fixture.session_id).unwrap(),
         AgentState::Thinking
@@ -142,14 +148,14 @@ async fn test_processing_message_cleanup() -> Result<()> {
         fixture.session_id,
         ChatMessage::Processing {
             message: "Processing...".to_string(),
-            spinner_index: 0
-        }
+            spinner_index: 0,
+        },
     )?;
 
     // Add another regular message
     fixture.state.add_message_to_session(
         fixture.session_id,
-        ChatMessage::Agent("Done processing".to_string())
+        ChatMessage::Agent("Done processing".to_string()),
     )?;
 
     // Verify both messages exist
@@ -157,7 +163,9 @@ async fn test_processing_message_cleanup() -> Result<()> {
     assert_eq!(session.messages.len(), 2);
 
     // Test processing message removal
-    fixture.state.remove_last_processing_message(fixture.session_id)?;
+    fixture
+        .state
+        .remove_last_processing_message(fixture.session_id)?;
 
     // Should still have 2 messages (no processing message was last)
     let session = fixture.state.get_session_by_id(fixture.session_id).unwrap();
@@ -168,12 +176,14 @@ async fn test_processing_message_cleanup() -> Result<()> {
         fixture.session_id,
         ChatMessage::Processing {
             message: "Processing again...".to_string(),
-            spinner_index: 1
-        }
+            spinner_index: 1,
+        },
     )?;
 
     // Now remove it
-    fixture.state.remove_last_processing_message(fixture.session_id)?;
+    fixture
+        .state
+        .remove_last_processing_message(fixture.session_id)?;
 
     // Should be back to 2 messages
     let session = fixture.state.get_session_by_id(fixture.session_id).unwrap();
@@ -187,7 +197,9 @@ async fn test_agent_worker_command_processing() -> Result<()> {
     let fixture = TestFixture::new().await?.setup_with_worker().await?;
 
     // Test pausing agent
-    let command = AgentCommand::PauseAgent { session_id: fixture.session_id };
+    let command = AgentCommand::PauseAgent {
+        session_id: fixture.session_id,
+    };
     fixture.state.send_agent_command(command).await?;
 
     // Give worker time to process
@@ -199,7 +211,9 @@ async fn test_agent_worker_command_processing() -> Result<()> {
     );
 
     // Test resuming agent
-    let command = AgentCommand::ResumeAgent { session_id: fixture.session_id };
+    let command = AgentCommand::ResumeAgent {
+        session_id: fixture.session_id,
+    };
     fixture.state.send_agent_command(command).await?;
 
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -260,7 +274,7 @@ async fn test_concurrent_session_operations() -> Result<()> {
             for j in 0..5 {
                 state.add_message_to_session(
                     session_id,
-                    ChatMessage::User(format!("Message {} from session {}", j, i))
+                    ChatMessage::User(format!("Message {} from session {}", j, i)),
                 )?;
             }
 
@@ -310,18 +324,23 @@ async fn test_agent_input_processing_with_timeout() -> Result<()> {
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-    }).await;
+    })
+    .await;
 
-    assert!(result.is_ok(), "Agent processing should complete within timeout");
+    assert!(
+        result.is_ok(),
+        "Agent processing should complete within timeout"
+    );
 
     // Verify messages were added during processing
     let session = fixture.state.get_session_by_id(fixture.session_id).unwrap();
     assert!(!session.messages.is_empty());
 
     // Should have at least user input message
-    assert!(session.messages.iter().any(|msg| {
-        matches!(msg, ChatMessage::User(text) if text.contains("Test input"))
-    }));
+    assert!(session
+        .messages
+        .iter()
+        .any(|msg| { matches!(msg, ChatMessage::User(text) if text.contains("Test input")) }));
 
     Ok(())
 }
@@ -334,7 +353,7 @@ async fn test_memory_limits_and_cleanup() -> Result<()> {
     for i in 0..1200 {
         fixture.state.add_message_to_session(
             fixture.session_id,
-            ChatMessage::User(format!("Message {}", i))
+            ChatMessage::User(format!("Message {}", i)),
         )?;
     }
 
@@ -343,14 +362,16 @@ async fn test_memory_limits_and_cleanup() -> Result<()> {
     assert_eq!(session.messages.len(), 1000);
 
     // Verify oldest messages were removed (should not find message 0)
-    assert!(!session.messages.iter().any(|msg| {
-        matches!(msg, ChatMessage::User(text) if text == "Message 0")
-    }));
+    assert!(!session
+        .messages
+        .iter()
+        .any(|msg| { matches!(msg, ChatMessage::User(text) if text == "Message 0") }));
 
     // Should still have recent messages
-    assert!(session.messages.iter().any(|msg| {
-        matches!(msg, ChatMessage::User(text) if text == "Message 1199")
-    }));
+    assert!(session
+        .messages
+        .iter()
+        .any(|msg| { matches!(msg, ChatMessage::User(text) if text == "Message 1199") }));
 
     Ok(())
 }
@@ -365,7 +386,7 @@ async fn test_error_conditions_and_recovery() -> Result<()> {
     // Should handle gracefully
     let result = fixture.state.add_message_to_session(
         fake_session_id,
-        ChatMessage::User("Should fail".to_string())
+        ChatMessage::User("Should fail".to_string()),
     );
     assert!(result.is_ok()); // Current implementation doesn't fail
 
@@ -374,7 +395,9 @@ async fn test_error_conditions_and_recovery() -> Result<()> {
     assert!(session.is_none());
 
     // Test setting agent state for non-existent session (should not panic)
-    fixture.state.set_agent_state(fake_session_id, AgentState::Thinking);
+    fixture
+        .state
+        .set_agent_state(fake_session_id, AgentState::Thinking);
 
     // Verify original session is unaffected
     let original_session = fixture.state.get_session_by_id(fixture.session_id);
@@ -406,16 +429,19 @@ async fn test_suggestions_generation() -> Result<()> {
     // Add some conversation context
     fixture.state.add_message_to_session(
         fixture.session_id,
-        ChatMessage::User("What's my balance?".to_string())
+        ChatMessage::User("What's my balance?".to_string()),
     )?;
 
     fixture.state.add_message_to_session(
         fixture.session_id,
-        ChatMessage::Agent("Your balance is 2.5 SOL".to_string())
+        ChatMessage::Agent("Your balance is 2.5 SOL".to_string()),
     )?;
 
     // Test generating suggestions (this will call AI service)
-    let result = fixture.state.generate_reply_suggestions(fixture.session_id).await;
+    let result = fixture
+        .state
+        .generate_reply_suggestions(fixture.session_id)
+        .await;
 
     // Should not fail even if AI service is not available
     assert!(result.is_ok());

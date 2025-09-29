@@ -53,8 +53,13 @@ impl FuzzyMatcher {
                 }
 
                 // Bonus for start of word (with bounds check)
-                let start_bonus = if actual_index == 0 ||
-                    (actual_index > 0 && text.chars().nth(actual_index - 1).map_or(false, |c| !c.is_alphanumeric())) {
+                let start_bonus = if actual_index == 0
+                    || (actual_index > 0
+                        && text
+                            .chars()
+                            .nth(actual_index - 1)
+                            .map_or(false, |c| !c.is_alphanumeric()))
+                {
                     0.2
                 } else {
                     0.0
@@ -100,17 +105,24 @@ impl FuzzyMatcher {
     }
 
     /// Filter and score a list of candidates
-    pub fn filter_suggestions(&self, pattern: &str, candidates: &[(String, String, String)]) -> Vec<RealtimeSuggestion> {
+    pub fn filter_suggestions(
+        &self,
+        pattern: &str,
+        candidates: &[(String, String, String)],
+    ) -> Vec<RealtimeSuggestion> {
         let mut suggestions: Vec<RealtimeSuggestion> = candidates
             .iter()
             .filter_map(|(text, description, category)| {
                 let score = self.score(pattern, text);
                 if score >= self.threshold {
-                    Some(RealtimeSuggestion::new(
-                        text.clone(),
-                        description.clone(),
-                        category.clone(),
-                    ).with_score(score, self.get_match_indices(pattern, text)))
+                    Some(
+                        RealtimeSuggestion::new(
+                            text.clone(),
+                            description.clone(),
+                            category.clone(),
+                        )
+                        .with_score(score, self.get_match_indices(pattern, text)),
+                    )
                 } else {
                     None
                 }
@@ -118,7 +130,11 @@ impl FuzzyMatcher {
             .collect();
 
         // Sort by score (highest first)
-        suggestions.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        suggestions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         suggestions
     }
 }

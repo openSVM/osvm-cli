@@ -1,30 +1,30 @@
 //! Agent execution logic for AI processing and tool execution
 
-use anyhow::{Result, anyhow};
-use log::{error, warn, debug, info};
+use anyhow::{anyhow, Result};
+use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::Duration;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use uuid::Uuid;
 
-use crate::services::{
-    mcp_service::McpTool,
-    ai_service::PlannedTool
-};
+use crate::services::{ai_service::PlannedTool, mcp_service::McpTool};
 
 use super::super::state::AdvancedChatState;
-use super::super::types::{ChatMessage, AgentState};
+use super::super::types::{AgentState, ChatMessage};
 
 impl AdvancedChatState {
     pub async fn process_input_async(&self, session_id: Uuid, input: String) -> Result<()> {
         // Set agent state to thinking
         self.set_agent_state(session_id, AgentState::Thinking);
         self.add_message_to_session(session_id, ChatMessage::User(input.clone()))?;
-        self.add_message_to_session(session_id, ChatMessage::Processing {
-            message: "Analyzing your request...".to_string(),
-            spinner_index: self.spinner_state.load(Ordering::Relaxed)
-        })?;
+        self.add_message_to_session(
+            session_id,
+            ChatMessage::Processing {
+                message: "Analyzing your request...".to_string(),
+                spinner_index: self.spinner_state.load(Ordering::Relaxed),
+            },
+        )?;
 
         // First, refresh available tools to ensure we have the latest
         if let Err(e) = self.refresh_tools_from_mcp().await {
@@ -32,28 +32,48 @@ impl AdvancedChatState {
         }
 
         self.set_agent_state(session_id, AgentState::Planning);
-        self.add_message_to_session(session_id, ChatMessage::Processing {
-            message: "Creating execution plan...".to_string(),
-            spinner_index: self.spinner_state.load(Ordering::Relaxed)
-        })?;
+        self.add_message_to_session(
+            session_id,
+            ChatMessage::Processing {
+                message: "Creating execution plan...".to_string(),
+                spinner_index: self.spinner_state.load(Ordering::Relaxed),
+            },
+        )?;
 
         // Get available tools
-        let available_tools = self.available_tools.read()
+        let available_tools = self
+            .available_tools
+            .read()
             .map_err(|e| anyhow!("Failed to read available tools: {}", e))?
             .clone();
 
         // Use the proper AI service method to create tool plan
         let tool_plan_result = tokio::time::timeout(
-            Duration::from_secs(120),  // Extended timeout for comprehensive AI responses
-            self.ai_service.create_tool_plan(&input, &available_tools)
-        ).await;
+            Duration::from_secs(120), // Extended timeout for comprehensive AI responses
+            self.ai_service.create_tool_plan(&input, &available_tools),
+        )
+        .await;
 
         // Helper closure to build heuristic tools based on input
         let build_heuristic_plan = |text: &str| -> Vec<PlannedTool> {
             let mut tools = Vec::new();
             let lc = text.to_lowercase();
-            if lc.contains("balance") { tools.push(PlannedTool { server_id: "local_sim".into(), tool_name: "get_balance".into(), args: serde_json::json!({}), reason: "Heuristic: user asked about balance".into() }); }
-            if lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx") { tools.push(PlannedTool { server_id: "local_sim".into(), tool_name: "get_transactions".into(), args: serde_json::json!({}), reason: "Heuristic: user asked about transactions".into() }); }
+            if lc.contains("balance") {
+                tools.push(PlannedTool {
+                    server_id: "local_sim".into(),
+                    tool_name: "get_balance".into(),
+                    args: serde_json::json!({}),
+                    reason: "Heuristic: user asked about balance".into(),
+                });
+            }
+            if lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx") {
+                tools.push(PlannedTool {
+                    server_id: "local_sim".into(),
+                    tool_name: "get_transactions".into(),
+                    args: serde_json::json!({}),
+                    reason: "Heuristic: user asked about transactions".into(),
+                });
+            }
             tools
         };
 
@@ -63,19 +83,40 @@ impl AdvancedChatState {
         match tool_plan_result {
             Err(_) => {
                 warn!("AI planning timed out");
-                self.add_message_to_session(session_id, ChatMessage::Error("AI planning timed out. Using heuristic fallback.".to_string()))?;
-                if no_configured_tools { self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await?; }
-                else { self.simple_response(session_id, &input).await?; }
+                self.add_message_to_session(
+                    session_id,
+                    ChatMessage::Error(
+                        "AI planning timed out. Using heuristic fallback.".to_string(),
+                    ),
+                )?;
+                if no_configured_tools {
+                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await?;
+                } else {
+                    self.simple_response(session_id, &input).await?;
+                }
             }
             Ok(Err(e)) => {
                 error!("AI service failed: {}", e);
-                self.add_message_to_session(session_id, ChatMessage::Error("AI planning service failed. Using heuristic fallback.".to_string()))?;
-                if no_configured_tools { self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await?; }
-                else { self.simple_response(session_id, &input).await?; }
+                self.add_message_to_session(
+                    session_id,
+                    ChatMessage::Error(
+                        "AI planning service failed. Using heuristic fallback.".to_string(),
+                    ),
+                )?;
+                if no_configured_tools {
+                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await?;
+                } else {
+                    self.simple_response(session_id, &input).await?;
+                }
             }
             Ok(Ok(tool_plan)) => {
                 // Successfully got tool plan from AI service
-                self.add_message_to_session(session_id, ChatMessage::AgentPlan(tool_plan.osvm_tools_to_use.clone()))?;
+                self.add_message_to_session(
+                    session_id,
+                    ChatMessage::AgentPlan(tool_plan.osvm_tools_to_use.clone()),
+                )?;
 
                 if tool_plan.osvm_tools_to_use.is_empty() {
                     // No tools needed according to AI
@@ -83,8 +124,12 @@ impl AdvancedChatState {
                         // Try heuristic plan instead
                         let heur = build_heuristic_plan(&input);
                         if !heur.is_empty() {
-                            self.add_message_to_session(session_id, ChatMessage::AgentPlan(heur.clone()))?;
-                            self.run_heuristic_fallback(session_id, &input, heur).await?;
+                            self.add_message_to_session(
+                                session_id,
+                                ChatMessage::AgentPlan(heur.clone()),
+                            )?;
+                            self.run_heuristic_fallback(session_id, &input, heur)
+                                .await?;
                         } else {
                             self.simple_response(session_id, &input).await?;
                         }
@@ -95,7 +140,7 @@ impl AdvancedChatState {
                     // Execute tools iteratively with potential for follow-up actions
                     let mut executed_tools = Vec::new();
                     let mut iteration_count = 0;
-                    let max_iterations = 5;  // Allow up to 5 iterations of tool execution
+                    let max_iterations = 5; // Allow up to 5 iterations of tool execution
 
                     let mut current_tools = tool_plan.osvm_tools_to_use;
 
@@ -104,37 +149,50 @@ impl AdvancedChatState {
 
                         // Execute current batch of tools
                         for planned_tool in &current_tools {
-                            self.execute_planned_tool(session_id, planned_tool.clone()).await?;
+                            self.execute_planned_tool(session_id, planned_tool.clone())
+                                .await?;
                             executed_tools.push(planned_tool.clone());
                         }
 
                         // Check if we need follow-up actions based on results
-                        let session = self.get_session_by_id(session_id)
+                        let session = self
+                            .get_session_by_id(session_id)
                             .ok_or_else(|| anyhow!("Session not found"))?;
 
-                        let recent_results: Vec<(String, Value)> = session.messages.iter()
+                        let recent_results: Vec<(String, Value)> = session
+                            .messages
+                            .iter()
                             .rev()
                             .filter_map(|msg| match msg {
-                                ChatMessage::ToolResult { tool_name, result, .. } => {
-                                    Some((tool_name.clone(), result.clone()))
-                                }
-                                _ => None
+                                ChatMessage::ToolResult {
+                                    tool_name, result, ..
+                                } => Some((tool_name.clone(), result.clone())),
+                                _ => None,
                             })
-                            .take(current_tools.len())  // Get results for current batch of tools
+                            .take(current_tools.len()) // Get results for current batch of tools
                             .collect();
 
                         // Ask AI if we need follow-up tools based on results
                         if iteration_count < max_iterations && !recent_results.is_empty() {
-                            match self.check_for_follow_up_actions(&input, &recent_results, &available_tools).await {
+                            match self
+                                .check_for_follow_up_actions(
+                                    &input,
+                                    &recent_results,
+                                    &available_tools,
+                                )
+                                .await
+                            {
                                 Ok(follow_up_tools) if !follow_up_tools.is_empty() => {
-                                    self.add_message_to_session(session_id,
-                                        ChatMessage::AgentThinking(
-                                            format!("Executing {} follow-up actions...", follow_up_tools.len())
-                                        )
+                                    self.add_message_to_session(
+                                        session_id,
+                                        ChatMessage::AgentThinking(format!(
+                                            "Executing {} follow-up actions...",
+                                            follow_up_tools.len()
+                                        )),
                                     )?;
                                     current_tools = follow_up_tools;
                                 }
-                                _ => break,  // No more tools needed
+                                _ => break, // No more tools needed
                             }
                         } else {
                             break;
@@ -142,7 +200,8 @@ impl AdvancedChatState {
                     }
 
                     // Generate final response with all executed tools
-                    self.generate_final_response(session_id, &input, &tool_plan.expected_outcome).await?;
+                    self.generate_final_response(session_id, &input, &tool_plan.expected_outcome)
+                        .await?;
                 }
             }
         }
@@ -159,7 +218,12 @@ impl AdvancedChatState {
     }
 
     // Heuristic fallback execution simulating basic tools so user sees end-to-end flow
-    async fn run_heuristic_fallback(&self, session_id: Uuid, original_input: &str, tools: Vec<PlannedTool>) -> Result<()> {
+    async fn run_heuristic_fallback(
+        &self,
+        session_id: Uuid,
+        original_input: &str,
+        tools: Vec<PlannedTool>,
+    ) -> Result<()> {
         if tools.is_empty() {
             // Nothing heuristic matched; fall back to simple
             return self.simple_response(session_id, original_input).await;
@@ -168,35 +232,50 @@ impl AdvancedChatState {
         for planned_tool in tools {
             self.execute_planned_tool(session_id, planned_tool).await?;
         }
-        self.generate_final_response(session_id, original_input, "Heuristic simulated execution").await?;
+        self.generate_final_response(session_id, original_input, "Heuristic simulated execution")
+            .await?;
         Ok(())
     }
 
-    async fn execute_planned_tool(&self, session_id: Uuid, planned_tool: PlannedTool) -> Result<()> {
+    async fn execute_planned_tool(
+        &self,
+        session_id: Uuid,
+        planned_tool: PlannedTool,
+    ) -> Result<()> {
         let execution_id = Uuid::new_v4().to_string();
 
-        self.set_agent_state(session_id, AgentState::ExecutingTool(planned_tool.tool_name.clone()));
-        self.add_message_to_session(session_id, ChatMessage::ToolCall {
-            tool_name: planned_tool.tool_name.clone(),
-            description: planned_tool.reason.clone(),
-            args: Some(planned_tool.args.clone()),
-            execution_id: execution_id.clone(),
-        })?;
+        self.set_agent_state(
+            session_id,
+            AgentState::ExecutingTool(planned_tool.tool_name.clone()),
+        );
+        self.add_message_to_session(
+            session_id,
+            ChatMessage::ToolCall {
+                tool_name: planned_tool.tool_name.clone(),
+                description: planned_tool.reason.clone(),
+                args: Some(planned_tool.args.clone()),
+                execution_id: execution_id.clone(),
+            },
+        )?;
 
         // Execute the tool using MCP service
         match self.call_mcp_tool(&planned_tool).await {
             Ok(result) => {
-                self.add_message_to_session(session_id, ChatMessage::ToolResult {
-                    tool_name: planned_tool.tool_name,
-                    result,
-                    execution_id,
-                })?;
+                self.add_message_to_session(
+                    session_id,
+                    ChatMessage::ToolResult {
+                        tool_name: planned_tool.tool_name,
+                        result,
+                        execution_id,
+                    },
+                )?;
             }
             Err(e) => {
                 error!("Tool execution failed: {}", e);
-                self.add_message_to_session(session_id, ChatMessage::Error(
-                    format!("Tool {} failed: {}", planned_tool.tool_name, e)
-                ))?;
+                self.add_message_to_session(
+                    session_id,
+                    ChatMessage::Error(format!("Tool {} failed: {}", planned_tool.tool_name, e)),
+                )?;
             }
         }
 
@@ -212,15 +291,21 @@ impl AdvancedChatState {
             if server_config.enabled {
                 // Initialize the server if needed
                 if let Err(e) = mcp_service.initialize_server(&planned_tool.server_id).await {
-                    warn!("Failed to initialize MCP server {}: {}", planned_tool.server_id, e);
+                    warn!(
+                        "Failed to initialize MCP server {}: {}",
+                        planned_tool.server_id, e
+                    );
                 }
 
                 // Try to call the actual tool
-                match mcp_service.call_tool(
-                    &planned_tool.server_id,
-                    &planned_tool.tool_name,
-                    Some(planned_tool.args.clone())
-                ).await {
+                match mcp_service
+                    .call_tool(
+                        &planned_tool.server_id,
+                        &planned_tool.tool_name,
+                        Some(planned_tool.args.clone()),
+                    )
+                    .await
+                {
                     Ok(result) => return Ok(result),
                     Err(e) => {
                         warn!("MCP tool call failed: {}, falling back to simulation", e);
@@ -246,27 +331,38 @@ impl AdvancedChatState {
                 "tps": 3000,
                 "validators": {"active": 1800, "delinquent": 12}
             })),
-            _ => Ok(serde_json::json!({"result": "Tool executed successfully"}))
+            _ => Ok(serde_json::json!({"result": "Tool executed successfully"})),
         }
     }
 
-    async fn generate_final_response(&self, session_id: Uuid, original_input: &str, expected_outcome: &str) -> Result<()> {
+    async fn generate_final_response(
+        &self,
+        session_id: Uuid,
+        original_input: &str,
+        expected_outcome: &str,
+    ) -> Result<()> {
         // Get the recent tool results to inform the response
-        let session = self.get_session_by_id(session_id).ok_or_else(|| anyhow!("Session not found"))?;
-        let tool_results: Vec<(String, Value)> = session.messages.iter()
+        let session = self
+            .get_session_by_id(session_id)
+            .ok_or_else(|| anyhow!("Session not found"))?;
+        let tool_results: Vec<(String, Value)> = session
+            .messages
+            .iter()
             .rev()
             .filter_map(|msg| match msg {
-                ChatMessage::ToolResult { tool_name, result, .. } => Some((tool_name.clone(), result.clone())),
-                _ => None
+                ChatMessage::ToolResult {
+                    tool_name, result, ..
+                } => Some((tool_name.clone(), result.clone())),
+                _ => None,
             })
             .collect();
 
         // Use the AI service's contextual response generation
-        match self.ai_service.generate_contextual_response(
-            original_input,
-            &tool_results,
-            expected_outcome
-        ).await {
+        match self
+            .ai_service
+            .generate_contextual_response(original_input, &tool_results, expected_outcome)
+            .await
+        {
             Ok(response) => {
                 self.add_message_to_session(session_id, ChatMessage::Agent(response))?;
             }
@@ -309,11 +405,18 @@ impl AdvancedChatState {
         &self,
         original_input: &str,
         tool_results: &[(String, Value)],
-        available_tools: &HashMap<String, Vec<McpTool>>
+        available_tools: &HashMap<String, Vec<McpTool>>,
     ) -> Result<Vec<PlannedTool>> {
         // Create a context string with the results
-        let results_context = tool_results.iter()
-            .map(|(name, result)| format!("{}: {}", name, serde_json::to_string(result).unwrap_or_default()))
+        let results_context = tool_results
+            .iter()
+            .map(|(name, result)| {
+                format!(
+                    "{}: {}",
+                    name,
+                    serde_json::to_string(result).unwrap_or_default()
+                )
+            })
             .collect::<Vec<_>>()
             .join("\n");
 
@@ -327,12 +430,13 @@ impl AdvancedChatState {
         // Use a shorter timeout for follow-up checks
         match tokio::time::timeout(
             Duration::from_secs(10),
-            self.ai_service.create_tool_plan(&follow_up_prompt, available_tools)
-        ).await {
-            Ok(Ok(plan)) if !plan.osvm_tools_to_use.is_empty() => {
-                Ok(plan.osvm_tools_to_use)
-            }
-            _ => Ok(Vec::new()),  // No follow-up needed or error occurred
+            self.ai_service
+                .create_tool_plan(&follow_up_prompt, available_tools),
+        )
+        .await
+        {
+            Ok(Ok(plan)) if !plan.osvm_tools_to_use.is_empty() => Ok(plan.osvm_tools_to_use),
+            _ => Ok(Vec::new()), // No follow-up needed or error occurred
         }
     }
 }

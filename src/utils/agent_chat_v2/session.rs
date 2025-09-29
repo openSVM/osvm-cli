@@ -3,12 +3,12 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use log::error;
-use serde::{Serialize, Deserialize};
-use uuid::Uuid;
+use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
+use uuid::Uuid;
 
-use super::types::{ChatMessage, AgentState};
+use super::types::{AgentState, ChatMessage};
 
 /// Chat session with full state tracking
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,14 +74,21 @@ impl ChatSession {
         let mut file = File::create(&file_path)?;
         writeln!(file, "# OSVM Agent Chat Session Recording")?;
         writeln!(file, "# Session: {} ({})", self.name, self.id)?;
-        writeln!(file, "# Started: {}", Utc::now().format("%Y-%m-%d %H:%M:%S UTC"))?;
+        writeln!(
+            file,
+            "# Started: {}",
+            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        )?;
         writeln!(file, "# Format: [timestamp] {{message_json}}")?;
         writeln!(file, "")?;
 
         // Now enable recording and add the message
         self.recording = true;
         self.recording_file = Some(file_path.clone());
-        self.add_message(ChatMessage::System(format!("Recording started: {}", file_path)));
+        self.add_message(ChatMessage::System(format!(
+            "Recording started: {}",
+            file_path
+        )));
         Ok(())
     }
 

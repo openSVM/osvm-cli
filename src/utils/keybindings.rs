@@ -3,12 +3,12 @@
 //! This module provides a flexible keybinding system that allows users to
 //! customize keyboard shortcuts and create their own command mappings.
 
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
+use log::{debug, error, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use log::{debug, warn, error};
 
 /// Keybinding action types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -113,7 +113,7 @@ impl KeyCombo {
 
         let mut combo = KeyCombo::new(parts.last().unwrap());
 
-        for modifier in &parts[..parts.len()-1] {
+        for modifier in &parts[..parts.len() - 1] {
             match modifier.to_lowercase().as_str() {
                 "ctrl" | "control" => combo.ctrl = true,
                 "alt" | "option" => combo.alt = true,
@@ -130,10 +130,18 @@ impl KeyCombo {
     pub fn format(&self) -> String {
         let mut parts = Vec::new();
 
-        if self.ctrl { parts.push("Ctrl"); }
-        if self.alt { parts.push("Alt"); }
-        if self.shift { parts.push("Shift"); }
-        if self.meta { parts.push("Meta"); }
+        if self.ctrl {
+            parts.push("Ctrl");
+        }
+        if self.alt {
+            parts.push("Alt");
+        }
+        if self.shift {
+            parts.push("Shift");
+        }
+        if self.meta {
+            parts.push("Meta");
+        }
         parts.push(&self.key);
 
         parts.join("+")
@@ -189,7 +197,10 @@ impl Default for KeybindingConfig {
         bindings.insert(KeyCombo::new("o").ctrl(), KeyAction::LoadSession);
 
         // Toggle features
-        bindings.insert(KeyCombo::new("f").ctrl().alt(), KeyAction::ToggleFuzzySearch);
+        bindings.insert(
+            KeyCombo::new("f").ctrl().alt(),
+            KeyAction::ToggleFuzzySearch,
+        );
         bindings.insert(KeyCombo::new("v").ctrl().alt(), KeyAction::ToggleVimMode);
 
         Self {
@@ -219,7 +230,10 @@ impl KeybindingConfig {
         let config: Self = serde_json::from_str(&content)
             .map_err(|e| anyhow!("Failed to parse keybinding config: {}", e))?;
 
-        debug!("Loaded keybinding config with {} bindings", config.bindings.len());
+        debug!(
+            "Loaded keybinding config with {} bindings",
+            config.bindings.len()
+        );
         Ok(config)
     }
 
@@ -244,8 +258,8 @@ impl KeybindingConfig {
 
     /// Get configuration file path
     fn config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
         Ok(PathBuf::from(home).join(".osvm").join("keybindings.json"))
     }
 
@@ -291,39 +305,55 @@ impl KeybindingConfig {
     /// Add Vim-style keybindings
     fn add_vim_bindings(&mut self) {
         // Vim navigation
-        self.bindings.insert(KeyCombo::new("h"), KeyAction::MoveLeft);
-        self.bindings.insert(KeyCombo::new("j"), KeyAction::MoveDown);
+        self.bindings
+            .insert(KeyCombo::new("h"), KeyAction::MoveLeft);
+        self.bindings
+            .insert(KeyCombo::new("j"), KeyAction::MoveDown);
         self.bindings.insert(KeyCombo::new("k"), KeyAction::MoveUp);
-        self.bindings.insert(KeyCombo::new("l"), KeyAction::MoveRight);
+        self.bindings
+            .insert(KeyCombo::new("l"), KeyAction::MoveRight);
 
         // Vim commands
         self.bindings.insert(KeyCombo::new("0"), KeyAction::Home);
         self.bindings.insert(KeyCombo::new("$"), KeyAction::End);
         self.bindings.insert(KeyCombo::new("x"), KeyAction::Delete);
-        self.bindings.insert(KeyCombo::new("i"), KeyAction::EnterCommandMode);
+        self.bindings
+            .insert(KeyCombo::new("i"), KeyAction::EnterCommandMode);
 
         // Vim shortcuts
-        self.bindings.insert(KeyCombo::new("d").shift(), KeyAction::ClearHistory);
-        self.bindings.insert(KeyCombo::new("y").shift(), KeyAction::SaveSession);
+        self.bindings
+            .insert(KeyCombo::new("d").shift(), KeyAction::ClearHistory);
+        self.bindings
+            .insert(KeyCombo::new("y").shift(), KeyAction::SaveSession);
     }
 
     /// Add Emacs-style keybindings
     fn add_emacs_bindings(&mut self) {
         // Emacs navigation
-        self.bindings.insert(KeyCombo::new("b").ctrl(), KeyAction::MoveLeft);
-        self.bindings.insert(KeyCombo::new("f").ctrl(), KeyAction::MoveRight);
-        self.bindings.insert(KeyCombo::new("p").ctrl(), KeyAction::MoveUp);
-        self.bindings.insert(KeyCombo::new("n").ctrl(), KeyAction::MoveDown);
+        self.bindings
+            .insert(KeyCombo::new("b").ctrl(), KeyAction::MoveLeft);
+        self.bindings
+            .insert(KeyCombo::new("f").ctrl(), KeyAction::MoveRight);
+        self.bindings
+            .insert(KeyCombo::new("p").ctrl(), KeyAction::MoveUp);
+        self.bindings
+            .insert(KeyCombo::new("n").ctrl(), KeyAction::MoveDown);
 
         // Emacs commands
-        self.bindings.insert(KeyCombo::new("a").ctrl(), KeyAction::Home);
-        self.bindings.insert(KeyCombo::new("e").ctrl(), KeyAction::End);
-        self.bindings.insert(KeyCombo::new("d").ctrl(), KeyAction::Delete);
-        self.bindings.insert(KeyCombo::new("k").ctrl(), KeyAction::Clear);
+        self.bindings
+            .insert(KeyCombo::new("a").ctrl(), KeyAction::Home);
+        self.bindings
+            .insert(KeyCombo::new("e").ctrl(), KeyAction::End);
+        self.bindings
+            .insert(KeyCombo::new("d").ctrl(), KeyAction::Delete);
+        self.bindings
+            .insert(KeyCombo::new("k").ctrl(), KeyAction::Clear);
 
         // Emacs shortcuts
-        self.bindings.insert(KeyCombo::new("x").ctrl().then("h"), KeyAction::ShowHelp);
-        self.bindings.insert(KeyCombo::new("x").ctrl().then("s"), KeyAction::SaveSession);
+        self.bindings
+            .insert(KeyCombo::new("x").ctrl().then("h"), KeyAction::ShowHelp);
+        self.bindings
+            .insert(KeyCombo::new("x").ctrl().then("s"), KeyAction::SaveSession);
     }
 
     /// List all keybindings
@@ -351,10 +381,17 @@ impl KeybindingConfig {
         output.push_str("|-----|--------|\n");
 
         for (combo, action) in &self.bindings {
-            if matches!(action, KeyAction::MoveUp | KeyAction::MoveDown |
-                       KeyAction::MoveLeft | KeyAction::MoveRight |
-                       KeyAction::PageUp | KeyAction::PageDown |
-                       KeyAction::Home | KeyAction::End) {
+            if matches!(
+                action,
+                KeyAction::MoveUp
+                    | KeyAction::MoveDown
+                    | KeyAction::MoveLeft
+                    | KeyAction::MoveRight
+                    | KeyAction::PageUp
+                    | KeyAction::PageDown
+                    | KeyAction::Home
+                    | KeyAction::End
+            ) {
                 output.push_str(&format!("| {} | {:?} |\n", combo.format(), action));
             }
         }
@@ -364,10 +401,17 @@ impl KeybindingConfig {
         output.push_str("|-----|--------|\n");
 
         for (combo, action) in &self.bindings {
-            if !matches!(action, KeyAction::MoveUp | KeyAction::MoveDown |
-                        KeyAction::MoveLeft | KeyAction::MoveRight |
-                        KeyAction::PageUp | KeyAction::PageDown |
-                        KeyAction::Home | KeyAction::End) {
+            if !matches!(
+                action,
+                KeyAction::MoveUp
+                    | KeyAction::MoveDown
+                    | KeyAction::MoveLeft
+                    | KeyAction::MoveRight
+                    | KeyAction::PageUp
+                    | KeyAction::PageDown
+                    | KeyAction::Home
+                    | KeyAction::End
+            ) {
                 output.push_str(&format!("| {} | {:?} |\n", combo.format(), action));
             }
         }
@@ -397,11 +441,10 @@ pub struct KeybindingManager {
 impl KeybindingManager {
     /// Create new keybinding manager
     pub fn new() -> Result<Self> {
-        let config = KeybindingConfig::load()
-            .unwrap_or_else(|e| {
-                warn!("Failed to load keybinding config: {}, using defaults", e);
-                KeybindingConfig::default()
-            });
+        let config = KeybindingConfig::load().unwrap_or_else(|e| {
+            warn!("Failed to load keybinding config: {}, using defaults", e);
+            KeybindingConfig::default()
+        });
 
         Ok(Self {
             config,
@@ -437,7 +480,10 @@ impl KeybindingManager {
                     self.recording_macro = false;
                     self.last_macro = self.macro_sequence.clone();
                     self.macro_sequence.clear();
-                    debug!("Stopped macro recording, {} keys recorded", self.last_macro.len());
+                    debug!(
+                        "Stopped macro recording, {} keys recorded",
+                        self.last_macro.len()
+                    );
                 } else {
                     // Start recording
                     self.recording_macro = true;

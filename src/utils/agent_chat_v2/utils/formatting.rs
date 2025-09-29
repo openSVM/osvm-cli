@@ -19,13 +19,16 @@ pub fn sanitize_text_for_ui(text: &str) -> String {
     sanitized = sanitized.replace("\r\n", "\n").replace('\r', "\n");
 
     // Remove other control characters (except newline) that can corrupt the TUI
-    sanitized = sanitized.chars()
+    sanitized = sanitized
+        .chars()
         .filter(|c| *c == '\n' || !c.is_control())
         .collect();
 
     // Redact potential private keys (base58-like patterns)
     if let Ok(key_pattern) = Regex::new(r"\b[1-9A-HJ-NP-Za-km-z]{32,44}\b") {
-        sanitized = key_pattern.replace_all(&sanitized, "[REDACTED_KEY]").to_string();
+        sanitized = key_pattern
+            .replace_all(&sanitized, "[REDACTED_KEY]")
+            .to_string();
     }
 
     // Collapse long runs of whitespace/newlines to avoid blowups
@@ -54,7 +57,7 @@ pub fn sanitize_json_for_ui(value: &Value) -> String {
                 sanitized
             }
         }
-        Err(_) => "[Invalid JSON]".to_string()
+        Err(_) => "[Invalid JSON]".to_string(),
     }
 }
 

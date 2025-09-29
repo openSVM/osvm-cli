@@ -298,7 +298,9 @@ async fn handle_mcp_command(
     app_matches: &clap::ArgMatches,
     matches: &clap::ArgMatches,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::services::mcp_service::{McpAuthConfig, McpServerConfig, McpService, McpTransportType};
+    use crate::services::mcp_service::{
+        McpAuthConfig, McpServerConfig, McpService, McpTransportType,
+    };
 
     let debug_mode = app_matches.get_flag("debug");
     let mut mcp_service = McpService::new_with_debug(debug_mode);
@@ -317,15 +319,19 @@ async fn handle_mcp_command(
 
     match mcp_sub_command {
         "add" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id")
+            let server_id = mcp_sub_matches
+                .get_one::<String>("server_id")
                 .expect("server_id is required by clap");
-            let url = mcp_sub_matches.get_one::<String>("server_url")
+            let url = mcp_sub_matches
+                .get_one::<String>("server_url")
                 .expect("server_url is required by clap");
-            let name = mcp_sub_matches.get_one::<String>("name")
+            let name = mcp_sub_matches
+                .get_one::<String>("name")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| server_id.clone());
-            
-            let transport_str = mcp_sub_matches.get_one::<String>("transport")
+
+            let transport_str = mcp_sub_matches
+                .get_one::<String>("transport")
                 .expect("transport has a default value");
             let transport_type = match transport_str.as_str() {
                 "http" => McpTransportType::Http,
@@ -334,10 +340,15 @@ async fn handle_mcp_command(
                 _ => McpTransportType::Http,
             };
 
-            let auth = if mcp_sub_matches.get_one::<String>("auth_type")
-                .expect("auth_type has a default value") != "none" {
-                let auth_type = mcp_sub_matches.get_one::<String>("auth_type")
-                    .expect("auth_type checked above").clone();
+            let auth = if mcp_sub_matches
+                .get_one::<String>("auth_type")
+                .expect("auth_type has a default value")
+                != "none"
+            {
+                let auth_type = mcp_sub_matches
+                    .get_one::<String>("auth_type")
+                    .expect("auth_type checked above")
+                    .clone();
                 Some(McpAuthConfig {
                     auth_type,
                     token: mcp_sub_matches.get_one::<String>("auth_token").cloned(),
@@ -363,7 +374,7 @@ async fn handle_mcp_command(
 
             mcp_service.add_server(server_id.clone(), config);
             println!("✅ Added MCP server '{}' at {}", server_id, url);
-            
+
             if enabled {
                 println!("🔄 Testing server connectivity...");
                 if let Err(e) = mcp_service.test_server(server_id).await {
@@ -376,21 +387,34 @@ async fn handle_mcp_command(
         }
 
         "add-github" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id")
+            let server_id = mcp_sub_matches
+                .get_one::<String>("server_id")
                 .expect("server_id is required by clap");
-            let github_url = mcp_sub_matches.get_one::<String>("github_url")
+            let github_url = mcp_sub_matches
+                .get_one::<String>("github_url")
                 .expect("github_url is required by clap");
             let name = mcp_sub_matches.get_one::<String>("name").cloned();
             let enabled = mcp_sub_matches.get_flag("enabled");
             let skip_confirmation = mcp_sub_matches.get_flag("yes");
 
             println!("🔄 Cloning MCP server from GitHub: {}", github_url);
-            
-            match mcp_service.add_server_from_github(server_id.clone(), github_url.clone(), name, skip_confirmation).await {
+
+            match mcp_service
+                .add_server_from_github(
+                    server_id.clone(),
+                    github_url.clone(),
+                    name,
+                    skip_confirmation,
+                )
+                .await
+            {
                 Ok(_) => {
-                    println!("✅ Successfully cloned and configured MCP server '{}'", server_id);
+                    println!(
+                        "✅ Successfully cloned and configured MCP server '{}'",
+                        server_id
+                    );
                     println!("   Repository: {}", github_url);
-                    
+
                     if enabled {
                         println!("🔄 Testing server connectivity...");
                         if let Err(e) = mcp_service.test_server(server_id).await {
@@ -413,7 +437,10 @@ async fn handle_mcp_command(
         "remove" => {
             let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
             if let Some(removed_config) = mcp_service.remove_server(server_id) {
-                println!("✅ Removed MCP server '{}' ({})", server_id, removed_config.name);
+                println!(
+                    "✅ Removed MCP server '{}' ({})",
+                    server_id, removed_config.name
+                );
             } else {
                 eprintln!("❌ Server '{}' not found", server_id);
                 std::process::exit(1);
@@ -426,11 +453,12 @@ async fn handle_mcp_command(
             let enabled_only = mcp_sub_matches.get_flag("enabled_only");
 
             if json_output {
-                let filtered_servers: std::collections::HashMap<&String, &McpServerConfig> = servers
-                    .iter()
-                    .filter(|(_, config)| !enabled_only || config.enabled)
-                    .map(|(id, config)| (*id, *config))
-                    .collect();
+                let filtered_servers: std::collections::HashMap<&String, &McpServerConfig> =
+                    servers
+                        .iter()
+                        .filter(|(_, config)| !enabled_only || config.enabled)
+                        .map(|(id, config)| (*id, *config))
+                        .collect();
                 println!("{}", serde_json::to_string_pretty(&filtered_servers)?);
             } else {
                 if servers.is_empty() {
@@ -442,21 +470,24 @@ async fn handle_mcp_command(
 
                 println!("📋 Configured MCP Servers:");
                 println!("========================");
-                
+
                 for (server_id, config) in servers {
                     if enabled_only && !config.enabled {
                         continue;
                     }
-                    
+
                     let status_icon = if config.enabled { "🟢" } else { "🔴" };
                     let transport_icon = match config.transport_type {
                         McpTransportType::Http => "🌐",
-                        McpTransportType::Websocket => "🔌", 
+                        McpTransportType::Websocket => "🔌",
                         McpTransportType::Stdio => "⚡",
                     };
-                    
+
                     println!();
-                    println!("  {} {} {} {}", status_icon, transport_icon, server_id, config.name);
+                    println!(
+                        "  {} {} {} {}",
+                        status_icon, transport_icon, server_id, config.name
+                    );
                     println!("     URL: {}", config.url);
                     println!("     Transport: {:?}", config.transport_type);
                     if config.auth.is_some() {
@@ -480,9 +511,9 @@ async fn handle_mcp_command(
 
         "test" => {
             let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            
+
             println!("🔄 Testing MCP server '{}'...", server_id);
-            
+
             match mcp_service.test_server(server_id).await {
                 Ok(_) => {
                     println!("✅ MCP server '{}' connectivity test passed!", server_id);
@@ -496,9 +527,9 @@ async fn handle_mcp_command(
 
         "init" => {
             let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            
+
             println!("🔄 Initializing MCP server '{}'...", server_id);
-            
+
             match mcp_service.initialize_server(server_id).await {
                 Ok(_) => {
                     println!("✅ Successfully initialized MCP server '{}'", server_id);
@@ -513,9 +544,9 @@ async fn handle_mcp_command(
         "tools" => {
             let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
             let json_output = mcp_sub_matches.get_flag("json");
-            
+
             println!("🔄 Fetching tools from MCP server '{}'...", server_id);
-            
+
             match mcp_service.list_tools(server_id).await {
                 Ok(tools) => {
                     if json_output {
@@ -525,19 +556,23 @@ async fn handle_mcp_command(
                             println!("No tools available from server '{}'", server_id);
                             return Ok(());
                         }
-                        
+
                         println!("🛠️  Available Tools from '{}':", server_id);
                         println!("=================================");
-                        
+
                         for tool in tools {
                             println!();
                             println!("  📦 {}", tool.name);
                             if let Some(description) = &tool.description {
                                 println!("     Description: {}", description);
                             }
-                            
+
                             // Show input schema in a more readable format
-                            if let Ok(schema_obj) = serde_json::from_value::<serde_json::Map<String, serde_json::Value>>(tool.input_schema.clone()) {
+                            if let Ok(schema_obj) = serde_json::from_value::<
+                                serde_json::Map<String, serde_json::Value>,
+                            >(
+                                tool.input_schema.clone()
+                            ) {
                                 if let Some(properties) = schema_obj.get("properties") {
                                     if let Some(props_obj) = properties.as_object() {
                                         if !props_obj.is_empty() {
@@ -550,13 +585,19 @@ async fn handle_mcp_command(
                                 }
                             }
                         }
-                        
+
                         println!();
-                        println!("💡 Use 'osvm mcp call {} <tool_name>' to execute a tool", server_id);
+                        println!(
+                            "💡 Use 'osvm mcp call {} <tool_name>' to execute a tool",
+                            server_id
+                        );
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to fetch tools from MCP server '{}': {}", server_id, e);
+                    eprintln!(
+                        "❌ Failed to fetch tools from MCP server '{}': {}",
+                        server_id, e
+                    );
                     std::process::exit(1);
                 }
             }
@@ -566,21 +607,26 @@ async fn handle_mcp_command(
             let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
             let tool_name = mcp_sub_matches.get_one::<String>("tool_name").unwrap();
             let json_output = mcp_sub_matches.get_flag("json");
-            
+
             let arguments = if let Some(args_str) = mcp_sub_matches.get_one::<String>("arguments") {
-                Some(serde_json::from_str(args_str)
-                    .map_err(|e| format!("Invalid JSON arguments: {}", e))?)
+                Some(
+                    serde_json::from_str(args_str)
+                        .map_err(|e| format!("Invalid JSON arguments: {}", e))?,
+                )
             } else {
                 None
             };
-            
+
             if debug_mode {
-                println!("🔄 Calling tool '{}' on MCP server '{}'...", tool_name, server_id);
+                println!(
+                    "🔄 Calling tool '{}' on MCP server '{}'...",
+                    tool_name, server_id
+                );
                 if let Some(ref args) = arguments {
                     println!("   Arguments: {}", serde_json::to_string_pretty(args)?);
                 }
             }
-            
+
             match mcp_service.call_tool(server_id, tool_name, arguments).await {
                 Ok(result) => {
                     if json_output {
@@ -588,7 +634,7 @@ async fn handle_mcp_command(
                     } else {
                         println!("✅ Tool '{}' executed successfully:", tool_name);
                         println!();
-                        
+
                         // Try to display the result in a user-friendly way
                         if let Some(content) = result.get("content") {
                             if let Some(content_array) = content.as_array() {
@@ -610,7 +656,10 @@ async fn handle_mcp_command(
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to call tool '{}' on MCP server '{}': {}", tool_name, server_id, e);
+                    eprintln!(
+                        "❌ Failed to call tool '{}' on MCP server '{}': {}",
+                        tool_name, server_id, e
+                    );
                     std::process::exit(1);
                 }
             }
@@ -619,10 +668,10 @@ async fn handle_mcp_command(
         "setup" => {
             let url = mcp_sub_matches.get_one::<String>("mcp_url").unwrap();
             let auto_enable = mcp_sub_matches.get_flag("auto_enable");
-            
+
             println!("🚀 Setting up Solana MCP Server integration...");
             println!("   URL: {}", url);
-            
+
             let config = McpServerConfig {
                 name: "Solana MCP Server".to_string(),
                 url: url.clone(),
@@ -633,10 +682,10 @@ async fn handle_mcp_command(
                 github_url: None,
                 local_path: None,
             };
-            
+
             mcp_service.add_server("solana".to_string(), config);
             println!("✅ Added Solana MCP server configuration");
-            
+
             if auto_enable {
                 println!("🔄 Testing server connectivity...");
                 match mcp_service.test_server("solana").await {
@@ -645,13 +694,18 @@ async fn handle_mcp_command(
                         println!();
                         println!("🎉 Setup complete! You can now:");
                         println!("   • List available tools: osvm mcp tools solana");
-                        println!("   • Call Solana RPC methods: osvm mcp call solana <method_name>");
+                        println!(
+                            "   • Call Solana RPC methods: osvm mcp call solana <method_name>"
+                        );
                         println!("   • Query blockchain data through natural language in AI mode");
                     }
                     Err(e) => {
                         eprintln!("⚠️  Warning: Server test failed: {}", e);
                         eprintln!("   The server was configured but may not be accessible.");
-                        eprintln!("   Please check that the Solana MCP server is running at: {}", url);
+                        eprintln!(
+                            "   Please check that the Solana MCP server is running at: {}",
+                            url
+                        );
                         eprintln!();
                         eprintln!("🔧 To start the Solana MCP server:");
                         eprintln!("   git clone https://github.com/openSVM/solana-mcp-server");
@@ -665,15 +719,18 @@ async fn handle_mcp_command(
         }
 
         "search" => {
-            let query = mcp_sub_matches.get_one::<String>("query")
+            let query = mcp_sub_matches
+                .get_one::<String>("query")
                 .expect("query is required by clap");
             let transport = mcp_sub_matches.get_one::<String>("transport");
             let enabled_only = mcp_sub_matches.get_flag("enabled_only");
             let json_output = mcp_sub_matches.get_flag("json");
-            
-            let transport_filter = transport.map(|t| if t == "any" { None } else { Some(t.as_str()) }).flatten();
+
+            let transport_filter = transport
+                .map(|t| if t == "any" { None } else { Some(t.as_str()) })
+                .flatten();
             let results = mcp_service.search_servers(query, transport_filter, enabled_only);
-            
+
             if results.is_empty() {
                 println!("🔍 No MCP servers found matching query: '{}'", query);
                 if enabled_only {
@@ -684,46 +741,56 @@ async fn handle_mcp_command(
                 }
             } else {
                 if json_output {
-                    let json_results: Vec<serde_json::Value> = results.iter().map(|(id, config)| {
-                        serde_json::json!({
-                            "id": id,
-                            "name": config.name,
-                            "url": config.url,
-                            "transport": match config.transport_type {
-                                McpTransportType::Http => "http",
-                                McpTransportType::Websocket => "websocket",
-                                McpTransportType::Stdio => "stdio"
-                            },
-                            "enabled": config.enabled,
-                            "has_auth": config.auth.is_some(),
-                            "github_url": config.github_url
+                    let json_results: Vec<serde_json::Value> = results
+                        .iter()
+                        .map(|(id, config)| {
+                            serde_json::json!({
+                                "id": id,
+                                "name": config.name,
+                                "url": config.url,
+                                "transport": match config.transport_type {
+                                    McpTransportType::Http => "http",
+                                    McpTransportType::Websocket => "websocket",
+                                    McpTransportType::Stdio => "stdio"
+                                },
+                                "enabled": config.enabled,
+                                "has_auth": config.auth.is_some(),
+                                "github_url": config.github_url
+                            })
                         })
-                    }).collect();
+                        .collect();
                     println!("{}", serde_json::to_string_pretty(&json_results)?);
                 } else {
-                    println!("🔍 Found {} MCP server(s) matching '{}:'", results.len(), query);
+                    println!(
+                        "🔍 Found {} MCP server(s) matching '{}:'",
+                        results.len(),
+                        query
+                    );
                     println!();
-                    
+
                     for (id, config) in results {
                         let status_icon = if config.enabled { "🟢" } else { "🔴" };
                         let transport_icon = match config.transport_type {
                             McpTransportType::Http => "🌐",
-                            McpTransportType::Websocket => "🔗", 
+                            McpTransportType::Websocket => "🔗",
                             McpTransportType::Stdio => "⚡",
                         };
                         let auth_badge = if config.auth.is_some() { " 🔐" } else { "" };
-                        
-                        println!("  {} {} {} {}{}", status_icon, transport_icon, id, config.name, auth_badge);
+
+                        println!(
+                            "  {} {} {} {}{}",
+                            status_icon, transport_icon, id, config.name, auth_badge
+                        );
                         println!("     URL: {}", config.url);
-                        
+
                         if let Some(github_url) = &config.github_url {
                             println!("     GitHub: {}", github_url);
                         }
-                        
+
                         if let Some(local_path) = &config.local_path {
                             println!("     Local: {}", local_path);
                         }
-                        
+
                         println!("     Transport: {:?}", config.transport_type);
                         println!();
                     }
@@ -769,7 +836,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("💡 Tip: Use 'osvm --help' to see all available commands\n");
 
             // Launch advanced chat directly
-            return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
+            return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                .await
                 .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
         }
     };
@@ -790,7 +858,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_audit_command(&app_matches, sub_matches).await;
     }
 
-    // Handle MCP command early to avoid config loading that might trigger self-repair  
+    // Handle MCP command early to avoid config loading that might trigger self-repair
     if sub_command == "mcp" {
         return handle_mcp_command(&app_matches, sub_matches).await;
     }
@@ -799,26 +867,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if sub_command == "chat" {
         // Check if test mode is requested
         if sub_matches.get_flag("test") {
-            return crate::utils::agent_chat::run_chat_ui_tests().await
+            return crate::utils::agent_chat::run_chat_ui_tests()
+                .await
                 .map_err(|e| e.into());
         } else if sub_matches.get_flag("advanced") {
-            return crate::utils::agent_chat_v2::run_advanced_agent_chat().await
+            return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                .await
                 .map_err(|e| e.into());
         } else {
-            return crate::utils::agent_chat::run_agent_chat_ui().await
+            return crate::utils::agent_chat::run_agent_chat_ui()
+                .await
                 .map_err(|e| e.into());
         }
     }
 
     // Handle agent command for CLI-based agent execution
     if sub_command == "agent" {
-        let prompt = sub_matches.get_one::<String>("prompt")
+        let prompt = sub_matches
+            .get_one::<String>("prompt")
             .ok_or("No prompt provided for agent command")?;
 
         let json_output = sub_matches.get_flag("json");
         let verbose = sub_matches.get_count("verbose");
         let no_tools = sub_matches.get_flag("no-tools");
-        let timeout = sub_matches.get_one::<String>("timeout")
+        let timeout = sub_matches
+            .get_one::<String>("timeout")
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(30);
 
@@ -827,8 +900,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             json_output,
             verbose,
             no_tools,
-            timeout
-        ).await.map_err(|e| e.into());
+            timeout,
+        )
+        .await
+        .map_err(|e| e.into());
     }
 
     // Handle AI queries early to avoid config loading

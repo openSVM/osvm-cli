@@ -1,6 +1,6 @@
 //! Task state management for tracking chat operations and UI state
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Priority levels for todo items
 #[derive(Debug, Clone)]
@@ -68,7 +68,8 @@ impl TaskState {
         Self {
             current_task: "Initialize OSVM Agent".to_string(),
             todo_items: Self::default_todos(),
-            current_reasoning: "Setting up OSVM agent environment and loading necessary services...".to_string(),
+            current_reasoning:
+                "Setting up OSVM agent environment and loading necessary services...".to_string(),
             selected_todo_index: 0,
             input_mode: InputMode::InputField,
             spinner_frame: 0,

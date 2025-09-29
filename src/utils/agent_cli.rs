@@ -4,16 +4,16 @@
 //! without launching the full interactive UI. It uses the AI service to create
 //! tool plans and executes them, providing results directly to stdout.
 
-use anyhow::{Result, Context};
-use serde::{Serialize, Deserialize};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
 
 use crate::services::{
-    ai_service::{AiService, ToolPlan, PlannedTool},
-    mcp_service::{McpService, McpTool}
+    ai_service::{AiService, PlannedTool, ToolPlan},
+    mcp_service::{McpService, McpTool},
 };
 
 /// Result of agent command execution
@@ -127,10 +127,7 @@ pub async fn execute_agent_command(
         json_output,
     );
 
-    match tokio::time::timeout(
-        Duration::from_secs(timeout_seconds),
-        execution_future
-    ).await {
+    match tokio::time::timeout(Duration::from_secs(timeout_seconds), execution_future).await {
         Ok(Ok((plan, tool_results, final_response))) => {
             result.plan = Some(plan);
             result.tool_results = tool_results;
@@ -139,10 +136,16 @@ pub async fn execute_agent_command(
         }
         Ok(Err(e)) => {
             result.error = Some(format!("Execution failed: {}", e));
-            result.final_response = format!("I encountered an error while processing your request: {}", e);
+            result.final_response = format!(
+                "I encountered an error while processing your request: {}",
+                e
+            );
         }
         Err(_) => {
-            result.error = Some(format!("Execution timed out after {} seconds", timeout_seconds));
+            result.error = Some(format!(
+                "Execution timed out after {} seconds",
+                timeout_seconds
+            ));
             result.final_response = "The operation timed out. Please try again with a simpler request or increase the timeout.".to_string();
         }
     }
@@ -178,7 +181,8 @@ pub async fn execute_agent_command(
                 if let Some(ref error) = tool_result.error {
                     println!("   ❌ {}: {}", tool_result.tool_name, error);
                 } else if let Some(ref result_value) = tool_result.result {
-                    println!("   ✅ {}: {}",
+                    println!(
+                        "   ✅ {}: {}",
                         tool_result.tool_name,
                         format_tool_result(result_value)
                     );
@@ -214,7 +218,8 @@ async fn execute_with_plan(
     let tool_plan = if no_tools || available_tools.is_empty() {
         // Create a simple plan without tools
         ToolPlan {
-            reasoning: "No tools available or tool execution disabled. Providing direct response.".to_string(),
+            reasoning: "No tools available or tool execution disabled. Providing direct response."
+                .to_string(),
             osvm_tools_to_use: Vec::new(),
             expected_outcome: "Direct AI response to the query".to_string(),
         }
@@ -223,7 +228,10 @@ async fn execute_with_plan(
         match ai_service.create_tool_plan(prompt, available_tools).await {
             Ok(plan) => {
                 if verbose > 1 {
-                    eprintln!("📝 OSVM Plan received with {} tools", plan.osvm_tools_to_use.len());
+                    eprintln!(
+                        "📝 OSVM Plan received with {} tools",
+                        plan.osvm_tools_to_use.len()
+                    );
                 }
                 plan
             }
@@ -264,15 +272,21 @@ async fn execute_with_plan(
     }
 
     // Generate final response
-    let tool_results_for_ai: Vec<(String, Value)> = tool_results.iter()
+    let tool_results_for_ai: Vec<(String, Value)> = tool_results
+        .iter()
         .filter_map(|tr| {
-            tr.result.as_ref().map(|r| (tr.tool_name.clone(), r.clone()))
+            tr.result
+                .as_ref()
+                .map(|r| (tr.tool_name.clone(), r.clone()))
         })
         .collect();
 
-    let final_response = if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
+    let final_response = if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty()
+    {
         // No tools were used, get direct AI response
-        ai_service.query_with_debug(prompt, verbose > 1).await
+        ai_service
+            .query_with_debug(prompt, verbose > 1)
+            .await
             .unwrap_or_else(|e| format!("I apologize, but I couldn't generate a response: {}", e))
     } else {
         ai_service.generate_contextual_response(
@@ -291,7 +305,10 @@ async fn execute_with_plan(
 /// Execute a tool from the OSVM plan
 async fn execute_mock_tool(planned_tool: &PlannedTool) -> (Option<Value>, Option<String>) {
     // Log tool execution for agentic behavior
-    eprintln!("🤖 Agent executing: {} on {}", planned_tool.tool_name, planned_tool.server_id);
+    eprintln!(
+        "🤖 Agent executing: {} on {}",
+        planned_tool.tool_name, planned_tool.server_id
+    );
 
     // Simulate execution delay for realistic behavior
     tokio::time::sleep(Duration::from_millis(200)).await;
@@ -311,12 +328,14 @@ async fn execute_mock_tool(planned_tool: &PlannedTool) -> (Option<Value>, Option
                     "address": "7nYzPUfXgvNgSPe5kEqKvGvSZg4rPKnrJdK5eTbDwRmQ",
                     "last_activity": "2024-01-20T15:30:00Z"
                 })),
-                None
+                None,
             )
         }
         "get_transactions" => {
             // Simulate fetching transactions
-            let limit = planned_tool.args.get("limit")
+            let limit = planned_tool
+                .args
+                .get("limit")
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<usize>().ok())
                 .unwrap_or(10);
@@ -346,7 +365,7 @@ async fn execute_mock_tool(planned_tool: &PlannedTool) -> (Option<Value>, Option
                     "total": 2,
                     "limit": limit
                 })),
-                None
+                None,
             )
         }
         "deploy_validator" => {
@@ -366,7 +385,7 @@ async fn execute_mock_tool(planned_tool: &PlannedTool) -> (Option<Value>, Option
                         "Service will be started"
                     ]
                 })),
-                None
+                None,
             )
         }
         "get_network_status" => {
@@ -383,19 +402,21 @@ async fn execute_mock_tool(planned_tool: &PlannedTool) -> (Option<Value>, Option
                     },
                     "status": "healthy"
                 })),
-                None
+                None,
             )
         }
         _ => {
             // Unknown tool - this shouldn't happen with proper OSVM planning
             (
                 None,
-                Some(format!("Tool '{}' is not available in the current context", planned_tool.tool_name))
+                Some(format!(
+                    "Tool '{}' is not available in the current context",
+                    planned_tool.tool_name
+                )),
             )
         }
     }
 }
-
 
 /// Format tool result for display
 fn format_tool_result(value: &Value) -> String {
@@ -428,7 +449,8 @@ mod tests {
             0,    // no verbose
             true, // no tools
             5,    // timeout
-        ).await;
+        )
+        .await;
 
         assert!(result.is_ok());
     }

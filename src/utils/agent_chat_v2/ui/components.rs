@@ -1,16 +1,16 @@
 //! Individual UI components
 
-use cursive::{Cursive, CursiveExt, View};
-use cursive::views::{
-    Dialog, EditView, LinearLayout, TextView, ScrollView, Panel, Button,
-    ListView, SelectView, ResizedView, DummyView, NamedView
-};
 use cursive::traits::*;
+use cursive::views::{
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, NamedView, Panel, ResizedView,
+    ScrollView, SelectView, TextView,
+};
+use cursive::{Cursive, CursiveExt, View};
 use uuid::Uuid;
 
 use super::super::state::AdvancedChatState;
-use super::layout::AdvancedChatUI;
 use super::handlers::*;
+use super::layout::AdvancedChatUI;
 
 impl AdvancedChatUI {
     pub fn create_chat_list_panel(&self) -> impl View {
@@ -20,8 +20,7 @@ impl AdvancedChatUI {
         chat_list_layout.add_child(Panel::new(TextView::new("Chat Sessions")).title("Sessions"));
 
         // Chat list - use ListView instead for more reliable navigation
-        let chat_list = ListView::new()
-            .with_name("chat_list");
+        let chat_list = ListView::new().with_name("chat_list");
 
         // We'll populate this manually in the update function
 
@@ -29,11 +28,11 @@ impl AdvancedChatUI {
         chat_list_layout.add_child(
             Panel::new(
                 ScrollView::new(chat_list)
-                    .scroll_strategy(cursive::view::scroll::ScrollStrategy::KeepRow)
+                    .scroll_strategy(cursive::view::scroll::ScrollStrategy::KeepRow),
             )
             .title("Sessions")
             .min_height(5)
-            .max_height(20) // Allow more flexibility
+            .max_height(20), // Allow more flexibility
         );
 
         // New chat button
@@ -44,20 +43,22 @@ impl AdvancedChatUI {
 
         // Session controls - responsive spacing
         chat_list_layout.add_child(DummyView.min_height(1));
-        chat_list_layout.add_child(LinearLayout::horizontal()
-            .child(Button::new("Run", |siv| resume_agent(siv)))
-            .child(DummyView.min_width(1))
-            .child(Button::new("Pause", |siv| pause_agent(siv)))
-            .child(DummyView.min_width(1))
-            .child(Button::new("Stop", |siv| stop_agent(siv)))
+        chat_list_layout.add_child(
+            LinearLayout::horizontal()
+                .child(Button::new("Run", |siv| resume_agent(siv)))
+                .child(DummyView.min_width(1))
+                .child(Button::new("Pause", |siv| pause_agent(siv)))
+                .child(DummyView.min_width(1))
+                .child(Button::new("Stop", |siv| stop_agent(siv))),
         );
 
         // Recording controls - responsive spacing
         chat_list_layout.add_child(DummyView.min_height(1));
-        chat_list_layout.add_child(LinearLayout::horizontal()
-            .child(Button::new("Record", |siv| start_recording(siv)))
-            .child(DummyView.min_width(1))
-            .child(Button::new("Stop Rec", |siv| stop_recording(siv)))
+        chat_list_layout.add_child(
+            LinearLayout::horizontal()
+                .child(Button::new("Record", |siv| start_recording(siv)))
+                .child(DummyView.min_width(1))
+                .child(Button::new("Stop Rec", |siv| stop_recording(siv))),
         );
 
         chat_list_layout.add_child(DummyView.min_height(1));
@@ -77,12 +78,9 @@ impl AdvancedChatUI {
         let mut chat_layout = LinearLayout::vertical();
 
         // Chat history area
-        let chat_view = ScrollView::new(
-            TextView::new("")
-                .with_name("chat_display")
-                .full_width()
-        ).scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToBottom)
-         .with_name("chat_scroll");
+        let chat_view = ScrollView::new(TextView::new("").with_name("chat_display").full_width())
+            .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToBottom)
+            .with_name("chat_scroll");
 
         let chat_panel = Panel::new(chat_view)
             .title("Chat History")
@@ -91,8 +89,7 @@ impl AdvancedChatUI {
         chat_layout.add_child(chat_panel.full_height());
 
         // Suggestions area (shown when available) - no frame, just colored text
-        let suggestions_view = LinearLayout::vertical()
-            .with_name("suggestions_container");
+        let suggestions_view = LinearLayout::vertical().with_name("suggestions_container");
         chat_layout.add_child(suggestions_view);
 
         // Input area
@@ -107,14 +104,13 @@ impl AdvancedChatUI {
                         }
                     })
                     .with_name("input")
-                    .full_width()
+                    .full_width(),
             );
 
         chat_layout.add_child(Panel::new(input_layout).title("Input"));
 
         // Agent status bar with live updates
-        let agent_status = TextView::new("🤖 Agent: Initializing...")
-            .with_name("agent_status");
+        let agent_status = TextView::new("🤖 Agent: Initializing...").with_name("agent_status");
         chat_layout.add_child(Panel::new(agent_status).title("🤖 Agent Status"));
 
         // Control buttons

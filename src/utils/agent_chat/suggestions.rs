@@ -1,6 +1,6 @@
 //! Real-time suggestion system for the chat interface
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Real-time suggestion with fuzzy matching metadata
 #[derive(Debug, Clone)]

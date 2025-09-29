@@ -9,8 +9,8 @@ use anyhow::Result;
 use std::time::Duration;
 use tokio::time::timeout;
 
-use ui_test_utils::HeadlessUI;
 use osvm::utils::agent_chat_v2::AgentState;
+use ui_test_utils::HeadlessUI;
 
 #[tokio::test]
 async fn test_basic_ui_setup_and_display() -> Result<()> {
@@ -113,7 +113,8 @@ async fn test_agent_state_transitions() -> Result<()> {
     // Note: Due to async nature, we might not catch all intermediate states
     let final_state = timeout(Duration::from_secs(10), async {
         ui.wait_for_agent_idle(5).await
-    }).await;
+    })
+    .await;
 
     assert!(final_state.is_ok(), "Agent should return to idle state");
 
@@ -245,7 +246,10 @@ async fn test_memory_pressure_ui() -> Result<()> {
 
     // Check that session doesn't have too many messages (due to cleanup)
     let session = ui.state().get_active_session().unwrap();
-    assert!(session.messages.len() <= 1000, "Messages should be cleaned up to prevent memory issues");
+    assert!(
+        session.messages.len() <= 1000,
+        "Messages should be cleaned up to prevent memory issues"
+    );
 
     Ok(())
 }

@@ -1,14 +1,16 @@
 //! UI event handlers and callbacks
 
-use cursive::{Cursive, CursiveExt};
-use cursive::views::{Dialog, EditView, LinearLayout, TextView, SelectView, Panel, Button, DummyView};
 use cursive::traits::*;
+use cursive::views::{
+    Button, Dialog, DummyView, EditView, LinearLayout, Panel, SelectView, TextView,
+};
+use cursive::{Cursive, CursiveExt};
 use log::{error, info};
 use uuid::Uuid;
 
-use super::super::state::AdvancedChatState;
-use super::super::types::{ChatMessage, AgentState};
 use super::super::agent::AgentCommand;
+use super::super::state::AdvancedChatState;
+use super::super::types::{AgentState, ChatMessage};
 use super::display::update_ui_displays;
 
 // UI Event Handlers
@@ -55,21 +57,28 @@ pub fn copy_last_message(siv: &mut Cursive, state: AdvancedChatState) {
                         if let Err(e) = clipboard.set_text(&text_to_copy) {
                             siv.add_layer(
                                 Dialog::info(format!("Failed to copy to clipboard: {}", e))
-                                    .title("Error")
+                                    .title("Error"),
                             );
                         } else {
                             siv.add_layer(
                                 Dialog::info("Message copied to clipboard!")
                                     .title("Success")
-                                    .button("OK", |s| { s.pop_layer(); })
+                                    .button("OK", |s| {
+                                        s.pop_layer();
+                                    }),
                             );
                         }
                     }
                     Err(e) => {
                         siv.add_layer(
-                            Dialog::info(format!("Clipboard not available: {}\nText:\n{}", e, text_to_copy))
-                                .title("Clipboard Error")
-                                .button("OK", |s| { s.pop_layer(); })
+                            Dialog::info(format!(
+                                "Clipboard not available: {}\nText:\n{}",
+                                e, text_to_copy
+                            ))
+                            .title("Clipboard Error")
+                            .button("OK", |s| {
+                                s.pop_layer();
+                            }),
                         );
                     }
                 }
@@ -124,7 +133,9 @@ pub fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
 pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: AdvancedChatState) {
     // Get the suggestion
     let suggestion = {
-        let suggestions = state.current_suggestions.read()
+        let suggestions = state
+            .current_suggestions
+            .read()
             .map(|s| s.clone())
             .unwrap_or_default();
 
@@ -182,10 +193,13 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         let _ = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()));
 
         // Add processing indicator with animated spinner
-        let _ = state.add_message_to_session(session.id, ChatMessage::Processing {
-            message: "🤖 Processing your request...".to_string(),
-            spinner_index: 0
-        });
+        let _ = state.add_message_to_session(
+            session.id,
+            ChatMessage::Processing {
+                message: "🤖 Processing your request...".to_string(),
+                spinner_index: 0,
+            },
+        );
 
         // Update the display immediately
         update_ui_displays(siv);
@@ -201,11 +215,12 @@ pub fn create_new_chat_dialog(siv: &mut Cursive) {
             EditView::new()
                 .content("New Chat")
                 .with_name("new_chat_name")
-                .fixed_width(30)
+                .fixed_width(30),
         )
         .title("Create New Chat")
         .button("Create", |s| {
-            let name = s.find_name::<EditView>("new_chat_name")
+            let name = s
+                .find_name::<EditView>("new_chat_name")
                 .and_then(|v| Some(v.get_content().to_string()))
                 .unwrap_or_else(|| "Unnamed Chat".to_string());
 
@@ -221,14 +236,16 @@ pub fn create_new_chat_dialog(siv: &mut Cursive) {
         })
         .button("Cancel", |s| {
             s.pop_layer();
-        })
+        }),
     );
 }
 
 pub fn resume_agent(siv: &mut Cursive) {
     siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
-            let command = AgentCommand::ResumeAgent { session_id: session.id };
+            let command = AgentCommand::ResumeAgent {
+                session_id: session.id,
+            };
             // Send command using sync method to avoid runtime conflicts
             state.send_agent_command_sync(command);
         }
@@ -238,7 +255,9 @@ pub fn resume_agent(siv: &mut Cursive) {
 pub fn pause_agent(siv: &mut Cursive) {
     siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
-            let command = AgentCommand::PauseAgent { session_id: session.id };
+            let command = AgentCommand::PauseAgent {
+                session_id: session.id,
+            };
             // Send command using sync method to avoid runtime conflicts
             state.send_agent_command_sync(command);
         }
@@ -248,7 +267,9 @@ pub fn pause_agent(siv: &mut Cursive) {
 pub fn stop_agent(siv: &mut Cursive) {
     siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
-            let command = AgentCommand::StopAgent { session_id: session.id };
+            let command = AgentCommand::StopAgent {
+                session_id: session.id,
+            };
             // Send command using sync method to avoid runtime conflicts
             state.send_agent_command_sync(command);
         }
@@ -260,9 +281,11 @@ pub fn start_recording(siv: &mut Cursive) {
         if let Some(session_id) = state.active_session_id.read().ok().and_then(|id| *id) {
             if let Ok(mut sessions) = state.sessions.write() {
                 if let Some(session) = sessions.get_mut(&session_id) {
-                    let filename = format!("osvm_chat_{}_{}.log",
+                    let filename = format!(
+                        "osvm_chat_{}_{}.log",
                         session.name.replace(' ', "_"),
-                        chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+                        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                    );
 
                     if let Err(e) = session.start_recording(filename) {
                         error!("Failed to start recording: {}", e);
@@ -319,10 +342,10 @@ pub fn show_settings(siv: &mut Cursive) {
 
     // Current server status
     settings_layout.add_child(TextView::new("Current MCP Servers:"));
-    settings_layout.add_child(Panel::new(
-        TextView::new("Loading server status...")
-            .with_name("mcp_server_status")
-    ).max_height(5));
+    settings_layout.add_child(
+        Panel::new(TextView::new("Loading server status...").with_name("mcp_server_status"))
+            .max_height(5),
+    );
     settings_layout.add_child(DummyView.fixed_height(1));
 
     // System settings
@@ -348,7 +371,9 @@ pub fn show_settings(siv: &mut Cursive) {
     siv.add_layer(
         Dialog::around(settings_layout)
             .title("OSVM Agent Settings")
-            .button("Close", |s| { s.pop_layer(); })
+            .button("Close", |s| {
+                s.pop_layer();
+            }),
     );
 
     // Update MCP server status after dialog is shown
@@ -358,9 +383,11 @@ pub fn show_settings(siv: &mut Cursive) {
 pub fn export_chat(siv: &mut Cursive) {
     siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
-            let filename = format!("osvm_chat_export_{}_{}.json",
+            let filename = format!(
+                "osvm_chat_export_{}_{}.json",
                 session.name.replace(' ', "_"),
-                chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+                chrono::Utc::now().format("%Y%m%d_%H%M%S")
+            );
 
             match serde_json::to_string_pretty(&session) {
                 Ok(json_content) => {
@@ -370,9 +397,10 @@ pub fn export_chat(siv: &mut Cursive) {
                             // Add success message to current session
                             if let Ok(mut sessions) = state.sessions.write() {
                                 if let Some(current_session) = sessions.get_mut(&session.id) {
-                                    current_session.add_message(ChatMessage::System(
-                                        format!("Chat exported to {}", filename)
-                                    ));
+                                    current_session.add_message(ChatMessage::System(format!(
+                                        "Chat exported to {}",
+                                        filename
+                                    )));
                                 }
                             }
                         }
@@ -436,7 +464,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
                 println!("Ctrl/Alt+1-5: Suggestions  |  Alt+R/C/D/F: Actions");
                 println!("Alt+X: Emergency Clear  |  Esc: Hide Suggestions");
                 println!("================================================\n");
-            })
+            }),
     );
 }
 
@@ -448,25 +476,29 @@ pub fn show_add_mcp_server_dialog(siv: &mut Cursive) {
     form_layout.add_child(TextView::new("Add New MCP Server"));
     form_layout.add_child(DummyView.fixed_height(1));
 
-    form_layout.add_child(LinearLayout::horizontal()
-        .child(TextView::new("Name: ").fixed_width(15))
-        .child(EditView::new().with_name("server_name").fixed_width(30))
+    form_layout.add_child(
+        LinearLayout::horizontal()
+            .child(TextView::new("Name: ").fixed_width(15))
+            .child(EditView::new().with_name("server_name").fixed_width(30)),
     );
 
-    form_layout.add_child(LinearLayout::horizontal()
-        .child(TextView::new("URL: ").fixed_width(15))
-        .child(EditView::new().with_name("server_url").fixed_width(30))
+    form_layout.add_child(
+        LinearLayout::horizontal()
+            .child(TextView::new("URL: ").fixed_width(15))
+            .child(EditView::new().with_name("server_url").fixed_width(30)),
     );
 
-    form_layout.add_child(LinearLayout::horizontal()
-        .child(TextView::new("Type: ").fixed_width(15))
-        .child(SelectView::<String>::new()
-            .item("HTTP", "http".to_string())
-            .item("WebSocket", "websocket".to_string())
-            .item("Stdio", "stdio".to_string())
-            .with_name("server_type")
-            .fixed_width(15)
-        )
+    form_layout.add_child(
+        LinearLayout::horizontal()
+            .child(TextView::new("Type: ").fixed_width(15))
+            .child(
+                SelectView::<String>::new()
+                    .item("HTTP", "http".to_string())
+                    .item("WebSocket", "websocket".to_string())
+                    .item("Stdio", "stdio".to_string())
+                    .with_name("server_type")
+                    .fixed_width(15),
+            ),
     );
 
     siv.add_layer(
@@ -477,7 +509,7 @@ pub fn show_add_mcp_server_dialog(siv: &mut Cursive) {
             })
             .button("Cancel", |s| {
                 s.pop_layer();
-            })
+            }),
     );
 }
 
@@ -500,7 +532,9 @@ pub fn show_mcp_server_list(siv: &mut Cursive) {
             .title("Manage MCP Servers")
             .button("Enable/Disable", toggle_mcp_server)
             .button("Remove", remove_mcp_server)
-            .button("Close", |s| { s.pop_layer(); })
+            .button("Close", |s| {
+                s.pop_layer();
+            }),
     );
 }
 
@@ -518,7 +552,9 @@ pub fn refresh_mcp_tools(siv: &mut Cursive) {
     siv.add_layer(
         Dialog::text("Refreshing MCP tools in background...")
             .title("MCP Tools")
-            .button("OK", |s| { s.pop_layer(); })
+            .button("OK", |s| {
+                s.pop_layer();
+            }),
     );
 }
 
@@ -529,16 +565,14 @@ pub fn export_all_chats(siv: &mut Cursive) {
 
         let sessions = state.sessions.read().unwrap();
         match serde_json::to_string_pretty(&*sessions) {
-            Ok(json_content) => {
-                match std::fs::write(&filename, json_content) {
-                    Ok(_) => {
-                        info!("All chats exported to {}", filename);
-                    }
-                    Err(e) => {
-                        error!("Failed to write export file: {}", e);
-                    }
+            Ok(json_content) => match std::fs::write(&filename, json_content) {
+                Ok(_) => {
+                    info!("All chats exported to {}", filename);
                 }
-            }
+                Err(e) => {
+                    error!("Failed to write export file: {}", e);
+                }
+            },
             Err(e) => {
                 error!("Failed to serialize sessions: {}", e);
             }
@@ -548,47 +582,62 @@ pub fn export_all_chats(siv: &mut Cursive) {
     siv.add_layer(
         Dialog::text("All chats exported successfully!")
             .title("Export Complete")
-            .button("OK", |s| { s.pop_layer(); })
+            .button("OK", |s| {
+                s.pop_layer();
+            }),
     );
 }
 
 pub fn clear_all_chats(siv: &mut Cursive) {
     siv.add_layer(
-        Dialog::text("Are you sure you want to clear all chat sessions?\nThis action cannot be undone.")
-            .title("Confirm Clear All")
-            .button("Yes, Clear All", |s| {
-                s.with_user_data(|state: &mut AdvancedChatState| {
-                    if let Ok(mut sessions) = state.sessions.write() {
-                        sessions.clear();
-                    }
-                    if let Ok(mut active_id) = state.active_session_id.write() {
-                        *active_id = None;
-                    }
-                });
-                s.pop_layer();
-                update_ui_displays(s);
-            })
-            .button("Cancel", |s| { s.pop_layer(); })
+        Dialog::text(
+            "Are you sure you want to clear all chat sessions?\nThis action cannot be undone.",
+        )
+        .title("Confirm Clear All")
+        .button("Yes, Clear All", |s| {
+            s.with_user_data(|state: &mut AdvancedChatState| {
+                if let Ok(mut sessions) = state.sessions.write() {
+                    sessions.clear();
+                }
+                if let Ok(mut active_id) = state.active_session_id.write() {
+                    *active_id = None;
+                }
+            });
+            s.pop_layer();
+            update_ui_displays(s);
+        })
+        .button("Cancel", |s| {
+            s.pop_layer();
+        }),
     );
 }
 
 pub fn update_mcp_server_status_in_settings(siv: &mut Cursive) {
-    let status_text = siv.with_user_data(|state: &mut AdvancedChatState| {
-        let mut status_text = String::new();
+    let status_text = siv
+        .with_user_data(|state: &mut AdvancedChatState| {
+            let mut status_text = String::new();
 
-        if let Ok(mcp_service) = state.mcp_service.try_lock() {
-            for (server_id, config) in mcp_service.list_servers() {
-                let status = if config.enabled { "✓ Enabled" } else { "✗ Disabled" };
-                status_text.push_str(&format!("• {} ({:?}): {}\n", config.name, config.transport_type, status));
+            if let Ok(mcp_service) = state.mcp_service.try_lock() {
+                for (server_id, config) in mcp_service.list_servers() {
+                    let status = if config.enabled {
+                        "✓ Enabled"
+                    } else {
+                        "✗ Disabled"
+                    };
+                    status_text.push_str(&format!(
+                        "• {} ({:?}): {}\n",
+                        config.name, config.transport_type, status
+                    ));
+                }
             }
-        }
 
-        if status_text.is_empty() {
-            status_text = "No MCP servers configured".to_string();
-        }
+            if status_text.is_empty() {
+                status_text = "No MCP servers configured".to_string();
+            }
 
-        status_text
-    }).unwrap_or_else(|| "Failed to load MCP server status".to_string());
+            status_text
+        })
+        .unwrap_or_else(|| "Failed to load MCP server status".to_string());
 
     // Update the status display outside the closure
     if let Some(mut status_view) = siv.find_name::<TextView>("mcp_server_status") {
@@ -599,15 +648,18 @@ pub fn update_mcp_server_status_in_settings(siv: &mut Cursive) {
 // Helper functions for MCP management
 
 fn add_mcp_server_from_form(siv: &mut Cursive) {
-    let name = siv.find_name::<EditView>("server_name")
+    let name = siv
+        .find_name::<EditView>("server_name")
         .map(|v| v.get_content().to_string())
         .unwrap_or_default();
 
-    let url = siv.find_name::<EditView>("server_url")
+    let url = siv
+        .find_name::<EditView>("server_url")
         .map(|v| v.get_content().to_string())
         .unwrap_or_default();
 
-    let server_type = siv.find_name::<SelectView<String>>("server_type")
+    let server_type = siv
+        .find_name::<SelectView<String>>("server_type")
         .and_then(|v| v.selection())
         .map(|s| s.as_str().to_string())
         .unwrap_or_else(|| "http".to_string());
@@ -616,7 +668,9 @@ fn add_mcp_server_from_form(siv: &mut Cursive) {
         siv.add_layer(
             Dialog::text("Please fill in all required fields.")
                 .title("Error")
-                .button("OK", |s| { s.pop_layer(); })
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
         );
         return;
     }
@@ -655,23 +709,32 @@ fn add_mcp_server_from_form(siv: &mut Cursive) {
     match result {
         Some(Ok(_)) => {
             siv.add_layer(
-                Dialog::text(&format!("✅ Server '{}' added successfully!\nURL: {}\nType: {}", name, url, server_type))
-                    .title("Server Added")
-                    .button("OK", |s| { s.pop_layer(); })
+                Dialog::text(&format!(
+                    "✅ Server '{}' added successfully!\nURL: {}\nType: {}",
+                    name, url, server_type
+                ))
+                .title("Server Added")
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
             );
         }
         Some(Err(e)) => {
             siv.add_layer(
                 Dialog::text(&format!("❌ Failed to add server: {}", e))
                     .title("Error")
-                    .button("OK", |s| { s.pop_layer(); })
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
             );
         }
         None => {
             siv.add_layer(
                 Dialog::text("❌ Failed to access application state")
                     .title("Error")
-                    .button("OK", |s| { s.pop_layer(); })
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
             );
         }
     }
@@ -685,7 +748,8 @@ fn toggle_mcp_server(siv: &mut Cursive) {
             let result = siv.with_user_data(|state: &mut AdvancedChatState| {
                 if let Ok(mut mcp_service) = state.mcp_service.try_lock() {
                     // Get current state and toggle it
-                    let current_enabled = mcp_service.get_server(&server_id)
+                    let current_enabled = mcp_service
+                        .get_server(&server_id)
                         .map(|config| config.enabled)
                         .unwrap_or(false);
                     mcp_service.toggle_server(&server_id, !current_enabled)
@@ -697,27 +761,34 @@ fn toggle_mcp_server(siv: &mut Cursive) {
             match result {
                 Some(Ok(_)) => {
                     siv.add_layer(
-                        Dialog::text(&format!("✅ Server '{}' status toggled successfully!", server_id))
-                            .title("Server Updated")
-                            .button("OK", |s| {
-                                s.pop_layer();
-                                s.pop_layer(); // Close server list to refresh
-                                show_mcp_server_list(s); // Reopen with updated list
-                            })
+                        Dialog::text(&format!(
+                            "✅ Server '{}' status toggled successfully!",
+                            server_id
+                        ))
+                        .title("Server Updated")
+                        .button("OK", |s| {
+                            s.pop_layer();
+                            s.pop_layer(); // Close server list to refresh
+                            show_mcp_server_list(s); // Reopen with updated list
+                        }),
                     );
                 }
                 Some(Err(e)) => {
                     siv.add_layer(
                         Dialog::text(&format!("❌ Failed to toggle server: {}", e))
                             .title("Error")
-                            .button("OK", |s| { s.pop_layer(); })
+                            .button("OK", |s| {
+                                s.pop_layer();
+                            }),
                     );
                 }
                 None => {
                     siv.add_layer(
                         Dialog::text("❌ Failed to access application state")
                             .title("Error")
-                            .button("OK", |s| { s.pop_layer(); })
+                            .button("OK", |s| {
+                                s.pop_layer();
+                            }),
                     );
                 }
             }
@@ -731,51 +802,63 @@ fn remove_mcp_server(siv: &mut Cursive) {
             let server_id = selection.as_str().to_string();
 
             siv.add_layer(
-                Dialog::text(&format!("Are you sure you want to remove server '{}'?", server_id))
-                    .title("Confirm Removal")
-                    .button("Yes, Remove", {
-                        let server_id = server_id.clone();
-                        move |s| {
-                            let result = s.with_user_data(|state: &mut AdvancedChatState| {
-                                if let Ok(mut mcp_service) = state.mcp_service.try_lock() {
-                                    mcp_service.remove_server(&server_id);
-                                    Ok(())
-                                } else {
-                                    Err(anyhow::anyhow!("Could not access MCP service"))
-                                }
-                            });
+                Dialog::text(&format!(
+                    "Are you sure you want to remove server '{}'?",
+                    server_id
+                ))
+                .title("Confirm Removal")
+                .button("Yes, Remove", {
+                    let server_id = server_id.clone();
+                    move |s| {
+                        let result = s.with_user_data(|state: &mut AdvancedChatState| {
+                            if let Ok(mut mcp_service) = state.mcp_service.try_lock() {
+                                mcp_service.remove_server(&server_id);
+                                Ok(())
+                            } else {
+                                Err(anyhow::anyhow!("Could not access MCP service"))
+                            }
+                        });
 
-                            match result {
-                                Some(Ok(_)) => {
-                                    s.add_layer(
-                                        Dialog::text(&format!("✅ Server '{}' removed successfully!", server_id))
-                                            .title("Server Removed")
-                                            .button("OK", |s| {
-                                                s.pop_layer(); // Close success dialog
-                                                s.pop_layer(); // Close confirmation dialog
-                                                s.pop_layer(); // Close server list
-                                                show_mcp_server_list(s); // Reopen with updated list
-                                            })
-                                    );
-                                }
-                                Some(Err(e)) => {
-                                    s.add_layer(
-                                        Dialog::text(&format!("❌ Failed to remove server: {}", e))
-                                            .title("Error")
-                                            .button("OK", |s| { s.pop_layer(); })
-                                    );
-                                }
-                                None => {
-                                    s.add_layer(
-                                        Dialog::text("❌ Failed to access application state")
-                                            .title("Error")
-                                            .button("OK", |s| { s.pop_layer(); })
-                                    );
-                                }
+                        match result {
+                            Some(Ok(_)) => {
+                                s.add_layer(
+                                    Dialog::text(&format!(
+                                        "✅ Server '{}' removed successfully!",
+                                        server_id
+                                    ))
+                                    .title("Server Removed")
+                                    .button("OK", |s| {
+                                        s.pop_layer(); // Close success dialog
+                                        s.pop_layer(); // Close confirmation dialog
+                                        s.pop_layer(); // Close server list
+                                        show_mcp_server_list(s); // Reopen with updated list
+                                    }),
+                                );
+                            }
+                            Some(Err(e)) => {
+                                s.add_layer(
+                                    Dialog::text(&format!("❌ Failed to remove server: {}", e))
+                                        .title("Error")
+                                        .button("OK", |s| {
+                                            s.pop_layer();
+                                        }),
+                                );
+                            }
+                            None => {
+                                s.add_layer(
+                                    Dialog::text("❌ Failed to access application state")
+                                        .title("Error")
+                                        .button("OK", |s| {
+                                            s.pop_layer();
+                                        }),
+                                );
                             }
                         }
-                    })
-                    .button("Cancel", |s| { s.pop_layer(); })
+                    }
+                })
+                .button("Cancel", |s| {
+                    s.pop_layer();
+                }),
             );
         }
     }
@@ -786,13 +869,12 @@ pub fn show_context_menu(siv: &mut Cursive, position: cursive::Vec2) {
     use cursive::views::MenuPopup;
 
     // Create context menu based on what's under the cursor
-    let mut menu = cursive::views::Dialog::text("Quick Actions")
-        .title("Context Menu");
+    let mut menu = cursive::views::Dialog::text("Quick Actions").title("Context Menu");
 
     // Add common actions
     menu = menu.button("Copy Last Message", |s| {
         s.pop_layer(); // Close context menu first
-        // Get state reference without borrowing mutably
+                       // Get state reference without borrowing mutably
         let state_opt = s.user_data::<AdvancedChatState>().cloned();
         if let Some(state) = state_opt {
             copy_last_message(s, state);
@@ -801,7 +883,7 @@ pub fn show_context_menu(siv: &mut Cursive, position: cursive::Vec2) {
 
     menu = menu.button("Retry Last Message", |s| {
         s.pop_layer(); // Close context menu first
-        // Get state reference without borrowing mutably
+                       // Get state reference without borrowing mutably
         let state_opt = s.user_data::<AdvancedChatState>().cloned();
         if let Some(state) = state_opt {
             retry_last_message(s, state);
@@ -822,7 +904,12 @@ pub fn show_context_menu(siv: &mut Cursive, position: cursive::Vec2) {
 }
 
 // Live processing with animated feedback
-pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_input: String, state: AdvancedChatState) {
+pub fn start_live_processing(
+    siv: &mut Cursive,
+    session_id: uuid::Uuid,
+    user_input: String,
+    state: AdvancedChatState,
+) {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
@@ -847,7 +934,7 @@ pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_inp
             "🔍 Searching for relevant information...",
             "⚙️ Processing with AI...",
             "📊 Generating response...",
-            "✨ Finalizing answer..."
+            "✨ Finalizing answer...",
         ];
 
         let mut stage_index = 0;
@@ -865,12 +952,18 @@ pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_inp
             let message = stages[stage_index].to_string();
 
             // Update processing message in session
-            let _ = state_clone.update_processing_message(session_id, message.clone(), spinner_index % 10);
+            let _ = state_clone.update_processing_message(
+                session_id,
+                message.clone(),
+                spinner_index % 10,
+            );
 
             // Request UI update
-            cb_sink.send(Box::new(move |siv| {
-                update_ui_displays(siv);
-            })).ok();
+            cb_sink
+                .send(Box::new(move |siv| {
+                    update_ui_displays(siv);
+                }))
+                .ok();
 
             thread::sleep(Duration::from_millis(100));
         }
@@ -889,11 +982,15 @@ pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_inp
                 eprintln!("Failed to create tokio runtime: {}", e);
                 processing_final.store(false, Ordering::Relaxed);
                 let _ = state_final.remove_last_processing_message(session_id);
-                let _ = state_final.add_message_to_session(session_id,
-                    ChatMessage::Error("Failed to initialize AI processing".to_string()));
-                cb_sink2.send(Box::new(move |siv| {
-                    update_ui_displays(siv);
-                })).ok();
+                let _ = state_final.add_message_to_session(
+                    session_id,
+                    ChatMessage::Error("Failed to initialize AI processing".to_string()),
+                );
+                cb_sink2
+                    .send(Box::new(move |siv| {
+                        update_ui_displays(siv);
+                    }))
+                    .ok();
                 return;
             }
         };
@@ -1025,11 +1122,14 @@ pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_inp
                 Err(e) => {
                     eprintln!("AI service error: {}", e);
                     // Fallback to mock response on AI service failure
-                    format!("I encountered an issue connecting to the AI service: {}
+                    format!(
+                        "I encountered an issue connecting to the AI service: {}
 
 \
                         However, I can still help with basic Solana operations. {}",
-                        e, generate_mock_response(&user_input))
+                        e,
+                        generate_mock_response(&user_input)
+                    )
                 }
             }
         });
@@ -1077,9 +1177,11 @@ pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_inp
         }
 
         // Final UI update
-        cb_sink2.send(Box::new(move |siv| {
-            update_ui_displays(siv);
-        })).ok();
+        cb_sink2
+            .send(Box::new(move |siv| {
+                update_ui_displays(siv);
+            }))
+            .ok();
     });
 }
 
@@ -1110,7 +1212,7 @@ fn generate_context_suggestions(input: &str) -> Vec<String> {
             "Check staking rewards".to_string(),
             "Get current SOL price".to_string(),
             "Show wallet addresses".to_string(),
-            "Export transaction history".to_string()
+            "Export transaction history".to_string(),
         ]
     } else if input_lower.contains("transaction") {
         vec![
@@ -1118,7 +1220,7 @@ fn generate_context_suggestions(input: &str) -> Vec<String> {
             "Show transaction details".to_string(),
             "Check transaction status".to_string(),
             "Export as CSV".to_string(),
-            "Analyze spending patterns".to_string()
+            "Analyze spending patterns".to_string(),
         ]
     } else {
         vec![
@@ -1126,7 +1228,7 @@ fn generate_context_suggestions(input: &str) -> Vec<String> {
             "Show recent transactions".to_string(),
             "Current SOL price".to_string(),
             "How to stake SOL?".to_string(),
-            "Check validator performance".to_string()
+            "Check validator performance".to_string(),
         ]
     }
 }
@@ -1137,7 +1239,8 @@ pub fn setup_input_suggestions(siv: &mut Cursive, state: AdvancedChatState) {
     if let Some(mut input) = siv.find_name::<EditView>("input") {
         let state_clone = state.clone();
         input.set_on_edit(move |_siv, content, _cursor| {
-            if content.len() >= 3 { // Start suggesting after 3 characters
+            if content.len() >= 3 {
+                // Start suggesting after 3 characters
                 let suggestions = generate_smart_input_suggestions(content, state_clone.clone());
                 if let Ok(mut current_suggestions) = state_clone.current_suggestions.write() {
                     *current_suggestions = suggestions;
@@ -1169,7 +1272,7 @@ fn generate_input_suggestions(partial: &str) -> Vec<String> {
         ("validator info", "Get validator information"),
         ("transaction history", "Export transaction history"),
         ("market analysis", "Analyze market trends"),
-        ("wallet security", "Check wallet security settings")
+        ("wallet security", "Check wallet security settings"),
     ];
 
     for (pattern, suggestion) in common_queries {
@@ -1187,7 +1290,7 @@ fn generate_input_suggestions(partial: &str) -> Vec<String> {
             "Show recent transactions".to_string(),
             "Current SOL price".to_string(),
             "How to stake SOL?".to_string(),
-            "Check staking rewards".to_string()
+            "Check staking rewards".to_string(),
         ];
     }
 
@@ -1219,7 +1322,10 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
                 partial_owned
             );
 
-            ai_service.query_with_debug(&suggestion_query, false).await.unwrap_or_default()
+            ai_service
+                .query_with_debug(&suggestion_query, false)
+                .await
+                .unwrap_or_default()
         });
 
         // TODO: Update suggestions in state (requires more complex async handling)
@@ -1231,19 +1337,25 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
 }
 
 // Execute AI plan with XML parsing and tool execution
-async fn execute_ai_plan(ai_response: String, session_id: uuid::Uuid, state: AdvancedChatState) -> String {
+async fn execute_ai_plan(
+    ai_response: String,
+    session_id: uuid::Uuid,
+    state: AdvancedChatState,
+) -> String {
     use regex::Regex;
 
     // Extract plan and response sections with better regex
     let plan_regex = Regex::new(r"(?s)<plan>(.*?)</plan>").unwrap();
     let response_regex = Regex::new(r"(?s)<response>(.*?)</response>").unwrap();
 
-    let plan_content = plan_regex.captures(&ai_response)
+    let plan_content = plan_regex
+        .captures(&ai_response)
         .and_then(|cap| cap.get(1))
         .map(|m| m.as_str().trim())
         .unwrap_or("");
 
-    let response_content = response_regex.captures(&ai_response)
+    let response_content = response_regex
+        .captures(&ai_response)
         .and_then(|cap| cap.get(1))
         .map(|m| m.as_str().trim())
         .unwrap_or(&ai_response); // If no proper XML format, return the whole response
@@ -1254,7 +1366,8 @@ async fn execute_ai_plan(ai_response: String, session_id: uuid::Uuid, state: Adv
     }
 
     // Parse tool calls from plan
-    let tool_regex = Regex::new(r#"(?s)<tool name="([^"]+)" server="([^"]+)">(.*?)</tool>"#).unwrap();
+    let tool_regex =
+        Regex::new(r#"(?s)<tool name="([^"]+)" server="([^"]+)">(.*?)</tool>"#).unwrap();
     let param_regex = Regex::new(r#"<param name="([^"]+)">([^<]*)</param>"#).unwrap();
 
     let mut execution_results = Vec::new();
@@ -1272,28 +1385,39 @@ async fn execute_ai_plan(ai_response: String, session_id: uuid::Uuid, state: Adv
         for param_match in param_regex.captures_iter(params_section) {
             let param_name = param_match.get(1).unwrap().as_str();
             let param_value = param_match.get(2).unwrap().as_str();
-            params.insert(param_name.to_string(), serde_json::Value::String(param_value.to_string()));
+            params.insert(
+                param_name.to_string(),
+                serde_json::Value::String(param_value.to_string()),
+            );
         }
 
         let execution_id = uuid::Uuid::new_v4().to_string();
 
         // Add tool execution message
-        let _ = state.add_message_to_session(session_id, ChatMessage::ToolCall {
-            tool_name: tool_name.to_string(),
-            description: format!("Executing {} on server {}", tool_name, server_id),
-            args: Some(serde_json::Value::Object(params.clone().into_iter().collect())),
-            execution_id: execution_id.clone(),
-        });
+        let _ = state.add_message_to_session(
+            session_id,
+            ChatMessage::ToolCall {
+                tool_name: tool_name.to_string(),
+                description: format!("Executing {} on server {}", tool_name, server_id),
+                args: Some(serde_json::Value::Object(
+                    params.clone().into_iter().collect(),
+                )),
+                execution_id: execution_id.clone(),
+            },
+        );
 
         // Execute the tool
         let tool_result = execute_mcp_tool(server_id, tool_name, params, state.clone()).await;
 
         // Add tool result message
-        let _ = state.add_message_to_session(session_id, ChatMessage::ToolResult {
-            tool_name: tool_name.to_string(),
-            result: serde_json::Value::String(tool_result.clone()),
-            execution_id,
-        });
+        let _ = state.add_message_to_session(
+            session_id,
+            ChatMessage::ToolResult {
+                tool_name: tool_name.to_string(),
+                result: serde_json::Value::String(tool_result.clone()),
+                execution_id,
+            },
+        );
 
         execution_results.push(format!("{}: {}", tool_name, tool_result));
     }
@@ -1314,7 +1438,7 @@ async fn execute_mcp_tool(
     server_id: &str,
     tool_name: &str,
     params: std::collections::HashMap<String, serde_json::Value>,
-    _state: AdvancedChatState
+    _state: AdvancedChatState,
 ) -> String {
     // Mock tool execution - replace with real MCP calls later
     match (server_id, tool_name) {

@@ -3,12 +3,12 @@
 //! This module provides comprehensive theming capabilities including colors,
 //! layout customization, animations, and visual effects.
 
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
+use log::{debug, error, warn};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use log::{debug, warn, error};
 
 /// Color definition with support for 256-color and RGB
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -54,7 +54,7 @@ impl Color {
                 // Convert HSL to RGB
                 let (r, g, b) = hsl_to_rgb(*h, *s, *l);
                 format!("\x1b[38;2;{};{};{}m", r, g, b)
-            },
+            }
             Color::Hex(hex) => {
                 // Parse hex color (#RRGGBB or #RGB)
                 if let Ok((r, g, b)) = parse_hex_color(hex) {
@@ -62,7 +62,7 @@ impl Color {
                 } else {
                     "\x1b[39m".to_string()
                 }
-            },
+            }
         }
     }
 
@@ -85,14 +85,14 @@ impl Color {
             Color::Hsl(h, s, l) => {
                 let (r, g, b) = hsl_to_rgb(*h, *s, *l);
                 format!("\x1b[48;2;{};{};{}m", r, g, b)
-            },
+            }
             Color::Hex(hex) => {
                 if let Ok((r, g, b)) = parse_hex_color(hex) {
                     format!("\x1b[48;2;{};{};{}m", r, g, b)
                 } else {
                     "\x1b[49m".to_string()
                 }
-            },
+            }
         }
     }
 }
@@ -134,12 +134,24 @@ impl TextStyle {
             codes.push(bg.to_bg_ansi());
         }
 
-        if self.bold { codes.push("\x1b[1m".to_string()); }
-        if self.italic { codes.push("\x1b[3m".to_string()); }
-        if self.underline { codes.push("\x1b[4m".to_string()); }
-        if self.strikethrough { codes.push("\x1b[9m".to_string()); }
-        if self.dim { codes.push("\x1b[2m".to_string()); }
-        if self.blink { codes.push("\x1b[5m".to_string()); }
+        if self.bold {
+            codes.push("\x1b[1m".to_string());
+        }
+        if self.italic {
+            codes.push("\x1b[3m".to_string());
+        }
+        if self.underline {
+            codes.push("\x1b[4m".to_string());
+        }
+        if self.strikethrough {
+            codes.push("\x1b[9m".to_string());
+        }
+        if self.dim {
+            codes.push("\x1b[2m".to_string());
+        }
+        if self.blink {
+            codes.push("\x1b[5m".to_string());
+        }
 
         codes.join("")
     }
@@ -282,18 +294,24 @@ impl Theme {
     /// Create default dark theme (Claude Code style)
     pub fn default_dark_theme() -> Self {
         let mut animations = HashMap::new();
-        animations.insert("typing".to_string(), Animation {
-            enabled: true,
-            duration_ms: 100,
-            easing: EasingFunction::Linear,
-            repeat: false,
-        });
-        animations.insert("loading".to_string(), Animation {
-            enabled: true,
-            duration_ms: 1000,
-            easing: EasingFunction::Linear,
-            repeat: true,
-        });
+        animations.insert(
+            "typing".to_string(),
+            Animation {
+                enabled: true,
+                duration_ms: 100,
+                easing: EasingFunction::Linear,
+                repeat: false,
+            },
+        );
+        animations.insert(
+            "loading".to_string(),
+            Animation {
+                enabled: true,
+                duration_ms: 1000,
+                easing: EasingFunction::Linear,
+                repeat: true,
+            },
+        );
 
         Self {
             name: "Claude Dark".to_string(),
@@ -379,8 +397,18 @@ impl Theme {
 
             layout: Layout {
                 border_style: BorderStyle::Single,
-                padding: Padding { top: 1, bottom: 1, left: 2, right: 2 },
-                margin: Margin { top: 0, bottom: 0, left: 0, right: 0 },
+                padding: Padding {
+                    top: 1,
+                    bottom: 1,
+                    left: 2,
+                    right: 2,
+                },
+                margin: Margin {
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                },
                 width: None,
                 height: None,
                 alignment: Alignment::Left,
@@ -471,8 +499,8 @@ impl Theme {
         let content = fs::read_to_string(&theme_path)
             .map_err(|e| anyhow!("Failed to read theme file: {}", e))?;
 
-        let theme: Self = serde_json::from_str(&content)
-            .map_err(|e| anyhow!("Failed to parse theme: {}", e))?;
+        let theme: Self =
+            serde_json::from_str(&content).map_err(|e| anyhow!("Failed to parse theme: {}", e))?;
 
         debug!("Loaded theme '{}' from {:?}", name, theme_path);
         Ok(theme)
@@ -499,12 +527,22 @@ impl Theme {
 
     /// Get theme file path
     fn theme_path(name: &str) -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
-        let safe_name = name.chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let safe_name = name
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect::<String>();
-        Ok(PathBuf::from(home).join(".osvm").join("themes").join(format!("{}.json", safe_name)))
+        Ok(PathBuf::from(home)
+            .join(".osvm")
+            .join("themes")
+            .join(format!("{}.json", safe_name)))
     }
 
     /// List available themes
@@ -569,24 +607,48 @@ impl Theme {
         let mut preview = String::new();
 
         preview.push_str(&format!("Theme: {}\n", self.primary.apply(&self.name)));
-        preview.push_str(&format!("Description: {}\n", self.muted.apply(&self.description)));
-        preview.push_str(&format!("Author: {}\n\n", self.secondary.apply(&self.author)));
+        preview.push_str(&format!(
+            "Description: {}\n",
+            self.muted.apply(&self.description)
+        ));
+        preview.push_str(&format!(
+            "Author: {}\n\n",
+            self.secondary.apply(&self.author)
+        ));
 
         preview.push_str("Color Palette:\n");
         preview.push_str(&format!("Primary: {}\n", self.primary.apply("Sample Text")));
-        preview.push_str(&format!("Secondary: {}\n", self.secondary.apply("Sample Text")));
+        preview.push_str(&format!(
+            "Secondary: {}\n",
+            self.secondary.apply("Sample Text")
+        ));
         preview.push_str(&format!("Accent: {}\n", self.accent.apply("Sample Text")));
         preview.push_str(&format!("Error: {}\n", self.error.apply("Error Message")));
-        preview.push_str(&format!("Warning: {}\n", self.warning.apply("Warning Message")));
-        preview.push_str(&format!("Success: {}\n", self.success.apply("Success Message")));
+        preview.push_str(&format!(
+            "Warning: {}\n",
+            self.warning.apply("Warning Message")
+        ));
+        preview.push_str(&format!(
+            "Success: {}\n",
+            self.success.apply("Success Message")
+        ));
         preview.push_str(&format!("Info: {}\n", self.info.apply("Info Message")));
 
         preview.push_str("\nUI Elements:\n");
         preview.push_str(&format!("Command: {}\n", self.command.apply("/balance")));
-        preview.push_str(&format!("Query: {}\n", self.query.apply("balance my wallet")));
+        preview.push_str(&format!(
+            "Query: {}\n",
+            self.query.apply("balance my wallet")
+        ));
         preview.push_str(&format!("Action: {}\n", self.action.apply("send SOL")));
-        preview.push_str(&format!("Selection: {}\n", self.selection.apply("▶ Selected Item")));
-        preview.push_str(&format!("Highlight: {}\n", self.highlight.apply("Highlighted Text")));
+        preview.push_str(&format!(
+            "Selection: {}\n",
+            self.selection.apply("▶ Selected Item")
+        ));
+        preview.push_str(&format!(
+            "Highlight: {}\n",
+            self.highlight.apply("Highlighted Text")
+        ));
 
         preview
     }
@@ -601,15 +663,14 @@ pub struct ThemeManager {
 impl ThemeManager {
     /// Create new theme manager
     pub fn new() -> Result<Self> {
-        let available_themes = Theme::list_available()
-            .unwrap_or_else(|e| {
-                warn!("Failed to list themes: {}, using default", e);
-                vec!["default".to_string()]
-            });
+        let available_themes = Theme::list_available().unwrap_or_else(|e| {
+            warn!("Failed to list themes: {}, using default", e);
+            vec!["default".to_string()]
+        });
 
         // Try to load saved theme preference, fallback to default
-        let current_theme = Self::load_preferred_theme()
-            .unwrap_or_else(|_| Theme::default_dark_theme());
+        let current_theme =
+            Self::load_preferred_theme().unwrap_or_else(|_| Theme::default_dark_theme());
 
         Ok(Self {
             current_theme,
@@ -679,8 +740,8 @@ impl ThemeManager {
 
     /// Get theme preference config path
     fn config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .map_err(|_| anyhow!("HOME environment variable not set"))?;
+        let home =
+            std::env::var("HOME").map_err(|_| anyhow!("HOME environment variable not set"))?;
         Ok(PathBuf::from(home).join(".osvm").join("current_theme"))
     }
 }
@@ -775,14 +836,15 @@ mod tests {
 
         let styled_text = style.apply("Hello");
         assert!(styled_text.contains("\x1b[31m")); // Red color
-        assert!(styled_text.contains("\x1b[1m"));  // Bold
-        assert!(styled_text.contains("\x1b[0m"));  // Reset
+        assert!(styled_text.contains("\x1b[1m")); // Bold
+        assert!(styled_text.contains("\x1b[0m")); // Reset
     }
 
     #[test]
     fn test_theme_creation() {
         let theme = Theme::default_dark_theme();
         assert_eq!(theme.name, "Claude Dark");
-        assert!(!theme.custom_styles.is_empty() || theme.custom_styles.is_empty()); // Either is fine
+        assert!(!theme.custom_styles.is_empty() || theme.custom_styles.is_empty());
+        // Either is fine
     }
 }

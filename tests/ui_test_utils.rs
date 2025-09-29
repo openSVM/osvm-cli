@@ -3,13 +3,13 @@
 //! This module provides utilities to test the agent_chat_v2 UI components
 //! without requiring a real terminal interface.
 
-use cursive::{Cursive, CursiveExt, View};
 use cursive::backends::puppet::Backend as PuppetBackend;
 use cursive::event::{Event, Key};
+use cursive::{Cursive, CursiveExt, View};
 use std::sync::Arc;
 use uuid::Uuid;
 
-use osvm::utils::agent_chat_v2::{AdvancedChatState, AdvancedChatUI, update_ui_displays};
+use osvm::utils::agent_chat_v2::{update_ui_displays, AdvancedChatState, AdvancedChatUI};
 
 /// Headless UI test environment
 pub struct HeadlessUI {
@@ -36,7 +36,9 @@ impl HeadlessUI {
         siv.set_user_data(state.clone());
 
         // Setup UI
-        let ui = AdvancedChatUI { state: state.clone() };
+        let ui = AdvancedChatUI {
+            state: state.clone(),
+        };
         ui.setup_far_ui(&mut siv);
         ui.setup_suggestion_hotkeys(&mut siv);
         ui.setup_action_hotkeys(&mut siv);
@@ -104,7 +106,10 @@ impl HeadlessUI {
 
     /// Select a chat session by index
     pub fn select_chat(&mut self, index: usize) {
-        if let Some(mut chat_list) = self.siv.find_name::<cursive::views::SelectView<Uuid>>("chat_list") {
+        if let Some(mut chat_list) = self
+            .siv
+            .find_name::<cursive::views::SelectView<Uuid>>("chat_list")
+        {
             chat_list.set_selection(index);
             self.step();
         }
@@ -112,7 +117,10 @@ impl HeadlessUI {
 
     /// Get current chat display content
     pub fn get_chat_content(&mut self) -> String {
-        if let Some(chat_display) = self.siv.find_name::<cursive::views::TextView>("chat_display") {
+        if let Some(chat_display) = self
+            .siv
+            .find_name::<cursive::views::TextView>("chat_display")
+        {
             chat_display.get_content().source().to_string()
         } else {
             String::new()
@@ -130,7 +138,10 @@ impl HeadlessUI {
 
     /// Get list of chat session names
     pub fn get_chat_names(&mut self) -> Vec<String> {
-        if let Some(chat_list) = self.siv.find_name::<cursive::views::SelectView<Uuid>>("chat_list") {
+        if let Some(chat_list) = self
+            .siv
+            .find_name::<cursive::views::SelectView<Uuid>>("chat_list")
+        {
             (0..chat_list.len())
                 .map(|i| chat_list.get_item(i).unwrap().0.to_string())
                 .collect()
@@ -155,14 +166,18 @@ impl HeadlessUI {
 
     /// Check if suggestions are visible
     pub fn are_suggestions_visible(&self) -> bool {
-        self.state.suggestions_visible.read()
+        self.state
+            .suggestions_visible
+            .read()
             .map(|v| *v)
             .unwrap_or(false)
     }
 
     /// Get current suggestions
     pub fn get_suggestions(&self) -> Vec<String> {
-        self.state.current_suggestions.read()
+        self.state
+            .current_suggestions
+            .read()
             .map(|s| s.clone())
             .unwrap_or_default()
     }
@@ -180,7 +195,10 @@ impl HeadlessUI {
 
         while start.elapsed() < timeout {
             if let Some(session) = self.state.get_active_session() {
-                if matches!(session.agent_state, osvm::utils::agent_chat_v2::AgentState::Idle) {
+                if matches!(
+                    session.agent_state,
+                    osvm::utils::agent_chat_v2::AgentState::Idle
+                ) {
                     return true;
                 }
             }
