@@ -130,10 +130,12 @@ impl TaskState {
         self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
     }
 
-    /// Toggle todo item completion
+    /// Toggle todo item completion - safe bounds checking
     pub fn toggle_todo(&mut self, index: usize) {
-        if index < self.todo_items.len() && !self.todo_items[index].completed {
-            self.todo_items[index].complete("✅ Task completed successfully".to_string());
+        if let Some(item) = self.todo_items.get_mut(index) {
+            if !item.completed {
+                item.complete("✅ Task completed successfully".to_string());
+            }
         }
     }
 
@@ -151,7 +153,11 @@ impl TaskState {
     /// Navigate to next todo item
     pub fn navigate_todo_down(&mut self) {
         if !self.todo_items.is_empty() {
-            self.selected_todo_index = (self.selected_todo_index + 1) % self.todo_items.len();
+            // Safe modulo operation - prevent divide by zero
+            let len = self.todo_items.len();
+            if len > 0 {
+                self.selected_todo_index = (self.selected_todo_index + 1) % len;
+            }
         }
     }
 

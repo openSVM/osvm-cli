@@ -252,8 +252,9 @@ pub async fn show_context_visualization(chat_history: &[String], ai_service: &Ar
     } else {
         println!("\n{}Recent Messages:{}", Colors::CYAN, Colors::RESET);
         for (i, msg) in chat_history.iter().rev().take(5).enumerate() {
-            let truncated = if msg.len() > 60 {
-                format!("{}...", &msg[..57])
+            let truncated = if msg.chars().count() > 60 {
+                let truncated_chars: String = msg.chars().take(57).collect();
+                format!("{}...", truncated_chars)
             } else {
                 msg.clone()
             };

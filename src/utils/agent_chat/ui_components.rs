@@ -1,6 +1,7 @@
 //! UI components and rendering logic for the chat interface
 
 use super::{Colors, TaskState, InputState, TodoPriority, InputMode, SPINNER_FRAMES};
+use anyhow::Result;
 use ratatui::{
     Frame,
     prelude::*,
@@ -8,79 +9,109 @@ use ratatui::{
     style::*,
     text::*,
 };
-use std::io::{self, Write};
 
-/// Show the welcome box
+/// Show the welcome box using simple borders
 pub fn show_welcome_box() {
-    println!("\n{}╭────────────────────────────────────────────────╮", Colors::CYAN);
-    println!("│         {}OSVM Agent Chat Interface{}              │", Colors::BOLD, Colors::CYAN);
-    println!("│                                                │");
-    println!("│  • Claude Code-style real-time chat           │");
-    println!("│  • MCP tool integration                       │");
-    println!("│  • Fuzzy search & auto-complete              │");
-    println!("│  • Ctrl+T: Toggle task navigation            │");
-    println!("│                                                │");
-    println!("│  Type 'help' for commands or 'exit' to quit  │");
-    println!("╰────────────────────────────────────────────────╯{}\n", Colors::RESET);
+    println!();
+    println!("{}+==================================================+{}", Colors::CYAN, Colors::RESET);
+    println!("{}|         {}OSVM Agent Chat Interface{}              |{}", Colors::CYAN, Colors::BOLD, Colors::CYAN, Colors::RESET);
+    println!("{}|                                                  |{}", Colors::CYAN, Colors::RESET);
+    println!("{}|  * Real-time AI chat with Solana tools          |{}", Colors::CYAN, Colors::RESET);  
+    println!("{}|  * MCP tool integration                          |{}", Colors::CYAN, Colors::RESET);
+    println!("{}|  * Press Ctrl+T to toggle task navigation       |{}", Colors::CYAN, Colors::RESET);
+    println!("{}|  * Press Ctrl+C to exit                          |{}", Colors::CYAN, Colors::RESET);
+    println!("{}|                                                  |{}", Colors::CYAN, Colors::RESET);
+    println!("{}|  Type your message to chat or /help for help    |{}", Colors::CYAN, Colors::RESET);
+    println!("{}+==================================================+{}", Colors::CYAN, Colors::RESET);
+    println!();
 }
 
-/// Show enhanced status bar
+/// Show enhanced status bar using simple sequential output
+pub fn show_enhanced_status_bar_in_place(
+    task_state: &TaskState,
+    _renderer: &mut super::responsive_layout::TerminalRenderer,
+) -> Result<()> {
+    show_enhanced_status_bar(task_state);
+    Ok(())
+}
+
+/// Show enhanced status bar - simple version
 pub fn show_enhanced_status_bar(task_state: &TaskState) {
     let spinner = SPINNER_FRAMES[task_state.spinner_frame];
     let mode_indicator = match task_state.input_mode {
-        InputMode::InputField => "[INPUT]",
-        InputMode::TaskSelection => "[TASKS]",
+        InputMode::InputField => "INPUT",
+        InputMode::TaskSelection => "TASKS",
     };
 
-    println!("{}{}═══════════════════════════════════════════════════════════{}",
-        Colors::DIM, Colors::BOLD, Colors::RESET);
-
-    println!("{}  {} {} {} | Mode: {}{}",
-        Colors::CYAN,
-        spinner,
-        task_state.current_task,
-        Colors::DIM,
-        mode_indicator,
-        Colors::RESET
-    );
-
-    // Show todos inline
-    let incomplete_count = task_state.todo_items.iter().filter(|t| !t.completed).count();
-    let complete_count = task_state.todo_items.iter().filter(|t| t.completed).count();
-
-    println!("{}  Tasks: {}{}/{} complete{} | {}{}{}",
-        Colors::DIM,
-        Colors::GREEN,
-        complete_count,
-        task_state.todo_items.len(),
-        Colors::DIM,
-        Colors::GRAY,
-        task_state.current_reasoning,
-        Colors::RESET
-    );
-
-    println!("{}═══════════════════════════════════════════════════════════{}\n",
-        Colors::DIM, Colors::RESET);
+    println!("{}+-- Status ------------------------------------------+{}", Colors::CYAN, Colors::RESET);
+    println!("{}| {} {} | Mode: {} |{}", 
+             Colors::CYAN, 
+             spinner,
+             task_state.current_task,
+             mode_indicator,
+             Colors::RESET);
+    println!("{}+-----------------------------------------------+{}", Colors::CYAN, Colors::RESET);
 }
 
-/// Show task details below input
+/// Show task details using simple sequential rendering with boxes
+pub fn show_task_details_in_place(
+    task_state: &TaskState,
+    _renderer: &mut super::responsive_layout::TerminalRenderer,
+) -> Result<()> {
+    show_task_details_below_input(task_state);
+    Ok(())
+}
+
+/// Show task details with simple borders
 pub fn show_task_details_below_input(task_state: &TaskState) {
-    if let Some(selected_task) = task_state.get_selected_task_details() {
-        println!("\n{}┌─ Task Details ─────────────────────────────┐{}", Colors::DIM, Colors::RESET);
-        println!("{}│ {}{}{}", Colors::DIM, Colors::YELLOW, selected_task.text, Colors::RESET);
-
-        // Show reasoning
-        let reasoning_lines = wrap_text(&selected_task.reasoning, 44);
-        for line in reasoning_lines.iter().take(2) {
-            println!("{}│ {}{}", Colors::DIM, line, Colors::RESET);
+    let complete_count = task_state.todo_items.iter().filter(|t| t.completed).count();
+    
+    println!("{}+-- Tasks ({}/{}) ------------------------------+{}", 
+             Colors::YELLOW,
+             complete_count,
+             task_state.todo_items.len(),
+             Colors::RESET);
+    
+    for (i, item) in task_state.todo_items.iter().enumerate() {
+        let checkbox = if item.completed { "[X]" } else { "[ ]" };
+        let priority_color = match item.priority {
+            TodoPriority::High => Colors::RED,
+            TodoPriority::Medium => Colors::YELLOW,
+            TodoPriority::Low => Colors::GREEN,
+        };
+        
+        let selection_indicator = if task_state.input_mode == InputMode::TaskSelection &&
+                                     i == task_state.selected_todo_index {
+            format!("{}>> {}", Colors::CYAN, Colors::RESET)
+        } else {
+            "   ".to_string()
+        };
+        
+        println!("{}|{}{} {}{}{} |{}",
+                 Colors::YELLOW,
+                 selection_indicator,
+                 checkbox,
+                 priority_color,
+                 item.text,
+                 Colors::YELLOW,
+                 Colors::RESET);
+        
+        if let Some(ref results) = item.execution_results {
+            println!("{}|    {}{}{} |{}",
+                     Colors::YELLOW,
+                     Colors::DIM,
+                     results,
+                     Colors::YELLOW,
+                     Colors::RESET);
         }
-
-        // Show execution results if available
-        if let Some(results) = &selected_task.execution_results {
-            println!("{}│ {}{}{}", Colors::DIM, Colors::GREEN, results, Colors::RESET);
-        }
-
-        println!("{}└────────────────────────────────────────────┘{}", Colors::DIM, Colors::RESET);
+    }
+    
+    println!("{}+-----------------------------------------------+{}", Colors::YELLOW, Colors::RESET);
+    
+    if !task_state.current_reasoning.is_empty() {
+        println!("{}+-- Current Reasoning ---------------------------+{}", Colors::BLUE, Colors::RESET);
+        println!("{}| {} |{}", Colors::BLUE, task_state.current_reasoning, Colors::RESET);
+        println!("{}+-----------------------------------------------+{}", Colors::BLUE, Colors::RESET);
     }
 }
 
@@ -99,15 +130,15 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
     let spinner = SPINNER_FRAMES[task_state.spinner_frame];
     let task_header = Paragraph::new(Text::from(vec![
         Line::from(vec![
-            Span::styled(spinner, Style::default().fg(Color::Cyan)),
+            Span::styled(spinner, Style::default().fg(ratatui::style::Color::Cyan)),
             Span::raw(" "),
-            Span::styled(&task_state.current_task, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled(&task_state.current_task, Style::default().fg(ratatui::style::Color::White).add_modifier(Modifier::BOLD)),
         ])
     ]))
     .block(Block::default()
         .borders(Borders::ALL)
         .title("Task Status")
-        .border_style(Style::default().fg(Color::Blue)));
+        .border_style(Style::default().fg(ratatui::style::Color::Blue)));
 
     f.render_widget(task_header, chunks[0]);
 
@@ -115,9 +146,9 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
     let todo_items: Vec<ListItem> = task_state.todo_items.iter().enumerate().map(|(i, item)| {
         let checkbox = if item.completed { "☑" } else { "☐" };
         let priority_color = match item.priority {
-            TodoPriority::High => Color::Red,
-            TodoPriority::Medium => Color::Yellow,
-            TodoPriority::Low => Color::Green,
+            TodoPriority::High => ratatui::style::Color::Red,
+            TodoPriority::Medium => ratatui::style::Color::Yellow,
+            TodoPriority::Low => ratatui::style::Color::Green,
         };
 
         let selection_indicator = if task_state.input_mode == InputMode::TaskSelection &&
@@ -127,8 +158,9 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
             "  "
         };
 
-        let todo_text = if item.text.len() > 45 {
-            format!("{}...", &item.text[..42])
+        let todo_text = if item.text.chars().count() > 45 {
+            let truncated: String = item.text.chars().take(42).collect();
+            format!("{}...", truncated)
         } else {
             item.text.clone()
         };
@@ -137,7 +169,7 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
             Span::raw(selection_indicator),
             Span::styled(checkbox, Style::default().fg(priority_color)),
             Span::raw(" "),
-            Span::styled(todo_text, Style::default().fg(Color::White)),
+            Span::styled(todo_text, Style::default().fg(ratatui::style::Color::White)),
         ]))
     }).collect();
 
@@ -151,8 +183,8 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
         .block(Block::default()
             .borders(Borders::ALL)
             .title(todo_header)
-            .border_style(Style::default().fg(Color::Blue)))
-        .highlight_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+            .border_style(Style::default().fg(ratatui::style::Color::Blue)))
+        .highlight_style(Style::default().fg(ratatui::style::Color::Yellow).add_modifier(Modifier::BOLD));
 
     f.render_widget(todo_list, chunks[1]);
 
@@ -162,9 +194,9 @@ pub fn render_task_status(f: &mut Frame, area: Rect, task_state: &TaskState) {
         .block(Block::default()
             .borders(Borders::ALL)
             .title("Current Reasoning")
-            .border_style(Style::default().fg(Color::Blue)))
+            .border_style(Style::default().fg(ratatui::style::Color::Blue)))
         .wrap(Wrap { trim: true })
-        .style(Style::default().fg(Color::Gray));
+        .style(Style::default().fg(ratatui::style::Color::Gray));
 
     f.render_widget(reasoning_paragraph, chunks[2]);
 }
@@ -178,11 +210,11 @@ pub fn render_input_bar(f: &mut Frame, area: Rect, input_state: &InputState, tas
     };
 
     let input = Paragraph::new(input_text)
-        .style(Style::default().fg(Color::Green))
+        .style(Style::default().fg(ratatui::style::Color::Green))
         .block(Block::default()
             .borders(Borders::ALL)
             .title("Input")
-            .border_style(Style::default().fg(Color::Green)));
+            .border_style(Style::default().fg(ratatui::style::Color::Green)));
 
     f.render_widget(input, area);
 }
