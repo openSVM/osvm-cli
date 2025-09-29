@@ -1,79 +1,323 @@
 # OSVM CLI Documentation
 
-Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Machine command-line interface with integrated AI and MCP capabilities.
+Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Machine command-line interface with integrated AI assistance, MCP server support, and extensible plugin architecture.
 
-## Documentation Index
+## 🚀 Quick Access
 
-### Core Features
-- [SVM Management](svm-management.md) - Manage Solana Virtual Machines
-- [Node Management](node-management.md) - Deploy and monitor validator/RPC nodes
-- [SSH Deployment](ssh-deployment.md) - Remote deployment capabilities
-- [RPC Manager](rpc-manager.md) - Comprehensive RPC node management
+- [**📖 Main Documentation Website**](index.html) - Interactive terminal-style documentation
+- [**⚡ Getting Started**](#quick-start) - Begin your OSVM journey
+- [**📚 API Reference**](#api-reference) - Complete command reference
+- [**🧩 Plugin Development**](#plugin-development) - Extend OSVM functionality
 
-### AI Integration
-- [AI Endpoint Configuration](ai-endpoint-configuration.md) - Configure AI endpoints for smart contract analysis
-- [DeepLogic AI Analysis](deeplogic-ai-analysis.md) - AI-powered logical vulnerability detection with code remediation
-- [Security Audit](security-audit.md) - Comprehensive security analysis and reporting
+## 📋 Documentation Index
 
-### MCP Integration
-- [MCP Integration](mcp-integration.md) - Model Context Protocol server integration
-- [GitHub MCP Servers](mcp-integration.md#github-integration) - Clone and deploy MCP servers from repositories
-- [MCP Tool Discovery](mcp-integration.md#tool-discovery) - Discover and execute blockchain tools
+### 🏗️ Core Features
+- [**SVM Management**](svm-management.md) - Deploy and manage Solana Virtual Machines
+- [**Node Management**](node-management.md) - Validator and RPC node operations
+- [**SSH Deployment**](ssh-deployment.md) - Remote deployment capabilities
+- [**RPC Manager**](rpc-manager.md) - Comprehensive RPC node management
 
-### Advanced Features
-- [Self-Repair System](self-repair-system.md) - Automatic error detection and repair
-- [Log Monitoring](log-monitoring.md) - Real-time log analysis and auto-repair
-- [Validator Enhancements](validator-enhancements.md) - Hardware optimization and configuration
-- [eBPF Deployment](ebpf-deployment.md) - Solana program deployment
+### 🤖 AI Integration
+- [**AI Endpoint Configuration**](ai-endpoint-configuration.md) - Configure AI providers and endpoints
+- [**DeepLogic AI Analysis**](deeplogic-ai-analysis.md) - Advanced vulnerability detection
+- [**Security Audit**](security-audit.md) - Automated security analysis and reporting
 
-### User Interface
-- [Dashboard](dashboard.md) - Interactive monitoring dashboards
-- [Examples](examples.md) - Usage examples and command patterns
+### 🔌 MCP Integration
+- [**MCP Integration Guide**](mcp-integration.md) - Model Context Protocol server setup
+- [**GitHub MCP Servers**](mcp-integration.md#github-integration) - Repository-based server deployment
+- [**Tool Discovery**](mcp-integration.md#tool-discovery) - Blockchain tool discovery and execution
 
-### Setup & Configuration
-- [Installation](installation.md) - Installation guide
-- [Configuration](configuration.md) - Configuration management
+### 🧩 Plugin System
+- [**Plugin Development Guide**](#plugin-development) - Create custom plugins
+- [**Plugin API Reference**](#plugin-api) - Complete API documentation
+- [**Plugin Examples**](#plugin-examples) - Working plugin examples
+- [**Plugin Security**](#plugin-security) - Security model and permissions
 
-## Quick Start
+### ⚙️ Advanced Features
+- [**Self-Repair System**](self-repair-system.md) - Automatic error detection and repair
+- [**Log Monitoring**](log-monitoring.md) - Real-time log analysis and alerts
+- [**Validator Enhancements**](validator-enhancements.md) - Hardware optimization
+- [**eBPF Deployment**](ebpf-deployment.md) - Solana program deployment
 
-1. [Install OSVM CLI](installation.md)
-2. [Configure your environment](configuration.md)
-3. [Try basic SVM operations](svm-management.md#quick-start)
-4. [Set up AI integration](ai-endpoint-configuration.md#quick-start)
-5. [Configure MCP servers](mcp-integration.md#quick-start)
-6. [Deploy your first node](node-management.md#quick-start)
-7. [Run a security audit](security-audit.md#quick-start)
+### 🛠️ Tools & Interfaces
+- [**Interactive Dashboard**](dashboard.md) - Real-time monitoring interface
+- [**Agent Chat System**](#agent-chat) - AI-powered command interface
+- [**Command Examples**](examples.md) - Usage patterns and workflows
 
-## Architecture Overview
+### 📦 Setup & Configuration
+- [**Installation Guide**](installation.md) - Complete installation instructions
+- [**Configuration Management**](configuration.md) - System and user configuration
+- [**Testing Guide**](testing.md) - Testing and validation procedures
 
-## Architecture Overview
+## 🚀 Quick Start
+
+### 1. Installation
+```bash
+# One-line install
+curl -sSf https://raw.githubusercontent.com/opensvm/osvm-cli/main/install.sh | sh
+
+# Verify installation
+osvm --version
+```
+
+### 2. Basic Configuration
+```bash
+# Check system health
+osvm doctor
+
+# Auto-fix common issues
+osvm doctor --fix
+
+# List available SVMs
+osvm svm list
+```
+
+### 3. First Deployment
+```bash
+# Deploy to testnet for testing
+osvm user@host --svm sonic --node-type validator --network testnet
+
+# Monitor with dashboard
+osvm svm dashboard
+```
+
+### 4. AI Integration
+```bash
+# Configure AI provider
+export OPENAI_URL="https://api.openai.com/v1/chat/completions"
+export OPENAI_KEY="your-api-key"
+
+# Ask AI questions
+osvm "How do I optimize my validator performance?"
+
+# Run security audit
+osvm audit ./contracts
+```
+
+### 5. MCP Server Setup
+```bash
+# Quick setup with Solana MCP server
+osvm mcp setup --auto-enable
+
+# Test connectivity
+osvm mcp test solana-server
+
+# Execute blockchain queries
+osvm mcp call solana-server getBalance --args '{"pubkey":"your-address"}'
+```
+
+## 🏗️ Architecture Overview
+
+OSVM CLI is built with a modular architecture consisting of:
 
 ### Core Components
-- **CLI Interface**: Command-line interface with comprehensive subcommands
-- **SVM Manager**: Solana Virtual Machine lifecycle management
-- **Node Manager**: Validator and RPC node deployment and monitoring
-- **SSH Deployment**: Remote server deployment capabilities
-- **RPC Manager**: Comprehensive RPC node management and scaling
+- **Command Router** - Central command processing and routing
+- **Service Layer** - High-level service implementations (AI, MCP, Audit)
+- **Utility Layer** - Core functionality modules
+- **Plugin System** - Extensible plugin architecture
 
-### AI Integration
-- **AI Service**: Multi-provider AI endpoint support (OpenAI, Ollama, LocalAI, etc.)
-- **Smart Contract Analysis**: AI-powered security analysis and code review
-- **DeepLogic Analysis**: Advanced logical vulnerability detection
-- **Natural Language Queries**: Query blockchain data using natural language
+### Key Services
+- **AI Service** - Multi-provider AI integration with circuit breaker
+- **MCP Service** - Model Context Protocol server management
+- **Audit Service** - Security analysis and vulnerability detection
+- **SSH Deploy Service** - Remote deployment and management
 
-### MCP Integration
-- **MCP Client**: Full Model Context Protocol client implementation
-- **Transport Support**: HTTP, WebSocket, and stdio transport protocols
-- **GitHub Integration**: Clone and build MCP servers from GitHub repositories
-- **Tool Discovery**: Automatic discovery and execution of MCP server tools
-- **Circuit Breaker**: Fault-tolerant MCP server communication
+### Plugin Architecture
+- **Command Plugins** - Custom slash commands
+- **Tool Plugins** - MCP-style tools for AI integration
+- **Theme Plugins** - Visual customization
+- **Integration Plugins** - External service connections
 
-### External Integrations
-- **Solana Network**: Direct blockchain interaction and monitoring
-- **GitHub Repositories**: Clone and deploy MCP servers from public/private repos
-- **Remote Servers**: SSH-based deployment and management
-- **Local Environment**: Development and testing support
+## 📖 API Reference
 
-## Support
+### Core Commands
 
-For issues, questions, or contributions, please visit the [OSVM CLI repository](https://github.com/openSVM/osvm-cli).
+**SVM Management:**
+```bash
+osvm svm list                    # List all SVMs
+osvm svm get <name>             # Get SVM details
+osvm svm dashboard              # Launch monitoring dashboard
+```
+
+**Node Operations:**
+```bash
+osvm nodes list                 # List deployed nodes
+osvm nodes status <id>          # Check node status
+osvm nodes logs <id> [--follow] # View node logs
+osvm nodes restart <id>         # Restart node
+```
+
+**AI Integration:**
+```bash
+osvm "query"                    # Natural language query
+osvm chat                       # Interactive AI chat
+osvm audit [path]               # Security audit
+```
+
+**MCP Operations:**
+```bash
+osvm mcp list                   # List configured servers
+osvm mcp tools [server]         # List available tools
+osvm mcp call <server> <tool>   # Execute tool
+```
+
+**Plugin Management:**
+```bash
+osvm plugins list               # List installed plugins
+osvm plugins install <path>     # Install plugin
+osvm plugins enable <name>      # Enable plugin
+```
+
+## 🧩 Plugin Development
+
+### Creating a Command Plugin
+
+**1. Plugin Structure:**
+```
+my-plugin/
+├── plugin.json          # Plugin manifest
+├── main.py             # Entry point
+├── requirements.txt    # Dependencies
+└── README.md          # Documentation
+```
+
+**2. Plugin Manifest (`plugin.json`):**
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "description": "Description of plugin functionality",
+  "author": "Your Name",
+  "license": "MIT",
+  "plugin_type": "Command",
+  "entry_point": "main.py",
+  "dependencies": ["requests"],
+  "permissions": [
+    {"NetworkAccess": ["api.example.com"]},
+    "EnvironmentAccess"
+  ],
+  "min_osvm_version": "0.8.0",
+  "supported_platforms": ["linux", "macos", "windows"]
+}
+```
+
+**3. Plugin Implementation (`main.py`):**
+```python
+#!/usr/bin/env python3
+import json
+import sys
+
+def main():
+    # Read context from stdin
+    context = json.loads(sys.stdin.read())
+
+    # Parse user input
+    user_input = context["user_input"]
+    command = user_input.replace("/mycommand", "").strip()
+
+    # Execute plugin logic
+    try:
+        result = {
+            "success": True,
+            "output": f"Plugin executed with: {command}",
+            "suggestions": ["/mycommand help"]
+        }
+    except Exception as e:
+        result = {
+            "success": False,
+            "error": str(e)
+        }
+
+    # Return result as JSON
+    print(json.dumps(result))
+
+if __name__ == "__main__":
+    main()
+```
+
+### Plugin Types
+
+**Command Plugins:** Add new slash commands to the chat interface
+- Entry point: Executable script (Python, Rust, Node.js, etc.)
+- Input: JSON context via stdin
+- Output: JSON result via stdout
+
+**Tool Plugins:** Provide MCP-style tools for AI integration
+- Automatically available to AI queries
+- Support complex parameter schemas
+- Can chain with other tools
+
+**Theme Plugins:** Visual customization
+- JSON-based color and style definitions
+- Support for animations and transitions
+- Responsive design compatibility
+
+**Integration Plugins:** External service connections
+- Database connections
+- API integrations
+- Cloud service providers
+- Version control systems
+
+### Plugin Security
+
+**Permission System:**
+```json
+{
+  "permissions": [
+    {"ReadFiles": ["~/data", "/tmp"]},
+    {"WriteFiles": ["~/output"]},
+    {"NetworkAccess": ["api.example.com", "*.trusted-domain.com"]},
+    "ExecuteCommands",
+    "EnvironmentAccess",
+    "MCPAccess",
+    "AIAccess"
+  ]
+}
+```
+
+**Security Best Practices:**
+- Request minimal permissions needed
+- Validate all user input
+- Use secure communication (HTTPS/TLS)
+- Store secrets in plugin configuration
+- Implement proper error handling
+- Follow principle of least privilege
+
+## 🛠️ Development Resources
+
+### Contributing to OSVM
+- [**Development Setup**](../CLAUDE.md#development-environment-setup) - Complete setup guide
+- [**Code Style Guide**](../CLAUDE.md#code-style) - Coding standards and conventions
+- [**Testing Strategy**](../CLAUDE.md#testing-strategy) - Testing guidelines
+- [**Architecture Guide**](../CLAUDE.md#project-structure) - Codebase architecture
+
+### External Resources
+- [**Solana Documentation**](https://docs.solana.com/) - Solana blockchain documentation
+- [**Model Context Protocol**](https://modelcontextprotocol.io/) - MCP specification
+- [**Rust Programming**](https://doc.rust-lang.org/) - Rust language documentation
+- [**GitHub Actions**](https://docs.github.com/en/actions) - CI/CD documentation
+
+## 📞 Support & Community
+
+### Getting Help
+- **📖 Documentation**: Complete guides and references
+- **💬 GitHub Discussions**: Community Q&A and discussions
+- **🐛 Issue Tracker**: Bug reports and feature requests
+- **📧 Email Support**: Technical support contact
+
+### Community Resources
+- **Discord Server**: Real-time community chat
+- **Twitter**: Updates and announcements
+- **Blog**: Technical articles and tutorials
+- **Newsletter**: Monthly updates and releases
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+
+---
+
+**🔗 Quick Links:**
+- [Main Website](index.html) | [GitHub Repository](https://github.com/opensvm/osvm-cli) | [Download Latest](https://github.com/opensvm/osvm-cli/releases/latest)
+
+*Last updated: $(date)*

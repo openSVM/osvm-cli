@@ -1,0 +1,470 @@
+<!-- Home Page Content -->
+<div class="page-header">
+    <div class="command-line">
+        <span class="prompt">user@osvm:~$</span>
+        <span class="command typing" data-speed="80">cat README.md</span>
+    </div>
+</div>
+
+<!-- ASCII Art Header -->
+<pre class="ascii-art animate-on-scroll" data-animation="fadeIn">
+ ██████╗ ███████╗██╗   ██╗███╗   ███╗     ██████╗██╗     ██╗
+██╔═══██╗██╔════╝██║   ██║████╗ ████║    ██╔════╝██║     ██║
+██║   ██║███████╗██║   ██║██╔████╔██║    ██║     ██║     ██║
+██║   ██║╚════██║╚██╗ ██╔╝██║╚██╔╝██║    ██║     ██║     ██║
+╚██████╔╝███████║ ╚████╔╝ ██║ ╚═╝ ██║    ╚██████╗███████╗██║
+ ╚═════╝ ╚══════╝  ╚═══╝  ╚═╝     ╚═╝     ╚═════╝╚══════╝╚═╝
+</pre>
+
+<!-- Main Introduction -->
+<section class="intro animate-on-scroll" data-animation="slideUp">
+    <h1>Solana Virtual Machine Command-Line Interface</h1>
+    <p class="subtitle">Deploy, monitor, and manage SVM infrastructure with AI assistance, MCP server integration, and extensible <a href="#" data-cross-link="plugins">plugin</a> architecture</p>
+
+    <div class="badges">
+        <span class="badge">MIT License</span>
+        <span class="badge">Rust 1.80+</span>
+        <span class="badge">Solana 1.14+</span>
+        <span class="badge">Plugin Support</span>
+    </div>
+
+    <div class="demo-notice animate-on-scroll" data-animation="zoomIn">
+        <span class="demo-icon">💡</span>
+        <span class="demo-text">Click any command on this site to copy it to your clipboard! Try <kbd>Ctrl+K</kbd> to search.</span>
+    </div>
+</section>
+
+<!-- Quick Start Section -->
+<section class="quick-start animate-on-scroll" data-animation="slideUp">
+    <h2><span class="section-marker">[</span>QUICK START<span class="section-marker">]</span></h2>
+
+    <div class="install-box">
+        <div class="command-line">
+            <span class="prompt">$</span>
+            <span class="command">curl -sSf https://osvm.ai/install.sh | sh</span>
+            <button class="copy-btn" onclick="copyToClipboard('curl -sSf https://osvm.ai/install.sh | sh')">COPY</button>
+        </div>
+    </div>
+
+    <div class="command-grid">
+        <div class="command-example animate-on-scroll" data-animation="slideLeft" onclick="copyCommand('osvm svm list')">
+            <div class="command-line">
+                <span class="prompt">$</span>
+                <span class="command">osvm svm list</span>
+                <span class="copy-indicator">CLICK TO COPY</span>
+            </div>
+            <div class="command-desc">List available SVMs</div>
+        </div>
+
+        <div class="command-example animate-on-scroll" data-animation="slideLeft" onclick="copyCommand('osvm svm dashboard')">
+            <div class="command-line">
+                <span class="prompt">$</span>
+                <span class="command">osvm svm dashboard</span>
+                <span class="copy-indicator">CLICK TO COPY</span>
+            </div>
+            <div class="command-desc">Launch monitoring dashboard</div>
+        </div>
+
+        <div class="command-example animate-on-scroll" data-animation="slideLeft" onclick="copyCommand('osvm chat')">
+            <div class="command-line">
+                <span class="prompt">$</span>
+                <span class="command">osvm chat</span>
+                <span class="copy-indicator">CLICK TO COPY</span>
+            </div>
+            <div class="command-desc"><a href="#" data-cross-link="ai-integration">AI</a>-powered assistance</div>
+        </div>
+
+        <div class="command-example animate-on-scroll" data-animation="slideLeft" onclick="copyCommand('osvm examples')">
+            <div class="command-line">
+                <span class="prompt">$</span>
+                <span class="command">osvm examples</span>
+                <span class="copy-indicator">CLICK TO COPY</span>
+            </div>
+            <div class="command-desc">View usage examples</div>
+        </div>
+    </div>
+</section>
+
+<!-- Features Overview -->
+<section class="features animate-on-scroll" data-animation="slideUp">
+    <h2><span class="section-marker">[</span>KEY FEATURES<span class="section-marker">]</span></h2>
+
+    <div class="feature-grid">
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">📡</div>
+            <h3>SVM DEPLOYMENT</h3>
+            <p>Deploy and manage Solana Virtual Machines across mainnet, testnet, and devnet with automated configuration</p>
+            <a href="#" data-cross-link="node-deployment" class="feature-link">Learn More →</a>
+        </div>
+
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">🤖</div>
+            <h3>AI INTEGRATION</h3>
+            <p>Built-in <a href="#" data-cross-link="ai-integration">AI</a> assistance for security analysis, code review, and blockchain queries with multiple provider support</p>
+            <a href="#" data-cross-link="ai-integration" class="feature-link">Learn More →</a>
+        </div>
+
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">🔌</div>
+            <h3>MCP SERVERS</h3>
+            <p>Connect to <a href="#" data-cross-link="mcp-servers">Model Context Protocol</a> servers for enhanced blockchain data access and external integrations</p>
+            <a href="#" data-cross-link="mcp-servers" class="feature-link">Learn More →</a>
+        </div>
+
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">🧩</div>
+            <h3>PLUGIN SYSTEM</h3>
+            <p>Extensible architecture with custom commands, tools, <a href="#" data-cross-link="themes">themes</a>, and integrations via secure <a href="#" data-cross-link="plugins">plugin</a> framework</p>
+            <a href="#" data-cross-link="plugins" class="feature-link">Learn More →</a>
+        </div>
+
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">📊</div>
+            <h3>MONITORING</h3>
+            <p>Real-time dashboard with TPS tracking, resource monitoring, and automated health checks</p>
+            <a href="#" data-cross-link="node-deployment" class="feature-link">Learn More →</a>
+        </div>
+
+        <div class="feature-card animate-on-scroll" data-animation="zoomIn">
+            <div class="feature-icon">🔧</div>
+            <h3>SELF-REPAIR</h3>
+            <p>Intelligent system diagnostics with automatic error detection and repair capabilities</p>
+            <a href="#" data-cross-link="installation" class="feature-link">Learn More →</a>
+        </div>
+    </div>
+</section>
+
+<!-- Command Examples with Tabs -->
+<section class="examples animate-on-scroll" data-animation="slideUp">
+    <h2><span class="section-marker">[</span>COMMAND EXAMPLES<span class="section-marker">]</span></h2>
+
+    <div class="example-tabs">
+        <button class="tab-btn active" onclick="showTab('basic')">BASIC</button>
+        <button class="tab-btn" onclick="showTab('deployment')">DEPLOYMENT</button>
+        <button class="tab-btn" onclick="showTab('ai')">AI</button>
+        <button class="tab-btn" onclick="showTab('plugins')">PLUGINS</button>
+    </div>
+
+    <div class="tab-content active" id="basic">
+        <div class="code-block">
+            <div class="code-header">Basic Operations <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># List all available SVMs</span>
+<span class="copyable-command" onclick="copyCommand('osvm svm list')"><span class="prompt">$</span> osvm svm list</span>
+
+<span class="comment"># Get detailed information about a specific SVM</span>
+<span class="copyable-command" onclick="copyCommand('osvm svm get sonic')"><span class="prompt">$</span> osvm svm get sonic</span>
+
+<span class="comment"># Check system health</span>
+<span class="copyable-command" onclick="copyCommand('osvm doctor')"><span class="prompt">$</span> osvm doctor</span>
+
+<span class="comment"># Auto-fix common issues</span>
+<span class="copyable-command" onclick="copyCommand('osvm doctor --fix')"><span class="prompt">$</span> osvm doctor --fix</span>
+
+<span class="comment"># Get wallet balance</span>
+<span class="copyable-command" onclick="copyCommand('osvm balance')"><span class="prompt">$</span> osvm balance</span></code></pre>
+        </div>
+    </div>
+
+    <div class="tab-content" id="deployment">
+        <div class="code-block">
+            <div class="code-header">Node Deployment <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># Deploy validator node to mainnet</span>
+<span class="copyable-command" onclick="copyCommand('osvm user@host --svm sonic --node-type validator --network mainnet')"><span class="prompt">$</span> osvm user@host --svm sonic --node-type validator --network mainnet</span>
+
+<span class="comment"># Deploy multiple SVMs to devnet</span>
+<span class="copyable-command" onclick="copyCommand('osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet')"><span class="prompt">$</span> osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet</span>
+
+<span class="comment"># Deploy eBPF program to all networks</span>
+<span class="copyable-command" onclick="copyCommand('osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json')"><span class="prompt">$</span> osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json</span></code></pre>
+        </div>
+    </div>
+
+    <div class="tab-content" id="ai">
+        <div class="code-block">
+            <div class="code-header">AI Integration <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># Ask AI questions about Solana</span>
+<span class="copyable-command" onclick="copyCommand('osvm &quot;What are Solana security best practices?&quot;')"><span class="prompt">$</span> osvm "What are Solana security best practices?"</span>
+
+<span class="comment"># Audit smart contract code</span>
+<span class="copyable-command" onclick="copyCommand('osvm audit ./contracts')"><span class="prompt">$</span> osvm audit ./contracts</span>
+
+<span class="comment"># Interactive AI chat</span>
+<span class="copyable-command" onclick="copyCommand('osvm chat')"><span class="prompt">$</span> osvm chat</span>
+
+<span class="comment"># Setup MCP server for AI tools</span>
+<span class="copyable-command" onclick="copyCommand('osvm mcp setup --auto-enable')"><span class="prompt">$</span> osvm mcp setup --auto-enable</span></code></pre>
+        </div>
+    </div>
+
+    <div class="tab-content" id="plugins">
+        <div class="code-block">
+            <div class="code-header">Plugin & Theme Management <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># List available plugins</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins list')"><span class="prompt">$</span> osvm plugins list</span>
+
+<span class="comment"># Install plugin from GitHub</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/weather-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/weather-plugin</span>
+
+<span class="comment"># Apply custom theme</span>
+<span class="copyable-command" onclick="copyCommand('osvm chat --theme cyberpunk')"><span class="prompt">$</span> osvm chat --theme cyberpunk</span>
+
+<span class="comment"># Create new plugin</span>
+<span class="copyable-command" onclick="copyCommand('osvm plugins create my-plugin --type command')"><span class="prompt">$</span> osvm plugins create my-plugin --type command</span></code></pre>
+        </div>
+    </div>
+</section>
+
+<!-- What's New Section -->
+<section class="whats-new animate-on-scroll" data-animation="slideUp">
+    <h2><span class="section-marker">[</span>WHAT'S NEW<span class="section-marker">]</span></h2>
+
+    <div class="news-grid">
+        <div class="news-item animate-on-scroll" data-animation="slideLeft">
+            <div class="news-badge">🎉 NEW</div>
+            <h3><a href="#" data-cross-link="plugins">Advanced Plugin System</a></h3>
+            <p>Create custom commands, tools, and <a href="#" data-cross-link="themes">themes</a> with our new plugin architecture. Support for Python, Rust, and JavaScript plugins.</p>
+            <div class="news-meta">
+                <span class="news-date">v0.8.2</span>
+                <a href="#" data-cross-link="plugins" class="news-link">Learn More →</a>
+            </div>
+        </div>
+
+        <div class="news-item animate-on-scroll" data-animation="slideLeft">
+            <div class="news-badge">✨ ENHANCED</div>
+            <h3><a href="#" data-cross-link="ai-integration">AI Chat Interface</a></h3>
+            <p>Completely redesigned chat interface with real-time suggestions, task management, and enhanced <a href="#" data-cross-link="ai-integration">AI</a> integration.</p>
+            <div class="news-meta">
+                <span class="news-date">v0.8.1</span>
+                <a href="#" data-cross-link="ai-integration" class="news-link">Try It →</a>
+            </div>
+        </div>
+
+        <div class="news-item animate-on-scroll" data-animation="slideLeft">
+            <div class="news-badge">🔌 UPDATED</div>
+            <h3><a href="#" data-cross-link="mcp-servers">MCP Server Integration</a></h3>
+            <p>Enhanced <a href="#" data-cross-link="mcp-servers">Model Context Protocol</a> support with GitHub integration, tool discovery, and improved authentication.</p>
+            <div class="news-meta">
+                <span class="news-date">v0.8.0</span>
+                <a href="#" data-cross-link="mcp-servers" class="news-link">Explore →</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Getting Started CTA -->
+<section class="cta-section animate-on-scroll" data-animation="zoomIn">
+    <div class="cta-content">
+        <h2>Ready to Get Started?</h2>
+        <p>Install OSVM CLI and start managing your Solana infrastructure today</p>
+
+        <div class="cta-buttons">
+            <button class="cta-btn primary" onclick="copyCommand('curl -sSf https://osvm.ai/install.sh | sh')">
+                <span class="btn-icon">⚡</span>
+                <span class="btn-text">Install Now</span>
+            </button>
+            <button class="cta-btn secondary" onclick="navigateToPage('installation')">
+                <span class="btn-icon">📖</span>
+                <span class="btn-text">Read Docs</span>
+            </button>
+            <button class="cta-btn secondary" onclick="navigateToPage('plugins')">
+                <span class="btn-icon">🧩</span>
+                <span class="btn-text">Explore Plugins</span>
+            </button>
+        </div>
+
+        <div class="cta-hint">
+            <span class="hint-icon">💡</span>
+            <span class="hint-text">New to OSVM? Try our <a href="#" data-cross-link="installation">installation guide</a> or explore <a href="#" data-cross-link="plugins">plugins</a> and <a href="#" data-cross-link="themes">themes</a></span>
+        </div>
+    </div>
+</section>
+
+<style>
+/* Home page specific styles */
+.news-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-lg);
+}
+
+.news-item {
+    background: var(--dark-gray);
+    border: 1px solid var(--gray);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+    transition: all var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+}
+
+.news-item:hover {
+    border-color: var(--light-gray);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px var(--shadow);
+}
+
+.news-badge {
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    background: var(--accent);
+    color: var(--black);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.news-item h3 {
+    color: var(--accent);
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-lg);
+}
+
+.news-item p {
+    color: var(--lighter-gray);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-md);
+}
+
+.news-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--gray);
+}
+
+.news-date {
+    color: var(--accent-dim);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.news-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--transition-fast);
+}
+
+.news-link:hover {
+    color: var(--white);
+}
+
+.feature-link {
+    color: var(--accent-dim);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    margin-top: var(--spacing-sm);
+    display: inline-block;
+    transition: color var(--transition-fast);
+}
+
+.feature-link:hover {
+    color: var(--accent);
+}
+
+.cta-section {
+    background: var(--dark-gray);
+    border: 1px solid var(--gray);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-2xl);
+    text-align: center;
+    margin: var(--spacing-2xl) 0;
+}
+
+.cta-content h2 {
+    color: var(--accent);
+    font-size: var(--font-size-2xl);
+    margin-bottom: var(--spacing-md);
+}
+
+.cta-content p {
+    color: var(--lighter-gray);
+    font-size: var(--font-size-lg);
+    margin-bottom: var(--spacing-xl);
+}
+
+.cta-buttons {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-lg);
+}
+
+.cta-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: 2px solid;
+}
+
+.cta-btn.primary {
+    background: var(--accent);
+    color: var(--black);
+    border-color: var(--accent);
+}
+
+.cta-btn.primary:hover {
+    background: var(--white);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2);
+}
+
+.cta-btn.secondary {
+    background: transparent;
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+.cta-btn.secondary:hover {
+    background: var(--accent);
+    color: var(--black);
+    transform: translateY(-2px);
+}
+
+.cta-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    color: var(--lighter-gray);
+    font-size: var(--font-size-sm);
+}
+
+.hint-icon {
+    filter: grayscale(100%);
+}
+
+@media (max-width: 768px) {
+    .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .cta-btn {
+        width: 100%;
+        max-width: 300px;
+        justify-content: center;
+    }
+
+    .news-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .cta-hint {
+        flex-direction: column;
+        text-align: center;
+    }
+}
+</style>

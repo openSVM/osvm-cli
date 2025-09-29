@@ -46,6 +46,7 @@ core.*
 *.sublime-project
 .history/
 .ionide/
+.claude/
 osvm-local 
 # OS specific files
 .DS_Store

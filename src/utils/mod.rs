@@ -11,14 +11,27 @@ use serde::de::DeserializeOwned;
 use std::{fs::File, io, path::Path};
 
 // UI and display utilities
+/// Agent chat interface using cursive-multiplex with MCP tools
+pub mod agent_chat;
+#[cfg(test)]
+pub mod agent_chat_tests;
+pub mod agent_chat_v2;
+/// CLI-based agent execution without UI
+pub mod agent_cli;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
 /// Example command utilities for displaying usage examples
 pub mod examples;
+/// Custom keybinding system for agent interfaces
+pub mod keybindings;
 /// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
+/// Plugin system for extending functionality
+pub mod plugins;
+/// Advanced theme customization system
+pub mod themes;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions
@@ -60,7 +73,7 @@ pub mod markdown_renderer;
 pub mod nodes;
 /// Configurable AI prompt templates system
 pub mod prompt_templates;
-/// Simple devnet proxy implementation  
+/// Simple devnet proxy implementation
 pub mod simple_devnet_proxy;
 /// Solana RPC connectivity and monitoring
 pub mod solana_rpc;
