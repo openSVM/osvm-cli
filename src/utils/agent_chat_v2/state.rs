@@ -45,6 +45,15 @@ impl AdvancedChatState {
             suggestions_visible: Arc::new(RwLock::new(false)),
         };
 
+        // Create default sessions so the UI has content to navigate
+        let main_session_id = state.create_session("Main Chat".to_string())?;
+        let analysis_session_id = state.create_session("Analysis".to_string())?;
+        let work_session_id = state.create_session("Work Chat".to_string())?;
+
+        if let Ok(mut active_id) = state.active_session_id.write() {
+            *active_id = Some(main_session_id);
+        }
+
         // Don't block on tool refresh during creation - it will be done asynchronously
         Ok(state)
     }

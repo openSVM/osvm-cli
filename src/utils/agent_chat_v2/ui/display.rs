@@ -1,7 +1,7 @@
 //! Display update logic and UI refresh
 
 use cursive::{Cursive, CursiveExt};
-use cursive::views::{TextView, SelectView, LinearLayout};
+use cursive::views::{TextView, SelectView, LinearLayout, ListView, Button};
 use cursive::traits::*;
 use cursive::theme::{Color, BaseColor, ColorStyle};
 use cursive::utils::markup::StyledString;
@@ -12,6 +12,7 @@ use super::super::types::{ChatMessage, AgentState};
 use super::super::utils::{sanitize_text_for_ui, sanitize_json_for_ui};
 use super::super::utils::markdown::render_markdown;
 use super::layout::AdvancedChatUI;
+use super::handlers::handle_chat_selection;
 
 impl AdvancedChatUI {
     pub fn update_all_displays(&self, siv: &mut Cursive) {
@@ -24,10 +25,11 @@ impl AdvancedChatUI {
     pub fn update_chat_list(&self, siv: &mut Cursive) {
         let session_names = self.state.get_session_names();
         let active_id = self.state.active_session_id.read().ok().and_then(|id| *id);
-        if let Some(mut chat_select) = siv.find_name::<SelectView<Uuid>>("chat_list") {
-            chat_select.clear();
-            let mut selected_idx = 0;
-            for (i, (id, name, agent_state)) in session_names.iter().enumerate() {
+
+        if let Some(mut chat_list) = siv.find_name::<ListView>("chat_list") {
+            chat_list.clear();
+
+            for (id, name, agent_state) in session_names.iter() {
                 let status_icon = match agent_state {
                     AgentState::Idle => "●",
                     AgentState::Thinking => "◐",
@@ -37,15 +39,21 @@ impl AdvancedChatUI {
                     AgentState::Paused => "⏸",
                     AgentState::Error(_) => "⚠",
                 };
+
                 let display_name = format!("{} {}", status_icon, name);
-                chat_select.add_item(display_name, *id);
-                if Some(*id) == active_id {
-                    selected_idx = i;
-                }
-            }
-            // Set selection to active session
-            if !session_names.is_empty() {
-                chat_select.set_selection(selected_idx);
+                let is_active = Some(*id) == active_id;
+                let button_text = if is_active {
+                    format!("► {}", display_name)  // Arrow for active session
+                } else {
+                    format!("  {}", display_name)  // Spaces for inactive
+                };
+
+                let session_id = *id;
+                let button = Button::new(button_text, move |siv| {
+                    handle_chat_selection(siv, session_id);
+                });
+
+                chat_list.add_child(&display_name, button);
             }
         }
     }
@@ -108,22 +116,23 @@ impl AdvancedChatUI {
                         display_text.push_str(&format!("Error: {}\n\n", sanitized));
                     }
                     ChatMessage::AgentThinking(text) => {
-                        let rendered = self.render_markdown(text);
-                        let sanitized = self.sanitize_text(&rendered);
-                        display_text.push_str(&format!("Thinking:\n{}\n\n", sanitized));
+                        let sanitized = self.sanitize_text(text);
+                        display_text.push_str(&format!("Agent (thinking): {}\n\n", sanitized));
                     }
                     ChatMessage::AgentPlan(plan) => {
-                        let plan_str = plan.iter()
-                            .map(|tool| tool.tool_name.clone())
-                            .collect::<Vec<String>>()
-                            .join(" -> ");
-                        display_text.push_str(&format!("Plan: {}\n\n", plan_str));
+                        display_text.push_str("Agent Plan:\n");
+                        for (i, step) in plan.iter().enumerate() {
+                            let step_text = format!("{}: {}", step.tool_name, step.reason);
+                            let sanitized = self.sanitize_text(&step_text);
+                            display_text.push_str(&format!("  {}. {}\n", i + 1, sanitized));
+                        }
+                        display_text.push_str("\n");
                     }
                     ChatMessage::Processing { message, spinner_index } => {
-                        let spinners = vec!["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/"];
-                        let spinner = spinners[spinner_index % spinners.len()];
+                        let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                        let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
                         let sanitized = self.sanitize_text(message);
-                        display_text.push_str(&format!("{} {}\n\n", spinner, sanitized));
+                        display_text.push_str(&format!("{} {}\n\n", spinner_char, sanitized));
                     }
                 }
             }
@@ -131,15 +140,31 @@ impl AdvancedChatUI {
             if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
                 chat_display.set_content(display_text);
             }
+        } else {
+            if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
+                chat_display.set_content("No active session. Use Tab to navigate to the session list and select a session.");
+            }
         }
     }
 
     pub fn update_agent_status(&self, siv: &mut Cursive) {
-        // Update suggestions display
-        self.update_suggestions_display(siv);
+        let status_text = if let Some(session) = self.state.get_active_session() {
+            match session.agent_state {
+                AgentState::Idle => "Agent: Idle".to_string(),
+                AgentState::Thinking => "Agent: Thinking...".to_string(),
+                AgentState::Planning => "Agent: Planning...".to_string(),
+                AgentState::ExecutingTool(ref tool_name) => format!("Agent: Executing {}", tool_name),
+                AgentState::Waiting => "Agent: Waiting".to_string(),
+                AgentState::Paused => "Agent: Paused".to_string(),
+                AgentState::Error(ref err) => format!("Agent: Error - {}", err),
+            }
+        } else {
+            "Agent: No active session".to_string()
+        };
 
-        // Agent status is now shown in session list and title
-        // No separate status panel needed
+        if let Some(mut status_display) = siv.find_name::<TextView>("agent_status") {
+            status_display.set_content(status_text);
+        }
     }
 
     pub fn update_suggestions_display(&self, siv: &mut Cursive) {
@@ -156,8 +181,7 @@ impl AdvancedChatUI {
                     .unwrap_or_default();
 
                 if !suggestions.is_empty() {
-                    // Add up to 5 suggestions with blue background and white text
-                    for (i, sugg) in suggestions.iter().take(5).enumerate() {
+                    for (i, sugg) in suggestions.iter().enumerate() {
                         let mut styled = StyledString::new();
 
                         // Create blue background with white text style
@@ -197,129 +221,9 @@ impl AdvancedChatUI {
 }
 
 pub fn update_ui_displays(siv: &mut Cursive) {
-    // Update suggestions display
+    // Update all displays using the comprehensive UI wrapper
     if let Some(state) = siv.user_data::<AdvancedChatState>() {
         let ui = AdvancedChatUI { state: state.clone() };
-        ui.update_suggestions_display(siv);
-    }
-    // Get data from state first
-    let (session_names, active_session) = siv.with_user_data(|state: &mut AdvancedChatState| {
-        (state.get_session_names(), state.get_active_session())
-    }).unwrap_or((vec![], None));
-
-    // Update chat list
-    if let Some(mut chat_select) = siv.find_name::<SelectView<Uuid>>("chat_list") {
-        chat_select.clear();
-
-        for (id, name, agent_state) in session_names {
-            let status_icon = match agent_state {
-                AgentState::Idle => "...",
-                AgentState::Thinking => "*thinking*",
-                AgentState::Planning => "*planning*",
-                AgentState::ExecutingTool(_) => "*tool*",
-                AgentState::Waiting => "*waiting*",
-                AgentState::Paused => "*paused*",
-                AgentState::Error(_) => "*error*",
-            };
-
-            chat_select.add_item(format!("{} {}", status_icon, name), id);
-        }
-    }
-
-    // Update chat display
-    if let Some(session) = active_session {
-            let mut display_text = String::new();
-
-            for message in &session.messages {
-                match message {
-                    ChatMessage::User(text) => {
-                        let sanitized = sanitize_text_for_ui(text);
-                        display_text.push_str(&format!("You: {}\n", sanitized));
-                        display_text.push_str("   [Retry] [Copy] [Delete]\n\n");
-                    }
-                    ChatMessage::Agent(text) => {
-                        // First render markdown, then sanitize
-                        let mut rendered = text.to_string();
-
-                        // Basic markdown rendering
-                        rendered = rendered.replace("**", "");
-                        rendered = rendered.replace("### ", "═══ ");
-                        rendered = rendered.replace("## ", "══ ");
-                        rendered = rendered.replace("# ", "═ ");
-                        rendered = rendered.replace("\n- ", "\n  • ");
-                        rendered = rendered.replace("\n* ", "\n  • ");
-
-                        let sanitized = sanitize_text_for_ui(&rendered);
-                        display_text.push_str(&format!("Agent:\n{}\n", sanitized));
-                        display_text.push_str("   [Fork] [Copy] [Retry] [Delete]\n\n");
-                    }
-                    ChatMessage::System(text) => {
-                        let sanitized = sanitize_text_for_ui(text);
-                        display_text.push_str(&format!("System: {}\n\n", sanitized));
-                    }
-                    ChatMessage::ToolCall { tool_name, description, args, execution_id } => {
-                        let sanitized_tool_name = sanitize_text_for_ui(tool_name);
-                        let sanitized_description = sanitize_text_for_ui(description);
-                        display_text.push_str(&format!("Calling tool: {} - {}\n", sanitized_tool_name, sanitized_description));
-                        if let Some(args) = args {
-                            let sanitized_args = sanitize_json_for_ui(args);
-                            display_text.push_str(&format!("   Args: {}\n", sanitized_args));
-                        }
-                        display_text.push_str(&format!("   ID: {}\n\n", execution_id));
-                    }
-                    ChatMessage::ToolResult { tool_name, result, execution_id } => {
-                        let sanitized_tool_name = sanitize_text_for_ui(tool_name);
-                        display_text.push_str(&format!("Tool {} result (ID: {}):\n", sanitized_tool_name, execution_id));
-                        let sanitized_result = sanitize_json_for_ui(result);
-                        display_text.push_str(&format!("{}\n\n", sanitized_result));
-                    }
-                    ChatMessage::Error(text) => {
-                        let sanitized = sanitize_text_for_ui(text);
-                        display_text.push_str(&format!("Error: {}\n\n", sanitized));
-                    }
-                    ChatMessage::AgentThinking(text) => {
-                        // Render markdown for thinking messages
-                        let mut rendered = text.to_string();
-                        rendered = rendered.replace("**", "");
-                        rendered = rendered.replace("\n- ", "\n  • ");
-
-                        let sanitized = sanitize_text_for_ui(&rendered);
-                        // Format thinking messages in gray (using dim style)
-                        display_text.push_str(&format!("Thinking:\n{}\n\n", sanitized));
-                    }
-                    ChatMessage::AgentPlan(plan) => {
-                        let plan_str = plan.iter()
-                            .map(|tool| tool.tool_name.clone())
-                            .collect::<Vec<String>>()
-                            .join(" -> ");
-                        display_text.push_str(&format!("Plan: {}\n\n", plan_str));
-                    }
-                    ChatMessage::Processing { message, spinner_index } => {
-                        let spinners = vec!["|", "/", "-", "\\", "|", "/", "-", "\\", "|", "/"];
-                        let spinner = spinners[spinner_index % spinners.len()];
-                        let sanitized = sanitize_text_for_ui(message);
-                        display_text.push_str(&format!("\x1b[36m{} {}\x1b[0m\n\n", spinner, sanitized));
-                    }
-                }
-            }
-
-            if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
-                chat_display.set_content(display_text);
-            }
-
-            // Update agent status
-            let status_text = match &session.agent_state {
-                AgentState::Idle => "Agent: Idle".to_string(),
-                AgentState::Thinking => "Agent: Thinking".to_string(),
-                AgentState::Planning => "Agent: Planning".to_string(),
-                AgentState::ExecutingTool(tool) => format!("Agent: Executing {}", tool),
-                AgentState::Waiting => "Agent: Waiting".to_string(),
-                AgentState::Paused => "Agent: Paused".to_string(),
-                AgentState::Error(err) => format!("Agent: Error - {}", err),
-            };
-
-        if let Some(mut status_display) = siv.find_name::<TextView>("agent_status") {
-            status_display.set_content(status_text);
-        }
+        ui.update_all_displays(siv);  // This calls all the update functions including chat list
     }
 }
