@@ -14,6 +14,7 @@ use uuid::Uuid;
 use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
 use super::handlers::*;
+use super::handlers::show_context_menu;
 
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
@@ -32,13 +33,13 @@ impl AdvancedChatUI {
         // Main horizontal layout: Chat List | Chat History
         let mut main_layout = LinearLayout::horizontal();
 
-        // Left panel: Chat sessions list
+        // Left panel: Chat sessions list - responsive width
         let chat_list_panel = self.create_chat_list_panel();
-        main_layout.add_child(ResizedView::with_fixed_width(30, chat_list_panel));
+        main_layout.add_child(ResizedView::with_min_width(25, chat_list_panel).max_width(40));
 
-        // Right panel: Active chat and controls
+        // Right panel: Active chat and controls - takes remaining space
         let chat_panel = self.create_chat_panel();
-        main_layout.add_child(chat_panel.full_width());
+        main_layout.add_child(ResizedView::with_min_width(50, chat_panel).full_width());
 
         // Wrap in main dialog with dynamic title showing agent status
         let title = if let Some(session) = self.state.get_active_session() {
@@ -84,6 +85,22 @@ impl AdvancedChatUI {
         });
 
         // Tab and Arrow keys will handle navigation naturally through the ListView buttons
+
+        // Add context menu via F10 key (standard UI convention)
+        siv.add_global_callback(cursive::event::Key::F10, |s| {
+            show_context_menu(s, cursive::Vec2::new(0, 0));
+        });
+
+        // Also add Shift+F10 for alternate context menu access
+        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::F10), |s| {
+            show_context_menu(s, cursive::Vec2::new(0, 0));
+        });
+
+        // Add resize handling to prevent crashes - gentle approach
+        siv.add_global_callback(cursive::event::Event::WindowResize, |s| {
+            // Gentle refresh - just update displays, don't recreate UI
+            super::display::update_ui_displays(s);
+        });
     }
 
     pub fn setup_action_hotkeys(&self, siv: &mut Cursive) {
@@ -160,6 +177,19 @@ impl AdvancedChatUI {
         siv.add_global_callback(cursive::event::Key::Esc, move |_s| {
             if let Ok(mut vis) = state.suggestions_visible.write() {
                 *vis = false;
+            }
+        });
+
+        // Emergency clear - Ctrl+Alt+X to clear stuck processing states (safe combination)
+        let state = self.state.clone();
+        siv.add_global_callback(cursive::event::Event::AltChar('x'), move |siv| {
+            // Clear all processing messages from active session
+            if let Some(session) = state.get_active_session() {
+                let session_id = session.id;
+                if let Err(e) = state.remove_last_processing_message(session_id) {
+                    eprintln!("Emergency clear failed: {}", e);
+                }
+                super::display::update_ui_displays(siv);
             }
         });
     }

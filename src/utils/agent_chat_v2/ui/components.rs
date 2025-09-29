@@ -25,14 +25,15 @@ impl AdvancedChatUI {
 
         // We'll populate this manually in the update function
 
-        // Add ListView directly inside a Panel
+        // Add ListView directly inside a Panel - responsive height
         chat_list_layout.add_child(
             Panel::new(
                 ScrollView::new(chat_list)
                     .scroll_strategy(cursive::view::scroll::ScrollStrategy::KeepRow)
             )
             .title("Sessions")
-            .max_height(15)
+            .min_height(5)
+            .max_height(20) // Allow more flexibility
         );
 
         // New chat button
@@ -41,31 +42,32 @@ impl AdvancedChatUI {
             create_new_chat_dialog(siv);
         }));
 
-        // Session controls
-        chat_list_layout.add_child(DummyView.fixed_height(1));
+        // Session controls - responsive spacing
+        chat_list_layout.add_child(DummyView.min_height(1));
         chat_list_layout.add_child(LinearLayout::horizontal()
             .child(Button::new("Run", |siv| resume_agent(siv)))
-            .child(DummyView.fixed_width(1))
+            .child(DummyView.min_width(1))
             .child(Button::new("Pause", |siv| pause_agent(siv)))
-            .child(DummyView.fixed_width(1))
+            .child(DummyView.min_width(1))
             .child(Button::new("Stop", |siv| stop_agent(siv)))
         );
 
-        // Recording controls
-        chat_list_layout.add_child(DummyView.fixed_height(1));
+        // Recording controls - responsive spacing
+        chat_list_layout.add_child(DummyView.min_height(1));
         chat_list_layout.add_child(LinearLayout::horizontal()
             .child(Button::new("Record", |siv| start_recording(siv)))
-            .child(DummyView.fixed_width(1))
+            .child(DummyView.min_width(1))
             .child(Button::new("Stop Rec", |siv| stop_recording(siv)))
         );
 
-        chat_list_layout.add_child(DummyView.fixed_height(1));
+        chat_list_layout.add_child(DummyView.min_height(1));
 
-        // MCP Tools Panel
+        // MCP Tools Panel - responsive height
         let mcp_tools_view = TextView::new("").with_name("mcp_tools_list");
         let mcp_panel = Panel::new(ScrollView::new(mcp_tools_view))
             .title("MCP Tools")
-            .max_height(10);
+            .min_height(3)
+            .max_height(15); // Allow more flexibility
         chat_list_layout.add_child(mcp_panel);
 
         chat_list_layout
@@ -109,6 +111,11 @@ impl AdvancedChatUI {
             );
 
         chat_layout.add_child(Panel::new(input_layout).title("Input"));
+
+        // Agent status bar with live updates
+        let agent_status = TextView::new("🤖 Agent: Initializing...")
+            .with_name("agent_status");
+        chat_layout.add_child(Panel::new(agent_status).title("🤖 Agent Status"));
 
         // Control buttons
         let button_layout = LinearLayout::horizontal()

@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use cursive::{Cursive, CursiveExt};
+use log::{info, error, warn};
 
 // Public module exports
 pub mod types;
@@ -25,17 +26,25 @@ pub use ui::{AdvancedChatUI, update_ui_displays};
 pub async fn run_advanced_agent_chat() -> Result<()> {
     println!("Starting OSVM Advanced Agent Chat Interface...");
 
-    // Check if we're in a terminal environment
-    if std::env::var("TERM").is_err() || std::env::var("CI").is_ok() {
+    // Check if we're in a terminal environment - only fail if clearly no terminal support
+    let term_var = std::env::var("TERM").unwrap_or_default();
+    if term_var.is_empty() || term_var == "dumb" {
+        println!("No suitable terminal detected (TERM={}), falling back to demo mode", term_var);
         return run_advanced_demo_mode().await;
     }
 
-    // Initialize the state (skip problematic initialization that can hang)
+    println!("Terminal detected: {}", term_var);
+
+    // Initialize the state and MCP services (safe now that problematic servers are disabled)
     let state = AdvancedChatState::new()?;
 
-    // Skip initialize() and start_agent_worker() as they can hang on MCP connections
-    // The UI will work without these background services for basic functionality
-    // TODO: Add async initialization option in the UI for optional MCP features
+    // Initialize MCP tools - this should work now that localhost:3000 server is disabled
+    if let Err(e) = state.initialize().await {
+        warn!("MCP initialization failed: {}, continuing without MCP tools", e);
+    }
+
+    // Skip agent worker for now as it can still cause issues
+    // TODO: Make agent worker more robust
 
     // Create default session
     let _default_session_id = state.create_session("Main Chat".to_string())?;
@@ -64,8 +73,18 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // This is handled by the caller which falls back to demo mode
     let mut siv = Cursive::default();
 
+    // Check minimum terminal size to prevent crashes - use more reasonable minimums
+    let term_size = siv.screen_size();
+    println!("Terminal size: {}x{}", term_size.x, term_size.y);
+    if term_size.x < 60 || term_size.y < 15 {
+        eprintln!("Terminal too small: {}x{} (minimum: 60x15)", term_size.x, term_size.y);
+        eprintln!("Please resize your terminal and try again.");
+        return Err(anyhow::anyhow!("Terminal size too small for advanced chat interface"));
+    }
+
     // Enable mouse support for better interaction
     siv.set_window_title("OSVM Advanced Agent Chat");
+    // Note: Mouse support enabled by default in recent cursive versions
 
     // Configure better key handling
     siv.set_autorefresh(true);
@@ -76,11 +95,15 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // Create UI wrapper to access methods
     let ui = AdvancedChatUI { state: state.clone() };
 
-    // Start spinner animation after Cursive is initialized
+    // Start spinner animation and periodic updates after Cursive is initialized
     state.start_spinner_animation(siv.cb_sink().clone());
+    start_periodic_updates(&mut siv, state.clone());
 
     // Set up the FAR-style UI layout
     ui.setup_far_ui(&mut siv);
+
+    // Set up auto-suggestions as user types
+    ui::handlers::setup_input_suggestions(&mut siv, state.clone());
 
     // Add global hotkeys for suggestions and actions
     ui.setup_suggestion_hotkeys(&mut siv);
@@ -183,4 +206,26 @@ async fn run_advanced_demo_mode() -> Result<()> {
     println!("   Run 'osvm chat --advanced' in a terminal to see the full UI.");
 
     Ok(())
+}
+
+/// Set up periodic UI updates every 30 seconds as requested
+fn start_periodic_updates(siv: &mut Cursive, state: AdvancedChatState) {
+    use std::thread;
+    use std::time::Duration;
+
+    let cb_sink = siv.cb_sink().clone();
+
+    // Start background thread for periodic updates
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(30)); // Update every 30 seconds as requested
+
+            // Request UI update
+            if cb_sink.send(Box::new(move |siv| {
+                update_ui_displays(siv);
+            })).is_err() {
+                break; // Exit if UI is closed
+            }
+        }
+    });
 }
