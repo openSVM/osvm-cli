@@ -187,7 +187,7 @@ async fn test_recording_under_stress() -> Result<()> {
     let fixture = AdvancedTestFixture::new().await?.with_sessions(3).await?;
 
     let process_id = std::process::id();
-    let temp_files = vec![
+    let temp_files = [
         format!("/tmp/stress_recording_1_{}.log", process_id),
         format!("/tmp/stress_recording_2_{}.log", process_id),
         format!("/tmp/stress_recording_3_{}.log", process_id),
@@ -225,7 +225,7 @@ async fn test_recording_under_stress() -> Result<()> {
     }
 
     // Verify recording files
-    for (_i, file_path) in temp_files.iter().enumerate() {
+    for file_path in temp_files.iter() {
         assert!(std::path::Path::new(file_path).exists());
         let content = std::fs::read_to_string(file_path)?;
         assert!(content.contains("Rapid message"));

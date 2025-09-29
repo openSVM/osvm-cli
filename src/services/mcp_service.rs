@@ -513,7 +513,7 @@ impl McpService {
 
         // Clone the repository with timeout and additional security flags
         let clone_result = Command::new("git")
-            .args(&[
+            .args([
                 "clone",
                 "--depth",
                 "1",               // Shallow clone for security and performance
@@ -548,7 +548,7 @@ impl McpService {
             }
 
             let build_result = Command::new("cargo")
-                .args(&["build", "--release"])
+                .args(["build", "--release"])
                 .current_dir(&local_path)
                 .env("CARGO_NET_OFFLINE", "false") // Allow network for dependencies
                 .output()
@@ -587,7 +587,7 @@ impl McpService {
 
             // Run npm install
             let install_result = Command::new("npm")
-                .args(&["install"])
+                .args(["install"])
                 .current_dir(&local_path)
                 .output()
                 .context("Failed to execute npm install command")?;
@@ -610,8 +610,8 @@ impl McpService {
 
             // Determine the script to run
             let script_path = if let Some(script) = main_script {
-                if script.starts_with("./") {
-                    local_path.join(&script[2..])
+                if let Some(stripped) = script.strip_prefix("./") {
+                    local_path.join(stripped)
                 } else if script.starts_with("/") {
                     PathBuf::from(script)
                 } else {
@@ -1111,7 +1111,7 @@ impl McpService {
 
         let mut req_builder = self
             .client
-            .post(&format!("{}/api/mcp", config.url))
+            .post(format!("{}/api/mcp", config.url))
             .header("Content-Type", "application/json")
             .json(&request);
 
@@ -1504,7 +1504,7 @@ impl McpService {
 
         let mut req_builder = self
             .client
-            .post(&format!("{}/api/mcp", config.url))
+            .post(format!("{}/api/mcp", config.url))
             .header("Content-Type", "application/json")
             .json(&request);
 

@@ -17,8 +17,10 @@ mod ui_components;
 
 // Re-export public API
 pub use chat_application::App;
-pub use chat_application::{run_agent_chat_ui, run_chat_ui_tests};
-pub use input_handler::InputState;
+pub use chat_application::{
+    get_instant_suggestions, handle_regular_character, run_agent_chat_ui, run_chat_ui_tests,
+};
+pub use input_handler::{disable_raw_mode, enable_raw_mode, InputState};
 pub use task_state::TaskState;
 
 // Internal re-exports for module communication
