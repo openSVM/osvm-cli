@@ -13,6 +13,7 @@ mod terminal_utils;
 mod ai_integration;
 mod command_processor;
 mod chat_application;
+mod responsive_layout;
 
 // Re-export public API
 pub use chat_application::{run_agent_chat_ui, run_chat_ui_tests};

@@ -128,7 +128,7 @@ impl CommandProcessor {
 
     /// Process MCP tool invocation
     fn process_tool_invocation(&self, input: &str) -> Result<CommandResult> {
-        // Parse @server/tool syntax
+        // Parse @server/tool syntax with bounds checking
         let parts: Vec<&str> = input[1..].split('/').collect();
 
         if parts.len() != 2 {
@@ -137,8 +137,15 @@ impl CommandProcessor {
             ));
         }
 
-        let server = parts[0];
-        let tool = parts[1];
+        // Safe array access with bounds checking
+        let server = parts.get(0).ok_or_else(|| anyhow!("Missing server name"))?;
+        let tool = parts.get(1).ok_or_else(|| anyhow!("Missing tool name"))?;
+
+        if server.is_empty() || tool.is_empty() {
+            return Ok(CommandResult::Error(
+                "Server and tool names cannot be empty".to_string()
+            ));
+        }
 
         Ok(CommandResult::Success(format!(
             "{}Executing tool: {}/{}{}",
@@ -157,7 +164,7 @@ impl CommandProcessor {
         input.trim().starts_with('/') || input.trim().starts_with('@')
     }
 
-    /// Parse tool invocation
+    /// Parse tool invocation with safe array access
     pub fn parse_tool_invocation(input: &str) -> Option<(String, String, Vec<String>)> {
         if !input.starts_with('@') {
             return None;
@@ -168,14 +175,20 @@ impl CommandProcessor {
             return None;
         }
 
-        let server_tool: Vec<&str> = parts[0].split('/').collect();
+        let server_tool: Vec<&str> = parts.get(0)?.split('/').collect();
         if server_tool.len() != 2 {
             return None;
         }
 
-        let server = server_tool[0].to_string();
-        let tool = server_tool[1].to_string();
-        let args: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+        // Safe array access with bounds checking
+        let server = server_tool.get(0)?.to_string();
+        let tool = server_tool.get(1)?.to_string();
+        
+        if server.is_empty() || tool.is_empty() {
+            return None;
+        }
+
+        let args: Vec<String> = parts.get(1..).unwrap_or(&[]).iter().map(|s| s.to_string()).collect();
 
         Some((server, tool, args))
     }

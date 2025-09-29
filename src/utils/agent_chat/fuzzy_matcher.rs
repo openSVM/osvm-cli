@@ -24,6 +24,9 @@ impl FuzzyMatcher {
 
         // Exact match or substring gets highest score
         if text.contains(&pattern) {
+            if text.len() == 0 {
+                return 1.0; // Avoid division by zero
+            }
             return 1.0 - (pattern.len() as f32 / text.len() as f32) * 0.1;
         }
 
@@ -69,8 +72,12 @@ impl FuzzyMatcher {
         let max_score = pattern.len() as f32 * 1.3;
         let normalized = score / max_score;
 
-        // Penalty for length difference
-        let length_penalty = (text.len() as f32 - pattern.len() as f32).abs() / text.len() as f32 * 0.2;
+        // Penalty for length difference - avoid division by zero
+        let length_penalty = if text.len() == 0 {
+            0.0
+        } else {
+            (text.len() as f32 - pattern.len() as f32).abs() / text.len() as f32 * 0.2
+        };
 
         (normalized - length_penalty).max(0.0)
     }

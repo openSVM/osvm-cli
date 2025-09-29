@@ -26,15 +26,10 @@ pub fn clear_current_line() {
     io::stdout().flush().unwrap_or(());
 }
 
-/// Clear suggestions display area
+/// Clear suggestions display area - now handled by responsive layout system
+#[deprecated(note = "Suggestions are now cleared automatically by the responsive layout system")]
 pub fn clear_suggestions_display() {
-    // Clear up to 10 lines for suggestions
-    for _ in 0..10 {
-        println!("\x1b[K");
-    }
-    // Move cursor back up
-    print!("\x1b[10A");
-    io::stdout().flush().unwrap_or(());
+    // This function is now obsolete - suggestions are cleared automatically by TerminalRenderer
 }
 
 /// Clear inline suggestion (ghost text)
@@ -50,128 +45,22 @@ pub fn redraw_input_line(input: &str) -> Result<()> {
     Ok(())
 }
 
-/// Show navigable suggestions with selection indicator
-pub fn show_navigable_suggestions(suggestions: &[RealtimeSuggestion], selected_index: usize) {
-    if suggestions.is_empty() {
-        return;
-    }
-
-    println!("\n{}╭─ Suggestions (↑/↓ to navigate, Tab to select) ─╮{}", Colors::DIM, Colors::RESET);
-
-    for (i, suggestion) in suggestions.iter().enumerate().take(5) {
-        let selector = if i == selected_index { "▶" } else { " " };
-        let highlight_color = if i == selected_index {
-            Colors::YELLOW
-        } else {
-            Colors::GRAY
-        };
-
-        // Highlight matched characters
-        let highlighted_text = highlight_fuzzy_match(&suggestion.text, &suggestion.matched_indices, highlight_color);
-
-        println!("{}│{} {} {} - {}{}{}",
-            Colors::DIM,
-            selector,
-            highlight_color,
-            highlighted_text,
-            suggestion.description,
-            Colors::DIM,
-            Colors::RESET
-        );
-    }
-
-    println!("{}╰──────────────────────────────────────────────────╯{}", Colors::DIM, Colors::RESET);
+/// Legacy function - suggestions now handled by InputState::update_suggestions_in_place
+#[deprecated(note = "Use InputState::update_suggestions_in_place instead")]
+pub fn show_navigable_suggestions(_suggestions: &[RealtimeSuggestion], _selected_index: usize) {
+    // This function is now obsolete - suggestions are handled in-place by the new system
 }
 
-/// Show real-time suggestions with fuzzy matching highlights
-pub fn show_realtime_suggestions(suggestions: &[RealtimeSuggestion], current_input: &str) {
-    show_realtime_suggestions_fixed(suggestions, current_input);
+/// Legacy function - real-time suggestions now handled by new responsive system
+#[deprecated(note = "Use InputState::update_suggestions_in_place instead")]
+pub fn show_realtime_suggestions(_suggestions: &[RealtimeSuggestion], _current_input: &str) {
+    // This function is now obsolete - suggestions are handled in-place by the new system
 }
 
-/// Fixed version of show real-time suggestions
-pub fn show_realtime_suggestions_fixed(suggestions: &[RealtimeSuggestion], current_input: &str) {
-    if suggestions.is_empty() {
-        return;
-    }
-
-    // Use a mutex to ensure atomic terminal operations
-    use std::sync::Mutex;
-    static TERMINAL_LOCK: Mutex<()> = Mutex::new(());
-
-    let _guard = TERMINAL_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-
-    // Build the entire suggestion block in memory first
-    let mut output = String::new();
-
-    // Save cursor position
-    output.push_str("\x1b[s");
-
-    // Move down from current line and clear suggestion area
-    output.push_str("\r\n");
-
-    // Clear exactly 6 lines for suggestions
-    for i in 0..6 {
-        output.push_str("\x1b[K");
-        if i < 5 {
-            output.push_str("\n");
-        }
-    }
-
-    // Move back up to start of suggestion area
-    output.push_str("\x1b[5A");
-
-    // Add suggestions header
-    output.push_str(&format!("{}  ↓ Suggestions (Tab to complete):{}\n", Colors::DIM, Colors::RESET));
-
-    // Show up to 5 suggestions
-    for suggestion in suggestions.iter().take(5) {
-        let category_icon = match suggestion.category.as_str() {
-            "command" => "⌘",
-            "tool" => "⚙",
-            "history" => "↺",
-            "context" => "◉",
-            _ => "•",
-        };
-
-        // Highlight matched characters
-        let highlighted_text = highlight_fuzzy_match(&suggestion.text, &suggestion.matched_indices, Colors::CYAN);
-
-        output.push_str(&format!("  {} {} {} - {}{}{}\n",
-            Colors::GRAY,
-            category_icon,
-            highlighted_text,
-            Colors::DIM,
-            suggestion.description,
-            Colors::RESET
-        ));
-    }
-
-    // Restore cursor position
-    output.push_str("\x1b[u");
-
-    // Write everything at once for atomic update
-    print!("{}", output);
-    io::stdout().flush().unwrap_or(());
-}
-
-/// Highlight matched characters in fuzzy search results
-fn highlight_fuzzy_match(text: &str, matched_indices: &[usize], base_color: &str) -> String {
-    if matched_indices.is_empty() {
-        return format!("{}{}{}", base_color, text, Colors::RESET);
-    }
-
-    let mut result = String::new();
-    let chars: Vec<char> = text.chars().collect();
-
-    for (i, ch) in chars.iter().enumerate() {
-        if matched_indices.contains(&i) {
-            result.push_str(&format!("{}{}{}", Colors::BOLD, ch, base_color));
-        } else {
-            result.push(*ch);
-        }
-    }
-
-    result
+/// Legacy function - real-time suggestions now handled by new responsive system
+#[deprecated(note = "Use InputState::update_suggestions_in_place instead")]
+pub fn show_realtime_suggestions_fixed(_suggestions: &[RealtimeSuggestion], _current_input: &str) {
+    // This function is now obsolete - suggestions are handled in-place by the new system
 }
 
 /// Show available tools from MCP servers
