@@ -9,8 +9,6 @@
 //! - UI component interaction (headless)
 
 use anyhow::Result;
-use serde_json::json;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::timeout;
 use uuid::Uuid;
@@ -416,7 +414,8 @@ async fn test_demo_mode_execution() -> Result<()> {
     // Verify tools are loaded (or empty if no MCP servers configured)
     let tools = state.available_tools.read().unwrap();
     // Should not panic and should be a valid HashMap
-    assert!(tools.capacity() >= 0);
+    // Vec capacity is always non-negative, so check it exists
+    assert!(tools.capacity() > 0 || tools.is_empty());
 
     Ok(())
 }

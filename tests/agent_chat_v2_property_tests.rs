@@ -354,7 +354,7 @@ async fn property_recording_preserves_message_order() -> Result<()> {
     session.start_recording(temp_file.clone())?;
 
     // Add messages in specific order
-    let ordered_messages = vec![
+    let ordered_messages = [
         "First message",
         "Second message",
         "Third message",

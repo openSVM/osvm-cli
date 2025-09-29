@@ -14,7 +14,7 @@ use ui_test_utils::HeadlessUI;
 
 #[tokio::test]
 async fn test_basic_ui_setup_and_display() -> Result<()> {
-    let ui = HeadlessUI::new().await?;
+    let mut ui = HeadlessUI::new().await?;
 
     // Verify initial state
     let chat_names = ui.get_chat_names();

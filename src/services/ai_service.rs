@@ -165,10 +165,8 @@ impl AiService {
             if debug_mode {
                 println!("🤖 Asking OpenAI ({}): {}", self.api_url, question);
             }
-        } else {
-            if debug_mode {
-                println!("🤖 Asking OSVM AI ({}): {}", self.api_url, question);
-            }
+        } else if debug_mode {
+            println!("🤖 Asking OSVM AI ({}): {}", self.api_url, question);
         }
 
         let result = if self.use_openai {
@@ -755,6 +753,9 @@ Required XML structure:
 
         let mut tools: Vec<PlannedTool> = Vec::new();
         // Basic heuristic: lines containing 'tool' and 'server' or 'tool_name'
+        // Pre-compile regex outside the loop
+        let name_re = regex::Regex::new(r#"(?i)tool[_\- ]?name['"]?[:=]['"]?([A-Za-z0-9_\-]+)"#);
+
         for line in raw.lines() {
             let lower = line.to_lowercase();
             if lower.contains("tool")
@@ -763,10 +764,8 @@ Required XML structure:
                     || lower.contains("name"))
             {
                 // Extract plausible tool_name via regex
-                if let Ok(name_re) =
-                    regex::Regex::new(r#"(?i)tool[_\- ]?name['"]?[:=]['"]?([A-Za-z0-9_\-]+)"#)
-                {
-                    if let Some(caps) = name_re.captures(line) {
+                if let Ok(ref name_regex) = name_re {
+                    if let Some(caps) = name_regex.captures(line) {
                         let tool_name = caps
                             .get(1)
                             .map(|m| m.as_str())

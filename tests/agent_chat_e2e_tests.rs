@@ -529,7 +529,7 @@ async fn test_tui_malformed_input_handling() -> Result<()> {
         cmd.timeout(Duration::from_secs(5));
 
         // Should either succeed or fail gracefully (not crash)
-        let result = cmd.try_output();
+        let result = cmd.output();
         match result {
             Ok(output) => {
                 // Either success or controlled failure
