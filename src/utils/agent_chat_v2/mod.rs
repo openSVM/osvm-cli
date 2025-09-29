@@ -64,6 +64,12 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // This is handled by the caller which falls back to demo mode
     let mut siv = Cursive::default();
 
+    // Enable mouse support for better interaction
+    siv.set_window_title("OSVM Advanced Agent Chat");
+
+    // Configure better key handling
+    siv.set_autorefresh(true);
+
     // Set the state as user data for the UI
     siv.set_user_data(state.clone());
 

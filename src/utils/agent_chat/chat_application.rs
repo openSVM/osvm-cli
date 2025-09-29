@@ -225,6 +225,11 @@ pub async fn run_agent_chat_ui() -> Result<()> {
         // Add to chat history
         chat_history.push(format!("User: {}", input));
         
+        // Position cursor above input for processing output
+        let (_, rows) = terminal::size().unwrap_or((80, 24));
+        let output_row = rows.saturating_sub(12); // Leave space for input + suggestions
+        print!("\x1B[{};1H", output_row);
+        
         // Process user message with AI planning
         println!("{}• User: {}{}{}", Colors::GREEN, Colors::BOLD, input, Colors::RESET);
         
@@ -232,8 +237,8 @@ pub async fn run_agent_chat_ui() -> Result<()> {
             println!("{}✗ Error: {}{}", Colors::RED, e, Colors::RESET);
         }
         
-        // Show AI-generated contextual suggestions
-        show_contextual_suggestions(&ai_service, &chat_history).await;
+        // Show AI-generated contextual suggestions just above input
+        show_contextual_suggestions_compact(&ai_service, &chat_history).await;
     }
     
     Ok(())
@@ -248,11 +253,12 @@ async fn get_enhanced_input_with_status(
     input_state.history_index = input_state.command_history.len();
 
     // Position input box at bottom of terminal
-    let (_, rows) = terminal::size().unwrap_or((80, 24));
-    let input_start_row = rows.saturating_sub(1); // leave 2 lines for the box
+    let (cols, rows) = terminal::size().unwrap_or((80, 24));
+    let input_start_row = rows.saturating_sub(2); // leave 2 lines for the box
     print!("\x1B[{};1H", input_start_row);        // absolute cursor move
-    // Show input area with proper layout – anchored to bottom
-    println!("{}┌─ Input ──────────────────────────────────────────────┐{}", Colors::GREEN, Colors::RESET);
+    // Show input area with proper layout – anchored to bottom, full width
+    let input_border = "─".repeat(cols.saturating_sub(2) as usize);
+    println!("{}┌─ Input {}┐{}", Colors::GREEN, input_border, Colors::RESET);
     print!("{}│{} > ", Colors::GREEN, Colors::RESET);
     io::stdout().flush().map_err(|e| anyhow!("Failed to flush stdout: {}", e))?;
 
@@ -301,7 +307,10 @@ async fn get_enhanced_input_with_status(
                     // Submit input
                     super::input_handler::disable_raw_mode()?;
                     println!();
-                    println!("{}└──────────────────────────────────────────────────────┘{}", Colors::GREEN, Colors::RESET);
+                    // Draw bottom border with full width
+                    let (cols, _) = terminal::size().unwrap_or((80, 24));
+                    let bottom_border = "─".repeat(cols.saturating_sub(2) as usize);
+                    println!("{}└{}┘{}", Colors::GREEN, bottom_border, Colors::RESET);
                     
                     let result = input_state.input.clone();
                     
@@ -766,23 +775,21 @@ fn show_navigable_suggestions_windowed(suggestions: &[RealtimeSuggestion], state
     let win_end = (win_start + win_height).min(suggestions.len());
     let visible_suggestions = &suggestions[win_start..win_end];
     
-    // Save cursor at input line, move up to draw suggestions above input
-    print!("\x1B[s");             // CSI s – save cursor
-    print!("\x1B[{}A\r", box_height); // move cursor UP to draw above input
+    // Calculate absolute position for suggestion box (above input)
+    let input_row = rows.saturating_sub(2);
+    let max_box_height = 9; // Always clear max possible height (6 suggestions + 3 borders)
+    let suggestion_start_row = input_row.saturating_sub(max_box_height as u16);
     
-    // Clear suggestion box area line by line
-    for i in 0..box_height {
-        print!("\x1B[2K\r");      // clear current line
-        if i < box_height - 1 {
-            print!("\x1B[1B\r");  // move down one line
-        }
+    // Clear maximum possible suggestion area to prevent artifacts
+    for i in 0..max_box_height {
+        print!("\x1B[{};1H\x1B[2K", suggestion_start_row + i as u16);
     }
     
-    // Move back to start of suggestion area
-    print!("\x1B[{}A\r", box_height - 1);
+    // Recalculate actual start position for current box
+    let actual_start_row = input_row.saturating_sub(box_height as u16);
     
-    // Draw top border
-    print!("\x1B[2K\r");
+    // Draw top border at actual position
+    print!("\x1B[{};1H", actual_start_row);
     println!("{}┌─ Suggestions {}", Colors::DIM,
              "─".repeat(inner_width.saturating_sub(15)));
 
@@ -816,8 +823,8 @@ fn show_navigable_suggestions_windowed(suggestions: &[RealtimeSuggestion], state
             suggestion.description.clone()
         };
 
-        // Clear line and apply reverse video if selected
-        print!("\x1B[2K\r");
+        // Position cursor and draw suggestion line
+        print!("\x1B[{};1H", actual_start_row + 1 + i as u16);
         if is_selected {
             // Reverse video for selected row
             println!("{}│\x1B[7m {}{:<25}{} - {}{:<23}{}\x1B[27m │{}",
@@ -843,7 +850,8 @@ fn show_navigable_suggestions_windowed(suggestions: &[RealtimeSuggestion], state
     }
 
     // Show navigation hint with scroll indicator
-    print!("\x1B[2K\r");
+    let hint_row = actual_start_row + win_height as u16 + 1;
+    print!("\x1B[{};1H", hint_row);
     let scroll_info = if suggestions.len() > win_height {
         format!(" ({}/{}) ", state.selected_suggestion + 1, suggestions.len())
     } else {
@@ -855,12 +863,13 @@ fn show_navigable_suggestions_windowed(suggestions: &[RealtimeSuggestion], state
              width = inner_width.saturating_sub(2));
     
     // Bottom border
-    print!("\x1B[2K\r");
+    let bottom_row = actual_start_row + box_height as u16 - 1;
+    print!("\x1B[{};1H", bottom_row);
     println!("{}└{}┘{}", Colors::DIM,
              "─".repeat(inner_width), Colors::RESET);
     
-    // Restore cursor back to original input line
-    print!("\x1B[u");             // CSI u – restore cursor
+    // Return cursor to input line
+    print!("\x1B[{};4H", input_row + 1); // Position after "> "
 }
 
 /// Generate instant suggestions as user types (like Claude Code auto-complete)
@@ -1123,6 +1132,19 @@ async fn execute_ai_plan_with_colors(ai_plan: &ToolPlan, original_message: &str,
     }
     
     Ok(())
+}
+
+/// Show compact contextual suggestions just above input
+async fn show_contextual_suggestions_compact(ai_service: &Arc<AiService>, chat_history: &[String]) {
+    // Position suggestions just above input area
+    let (_, rows) = terminal::size().unwrap_or((80, 24));
+    let suggestion_row = rows.saturating_sub(8); // Leave space for input + small gap
+    print!("\x1B[{};1H", suggestion_row);
+    
+    println!("\n{}Reply Suggestions:{}", Colors::CYAN, Colors::RESET);
+    println!("{}1. Show recent transactions{}", Colors::BLUE, Colors::RESET);
+    println!("{}2. What's the current SOL price?{}", Colors::BLUE, Colors::RESET);
+    println!("{}3. How do I stake my SOL?{}", Colors::BLUE, Colors::RESET);
 }
 
 /// Show contextual suggestions after AI response

@@ -60,8 +60,30 @@ impl AdvancedChatUI {
 
         siv.add_fullscreen_layer(dialog);
 
-        // Set focus to input field
+        // Set focus to input field initially
         siv.focus_name("input").ok();
+
+        // Add Tab navigation between key UI elements - but don't interfere with other keys
+        siv.add_global_callback(cursive::event::Key::Tab, |s| {
+            // Try to focus the chat list first, then input as fallback
+            if s.focus_name("chat_list").is_ok() {
+                // Successfully focused chat list
+            } else {
+                let _ = s.focus_name("input");
+            }
+        });
+
+        // Add Shift+Tab for reverse navigation
+        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::Tab), |s| {
+            // Try to focus input first, then chat list as fallback
+            if s.focus_name("input").is_ok() {
+                // Successfully focused input
+            } else {
+                let _ = s.focus_name("chat_list");
+            }
+        });
+
+        // Tab and Arrow keys will handle navigation naturally through the ListView buttons
     }
 
     pub fn setup_action_hotkeys(&self, siv: &mut Cursive) {
@@ -100,17 +122,40 @@ impl AdvancedChatUI {
     }
 
     pub fn setup_suggestion_hotkeys(&self, siv: &mut Cursive) {
-        // Add number key handlers for suggestions
+        // Add Ctrl+number key handlers for suggestions - only when input has focus
         for i in 1..=5 {
             let state = self.state.clone();
             let key_char = char::from_digit(i as u32, 10).unwrap();
 
-            siv.add_global_callback(key_char, move |s| {
-                insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
+            siv.add_global_callback(cursive::event::Event::CtrlChar(key_char), move |s| {
+                // Only insert suggestion if suggestions are visible AND input has focus
+                let suggestions_visible = state.suggestions_visible.read()
+                    .map(|v| *v)
+                    .unwrap_or(false);
+
+                if suggestions_visible && s.find_name::<EditView>("input").is_some() {
+                    insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
+                }
             });
         }
 
-        // Hide suggestions on Escape
+        // Also add Alt+number for easier access
+        for i in 1..=5 {
+            let state = self.state.clone();
+
+            siv.add_global_callback(cursive::event::Event::AltChar(char::from_digit(i as u32, 10).unwrap()), move |s| {
+                // Only insert suggestion if suggestions are visible AND input has focus
+                let suggestions_visible = state.suggestions_visible.read()
+                    .map(|v| *v)
+                    .unwrap_or(false);
+
+                if suggestions_visible && s.find_name::<EditView>("input").is_some() {
+                    insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
+                }
+            });
+        }
+
+        // Hide suggestions on Escape - but don't interfere with other Escape usage
         let state = self.state.clone();
         siv.add_global_callback(cursive::event::Key::Esc, move |_s| {
             if let Ok(mut vis) = state.suggestions_visible.write() {

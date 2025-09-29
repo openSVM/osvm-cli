@@ -19,14 +19,21 @@ impl AdvancedChatUI {
         // Header
         chat_list_layout.add_child(Panel::new(TextView::new("Chat Sessions")).title("Sessions"));
 
-        // Chat list
-        let mut chat_select = SelectView::<Uuid>::new();
-        chat_select.set_on_select(|siv, session_id: &Uuid| {
-            handle_chat_selection(siv, *session_id);
-        });
-        let chat_select = chat_select.with_name("chat_list");
+        // Chat list - use ListView instead for more reliable navigation
+        let chat_list = ListView::new()
+            .with_name("chat_list");
 
-        chat_list_layout.add_child(Panel::new(ScrollView::new(chat_select)).max_height(15));
+        // We'll populate this manually in the update function
+
+        // Add ListView directly inside a Panel
+        chat_list_layout.add_child(
+            Panel::new(
+                ScrollView::new(chat_list)
+                    .scroll_strategy(cursive::view::scroll::ScrollStrategy::KeepRow)
+            )
+            .title("Sessions")
+            .max_height(15)
+        );
 
         // New chat button
         chat_list_layout.add_child(DummyView.fixed_height(1));
