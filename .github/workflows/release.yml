@@ -19,8 +19,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
+      - name: Install native dependencies for hidapi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -28,7 +30,7 @@ jobs:
           toolchain: stable
       
       - name: Build release binary
-        run: cargo build --release
+        run: cargo build --release --locked
         working-directory: .
       
       - name: Upload binary
@@ -229,8 +231,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
+      - name: Install native dependencies for hidapi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -259,8 +263,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev libudev-dev pkg-config libssl-dev perl
+      - name: Install native dependencies for hidapi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
       
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -268,7 +274,7 @@ jobs:
           toolchain: stable
       
       - name: Verify build
-        run: cargo build --release
+        run: cargo build --release --locked
         working-directory: .
       
       - name: Publish to crates.io
