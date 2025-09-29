@@ -284,6 +284,20 @@ async fn get_enhanced_input_with_status(
                     show_enhanced_status_bar(task_state);
                     continue;
                 } else {
+                    // In input mode - adopt suggestion if visible, then submit
+                    if !input_state.suggestions.is_empty() && input_state.selected_suggestion < input_state.suggestions.len() {
+                        let suggestion = &input_state.suggestions[input_state.selected_suggestion];
+                        input_state.input = suggestion.text.clone();
+                        input_state.cursor_pos = input_state.input.len();
+                        input_state.suggestions.clear();
+                        input_state.selected_suggestion = 0;
+                        input_state.original_before_sug = None;
+                        
+                        clear_suggestions_display();
+                        redraw_input_line(&input_state.input)?;
+                        continue; // Don't submit yet, let user confirm
+                    }
+                    
                     // Submit input
                     super::input_handler::disable_raw_mode()?;
                     println!();
@@ -361,10 +375,26 @@ async fn get_enhanced_input_with_status(
                     print!("{}│{} > {}", Colors::GREEN, Colors::RESET, input_state.input);
                     io::stdout().flush().map_err(|e| anyhow!("Failed to flush stdout: {}", e))?;
                 } else {
-                    // In input mode, Esc clears the current input
-                    input_state.clear();
-                    clear_suggestions_display();
-                    redraw_input_line(&input_state.input)?;
+                    // In input mode, handle Esc based on suggestion state
+                    if !input_state.suggestions.is_empty() {
+                        // Suggestions are visible - restore original input and suppress
+                        if let Some(original) = input_state.original_before_sug.take() {
+                            input_state.input = original;
+                            input_state.cursor_pos = input_state.input.len();
+                        }
+                        input_state.suggestions.clear();
+                        input_state.selected_suggestion = 0;
+                        input_state.suggestions_suppressed = true;
+                        input_state.sug_win_start = 0;
+                        
+                        clear_suggestions_display();
+                        redraw_input_line(&input_state.input)?;
+                    } else {
+                        // No suggestions visible - clear input as before
+                        input_state.clear();
+                        clear_suggestions_display();
+                        redraw_input_line(&input_state.input)?;
+                    }
                 }
             }
             InputChar::Tab => {
@@ -512,28 +542,38 @@ async fn handle_backspace(state: &mut InputState, suggestion_tx: &mpsc::Unbounde
     Ok(())
 }
 
-/// Handle Tab completion
+/// Handle Tab completion - adopt suggestion and advance selector
 async fn handle_tab_completion(state: &mut InputState) -> Result<()> {
+    // Enable suggestions if they were suppressed
+    state.suggestions_suppressed = false;
+    
     if !state.suggestions.is_empty() && state.selected_suggestion < state.suggestions.len() {
+        // Snapshot original input if this is the first suggestion interaction
+        if state.original_before_sug.is_none() {
+            state.original_before_sug = Some(state.input.clone());
+        }
+        
         let suggestion = &state.suggestions[state.selected_suggestion];
 
-        // Clear current dropdown
-        clear_suggestions_display();
-
-        // Update input with suggestion
+        // Update input with current suggestion
         state.input = suggestion.text.clone();
         state.cursor_pos = state.input.len();
-        state.reset_selection();
 
-        // Redraw the complete input line
+        // Advance selector to next suggestion (with wrap-around)
+        state.selected_suggestion = (state.selected_suggestion + 1) % state.suggestions.len();
+        
+        // Update window if needed
+        adjust_suggestion_window(state);
+
+        // Redraw input line and suggestions
         if let Err(e) = redraw_input_line(&state.input) {
             error!("Failed to redraw input line: {}", e);
         }
 
-        // Get new suggestions for the completed input
+        // Get new suggestions for the updated input
         state.suggestions = get_instant_suggestions(&state.input).await;
         if !state.suggestions.is_empty() {
-            show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+            show_navigable_suggestions_windowed(&state.suggestions, state);
         }
     }
     Ok(())
@@ -556,16 +596,29 @@ async fn handle_arrow_key(state: &mut InputState, arrow_key: ArrowKey) -> Result
     Ok(())
 }
 
-/// Handle up arrow navigation
+/// Handle up arrow navigation - move selector only, don't change input
 async fn handle_arrow_up(state: &mut InputState) -> Result<()> {
     if !state.suggestions.is_empty() {
-        // Navigate up in suggestions
+        // Enable suggestions if they were suppressed
+        state.suggestions_suppressed = false;
+        
+        // Snapshot original input if this is the first suggestion interaction
+        if state.original_before_sug.is_none() {
+            state.original_before_sug = Some(state.input.clone());
+        }
+        
+        // Navigate up in suggestions (with wrap-around)
         state.selected_suggestion = if state.selected_suggestion > 0 {
             state.selected_suggestion - 1
         } else {
             state.suggestions.len() - 1
         };
-        show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+        
+        // Update window if needed
+        adjust_suggestion_window(state);
+        
+        // Redraw suggestions only - don't change input
+        show_navigable_suggestions_windowed(&state.suggestions, state);
     } else if state.input.trim().is_empty() {
         // Navigate command history up
         navigate_history_up(state).await?;
@@ -573,12 +626,25 @@ async fn handle_arrow_up(state: &mut InputState) -> Result<()> {
     Ok(())
 }
 
-/// Handle down arrow navigation
+/// Handle down arrow navigation - move selector only, don't change input
 async fn handle_arrow_down(state: &mut InputState) -> Result<()> {
     if !state.suggestions.is_empty() {
-        // Navigate down in suggestions
+        // Enable suggestions if they were suppressed
+        state.suggestions_suppressed = false;
+        
+        // Snapshot original input if this is the first suggestion interaction
+        if state.original_before_sug.is_none() {
+            state.original_before_sug = Some(state.input.clone());
+        }
+        
+        // Navigate down in suggestions (with wrap-around)
         state.selected_suggestion = (state.selected_suggestion + 1) % state.suggestions.len();
-        show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+        
+        // Update window if needed
+        adjust_suggestion_window(state);
+        
+        // Redraw suggestions only - don't change input
+        show_navigable_suggestions_windowed(&state.suggestions, state);
     } else if state.input.trim().is_empty() {
         // Navigate command history down
         navigate_history_down(state).await?;
@@ -601,7 +667,7 @@ async fn navigate_history_up(state: &mut InputState) -> Result<()> {
         state.suggestions = get_instant_suggestions(&state.input).await;
         state.reset_selection();
         if !state.suggestions.is_empty() {
-            show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+            show_navigable_suggestions_windowed(&state.suggestions, state);
         }
     }
     Ok(())
@@ -622,7 +688,7 @@ async fn navigate_history_down(state: &mut InputState) -> Result<()> {
         state.suggestions = get_instant_suggestions(&state.input).await;
         state.reset_selection();
         if !state.suggestions.is_empty() {
-            show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+            show_navigable_suggestions_windowed(&state.suggestions, state);
         }
     } else if state.history_index == state.command_history.len() - 1 {
         // Clear input when going past last history item
@@ -642,6 +708,9 @@ async fn navigate_history_down(state: &mut InputState) -> Result<()> {
 
 /// Handle regular character input
 pub async fn handle_regular_character(state: &mut InputState, ch: char, suggestion_tx: &mpsc::UnboundedSender<String>) -> Result<()> {
+    // Clear suppression when user types new characters
+    state.suggestions_suppressed = false;
+    
     state.insert_char(ch);
     
     // Instead of just printing the character, redraw the entire input line properly
@@ -655,8 +724,13 @@ pub async fn handle_regular_character(state: &mut InputState, ch: char, suggesti
     Ok(())
 }
 
-/// Update suggestions for current input
+/// Update suggestions for current input with suppression logic
 async fn update_suggestions_for_input(state: &mut InputState, suggestion_tx: &mpsc::UnboundedSender<String>) -> Result<()> {
+    // Don't show suggestions if they are suppressed
+    if state.suggestions_suppressed {
+        return Ok(());
+    }
+    
     if state.input.len() > 0 {
         // Send to background suggestion generation
         if let Err(e) = suggestion_tx.send(state.input.clone()) {
@@ -665,7 +739,7 @@ async fn update_suggestions_for_input(state: &mut InputState, suggestion_tx: &mp
 
         state.suggestions = get_instant_suggestions(&state.input).await;
         if !state.suggestions.is_empty() {
-            show_navigable_suggestions(&state.suggestions, state.selected_suggestion);
+            show_navigable_suggestions_windowed(&state.suggestions, state);
         }
     } else {
         // Clear suggestions when input is empty
@@ -675,28 +749,48 @@ async fn update_suggestions_for_input(state: &mut InputState, suggestion_tx: &mp
     Ok(())
 }
 
-/// Show navigable suggestions with highlighting - properly contained
-fn show_navigable_suggestions(suggestions: &[RealtimeSuggestion], selected_index: usize) {
+/// Show navigable suggestions with windowed scrolling and reverse-video highlighting
+fn show_navigable_suggestions_windowed(suggestions: &[RealtimeSuggestion], state: &InputState) {
     if suggestions.is_empty() {
         return;
     }
 
-    // Determine terminal width for dynamic box
-    let (cols, _) = terminal::size().unwrap_or((80, 24));
-    let inner_width = cols.saturating_sub(2) as usize; // account for border chars
+    // Determine terminal dimensions
+    let (cols, rows) = terminal::size().unwrap_or((80, 24));
+    let inner_width = cols.saturating_sub(2) as usize;
+    let win_height = state.win_height.min(suggestions.len()).min(6);
+    let box_height = win_height + 3; // borders + hint
     
-    // Save cursor at input line, move one line down to draw suggestions
+    // Calculate window slice
+    let win_start = state.sug_win_start;
+    let win_end = (win_start + win_height).min(suggestions.len());
+    let visible_suggestions = &suggestions[win_start..win_end];
+    
+    // Save cursor at input line, move up to draw suggestions above input
     print!("\x1B[s");             // CSI s – save cursor
-    let box_height: u16 = 9;      // borders + 6 suggestions + hint
     print!("\x1B[{}A\r", box_height); // move cursor UP to draw above input
-    // do not clear entire bottom, will clear line-by-line to keep input box intact
+    
+    // Clear suggestion box area line by line
+    for i in 0..box_height {
+        print!("\x1B[2K\r");      // clear current line
+        if i < box_height - 1 {
+            print!("\x1B[1B\r");  // move down one line
+        }
+    }
+    
+    // Move back to start of suggestion area
+    print!("\x1B[{}A\r", box_height - 1);
+    
     // Draw top border
     print!("\x1B[2K\r");
     println!("{}┌─ Suggestions {}", Colors::DIM,
              "─".repeat(inner_width.saturating_sub(15)));
 
-    // Display suggestions with proper formatting and highlighting
-    for (i, suggestion) in suggestions.iter().enumerate().take(6) {
+    // Display windowed suggestions with reverse-video highlighting
+    for (i, suggestion) in visible_suggestions.iter().enumerate() {
+        let global_index = win_start + i;
+        let is_selected = global_index == state.selected_suggestion;
+        
         let color = match suggestion.category.as_str() {
             "command" => Colors::CYAN,
             "query" => Colors::GREEN,
@@ -705,10 +799,8 @@ fn show_navigable_suggestions(suggestions: &[RealtimeSuggestion], selected_index
             _ => Colors::BLUE,
         };
 
-        let selector = if i == selected_index { "▶" } else { " " };
-        
-        // Available width minus fixed elements: selector + spaces + " - "
-        let content_width = inner_width.saturating_sub(4); // approx.
+        // Available width minus fixed elements
+        let content_width = inner_width.saturating_sub(4);
         let max_text_width = content_width.min(25);
         let max_desc_width = content_width.saturating_sub(max_text_width).saturating_sub(3);
         
@@ -724,30 +816,49 @@ fn show_navigable_suggestions(suggestions: &[RealtimeSuggestion], selected_index
             suggestion.description.clone()
         };
 
-        // Clear the entire terminal line first to avoid leftover fragments
+        // Clear line and apply reverse video if selected
         print!("\x1B[2K\r");
-        println!("{}│{} {}{:<25}{} - {}{:<23}{} │{}",
-                Colors::DIM,
-                selector,
-                color,
-                display_text,
-                Colors::RESET,
-                Colors::DIM,
-                display_desc,
-                Colors::RESET,
-                Colors::DIM);
+        if is_selected {
+            // Reverse video for selected row
+            println!("{}│\x1B[7m {}{:<25}{} - {}{:<23}{}\x1B[27m │{}",
+                    Colors::DIM,
+                    color,
+                    display_text,
+                    Colors::RESET,
+                    Colors::DIM,
+                    display_desc,
+                    Colors::RESET,
+                    Colors::DIM);
+        } else {
+            println!("{}│ {}{:<25}{} - {}{:<23}{} │{}",
+                    Colors::DIM,
+                    color,
+                    display_text,
+                    Colors::RESET,
+                    Colors::DIM,
+                    display_desc,
+                    Colors::RESET,
+                    Colors::DIM);
+        }
     }
 
-    // Show navigation hint
+    // Show navigation hint with scroll indicator
     print!("\x1B[2K\r");
-    let hint = "↑↓ Navigate • Tab Complete • Enter Submit";
+    let scroll_info = if suggestions.len() > win_height {
+        format!(" ({}/{}) ", state.selected_suggestion + 1, suggestions.len())
+    } else {
+        String::new()
+    };
+    let hint = format!("↑↓ Navigate • Tab Complete • Enter Submit{}", scroll_info);
     println!("{}│{} {:<width$}{} │{}",
              Colors::DIM, Colors::DIM, hint, Colors::RESET, Colors::DIM,
              width = inner_width.saturating_sub(2));
+    
     // Bottom border
     print!("\x1B[2K\r");
     println!("{}└{}┘{}", Colors::DIM,
              "─".repeat(inner_width), Colors::RESET);
+    
     // Restore cursor back to original input line
     print!("\x1B[u");             // CSI u – restore cursor
 }
@@ -1389,6 +1500,30 @@ fn redraw_input_line(input: &str) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Adjust suggestion window to keep selected item visible
+fn adjust_suggestion_window(state: &mut InputState) {
+    if state.suggestions.is_empty() {
+        return;
+    }
+    
+    let list_len = state.suggestions.len();
+    let win_height = state.win_height.min(6);
+    
+    // Adjust window start to keep selected item visible
+    if state.selected_suggestion < state.sug_win_start {
+        // Selected item is above visible window
+        state.sug_win_start = state.selected_suggestion;
+    } else if state.selected_suggestion >= state.sug_win_start + win_height {
+        // Selected item is below visible window
+        state.sug_win_start = state.selected_suggestion + 1 - win_height;
+    }
+    
+    // Ensure window doesn't go beyond list bounds
+    if state.sug_win_start + win_height > list_len {
+        state.sug_win_start = list_len.saturating_sub(win_height);
+    }
 }
 
 /// Highlight matched characters in fuzzy search results

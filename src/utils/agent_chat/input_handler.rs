@@ -46,6 +46,10 @@ pub struct InputState {
     pub suggestions: Vec<RealtimeSuggestion>,
     pub last_suggestion_time: std::time::Instant,
     pub config: InputConfig,
+    pub original_before_sug: Option<String>,
+    pub suggestions_suppressed: bool,
+    pub sug_win_start: usize,
+    pub win_height: usize,
 }
 
 impl InputState {
@@ -60,6 +64,10 @@ impl InputState {
             suggestions: Vec::new(),
             last_suggestion_time: std::time::Instant::now(),
             config: InputConfig::default(),
+            original_before_sug: None,
+            suggestions_suppressed: false,
+            sug_win_start: 0,
+            win_height: 6,
         }
     }
 
@@ -180,6 +188,9 @@ impl InputState {
         self.cursor_pos = 0;
         self.suggestions.clear();
         self.selected_suggestion = 0;
+        self.original_before_sug = None;
+        self.suggestions_suppressed = false;
+        self.sug_win_start = 0;
     }
 
     /// Navigate history up
