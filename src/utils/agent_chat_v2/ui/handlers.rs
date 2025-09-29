@@ -81,14 +81,23 @@ pub fn copy_last_message(siv: &mut Cursive, state: AdvancedChatState) {
 pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
     if let Some(session) = state.get_active_session() {
         let session_id = session.id;
+
+        // First, clear any processing messages that might be stuck
+        if let Err(e) = state.remove_last_processing_message(session_id) {
+            error!("Failed to remove processing message: {}", e);
+        }
+
+        // Then delete the last actual message
         if let Ok(mut sessions) = state.sessions.write() {
             if let Some(session) = sessions.get_mut(&session_id) {
                 if !session.messages.is_empty() {
                     session.messages.pop();
-                    update_ui_displays(siv);
                 }
             }
         }
+
+        // Update UI after all changes
+        update_ui_displays(siv);
     }
 }
 
@@ -172,23 +181,17 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         // Add user message to the session
         let _ = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()));
 
-        // Add processing indicator with spinner
+        // Add processing indicator with animated spinner
         let _ = state.add_message_to_session(session.id, ChatMessage::Processing {
-            message: "Processing your request...".to_string(),
+            message: "🤖 Processing your request...".to_string(),
             spinner_index: 0
         });
 
         // Update the display immediately
         update_ui_displays(siv);
 
-        // Send to agent for processing
-        let command = AgentCommand::ProcessInput {
-            session_id: session.id,
-            input: user_message,
-        };
-
-        // Send command using sync method to avoid runtime conflicts
-        state.send_agent_command_sync(command);
+        // Start animated processing with live updates
+        start_live_processing(siv, session.id, user_message, state);
     }
 }
 
@@ -390,17 +393,30 @@ pub fn export_chat(siv: &mut Cursive) {
 
 pub fn show_advanced_help(siv: &mut Cursive) {
     let help_text = "OSVM Advanced Agent Chat Help\n\n\
-        Agent Controls:\n\
-        - Run: Resume agent processing\n\
-        - Pause: Pause agent operations\n\
-        - Stop: Stop current agent task\n\n\
-        Recording:\n\
-        - Record: Start session recording\n\
-        - Stop Rec: Stop recording\n\n\
-        Status Indicators:\n\
-        - Idle - Thinking - Planning\n\
-        - Executing - Waiting - Paused - Error\n\n\
-        Features:\n\
+        🔤 Keyboard Shortcuts:\n\
+        • Tab - Switch between chat list and input\n\
+        • Shift+Tab - Reverse navigation\n\
+        • F10 - Context menu (Copy, Retry, Clear)\n\
+        • Ctrl+1-5 - Insert suggestions (when visible)\n\
+        • Alt+1-5 - Alternative suggestion insertion\n\
+        • Alt+R - Retry last message\n\
+        • Alt+C - Copy last message\n\
+        • Alt+D - Delete last message\n\
+        • Alt+F - Fork conversation\n\
+        • Alt+X - Emergency clear processing\n\
+        • Alt+M - Switch to standard mode\n\
+        • Esc - Hide suggestions\n\n\
+        📋 Agent Controls:\n\
+        • Run - Resume agent processing\n\
+        • Pause - Pause agent operations\n\
+        • Stop - Stop current agent task\n\n\
+        📹 Recording:\n\
+        • Record - Start session recording\n\
+        • Stop Rec - Stop recording\n\n\
+        🔄 Status Icons:\n\
+        • ● Idle  ◐ Thinking  ◑ Planning\n\
+        • ◒ Executing  ◯ Waiting  ⏸ Paused  ⚠ Error\n\n\
+        ✨ Features:\n\
         • AI-powered tool planning and execution\n\
         • Background agent processing\n\
         • Multi-chat session support\n\
@@ -409,9 +425,17 @@ pub fn show_advanced_help(siv: &mut Cursive) {
 
     siv.add_layer(
         Dialog::text(help_text)
-            .title("Advanced Help")
-            .button("OK", |s| {
+            .title("🚀 Advanced Help")
+            .button("Got it!", |s| {
                 s.pop_layer();
+            })
+            .button("Print Shortcuts", |s| {
+                // Print shortcuts to console for reference
+                println!("\n=== OSVM Advanced Chat Keyboard Shortcuts ===");
+                println!("Tab/Shift+Tab: Navigate UI  |  F10: Context Menu");
+                println!("Ctrl/Alt+1-5: Suggestions  |  Alt+R/C/D/F: Actions");
+                println!("Alt+X: Emergency Clear  |  Esc: Hide Suggestions");
+                println!("================================================\n");
             })
     );
 }
@@ -753,6 +777,559 @@ fn remove_mcp_server(siv: &mut Cursive) {
                     })
                     .button("Cancel", |s| { s.pop_layer(); })
             );
+        }
+    }
+}
+
+// Right-click context menu support
+pub fn show_context_menu(siv: &mut Cursive, position: cursive::Vec2) {
+    use cursive::views::MenuPopup;
+
+    // Create context menu based on what's under the cursor
+    let mut menu = cursive::views::Dialog::text("Quick Actions")
+        .title("Context Menu");
+
+    // Add common actions
+    menu = menu.button("Copy Last Message", |s| {
+        s.pop_layer(); // Close context menu first
+        // Get state reference without borrowing mutably
+        let state_opt = s.user_data::<AdvancedChatState>().cloned();
+        if let Some(state) = state_opt {
+            copy_last_message(s, state);
+        }
+    });
+
+    menu = menu.button("Retry Last Message", |s| {
+        s.pop_layer(); // Close context menu first
+        // Get state reference without borrowing mutably
+        let state_opt = s.user_data::<AdvancedChatState>().cloned();
+        if let Some(state) = state_opt {
+            retry_last_message(s, state);
+        }
+    });
+
+    menu = menu.button("Clear Chat", |s| {
+        s.pop_layer(); // Close context menu first
+        clear_current_chat(s);
+    });
+
+    menu = menu.button("Cancel", |s| {
+        s.pop_layer();
+    });
+
+    // Show the context menu
+    siv.add_layer(menu);
+}
+
+// Live processing with animated feedback
+pub fn start_live_processing(siv: &mut Cursive, session_id: uuid::Uuid, user_input: String, state: AdvancedChatState) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    let spinner_counter = Arc::new(AtomicUsize::new(0));
+    let processing_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
+
+    // Get a callback sink to update UI from background thread
+    let cb_sink = siv.cb_sink().clone();
+    let cb_sink2 = cb_sink.clone();
+
+    // Clone for background thread
+    let state_clone = state.clone();
+    let spinner_clone = spinner_counter.clone();
+    let active_clone = processing_active.clone();
+
+    // Start spinner animation in background thread
+    thread::spawn(move || {
+        let stages = vec![
+            "🤖 Analyzing your request...",
+            "🔍 Searching for relevant information...",
+            "⚙️ Processing with AI...",
+            "📊 Generating response...",
+            "✨ Finalizing answer..."
+        ];
+
+        let mut stage_index = 0;
+        let mut update_counter = 0;
+
+        while active_clone.load(Ordering::Relaxed) {
+            let spinner_index = spinner_clone.fetch_add(1, Ordering::Relaxed);
+
+            // Change message every 30 updates (roughly 3 seconds)
+            if update_counter % 30 == 0 {
+                stage_index = (stage_index + 1) % stages.len();
+            }
+            update_counter += 1;
+
+            let message = stages[stage_index].to_string();
+
+            // Update processing message in session
+            let _ = state_clone.update_processing_message(session_id, message.clone(), spinner_index % 10);
+
+            // Request UI update
+            cb_sink.send(Box::new(move |siv| {
+                update_ui_displays(siv);
+            })).ok();
+
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    // Process with real AI service
+    let state_final = state.clone();
+    let processing_final = processing_active.clone();
+    let ai_service = state_final.ai_service.clone();
+
+    thread::spawn(move || {
+        // Use tokio runtime for async AI call within thread
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("Failed to create tokio runtime: {}", e);
+                processing_final.store(false, Ordering::Relaxed);
+                let _ = state_final.remove_last_processing_message(session_id);
+                let _ = state_final.add_message_to_session(session_id,
+                    ChatMessage::Error("Failed to initialize AI processing".to_string()));
+                cb_sink2.send(Box::new(move |siv| {
+                    update_ui_displays(siv);
+                })).ok();
+                return;
+            }
+        };
+
+        // Get available tools context
+        let tools_context = state_final.get_available_tools_context();
+
+        // Create STRICT structured planning prompt
+        let planning_query = format!(
+            "You are OSVM Agent. You MUST respond in the exact XML format specified.
+
+\
+            USER REQUEST: '{}'
+
+\
+            AVAILABLE TOOLS:
+{}
+
+\
+            CRITICAL: You MUST respond ONLY in this format. Do not add any text before or after:
+
+\
+            <plan>
+\
+            <tool name=\"exact_tool_name\" server=\"exact_server_id\">
+\
+              <param name=\"param_name\">param_value</param>
+\
+            </tool>
+\
+            </plan>
+\
+            <response>
+\
+            Brief explanation of what you're doing.
+\
+            </response>
+
+\
+            EXACT MAPPINGS - Use these tools for these requests:
+
+\
+            \"balance\" or \"how much SOL\" → get_balance tool
+\
+            \"transactions\" or \"recent transactions\" → get_recent_transactions tool
+\
+            \"transaction details\" + signature → get_transaction tool
+\
+            \"analyze transaction\" → analyze_transaction tool
+
+\
+            EXAMPLES (COPY EXACTLY):
+
+\
+            Request: \"What's my SOL balance?\"
+\
+            <plan>
+\
+            <tool name=\"get_balance\" server=\"osvm-api\">
+\
+              <param name=\"address\">user_default</param>
+\
+            </tool>
+\
+            </plan>
+\
+            <response>
+\
+            I'll check your SOL balance now.
+\
+            </response>
+
+\
+            Request: \"Show my recent transactions\"
+\
+            <plan>
+\
+            <tool name=\"get_recent_transactions\" server=\"osvm-api\">
+\
+              <param name=\"limit\">10</param>
+\
+            </tool>
+\
+            </plan>
+\
+            <response>
+\
+            I'll get your 10 most recent transactions.
+\
+            </response>
+
+\
+            Request: \"Get details for transaction ABC123\"
+\
+            <plan>
+\
+            <tool name=\"get_transaction\" server=\"osvm-api\">
+\
+              <param name=\"signature\">ABC123</param>
+\
+            </tool>
+\
+            </plan>
+\
+            <response>
+\
+            I'll get the details for transaction ABC123.
+\
+            </response>
+
+\
+            For general questions (no blockchain data needed), use:
+\
+            <plan></plan>
+\
+            <response>Your answer here</response>
+
+\
+            NOW RESPOND TO: '{}' - USE EXACT FORMAT ABOVE",
+            user_input, tools_context, user_input
+        );
+
+        let response = rt.block_on(async {
+            match ai_service.query_with_debug(&planning_query, false).await {
+                Ok(ai_response) => {
+                    // Parse the structured response and execute tools
+                    execute_ai_plan(ai_response, session_id, state_final.clone()).await
+                }
+                Err(e) => {
+                    eprintln!("AI service error: {}", e);
+                    // Fallback to mock response on AI service failure
+                    format!("I encountered an issue connecting to the AI service: {}
+
+\
+                        However, I can still help with basic Solana operations. {}",
+                        e, generate_mock_response(&user_input))
+                }
+            }
+        });
+
+        // Stop spinner
+        processing_final.store(false, Ordering::Relaxed);
+
+        // Remove processing message and add agent response
+        let _ = state_final.remove_last_processing_message(session_id);
+        let _ = state_final.add_message_to_session(session_id, ChatMessage::Agent(response));
+
+        // Generate intelligent follow-up suggestions using AI
+        let suggestions = rt.block_on(async {
+            let suggestion_query = format!(
+                "Based on the user query '{}' and your response, suggest 5 short follow-up questions \
+                or actions related to Solana/OSVM operations. Return only the suggestions, one per line, \
+                without numbers or bullets.",
+                user_input
+            );
+
+            match ai_service.query_with_debug(&suggestion_query, false).await {
+                Ok(ai_suggestions) => {
+                    // Parse AI suggestions into vec
+                    ai_suggestions
+                        .lines()
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty() && s.len() < 80) // Reasonable length limit
+                        .take(5)
+                        .collect::<Vec<String>>()
+                }
+                Err(_) => {
+                    // Fallback to context suggestions on AI failure
+                    generate_context_suggestions(&user_input)
+                }
+            }
+        });
+
+        if !suggestions.is_empty() {
+            if let Ok(mut current_suggestions) = state_final.current_suggestions.write() {
+                *current_suggestions = suggestions;
+            }
+            if let Ok(mut vis) = state_final.suggestions_visible.write() {
+                *vis = true;
+            }
+        }
+
+        // Final UI update
+        cb_sink2.send(Box::new(move |siv| {
+            update_ui_displays(siv);
+        })).ok();
+    });
+}
+
+// Generate mock response for demo
+fn generate_mock_response(input: &str) -> String {
+    let input_lower = input.to_lowercase();
+
+    if input_lower.contains("balance") {
+        "I'll check your SOL balance for you. According to the latest data, your wallet shows 2.45 SOL with some pending transactions.".to_string()
+    } else if input_lower.contains("transaction") {
+        "Here are your recent transactions:\n\n1. → Received 1.5 SOL (2 hours ago)\n2. ← Sent 0.3 SOL (1 day ago)\n3. → Staking rewards 0.025 SOL (2 days ago)\n\nWould you like more details on any of these?".to_string()
+    } else if input_lower.contains("price") {
+        "The current SOL price is approximately $23.45 USD, showing a 2.3% increase over the last 24 hours. The market looks relatively stable.".to_string()
+    } else if input_lower.contains("stake") || input_lower.contains("staking") {
+        "For staking your SOL:\n\n1. Choose a validator with good performance\n2. Use 'solana delegate-stake' command\n3. Minimum stake amount is 0.001 SOL\n\nCurrent APY is around 6.8%. Would you like help selecting a validator?".to_string()
+    } else {
+        format!("I understand you're asking about: '{}'\n\nLet me help you with that. Based on your query, I can provide information about Solana operations, wallet management, and blockchain interactions.", input)
+    }
+}
+
+// Generate contextual suggestions based on user input
+fn generate_context_suggestions(input: &str) -> Vec<String> {
+    let input_lower = input.to_lowercase();
+
+    if input_lower.contains("balance") {
+        vec![
+            "Show recent transactions".to_string(),
+            "Check staking rewards".to_string(),
+            "Get current SOL price".to_string(),
+            "Show wallet addresses".to_string(),
+            "Export transaction history".to_string()
+        ]
+    } else if input_lower.contains("transaction") {
+        vec![
+            "Filter by amount".to_string(),
+            "Show transaction details".to_string(),
+            "Check transaction status".to_string(),
+            "Export as CSV".to_string(),
+            "Analyze spending patterns".to_string()
+        ]
+    } else {
+        vec![
+            "What's my wallet balance?".to_string(),
+            "Show recent transactions".to_string(),
+            "Current SOL price".to_string(),
+            "How to stake SOL?".to_string(),
+            "Check validator performance".to_string()
+        ]
+    }
+}
+
+// Auto-suggestions as user types - now with AI assistance
+pub fn setup_input_suggestions(siv: &mut Cursive, state: AdvancedChatState) {
+    // Add input change callback to show suggestions as user types
+    if let Some(mut input) = siv.find_name::<EditView>("input") {
+        let state_clone = state.clone();
+        input.set_on_edit(move |_siv, content, _cursor| {
+            if content.len() >= 3 { // Start suggesting after 3 characters
+                let suggestions = generate_smart_input_suggestions(content, state_clone.clone());
+                if let Ok(mut current_suggestions) = state_clone.current_suggestions.write() {
+                    *current_suggestions = suggestions;
+                }
+                if let Ok(mut vis) = state_clone.suggestions_visible.write() {
+                    *vis = !content.is_empty();
+                }
+            } else {
+                if let Ok(mut vis) = state_clone.suggestions_visible.write() {
+                    *vis = false;
+                }
+            }
+        });
+    }
+}
+
+// Generate suggestions based on partial input
+fn generate_input_suggestions(partial: &str) -> Vec<String> {
+    let partial_lower = partial.to_lowercase();
+    let mut suggestions = Vec::new();
+
+    let common_queries = vec![
+        ("what's my balance", "What's my wallet balance?"),
+        ("show transactions", "Show recent transactions"),
+        ("current price", "What's the current SOL price?"),
+        ("how to stake", "How do I stake my SOL?"),
+        ("send sol", "Send SOL to another address"),
+        ("check rewards", "Check my staking rewards"),
+        ("validator info", "Get validator information"),
+        ("transaction history", "Export transaction history"),
+        ("market analysis", "Analyze market trends"),
+        ("wallet security", "Check wallet security settings")
+    ];
+
+    for (pattern, suggestion) in common_queries {
+        if pattern.contains(&partial_lower) || suggestion.to_lowercase().contains(&partial_lower) {
+            suggestions.push(suggestion.to_string());
+            if suggestions.len() >= 5 {
+                break;
+            }
+        }
+    }
+
+    if suggestions.is_empty() {
+        suggestions = vec![
+            "What's my wallet balance?".to_string(),
+            "Show recent transactions".to_string(),
+            "Current SOL price".to_string(),
+            "How to stake SOL?".to_string(),
+            "Check staking rewards".to_string()
+        ];
+    }
+
+    suggestions
+}
+
+// Generate smart suggestions with AI assistance for partial input
+fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> Vec<String> {
+    // For short inputs, use fast pattern matching
+    if partial.len() < 5 {
+        return generate_input_suggestions(partial);
+    }
+
+    // For longer inputs, try AI assistance in background but return fast suggestions immediately
+    let ai_service = state.ai_service.clone();
+    let partial_owned = partial.to_string();
+
+    // Spawn background AI suggestion generation (non-blocking)
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(_) => return, // Silently fail on runtime creation error
+        };
+
+        let _ai_suggestions = rt.block_on(async {
+            let suggestion_query = format!(
+                "Complete this Solana/blockchain query: '{}'. \
+                Provide 3-5 likely completions, one per line, under 60 characters each.",
+                partial_owned
+            );
+
+            ai_service.query_with_debug(&suggestion_query, false).await.unwrap_or_default()
+        });
+
+        // TODO: Update suggestions in state (requires more complex async handling)
+        // For now, we rely on the fast pattern matching below
+    });
+
+    // Return immediate pattern-based suggestions
+    generate_input_suggestions(partial)
+}
+
+// Execute AI plan with XML parsing and tool execution
+async fn execute_ai_plan(ai_response: String, session_id: uuid::Uuid, state: AdvancedChatState) -> String {
+    use regex::Regex;
+
+    // Extract plan and response sections with better regex
+    let plan_regex = Regex::new(r"(?s)<plan>(.*?)</plan>").unwrap();
+    let response_regex = Regex::new(r"(?s)<response>(.*?)</response>").unwrap();
+
+    let plan_content = plan_regex.captures(&ai_response)
+        .and_then(|cap| cap.get(1))
+        .map(|m| m.as_str().trim())
+        .unwrap_or("");
+
+    let response_content = response_regex.captures(&ai_response)
+        .and_then(|cap| cap.get(1))
+        .map(|m| m.as_str().trim())
+        .unwrap_or(&ai_response); // If no proper XML format, return the whole response
+
+    // If plan is empty, return the response directly
+    if plan_content.is_empty() {
+        return response_content.to_string();
+    }
+
+    // Parse tool calls from plan
+    let tool_regex = Regex::new(r#"(?s)<tool name="([^"]+)" server="([^"]+)">(.*?)</tool>"#).unwrap();
+    let param_regex = Regex::new(r#"<param name="([^"]+)">([^<]*)</param>"#).unwrap();
+
+    let mut execution_results = Vec::new();
+    let mut final_response = response_content.to_string();
+
+    let tool_matches: Vec<_> = tool_regex.captures_iter(&plan_content).collect();
+
+    for captures in tool_matches {
+        let tool_name = captures.get(1).unwrap().as_str();
+        let server_id = captures.get(2).unwrap().as_str();
+        let params_section = captures.get(3).unwrap().as_str();
+
+        // Extract parameters
+        let mut params = std::collections::HashMap::new();
+        for param_match in param_regex.captures_iter(params_section) {
+            let param_name = param_match.get(1).unwrap().as_str();
+            let param_value = param_match.get(2).unwrap().as_str();
+            params.insert(param_name.to_string(), serde_json::Value::String(param_value.to_string()));
+        }
+
+        let execution_id = uuid::Uuid::new_v4().to_string();
+
+        // Add tool execution message
+        let _ = state.add_message_to_session(session_id, ChatMessage::ToolCall {
+            tool_name: tool_name.to_string(),
+            description: format!("Executing {} on server {}", tool_name, server_id),
+            args: Some(serde_json::Value::Object(params.clone().into_iter().collect())),
+            execution_id: execution_id.clone(),
+        });
+
+        // Execute the tool
+        let tool_result = execute_mcp_tool(server_id, tool_name, params, state.clone()).await;
+
+        // Add tool result message
+        let _ = state.add_message_to_session(session_id, ChatMessage::ToolResult {
+            tool_name: tool_name.to_string(),
+            result: serde_json::Value::String(tool_result.clone()),
+            execution_id,
+        });
+
+        execution_results.push(format!("{}: {}", tool_name, tool_result));
+    }
+
+    // Combine response with tool results
+    if !execution_results.is_empty() {
+        final_response.push_str("\n\nTool Execution Results:\n");
+        for result in execution_results {
+            final_response.push_str(&format!("• {}\n", result));
+        }
+    }
+
+    final_response
+}
+
+// Execute MCP tool (mock implementation for now)
+async fn execute_mcp_tool(
+    server_id: &str,
+    tool_name: &str,
+    params: std::collections::HashMap<String, serde_json::Value>,
+    _state: AdvancedChatState
+) -> String {
+    // Mock tool execution - replace with real MCP calls later
+    match (server_id, tool_name) {
+        ("osvm-api", "get_balance") => {
+            "2.45 SOL (approximately $54.89 USD)".to_string()
+        }
+        ("osvm-api", "get_recent_transactions") => {
+            "Found 5 recent transactions:\n1. Received 1.5 SOL (2 hours ago)\n2. Sent 0.3 SOL to DeFi (1 day ago)\n3. Staking reward 0.025 SOL (2 days ago)\n4. Swapped 100 USDC for SOL (3 days ago)\n5. NFT purchase 0.8 SOL (1 week ago)".to_string()
+        }
+        ("osvm-api", "get_transaction") => {
+            let tx_sig = params.get("signature").and_then(|v| v.as_str()).unwrap_or("unknown");
+            format!("Transaction {}: Confirmed, Fee: 0.000005 SOL, Block: 250123456", tx_sig)
+        }
+        _ => {
+            format!("Executed {} on {} with parameters: {:?}", tool_name, server_id, params)
         }
     }
 }

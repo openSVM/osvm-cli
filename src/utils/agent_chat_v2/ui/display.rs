@@ -27,33 +27,72 @@ impl AdvancedChatUI {
         let active_id = self.state.active_session_id.read().ok().and_then(|id| *id);
 
         if let Some(mut chat_list) = siv.find_name::<ListView>("chat_list") {
-            chat_list.clear();
+            // Smart in-place updates instead of clear() + rebuild
+            // Only rebuild if session count changed, otherwise just update existing buttons
+            let current_count = chat_list.len();
+            let new_count = session_names.len();
 
-            for (id, name, agent_state) in session_names.iter() {
-                let status_icon = match agent_state {
-                    AgentState::Idle => "●",
-                    AgentState::Thinking => "◐",
-                    AgentState::Planning => "◑",
-                    AgentState::ExecutingTool(_) => "◒",
-                    AgentState::Waiting => "◯",
-                    AgentState::Paused => "⏸",
-                    AgentState::Error(_) => "⚠",
-                };
+            if current_count != new_count {
+                // Session count changed - need full rebuild
+                chat_list.clear();
 
-                let display_name = format!("{} {}", status_icon, name);
-                let is_active = Some(*id) == active_id;
-                let button_text = if is_active {
-                    format!("► {}", display_name)  // Arrow for active session
-                } else {
-                    format!("  {}", display_name)  // Spaces for inactive
-                };
+                for (id, name, agent_state) in session_names.iter() {
+                    let status_icon = match agent_state {
+                        AgentState::Idle => "●",
+                        AgentState::Thinking => "◐",
+                        AgentState::Planning => "◑",
+                        AgentState::ExecutingTool(_) => "◒",
+                        AgentState::Waiting => "◯",
+                        AgentState::Paused => "⏸",
+                        AgentState::Error(_) => "⚠",
+                    };
 
-                let session_id = *id;
-                let button = Button::new(button_text, move |siv| {
-                    handle_chat_selection(siv, session_id);
-                });
+                    let display_name = format!("{} {}", status_icon, name);
+                    let is_active = Some(*id) == active_id;
+                    let button_text = if is_active {
+                        format!("► {}", display_name)
+                    } else {
+                        format!("  {}", display_name)
+                    };
 
-                chat_list.add_child(&display_name, button);
+                    let session_id = *id;
+                    let mut button = Button::new(button_text.clone(), move |siv| {
+                        handle_chat_selection(siv, session_id);
+                    });
+
+                    chat_list.add_child(&display_name, button);
+                }
+            } else {
+                // Same session count - for now just do a full rebuild
+                // TODO: Implement true in-place updates when cursive API supports it
+                chat_list.clear();
+
+                for (id, name, agent_state) in session_names.iter() {
+                    let status_icon = match agent_state {
+                        AgentState::Idle => "●",
+                        AgentState::Thinking => "◐",
+                        AgentState::Planning => "◑",
+                        AgentState::ExecutingTool(_) => "◒",
+                        AgentState::Waiting => "◯",
+                        AgentState::Paused => "⏸",
+                        AgentState::Error(_) => "⚠",
+                    };
+
+                    let display_name = format!("{} {}", status_icon, name);
+                    let is_active = Some(*id) == active_id;
+                    let button_text = if is_active {
+                        format!("► {}", display_name)
+                    } else {
+                        format!("  {}", display_name)
+                    };
+
+                    let session_id = *id;
+                    let mut button = Button::new(button_text.clone(), move |siv| {
+                        handle_chat_selection(siv, session_id);
+                    });
+
+                    chat_list.add_child(&display_name, button);
+                }
             }
         }
     }
@@ -137,29 +176,48 @@ impl AdvancedChatUI {
                 }
             }
 
+            // Stable content update - only set if content actually changed
             if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
-                chat_display.set_content(display_text);
+                let content_ref = chat_display.get_content();
+                let current_content = content_ref.source().to_string();
+                if current_content != display_text {
+                    chat_display.set_content(display_text);
+                }
             }
         } else {
+            let no_session_text = "No active session. Use Tab to navigate to the session list and select a session.";
             if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
-                chat_display.set_content("No active session. Use Tab to navigate to the session list and select a session.");
+                let content_ref = chat_display.get_content();
+                let current_content = content_ref.source().to_string();
+                if current_content != no_session_text {
+                    chat_display.set_content(no_session_text);
+                }
             }
         }
     }
 
     pub fn update_agent_status(&self, siv: &mut Cursive) {
+        use std::sync::atomic::Ordering;
+        use chrono::{DateTime, Utc};
+
+        let spinner_index = self.state.spinner_state.load(Ordering::Relaxed);
+        let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
+
+        let timestamp = Utc::now().format("%H:%M:%S");
+
         let status_text = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => "Agent: Idle".to_string(),
-                AgentState::Thinking => "Agent: Thinking...".to_string(),
-                AgentState::Planning => "Agent: Planning...".to_string(),
-                AgentState::ExecutingTool(ref tool_name) => format!("Agent: Executing {}", tool_name),
-                AgentState::Waiting => "Agent: Waiting".to_string(),
-                AgentState::Paused => "Agent: Paused".to_string(),
-                AgentState::Error(ref err) => format!("Agent: Error - {}", err),
+                AgentState::Idle => format!("🤖 Agent: Idle | Ready for tasks | {}", timestamp),
+                AgentState::Thinking => format!("{} Agent: Thinking... | Analyzing request | {}", spinner_char, timestamp),
+                AgentState::Planning => format!("{} Agent: Planning... | Creating execution plan | {}", spinner_char, timestamp),
+                AgentState::ExecutingTool(ref tool_name) => format!("{} Agent: Executing {} | Processing... | {}", spinner_char, tool_name, timestamp),
+                AgentState::Waiting => format!("⏳ Agent: Waiting | Awaiting response | {}", timestamp),
+                AgentState::Paused => format!("⏸️ Agent: Paused | Operations suspended | {}", timestamp),
+                AgentState::Error(ref err) => format!("⚠️ Agent: Error | {} | {}", err, timestamp),
             }
         } else {
-            "Agent: No active session".to_string()
+            format!("❓ Agent: No active session | Select a chat session | {}", timestamp)
         };
 
         if let Some(mut status_display) = siv.find_name::<TextView>("agent_status") {

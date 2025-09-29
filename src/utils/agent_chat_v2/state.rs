@@ -279,4 +279,58 @@ impl AdvancedChatState {
 
         Ok(())
     }
+
+    pub fn update_processing_message(&self, session_id: Uuid, message: String, spinner_index: usize) -> Result<()> {
+        let mut sessions = self.sessions.write()
+            .map_err(|e| anyhow::anyhow!("Failed to write sessions: {}", e))?;
+        if let Some(session) = sessions.get_mut(&session_id) {
+            if let Some(last_msg) = session.messages.last_mut() {
+                if let ChatMessage::Processing { .. } = last_msg {
+                    // Update the existing processing message
+                    *last_msg = ChatMessage::Processing { message, spinner_index };
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_available_tools_context(&self) -> String {
+        let tools = match self.available_tools.read() {
+            Ok(tools) => tools,
+            Err(_) => {
+                // Clear poison and retry
+                self.available_tools.clear_poison();
+                self.available_tools.read().unwrap()
+            }
+        };
+
+        if tools.is_empty() {
+            return "No MCP tools currently available.".to_string();
+        }
+
+        let mut context = String::new();
+        context.push_str("Available MCP Tools:\n");
+
+        for (server_id, tool_list) in tools.iter() {
+            context.push_str(&format!("\nServer: {}\n", server_id));
+            for tool in tool_list.iter() {
+                context.push_str(&format!("  - {}: {}\n",
+                    tool.name,
+                    tool.description.as_ref().unwrap_or(&"No description".to_string())
+                ));
+
+                // Add input schema info if available
+                if let Some(schema) = tool.input_schema.as_object() {
+                    if let Some(properties) = schema.get("properties").and_then(|p| p.as_object()) {
+                        context.push_str("    Parameters: ");
+                        let params: Vec<String> = properties.keys().cloned().collect();
+                        context.push_str(&params.join(", "));
+                        context.push_str("\n");
+                    }
+                }
+            }
+        }
+
+        context
+    }
 }
