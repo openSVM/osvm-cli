@@ -1,0 +1,623 @@
+<!-- Themes & Customization Documentation -->
+<div class="page-header">
+    <div class="command-line">
+        <span class="prompt">user@osvm:~$</span>
+        <span class="command typing">cat docs/themes.md</span>
+    </div>
+</div>
+
+<section class="page-intro">
+    <h1>🎨 Themes & Customization</h1>
+    <p class="subtitle">Personalize your OSVM experience with custom themes, colors, and layouts</p>
+
+    <div class="feature-highlights">
+        <div class="highlight-item">
+            <span class="highlight-icon">🎨</span>
+            <span>Custom Colors</span>
+        </div>
+        <div class="highlight-item">
+            <span class="highlight-icon">✨</span>
+            <span>Animations</span>
+        </div>
+        <div class="highlight-item">
+            <span class="highlight-icon">📱</span>
+            <span>Responsive</span>
+        </div>
+        <div class="highlight-item">
+            <span class="highlight-icon">🔧</span>
+            <span>Configurable</span>
+        </div>
+    </div>
+</section>
+
+<!-- Theme Gallery -->
+<section class="theme-gallery-section">
+    <h2><span class="section-marker">[</span>THEME GALLERY<span class="section-marker">]</span></h2>
+
+    <div class="theme-selector">
+        <p>Click on any theme to see it in action:</p>
+        <div class="theme-grid">
+            <div class="theme-card active" data-theme="default" onclick="applyPreviewTheme('default')">
+                <div class="theme-preview default-theme">
+                    <div class="preview-header">Default Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">user@osvm:~$</div>
+                        <div class="preview-command">osvm svm list</div>
+                        <div class="preview-output">✓ sonic [mainnet]</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Default</h3>
+                    <p>Classic terminal aesthetics with balanced contrast</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme default')">Apply Theme</button>
+                </div>
+            </div>
+
+            <div class="theme-card" data-theme="cyberpunk" onclick="applyPreviewTheme('cyberpunk')">
+                <div class="theme-preview cyberpunk-theme">
+                    <div class="preview-header">Cyberpunk Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">neo@matrix:~$</div>
+                        <div class="preview-command">osvm chat</div>
+                        <div class="preview-output">🤖 Neural link established...</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Cyberpunk</h3>
+                    <p>Neon colors with futuristic matrix-style effects</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme cyberpunk')">Apply Theme</button>
+                </div>
+            </div>
+
+            <div class="theme-card" data-theme="minimal" onclick="applyPreviewTheme('minimal')">
+                <div class="theme-preview minimal-theme">
+                    <div class="preview-header">Minimal Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">$</div>
+                        <div class="preview-command">osvm status</div>
+                        <div class="preview-output">ready</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Minimal</h3>
+                    <p>Clean, distraction-free interface for focus</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme minimal')">Apply Theme</button>
+                </div>
+            </div>
+
+            <div class="theme-card" data-theme="retro" onclick="applyPreviewTheme('retro')">
+                <div class="theme-preview retro-theme">
+                    <div class="preview-header">Retro Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">C:\></div>
+                        <div class="preview-command">osvm.exe /help</div>
+                        <div class="preview-output">OSVM v0.8.2 READY</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Retro</h3>
+                    <p>Classic DOS-style terminal with vintage vibes</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme retro')">Apply Theme</button>
+                </div>
+            </div>
+
+            <div class="theme-card" data-theme="ocean" onclick="applyPreviewTheme('ocean')">
+                <div class="theme-preview ocean-theme">
+                    <div class="preview-header">Ocean Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">depth@ocean:~$</div>
+                        <div class="preview-command">osvm nodes list</div>
+                        <div class="preview-output">🌊 validators: 3 active</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Ocean</h3>
+                    <p>Calming blue tones inspired by deep ocean</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme ocean')">Apply Theme</button>
+                </div>
+            </div>
+
+            <div class="theme-card" data-theme="forest" onclick="applyPreviewTheme('forest')">
+                <div class="theme-preview forest-theme">
+                    <div class="preview-header">Forest Theme</div>
+                    <div class="preview-content">
+                        <div class="preview-prompt">root@forest:~$</div>
+                        <div class="preview-command">osvm status</div>
+                        <div class="preview-output">🌲 all systems green</div>
+                    </div>
+                </div>
+                <div class="theme-info">
+                    <h3>Forest</h3>
+                    <p>Natural green tones for a calming experience</p>
+                    <button class="apply-theme-btn" onclick="copyCommand('osvm chat --theme forest')">Apply Theme</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Using Themes -->
+<section class="theme-usage">
+    <h2><span class="section-marker">[</span>USING THEMES<span class="section-marker">]</span></h2>
+
+    <div class="usage-tabs">
+        <button class="tab-btn active" onclick="showThemeTab('apply')">Apply Themes</button>
+        <button class="tab-btn" onclick="showThemeTab('install')">Install Themes</button>
+        <button class="tab-btn" onclick="showThemeTab('configure')">Configure</button>
+    </div>
+
+    <div class="tab-content active" id="theme-apply">
+        <div class="code-block">
+            <div class="code-header">Applying Themes <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># List available themes</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes list')"><span class="prompt">$</span> osvm themes list</span>
+
+<span class="comment"># Apply theme to chat interface</span>
+<span class="copyable-command" onclick="copyCommand('osvm chat --theme cyberpunk')"><span class="prompt">$</span> osvm chat --theme cyberpunk</span>
+
+<span class="comment"># Apply theme to dashboard</span>
+<span class="copyable-command" onclick="copyCommand('osvm svm dashboard --theme minimal')"><span class="prompt">$</span> osvm svm dashboard --theme minimal</span>
+
+<span class="comment"># Set default theme</span>
+<span class="copyable-command" onclick="copyCommand('osvm config set default_theme ocean')"><span class="prompt">$</span> osvm config set default_theme ocean</span>
+
+<span class="comment"># Reset to default theme</span>
+<span class="copyable-command" onclick="copyCommand('osvm config unset default_theme')"><span class="prompt">$</span> osvm config unset default_theme</span></code></pre>
+        </div>
+    </div>
+
+    <div class="tab-content" id="theme-install">
+        <div class="code-block">
+            <div class="code-header">Installing Custom Themes <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># Install theme from local file</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes install ./my-theme.json')"><span class="prompt">$</span> osvm themes install ./my-theme.json</span>
+
+<span class="comment"># Install from GitHub repository</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes install github.com/user/awesome-theme')"><span class="prompt">$</span> osvm themes install github.com/user/awesome-theme</span>
+
+<span class="comment"># Install theme pack</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes install-pack cyberpunk-collection')"><span class="prompt">$</span> osvm themes install-pack cyberpunk-collection</span>
+
+<span class="comment"># Remove installed theme</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes remove custom-theme')"><span class="prompt">$</span> osvm themes remove custom-theme</span></code></pre>
+        </div>
+    </div>
+
+    <div class="tab-content" id="theme-configure">
+        <div class="code-block">
+            <div class="code-header">Theme Configuration <span class="copy-hint">← Click any command to copy</span></div>
+            <pre><code><span class="comment"># Edit theme settings</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes edit cyberpunk')"><span class="prompt">$</span> osvm themes edit cyberpunk</span>
+
+<span class="comment"># Export current theme</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes export my-custom-theme.json')"><span class="prompt">$</span> osvm themes export my-custom-theme.json</span>
+
+<span class="comment"># Preview theme without applying</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes preview ocean')"><span class="prompt">$</span> osvm themes preview ocean</span>
+
+<span class="comment"># Create theme from current settings</span>
+<span class="copyable-command" onclick="copyCommand('osvm themes create my-theme')"><span class="prompt">$</span> osvm themes create my-theme</span></code></pre>
+        </div>
+    </div>
+</section>
+
+<!-- Creating Custom Themes -->
+<section class="theme-creation">
+    <h2><span class="section-marker">[</span>CREATING CUSTOM THEMES<span class="section-marker">]</span></h2>
+
+    <div class="creation-steps">
+        <div class="step-card">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h3>Define Color Palette</h3>
+                <p>Choose your primary, secondary, and accent colors</p>
+            </div>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step-card">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h3>Configure Styles</h3>
+                <p>Set up component styling and layout preferences</p>
+            </div>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step-card">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h3>Add Animations</h3>
+                <p>Define transitions and visual effects</p>
+            </div>
+        </div>
+        <div class="step-arrow">→</div>
+        <div class="step-card">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <h3>Test & Share</h3>
+                <p>Preview your theme and share with the community</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="theme-editor">
+        <h3>Theme Configuration Template</h3>
+        <div class="editor-tabs">
+            <button class="tab-btn active" onclick="showEditorTab('basic')">Basic Setup</button>
+            <button class="tab-btn" onclick="showEditorTab('colors')">Colors</button>
+            <button class="tab-btn" onclick="showEditorTab('styles')">Styles</button>
+            <button class="tab-btn" onclick="showEditorTab('animations')">Animations</button>
+        </div>
+
+        <div class="tab-content active" id="editor-basic">
+            <div class="code-block">
+                <div class="code-header">Basic Theme Information</div>
+                <pre><code>{
+  "name": "my-awesome-theme",
+  "version": "1.0.0",
+  "description": "A beautiful custom theme for OSVM",
+  "author": "Your Name",
+  "license": "MIT",
+  "plugin_type": "Theme",
+
+  "metadata": {
+    "category": "dark",
+    "tags": ["modern", "professional", "blue"],
+    "preview_image": "preview.png",
+    "homepage": "https://github.com/yourusername/osvm-awesome-theme"
+  },
+
+  "compatibility": {
+    "min_osvm_version": "0.8.0",
+    "supported_platforms": ["linux", "macos", "windows"],
+    "supported_interfaces": ["chat", "dashboard", "terminal"]
+  }
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="tab-content" id="editor-colors">
+            <div class="code-block">
+                <div class="code-header">Color Palette Configuration</div>
+                <pre><code>{
+  "colors": {
+    <span class="comment">// Primary colors</span>
+    "primary": "#0066ff",
+    "primary_light": "#3388ff",
+    "primary_dark": "#0044cc",
+
+    <span class="comment">// Secondary colors</span>
+    "secondary": "#00cc66",
+    "secondary_light": "#33dd88",
+    "secondary_dark": "#009944",
+
+    <span class="comment">// Neutral colors</span>
+    "background": "#1a1a1a",
+    "surface": "#2d2d2d",
+    "surface_light": "#404040",
+    "text": "#ffffff",
+    "text_secondary": "#cccccc",
+    "text_muted": "#888888",
+
+    <span class="comment">// Accent colors</span>
+    "accent": "#ff6600",
+    "warning": "#ffcc00",
+    "error": "#ff3333",
+    "success": "#00ff66",
+    "info": "#00ccff",
+
+    <span class="comment">// Semantic colors</span>
+    "border": "#404040",
+    "shadow": "rgba(0, 0, 0, 0.3)",
+    "overlay": "rgba(0, 0, 0, 0.8)"
+  }
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="tab-content" id="editor-styles">
+            <div class="code-block">
+                <div class="code-header">Component Styling</div>
+                <pre><code>{
+  "styles": {
+    "terminal": {
+      "background": "background",
+      "text": "text",
+      "cursor": "primary",
+      "selection": "primary_light"
+    },
+
+    "chat_input": {
+      "background": "surface",
+      "text": "text",
+      "border": "border",
+      "border_width": 1,
+      "border_radius": 4,
+      "padding": "8px 12px"
+    },
+
+    "message_user": {
+      "background": "primary",
+      "text": "white",
+      "prefix": "► ",
+      "border_radius": 12
+    },
+
+    "message_assistant": {
+      "background": "surface",
+      "text": "text",
+      "prefix": "◉ ",
+      "border_radius": 12
+    },
+
+    "commands": {
+      "text": "accent",
+      "background": "transparent",
+      "prefix": "$ "
+    },
+
+    "status_bar": {
+      "background": "surface_light",
+      "text": "text_secondary",
+      "border": "border"
+    },
+
+    "buttons": {
+      "background": "primary",
+      "text": "white",
+      "hover_background": "primary_light",
+      "border_radius": 6
+    }
+  }
+}</code></pre>
+            </div>
+        </div>
+
+        <div class="tab-content" id="editor-animations">
+            <div class="code-block">
+                <div class="code-header">Animation Configuration</div>
+                <pre><code>{
+  "animations": {
+    "typing_indicator": {
+      "type": "dots",
+      "speed": "medium",
+      "color": "primary"
+    },
+
+    "transitions": {
+      "speed": "fast",
+      "easing": "ease-out",
+      "fade_duration": 200,
+      "slide_duration": 300
+    },
+
+    "effects": {
+      "enable_particles": false,
+      "enable_glow": true,
+      "enable_blur": false,
+      "cursor_blink": true
+    },
+
+    "message_animations": {
+      "appear": "slide_up",
+      "duration": 250,
+      "stagger": 50
+    },
+
+    "loading_animations": {
+      "spinner": "dots",
+      "progress_bar": "gradient",
+      "skeleton": "wave"
+    }
+  }
+}</code></pre>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Theme Customization Tools -->
+<section class="customization-tools">
+    <h2><span class="section-marker">[</span>CUSTOMIZATION TOOLS<span class="section-marker">]</span></h2>
+
+    <div class="tools-grid">
+        <div class="tool-card">
+            <div class="tool-icon">🎨</div>
+            <h3>Theme Builder</h3>
+            <p>Visual theme editor with live preview</p>
+            <div class="tool-actions">
+                <button class="tool-btn" onclick="copyCommand('osvm themes builder')">Launch Builder</button>
+                <a href="#" class="tool-link">Web Version →</a>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <div class="tool-icon">🔍</div>
+            <h3>Color Picker</h3>
+            <p>Extract colors from images and generate palettes</p>
+            <div class="tool-actions">
+                <button class="tool-btn" onclick="copyCommand('osvm themes color-picker')">Open Picker</button>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <div class="tool-icon">📐</div>
+            <h3>Theme Validator</h3>
+            <p>Validate theme syntax and accessibility</p>
+            <div class="tool-actions">
+                <button class="tool-btn" onclick="copyCommand('osvm themes validate ./my-theme.json')">Validate</button>
+            </div>
+        </div>
+
+        <div class="tool-card">
+            <div class="tool-icon">📸</div>
+            <h3>Screenshot Generator</h3>
+            <p>Generate preview images for your themes</p>
+            <div class="tool-actions">
+                <button class="tool-btn" onclick="copyCommand('osvm themes screenshot')">Generate</button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Community Themes -->
+<section class="community-themes">
+    <h2><span class="section-marker">[</span>COMMUNITY THEMES<span class="section-marker">]</span></h2>
+
+    <div class="community-notice">
+        <p>Discover and share themes created by the OSVM community:</p>
+    </div>
+
+    <div class="community-grid">
+        <div class="community-theme">
+            <div class="theme-preview-mini dracula-theme">
+                <div class="mini-header">Dracula</div>
+                <div class="mini-content">vampire@castle:~$ osvm status</div>
+            </div>
+            <div class="theme-details">
+                <h4>Dracula Theme</h4>
+                <p>Dark theme with purple accents</p>
+                <div class="theme-stats">
+                    <span>⭐ 4.8</span>
+                    <span>📦 2.1k installs</span>
+                    <span>👤 @vampire-dev</span>
+                </div>
+                <button class="install-btn" onclick="copyCommand('osvm themes install github.com/vampire-dev/dracula-osvm')">Install</button>
+            </div>
+        </div>
+
+        <div class="community-theme">
+            <div class="theme-preview-mini monokai-theme">
+                <div class="mini-header">Monokai</div>
+                <div class="mini-content">dev@machine:~$ osvm chat</div>
+            </div>
+            <div class="theme-details">
+                <h4>Monokai Pro</h4>
+                <p>Professional dark theme with vibrant highlights</p>
+                <div class="theme-stats">
+                    <span>⭐ 4.9</span>
+                    <span>📦 3.2k installs</span>
+                    <span>👤 @monokai-team</span>
+                </div>
+                <button class="install-btn" onclick="copyCommand('osvm themes install github.com/monokai-team/monokai-osvm')">Install</button>
+            </div>
+        </div>
+
+        <div class="community-theme">
+            <div class="theme-preview-mini solarized-theme">
+                <div class="mini-header">Solarized</div>
+                <div class="mini-content">user@solar:~$ osvm svm list</div>
+            </div>
+            <div class="theme-details">
+                <h4>Solarized Dark</h4>
+                <p>Precision colors for machines and people</p>
+                <div class="theme-stats">
+                    <span>⭐ 4.7</span>
+                    <span>📦 1.8k installs</span>
+                    <span>👤 @solarized</span>
+                </div>
+                <button class="install-btn" onclick="copyCommand('osvm themes install github.com/solarized/solarized-osvm')">Install</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="community-actions">
+        <button class="action-btn" onclick="copyCommand('osvm themes browse')">Browse All Themes</button>
+        <button class="action-btn secondary" onclick="copyCommand('osvm themes submit ./my-theme.json')">Submit Your Theme</button>
+    </div>
+</section>
+
+<!-- Advanced Features -->
+<section class="advanced-features">
+    <h2><span class="section-marker">[</span>ADVANCED FEATURES<span class="section-marker">]</span></h2>
+
+    <div class="feature-list">
+        <div class="feature-item">
+            <h3>🌐 Responsive Themes</h3>
+            <p>Themes automatically adapt to different screen sizes and terminal dimensions</p>
+            <div class="feature-example">
+                <code>{"responsive": {"mobile": {"font_size": "small"}, "desktop": {"font_size": "normal"}}}</code>
+            </div>
+        </div>
+
+        <div class="feature-item">
+            <h3>🔄 Dynamic Themes</h3>
+            <p>Themes that change based on system state, time of day, or user activity</p>
+            <div class="feature-example">
+                <code>{"dynamic": {"time_based": true, "system_theme_sync": true}}</code>
+            </div>
+        </div>
+
+        <div class="feature-item">
+            <h3>🎭 Theme Inheritance</h3>
+            <p>Create theme variants by extending existing themes</p>
+            <div class="feature-example">
+                <code>{"extends": "cyberpunk", "overrides": {"colors": {"primary": "#ff00ff"}}}</code>
+            </div>
+        </div>
+
+        <div class="feature-item">
+            <h3>⚡ Performance Optimization</h3>
+            <p>Themes are cached and optimized for fast loading and smooth animations</p>
+            <div class="feature-example">
+                <code>{"performance": {"preload_assets": true, "optimize_animations": true}}</code>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+// Theme-specific JavaScript
+function showThemeTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('#theme-apply, #theme-install, #theme-configure').forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Remove active class from all buttons
+    document.querySelectorAll('.usage-tabs .tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Show selected tab
+    document.getElementById(`theme-${tabName}`).classList.add('active');
+
+    // Add active class to clicked button
+    event.target.classList.add('active');
+}
+
+function showEditorTab(tabName) {
+    // Hide all editor tabs
+    document.querySelectorAll('#editor-basic, #editor-colors, #editor-styles, #editor-animations').forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Remove active from buttons
+    event.target.parentElement.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Show selected tab
+    document.getElementById(`editor-${tabName}`).classList.add('active');
+    event.target.classList.add('active');
+}
+
+function applyPreviewTheme(themeName) {
+    // Remove active class from all theme cards
+    document.querySelectorAll('.theme-card').forEach(card => {
+        card.classList.remove('active');
+    });
+
+    // Add active class to clicked card
+    event.currentTarget.classList.add('active');
+
+    // Update page styles to preview theme
+    document.documentElement.className = `theme-${themeName}`;
+
+    console.log(`🎨 Previewing theme: ${themeName}`);
+}
+
+// Initialize with default theme
+document.addEventListener('DOMContentLoaded', () => {
+    applyPreviewTheme('default');
+});
+</script>

@@ -51,6 +51,12 @@ pub struct AuditResult {
     pub output_files: Vec<String>,
 }
 
+impl Default for AuditService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuditService {
     pub fn new() -> Self {
         Self {
@@ -423,7 +429,7 @@ impl AuditService {
                     let public_dir = std::path::Path::new("public");
                     let public_audit_path = public_dir.join("audit.html");
 
-                    if let Err(e) = std::fs::create_dir_all(&public_dir) {
+                    if let Err(e) = std::fs::create_dir_all(public_dir) {
                         if request.verbose > 0 {
                             println!("⚠️  Could not create public directory: {}", e);
                         }
