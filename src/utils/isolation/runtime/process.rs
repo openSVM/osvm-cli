@@ -209,7 +209,7 @@ mod tests {
             isolation_config: Default::default(),
             runtime_handle: None,
             metadata: {
-                let mut meta = super::super::super::ComponentMetadata::default();
+                let mut meta = crate::utils::isolation::component::ComponentMetadata::default();
                 meta.tags.insert(
                     "command".to_string(),
                     serde_json::to_string(&vec!["sleep", "10"]).unwrap(),

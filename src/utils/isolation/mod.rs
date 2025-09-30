@@ -26,20 +26,30 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
+pub mod autoscaler;
 pub mod certificate;
 pub mod component;
 pub mod config;
+pub mod hotswap;
 pub mod network;
+pub mod orchestrator;
 pub mod policy;
 pub mod runtime;
+pub mod tee;
+pub mod vsock;
 
 // Re-exports for convenience
+pub use autoscaler::{AutoScaler, AutoScalerConfig, ScalingPolicy, ComponentMetrics};
 pub use certificate::{CertificateAuthority, CertificateManager};
 pub use component::{Component, ComponentId, ComponentRegistry, ComponentStatus, ComponentType};
 pub use config::{IsolationConfig, IsolationType, ResourceLimits};
+pub use hotswap::{HotSwapManager, HotSwapConfig, HotSwapResult};
 pub use network::{NetworkManager, ZeroTrustNetwork};
+pub use orchestrator::{Orchestrator, OrchestratorConfig, OrchestratorStats};
 pub use policy::{Policy, PolicyEngine};
 pub use runtime::{Runtime, RuntimeManager};
+pub use tee::{TeeManager, TeeType, TeeConfig, KeyHandle, AttestationReport};
+pub use vsock::{VsockManager, VsockAddr, VsockConnection, Cid, Port};
 
 /// Isolation level for a component
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

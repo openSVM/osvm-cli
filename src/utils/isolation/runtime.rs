@@ -7,9 +7,11 @@ use std::sync::Arc;
 
 pub mod hermit;
 pub mod process;
+pub mod firecracker;
 
 pub use hermit::HermitRuntime;
 pub use process::ProcessRuntime;
+pub use firecracker::FirecrackerRuntime;
 
 /// Runtime abstraction for running components in isolated environments
 #[async_trait]
@@ -55,6 +57,14 @@ impl RuntimeManager {
 
         // Register process runtime (always available)
         manager.register_runtime(Arc::new(ProcessRuntime::new()));
+
+        // Register Firecracker runtime if available
+        let firecracker_config = firecracker::FirecrackerConfig::default();
+        if let Ok(firecracker) = FirecrackerRuntime::new(firecracker_config) {
+            if firecracker.is_available() {
+                manager.register_runtime(Arc::new(firecracker));
+            }
+        }
 
         // Register HermitCore runtime if available
         let hermit_config = hermit::HermitConfig::default();
