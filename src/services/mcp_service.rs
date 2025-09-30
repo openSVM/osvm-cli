@@ -3,9 +3,10 @@ use crate::utils::circuit_breaker::{
 };
 use crate::utils::debug_logger::VerbosityLevel;
 use crate::{debug_error, debug_print, debug_success, debug_warn};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use dirs;
+use log::warn;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -23,6 +24,22 @@ const MCP_JSONRPC_VERSION: &str = "2.0";
 const CLIENT_NAME: &str = "osvm-cli";
 const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
 const MAX_REQUEST_ID: u64 = u64::MAX - 1000; // Leave some buffer for overflow
+
+/// Safely validate and canonicalize a path to prevent directory traversal attacks
+fn safe_path_validation(path: &Path, base_dir: &Path) -> Result<PathBuf> {
+    let canonical_path = path.canonicalize()
+        .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
+
+    let canonical_base = base_dir.canonicalize()
+        .with_context(|| format!("Failed to canonicalize base directory: {}", base_dir.display()))?;
+
+    if !canonical_path.starts_with(&canonical_base) {
+        return Err(anyhow!("Path traversal detected: {} is outside base directory {}",
+                          canonical_path.display(), canonical_base.display()));
+    }
+
+    Ok(canonical_path)
+}
 
 // MCP method names
 const MCP_METHOD_INITIALIZE: &str = "initialize";
@@ -358,7 +375,7 @@ impl McpService {
     /// Load configurations from JSON file
     fn load_from_file(&mut self) -> Result<()> {
         let config_path = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("./")))
             .join("osvm")
             .join("mcp_servers.json");
 
@@ -386,7 +403,7 @@ impl McpService {
     /// Save configurations to JSON file
     pub fn save_config(&self) -> Result<()> {
         let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("./")))
             .join("osvm");
 
         std::fs::create_dir_all(&config_dir)?;
@@ -403,6 +420,126 @@ impl McpService {
         }
 
         Ok(())
+    }
+
+    /// Securely load MCP server configurations from specific environment variables
+    /// SECURITY: Only accesses predefined environment variables, no enumeration
+    fn load_mcp_servers_from_env_secure(&mut self) -> Result<()> {
+        // Define maximum number of MCP servers to prevent resource exhaustion
+        const MAX_MCP_SERVERS: u32 = 20;
+
+        // List of expected MCP server environment variable patterns
+        let expected_env_vars = [
+            "SOLANA_MCP_SERVER_URL",
+            "OSVM_MCP_SERVER_URL",
+            "DEVNET_MCP_SERVER_URL",
+            "MAINNET_MCP_SERVER_URL",
+        ];
+
+        // Load well-known MCP server environment variables
+        for env_var in &expected_env_vars {
+            if let Ok(url) = env::var(env_var) {
+                // Validate URL before use
+                if self.validate_mcp_url(&url)? {
+                    let server_name = env_var.to_lowercase()
+                        .replace("_url", "")
+                        .replace("_", "-");
+
+                    let config = McpServerConfig {
+                        name: server_name.clone(),
+                        url,
+                        transport_type: McpTransportType::Http,
+                        auth: None,
+                        enabled: true,
+                        extra_config: HashMap::new(),
+                        github_url: None,
+                        local_path: None,
+                    };
+
+                    self.servers.insert(server_name.clone(), config);
+
+                    if self.debug_mode {
+                        debug_success!("Loaded {} MCP server from environment", server_name);
+                    }
+                }
+            }
+        }
+
+        // Load numbered MCP servers (MCP_SERVER_1_URL, MCP_SERVER_2_URL, etc.)
+        for i in 1..=MAX_MCP_SERVERS {
+            let env_var = format!("MCP_SERVER_{}_URL", i);
+            if let Ok(url) = env::var(&env_var) {
+                // Validate URL before use
+                if self.validate_mcp_url(&url)? {
+                    let server_name = format!("mcp-server-{}", i);
+
+                    let config = McpServerConfig {
+                        name: server_name.clone(),
+                        url,
+                        transport_type: McpTransportType::Http,
+                        auth: None,
+                        enabled: true,
+                        extra_config: HashMap::new(),
+                        github_url: None,
+                        local_path: None,
+                    };
+
+                    self.servers.insert(server_name.clone(), config);
+
+                    if self.debug_mode {
+                        debug_success!("Loaded {} MCP server from environment", server_name);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate MCP server URL for security
+    fn validate_mcp_url(&self, url: &str) -> Result<bool> {
+        // Parse URL to validate format
+        let parsed_url = url::Url::parse(url)
+            .context("Invalid MCP server URL format")?;
+
+        // Only allow HTTP and HTTPS
+        if !matches!(parsed_url.scheme(), "http" | "https") {
+            warn!("Invalid MCP server URL scheme: {}", parsed_url.scheme());
+            return Ok(false);
+        }
+
+        // Block access to internal/private networks
+        if let Some(host) = parsed_url.host() {
+            match host {
+                url::Host::Ipv4(ip) => {
+                    if ip.is_loopback() || ip.is_private() || ip.is_link_local() {
+                        warn!("MCP server URL points to internal network: {}", ip);
+                        return Ok(false);
+                    }
+                }
+                url::Host::Ipv6(ip) => {
+                    if ip.is_loopback() {
+                        warn!("MCP server URL points to loopback: {}", ip);
+                        return Ok(false);
+                    }
+                }
+                url::Host::Domain(domain) => {
+                    let domain_lower = domain.to_lowercase();
+                    if matches!(domain_lower.as_str(), "localhost" | "127.0.0.1" | "::1") {
+                        warn!("MCP server URL points to localhost: {}", domain);
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+
+        // Validate URL length to prevent buffer overflows
+        if url.len() > 2048 {
+            warn!("MCP server URL too long: {} characters", url.len());
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Load MCP server configurations from environment variables
@@ -428,33 +565,8 @@ impl McpService {
         }
 
         // Check for custom MCP servers
-        for (key, value) in env::vars() {
-            if key.starts_with("MCP_SERVER_") && key.ends_with("_URL") {
-                let server_name = key
-                    .strip_prefix("MCP_SERVER_")
-                    .unwrap()
-                    .strip_suffix("_URL")
-                    .unwrap()
-                    .to_lowercase();
-
-                let config = McpServerConfig {
-                    name: server_name.clone(),
-                    url: value,
-                    transport_type: McpTransportType::Http,
-                    auth: None,
-                    enabled: true,
-                    extra_config: HashMap::new(),
-                    github_url: None,
-                    local_path: None,
-                };
-
-                self.servers.insert(server_name.clone(), config);
-
-                if self.debug_mode {
-                    debug_success!("Loaded {} MCP server from environment", server_name);
-                }
-            }
-        }
+        // SECURITY FIX: Use specific environment variable access instead of env::vars()
+        self.load_mcp_servers_from_env_secure()?;
 
         Ok(())
     }
@@ -519,7 +631,8 @@ impl McpService {
                 "1",               // Shallow clone for security and performance
                 "--single-branch", // Only clone default branch
                 &github_url,
-                local_path.to_str().unwrap(),
+                local_path.to_str()
+                    .ok_or_else(|| anyhow!("Invalid path contains non-UTF8 characters: {}", local_path.display()))?,
             ])
             .output()
             .context("Failed to execute git clone command")?;
@@ -574,7 +687,9 @@ impl McpService {
                 ));
             }
 
-            binary_path.to_str().unwrap().to_string()
+            binary_path.to_str()
+                .ok_or_else(|| anyhow!("Binary path contains non-UTF8 characters: {}", binary_path.display()))?
+                .to_string()
         } else if package_json_path.exists() {
             // Node.js project - install dependencies with npm
             if self.debug_mode {
@@ -632,7 +747,8 @@ impl McpService {
             }
 
             // For Node.js MCP servers, we'll use a wrapper command that calls node
-            format!("node {}", script_path.to_str().unwrap())
+            format!("node {}", script_path.to_str()
+                .ok_or_else(|| anyhow!("Script path contains non-UTF8 characters: {}", script_path.display()))?)
         } else {
             return Err(anyhow::anyhow!(
                 "No Cargo.toml or package.json found in the cloned repository. \
@@ -649,7 +765,9 @@ impl McpService {
             enabled: true,
             extra_config: HashMap::new(),
             github_url: Some(github_url),
-            local_path: Some(local_path.to_str().unwrap().to_string()),
+            local_path: Some(local_path.to_str()
+                .ok_or_else(|| anyhow!("Local path contains non-UTF8 characters: {}", local_path.display()))?
+                .to_string()),
         };
 
         self.servers.insert(server_id, config);

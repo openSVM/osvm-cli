@@ -28,6 +28,22 @@ pub mod examples;
 pub mod keybindings;
 /// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
+/// Secure logging utilities to prevent information disclosure
+pub mod secure_logger;
+/// Network security utilities for safe network operations
+pub mod network_security;
+/// Cryptographic security utilities for key validation and secure storage
+pub mod crypto_security;
+/// Error boundary utilities for secure error handling and recovery
+pub mod error_boundary;
+/// Secure system operations without privilege escalation
+pub mod secure_system;
+/// Real-time security monitoring and threat detection
+pub mod security_monitor;
+/// Secure deployment architectures for maximum isolation
+pub mod secure_deployment;
+/// Automated security testing framework for continuous validation
+pub mod security_testing;
 /// Plugin system for extending functionality
 pub mod plugins;
 /// Advanced theme customization system

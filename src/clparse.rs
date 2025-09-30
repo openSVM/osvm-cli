@@ -214,7 +214,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("ledger-path")
                                 .long("ledger-path")
                                 .value_name("PATH")
-                                .default_value("/tmp/test-ledger")
+                                .default_value("./test-ledger")
                                 .help("Ledger data directory path")
                         )
                         .arg(

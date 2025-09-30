@@ -1,7 +1,7 @@
 //! Main application state for advanced chat UI
 
 use anyhow::{anyhow, Context, Result};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
@@ -94,27 +94,48 @@ impl AdvancedChatState {
     }
 
     pub fn get_active_session(&self) -> Option<ChatSession> {
-        let active_id = self.active_session_id.read().ok()?;
+        // Use a timeout to prevent deadlocks
+        let active_id = match self.active_session_id.try_read() {
+            Ok(lock) => lock,
+            Err(_) => {
+                warn!("Failed to acquire read lock for active_session_id");
+                return None;
+            }
+        };
+
         let session_id = (*active_id)?;
-        let sessions = self.sessions.read().ok()?;
+        drop(active_id); // Release lock early
+
+        let sessions = match self.sessions.try_read() {
+            Ok(lock) => lock,
+            Err(_) => {
+                warn!("Failed to acquire read lock for sessions");
+                return None;
+            }
+        };
+
         sessions.get(&session_id).cloned()
     }
 
     pub fn add_message_to_session(&self, session_id: Uuid, message: ChatMessage) -> Result<()> {
+        // Use try_write to prevent deadlocks
         let mut sessions = self
             .sessions
-            .write()
-            .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
+            .try_write()
+            .map_err(|_| anyhow!("Failed to acquire write lock for sessions (possible deadlock)"))?;
 
         if let Some(session) = sessions.get_mut(&session_id) {
             session.add_message(message);
+        } else {
+            warn!("Session {} not found when adding message", session_id);
         }
 
         Ok(())
     }
 
     pub fn get_session_by_id(&self, session_id: Uuid) -> Option<ChatSession> {
-        self.sessions.read().ok()?.get(&session_id).cloned()
+        let sessions = self.sessions.try_read().ok()?;
+        sessions.get(&session_id).cloned()
     }
 
     pub fn set_agent_state(&self, session_id: Uuid, state: AgentState) {
@@ -134,16 +155,26 @@ impl AdvancedChatState {
     }
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
+        // Use try_write to prevent deadlocks
         let mut sessions = self
             .sessions
-            .write()
-            .map_err(|e| anyhow::anyhow!("Failed to write sessions: {}", e))?;
+            .try_write()
+            .map_err(|_| anyhow::anyhow!("Failed to acquire write lock for sessions (possible deadlock)"))?;
 
+        // Atomic operation: check and remove in one step
         if let Some(session) = sessions.get_mut(&session_id) {
-            // Remove the last message if it's a Processing type
-            if let Some(ChatMessage::Processing { .. }) = session.messages.last() {
-                session.messages.pop();
+            // Only pop if the last message is actually Processing type
+            match session.messages.last() {
+                Some(ChatMessage::Processing { .. }) => {
+                    session.messages.pop();
+                    debug!("Removed processing message from session {}", session_id);
+                }
+                _ => {
+                    debug!("No processing message to remove from session {}", session_id);
+                }
             }
+        } else {
+            warn!("Session {} not found when removing processing message", session_id);
         }
 
         Ok(())

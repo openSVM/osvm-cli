@@ -180,10 +180,9 @@ impl AiService {
             Ok(_) => {
                 self.circuit_breaker.on_success_endpoint(&endpoint);
                 if debug_mode {
-                    println!(
-                        "🔍 AI Response received ({} chars)",
-                        result.as_ref().unwrap().len()
-                    );
+                    if let Ok(ref response) = result {
+                        println!("🔍 AI Response received ({} chars)", response.len());
+                    }
                 }
             }
             Err(e) => {
@@ -345,7 +344,8 @@ impl AiService {
     }
 
     async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
-        let api_key = self.api_key.as_ref().unwrap();
+        let api_key = self.api_key.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("OpenAI API key not available. Please set OPENAI_KEY environment variable."))?;
 
         let request_body = OpenAiRequest {
             model: "gpt-3.5-turbo".to_string(),
