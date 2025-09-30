@@ -202,7 +202,8 @@ mod tests {
             network: "localnet".to_string(),
             port: 8899,
             faucet_port: Some(9900),
-            ledger_path: "/tmp/test-ledger".to_string(),
+            ledger_path: std::env::temp_dir().join("test-ledger")
+                .to_str().unwrap_or("./test-ledger").to_string(),
             reset: true,
             background: false,
         };

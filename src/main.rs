@@ -11,6 +11,39 @@ use {
     std::{process::exit, str::FromStr},
 };
 
+/// Sanitize user input to prevent command injection and ensure safe processing
+fn sanitize_user_input(input: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Remove potentially dangerous characters and sequences
+    let sanitized = input
+        .chars()
+        .filter(|c| {
+            // Allow alphanumeric, spaces, basic punctuation, but block command injection chars
+            c.is_alphanumeric()
+                || matches!(*c, ' ' | '.' | ',' | '?' | '!' | ':' | ';' | '\'' | '"' | '-' | '_' | '(' | ')' | '[' | ']' | '{' | '}')
+        })
+        .collect::<String>();
+
+    // Remove potentially dangerous sequences
+    let sanitized = sanitized
+        .replace("&&", " and ")
+        .replace("||", " or ")
+        .replace("$(", " ")
+        .replace("`", " ")
+        .replace("${", " ");
+
+    // Limit length to prevent resource exhaustion
+    if sanitized.len() > 2048 {
+        return Err("Input too long (max 2048 characters)".into());
+    }
+
+    // Ensure non-empty after sanitization
+    if sanitized.trim().is_empty() {
+        return Err("Input cannot be empty after sanitization".into());
+    }
+
+    Ok(sanitized.trim().to_string())
+}
+
 // Helper function to handle the type mismatch between clap v2 and v4
 // This function remains as it's used by command handlers directly with `sub_matches`
 fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<Pubkey> {
@@ -87,7 +120,7 @@ async fn handle_ai_query(
         }
     }
 
-    let query = query_parts.join(" ");
+    let query = sanitize_user_input(&query_parts.join(" "))?;
 
     // Get debug flag from global args
     let debug_mode = app_matches.get_flag("debug");
@@ -1409,10 +1442,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .get_one::<String>("faucet-port")
                         .map(|s| s.as_str())
                         .unwrap_or("9900");
+                    let default_ledger = std::env::temp_dir().join("test-ledger");
                     let ledger_path = rpc_sub_matches
                         .get_one::<String>("ledger-path")
                         .map(|s| s.as_str())
-                        .unwrap_or("/tmp/test-ledger");
+                        .unwrap_or_else(|| default_ledger.to_str().unwrap_or("./test-ledger"));
                     let reset = rpc_sub_matches.get_flag("reset");
                     let background = rpc_sub_matches.get_flag("background");
                     let stop = rpc_sub_matches.get_flag("stop");

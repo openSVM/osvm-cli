@@ -367,22 +367,23 @@ impl RollbackValidator {
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         // Create a simple test program
         let test_program = r#"fn main() { println!("test"); }"#;
-        let temp_file = "/tmp/osvm_rust_test.rs";
+        let temp_file = std::env::temp_dir().join("osvm_rust_test.rs");
+        let temp_binary = std::env::temp_dir().join("osvm_rust_test");
 
         // Write test program
-        tokio::fs::write(temp_file, test_program).await?;
+        tokio::fs::write(&temp_file, test_program).await?;
 
         // Try to compile it
         let output = tokio::process::Command::new("rustc")
-            .arg(temp_file)
+            .arg(&temp_file)
             .arg("-o")
-            .arg("/tmp/osvm_rust_test")
+            .arg(&temp_binary)
             .output()
             .await?;
 
         // Clean up
-        let _ = tokio::fs::remove_file(temp_file).await;
-        let _ = tokio::fs::remove_file("/tmp/osvm_rust_test").await;
+        let _ = tokio::fs::remove_file(&temp_file).await;
+        let _ = tokio::fs::remove_file(&temp_binary).await;
 
         Ok(output.status.success())
     }

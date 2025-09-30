@@ -3,7 +3,7 @@
 //! This module provides comprehensive security audit functionality for OSVM CLI,
 //! including vulnerability analysis, report generation, and Typst PDF export.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,42 @@ use crate::utils::audit_templates::{EnhancedAIErrorHandler, TemplateReportGenera
 use crate::utils::diagnostics::{
     DiagnosticCoordinator, DiagnosticResults, IssueCategory, IssueSeverity,
 };
+
+/// RAII wrapper for temporary directories that ensures cleanup
+pub struct TempDir {
+    path: std::path::PathBuf,
+    cleanup_on_drop: bool,
+}
+
+impl TempDir {
+    pub fn new() -> Result<Self> {
+        let path = std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
+        std::fs::create_dir_all(&path)?;
+        Ok(Self {
+            path,
+            cleanup_on_drop: true,
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn into_path(mut self) -> std::path::PathBuf {
+        self.cleanup_on_drop = false;
+        self.path.clone()
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        if self.cleanup_on_drop && self.path.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&self.path) {
+                eprintln!("Failed to cleanup temporary directory {}: {}", self.path.display(), e);
+            }
+        }
+    }
+}
 use crate::utils::git_manager::GitRepositoryManager;
 
 /// Helper function to safely create regex patterns in the audit system
@@ -7249,10 +7285,9 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
     /// Clone repository to temporary directory with branch fallback
     fn clone_repository(&self, repo_url: &str, branch: &str) -> Result<std::path::PathBuf> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
+        let temp_dir = TempDir::new()?;
 
-        println!("📥 Cloning repository to: {}", temp_dir.display());
+        println!("📥 Cloning repository to: {}", temp_dir.path().display());
 
         // Try to clone with the specified branch first
         let branches_to_try = if branch == "main" {
@@ -7276,7 +7311,8 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                     branch_name,
                     "--single-branch",
                     repo_url,
-                    temp_dir.to_str().unwrap(),
+                    temp_dir.path().to_str()
+                        .ok_or_else(|| anyhow!("Invalid temp directory path"))?,
                 ],
                 Some(&std::env::temp_dir()),
                 Duration::from_secs(180), // 3 minute timeout per attempt
@@ -7284,13 +7320,13 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
 
             if output.status.success() {
                 // Verify the repository was cloned successfully
-                if temp_dir.exists() {
+                if temp_dir.path().exists() {
                     println!("✅ Successfully cloned with branch: {}", branch_name);
-                    return Ok(temp_dir);
+                    return Ok(temp_dir.into_path()); // Transfer ownership to caller
                 } else {
                     last_error = format!(
                         "Repository clone directory does not exist: {}",
-                        temp_dir.display()
+                        temp_dir.path().display()
                     );
                     break;
                 }
@@ -7301,10 +7337,8 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                     branch_name, last_error
                 );
 
-                // Clean up any partial clone attempt
-                if temp_dir.exists() {
-                    let _ = std::fs::remove_dir_all(&temp_dir);
-                }
+                // TempDir will automatically clean up on drop
+                // No manual cleanup needed
             }
         }
 
