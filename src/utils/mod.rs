@@ -48,6 +48,8 @@ pub mod security_testing;
 pub mod plugins;
 /// Advanced theme customization system
 pub mod themes;
+/// Isolation runtime support for unikernels and microVMs
+pub mod isolation;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions
