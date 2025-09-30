@@ -81,3 +81,4 @@ packaging/archlinux/.SRCINFO
 packaging/termux/osvm_*
 packaging/debian/osvm-*
 packaging/debian/debian-packages/
+osvm_chat_export_*.json
