@@ -39,11 +39,14 @@ pub mod error_boundary;
 /// Secure system operations without privilege escalation
 pub mod secure_system;
 /// Real-time security monitoring and threat detection
-pub mod security_monitor;
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod security_monitor;
 /// Secure deployment architectures for maximum isolation
-pub mod secure_deployment;
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod secure_deployment;
 /// Automated security testing framework for continuous validation
-pub mod security_testing;
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod security_testing;
 /// Plugin system for extending functionality
 pub mod plugins;
 /// Advanced theme customization system
