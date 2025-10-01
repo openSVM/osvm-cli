@@ -97,6 +97,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "audit"
             | "mcp"
             | "mount"
+            | "snapshot"
             | "chat"
             | "agent"
             | "plan"
@@ -2235,6 +2236,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 _ => {
                     eprintln!("Unknown mount subcommand: {}", mount_sub_command);
+                    exit(1);
+                }
+            }
+        }
+        "snapshot" => {
+            // Handle snapshot analysis and management commands
+            match crate::commands::snapshot::execute_snapshot_command(sub_matches).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Snapshot command failed: {}", e);
                     exit(1);
                 }
             }
