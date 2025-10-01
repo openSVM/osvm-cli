@@ -129,13 +129,18 @@ impl CertificateAuthority {
     /// Create with default configuration
     pub fn with_defaults() -> Result<Self> {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-        let ca_url = std::env::var("STEP_CA_URL")
-            .unwrap_or_else(|_| "https://localhost:8443".to_string());
+        let ca_url =
+            std::env::var("STEP_CA_URL").unwrap_or_else(|_| "https://localhost:8443".to_string());
         let ca_root_cert = PathBuf::from(format!("{}/.step/certs/root_ca.crt", home));
-        let provisioner = std::env::var("STEP_CA_PROVISIONER")
-            .unwrap_or_else(|_| "osvm-provisioner".to_string());
+        let provisioner =
+            std::env::var("STEP_CA_PROVISIONER").unwrap_or_else(|_| "osvm-provisioner".to_string());
 
-        Self::new(ca_url, ca_root_cert, provisioner, CertificateAuthorityConfig::default())
+        Self::new(
+            ca_url,
+            ca_root_cert,
+            provisioner,
+            CertificateAuthorityConfig::default(),
+        )
     }
 
     /// Set provisioner password
@@ -177,15 +182,16 @@ impl CertificateAuthority {
 
         // Add password if configured
         if let Some(password) = &self.provisioner_password {
-            cmd.arg("--provisioner-password-file")
-                .arg("-"); // Read from stdin
+            cmd.arg("--provisioner-password-file").arg("-"); // Read from stdin
             cmd.env("STEP_CA_PASSWORD", password);
         } else {
             cmd.arg("--force"); // Non-interactive
         }
 
         // Execute command
-        let output = cmd.output().context("Failed to execute step ca certificate")?;
+        let output = cmd
+            .output()
+            .context("Failed to execute step ca certificate")?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -193,8 +199,8 @@ impl CertificateAuthority {
         }
 
         // Read the generated certificate
-        let cert_pem = fs::read_to_string(&cert_path)
-            .context("Failed to read generated certificate")?;
+        let cert_pem =
+            fs::read_to_string(&cert_path).context("Failed to read generated certificate")?;
 
         // Parse certificate to extract details
         let cert = self.parse_certificate(&cert_pem)?;
@@ -278,11 +284,7 @@ impl CertificateAuthority {
     }
 
     /// Initialize step-ca (for first-time setup)
-    pub fn initialize_ca(
-        name: &str,
-        dns_names: Vec<String>,
-        address: &str,
-    ) -> Result<()> {
+    pub fn initialize_ca(name: &str, dns_names: Vec<String>, address: &str) -> Result<()> {
         log::info!("Initializing step-ca: {}", name);
 
         let mut cmd = Command::new("step");
@@ -355,12 +357,12 @@ impl CertificateManager {
             return Err(IsolationError::CertificateError(format!(
                 "Certificate not found at {:?}",
                 self.cert_path
-            )).into());
+            ))
+            .into());
         }
 
         // Read PEM file
-        let pem = fs::read_to_string(&self.cert_path)
-            .context("Failed to read certificate file")?;
+        let pem = fs::read_to_string(&self.cert_path).context("Failed to read certificate file")?;
 
         // Parse certificate
         let cert = self.parse_certificate_pem(&pem)?;
@@ -405,7 +407,9 @@ impl CertificateManager {
             return Ok(false);
         }
 
-        let ca = self.ca.as_ref()
+        let ca = self
+            .ca
+            .as_ref()
             .ok_or_else(|| anyhow!("No CA configured for renewal"))?;
 
         log::info!("Renewing certificate for {}", identity);
@@ -425,8 +429,7 @@ impl CertificateManager {
         log::debug!("Saving certificate to {:?}", self.cert_path);
 
         // Write PEM to file
-        fs::write(&self.cert_path, &cert.pem)
-            .context("Failed to write certificate file")?;
+        fs::write(&self.cert_path, &cert.pem).context("Failed to write certificate file")?;
 
         // Set appropriate permissions (readable only by owner)
         #[cfg(unix)]
@@ -448,11 +451,11 @@ impl CertificateManager {
             return Err(IsolationError::CertificateError(format!(
                 "Private key not found at {:?}",
                 self.key_path
-            )).into());
+            ))
+            .into());
         }
 
-        fs::read(&self.key_path)
-            .context("Failed to read private key file")
+        fs::read(&self.key_path).context("Failed to read private key file")
     }
 
     /// Get certificate paths

@@ -63,6 +63,82 @@ pub struct AiService {
 }
 
 impl AiService {
+    /// Get the templates directory path
+    fn get_templates_dir() -> String {
+        if let Ok(home) = env::var("HOME") {
+            format!("{}/.config/osvm/templates", home)
+        } else {
+            // Fallback to current directory if HOME not set
+            "./templates/ai_prompts".to_string()
+        }
+    }
+
+    /// Ensure default templates exist in user config directory
+    fn ensure_default_templates(templates_dir: &str) -> Result<()> {
+        use std::fs;
+        use std::path::Path;
+
+        let templates_path = Path::new(templates_dir);
+
+        // Create directory if it doesn't exist
+        if !templates_path.exists() {
+            fs::create_dir_all(templates_path)?;
+        }
+
+        // Default templates to copy
+        let default_templates = [
+            (
+                "fix_suggestion_general.yaml",
+                include_str!("../../templates/ai_prompts/fix_suggestion_general.yaml"),
+            ),
+            (
+                "deeplogic_economic_exploit.yaml",
+                include_str!("../../templates/ai_prompts/deeplogic_economic_exploit.yaml"),
+            ),
+        ];
+
+        // CRITICAL SECURITY FIX: Atomic create-if-not-exists to prevent TOCTOU attacks
+        use std::io::Write;
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
+
+        for (filename, content) in &default_templates {
+            let target_path = templates_path.join(filename);
+
+            // Atomic create-if-not-exists with O_EXCL (prevents symlink attacks)
+            let file_result = {
+                let mut opts = std::fs::OpenOptions::new();
+                opts.write(true).create_new(true); // Atomically fails if file exists
+
+                #[cfg(unix)]
+                opts.mode(0o644); // Secure permissions: owner rw, group/other r
+
+                opts.open(&target_path)
+            };
+
+            match file_result {
+                Ok(mut file) => {
+                    file.write_all(content.as_bytes())?;
+                    file.sync_all()?; // Force to disk
+                    log::info!("✅ Copied default template: {}", filename);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // File exists, skip silently (user may have customized it)
+                    continue;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to create template {}: {}",
+                        filename,
+                        e
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn new() -> Self {
         Self::new_with_debug(true)
     }
@@ -126,12 +202,25 @@ impl AiService {
         let mut circuit_breaker = GranularCircuitBreaker::new();
         let mut template_manager = PromptTemplateManager::new();
 
-        // Initialize template manager
-        if let Err(e) =
-            template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode)
+        // Initialize template manager from user config directory
+        let templates_dir = Self::get_templates_dir();
+
+        // Ensure templates directory exists and copy defaults if needed
+        if let Err(e) = Self::ensure_default_templates(&templates_dir) {
+            if debug_mode {
+                debug_warn!("Failed to setup template directory: {}", e);
+            }
+        }
+
+        // Load templates from user config directory
+        if let Err(e) = template_manager.load_from_directory_with_debug(&templates_dir, debug_mode)
         {
             if debug_mode {
-                debug_warn!("Failed to load AI prompt templates: {}", e);
+                debug_warn!(
+                    "Failed to load AI prompt templates from {}: {}",
+                    templates_dir,
+                    e
+                );
             }
         }
 
@@ -344,8 +433,11 @@ impl AiService {
     }
 
     async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
-        let api_key = self.api_key.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("OpenAI API key not available. Please set OPENAI_KEY environment variable."))?;
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "OpenAI API key not available. Please set OPENAI_KEY environment variable."
+            )
+        })?;
 
         let request_body = OpenAiRequest {
             model: "gpt-3.5-turbo".to_string(),

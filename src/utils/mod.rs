@@ -20,24 +20,22 @@ pub mod agent_chat_v2;
 pub mod agent_cli;
 /// Color formatting utilities for terminal output
 pub mod color;
-/// Dashboard utilities for interactive SVM monitoring
-pub mod dashboard;
-/// Example command utilities for displaying usage examples
-pub mod examples;
-/// Custom keybinding system for agent interfaces
-pub mod keybindings;
-/// Node dashboard utilities for interactive node monitoring
-pub mod nodes_dashboard;
-/// Secure logging utilities to prevent information disclosure
-pub mod secure_logger;
-/// Network security utilities for safe network operations
-pub mod network_security;
 /// Cryptographic security utilities for key validation and secure storage
 pub mod crypto_security;
+/// Dashboard utilities for interactive SVM monitoring
+pub mod dashboard;
 /// Error boundary utilities for secure error handling and recovery
 pub mod error_boundary;
-/// Secure system operations without privilege escalation
-pub mod secure_system;
+/// Example command utilities for displaying usage examples
+pub mod examples;
+/// Isolation runtime support for unikernels and microVMs
+pub mod isolation;
+/// Custom keybinding system for agent interfaces
+pub mod keybindings;
+/// Network security utilities for safe network operations
+pub mod network_security;
+/// Node dashboard utilities for interactive node monitoring
+pub mod nodes_dashboard;
 /// Real-time security monitoring and threat detection
 // FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
 // pub mod security_monitor;
@@ -47,12 +45,16 @@ pub mod secure_system;
 /// Automated security testing framework for continuous validation
 // FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
 // pub mod security_testing;
+/// OSVM command planner for AI-powered command execution
+pub mod osvm_command_planner;
 /// Plugin system for extending functionality
 pub mod plugins;
+/// Secure logging utilities to prevent information disclosure
+pub mod secure_logger;
+/// Secure system operations without privilege escalation
+pub mod secure_system;
 /// Advanced theme customization system
 pub mod themes;
-/// Isolation runtime support for unikernels and microVMs
-pub mod isolation;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions

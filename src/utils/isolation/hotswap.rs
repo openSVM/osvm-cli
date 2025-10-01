@@ -57,8 +57,8 @@
 //! - **Security Patches**: Apply critical patches with zero interruption
 //! - **Configuration Changes**: Update settings without restart
 
-use super::{Component, ComponentId, ComponentRegistry, ComponentStatus};
 use super::runtime::{Runtime, RuntimeManager};
+use super::{Component, ComponentId, ComponentRegistry, ComponentStatus};
 use anyhow::{anyhow, Context, Result};
 use std::sync::Arc;
 use std::time::Duration;
@@ -173,11 +173,10 @@ impl HotSwapManager {
 
     /// Verify old component is ready for hot-swap
     async fn verify_old_component(&self, component_id: ComponentId) -> Result<Component> {
-        let component = self.registry.get(component_id).await
-            .context(format!(
-                "Old component {} not found. Ensure component is registered before hot-swap",
-                component_id
-            ))?;
+        let component = self.registry.get(component_id).await.context(format!(
+            "Old component {} not found. Ensure component is registered before hot-swap",
+            component_id
+        ))?;
 
         if !matches!(component.status, ComponentStatus::Running) {
             return Err(anyhow!(
@@ -199,10 +198,14 @@ impl HotSwapManager {
     ) -> Result<Component> {
         log::info!("Phase 1: Starting new component {}", new_component.id);
 
-        runtime.start_component(&mut new_component).await
+        runtime
+            .start_component(&mut new_component)
+            .await
             .context("Failed to start new component")?;
 
-        self.registry.register(new_component.clone()).await
+        self.registry
+            .register(new_component.clone())
+            .await
             .context("Failed to register new component")?;
 
         Ok(new_component)
@@ -218,10 +221,11 @@ impl HotSwapManager {
 
         timeout(
             self.config.health_check_timeout,
-            self.health_check_loop(runtime, component_id)
-        ).await
-            .context("Health check timeout")?
-            .context("Health check failed")?;
+            self.health_check_loop(runtime, component_id),
+        )
+        .await
+        .context("Health check timeout")?
+        .context("Health check failed")?;
 
         log::info!("Health checks passed");
         Ok(())
@@ -261,7 +265,9 @@ impl HotSwapManager {
     ) -> Result<()> {
         log::info!("Phase 5: Stopping old component {}", component_id);
 
-        runtime.stop_component(component_id).await
+        runtime
+            .stop_component(component_id)
+            .await
             .context(format!("Failed to stop old component {}", component_id))?;
 
         Ok(())
@@ -291,7 +297,9 @@ impl HotSwapManager {
         let _old_component = self.verify_old_component(old_component_id).await?;
 
         // Get runtime and component ID before moving
-        let runtime = self.runtime_manager.get_runtime(&new_component.isolation_config)?;
+        let runtime = self
+            .runtime_manager
+            .get_runtime(&new_component.isolation_config)?;
         let new_component_id = new_component.id;
 
         // Start new component
@@ -310,12 +318,14 @@ impl HotSwapManager {
         // Perform health checks
         if let Err(e) = self.perform_health_checks(&runtime, new_component.id).await {
             log::error!("Health checks failed: {}", e);
-            return self.rollback(
-                old_component_id,
-                new_component.id,
-                &runtime,
-                format!("Health check failed: {}", e)
-            ).await;
+            return self
+                .rollback(
+                    old_component_id,
+                    new_component.id,
+                    &runtime,
+                    format!("Health check failed: {}", e),
+                )
+                .await;
         }
 
         // Shift traffic to new component
@@ -332,10 +342,7 @@ impl HotSwapManager {
         // Success! Calculate duration
         let duration = start_time.elapsed();
 
-        log::info!(
-            "Hot-swap completed successfully in {:?}",
-            duration
-        );
+        log::info!("Hot-swap completed successfully in {:?}", duration);
 
         Ok(HotSwapResult::Success {
             old_component_id,
@@ -351,7 +358,11 @@ impl HotSwapManager {
         component_id: ComponentId,
     ) -> Result<()> {
         for attempt in 1..=self.config.max_health_checks {
-            log::debug!("Health check attempt {}/{}", attempt, self.config.max_health_checks);
+            log::debug!(
+                "Health check attempt {}/{}",
+                attempt,
+                self.config.max_health_checks
+            );
 
             // Check component status
             let status = runtime.get_status(component_id).await?;
@@ -414,7 +425,10 @@ impl HotSwapManager {
         // Verify old component is still healthy
         let old_status = runtime.get_status(old_component_id).await?;
         if !matches!(old_status, ComponentStatus::Running) {
-            log::error!("Old component is no longer running! Status: {:?}", old_status);
+            log::error!(
+                "Old component is no longer running! Status: {:?}",
+                old_status
+            );
             return Ok(HotSwapResult::Failed {
                 old_component_id,
                 new_component_id,
@@ -444,9 +458,12 @@ impl HotSwapManager {
         &self,
         old_component_id: ComponentId,
         new_component: Component,
-        traffic_percentages: Vec<u8>,  // e.g., [1, 5, 10, 25, 50, 100]
+        traffic_percentages: Vec<u8>, // e.g., [1, 5, 10, 25, 50, 100]
     ) -> Result<HotSwapResult> {
-        log::info!("Starting canary deployment with percentages: {:?}", traffic_percentages);
+        log::info!(
+            "Starting canary deployment with percentages: {:?}",
+            traffic_percentages
+        );
 
         // TODO: Implement canary deployment
         // This would integrate with load balancer / service mesh to gradually
@@ -459,8 +476,8 @@ impl HotSwapManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::isolation::config::{IsolationConfig, IsolationType};
     use crate::utils::isolation::component::ComponentType;
+    use crate::utils::isolation::config::{IsolationConfig, IsolationType};
 
     #[test]
     fn test_hotswap_config_default() {

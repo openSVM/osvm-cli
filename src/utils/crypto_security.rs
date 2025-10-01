@@ -3,12 +3,12 @@
 //! This module provides utilities for validating cryptographic keys, secure
 //! key storage, and cryptographic operations with proper security practices.
 
-use std::path::Path;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use anyhow::{anyhow, Context, Result};
 use solana_sdk::signature::{Keypair, Signature};
 use solana_sdk::signer::Signer;
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 
 /// Minimum entropy requirements for key generation
 const MIN_ENTROPY_BITS: usize = 256;
@@ -49,7 +49,10 @@ impl KeyValidator {
                         path.display()
                     ));
                 } else {
-                    eprintln!("⚠️  Warning: Keypair file has unsafe permissions: {}", path.display());
+                    eprintln!(
+                        "⚠️  Warning: Keypair file has unsafe permissions: {}",
+                        path.display()
+                    );
                 }
             }
         }
@@ -71,7 +74,10 @@ impl KeyValidator {
 
         // Validate key length
         if key_data.len() != 64 {
-            return Err(anyhow!("Invalid keypair length: expected 64 bytes, got {}", key_data.len()));
+            return Err(anyhow!(
+                "Invalid keypair length: expected 64 bytes, got {}",
+                key_data.len()
+            ));
         }
 
         // Try to create a keypair to validate format
@@ -79,8 +85,9 @@ impl KeyValidator {
             return Err(anyhow!("Key data too short for keypair"));
         }
         let keypair = Keypair::new_from_array(
-            key_data[0..32].try_into()
-                .context("Failed to extract private key bytes")?
+            key_data[0..32]
+                .try_into()
+                .context("Failed to extract private key bytes")?,
         );
 
         // Validate entropy (basic check)
@@ -105,7 +112,10 @@ impl KeyValidator {
         // Require at least 50% unique bytes for basic entropy
         if unique_bytes < key_data.len() / 2 {
             if self.strict_mode {
-                return Err(anyhow!("Key appears to have low entropy (only {} unique bytes)", unique_bytes));
+                return Err(anyhow!(
+                    "Key appears to have low entropy (only {} unique bytes)",
+                    unique_bytes
+                ));
             } else {
                 eprintln!("⚠️  Warning: Key may have low entropy");
             }
@@ -113,7 +123,9 @@ impl KeyValidator {
 
         // Check for obvious patterns (all zeros, all ones, etc.)
         if key_data.iter().all(|&b| b == key_data[0]) {
-            return Err(anyhow!("Key contains repetitive pattern (potential security risk)"));
+            return Err(anyhow!(
+                "Key contains repetitive pattern (potential security risk)"
+            ));
         }
 
         Ok(())
@@ -147,8 +159,9 @@ impl KeyValidator {
         {
             let mut permissions = fs::metadata(path)?.permissions();
             permissions.set_mode(0o600); // rw-------
-            fs::set_permissions(path, permissions)
-                .with_context(|| format!("Failed to set secure permissions on {}", path.display()))?;
+            fs::set_permissions(path, permissions).with_context(|| {
+                format!("Failed to set secure permissions on {}", path.display())
+            })?;
         }
 
         Ok(())
@@ -165,8 +178,12 @@ impl SecureKeyStorage {
     pub fn new(base_path: std::path::PathBuf) -> Result<Self> {
         // Ensure directory exists with secure permissions
         if !base_path.exists() {
-            fs::create_dir_all(&base_path)
-                .with_context(|| format!("Failed to create key storage directory: {}", base_path.display()))?;
+            fs::create_dir_all(&base_path).with_context(|| {
+                format!(
+                    "Failed to create key storage directory: {}",
+                    base_path.display()
+                )
+            })?;
         }
 
         // Set secure permissions on directory
@@ -174,8 +191,12 @@ impl SecureKeyStorage {
         {
             let mut permissions = fs::metadata(&base_path)?.permissions();
             permissions.set_mode(0o700); // rwx------
-            fs::set_permissions(&base_path, permissions)
-                .with_context(|| format!("Failed to set secure permissions on directory: {}", base_path.display()))?;
+            fs::set_permissions(&base_path, permissions).with_context(|| {
+                format!(
+                    "Failed to set secure permissions on directory: {}",
+                    base_path.display()
+                )
+            })?;
         }
 
         Ok(Self { base_path })
@@ -203,8 +224,12 @@ impl SecureKeyStorage {
         {
             let mut permissions = fs::metadata(&file_path)?.permissions();
             permissions.set_mode(0o600); // rw-------
-            fs::set_permissions(&file_path, permissions)
-                .with_context(|| format!("Failed to set secure permissions on {}", file_path.display()))?;
+            fs::set_permissions(&file_path, permissions).with_context(|| {
+                format!(
+                    "Failed to set secure permissions on {}",
+                    file_path.display()
+                )
+            })?;
         }
 
         Ok(file_path)
@@ -220,16 +245,16 @@ impl SecureKeyStorage {
         let content = fs::read_to_string(&file_path)
             .with_context(|| format!("Failed to read keypair from {}", file_path.display()))?;
 
-        let key_data: Vec<u8> = serde_json::from_str(&content)
-            .context("Invalid keypair format")?;
+        let key_data: Vec<u8> = serde_json::from_str(&content).context("Invalid keypair format")?;
 
         if key_data.len() < 32 {
             return Err(anyhow!("Key data too short for keypair"));
         }
 
         Ok(Keypair::new_from_array(
-            key_data[0..32].try_into()
-                .context("Failed to extract private key bytes")?
+            key_data[0..32]
+                .try_into()
+                .context("Failed to extract private key bytes")?,
         ))
     }
 

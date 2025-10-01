@@ -62,9 +62,8 @@
 //! - **Enforce Policies**: Block unauthorized communication, enforce resource limits
 
 use super::{
-    Component, ComponentId, ComponentRegistry, ComponentStatus, ComponentType,
-    HotSwapManager, NetworkManager, RuntimeManager, VsockManager,
-    certificate::CertificateAuthority,
+    certificate::CertificateAuthority, Component, ComponentId, ComponentRegistry, ComponentStatus,
+    ComponentType, HotSwapManager, NetworkManager, RuntimeManager, VsockManager,
 };
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
@@ -232,8 +231,12 @@ impl Orchestrator {
 
         // 2. Start component
         log::debug!("Starting component {}", component_id);
-        let runtime = self.runtime_manager.get_runtime(&component.isolation_config)?;
-        runtime.start_component(&mut component).await
+        let runtime = self
+            .runtime_manager
+            .get_runtime(&component.isolation_config)?;
+        runtime
+            .start_component(&mut component)
+            .await
             .context("Failed to start component")?;
 
         // 3. Register component
@@ -250,16 +253,20 @@ impl Orchestrator {
                 vsock_cid: Some(cid),
                 healthy: true,
                 metadata: HashMap::new(),
-            }).await?;
+            })
+            .await?;
         }
 
         // 5. Initialize health check
-        self.health_checks.write().await.insert(component_id, HealthState {
-            last_check: std::time::Instant::now(),
-            healthy: true,
-            failure_count: 0,
-            last_error: None,
-        });
+        self.health_checks.write().await.insert(
+            component_id,
+            HealthState {
+                last_check: std::time::Instant::now(),
+                healthy: true,
+                failure_count: 0,
+                last_error: None,
+            },
+        );
 
         log::info!("Component {} deployed successfully", component_id);
         Ok(component_id)
@@ -273,7 +280,9 @@ impl Orchestrator {
         let component = self.registry.get(component_id).await?;
 
         // Stop component
-        let runtime = self.runtime_manager.get_runtime(&component.isolation_config)?;
+        let runtime = self
+            .runtime_manager
+            .get_runtime(&component.isolation_config)?;
         runtime.stop_component(component_id).await?;
 
         // Free resources
@@ -298,14 +307,24 @@ impl Orchestrator {
         log::info!("Updating component {} with hot-swap", old_component_id);
 
         // Perform hot-swap
-        let result = self.hotswap_manager.hot_swap(old_component_id, new_component.clone()).await?;
+        let result = self
+            .hotswap_manager
+            .hot_swap(old_component_id, new_component.clone())
+            .await?;
 
         match result {
-            super::HotSwapResult::Success { new_component_id, .. } => {
-                log::info!("Component updated successfully: {} → {}", old_component_id, new_component_id);
+            super::HotSwapResult::Success {
+                new_component_id, ..
+            } => {
+                log::info!(
+                    "Component updated successfully: {} → {}",
+                    old_component_id,
+                    new_component_id
+                );
 
                 // Update service registry
-                self.update_service_endpoint(old_component_id, new_component_id).await?;
+                self.update_service_endpoint(old_component_id, new_component_id)
+                    .await?;
 
                 Ok(new_component_id)
             }
@@ -326,13 +345,13 @@ impl Orchestrator {
 
         if let Some(endpoints) = services.get(service_name) {
             // Filter to only healthy endpoints
-            let healthy: Vec<_> = endpoints.iter()
-                .filter(|e| e.healthy)
-                .cloned()
-                .collect();
+            let healthy: Vec<_> = endpoints.iter().filter(|e| e.healthy).cloned().collect();
 
             if healthy.is_empty() {
-                return Err(anyhow!("No healthy endpoints for service '{}'", service_name));
+                return Err(anyhow!(
+                    "No healthy endpoints for service '{}'",
+                    service_name
+                ));
             }
 
             Ok(healthy)
@@ -345,7 +364,8 @@ impl Orchestrator {
     async fn register_service(&self, endpoint: ServiceEndpoint) -> Result<()> {
         let mut services = self.services.write().await;
 
-        services.entry(endpoint.service_name.clone())
+        services
+            .entry(endpoint.service_name.clone())
             .or_insert_with(Vec::new)
             .push(endpoint);
 
@@ -416,13 +436,16 @@ impl Orchestrator {
     /// Check health of a single component
     async fn check_component_health(&self, component_id: ComponentId) -> Result<()> {
         let component = self.registry.get(component_id).await?;
-        let runtime = self.runtime_manager.get_runtime(&component.isolation_config)?;
+        let runtime = self
+            .runtime_manager
+            .get_runtime(&component.isolation_config)?;
 
         // Get component status
         let status = runtime.get_status(component_id).await?;
 
         let mut health_checks = self.health_checks.write().await;
-        let health_state = health_checks.get_mut(&component_id)
+        let health_state = health_checks
+            .get_mut(&component_id)
             .ok_or_else(|| anyhow!("No health state for component {}", component_id))?;
 
         health_state.last_check = std::time::Instant::now();
@@ -450,7 +473,8 @@ impl Orchestrator {
     /// Handle unhealthy component (restart or replace)
     async fn handle_unhealthy_component(&self, component_id: ComponentId) -> Result<()> {
         let health_checks = self.health_checks.read().await;
-        let health_state = health_checks.get(&component_id)
+        let health_state = health_checks
+            .get(&component_id)
             .ok_or_else(|| anyhow!("No health state for component {}", component_id))?;
 
         if health_state.failure_count >= self.config.max_restart_attempts {
@@ -462,14 +486,19 @@ impl Orchestrator {
             return Err(anyhow!("Max restart attempts exceeded"));
         }
 
-        log::info!("Restarting unhealthy component {} (attempt {})",
-                   component_id, health_state.failure_count);
+        log::info!(
+            "Restarting unhealthy component {} (attempt {})",
+            component_id,
+            health_state.failure_count
+        );
 
         drop(health_checks); // Release lock
 
         // Get component and restart
         let component = self.registry.get(component_id).await?;
-        let runtime = self.runtime_manager.get_runtime(&component.isolation_config)?;
+        let runtime = self
+            .runtime_manager
+            .get_runtime(&component.isolation_config)?;
 
         runtime.restart_component(component_id).await?;
 
@@ -494,9 +523,7 @@ impl Orchestrator {
         let services = self.services.read().await;
         let health_checks = self.health_checks.read().await;
 
-        let healthy_count = health_checks.values()
-            .filter(|h| h.healthy)
-            .count();
+        let healthy_count = health_checks.values().filter(|h| h.healthy).count();
 
         OrchestratorStats {
             total_components: components.len(),

@@ -81,9 +81,7 @@ pub enum ComponentType {
     },
 
     /// Generic service
-    Service {
-        name: String,
-    },
+    Service { name: String },
 }
 
 impl ComponentType {
@@ -252,21 +250,18 @@ impl ComponentRegistry {
     pub async fn get(&self, id: ComponentId) -> Result<Component> {
         let components = self.components.read().await;
 
-        components
-            .get(&id)
-            .cloned()
-            .ok_or_else(|| {
-                IsolationError::ComponentNotFound(format!("Component {} not found", id)).into()
-            })
+        components.get(&id).cloned().ok_or_else(|| {
+            IsolationError::ComponentNotFound(format!("Component {} not found", id)).into()
+        })
     }
 
     /// Update component status
     pub async fn update_status(&self, id: ComponentId, status: ComponentStatus) -> Result<()> {
         let mut components = self.components.write().await;
 
-        let component = components
-            .get_mut(&id)
-            .ok_or_else(|| IsolationError::ComponentNotFound(format!("Component {} not found", id)))?;
+        let component = components.get_mut(&id).ok_or_else(|| {
+            IsolationError::ComponentNotFound(format!("Component {} not found", id))
+        })?;
 
         component.status = status;
         Ok(())

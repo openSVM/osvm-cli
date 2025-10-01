@@ -9,7 +9,10 @@ use std::collections::HashMap;
 /// Patterns that should be redacted from logs
 static SENSITIVE_PATTERNS: &[(&str, &str)] = &[
     // API Keys and tokens
-    (r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[A-Za-z0-9+/=]{8,}", "$1: [REDACTED]"),
+    (
+        r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[A-Za-z0-9+/=]{8,}",
+        "$1: [REDACTED]",
+    ),
     // Private keys (base58/hex)
     (r"[A-Za-z0-9]{44,88}", "[PRIVATE_KEY_REDACTED]"),
     // Solana addresses (but preserve format for debugging)
@@ -50,7 +53,9 @@ impl SecureLogger {
         let mut sanitized = input.to_string();
 
         for (regex, replacement) in &self.patterns {
-            sanitized = regex.replace_all(&sanitized, replacement.as_str()).to_string();
+            sanitized = regex
+                .replace_all(&sanitized, replacement.as_str())
+                .to_string();
         }
 
         sanitized

@@ -53,7 +53,11 @@ impl ProcessRuntime {
             return Err(anyhow!("Empty command"));
         }
 
-        log::info!("Starting process for component {}: {:?}", component_id, command);
+        log::info!(
+            "Starting process for component {}: {:?}",
+            component_id,
+            command
+        );
 
         let mut cmd = Command::new(&command[0]);
         if command.len() > 1 {
@@ -67,7 +71,11 @@ impl ProcessRuntime {
             .spawn()
             .context("Failed to spawn process")?;
 
-        log::info!("Process started for component {} with PID {:?}", component_id, process.id());
+        log::info!(
+            "Process started for component {} with PID {:?}",
+            component_id,
+            process.id()
+        );
 
         Ok(ProcessInstance {
             component_id,
@@ -105,8 +113,8 @@ impl Runtime for ProcessRuntime {
             .get("command")
             .ok_or_else(|| anyhow!("command not found in component metadata"))?;
 
-        let command: Vec<String> = serde_json::from_str(command_str)
-            .context("Failed to parse command")?;
+        let command: Vec<String> =
+            serde_json::from_str(command_str).context("Failed to parse command")?;
 
         // Start process
         let instance = self.start_process(component.id, command).await?;
@@ -136,8 +144,16 @@ impl Runtime for ProcessRuntime {
             .remove(&component_id)
             .ok_or_else(|| IsolationError::ComponentNotFound(component_id.to_string()))?;
 
-        instance.process.kill().await.context("Failed to kill process")?;
-        instance.process.wait().await.context("Failed to wait for process")?;
+        instance
+            .process
+            .kill()
+            .await
+            .context("Failed to kill process")?;
+        instance
+            .process
+            .wait()
+            .await
+            .context("Failed to wait for process")?;
 
         log::info!("Component {} stopped", component_id);
         Ok(())
@@ -181,7 +197,10 @@ impl Runtime for ProcessRuntime {
     async fn exec(&self, component_id: ComponentId, command: Vec<String>) -> Result<String> {
         // In a real implementation, we'd use nsenter or similar to exec into the process namespace
         // For now, just return an error
-        Err(anyhow!("exec not yet implemented for process runtime (component {})", component_id))
+        Err(anyhow!(
+            "exec not yet implemented for process runtime (component {})",
+            component_id
+        ))
     }
 }
 

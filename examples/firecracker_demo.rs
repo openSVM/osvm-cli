@@ -18,7 +18,7 @@ use tokio::time::sleep;
 // Import OSVM isolation components
 use osvm::utils::isolation::{
     component::{Component, ComponentId, ComponentRegistry, ComponentType},
-    config::{IsolationConfig, IsolationType, HypervisorType, ResourceLimits},
+    config::{HypervisorType, IsolationConfig, IsolationType, ResourceLimits},
     runtime::RuntimeManager,
 };
 
@@ -38,7 +38,10 @@ async fn main() -> Result<()> {
 
     let runtime_manager = RuntimeManager::with_defaults();
     println!("   ✓ Runtime manager initialized");
-    println!("   Available runtimes: {:?}", runtime_manager.list_available_runtimes());
+    println!(
+        "   Available runtimes: {:?}",
+        runtime_manager.list_available_runtimes()
+    );
     println!();
 
     // Step 2: Create RPC node component
@@ -59,9 +62,9 @@ async fn main() -> Result<()> {
                 rootfs_path: Some(PathBuf::from("/var/lib/osvm/firecracker/rootfs.ext4")),
             },
             resource_limits: ResourceLimits {
-                max_memory_mb: Some(512),    // 512MB for RPC node
-                max_cpu_cores: Some(4),       // 4 vCPUs
-                max_disk_mb: Some(10240),     // 10GB disk
+                max_memory_mb: Some(512),               // 512MB for RPC node
+                max_cpu_cores: Some(4),                 // 4 vCPUs
+                max_disk_mb: Some(10240),               // 10GB disk
                 max_network_bandwidth_mbps: Some(1000), // 1 Gbps
                 max_file_descriptors: Some(8192),
                 max_processes: Some(100),

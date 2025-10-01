@@ -289,19 +289,19 @@ impl TeeManager {
     }
 
     /// Generate validator key inside enclave
-    pub async fn generate_key_in_enclave(
-        &self,
-        component_id: ComponentId,
-    ) -> Result<KeyHandle> {
-        log::info!("Generating key inside enclave for component {}", component_id);
+    pub async fn generate_key_in_enclave(&self, component_id: ComponentId) -> Result<KeyHandle> {
+        log::info!(
+            "Generating key inside enclave for component {}",
+            component_id
+        );
 
         let enclaves = self.enclaves.read().await;
-        let _enclave = enclaves
-            .get(&component_id)
-            .ok_or_else(|| anyhow!(
+        let _enclave = enclaves.get(&component_id).ok_or_else(|| {
+            anyhow!(
                 "No enclave found for component {}. Create enclave first with create_enclave()",
                 component_id
-            ))?;
+            )
+        })?;
 
         // In production, would:
         // 1. Call enclave function: ecall_generate_keypair()
@@ -321,11 +321,7 @@ impl TeeManager {
     }
 
     /// Sign data using key in enclave
-    pub async fn sign_in_enclave(
-        &self,
-        key_handle: &KeyHandle,
-        data: &[u8],
-    ) -> Result<Vec<u8>> {
+    pub async fn sign_in_enclave(&self, key_handle: &KeyHandle, data: &[u8]) -> Result<Vec<u8>> {
         log::debug!(
             "Signing {} bytes with key {} in enclave {}",
             data.len(),
@@ -347,10 +343,7 @@ impl TeeManager {
     }
 
     /// Get attestation report for enclave
-    pub async fn get_attestation(
-        &self,
-        component_id: ComponentId,
-    ) -> Result<AttestationReport> {
+    pub async fn get_attestation(&self, component_id: ComponentId) -> Result<AttestationReport> {
         if !self.config.enable_attestation {
             return Err(anyhow!(
                 "Attestation is disabled in TEE configuration. \
@@ -380,11 +373,7 @@ impl TeeManager {
     }
 
     /// Seal data to enclave (encrypted storage)
-    pub async fn seal_data(
-        &self,
-        component_id: ComponentId,
-        data: &[u8],
-    ) -> Result<Vec<u8>> {
+    pub async fn seal_data(&self, component_id: ComponentId, data: &[u8]) -> Result<Vec<u8>> {
         if !self.config.enable_sealed_storage {
             return Err(anyhow!(
                 "Sealed storage is disabled in TEE configuration. \
@@ -392,7 +381,11 @@ impl TeeManager {
             ));
         }
 
-        log::debug!("Sealing {} bytes for component {}", data.len(), component_id);
+        log::debug!(
+            "Sealing {} bytes for component {}",
+            data.len(),
+            component_id
+        );
 
         // In production, would:
         // 1. Call enclave: ecall_seal_data()

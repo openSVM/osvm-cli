@@ -4,10 +4,10 @@
 //! information disclosure, ensure graceful degradation, and maintain security
 //! during error conditions.
 
+use anyhow::{Context, Result};
+use log::{debug, error, warn};
 use std::fmt;
 use std::panic;
-use anyhow::{Context, Result};
-use log::{error, warn, debug};
 
 /// Security-aware error boundary that prevents information disclosure
 pub struct SecureErrorBoundary {
@@ -30,9 +30,7 @@ impl SecureErrorBoundary {
         F: std::future::Future<Output = Result<T>> + std::panic::UnwindSafe,
     {
         let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                operation.await
-            })
+            tokio::runtime::Handle::current().block_on(async { operation.await })
         }));
 
         match result {
@@ -99,7 +97,10 @@ impl SecureErrorBoundary {
             error!("Panic in {}: {}", self.component_name, panic_message);
         } else {
             let sanitized_message = self.sanitize_error_message(&panic_message);
-            error!("Internal error in {}: {}", self.component_name, sanitized_message);
+            error!(
+                "Internal error in {}: {}",
+                self.component_name, sanitized_message
+            );
         }
     }
 
@@ -153,7 +154,11 @@ pub enum CircuitState {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker
-    pub fn new(name: &str, failure_threshold: usize, timeout_duration: std::time::Duration) -> Self {
+    pub fn new(
+        name: &str,
+        failure_threshold: usize,
+        timeout_duration: std::time::Duration,
+    ) -> Self {
         Self {
             failure_count: std::sync::atomic::AtomicUsize::new(0),
             last_failure_time: std::sync::Mutex::new(None),
@@ -165,7 +170,9 @@ impl CircuitBreaker {
 
     /// Get current circuit state
     pub fn state(&self) -> CircuitState {
-        let failure_count = self.failure_count.load(std::sync::atomic::Ordering::Relaxed);
+        let failure_count = self
+            .failure_count
+            .load(std::sync::atomic::Ordering::Relaxed);
 
         if failure_count < self.failure_threshold {
             return CircuitState::Closed;
@@ -191,10 +198,15 @@ impl CircuitBreaker {
         match self.state() {
             CircuitState::Open => {
                 warn!("Circuit breaker {} is open, rejecting call", self.name);
-                return Err(anyhow::anyhow!("Service temporarily unavailable (circuit breaker open)"));
+                return Err(anyhow::anyhow!(
+                    "Service temporarily unavailable (circuit breaker open)"
+                ));
             }
             CircuitState::HalfOpen => {
-                debug!("Circuit breaker {} is half-open, testing service", self.name);
+                debug!(
+                    "Circuit breaker {} is half-open, testing service",
+                    self.name
+                );
             }
             CircuitState::Closed => {
                 debug!("Circuit breaker {} is closed, allowing call", self.name);
@@ -215,26 +227,37 @@ impl CircuitBreaker {
 
     /// Record a successful operation
     fn on_success(&self) {
-        self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         debug!("Circuit breaker {} recorded success", self.name);
     }
 
     /// Record a failed operation
     fn on_failure(&self) {
-        let new_count = self.failure_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let new_count = self
+            .failure_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
         let mut last_failure = self.last_failure_time.lock().unwrap();
         *last_failure = Some(std::time::Instant::now());
 
         if new_count >= self.failure_threshold {
-            warn!("Circuit breaker {} tripped after {} failures", self.name, new_count);
+            warn!(
+                "Circuit breaker {} tripped after {} failures",
+                self.name, new_count
+            );
         } else {
-            debug!("Circuit breaker {} recorded failure {}/{}", self.name, new_count, self.failure_threshold);
+            debug!(
+                "Circuit breaker {} recorded failure {}/{}",
+                self.name, new_count, self.failure_threshold
+            );
         }
     }
 
     /// Manually reset the circuit breaker
     pub fn reset(&self) {
-        self.failure_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.failure_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         let mut last_failure = self.last_failure_time.lock().unwrap();
         *last_failure = None;
         debug!("Circuit breaker {} manually reset", self.name);
@@ -244,7 +267,8 @@ impl CircuitBreaker {
 /// Global error recovery manager
 pub struct ErrorRecoveryManager {
     boundaries: std::sync::Mutex<Vec<std::sync::Arc<SecureErrorBoundary>>>,
-    circuit_breakers: std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<CircuitBreaker>>>,
+    circuit_breakers:
+        std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<CircuitBreaker>>>,
 }
 
 impl ErrorRecoveryManager {
@@ -270,8 +294,8 @@ impl ErrorRecoveryManager {
             .or_insert_with(|| {
                 std::sync::Arc::new(CircuitBreaker::new(
                     name,
-                    5,                                        // 5 failures
-                    std::time::Duration::from_secs(60),      // 60 second timeout
+                    5,                                  // 5 failures
+                    std::time::Duration::from_secs(60), // 60 second timeout
                 ))
             })
             .clone()
@@ -324,7 +348,9 @@ mod tests {
     #[tokio::test]
     async fn test_error_boundary_success() {
         let boundary = SecureErrorBoundary::new("test", false);
-        let result = boundary.execute(async { Ok::<i32, anyhow::Error>(42) }).await;
+        let result = boundary
+            .execute(async { Ok::<i32, anyhow::Error>(42) })
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
     }
@@ -332,9 +358,9 @@ mod tests {
     #[tokio::test]
     async fn test_error_boundary_error() {
         let boundary = SecureErrorBoundary::new("test", false);
-        let result = boundary.execute(async {
-            Err::<i32, anyhow::Error>(anyhow::anyhow!("test error"))
-        }).await;
+        let result = boundary
+            .execute(async { Err::<i32, anyhow::Error>(anyhow::anyhow!("test error")) })
+            .await;
         assert!(result.is_err());
     }
 
@@ -346,12 +372,16 @@ mod tests {
         assert_eq!(breaker.state(), CircuitState::Closed);
 
         // First failure
-        let result = breaker.call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("failure")) }).await;
+        let result = breaker
+            .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("failure")) })
+            .await;
         assert!(result.is_err());
         assert_eq!(breaker.state(), CircuitState::Closed);
 
         // Second failure - should trip the breaker
-        let result = breaker.call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("failure")) }).await;
+        let result = breaker
+            .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("failure")) })
+            .await;
         assert!(result.is_err());
         assert_eq!(breaker.state(), CircuitState::Open);
 
@@ -368,7 +398,8 @@ mod tests {
     fn test_error_message_sanitization() {
         let boundary = SecureErrorBoundary::new("test", false);
 
-        let message = "Error in /home/user/.ssh/id_rsa with token sk-1234567890abcdef and IP 192.168.1.1";
+        let message =
+            "Error in /home/user/.ssh/id_rsa with token sk-1234567890abcdef and IP 192.168.1.1";
         let sanitized = boundary.sanitize_error_message(message);
 
         assert!(!sanitized.contains("/home/user"));

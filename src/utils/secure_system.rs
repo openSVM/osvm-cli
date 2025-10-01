@@ -4,10 +4,10 @@
 //! required sudo/root privileges, implementing defense-in-depth security practices.
 
 use anyhow::{anyhow, Context, Result};
+use log::{debug, info, warn};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use log::{warn, info, debug};
 
 /// Secure system operations manager
 pub struct SecureSystemManager {
@@ -76,8 +76,14 @@ impl SecureSystemManager {
             return Err(anyhow!("Invalid df output format"));
         }
 
-        let total_str = fields[1].trim_end_matches('G').trim_end_matches('M').trim_end_matches('K');
-        let available_str = fields[3].trim_end_matches('G').trim_end_matches('M').trim_end_matches('K');
+        let total_str = fields[1]
+            .trim_end_matches('G')
+            .trim_end_matches('M')
+            .trim_end_matches('K');
+        let available_str = fields[3]
+            .trim_end_matches('G')
+            .trim_end_matches('M')
+            .trim_end_matches('K');
 
         // Simple parsing - convert to GB
         let total_gb = self.parse_size_to_gb(total_str, fields[1])?;
@@ -108,8 +114,8 @@ impl SecureSystemManager {
     /// Get memory information without sudo
     fn get_memory_info(&self) -> Result<MemoryInfo> {
         // Read /proc/meminfo (no sudo needed)
-        let meminfo_content = fs::read_to_string("/proc/meminfo")
-            .context("Failed to read /proc/meminfo")?;
+        let meminfo_content =
+            fs::read_to_string("/proc/meminfo").context("Failed to read /proc/meminfo")?;
 
         let mut total_kb = 0;
         let mut available_kb = 0;
@@ -135,7 +141,8 @@ impl SecureSystemManager {
             return Err(anyhow!("Invalid meminfo line format"));
         }
 
-        parts[1].parse::<u64>()
+        parts[1]
+            .parse::<u64>()
             .context("Failed to parse memory value")
     }
 
@@ -192,8 +199,12 @@ impl SecureSystemManager {
         let data_dir = self.get_data_dir()?;
 
         // Create directories with user permissions only
-        fs::create_dir_all(&config_dir)
-            .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+        fs::create_dir_all(&config_dir).with_context(|| {
+            format!(
+                "Failed to create config directory: {}",
+                config_dir.display()
+            )
+        })?;
 
         fs::create_dir_all(&data_dir)
             .with_context(|| format!("Failed to create data directory: {}", data_dir.display()))?;
@@ -311,7 +322,10 @@ mod tests {
 
         assert_eq!(manager.parse_size_to_gb("100", "100G").unwrap(), 100.0);
         assert_eq!(manager.parse_size_to_gb("1024", "1024M").unwrap(), 1.0);
-        assert_eq!(manager.parse_size_to_gb("1048576", "1048576K").unwrap(), 1.0);
+        assert_eq!(
+            manager.parse_size_to_gb("1048576", "1048576K").unwrap(),
+            1.0
+        );
     }
 
     #[test]
@@ -320,6 +334,8 @@ mod tests {
         let fixes = manager.suggest_manual_system_fixes();
 
         assert!(!fixes.is_empty());
-        assert!(fixes.iter().any(|fix| fix.issue.contains("System optimization")));
+        assert!(fixes
+            .iter()
+            .any(|fix| fix.issue.contains("System optimization")));
     }
 }

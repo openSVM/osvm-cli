@@ -149,8 +149,7 @@ impl HermitRuntime {
             return Err(anyhow!("Built image not found at {:?}", built_image));
         }
 
-        std::fs::copy(&built_image, output_path)
-            .context("Failed to copy built image")?;
+        std::fs::copy(&built_image, output_path).context("Failed to copy built image")?;
 
         log::info!("Unikernel image built successfully at {:?}", output_path);
         Ok(())
@@ -248,7 +247,10 @@ impl HermitRuntime {
             .get_mut(&component_id)
             .ok_or_else(|| IsolationError::ComponentNotFound(component_id.to_string()))?;
 
-        log::info!("Stopping HermitCore unikernel for component {}", component_id);
+        log::info!(
+            "Stopping HermitCore unikernel for component {}",
+            component_id
+        );
 
         // Try graceful shutdown first (SIGTERM)
         instance

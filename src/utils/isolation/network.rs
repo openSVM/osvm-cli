@@ -243,13 +243,12 @@ impl ZeroTrustNetwork {
     }
 
     /// Send message over secure connection
-    pub async fn send_message(
-        &self,
-        connection: &Connection,
-        data: &[u8],
-    ) -> Result<()> {
+    pub async fn send_message(&self, connection: &Connection, data: &[u8]) -> Result<()> {
         let mut stream = connection.stream.write().await;
-        stream.write_all(data).await.context("Failed to send data")?;
+        stream
+            .write_all(data)
+            .await
+            .context("Failed to send data")?;
         Ok(())
     }
 
@@ -257,7 +256,10 @@ impl ZeroTrustNetwork {
     pub async fn receive_message(&self, connection: &Connection) -> Result<Vec<u8>> {
         let mut stream = connection.stream.write().await;
         let mut buffer = vec![0u8; 65536];
-        let n = stream.read(&mut buffer).await.context("Failed to read data")?;
+        let n = stream
+            .read(&mut buffer)
+            .await
+            .context("Failed to read data")?;
         buffer.truncate(n);
         Ok(buffer)
     }
