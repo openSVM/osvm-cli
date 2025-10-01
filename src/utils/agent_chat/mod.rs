@@ -11,7 +11,7 @@ mod fuzzy_matcher;
 mod input_handler;
 mod responsive_layout;
 mod suggestions;
-mod system_status_bar;
+pub mod system_status_bar;
 mod task_state;
 mod terminal_utils;
 mod ui_components;

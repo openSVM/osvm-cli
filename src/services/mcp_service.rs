@@ -1,7 +1,11 @@
+use crate::services::isolation_config::IsolationConfig;
+use crate::services::unikernel_runtime::{UnikernelConfig, UnikernelRuntime};
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
 use crate::utils::debug_logger::VerbosityLevel;
+use crate::utils::input_sanitization;
+use crate::utils::path_security::create_secure_socket_dir;
 use crate::{debug_error, debug_print, debug_success, debug_warn};
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
@@ -24,30 +28,6 @@ const MCP_JSONRPC_VERSION: &str = "2.0";
 const CLIENT_NAME: &str = "osvm-cli";
 const DEFAULT_HTTP_TIMEOUT_SECS: u64 = 30;
 const MAX_REQUEST_ID: u64 = u64::MAX - 1000; // Leave some buffer for overflow
-
-/// Safely validate and canonicalize a path to prevent directory traversal attacks
-fn safe_path_validation(path: &Path, base_dir: &Path) -> Result<PathBuf> {
-    let canonical_path = path
-        .canonicalize()
-        .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
-
-    let canonical_base = base_dir.canonicalize().with_context(|| {
-        format!(
-            "Failed to canonicalize base directory: {}",
-            base_dir.display()
-        )
-    })?;
-
-    if !canonical_path.starts_with(&canonical_base) {
-        return Err(anyhow!(
-            "Path traversal detected: {} is outside base directory {}",
-            canonical_path.display(),
-            canonical_base.display()
-        ));
-    }
-
-    Ok(canonical_path)
-}
 
 // MCP method names
 const MCP_METHOD_INITIALIZE: &str = "initialize";
@@ -235,6 +215,10 @@ pub struct McpService {
     request_counter: std::sync::atomic::AtomicU64,
     /// Active stdio processes
     stdio_processes: HashMap<String, StdioProcess>,
+    /// Isolation configuration for unikernel execution
+    isolation_config: IsolationConfig,
+    /// Unikernel runtime for spawning isolated tool executions
+    unikernel_runtime: UnikernelRuntime,
 }
 
 impl McpService {
@@ -351,6 +335,21 @@ impl McpService {
 
     /// Create a new MCP service instance
     pub fn new() -> Self {
+        // Load isolation config or use default
+        let isolation_config = IsolationConfig::load().unwrap_or_else(|e| {
+            eprintln!("Warning: Failed to load isolation config: {}. Using defaults.", e);
+            IsolationConfig::default()
+        });
+        
+        // Initialize unikernel runtime
+        let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
+            .unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to initialize unikernel runtime: {}. Unikernel execution will be disabled.", e);
+                // Create a fallback runtime with a temp directory
+                UnikernelRuntime::new(std::env::temp_dir().join("osvm-unikernels"))
+                    .expect("Failed to create fallback unikernel runtime")
+            });
+        
         Self {
             servers: HashMap::new(),
             client: reqwest::Client::new(),
@@ -358,6 +357,8 @@ impl McpService {
             debug_mode: false,
             request_counter: std::sync::atomic::AtomicU64::new(1),
             stdio_processes: HashMap::new(),
+            isolation_config,
+            unikernel_runtime,
         }
     }
 
@@ -382,10 +383,14 @@ impl McpService {
 
     /// Load configurations from JSON file
     fn load_from_file(&mut self) -> Result<()> {
-        let config_path = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("./")))
-            .join("osvm")
-            .join("mcp_servers.json");
+        let config_dir = dirs::config_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|e| {
+                warn!("Failed to get current directory: {}. Using current path.", e);
+                PathBuf::from("./")
+            })
+        });
+
+        let config_path = config_dir.join("osvm").join("mcp_servers.json");
 
         if !config_path.exists() {
             return Ok(()); // No config file is fine
@@ -410,9 +415,14 @@ impl McpService {
 
     /// Save configurations to JSON file
     pub fn save_config(&self) -> Result<()> {
-        let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("./")))
-            .join("osvm");
+        let base_dir = dirs::config_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|e| {
+                warn!("Failed to get current directory: {}. Using current path.", e);
+                PathBuf::from("./")
+            })
+        });
+
+        let config_dir = base_dir.join("osvm");
 
         std::fs::create_dir_all(&config_dir)?;
 
@@ -1601,7 +1611,20 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
-        // Route to appropriate implementation based on transport type
+        // Check if this tool should be executed in a unikernel
+        if self.isolation_config.should_use_unikernel(server_id, tool_name) {
+            if self.debug_mode {
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Executing tool '{}' in unikernel for enhanced security",
+                    tool_name
+                );
+            }
+            
+            return self.call_tool_unikernel(server_id, tool_name, arguments).await;
+        }
+
+        // Otherwise, route to appropriate implementation based on transport type
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
                 self.call_tool_http(server_id, tool_name, arguments, config)
@@ -1612,6 +1635,70 @@ impl McpService {
                     .await
             }
         }
+    }
+
+    /// Call a tool in an isolated unikernel
+    async fn call_tool_unikernel(
+        &self,
+        server_id: &str,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        // Get tool configuration from isolation config
+        let tool_config = self.isolation_config.get_tool_config(server_id, tool_name);
+        
+        // Get unikernel image path, using default if not specified
+        let image_path = if let Some(ref image) = tool_config.unikernel_image {
+            PathBuf::from(image)
+        } else {
+            // Default unikernel image path
+            PathBuf::from(&self.isolation_config.unikernel_dir)
+                .join(format!("{}-{}.img", server_id, tool_name))
+        };
+        
+        // Build unikernel configuration
+        let unikernel_config = UnikernelConfig {
+            image_path,
+            mounts: tool_config.mounts.clone(),
+            memory_mb: tool_config.memory_mb,
+            vcpus: tool_config.vcpus,
+            tool_name: tool_name.to_string(),
+            server_id: server_id.to_string(),
+        };
+        
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Detailed,
+                "Spawning unikernel for tool '{}' with {} MB memory, {} vCPUs",
+                tool_name,
+                tool_config.memory_mb,
+                tool_config.vcpus
+            );
+        }
+        
+        // Spawn the unikernel
+        let handle = self.unikernel_runtime.spawn_unikernel(unikernel_config).await
+            .context("Failed to spawn unikernel for tool execution")?;
+        
+        if self.debug_mode {
+            debug_success!("Unikernel spawned successfully for tool '{}'", tool_name);
+        }
+        
+        // Execute the tool in the unikernel
+        let result = handle.execute_tool(tool_name, arguments).await
+            .context("Failed to execute tool in unikernel")?;
+        
+        // Terminate the unikernel
+        handle.terminate();
+        
+        if self.debug_mode {
+            debug_success!(
+                "Tool '{}' executed successfully in unikernel and terminated",
+                tool_name
+            );
+        }
+        
+        Ok(result)
     }
 
     /// Call a tool on an HTTP/WebSocket MCP server

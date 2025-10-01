@@ -1,24 +1,783 @@
 # OSVM CLI Project Rules
 
-## CRITICAL: No Custom Scripts
-- **NEVER create custom shell scripts, Python scripts, or any standalone scripts in this repository**
-- **ALL functionality must be implemented within the osvm binary itself**
-- **The only way to execute functionality is through the compiled osvm binary**
-- If a feature needs to be added, it must be implemented in the Rust source code and compiled into osvm
+## 🎯 PROJECT OVERVIEW
 
-## Project Structure
-- All code must be in Rust source files under src/
-- Use cargo build to compile changes
-- Execute features only via ./target/debug/osvm or cargo run
+OSVM (Open Solana Virtual Machine) is a revolutionary blockchain infrastructure providing:
+- Zero-downtime updates via hot-swap
+- Hardware-isolated execution with Firecracker MicroVMs and unikernels
+- Sub-millisecond vsock communication
+- MCP (Model Context Protocol) integration
+- AI-powered tooling and analysis
+- 99.83% attack surface reduction
 
-## Examples of what NOT to do:
-- ❌ Creating shell scripts (*.sh files)
-- ❌ Creating Python scripts (*.py files)  
-- ❌ Creating any standalone executable scripts
-- ❌ Using external tools when osvm can handle it
+**Language**: Rust 2021 Edition  
+**Version**: 0.8.3  
+**License**: MIT
 
-## Examples of what TO do:
-- ✅ Implement features in Rust within src/
-- ✅ Use cargo build to compile
-- ✅ Run features via osvm binary commands
-- ✅ If osvm doesn't have a feature, implement it in the Rust code first
+---
+
+## 🚨 CRITICAL RULES
+
+### ❌ NO CUSTOM SCRIPTS POLICY
+**NEVER create standalone scripts outside the Rust codebase:**
+- ❌ Shell scripts (*.sh files) - exceptions only for legacy deployment wrappers
+- ❌ Python scripts (*.py files)
+- ❌ Any standalone executable scripts
+- ✅ ALL functionality MUST be in Rust source under `src/`
+- ✅ Execute features ONLY via compiled `osvm` binary
+- ✅ Use `cargo build` to compile changes
+- ✅ Run via `./target/debug/osvm` or `cargo run`
+
+**Why**: OSVM is a self-contained binary tool. All features must be compiled into the binary to maintain consistency, security, and portability.
+
+---
+
+## 📁 PROJECT STRUCTURE & TREEMAP
+
+```
+osvm-cli/
+├── 📄 Cargo.toml                    # Project manifest & dependencies
+├── 📄 Cargo.lock                    # Locked dependency versions
+├── 📄 rust-toolchain.toml           # Rust version specification
+├── 📄 .cline_rules                  # AI assistant rules (this file)
+├── 📄 README.md                     # Main documentation
+├── 📄 LICENSE                       # MIT license
+├── 📄 CONTRIBUTING.md               # Contribution guidelines
+├── 📄 CODE_OF_CONDUCT.md            # Community standards
+│
+├── 📂 src/                          # Main source code
+│   ├── 📄 main.rs                   # CLI entry point & command routing
+│   ├── 📄 lib.rs                    # Library exports
+│   ├── 📄 config.rs                 # Configuration management
+│   ├── 📄 clparse.rs                # Command-line parsing utilities
+│   ├── 📄 prelude.rs                # Common imports
+│   │
+│   ├── 📂 bin/                      # Additional binaries
+│   │   └── 📄 snapshot_reader.rs   # Solana snapshot analyzer
+│   │
+│   ├── 📂 commands/                 # CLI command implementations
+│   │   ├── 📄 mod.rs               # Commands module exports
+│   │   ├── 📄 mount.rs             # Filesystem mount management
+│   │   ├── 📄 node.rs              # Node management commands
+│   │   └── 📄 svm.rs               # SVM version management
+│   │
+│   ├── 📂 services/                 # Core service layer
+│   │   ├── 📄 mod.rs               # Services module exports
+│   │   ├── 📄 ai_service.rs        # AI query & planning service
+│   │   ├── 📄 audit_service.rs     # Code audit & analysis
+│   │   ├── 📄 mcp_service.rs       # MCP server management
+│   │   ├── 📄 isolation_config.rs  # Isolation configuration
+│   │   └── 📄 unikernel_runtime.rs # Unikernel execution runtime
+│   │
+│   └── 📂 utils/                    # Utility modules
+│       ├── 📄 mod.rs               # Utils module exports
+│       ├── 📄 local_rpc.rs         # Local RPC server management
+│       │
+│       ├── 📂 agent_chat/          # Legacy agent chat UI (v1)
+│       │   ├── 📄 mod.rs
+│       │   ├── 📄 chat_application.rs
+│       │   └── 📄 system_status_bar.rs
+│       │
+│       ├── 📂 agent_chat_v2/       # Modern agent chat system
+│       │   ├── 📄 mod.rs
+│       │   ├── 📄 state.rs         # Chat state management
+│       │   │
+│       │   ├── 📂 agent/           # AI agent logic
+│       │   │   ├── 📄 mod.rs
+│       │   │   ├── 📄 worker.rs    # Background agent worker
+│       │   │   └── 📄 commands.rs  # Agent command processing
+│       │   │
+│       │   └── 📂 ui/              # Terminal UI components
+│       │       ├── 📄 mod.rs
+│       │       ├── 📄 layout.rs    # UI layout system
+│       │       ├── 📄 display.rs   # Display rendering
+│       │       ├── 📄 components.rs # UI components
+│       │       └── 📄 handlers.rs  # Input/event handlers
+│       │
+│       └── 📂 self_repair/         # Self-repair system
+│           └── 📄 user_deps.rs     # User dependency management
+│
+├── 📂 tests/                        # Integration tests
+│   ├── 📄 main.rs                  # Test entry point
+│   ├── 📄 mod.rs                   # Test module organization
+│   ├── 📄 README.md                # Test documentation
+│   ├── 📄 agent_chat_*.rs          # Agent chat test suites
+│   ├── 📄 deployment_*.rs          # Deployment test suites
+│   ├── 📄 ebpf_*.rs                # eBPF deployment tests
+│   ├── 📄 performance_tests.rs     # Performance benchmarks
+│   ├── 📂 integration/             # Integration test modules
+│   └── 📂 e2e/                     # End-to-end test scenarios
+│
+├── 📂 benches/                      # Performance benchmarks
+│   └── 📄 deployment_benchmarks.rs # Deployment performance tests
+│
+├── 📂 examples/                     # Example demonstrations
+│   ├── 📄 firecracker_demo.rs      # Firecracker MicroVM demo
+│   ├── 📄 isolation_demo.rs        # Isolation features demo
+│   ├── 📄 mcp_integration_demo.rs  # MCP integration demo
+│   ├── 📄 test_command_planner.rs  # Command planner demo
+│   ├── 📄 ISOLATION_GUIDE.md       # Isolation usage guide
+│   ├── 📂 github-actions/          # CI/CD workflow examples
+│   └── 📂 simple_mcp_server/       # Example MCP server
+│
+├── 📂 docs/                         # Documentation site
+│   ├── 📄 README.md                # Docs overview
+│   ├── 📄 index.html               # Documentation landing page
+│   ├── 📄 *.md                     # Individual doc pages
+│   ├── 📂 css/                     # Stylesheets
+│   ├── 📂 js/                      # JavaScript utilities
+│   └── 📂 pages/                   # Documentation pages
+│
+├── 📂 templates/                    # Template files
+│   ├── 📄 audit_report.*           # Audit report templates
+│   └── 📂 ai_prompts/              # AI prompt templates
+│
+├── 📂 packaging/                    # Distribution packages
+│   ├── 📄 README.md                # Packaging documentation
+│   ├── 📄 config.sh                # Package configuration
+│   ├── 📂 debian/                  # Debian/Ubuntu packages
+│   ├── 📂 archlinux/               # Arch Linux packages
+│   └── 📂 termux/                  # Termux (Android) packages
+│
+├── 📂 scripts/                      # Development scripts
+│   └── 📄 test_*.sh                # Test runner scripts
+│
+├── 📂 audit_reports/                # Security audit outputs
+├── 📂 test_reports/                 # Test result reports
+├── 📂 public/                       # Public web assets
+├── 📂 vendor/                       # Vendored dependencies (crunchy)
+├── 📂 target/                       # Build artifacts (gitignored)
+├── 📂 *-ledger/                     # Solana ledger directories (gitignored)
+│
+└── 📄 Various *.md files            # Status reports, plans, guides
+    ├── Architecture.md              # System architecture
+    ├── Design-Doc.md               # Design documentation
+    ├── Plan.md                     # Development roadmap
+    ├── IMPLEMENTATION_COMPLETE.md  # Implementation status
+    ├── PHASE*_*.md                 # Phase completion reports
+    ├── BUG_*.md                    # Bug reports & reviews
+    └── TEST_*.md                   # Test reports & results
+```
+
+---
+
+## 🏗️ CODE ORGANIZATION PRINCIPLES
+
+### Module Structure
+- **Commands** (`src/commands/`): CLI command implementations, user-facing interfaces
+- **Services** (`src/services/`): Business logic, external integrations, core functionality
+- **Utils** (`src/utils/`): Helper functions, shared utilities, agent systems
+- **Config** (`src/config.rs`): Configuration loading, validation, management
+
+### Naming Conventions
+- **Files**: `snake_case.rs` (e.g., `mcp_service.rs`)
+- **Modules**: `snake_case` (e.g., `mod agent_chat_v2`)
+- **Structs/Enums**: `PascalCase` (e.g., `McpService`, `UnikernelConfig`)
+- **Functions/Variables**: `snake_case` (e.g., `load_config()`, `server_id`)
+- **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `DEFAULT_TIMEOUT`)
+- **Type Aliases**: `PascalCase` (e.g., `Result<T>`)
+
+### File Organization Pattern
+```rust
+// Standard file structure:
+
+// 1. Imports (grouped logically)
+use std::collections::HashMap;
+use anyhow::{Context, Result};
+use crate::config::Config;
+
+// 2. Constants
+const DEFAULT_TIMEOUT: u64 = 30;
+
+// 3. Type definitions (structs, enums)
+pub struct ServiceName {
+    config: Config,
+    // fields...
+}
+
+// 4. Implementations
+impl ServiceName {
+    pub fn new() -> Self { /* ... */ }
+    pub fn method(&self) -> Result<()> { /* ... */ }
+}
+
+// 5. Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_something() { /* ... */ }
+}
+```
+
+---
+
+## 🔧 RUST BEST PRACTICES
+
+### Error Handling
+- Use `anyhow::Result<T>` for application errors
+- Use `thiserror` for custom error types with good messages
+- Provide context with `.context()` when errors bubble up
+- Never use `unwrap()` or `expect()` in production code paths
+- Use `?` operator for error propagation
+
+```rust
+// ✅ Good
+pub async fn load_config() -> Result<Config> {
+    let content = tokio::fs::read_to_string("config.yaml")
+        .await
+        .context("Failed to read config file")?;
+    
+    serde_yaml::from_str(&content)
+        .context("Failed to parse config YAML")
+}
+
+// ❌ Bad
+pub fn load_config() -> Config {
+    let content = std::fs::read_to_string("config.yaml").unwrap(); // No context!
+    serde_yaml::from_str(&content).expect("parse failed") // Panic in production!
+}
+```
+
+### Async/Await Patterns
+- Use `tokio` runtime with `#[tokio::main]` or `#[tokio::test]`
+- Prefer `async fn` over returning `impl Future`
+- Use `tokio::spawn` for concurrent tasks
+- Use `tokio::select!` for racing futures
+- Add timeouts with `tokio::time::timeout()`
+
+```rust
+// ✅ Good
+pub async fn execute_with_timeout(&self) -> Result<String> {
+    let timeout_duration = Duration::from_secs(30);
+    
+    tokio::time::timeout(timeout_duration, async {
+        self.execute().await
+    })
+    .await
+    .context("Operation timed out")?
+}
+
+// Use spawn for concurrent operations
+pub async fn process_multiple(&self, items: Vec<Item>) -> Result<Vec<Output>> {
+    let handles: Vec<_> = items.into_iter()
+        .map(|item| tokio::spawn(self.process_one(item)))
+        .collect();
+    
+    let results = futures::future::try_join_all(handles).await?;
+    Ok(results)
+}
+```
+
+### Memory Safety & Lifetimes
+- Use `&str` for string references, `String` for owned strings
+- Prefer borrowing over cloning where possible
+- Use `Arc<T>` for shared ownership across threads
+- Use `Mutex<T>` or `RwLock<T>` for interior mutability with thread safety
+
+### Type System Usage
+- Use `Option<T>` for nullable values, not null pointers
+- Use `Result<T, E>` for operations that can fail
+- Leverage `impl Trait` for return types when appropriate
+- Use type aliases for complex types: `type Result<T> = std::result::Result<T, Error>;`
+
+---
+
+## 🧪 TESTING REQUIREMENTS
+
+### Test Organization
+- **Unit tests**: In same file as code, under `#[cfg(test)] mod tests`
+- **Integration tests**: In `tests/` directory
+- **Examples**: In `examples/` directory (must compile and run)
+
+### Test Naming
+- Test functions: `test_<what_is_being_tested>()`
+- Test modules: `<feature>_tests.rs`
+- Use `#[test]` for sync tests, `#[tokio::test]` for async tests
+
+### Test Coverage Expectations
+- All public APIs should have tests
+- Critical paths require integration tests
+- Error cases must be tested
+- Use `serial_test` crate for tests requiring sequential execution
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    
+    #[test]
+    fn test_config_loading() {
+        let config = Config::default();
+        assert_eq!(config.enabled, true);
+    }
+    
+    #[tokio::test]
+    async fn test_async_operation() {
+        let service = Service::new();
+        let result = service.execute().await;
+        assert!(result.is_ok());
+    }
+    
+    #[test]
+    #[serial] // Run sequentially with other serial tests
+    fn test_file_system_operation() {
+        // Tests that modify shared filesystem state
+    }
+}
+```
+
+---
+
+## 📝 DOCUMENTATION STANDARDS
+
+### Code Documentation
+- Every public item requires doc comments (`///`)
+- Use `//!` for module-level documentation
+- Include examples in doc comments where helpful
+- Document error conditions and panics
+
+```rust
+/// Manages MCP (Model Context Protocol) server connections and tool execution.
+///
+/// This service handles communication with MCP servers over HTTP, WebSocket,
+/// and stdio transports. It supports both standard MicroVM and unikernel
+/// isolation modes.
+///
+/// # Examples
+///
+/// ```no_run
+/// use osvm::services::McpService;
+///
+/// let mut service = McpService::new();
+/// service.load_config()?;
+/// service.initialize_server("my-server").await?;
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Server configuration is invalid
+/// - Network connection fails
+/// - Tool execution times out
+pub struct McpService {
+    // fields...
+}
+```
+
+### Markdown Documentation
+- Keep `README.md` up to date with features
+- Document major architectural decisions in `docs/`
+- Maintain CHANGELOG for version updates
+- Use clear section headers and examples
+
+---
+
+## 🔐 SECURITY CONSIDERATIONS
+
+### Input Validation
+- **ALWAYS** validate and sanitize user input
+- Use `sanitize_user_input()` for CLI arguments
+- Validate paths with `safe_path_validation()`
+- Never construct file paths from user input without validation
+
+```rust
+// ✅ Good - from mount.rs
+fn validate_host_path(&self, path: &str) -> Result<String> {
+    let path = PathBuf::from(path);
+    
+    // Validate path exists
+    if !path.exists() {
+        return Err(anyhow!("Path does not exist: {}", path.display()));
+    }
+    
+    // Convert to canonical path to prevent directory traversal
+    let canonical = path.canonicalize()
+        .context("Failed to canonicalize path")?;
+    
+    Ok(canonical.to_string_lossy().into_owned())
+}
+```
+
+### Secrets Management
+- Never hardcode API keys, passwords, or tokens
+- Load secrets from environment variables
+- Use `McpAuthConfig` for authentication credentials
+- Mask sensitive values in logs and error messages
+
+### Process Isolation
+- Use `UnikernelRuntime` for isolated tool execution
+- Configure resource limits (memory, CPU) in `IsolationConfig`
+- Validate mount points and file access permissions
+- Use Firecracker MicroVMs for strongest isolation
+
+---
+
+## 🚀 MCP INTEGRATION PATTERNS
+
+### MCP Server Configuration
+- Store in `~/.osvm/mcp_servers.yaml`
+- Support HTTP, WebSocket, and stdio transports
+- Enable/disable servers with `enabled: true/false`
+- Configure isolation mode (unikernel or standard)
+
+### Tool Execution Flow
+```rust
+// Standard pattern for MCP tool execution
+pub async fn execute_mcp_tool(
+    server_id: &str,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<String> {
+    let mut mcp_service = McpService::new();
+    mcp_service.load_config()?;
+    
+    // Call tool with timeout
+    let result = mcp_service.call_tool(server_id, tool_name, arguments)
+        .await
+        .context("MCP tool execution failed")?;
+    
+    Ok(result)
+}
+```
+
+### Adding New MCP Servers
+- Use `add_server_from_github()` for GitHub repositories
+- Automatically detect build system (Cargo.toml, package.json)
+- Build and install server binary
+- Register in configuration
+
+---
+
+## 🤖 AI SERVICE PATTERNS
+
+### AI Query Execution
+- Support multiple endpoints (osvm.ai, OpenAI)
+- Use `AiService::query()` for simple queries
+- Use `AiService::create_tool_plan()` for structured planning
+- Enable debug mode for request/response logging
+
+### Tool Planning
+- Plans return structured `ToolPlan` with execution steps
+- Parse both JSON and XML response formats
+- Include salvage logic for malformed AI responses
+- Validate tool names and arguments
+
+```rust
+// Creating a tool plan from user query
+let ai_service = AiService::new();
+let plan = ai_service.create_tool_plan(
+    "Deploy an RPC node to devnet",
+    &available_tools,
+    Some(vec![command_history]),
+).await?;
+
+// Execute plan steps
+for tool in plan.tools {
+    println!("Step: {}", tool.reasoning);
+    // Execute tool.name with tool.arguments
+}
+```
+
+---
+
+## 🔧 CONFIGURATION MANAGEMENT
+
+### Configuration Files
+- Main config: `~/.osvm/config.yaml`
+- MCP servers: `~/.osvm/mcp_servers.yaml`
+- Mounts: `~/.osvm/mounts.yaml`
+- Isolation: `~/.osvm/isolation.yaml`
+
+### Loading Pattern
+```rust
+// Standard config loading pattern
+impl Config {
+    pub async fn load() -> Result<Self> {
+        let config_path = Self::get_config_path()?;
+        
+        if !config_path.exists() {
+            // Create default config
+            let config = Self::default();
+            config.save().await?;
+            return Ok(config);
+        }
+        
+        let content = tokio::fs::read_to_string(&config_path)
+            .await
+            .context("Failed to read config")?;
+        
+        serde_yaml::from_str(&content)
+            .context("Failed to parse config")
+    }
+}
+```
+
+---
+
+## 🎨 UI/UX PATTERNS (Terminal UI)
+
+### Ratatui Usage
+- Use `ratatui` for rich terminal UIs
+- Implement in `src/utils/agent_chat_v2/ui/`
+- Separate concerns: layout, rendering, event handling
+- Support both TUI and plain text modes
+
+### Display Guidelines
+- Use `colored` crate for terminal colors
+- Provide progress indicators for long operations
+- Show clear error messages with context
+- Include command examples in help text
+
+---
+
+## 📊 LOGGING & DEBUGGING
+
+### Logging Practices
+- Use `log` crate macros: `debug!()`, `info!()`, `warn!()`, `error!()`
+- Initialize with `solana-logger` for consistency
+- Support `--debug` flag for verbose output
+- Never log sensitive information (keys, tokens)
+
+```rust
+use log::{debug, info, error};
+
+pub async fn execute(&self) -> Result<()> {
+    info!("Starting execution");
+    debug!("Configuration: {:?}", self.config);
+    
+    match self.process().await {
+        Ok(result) => {
+            info!("Execution completed successfully");
+            Ok(result)
+        }
+        Err(e) => {
+            error!("Execution failed: {:#}", e);
+            Err(e)
+        }
+    }
+}
+```
+
+---
+
+## 🏛️ ARCHITECTURAL PATTERNS
+
+### Dependency Injection
+- Pass configuration and dependencies through constructors
+- Avoid global state where possible
+- Use `Arc<T>` for shared services across async tasks
+
+### Service Layer Pattern
+- Commands in `src/commands/` call services in `src/services/`
+- Services contain business logic and external integrations
+- Keep command handlers thin, delegate to services
+
+### Error Propagation
+- Commands return `Result<(), Box<dyn Error>>`
+- Services return `anyhow::Result<T>`
+- Convert errors at boundaries with `.context()`
+
+---
+
+## 🔄 SOLANA INTEGRATION
+
+### SDK Usage
+- Import from `solana-sdk`, `solana-client`, `solana-clap-utils`
+- Use version 3.0.x (consistent with Cargo.toml)
+- Prefer `Pubkey` over string addresses
+- Use `Commitment::finalized()` for RPC queries
+
+### RPC Patterns
+```rust
+use solana_client::rpc_client::RpcClient;
+use solana_sdk::commitment_config::CommitmentConfig;
+
+pub fn get_balance(rpc_url: &str, pubkey: &Pubkey) -> Result<u64> {
+    let client = RpcClient::new_with_commitment(
+        rpc_url.to_string(),
+        CommitmentConfig::finalized(),
+    );
+    
+    let balance = client.get_balance(pubkey)
+        .context("Failed to fetch balance")?;
+    
+    Ok(balance)
+}
+```
+
+---
+
+## 🧹 CODE QUALITY
+
+### Linting
+- Run `cargo clippy` before commits
+- Fix all warnings (use `#[allow(clippy::...)]` only when justified)
+- Format code with `cargo fmt`
+- No unused imports or variables (unless prefixed with `_`)
+
+### Unused Variable Handling
+**See: `.clinerules/unused-vars.md` (global rule)**
+
+When fixing TypeScript "unused variable" errors, always investigate WHY the variable exists:
+- Component props like `currentBalance` may be used to display data
+- Parameters like `transaction` may be needed for UI information
+- Callbacks like `onDepositSuccess` may be required for user flow
+
+**Only use underscore prefix for genuinely unused variables** (e.g., array indices in `.map()` where only item is needed).
+
+### Performance
+- Avoid unnecessary clones (use borrowing)
+- Use `&str` over `String` where possible
+- Batch operations when working with collections
+- Use async/await for I/O-bound operations
+- Use `tokio::spawn` for CPU-bound parallel tasks
+
+---
+
+## 🚢 DEPLOYMENT & RELEASES
+
+### Version Management
+- Update version in `Cargo.toml`
+- Tag releases: `git tag -a v0.8.3 -m "Release 0.8.3"`
+- Update CHANGELOG.md with changes
+
+### Build Commands
+```bash
+# Development build
+cargo build
+
+# Release build (optimized)
+cargo build --release
+
+# Install locally
+sudo cp target/release/osvm /usr/bin/osvm
+
+# Run tests
+cargo test
+
+# Run specific test
+cargo test test_name
+
+# Run benchmarks
+cargo bench
+```
+
+---
+
+## 📚 DOMAIN-SPECIFIC KNOWLEDGE
+
+### Firecracker MicroVMs
+- Boot time: ~125ms
+- Memory overhead: ~5MB base + workload
+- Communication via vsock (0.3ms latency)
+- KVM-based hardware isolation
+- Configure in `IsolationConfig`
+
+### Unikernels (HermitCore)
+- Boot time: ~50-100ms
+- Memory overhead: ~10MB
+- Single-process, no kernel
+- 99.83% attack surface reduction
+- Execute via `UnikernelRuntime`
+
+### Hot-Swap Updates
+- Zero-downtime component updates
+- Health check validation before cutover
+- Automatic rollback on failure
+- vsock connection preservation
+
+### Isolation Levels
+1. **Standard**: Normal process execution
+2. **MicroVM**: Firecracker isolation (125ms boot)
+3. **Unikernel**: Maximum isolation (50-100ms boot)
+
+---
+
+## ✅ CHECKLIST FOR NEW FEATURES
+
+When adding a new feature:
+
+- [ ] Implement in Rust under `src/` (NO standalone scripts)
+- [ ] Add public API to appropriate module (`commands/` or `services/`)
+- [ ] Include comprehensive error handling with context
+- [ ] Write unit tests (in same file)
+- [ ] Write integration tests (in `tests/`)
+- [ ] Add doc comments for public items
+- [ ] Update README.md if user-facing
+- [ ] Add example to `examples/` if complex
+- [ ] Run `cargo clippy` and fix warnings
+- [ ] Run `cargo fmt` to format code
+- [ ] Run `cargo test` to ensure tests pass
+- [ ] Test with `--debug` flag for verbose output
+- [ ] Update configuration schema if needed
+
+---
+
+## 🤝 CONTRIBUTION WORKFLOW
+
+1. **Fork & Branch**: Create feature branch from `main`
+2. **Develop**: Follow all rules in this document
+3. **Test**: Ensure all tests pass (`cargo test`)
+4. **Document**: Update docs and add examples
+5. **Commit**: Use conventional commit messages
+   - `feat: add new feature`
+   - `fix: resolve bug`
+   - `docs: update documentation`
+   - `refactor: improve code structure`
+   - `test: add test coverage`
+6. **Pull Request**: Describe changes, link issues
+
+---
+
+## 🐛 DEBUGGING TIPS
+
+### Common Issues
+- **Config not loading**: Check `~/.osvm/` directory permissions
+- **MCP server failing**: Verify server binary exists and is executable
+- **Timeout errors**: Increase timeout in service configuration
+- **Path errors**: Use `canonicalize()` to resolve paths
+
+### Debug Mode
+Enable with `--debug` flag for verbose output:
+```bash
+osvm --debug <command>
+```
+
+### Logging
+```bash
+# Enable Rust logging
+export RUST_LOG=osvm=debug,info
+osvm <command>
+
+# More verbose
+export RUST_LOG=trace
+osvm <command>
+```
+
+---
+
+## 📞 GETTING HELP
+
+- **Documentation**: `docs/` directory and README.md
+- **Examples**: `examples/` directory
+- **Issues**: GitHub Issues for bug reports
+- **Architecture**: `Architecture.md` for system design
+- **Testing**: `tests/README.md` for test guide
+
+---
+
+## 🎓 REFERENCES
+
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [Tokio Documentation](https://tokio.rs/)
+- [Solana Documentation](https://docs.solana.com/)
+- [Firecracker Documentation](https://github.com/firecracker-microvm/firecracker/tree/main/docs)
+- [MCP Specification](https://spec.modelcontextprotocol.io/)
+
+---
+
+**Last Updated**: January 2025  
+**Version**: 2.0 (Comprehensive Edition)

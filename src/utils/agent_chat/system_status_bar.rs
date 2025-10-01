@@ -7,8 +7,34 @@
 use super::Colors;
 use anyhow::Result;
 use crossterm::terminal;
+use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
+
+/// MCP tool deployment information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpToolDeployment {
+    pub server_name: String,
+    pub microvm_id: Option<String>,
+    pub mounts: Vec<MountInfo>,
+    pub active_unikernels: Vec<ActiveUnikernel>,
+}
+
+/// Mount information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MountInfo {
+    pub host_path: String,
+    pub vm_path: String,
+    pub readonly: bool,
+}
+
+/// Active unikernel execution
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveUnikernel {
+    pub tool_name: String,
+    pub unikernel_id: String,
+    pub started_at: std::time::SystemTime,
+}
 
 /// System status information
 #[derive(Debug, Clone)]
@@ -16,6 +42,7 @@ pub struct SystemStatus {
     pub unikernels_running: usize,
     pub microvms_running: usize,
     pub osvm_access_folders: Vec<String>,
+    pub mcp_deployments: Vec<McpToolDeployment>,
     pub total_components: usize,
     pub healthy_components: usize,
     pub current_network: String,
@@ -83,6 +110,9 @@ pub async fn get_system_status() -> SystemStatus {
     // Get OSVM access folders
     let access_folders = get_osvm_access_folders();
 
+    // Get MCP deployments with mount information
+    let mcp_deployments = get_mcp_deployments().await;
+
     // Get component status (mock for now, but structure for real implementation)
     let (total_components, healthy_components) = get_component_status().await;
 
@@ -93,11 +123,109 @@ pub async fn get_system_status() -> SystemStatus {
         unikernels_running: unikernels,
         microvms_running: microvms,
         osvm_access_folders: access_folders,
+        mcp_deployments,
         total_components,
         healthy_components,
         current_network,
         uptime_seconds: uptime,
     }
+}
+
+/// Get MCP tool deployments with mount information
+async fn get_mcp_deployments() -> Vec<McpToolDeployment> {
+    let mut deployments = Vec::new();
+
+    // Try to load mount configuration
+    let mounts_config = load_mounts_config().await.unwrap_or_default();
+
+    // Check for running MCP servers
+    let mcp_servers = detect_mcp_servers().await;
+
+    for (server_name, microvm_id) in mcp_servers {
+        let mut mounts = vec![
+            // Default mount
+            MountInfo {
+                host_path: "~/.config/osvm".to_string(),
+                vm_path: "/config".to_string(),
+                readonly: false,
+            },
+        ];
+
+        // Add configured mounts for this server
+        if let Some(server_mounts) = mounts_config.mcp_tool_mounts.get(&server_name) {
+            mounts.extend(server_mounts.clone());
+        }
+
+        // Get active unikernels for this server
+        let active_unikernels = get_active_unikernels(&server_name).await;
+
+        deployments.push(McpToolDeployment {
+            server_name,
+            microvm_id: Some(microvm_id),
+            mounts,
+            active_unikernels,
+        });
+    }
+
+    deployments
+}
+
+/// Detect running MCP servers and their microVM IDs
+async fn detect_mcp_servers() -> Vec<(String, String)> {
+    let mut servers = Vec::new();
+
+    // Check for common MCP server processes
+    let server_names = vec!["solana-mcp", "github-mcp", "filesystem-mcp"];
+
+    for (idx, server_name) in server_names.iter().enumerate() {
+        if let Ok(output) = tokio::process::Command::new("pgrep")
+            .args(&["-f", server_name])
+            .output()
+            .await
+        {
+            if output.status.success() && !output.stdout.is_empty() {
+                servers.push((server_name.to_string(), format!("μVM-{}", idx + 1)));
+            }
+        }
+    }
+
+    servers
+}
+
+/// Get active unikernels for a specific MCP server
+async fn get_active_unikernels(server_name: &str) -> Vec<ActiveUnikernel> {
+    // This would query the actual unikernel runtime
+    // For now, return empty as unikernels are typically very short-lived
+    Vec::new()
+}
+
+/// Load mounts configuration
+async fn load_mounts_config() -> Result<MountsConfig> {
+    let config_path = get_mounts_config_path()?;
+
+    if !config_path.exists() {
+        return Ok(MountsConfig::default());
+    }
+
+    let content = tokio::fs::read_to_string(&config_path).await?;
+    let config: MountsConfig = serde_json::from_str(&content)?;
+    Ok(config)
+}
+
+/// Get mounts configuration file path
+fn get_mounts_config_path() -> Result<std::path::PathBuf> {
+    let home = std::env::var("HOME")?;
+    Ok(std::path::PathBuf::from(home)
+        .join(".config")
+        .join("osvm")
+        .join("mounts.json"))
+}
+
+/// Mounts configuration structure
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MountsConfig {
+    pub osvm_mounts: Vec<MountInfo>,
+    pub mcp_tool_mounts: std::collections::HashMap<String, Vec<MountInfo>>,
 }
 
 /// Count running isolation processes
@@ -191,6 +319,63 @@ fn detect_solana_network() -> Option<String> {
     None
 }
 
+/// Format MCP deployment info for status bar
+fn format_mcp_deployments(deployments: &[McpToolDeployment]) -> String {
+    let mut parts = Vec::new();
+
+    for deployment in deployments {
+        let server_short = deployment.server_name.replace("-mcp", "");
+        let microvm = deployment
+            .microvm_id
+            .as_ref()
+            .map(|id| id.as_str())
+            .unwrap_or("?");
+
+        // Count mounts (excluding default config mount)
+        let extra_mounts = deployment.mounts.len().saturating_sub(1);
+
+        let mount_info = if extra_mounts > 0 {
+            let readonly_count = deployment
+                .mounts
+                .iter()
+                .filter(|m| m.readonly)
+                .count();
+            if readonly_count > 0 {
+                format!(":cfg+{}:{}ro", extra_mounts, readonly_count)
+            } else {
+                format!(":cfg+{}", extra_mounts)
+            }
+        } else {
+            ":cfg".to_string()
+        };
+
+        parts.push(format!("{}({}{})", server_short, microvm, mount_info));
+    }
+
+    parts.join(" ")
+}
+
+/// Format active unikernels for status bar
+fn format_active_unikernels(deployments: &[McpToolDeployment]) -> String {
+    let mut active_tools = Vec::new();
+
+    for deployment in deployments {
+        for unikernel in &deployment.active_unikernels {
+            active_tools.push(format!(
+                "{}({})",
+                unikernel.tool_name,
+                deployment.server_name.replace("-mcp", "")
+            ));
+        }
+    }
+
+    if active_tools.is_empty() {
+        "idle".to_string()
+    } else {
+        format!("uK:{}", active_tools.join(","))
+    }
+}
+
 /// Render the top-anchored status bar
 pub fn render_system_status_bar(status: &SystemStatus, carousel: &mut TextCarousel) -> Result<()> {
     let (cols, _) = terminal::size().unwrap_or((80, 24));
@@ -198,29 +383,37 @@ pub fn render_system_status_bar(status: &SystemStatus, carousel: &mut TextCarous
     // Position cursor at top of terminal
     print!("\x1B[1;1H");
 
-    // Create status text
+    // Create compact status text
+    let mcp_info = format_mcp_deployments(&status.mcp_deployments);
+    let unikernel_info = format_active_unikernels(&status.mcp_deployments);
+
     let status_text = format!(
-        "OSVM: {}μVMs {}uK {}comp({}/{}) net:{} up:{}s access:{} • ",
+        "OSVM: {}μVMs {}uK • {} • {} • net:{} • up:{}s",
         status.microvms_running,
         status.unikernels_running,
-        status.total_components,
-        status.healthy_components,
-        status.total_components,
+        mcp_info,
+        unikernel_info,
         status.current_network,
-        status.uptime_seconds % 3600, // Show seconds for demo
-        status.osvm_access_folders.len()
+        status.uptime_seconds % 3600
     );
 
-    // Add detailed folder access info to carousel
-    let detailed_info = format!(
-        "{} • Folders: {} • Components: {} healthy, {} total • Network: {} • Uptime: {} seconds",
-        status_text,
-        status.osvm_access_folders.join(", "),
-        status.healthy_components,
-        status.total_components,
-        status.current_network,
-        status.uptime_seconds
-    );
+    // Create detailed info for carousel
+    let mut detailed_parts = vec![status_text.clone()];
+
+    // Add detailed mount information
+    for deployment in &status.mcp_deployments {
+        for mount in &deployment.mounts {
+            if mount.host_path != "~/.config/osvm" {
+                let ro = if mount.readonly { " (ro)" } else { "" };
+                detailed_parts.push(format!(
+                    "{}: {}→{}{}",
+                    deployment.server_name, mount.host_path, mount.vm_path, ro
+                ));
+            }
+        }
+    }
+
+    let detailed_info = detailed_parts.join(" • ");
 
     // Update carousel text if it changed
     if carousel.text != detailed_info {
@@ -318,5 +511,33 @@ mod tests {
         let status = get_system_status().await;
         assert!(status.total_components > 0);
         assert!(status.uptime_seconds > 0);
+    }
+
+    #[test]
+    fn test_format_mcp_deployments() {
+        let deployments = vec![
+            McpToolDeployment {
+                server_name: "solana-mcp".to_string(),
+                microvm_id: Some("μVM-1".to_string()),
+                mounts: vec![
+                    MountInfo {
+                        host_path: "~/.config/osvm".to_string(),
+                        vm_path: "/config".to_string(),
+                        readonly: false,
+                    },
+                    MountInfo {
+                        host_path: "~/solana-data".to_string(),
+                        vm_path: "/data/solana-data".to_string(),
+                        readonly: false,
+                    },
+                ],
+                active_unikernels: vec![],
+            },
+        ];
+
+        let result = format_mcp_deployments(&deployments);
+        assert!(result.contains("solana"));
+        assert!(result.contains("μVM-1"));
+        assert!(result.contains("cfg+1"));
     }
 }

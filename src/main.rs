@@ -3,6 +3,7 @@
 use {
     crate::config::Config,
     crate::utils::diagnostics::DiagnosticCoordinator,
+    crate::utils::input_sanitization,
     crate::utils::markdown_renderer::MarkdownRenderer,
     crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
@@ -74,6 +75,7 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<Pubkey> {
 #[cfg(feature = "remote-wallet")]
 use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
 pub mod clparse;
+pub mod commands;
 pub mod config; // Added
 pub mod prelude;
 pub mod services;
@@ -94,6 +96,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "doctor"
             | "audit"
             | "mcp"
+            | "mount"
             | "chat"
             | "agent"
             | "plan"
@@ -659,8 +662,9 @@ async fn handle_mcp_command(
             let json_output = mcp_sub_matches.get_flag("json");
 
             let arguments = if let Some(args_str) = mcp_sub_matches.get_one::<String>("arguments") {
+                // Validate JSON with size limit (max 1MB for arguments)
                 Some(
-                    serde_json::from_str(args_str)
+                    input_sanitization::validate_json(args_str, 1024 * 1024)
                         .map_err(|e| format!("Invalid JSON arguments: {}", e))?,
                 )
             } else {
@@ -841,6 +845,53 @@ async fn handle_mcp_command(
 
                     println!("     Transport: {:?}", config.transport_type);
                     println!();
+                }
+            }
+        }
+
+        "mount" => {
+            let tool_name = mcp_sub_matches
+                .get_one::<String>("tool_name")
+                .expect("tool_name is required by clap");
+            let host_path = mcp_sub_matches
+                .get_one::<String>("host_path")
+                .expect("host_path is required by clap");
+            let readonly = mcp_sub_matches.get_flag("readonly");
+
+            match crate::commands::mount::handle_mcp_mount(tool_name, host_path, readonly) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to mount folder to MCP tool: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "unmount" => {
+            let tool_name = mcp_sub_matches
+                .get_one::<String>("tool_name")
+                .expect("tool_name is required by clap");
+            let host_path = mcp_sub_matches
+                .get_one::<String>("host_path")
+                .expect("host_path is required by clap");
+
+            match crate::commands::mount::handle_mcp_unmount(tool_name, host_path) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to unmount folder from MCP tool: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "mounts" => {
+            let tool_name = mcp_sub_matches.get_one::<String>("tool_name");
+
+            match crate::commands::mount::handle_mcp_mounts(tool_name.map(|s| s.as_str())) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to list MCP tool mounts: {}", e);
+                    std::process::exit(1);
                 }
             }
         }
@@ -2137,6 +2188,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "mcp" => {
             // Handle the MCP command for managing Model Context Protocol servers
             return handle_mcp_command(&app_matches, sub_matches).await;
+        }
+        "mount" => {
+            // Handle folder mount management for OSVM microVMs
+            let Some((mount_sub_command, mount_sub_matches)) = matches.subcommand() else {
+                eprintln!("No mount subcommand provided");
+                exit(1);
+            };
+
+            match mount_sub_command {
+                "add" => {
+                    let host_path = mount_sub_matches
+                        .get_one::<String>("host_path")
+                        .expect("host_path is required by clap");
+                    let readonly = mount_sub_matches.get_flag("readonly");
+
+                    match crate::commands::mount::handle_mount_add(host_path, readonly) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("❌ Failed to add mount: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                "remove" => {
+                    let host_path = mount_sub_matches
+                        .get_one::<String>("host_path")
+                        .expect("host_path is required by clap");
+
+                    match crate::commands::mount::handle_mount_remove(host_path) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("❌ Failed to remove mount: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                "list" => {
+                    match crate::commands::mount::handle_mount_list() {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("❌ Failed to list mounts: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                _ => {
+                    eprintln!("Unknown mount subcommand: {}", mount_sub_command);
+                    exit(1);
+                }
+            }
         }
         "doctor" => {
             // Handle the doctor command for system diagnostics and repair

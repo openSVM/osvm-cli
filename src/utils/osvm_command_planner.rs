@@ -109,7 +109,7 @@ impl OsvmCommandPlanner {
             Err(anyhow::anyhow!(
                 "AI returned unexpected format. \n\nResponse preview: {}\n\n\
                 💡 This feature is experimental. If you see this error frequently, please report it at:\n   \
-                https://github.com/anthropics/osvm-cli/issues",
+                https://github.com/opensvm/osvm-cli/issues",
                 &ai_response.chars().take(200).collect::<String>()
             ))
         })
