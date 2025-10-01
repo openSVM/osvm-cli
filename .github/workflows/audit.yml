@@ -57,10 +57,15 @@ jobs:
         rm -rf typst.tar.xz typst-x86_64-unknown-linux-musl/
         typst --version
         
+    - name: Install native dependencies for hidapi
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
+        
     - name: Build OSVM CLI
       run: |
         cd osvm-cli
-        cargo build --release
+        cargo build --release --locked
         
     - name: Run tests
       run: |
