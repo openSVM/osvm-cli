@@ -1,6 +1,6 @@
 # Maintainer: OpenSVM <rin@opensvm.com>
 pkgname=osvm
-pkgver=0.8.2-test
+pkgver=0.8.3
 pkgrel=1
 pkgdesc="OpenSVM CLI tool for managing SVM nodes and deployments"
 arch=('x86_64' 'aarch64')
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('glibc')
 makedepends=('rust' 'cargo' 'pkg-config' 'openssl' 'systemd-libs')
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/openSVM/osvm-cli/archive/v${pkgver}.tar.gz")
-sha256sums=('eaec5c0679db60874389d00acd89c000f41e8d928cf2cd6aa860df2b089ff802')
+sha256sums=('5af35631fd31c78a8a1305d9f2b54bff9d11feca3f3c637750838323f47ed29b')
 
 prepare() {
     cd "${pkgname}-cli-${pkgver}"
