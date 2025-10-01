@@ -1131,3 +1131,98 @@ a:focus {
     line-height: 1.4;
     color: var(--off-white);
 }
+
+/* ===== MISSING SECTION CONTAINERS (BUG-010/025 FIX) ===== */
+
+/* Page Header */
+.page-header {
+    margin-bottom: var(--spacing-xl);
+    padding-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--gray);
+}
+
+/* Section Containers */
+.achievements,
+.architecture,
+.phases,
+.benchmarks,
+.security,
+.getting-started,
+.docs-links,
+.status {
+    margin-bottom: var(--spacing-2xl);
+}
+
+/* Animate on Scroll Support */
+.animate-on-scroll {
+    opacity: 1;
+    transition: opacity var(--transition-slow), transform var(--transition-slow);
+}
+
+/* Animation States */
+[data-animation="slideUp"] {
+    animation: slideUp 0.6s ease-out;
+}
+
+[data-animation="slideLeft"] {
+    animation: slideLeft 0.6s ease-out;
+}
+
+[data-animation="zoomIn"] {
+    animation: zoomIn 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes zoomIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Additional isolation.html specific styles */
+.intro.animate-on-scroll,
+.achievements.animate-on-scroll,
+.architecture.animate-on-scroll,
+.phases.animate-on-scroll,
+.benchmarks.animate-on-scroll,
+.security.animate-on-scroll,
+.getting-started.animate-on-scroll,
+.docs-links.animate-on-scroll,
+.status.animate-on-scroll {
+    animation-delay: 0.1s;
+}
+
+/* Ensure consistent spacing for all sections */
+section {
+    margin-bottom: var(--spacing-2xl);
+}
+
+section:last-child {
+    margin-bottom: var(--spacing-xl);
+}

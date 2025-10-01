@@ -189,6 +189,7 @@ impl AdvancedChatUI {
         self.update_chat_display(siv);
         self.update_agent_status(siv);
         self.update_mcp_tools_list(siv);
+        self.update_status_bar(siv);
     }
 
     pub fn update_chat_list(&self, siv: &mut Cursive) {
@@ -353,6 +354,97 @@ impl AdvancedChatUI {
 
         if let Some(mut status_display) = siv.find_name::<TextView>("agent_status") {
             status_display.set_content(status_text);
+        }
+    }
+
+    pub fn update_status_bar(&self, siv: &mut Cursive) {
+        use std::time::{Duration, Instant};
+        
+        // Check if we need to refresh the cached status (throttle to avoid blocking UI thread too often)
+        const REFRESH_INTERVAL_SECS: u64 = 2; // Refresh every 2 seconds
+        
+        let should_refresh = {
+            if let Ok(last_update) = self.state.last_status_update.read() {
+                last_update.map(|instant| instant.elapsed() > Duration::from_secs(REFRESH_INTERVAL_SECS))
+                    .unwrap_or(true)
+            } else {
+                true
+            }
+        };
+        
+        // Only fetch new status if the cache is stale
+        if should_refresh {
+            // Spawn status fetch in background to avoid blocking UI thread
+            // For now, we still need to block briefly, but we do it less frequently
+            let status_text = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    let status = crate::utils::agent_chat::system_status_bar::get_system_status().await;
+                    
+                    // Format status similar to the carousel format
+                    let mcp_info = if status.mcp_deployments.is_empty() {
+                        "no MCP".to_string()
+                    } else {
+                        status.mcp_deployments.iter()
+                            .map(|d| {
+                                let server_short = d.server_name.replace("-mcp", "");
+                                let microvm = d.microvm_id.as_ref().map(|id| id.as_str()).unwrap_or("?");
+                                let extra_mounts = d.mounts.len().saturating_sub(1);
+                                let readonly_count = d.mounts.iter().filter(|m| m.readonly).count();
+                                
+                                if extra_mounts > 0 {
+                                    if readonly_count > 0 {
+                                        format!("{}({}:cfg+{}:{}ro)", server_short, microvm, extra_mounts, readonly_count)
+                                    } else {
+                                        format!("{}({}:cfg+{})", server_short, microvm, extra_mounts)
+                                    }
+                                } else {
+                                    format!("{}({}:cfg)", server_short, microvm)
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    };
+
+                    format!(
+                        "OSVM: {}μVMs {}uK • {} • net:{} • up:{}s",
+                        status.microvms_running,
+                        status.unikernels_running,
+                        mcp_info,
+                        status.current_network,
+                        status.uptime_seconds % 3600
+                    )
+                })
+            });
+            
+            // Update the cache
+            if let Ok(mut cached_status) = self.state.cached_status_text.write() {
+                *cached_status = Some(status_text.clone());
+            }
+            if let Ok(mut last_update) = self.state.last_status_update.write() {
+                *last_update = Some(Instant::now());
+            }
+            
+            // Update the view
+            if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
+                let content_ref = status_bar_view.get_content();
+                let current_content = content_ref.source().to_string();
+                if current_content != status_text {
+                    status_bar_view.set_content(status_text);
+                }
+            }
+        } else {
+            // Use cached status to avoid blocking
+            if let Ok(cached_status) = self.state.cached_status_text.read() {
+                if let Some(status_text) = cached_status.as_ref() {
+                    if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
+                        let content_ref = status_bar_view.get_content();
+                        let current_content = content_ref.source().to_string();
+                        if &current_content != status_text {
+                            status_bar_view.set_content(status_text.clone());
+                        }
+                    }
+                }
+            }
         }
     }
 

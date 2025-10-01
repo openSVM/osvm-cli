@@ -588,7 +588,7 @@ For issues & feedback: https://github.com/anthropics/osvm-cli/issues")
                 )
                 .subcommand(
                     Command::new("install")
-                        .about("Install an SVM on a remote host")
+                        .about("🚧 COMING SOON: Install an SVM on a remote host")
                         .arg(
                             Arg::new("name")
                                 .value_name("NAME")
@@ -689,7 +689,7 @@ For issues & feedback: https://github.com/anthropics/osvm-cli/issues")
                 )
                 .subcommand(
                     Command::new("restart")
-                        .about("Restart a node")
+                        .about("🚧 COMING SOON: Restart a node")
                         .arg(
                             Arg::new("node-id")
                                 .value_name("NODE_ID")
@@ -700,7 +700,7 @@ For issues & feedback: https://github.com/anthropics/osvm-cli/issues")
                 )
                 .subcommand(
                     Command::new("stop")
-                        .about("Stop a node")
+                        .about("🚧 COMING SOON: Stop a node")
                         .arg(
                             Arg::new("node-id")
                                 .value_name("NODE_ID")
@@ -1140,6 +1140,90 @@ For issues & feedback: https://github.com/anthropics/osvm-cli/issues")
                                 .action(ArgAction::SetTrue)
                                 .help("Output results in JSON format")
                         )
+                )
+                .subcommand(
+                    Command::new("mount")
+                        .about("Mount a folder to an MCP tool (auto-detected tool path)")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name (e.g., solana-mcp)")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to mount (e.g., ~/solana-data)")
+                                .required(true)
+                                .index(2)
+                        )
+                        .arg(
+                            Arg::new("readonly")
+                                .long("readonly")
+                                .short('r')
+                                .action(ArgAction::SetTrue)
+                                .help("Mount as read-only")
+                        )
+                )
+                .subcommand(
+                    Command::new("unmount")
+                        .about("Unmount a folder from an MCP tool")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to unmount")
+                                .required(true)
+                                .index(2)
+                        )
+                )
+                .subcommand(
+                    Command::new("mounts")
+                        .about("List mounts for MCP tools")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name (optional, shows all if not specified)")
+                                .index(1)
+                        )
+                )
+        )
+        .subcommand(
+            Command::new("mount")
+                .about("Manage folder mounts for OSVM microVMs and MCP tools")
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("add")
+                        .about("Mount a folder to OSVM microVM (auto-detected VM path)")
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to mount (e.g., ~/Documents)")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("readonly")
+                                .long("readonly")
+                                .short('r')
+                                .action(ArgAction::SetTrue)
+                                .help("Mount as read-only")
+                        )
+                )
+                .subcommand(
+                    Command::new("remove")
+                        .about("Unmount a folder from OSVM microVM")
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to unmount")
+                                .required(true)
+                                .index(1)
+                        )
+                )
+                .subcommand(
+                    Command::new("list")
+                        .about("List all OSVM microVM mounts")
                 )
         )
         .subcommand(

@@ -12,6 +12,7 @@ use crate::services::{
     ai_service::AiService,
     mcp_service::{McpServerConfig, McpService, McpTool},
 };
+use crate::utils::agent_chat::system_status_bar::SystemStatusBarManager;
 use crate::utils::themes::ThemeManager;
 
 use super::agent::AgentCommand;
@@ -31,12 +32,20 @@ pub struct AdvancedChatState {
     pub suggestions_visible: Arc<RwLock<bool>>,
     pub spinner_state: Arc<AtomicUsize>,
     pub theme_manager: Arc<RwLock<ThemeManager>>,
+    pub status_bar_manager: Arc<RwLock<SystemStatusBarManager>>,
+    
+    /// Cached status bar text to reduce blocking UI thread
+    pub cached_status_text: Arc<RwLock<Option<String>>>,
+    
+    /// Last time the status was updated
+    pub last_status_update: Arc<RwLock<Option<std::time::Instant>>>,
 }
 
 impl AdvancedChatState {
     pub fn new() -> Result<Self> {
         let mut theme_manager =
             ThemeManager::new().context("Failed to initialize theme manager")?;
+        let status_bar_manager = SystemStatusBarManager::new();
         let state = Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_session_id: Arc::new(RwLock::new(None)),
@@ -48,6 +57,9 @@ impl AdvancedChatState {
             current_suggestions: Arc::new(RwLock::new(Vec::new())),
             suggestions_visible: Arc::new(RwLock::new(false)),
             theme_manager: Arc::new(RwLock::new(theme_manager)),
+            status_bar_manager: Arc::new(RwLock::new(status_bar_manager)),
+            cached_status_text: Arc::new(RwLock::new(None)),
+            last_status_update: Arc::new(RwLock::new(None)),
         };
 
         // Load theme from saved configuration

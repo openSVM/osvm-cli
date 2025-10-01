@@ -173,6 +173,7 @@ pub async fn start_local_rpc(config: LocalRpcConfig) -> Result<LocalRpcInfo> {
     cmd.arg("--wal-recovery-mode")
         .arg("skip_any_corrupted_record");
     cmd.arg("--allow-private-addr");
+    cmd.arg("--no-port-check"); // Skip UDP port reachability checks for local development
 
     if config.reset {
         // For reset, we need to clear the ledger directory
