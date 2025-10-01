@@ -87,6 +87,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y debhelper dh-make devscripts dpkg-dev
       
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cargo rustc libudev-dev libusb-1.0-0-dev
+      
       - name: Create Debian package
         run: |
           # Get version by stripping 'v' prefix from tag
@@ -129,6 +134,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg-dev
+      
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cargo rustc libudev-dev libusb-1.0-0-dev
       
       - name: Create Termux package structure
         run: |
