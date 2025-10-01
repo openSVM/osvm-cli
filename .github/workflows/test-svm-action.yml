@@ -94,15 +94,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Install system dependencies
+      - name: Install native dependencies for hidapi
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libssl-dev perl
+          sudo apt-get install -y libhidapi-dev libudev-dev pkg-config libssl-dev perl
       
       - name: Dry run - Build OSVM CLI
         run: |
           echo "Building OSVM CLI for dry run test..."
-          cargo build --release
+          cargo build --release --locked
           
           # Verify the binary works
           ./target/release/osvm --version

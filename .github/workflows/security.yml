@@ -15,10 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install native dependencies for hidapi
         run: |
           sudo apt-get update
-          sudo apt-get install libudev-dev
+          sudo apt-get install -y libhidapi-dev libudev-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -70,10 +70,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
+      - name: Install native dependencies for hidapi
         run: |
           sudo apt-get update
-          sudo apt-get install libudev-dev
+          sudo apt-get install -y libhidapi-dev libudev-dev
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -83,7 +83,7 @@ jobs:
           CODEQL_ENABLE_EXPERIMENTAL_FEATURES: true
 
       - name: Build
-        run: cargo build
+        run: cargo build --locked
         working-directory: .
 
       - name: Perform CodeQL Analysis
