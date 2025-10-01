@@ -27,15 +27,23 @@ const MAX_REQUEST_ID: u64 = u64::MAX - 1000; // Leave some buffer for overflow
 
 /// Safely validate and canonicalize a path to prevent directory traversal attacks
 fn safe_path_validation(path: &Path, base_dir: &Path) -> Result<PathBuf> {
-    let canonical_path = path.canonicalize()
+    let canonical_path = path
+        .canonicalize()
         .with_context(|| format!("Failed to canonicalize path: {}", path.display()))?;
 
-    let canonical_base = base_dir.canonicalize()
-        .with_context(|| format!("Failed to canonicalize base directory: {}", base_dir.display()))?;
+    let canonical_base = base_dir.canonicalize().with_context(|| {
+        format!(
+            "Failed to canonicalize base directory: {}",
+            base_dir.display()
+        )
+    })?;
 
     if !canonical_path.starts_with(&canonical_base) {
-        return Err(anyhow!("Path traversal detected: {} is outside base directory {}",
-                          canonical_path.display(), canonical_base.display()));
+        return Err(anyhow!(
+            "Path traversal detected: {} is outside base directory {}",
+            canonical_path.display(),
+            canonical_base.display()
+        ));
     }
 
     Ok(canonical_path)
@@ -441,9 +449,7 @@ impl McpService {
             if let Ok(url) = env::var(env_var) {
                 // Validate URL before use
                 if self.validate_mcp_url(&url)? {
-                    let server_name = env_var.to_lowercase()
-                        .replace("_url", "")
-                        .replace("_", "-");
+                    let server_name = env_var.to_lowercase().replace("_url", "").replace("_", "-");
 
                     let config = McpServerConfig {
                         name: server_name.clone(),
@@ -499,8 +505,7 @@ impl McpService {
     /// Validate MCP server URL for security
     fn validate_mcp_url(&self, url: &str) -> Result<bool> {
         // Parse URL to validate format
-        let parsed_url = url::Url::parse(url)
-            .context("Invalid MCP server URL format")?;
+        let parsed_url = url::Url::parse(url).context("Invalid MCP server URL format")?;
 
         // Only allow HTTP and HTTPS
         if !matches!(parsed_url.scheme(), "http" | "https") {
@@ -631,8 +636,12 @@ impl McpService {
                 "1",               // Shallow clone for security and performance
                 "--single-branch", // Only clone default branch
                 &github_url,
-                local_path.to_str()
-                    .ok_or_else(|| anyhow!("Invalid path contains non-UTF8 characters: {}", local_path.display()))?,
+                local_path.to_str().ok_or_else(|| {
+                    anyhow!(
+                        "Invalid path contains non-UTF8 characters: {}",
+                        local_path.display()
+                    )
+                })?,
             ])
             .output()
             .context("Failed to execute git clone command")?;
@@ -687,8 +696,14 @@ impl McpService {
                 ));
             }
 
-            binary_path.to_str()
-                .ok_or_else(|| anyhow!("Binary path contains non-UTF8 characters: {}", binary_path.display()))?
+            binary_path
+                .to_str()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Binary path contains non-UTF8 characters: {}",
+                        binary_path.display()
+                    )
+                })?
                 .to_string()
         } else if package_json_path.exists() {
             // Node.js project - install dependencies with npm
@@ -747,8 +762,13 @@ impl McpService {
             }
 
             // For Node.js MCP servers, we'll use a wrapper command that calls node
-            format!("node {}", script_path.to_str()
-                .ok_or_else(|| anyhow!("Script path contains non-UTF8 characters: {}", script_path.display()))?)
+            format!(
+                "node {}",
+                script_path.to_str().ok_or_else(|| anyhow!(
+                    "Script path contains non-UTF8 characters: {}",
+                    script_path.display()
+                ))?
+            )
         } else {
             return Err(anyhow::anyhow!(
                 "No Cargo.toml or package.json found in the cloned repository. \
@@ -765,9 +785,17 @@ impl McpService {
             enabled: true,
             extra_config: HashMap::new(),
             github_url: Some(github_url),
-            local_path: Some(local_path.to_str()
-                .ok_or_else(|| anyhow!("Local path contains non-UTF8 characters: {}", local_path.display()))?
-                .to_string()),
+            local_path: Some(
+                local_path
+                    .to_str()
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Local path contains non-UTF8 characters: {}",
+                            local_path.display()
+                        )
+                    })?
+                    .to_string(),
+            ),
         };
 
         self.servers.insert(server_id, config);

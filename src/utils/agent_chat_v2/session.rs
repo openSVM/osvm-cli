@@ -2,11 +2,12 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use fs2::FileExt;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
-use uuid::Uuid;
+use uuid::Uuid; // For file locking
 
 use super::types::{AgentState, ChatMessage};
 
@@ -55,14 +56,26 @@ impl ChatSession {
 
     fn save_message_to_recording(&self, message: &ChatMessage) -> Result<()> {
         if let Some(file_path) = &self.recording_file {
+            // CRITICAL FIX: Use file locking to prevent corruption from concurrent writes
+            use fs2::FileExt;
+
             let mut file = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(file_path)?;
 
+            // Acquire exclusive lock (blocks until available)
+            file.lock_exclusive()?;
+
             let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
             let message_json = serde_json::to_string(message)?;
             writeln!(file, "[{}] {}", timestamp, message_json)?;
+
+            // Force to disk before releasing lock
+            file.sync_all()?;
+
+            // Lock automatically released when file is dropped
+            file.unlock()?;
         }
         Ok(())
     }

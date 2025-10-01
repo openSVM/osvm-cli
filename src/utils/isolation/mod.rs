@@ -39,17 +39,17 @@ pub mod tee;
 pub mod vsock;
 
 // Re-exports for convenience
-pub use autoscaler::{AutoScaler, AutoScalerConfig, ScalingPolicy, ComponentMetrics};
+pub use autoscaler::{AutoScaler, AutoScalerConfig, ComponentMetrics, ScalingPolicy};
 pub use certificate::{CertificateAuthority, CertificateManager};
 pub use component::{Component, ComponentId, ComponentRegistry, ComponentStatus, ComponentType};
 pub use config::{IsolationConfig, IsolationType, ResourceLimits};
-pub use hotswap::{HotSwapManager, HotSwapConfig, HotSwapResult};
+pub use hotswap::{HotSwapConfig, HotSwapManager, HotSwapResult};
 pub use network::{NetworkManager, ZeroTrustNetwork};
 pub use orchestrator::{Orchestrator, OrchestratorConfig, OrchestratorStats};
 pub use policy::{Policy, PolicyEngine};
 pub use runtime::{Runtime, RuntimeManager};
-pub use tee::{TeeManager, TeeType, TeeConfig, KeyHandle, AttestationReport};
-pub use vsock::{VsockManager, VsockAddr, VsockConnection, Cid, Port};
+pub use tee::{AttestationReport, KeyHandle, TeeConfig, TeeManager, TeeType};
+pub use vsock::{Cid, Port, VsockAddr, VsockConnection, VsockManager};
 
 /// Isolation level for a component
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -150,7 +150,9 @@ mod tests {
     fn test_isolation_level_security_scores() {
         assert_eq!(IsolationLevel::None.security_score(), 0);
         assert_eq!(IsolationLevel::TEE.security_score(), 100);
-        assert!(IsolationLevel::Unikernel.security_score() > IsolationLevel::MicroVM.security_score());
+        assert!(
+            IsolationLevel::Unikernel.security_score() > IsolationLevel::MicroVM.security_score()
+        );
     }
 
     #[test]

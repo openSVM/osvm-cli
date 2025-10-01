@@ -12,6 +12,7 @@ use crate::services::{
     ai_service::AiService,
     mcp_service::{McpServerConfig, McpService, McpTool},
 };
+use crate::utils::themes::ThemeManager;
 
 use super::agent::AgentCommand;
 use super::session::ChatSession;
@@ -29,10 +30,13 @@ pub struct AdvancedChatState {
     pub current_suggestions: Arc<RwLock<Vec<String>>>,
     pub suggestions_visible: Arc<RwLock<bool>>,
     pub spinner_state: Arc<AtomicUsize>,
+    pub theme_manager: Arc<RwLock<ThemeManager>>,
 }
 
 impl AdvancedChatState {
     pub fn new() -> Result<Self> {
+        let mut theme_manager =
+            ThemeManager::new().context("Failed to initialize theme manager")?;
         let state = Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_session_id: Arc::new(RwLock::new(None)),
@@ -43,7 +47,13 @@ impl AdvancedChatState {
             spinner_state: Arc::new(AtomicUsize::new(0)),
             current_suggestions: Arc::new(RwLock::new(Vec::new())),
             suggestions_visible: Arc::new(RwLock::new(false)),
+            theme_manager: Arc::new(RwLock::new(theme_manager)),
         };
+
+        // Load theme from saved configuration
+        if let Err(e) = state.load_theme_from_config() {
+            warn!("Failed to load theme from config: {}", e);
+        }
 
         // Create default sessions so the UI has content to navigate
         let main_session_id = state.create_session("Main Chat".to_string())?;
@@ -119,10 +129,9 @@ impl AdvancedChatState {
 
     pub fn add_message_to_session(&self, session_id: Uuid, message: ChatMessage) -> Result<()> {
         // Use try_write to prevent deadlocks
-        let mut sessions = self
-            .sessions
-            .try_write()
-            .map_err(|_| anyhow!("Failed to acquire write lock for sessions (possible deadlock)"))?;
+        let mut sessions = self.sessions.try_write().map_err(|_| {
+            anyhow!("Failed to acquire write lock for sessions (possible deadlock)")
+        })?;
 
         if let Some(session) = sessions.get_mut(&session_id) {
             session.add_message(message);
@@ -156,10 +165,9 @@ impl AdvancedChatState {
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
         // Use try_write to prevent deadlocks
-        let mut sessions = self
-            .sessions
-            .try_write()
-            .map_err(|_| anyhow::anyhow!("Failed to acquire write lock for sessions (possible deadlock)"))?;
+        let mut sessions = self.sessions.try_write().map_err(|_| {
+            anyhow::anyhow!("Failed to acquire write lock for sessions (possible deadlock)")
+        })?;
 
         // Atomic operation: check and remove in one step
         if let Some(session) = sessions.get_mut(&session_id) {
@@ -170,11 +178,17 @@ impl AdvancedChatState {
                     debug!("Removed processing message from session {}", session_id);
                 }
                 _ => {
-                    debug!("No processing message to remove from session {}", session_id);
+                    debug!(
+                        "No processing message to remove from session {}",
+                        session_id
+                    );
                 }
             }
         } else {
-            warn!("Session {} not found when removing processing message", session_id);
+            warn!(
+                "Session {} not found when removing processing message",
+                session_id
+            );
         }
 
         Ok(())
@@ -357,12 +371,25 @@ impl AdvancedChatState {
     }
 
     pub fn get_available_tools_context(&self) -> String {
+        // CRITICAL SECURITY FIX: Proper poison handling - don't mask panics!
         let tools = match self.available_tools.read() {
             Ok(tools) => tools,
-            Err(_) => {
-                // Clear poison and retry
-                self.available_tools.clear_poison();
-                self.available_tools.read().unwrap()
+            Err(poison_error) => {
+                error!("❌ CRITICAL: available_tools RwLock poisoned!");
+                error!("A panic occurred while holding the lock - data may be inconsistent");
+                error!("This indicates a bug in the tool refresh logic");
+
+                // Access the poisoned data read-only for emergency operation
+                // but warn the user that the system needs restart
+                let guard = poison_error.into_inner();
+
+                warn!("⚠️  MCP tools data may be corrupted - recommend restarting chat");
+
+                // Return early with safe fallback
+                return "⚠️  MCP tools temporarily unavailable due to system error.\n\
+                        Please restart the chat interface.\n\
+                        This indicates a bug - please report it."
+                    .to_string();
             }
         };
 
@@ -398,4 +425,107 @@ impl AdvancedChatState {
 
         context
     }
+
+    // Theme management methods
+    pub fn switch_theme(&self, theme_name: &str) -> Result<()> {
+        let mut theme_manager = self
+            .theme_manager
+            .write()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        theme_manager
+            .switch_theme(theme_name)
+            .context("Failed to switch theme")?;
+
+        // Save theme preference to config
+        drop(theme_manager); // Release the lock before calling save_theme_config
+        if let Err(e) = self.save_theme_config() {
+            warn!("Failed to save theme configuration: {}", e);
+        }
+
+        Ok(())
+    }
+
+    pub fn get_available_themes(&self) -> Result<Vec<String>> {
+        let theme_manager = self
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        Ok(theme_manager.available_themes().to_vec())
+    }
+
+    pub fn get_current_theme_name(&self) -> Result<String> {
+        let theme_manager = self
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        Ok(theme_manager.current_theme().name.clone())
+    }
+
+    pub fn preview_theme(&self, theme_name: &str) -> Result<String> {
+        use crate::utils::themes::Theme;
+
+        match Theme::load(theme_name) {
+            Ok(theme) => Ok(theme.preview()),
+            Err(e) => Err(anyhow!("Failed to load theme '{}': {}", theme_name, e)),
+        }
+    }
+
+    pub fn get_theme_manager(&self) -> Arc<RwLock<ThemeManager>> {
+        Arc::clone(&self.theme_manager)
+    }
+
+    /// Load theme from configuration file or environment
+    pub fn load_theme_from_config(&self) -> Result<()> {
+        let config_path = Self::get_config_path()?;
+
+        if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)?;
+            if let Ok(config) = serde_json::from_str::<ThemeConfig>(&content) {
+                if let Some(theme_name) = config.current_theme {
+                    self.switch_theme(&theme_name)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Save current theme to configuration file
+    pub fn save_theme_config(&self) -> Result<()> {
+        let config_path = Self::get_config_path()?;
+
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let theme_name = self.get_current_theme_name()?;
+        let config = ThemeConfig {
+            current_theme: Some(theme_name),
+            auto_theme_switching: false, // TODO: Add this setting
+        };
+
+        let json = serde_json::to_string_pretty(&config)?;
+        std::fs::write(&config_path, json)?;
+
+        Ok(())
+    }
+
+    /// Get theme configuration file path
+    fn get_config_path() -> Result<std::path::PathBuf> {
+        let home = std::env::var("HOME").context("HOME environment variable not set")?;
+        Ok(std::path::PathBuf::from(home)
+            .join(".config")
+            .join("osvm")
+            .join("theme_config.json"))
+    }
+}
+
+/// Theme configuration structure
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+struct ThemeConfig {
+    current_theme: Option<String>,
+    auto_theme_switching: bool,
 }

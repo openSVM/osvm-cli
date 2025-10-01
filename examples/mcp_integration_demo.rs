@@ -42,13 +42,17 @@ async fn main() -> Result<()> {
     println!("   Command: hermit build --release --target x86_64-unknown-hermit");
     println!("   Location: examples/simple_mcp_server/");
 
-    let image_path = PathBuf::from("examples/simple_mcp_server/target/x86_64-unknown-hermit/release/simple-mcp-server");
+    let image_path = PathBuf::from(
+        "examples/simple_mcp_server/target/x86_64-unknown-hermit/release/simple-mcp-server",
+    );
 
     // For demo purposes, check if standard binary exists
     let demo_image = PathBuf::from("examples/simple_mcp_server/target/release/simple-mcp-server");
     let using_demo = if !image_path.exists() && demo_image.exists() {
         println!("   ⚠ Using standard binary for demo (unikernel image not built)");
-        println!("   ℹ To build unikernel: cd examples/simple_mcp_server && hermit build --release");
+        println!(
+            "   ℹ To build unikernel: cd examples/simple_mcp_server && hermit build --release"
+        );
         true
     } else if image_path.exists() {
         println!("   ✓ Unikernel image found: {}", image_path.display());
@@ -70,7 +74,10 @@ async fn main() -> Result<()> {
     // Runtime manager (auto-detects available runtimes)
     let runtime_manager = RuntimeManager::with_defaults();
     println!("   ✓ Runtime manager initialized");
-    println!("   Available runtimes: {:?}", runtime_manager.list_available_runtimes());
+    println!(
+        "   Available runtimes: {:?}",
+        runtime_manager.list_available_runtimes()
+    );
 
     // Certificate authority (simulated for demo)
     let ca_root = PathBuf::from("/tmp/osvm-demo/ca");
@@ -127,7 +134,14 @@ async fn main() -> Result<()> {
 
     println!("   Component ID: {}", component_id);
     println!("   Type: MCP Server (simple-mcp v0.1.0)");
-    println!("   Isolation: {:?}", if using_demo { "ProcessSandbox (demo)" } else { "Unikernel (HermitCore)" });
+    println!(
+        "   Isolation: {:?}",
+        if using_demo {
+            "ProcessSandbox (demo)"
+        } else {
+            "Unikernel (HermitCore)"
+        }
+    );
     println!("   Resources: 128MB RAM, 1 CPU core, 100 Mbps network");
     println!();
 
@@ -158,14 +172,19 @@ async fn main() -> Result<()> {
     let client_id = ComponentId::new();
 
     // Allow connection from client to MCP server
-    network_manager.add_policy(NetworkPolicy {
-        source: ComponentPattern::Specific(client_id),
-        destination: ComponentPattern::Specific(component_id),
-        effect: PolicyEffect::Allow,
-        constraints: Default::default(),
-    }).await;
+    network_manager
+        .add_policy(NetworkPolicy {
+            source: ComponentPattern::Specific(client_id),
+            destination: ComponentPattern::Specific(component_id),
+            effect: PolicyEffect::Allow,
+            constraints: Default::default(),
+        })
+        .await;
 
-    println!("   ✓ Policy: Allow {} → {} (mTLS required)", client_id, component_id);
+    println!(
+        "   ✓ Policy: Allow {} → {} (mTLS required)",
+        client_id, component_id
+    );
     println!("   ✓ Default policy: Deny all other connections");
     println!();
 
@@ -218,8 +237,16 @@ async fn main() -> Result<()> {
         .is_connection_allowed(client_id, component_id)
         .await?;
 
-    println!("   Policy check: {} → {} = {}", client_id, component_id,
-             if is_allowed { "✓ ALLOWED" } else { "✗ DENIED" });
+    println!(
+        "   Policy check: {} → {} = {}",
+        client_id,
+        component_id,
+        if is_allowed {
+            "✓ ALLOWED"
+        } else {
+            "✗ DENIED"
+        }
+    );
 
     if is_allowed {
         println!("   ⚠ Connection simulation (requires running server)");
@@ -264,7 +291,10 @@ async fn main() -> Result<()> {
             _ => json!(null),
         };
 
-        println!("   📥 Response: {}", serde_json::to_string_pretty(&mock_response)?);
+        println!(
+            "   📥 Response: {}",
+            serde_json::to_string_pretty(&mock_response)?
+        );
         println!();
     }
 

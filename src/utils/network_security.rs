@@ -3,12 +3,12 @@
 //! This module provides utilities for secure network operations including
 //! timeouts, rate limiting, and connection validation.
 
-use std::time::Duration;
-use tokio::time::{timeout, sleep};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio::time::{sleep, timeout};
 
 /// Default timeout for network operations
 pub const DEFAULT_NETWORK_TIMEOUT: Duration = Duration::from_secs(30);
@@ -111,18 +111,21 @@ impl SecureHttpClient {
     }
 
     /// Perform a secure GET request with automatic retries and rate limiting
-    pub async fn secure_get(&self, url: &str) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn secure_get(
+        &self,
+        url: &str,
+    ) -> Result<reqwest::Response, Box<dyn std::error::Error + Send + Sync>> {
         self.validate_url(url)?;
 
         if let Some(rate_limiter) = &self.rate_limiter {
-            rate_limiter.wait_for_rate_limit(url).await
+            rate_limiter
+                .wait_for_rate_limit(url)
+                .await
                 .map_err(|e| format!("Rate limit error: {}", e))?;
         }
 
-        let response = timeout(
-            DEFAULT_NETWORK_TIMEOUT,
-            self.client.get(url).send()
-        ).await
+        let response = timeout(DEFAULT_NETWORK_TIMEOUT, self.client.get(url).send())
+            .await
             .map_err(|_| "HTTP request timeout")?
             .map_err(|e| format!("HTTP request failed: {}", e))?;
 
@@ -142,16 +145,19 @@ impl SecureHttpClient {
         self.validate_url(url)?;
 
         if let Some(rate_limiter) = &self.rate_limiter {
-            rate_limiter.wait_for_rate_limit(url).await
+            rate_limiter
+                .wait_for_rate_limit(url)
+                .await
                 .map_err(|e| format!("Rate limit error: {}", e))?;
         }
 
         let response = timeout(
             DEFAULT_NETWORK_TIMEOUT,
-            self.client.post(url).json(body).send()
-        ).await
-            .map_err(|_| "HTTP request timeout")?
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
+            self.client.post(url).json(body).send(),
+        )
+        .await
+        .map_err(|_| "HTTP request timeout")?
+        .map_err(|e| format!("HTTP request failed: {}", e))?;
 
         if !response.status().is_success() {
             return Err(format!("HTTP error: {}", response.status()).into());
@@ -162,8 +168,7 @@ impl SecureHttpClient {
 
     /// Validate URL to prevent SSRF attacks
     fn validate_url(&self, url: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let parsed = url::Url::parse(url)
-            .map_err(|e| format!("Invalid URL: {}", e))?;
+        let parsed = url::Url::parse(url).map_err(|e| format!("Invalid URL: {}", e))?;
 
         // Only allow HTTP and HTTPS
         if !matches!(parsed.scheme(), "http" | "https") {
@@ -204,9 +209,12 @@ pub async fn with_timeout<F, T>(
 where
     F: std::future::Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>>,
 {
-    timeout(timeout_duration, future)
-        .await
-        .map_err(|_| Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "Operation timeout")) as Box<dyn std::error::Error + Send + Sync>)?
+    timeout(timeout_duration, future).await.map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "Operation timeout",
+        )) as Box<dyn std::error::Error + Send + Sync>
+    })?
 }
 
 /// Execute an SSH command with timeout
@@ -218,21 +226,28 @@ pub async fn ssh_command_with_timeout(
     // Validate command to prevent injection
     validate_ssh_command(command)?;
 
-    timeout(
-        timeout_duration,
-        async {
-            client.execute_command(command)
-                .map_err(|e| format!("SSH command failed: {}", e).into())
-        }
-    ).await
-        .map_err(|_| Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "SSH command timeout")) as Box<dyn std::error::Error + Send + Sync>)?
+    timeout(timeout_duration, async {
+        client
+            .execute_command(command)
+            .map_err(|e| format!("SSH command failed: {}", e).into())
+    })
+    .await
+    .map_err(|_| {
+        Box::new(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            "SSH command timeout",
+        )) as Box<dyn std::error::Error + Send + Sync>
+    })?
 }
 
 /// Validate SSH command to prevent injection attacks
 fn validate_ssh_command(command: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Check for dangerous characters
     for c in command.chars() {
-        if matches!(c, ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r') {
+        if matches!(
+            c,
+            ';' | '&' | '|' | '`' | '$' | '(' | ')' | '<' | '>' | '\n' | '\r'
+        ) {
             // Allow some safe pipe usage for basic commands
             if c == '|' && command.contains("grep") {
                 continue;

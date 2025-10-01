@@ -40,9 +40,12 @@ impl SshClient {
         let tcp = std::net::TcpStream::connect_timeout(
             &format!("{}:{}", config.host, config.port)
                 .parse()
-                .map_err(|e| DeploymentError::ValidationError(format!("Invalid address format: {}", e)))?,
+                .map_err(|e| {
+                    DeploymentError::ValidationError(format!("Invalid address format: {}", e))
+                })?,
             std::time::Duration::from_secs(30),
-        ).map_err(|e| DeploymentError::ConnectionError(format!("Failed to connect: {}", e)))?;
+        )
+        .map_err(|e| DeploymentError::ConnectionError(format!("Failed to connect: {}", e)))?;
 
         let mut session = Session::new().map_err(|e| {
             DeploymentError::ConnectionError(format!("Failed to create session: {}", e))
@@ -403,26 +406,53 @@ impl SshClient {
     fn validate_host(host: &str) -> Result<(), DeploymentError> {
         // Check for empty or whitespace-only host
         if host.trim().is_empty() {
-            return Err(DeploymentError::ValidationError("Host cannot be empty".to_string()));
+            return Err(DeploymentError::ValidationError(
+                "Host cannot be empty".to_string(),
+            ));
         }
 
         // Check length to prevent resource exhaustion
         if host.len() > 253 {
-            return Err(DeploymentError::ValidationError("Host name too long (max 253 characters)".to_string()));
+            return Err(DeploymentError::ValidationError(
+                "Host name too long (max 253 characters)".to_string(),
+            ));
         }
 
         // Check for dangerous characters that could enable injection
         for c in host.chars() {
-            if matches!(c, ';' | '&' | '|' | '`' | '$' | '(' | ')' | '{' | '}' | '<' | '>' | '\n' | '\r' | '\t') {
-                return Err(DeploymentError::ValidationError(format!("Invalid character in host: '{}'", c)));
+            if matches!(
+                c,
+                ';' | '&'
+                    | '|'
+                    | '`'
+                    | '$'
+                    | '('
+                    | ')'
+                    | '{'
+                    | '}'
+                    | '<'
+                    | '>'
+                    | '\n'
+                    | '\r'
+                    | '\t'
+            ) {
+                return Err(DeploymentError::ValidationError(format!(
+                    "Invalid character in host: '{}'",
+                    c
+                )));
             }
         }
 
         // Basic format validation (IP address or domain name)
         if host.parse::<std::net::IpAddr>().is_err() {
             // If not a valid IP, check if it's a reasonable domain name
-            if !host.chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_')) {
-                return Err(DeploymentError::ValidationError("Invalid host format".to_string()));
+            if !host
+                .chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_'))
+            {
+                return Err(DeploymentError::ValidationError(
+                    "Invalid host format".to_string(),
+                ));
             }
         }
 
@@ -433,12 +463,16 @@ impl SshClient {
     fn validate_port(port: u16) -> Result<(), DeploymentError> {
         // Check for privileged ports (might require root)
         if port < 22 && port != 22 {
-            return Err(DeploymentError::ValidationError("Port number too low (use 22 or higher)".to_string()));
+            return Err(DeploymentError::ValidationError(
+                "Port number too low (use 22 or higher)".to_string(),
+            ));
         }
 
         // Check for valid port range
         if port == 0 {
-            return Err(DeploymentError::ValidationError("Port number cannot be 0".to_string()));
+            return Err(DeploymentError::ValidationError(
+                "Port number cannot be 0".to_string(),
+            ));
         }
 
         Ok(())

@@ -1,17 +1,17 @@
 //! Runtime abstraction for different isolation technologies
 
-use super::{Component, ComponentId, IsolationConfig, IsolationType, IsolationError};
+use super::{Component, ComponentId, IsolationConfig, IsolationError, IsolationType};
 use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+pub mod firecracker;
 pub mod hermit;
 pub mod process;
-pub mod firecracker;
 
+pub use firecracker::FirecrackerRuntime;
 pub use hermit::HermitRuntime;
 pub use process::ProcessRuntime;
-pub use firecracker::FirecrackerRuntime;
 
 /// Runtime abstraction for running components in isolated environments
 #[async_trait]
@@ -46,9 +46,7 @@ pub struct RuntimeManager {
 impl RuntimeManager {
     /// Create a new runtime manager
     pub fn new() -> Self {
-        Self {
-            runtimes: vec![],
-        }
+        Self { runtimes: vec![] }
     }
 
     /// Create a runtime manager with default runtimes
@@ -100,16 +98,14 @@ impl RuntimeManager {
             .find(|r| r.name() == preferred_runtime && r.is_available())
             .cloned()
             // Fallback to first available runtime
-            .or_else(|| {
-                self.runtimes
-                    .iter()
-                    .find(|r| r.is_available())
-                    .cloned()
+            .or_else(|| self.runtimes.iter().find(|r| r.is_available()).cloned())
+            .ok_or_else(|| {
+                IsolationError::RuntimeNotAvailable(format!(
+                    "No runtime available for isolation type: {:?}",
+                    config.isolation_type
+                ))
+                .into()
             })
-            .ok_or_else(|| IsolationError::RuntimeNotAvailable(format!(
-                "No runtime available for isolation type: {:?}",
-                config.isolation_type
-            )).into())
     }
 
     /// List available runtimes

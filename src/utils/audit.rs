@@ -28,7 +28,8 @@ pub struct TempDir {
 
 impl TempDir {
     pub fn new() -> Result<Self> {
-        let path = std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
+        let path =
+            std::env::temp_dir().join(format!("osvm-audit-{}", chrono::Utc::now().timestamp()));
         std::fs::create_dir_all(&path)?;
         Ok(Self {
             path,
@@ -50,7 +51,11 @@ impl Drop for TempDir {
     fn drop(&mut self) {
         if self.cleanup_on_drop && self.path.exists() {
             if let Err(e) = std::fs::remove_dir_all(&self.path) {
-                eprintln!("Failed to cleanup temporary directory {}: {}", self.path.display(), e);
+                eprintln!(
+                    "Failed to cleanup temporary directory {}: {}",
+                    self.path.display(),
+                    e
+                );
             }
         }
     }
@@ -7311,7 +7316,9 @@ This security audit provides a comprehensive assessment of the OSVM CLI applicat
                     branch_name,
                     "--single-branch",
                     repo_url,
-                    temp_dir.path().to_str()
+                    temp_dir
+                        .path()
+                        .to_str()
                         .ok_or_else(|| anyhow!("Invalid temp directory path"))?,
                 ],
                 Some(&std::env::temp_dir()),

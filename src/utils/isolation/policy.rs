@@ -55,9 +55,7 @@ pub struct PolicyEngine {
 impl PolicyEngine {
     /// Create a new policy engine
     pub fn new() -> Self {
-        Self {
-            policies: vec![],
-        }
+        Self { policies: vec![] }
     }
 
     /// Add a policy

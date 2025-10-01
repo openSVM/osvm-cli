@@ -19,7 +19,25 @@ fn sanitize_user_input(input: &str) -> Result<String, Box<dyn std::error::Error>
         .filter(|c| {
             // Allow alphanumeric, spaces, basic punctuation, but block command injection chars
             c.is_alphanumeric()
-                || matches!(*c, ' ' | '.' | ',' | '?' | '!' | ':' | ';' | '\'' | '"' | '-' | '_' | '(' | ')' | '[' | ']' | '{' | '}')
+                || matches!(
+                    *c,
+                    ' ' | '.'
+                        | ','
+                        | '?'
+                        | '!'
+                        | ':'
+                        | ';'
+                        | '\''
+                        | '"'
+                        | '-'
+                        | '_'
+                        | '('
+                        | ')'
+                        | '['
+                        | ']'
+                        | '{'
+                        | '}'
+                )
         })
         .collect::<String>();
 
@@ -73,13 +91,12 @@ fn is_known_command(sub_command: &str) -> bool {
             | "examples"
             | "rpc-manager"
             | "deploy"
-            | "solana"
             | "doctor"
             | "audit"
             | "mcp"
             | "chat"
             | "agent"
-            | "new_feature_command"
+            | "plan"
             | "v"
             | "ver"
             | "version"
@@ -936,6 +953,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| e.into());
     }
 
+    // Handle plan command for AI-powered command planning
+    if sub_command == "plan" {
+        let query = sub_matches
+            .get_one::<String>("query")
+            .ok_or("No query provided for plan command")?;
+
+        let execute = sub_matches.get_flag("execute");
+        let yes = sub_matches.get_flag("yes");
+        let json_output = sub_matches.get_flag("json");
+        let debug = app_matches.get_flag("debug");
+
+        use crate::utils::osvm_command_planner::OsvmCommandPlanner;
+
+        let planner = OsvmCommandPlanner::new(debug);
+
+        println!("🧠 Analyzing your request: \"{}\"", query);
+        println!();
+
+        // Create the execution plan
+        match planner.create_plan(query).await {
+            Ok(plan) => {
+                if json_output {
+                    // JSON output mode
+                    println!("{}", serde_json::to_string_pretty(&plan)?);
+                } else {
+                    // Pretty print the plan
+                    println!("📋 Execution Plan");
+                    println!("{}", "━".repeat(50));
+                    println!("💭 Reasoning: {}", plan.reasoning);
+                    println!("🎯 Confidence: {:.0}%", plan.confidence * 100.0);
+                    println!("🔧 Steps: {}", plan.steps.len());
+                    println!();
+
+                    for (i, step) in plan.steps.iter().enumerate() {
+                        println!("{}. {}", i + 1, step.full_command);
+                        println!("   {}", step.explanation);
+                        if step.requires_confirmation {
+                            println!("   ⚠️  Requires confirmation");
+                        }
+                        println!();
+                    }
+
+                    println!("✨ Expected outcome: {}", plan.expected_outcome);
+                    println!();
+
+                    // Execute if requested
+                    if execute {
+                        println!("{}", "━".repeat(50));
+                        println!("⚡ Executing plan...");
+                        println!();
+
+                        match planner.execute_plan(&plan, yes).await {
+                            Ok(results) => {
+                                let formatted = planner.format_results(&plan, &results);
+                                println!("{}", formatted);
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Execution failed: {}", e);
+                                return Err(e.into());
+                            }
+                        }
+                    } else {
+                        println!("💡 Use --execute to run this plan");
+                        println!("💡 Use --execute --yes to skip confirmations");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to create execution plan: {}", e);
+                eprintln!();
+                eprintln!("💡 Try rephrasing your request or use 'osvm examples' for help");
+                return Err(e.into());
+            }
+        }
+
+        return Ok(());
+    }
+
     // Handle AI queries early to avoid config loading
     if !is_known_command(sub_command) {
         return handle_ai_query(sub_command, sub_matches, &app_matches).await;
@@ -1266,7 +1361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "examples" => {
             // Handle the examples command
-            if matches.contains_id("list_categories") {
+            if matches.get_flag("list_categories") {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -1442,11 +1537,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .get_one::<String>("faucet-port")
                         .map(|s| s.as_str())
                         .unwrap_or("9900");
-                    let default_ledger = std::env::temp_dir().join("test-ledger");
                     let ledger_path = rpc_sub_matches
                         .get_one::<String>("ledger-path")
-                        .map(|s| s.as_str())
-                        .unwrap_or_else(|| default_ledger.to_str().unwrap_or("./test-ledger"));
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| {
+                            crate::utils::local_rpc::get_default_ledger_path(network, svm)
+                        });
                     let reset = rpc_sub_matches.get_flag("reset");
                     let background = rpc_sub_matches.get_flag("background");
                     let stop = rpc_sub_matches.get_flag("stop");
@@ -2286,9 +2382,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("❌ Audit command should be handled before config loading");
             eprintln!("   This indicates a programming error - please report this issue.");
             exit(1);
-        }
-        "new_feature_command" => {
-            println!("Expected output for new feature");
         }
         cmd => {
             return Err(format!("Unknown command: {cmd}").into());

@@ -16,6 +16,31 @@ pub fn parse_command_line() -> clap::ArgMatches {
     command!()
         .disable_version_flag(true) // Disable the auto-generated --version flag
         .arg_required_else_help(false) // Allow no args to default to advanced chat
+        .after_help("
+QUICK START:
+  osvm                        Launch interactive AI-powered agent chat (default)
+  osvm chat --advanced        Launch advanced multi-session chat interface
+  osvm agent \"<prompt>\"      Execute single AI-powered command
+  osvm doctor                 Check system health and dependencies
+  osvm mcp setup              Set up Solana MCP server integration
+  osvm --help                 Show detailed help for all commands
+
+AI-POWERED NATURAL LANGUAGE:
+  ⭐ Any unknown command is interpreted as an AI query!
+
+  Examples:
+  • osvm \"how do I deploy a validator?\"
+  • osvm \"check my wallet balance\"
+  • osvm \"what's the current network status?\"
+  • osvm \"show me recent transactions\"
+
+  The AI will:
+  → Understand your natural language request
+  → Plan and execute the appropriate tools via MCP
+  → Provide intelligent responses with context
+
+For more examples: osvm examples
+For issues & feedback: https://github.com/anthropics/osvm-cli/issues")
         .before_help("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░
@@ -27,8 +52,8 @@ pub fn parse_command_line() -> clap::ArgMatches {
 ░░░░░░░░███████░░░░░█████████░░░░░░░███░░░░░░░███░░░░░░░███░░░░░▐█░░░░░░
  ███████████████████████████████████████████████████████████████████████
 
-🚀 OSVM CLI - OpenSVM Command Line Interface
-   Advanced Solana Virtual Machine management with AI-powered security auditing")
+🚀 OSVM CLI v0.1.0 - OpenSVM Command Line Interface
+   AI-Powered Solana Virtual Machine Management & Security Auditing")
         // Add version aliases as subcommands
         .subcommand(Command::new("v").about("Show version information"))
         .subcommand(Command::new("ver").about("Show version information"))
@@ -118,7 +143,39 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .default_value("mainnet")
                 .help("Network to deploy on")
         )
-        // MOVED RPC SUBCOMMAND TO BE FIRST
+        .arg(
+            Arg::new("theme")
+                .long("theme")
+                .value_name("THEME")
+                .global(true)
+                .help("UI theme to use")
+        )
+        .arg(
+            Arg::new("auto_theme")
+                .long("auto-theme")
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Enable automatic theme switching")
+        )
+        // Core commands
+        .subcommand(
+            Command::new("balance")
+                .about("Check SOL balance for an address")
+                .long_about("Check the SOL balance for a Solana address.\n\
+                           \n\
+                           If no address is provided, shows the balance of the configured keypair.\n\
+                           \n\
+                           Examples:\n\
+                           • osvm balance                                    # Your configured wallet\n\
+                           • osvm balance 4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T # Specific address")
+                .arg(
+                    Arg::new("address")
+                        .value_name("ADDRESS")
+                        .help("Solana address to check balance for (defaults to configured keypair)")
+                        .index(1)
+                )
+        )
+        // RPC management commands
         .subcommand(
             Command::new("rpc-manager") // Renamed from "rpc" to "rpc-manager"
                 .about("Manage RPC nodes (local/remote)")
@@ -214,8 +271,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("ledger-path")
                                 .long("ledger-path")
                                 .value_name("PATH")
-                                .default_value("./test-ledger")
-                                .help("Ledger data directory path")
+                                .help("Ledger data directory path (default: ~/.config/osvm/ledgers/{network})")
                         )
                         .arg(
                             Arg::new("reset")
@@ -385,20 +441,20 @@ pub fn parse_command_line() -> clap::ArgMatches {
         )
         .subcommand(
             Command::new("chat")
-                .about("Launch interactive agent chat interface with MCP tools - now with advanced AI planning!")
+                .about("Interactive AI-powered agent chat with MCP tools and intelligent planning")
                 .long_about("Launch a comprehensive chat interface with AI-powered tool planning and execution.\n\
                            \n\
-                           Basic Mode (default):\n\
+                           Basic Mode:\n\
                            • Simple chat interface with MCP tool integration\n\
                            • Single chat session\n\
-                           • Basic tool calling\n\
+                           • Direct tool calling\n\
                            \n\
-                           Advanced Mode (--advanced):\n\
+                           Advanced Mode (--advanced, default when no args):\n\
                            • FAR-style/Borland TUI design with dual panels\n\
                            • AI-powered input parsing and intelligent tool planning\n\
-                           • Multiple chat sessions with background agent execution\n\
+                           • Multi-session management with background agent execution\n\
                            • Session recording and agent control (run/pause/stop)\n\
-                           • Professional multi-session management")
+                           • Professional keyboard shortcuts and vim-like navigation")
                 .arg(
                     Arg::new("debug")
                         .long("debug")
@@ -416,6 +472,46 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .long("advanced")
                         .action(ArgAction::SetTrue)
                         .help("Launch advanced FAR-style chat interface with AI planning and multi-session support")
+                )
+        )
+        .subcommand(
+            Command::new("plan")
+                .about("Create an AI-powered execution plan for OSVM commands")
+                .long_about("Analyze a natural language request and generate an executable OSVM command plan.\n\
+                           \n\
+                           This command uses AI to understand your intent and suggests the appropriate\n\
+                           OSVM commands to accomplish your goal.\n\
+                           \n\
+                           Examples:\n\
+                           • osvm plan \"show me all validators\"\n\
+                           • osvm plan \"check network health\"\n\
+                           • osvm plan \"list my nodes\"")
+                .arg(
+                    Arg::new("query")
+                        .value_name("QUERY")
+                        .help("Natural language query describing what you want to do")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("execute")
+                        .long("execute")
+                        .short('e')
+                        .action(ArgAction::SetTrue)
+                        .help("Execute the plan automatically (skip confirmation for safe commands)")
+                )
+                .arg(
+                    Arg::new("yes")
+                        .long("yes")
+                        .short('y')
+                        .action(ArgAction::SetTrue)
+                        .help("Auto-confirm all commands including those requiring confirmation")
+                )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output results in JSON format")
                 )
         )
         .subcommand(
@@ -749,123 +845,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .long("confirm-large")
                         .action(ArgAction::SetTrue)
                         .help("Require confirmation for deploying large binaries (>1MB)")
-                )
-        )
-        .subcommand(
-            Command::new("solana")
-                .about("Deploy and manage Solana validators")
-                .arg_required_else_help(true)
-                .subcommand(
-                    Command::new("validator")
-                        .about("Deploy a Solana validator node with enhanced features")
-                        .arg(
-                            Arg::new("connection")
-                                .help("SSH connection string (format: user@host[:port])")
-                                .required(true)
-                                .index(1)
-                        )
-                        .arg(
-                            Arg::new("network")
-                                .long("network")
-                                .value_name("NETWORK")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-                                .default_value("mainnet")
-                                .help("Network to deploy on")
-                        )
-                        .arg(
-                            Arg::new("version")
-                                .long("version")
-                                .value_name("VERSION")
-                                .help("Solana client version (e.g., v1.16.0, v1.18.23-jito)")
-                        )
-                        .arg(
-                            Arg::new("client-type")
-                                .long("client-type")
-                                .value_name("TYPE")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave", "firedancer", "sig"]))
-                                .default_value("agave")
-                                .help("Solana client type (standard, jito, agave, firedancer, sig)")
-                        )
-                        .arg(
-                            Arg::new("hot-swap")
-                                .long("hot-swap")
-                                .action(ArgAction::SetTrue)
-                                .help("Enable hot-swap capability for high availability")
-                        )
-                        .arg(
-                            Arg::new("ledger-disk")
-                                .long("ledger-disk")
-                                .value_name("DEVICE")
-                                .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-                        )
-                        .arg(
-                            Arg::new("accounts-disk")
-                                .long("accounts-disk")
-                                .value_name("DEVICE")
-                                .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-                        )
-                        .arg(
-                            Arg::new("metrics-config")
-                                .long("metrics-config")
-                                .value_name("CONFIG")
-                                .help("Metrics configuration string (e.g., host=https://metrics.solana.com:8086,db=mainnet-beta,u=mainnet-beta_write,p=password)")
-                        )
-                )
-                .subcommand(
-                    Command::new("rpc")
-                        .about("Deploy a Solana RPC node with enhanced features")
-                        .arg(
-                            Arg::new("connection")
-                                .help("SSH connection string (format: user@host[:port])")
-                                .required(true)
-                                .index(1)
-                        )
-                        .arg(
-                            Arg::new("network")
-                                .long("network")
-                                .value_name("NETWORK")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-                                .default_value("mainnet")
-                                .help("Network to deploy on")
-                        )
-                        .arg(
-                            Arg::new("version")
-                                .long("version")
-                                .value_name("VERSION")
-                                .help("Solana client version (e.g., v1.16.0)")
-                        )
-                        .arg(
-                            Arg::new("client-type")
-                                .long("client-type")
-                                .value_name("TYPE")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave", "firedancer", "sig"]))
-                                .default_value("agave")
-                                .help("Solana client type (standard, jito, agave, firedancer, sig)")
-                        )
-                        .arg(
-                            Arg::new("ledger-disk")
-                                .long("ledger-disk")
-                                .value_name("DEVICE")
-                                .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-                        )
-                        .arg(
-                            Arg::new("accounts-disk")
-                                .long("accounts-disk")
-                                .value_name("DEVICE")
-                                .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-                        )
-                        .arg(
-                            Arg::new("metrics-config")
-                                .long("metrics-config")
-                                .value_name("CONFIG")
-                                .help("Metrics configuration string")
-                        )
-                        .arg(
-                            Arg::new("enable-history")
-                                .long("enable-history")
-                                .action(ArgAction::SetTrue)
-                                .help("Enable transaction history (increases storage requirements)")
-                        )
                 )
         )
         .subcommand(
@@ -1252,10 +1231,5 @@ If not specified, built-in templates embedded in the binary will be used.")
                         .help("Don't commit audit results to repository. If no output directory is provided, files will be copied to the current folder.")
                 )
         )
-        .subcommand(
-            Command::new("new_feature_command")
-                .about("New feature for testing")
-        )
-
-                .get_matches()
+        .get_matches()
 }

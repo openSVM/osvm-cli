@@ -43,9 +43,18 @@ async fn main() -> anyhow::Result<()> {
 
     println!("   Component ID: {}", component_id);
     println!("   Type: MCP Server (echo-service)");
-    println!("   Isolation: {:?}", component.isolation_config.isolation_type);
-    println!("   Memory Limit: {:?} MB", component.isolation_config.resource_limits.max_memory_mb);
-    println!("   CPU Limit: {:?} cores", component.isolation_config.resource_limits.max_cpu_cores);
+    println!(
+        "   Isolation: {:?}",
+        component.isolation_config.isolation_type
+    );
+    println!(
+        "   Memory Limit: {:?} MB",
+        component.isolation_config.resource_limits.max_memory_mb
+    );
+    println!(
+        "   CPU Limit: {:?} cores",
+        component.isolation_config.resource_limits.max_cpu_cores
+    );
     println!("   ✓ Component created\n");
 
     // Step 3: Select runtime
@@ -143,7 +152,10 @@ fn create_test_component(id: ComponentId) -> Component {
 }
 
 /// Simulate component lifecycle
-async fn simulate_component_lifecycle(runtime: &dyn Runtime, component: &Component) -> anyhow::Result<()> {
+async fn simulate_component_lifecycle(
+    runtime: &dyn Runtime,
+    component: &Component,
+) -> anyhow::Result<()> {
     println!("   Simulating lifecycle for component {}...", component.id);
 
     // Check if we can actually start (would need real image)
@@ -175,25 +187,53 @@ async fn simulate_component_lifecycle(runtime: &dyn Runtime, component: &Compone
 fn print_isolation_properties(config: &IsolationConfig) {
     let isolation_level = config.isolation_type.level();
 
-    println!("   Security Level: {} ({}/100)",
-             isolation_level.name(),
-             isolation_level.security_score());
+    println!(
+        "   Security Level: {} ({}/100)",
+        isolation_level.name(),
+        isolation_level.security_score()
+    );
 
     println!("   Properties:");
-    println!("      • Hardware Isolation: {}",
-             if isolation_level.has_hardware_isolation() { "✓ Yes" } else { "✗ No" });
-    println!("      • Shared Kernel: {}",
-             if isolation_level.has_hardware_isolation() { "✗ No (isolated)" } else { "⚠️  Yes" });
-    println!("      • Attack Surface: {}",
-             if isolation_level.has_hardware_isolation() {
-                 "~50KB (unikernel)"
-             } else {
-                 "~30MB+ (Linux kernel)"
-             });
-    println!("      • Memory Encryption: {}",
-             if config.security.memory_encryption { "✓ Enabled" } else { "○ Available" });
-    println!("      • Secure Boot: {}",
-             if config.security.secure_boot { "✓ Enabled" } else { "○ Available" });
+    println!(
+        "      • Hardware Isolation: {}",
+        if isolation_level.has_hardware_isolation() {
+            "✓ Yes"
+        } else {
+            "✗ No"
+        }
+    );
+    println!(
+        "      • Shared Kernel: {}",
+        if isolation_level.has_hardware_isolation() {
+            "✗ No (isolated)"
+        } else {
+            "⚠️  Yes"
+        }
+    );
+    println!(
+        "      • Attack Surface: {}",
+        if isolation_level.has_hardware_isolation() {
+            "~50KB (unikernel)"
+        } else {
+            "~30MB+ (Linux kernel)"
+        }
+    );
+    println!(
+        "      • Memory Encryption: {}",
+        if config.security.memory_encryption {
+            "✓ Enabled"
+        } else {
+            "○ Available"
+        }
+    );
+    println!(
+        "      • Secure Boot: {}",
+        if config.security.secure_boot {
+            "✓ Enabled"
+        } else {
+            "○ Available"
+        }
+    );
 
     if config.network.mtls_enabled {
         println!("      • Network Security: ✓ mTLS (zero-trust)");

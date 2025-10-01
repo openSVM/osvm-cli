@@ -212,8 +212,8 @@ impl FirecrackerRuntime {
     /// Create a new Firecracker runtime
     pub fn new(config: FirecrackerConfig) -> Result<Self> {
         // Check if firecracker binary exists
-        let firecracker_bin = std::env::var("FIRECRACKER_BIN")
-            .unwrap_or_else(|_| "firecracker".to_string());
+        let firecracker_bin =
+            std::env::var("FIRECRACKER_BIN").unwrap_or_else(|_| "firecracker".to_string());
         let firecracker_bin = PathBuf::from(firecracker_bin);
 
         // Create work directory if it doesn't exist
@@ -245,12 +245,14 @@ impl FirecrackerRuntime {
         component_id: ComponentId,
         vm_config: VmConfig,
     ) -> Result<FirecrackerInstance> {
-        log::info!("Starting Firecracker MicroVM for component {}", component_id);
+        log::info!(
+            "Starting Firecracker MicroVM for component {}",
+            component_id
+        );
 
         // Create VM-specific directory
         let vm_dir = self.config.work_dir.join(component_id.to_string());
-        std::fs::create_dir_all(&vm_dir)
-            .context("Failed to create VM directory")?;
+        std::fs::create_dir_all(&vm_dir).context("Failed to create VM directory")?;
 
         // API socket path
         let api_socket = vm_dir.join("api.socket");
@@ -260,7 +262,7 @@ impl FirecrackerRuntime {
         let firecracker_config = self.create_firecracker_config(&vm_config, &api_socket)?;
         std::fs::write(
             &config_path,
-            serde_json::to_string_pretty(&firecracker_config)?
+            serde_json::to_string_pretty(&firecracker_config)?,
         )?;
 
         // Start firecracker process
@@ -274,10 +276,11 @@ impl FirecrackerRuntime {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd.spawn()
-            .context("Failed to spawn Firecracker process")?;
+        let mut child = cmd.spawn().context("Failed to spawn Firecracker process")?;
 
-        let pid = child.id().ok_or_else(|| anyhow!("Failed to get process ID"))?;
+        let pid = child
+            .id()
+            .ok_or_else(|| anyhow!("Failed to get process ID"))?;
 
         log::info!("Firecracker process started with PID {}", pid);
 
@@ -363,7 +366,10 @@ impl FirecrackerRuntime {
 
     /// Stop a MicroVM instance
     async fn stop_instance(&self, component_id: ComponentId) -> Result<()> {
-        log::info!("Stopping Firecracker MicroVM for component {}", component_id);
+        log::info!(
+            "Stopping Firecracker MicroVM for component {}",
+            component_id
+        );
 
         let mut instances = self.instances.write().await;
         if let Some(mut instance) = instances.remove(&component_id) {
@@ -412,7 +418,9 @@ impl FirecrackerRuntime {
 
         Ok(VmConfig {
             vcpus: limits.max_cpu_cores.unwrap_or(self.config.default_vcpus),
-            memory_mb: limits.max_memory_mb.unwrap_or(self.config.default_memory_mb),
+            memory_mb: limits
+                .max_memory_mb
+                .unwrap_or(self.config.default_memory_mb),
             kernel_image: self.config.default_kernel.clone(),
             rootfs_image: self.config.default_rootfs.clone(),
             boot_args: "console=ttyS0 reboot=k panic=1 pci=off".to_string(),
@@ -461,7 +469,10 @@ impl super::Runtime for FirecrackerRuntime {
         // Update component with runtime handle
         let mut data = HashMap::new();
         data.insert("vm_type".to_string(), "firecracker".to_string());
-        data.insert("api_socket".to_string(), instance.api_socket.to_string_lossy().to_string());
+        data.insert(
+            "api_socket".to_string(),
+            instance.api_socket.to_string_lossy().to_string(),
+        );
         if let Some(ref vsock) = instance.vm_config.vsock {
             data.insert("vsock_cid".to_string(), vsock.guest_cid.to_string());
         }
@@ -509,7 +520,11 @@ impl super::Runtime for FirecrackerRuntime {
     }
 
     async fn exec(&self, component_id: ComponentId, command: Vec<String>) -> Result<String> {
-        log::info!("Executing command in component {}: {:?}", component_id, command);
+        log::info!(
+            "Executing command in component {}: {:?}",
+            component_id,
+            command
+        );
 
         // In production, would use Firecracker API to execute commands in VM
         // This requires setting up a guest agent or SSH access

@@ -1,5 +1,6 @@
 //! Display update logic and UI refresh
 
+use crate::utils::themes::{TextStyle, Theme};
 use cursive::theme::{BaseColor, Color, ColorStyle};
 use cursive::traits::*;
 use cursive::utils::markup::StyledString;
@@ -15,6 +16,174 @@ use super::handlers::handle_chat_selection;
 use super::layout::AdvancedChatUI;
 
 impl AdvancedChatUI {
+    /// Apply theme styling to a message based on its type
+    fn format_message_with_theme(&self, message: &ChatMessage) -> String {
+        let theme_manager = match self.state.theme_manager.read() {
+            Ok(tm) => tm,
+            Err(_) => return self.format_message_fallback(message), // Fallback if lock fails
+        };
+
+        let theme = theme_manager.current_theme();
+
+        match message {
+            ChatMessage::User(text) => {
+                let sanitized = self.sanitize_text(text);
+                let user_style = theme.get_style("primary");
+                let action_style = theme.get_style("muted");
+                format!(
+                    "{}\n{}\n\n",
+                    user_style.apply(&format!("👤 You: {}", sanitized)),
+                    action_style.apply("   [R]etry [C]opy [D]elete   (Alt+R/C/D)")
+                )
+            }
+            ChatMessage::Agent(text) => {
+                let rendered = self.render_markdown(text);
+                let sanitized = self.sanitize_text(&rendered);
+                let agent_style = theme.get_style("secondary");
+                let action_style = theme.get_style("muted");
+                format!(
+                    "{}:\n{}\n{}\n\n",
+                    agent_style.apply("🤖 Agent"),
+                    theme.get_style("text").apply(&sanitized),
+                    action_style.apply("   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)")
+                )
+            }
+            ChatMessage::System(text) => {
+                let sanitized = self.sanitize_text(text);
+                let system_style = theme.get_style("info");
+                format!(
+                    "{}\n\n",
+                    system_style.apply(&format!("ℹ️  System: {}", sanitized))
+                )
+            }
+            ChatMessage::Error(text) => {
+                let sanitized = self.sanitize_text(text);
+                let error_style = theme.get_style("error");
+                format!(
+                    "{}\n\n",
+                    error_style.apply(&format!("❌ Error: {}", sanitized))
+                )
+            }
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                args,
+                execution_id,
+            } => {
+                let sanitized_tool_name = self.sanitize_text(tool_name);
+                let sanitized_description = self.sanitize_text(description);
+                let tool_style = theme.get_style("command");
+                let info_style = theme.get_style("muted");
+
+                let mut result = format!(
+                    "{}\n",
+                    tool_style.apply(&format!(
+                        "⚡ Calling tool: {} - {}",
+                        sanitized_tool_name, sanitized_description
+                    ))
+                );
+
+                if let Some(args) = args {
+                    let sanitized_args = self.sanitize_json(args);
+                    result.push_str(&format!(
+                        "{}\n",
+                        info_style.apply(&format!("   Args: {}", sanitized_args))
+                    ));
+                }
+                result.push_str(&format!(
+                    "{}\n\n",
+                    info_style.apply(&format!("   ID: {}", execution_id))
+                ));
+                result
+            }
+            ChatMessage::ToolResult {
+                tool_name,
+                result,
+                execution_id,
+            } => {
+                let sanitized_tool_name = self.sanitize_text(tool_name);
+                let success_style = theme.get_style("success");
+                let info_style = theme.get_style("muted");
+                let result_text = format!(
+                    "✅ Tool {} result (ID: {}):\n",
+                    sanitized_tool_name, execution_id
+                );
+                let sanitized_result = self.sanitize_json(result);
+                format!(
+                    "{}{}\n\n",
+                    success_style.apply(&result_text),
+                    theme.get_style("text").apply(&sanitized_result)
+                )
+            }
+            ChatMessage::AgentThinking(text) => {
+                let sanitized = self.sanitize_text(text);
+                let thinking_style = theme.get_style("accent");
+                format!(
+                    "{}\n\n",
+                    thinking_style.apply(&format!("💭 Agent (thinking): {}", sanitized))
+                )
+            }
+            ChatMessage::AgentPlan(plan) => {
+                let plan_style = theme.get_style("accent");
+                let mut result = format!("{}\n", plan_style.apply("📋 Agent Plan:"));
+                let text_style = theme.get_style("text");
+                for (i, step) in plan.iter().enumerate() {
+                    let step_text = format!("{}: {}", step.tool_name, step.reason);
+                    let sanitized = self.sanitize_text(&step_text);
+                    result.push_str(&format!(
+                        "{}\n",
+                        text_style.apply(&format!("  {}. {}", i + 1, sanitized))
+                    ));
+                }
+                result.push_str("\n");
+                result
+            }
+            ChatMessage::Processing {
+                message,
+                spinner_index,
+            } => {
+                let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
+                let sanitized = self.sanitize_text(message);
+                let processing_style = theme.get_style("accent");
+                format!(
+                    "{}\n\n",
+                    processing_style.apply(&format!("{} {}", spinner_char, sanitized))
+                )
+            }
+        }
+    }
+
+    /// Fallback message formatting without themes
+    fn format_message_fallback(&self, message: &ChatMessage) -> String {
+        match message {
+            ChatMessage::User(text) => {
+                let sanitized = self.sanitize_text(text);
+                format!(
+                    "You: {}\n   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n",
+                    sanitized
+                )
+            }
+            ChatMessage::Agent(text) => {
+                let rendered = self.render_markdown(text);
+                let sanitized = self.sanitize_text(&rendered);
+                format!(
+                    "Agent:\n{}\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n",
+                    sanitized
+                )
+            }
+            ChatMessage::System(text) => {
+                let sanitized = self.sanitize_text(text);
+                format!("System: {}\n\n", sanitized)
+            }
+            ChatMessage::Error(text) => {
+                let sanitized = self.sanitize_text(text);
+                format!("Error: {}\n\n", sanitized)
+            }
+            _ => "Message formatting error\n\n".to_string(),
+        }
+    }
+
     pub fn update_all_displays(&self, siv: &mut Cursive) {
         self.update_chat_list(siv);
         self.update_chat_display(siv);
@@ -118,81 +287,7 @@ impl AdvancedChatUI {
             let mut display_text = String::new();
 
             for message in &session.messages {
-                match message {
-                    ChatMessage::User(text) => {
-                        let sanitized = self.sanitize_text(text);
-                        display_text.push_str(&format!("You: {}\n", sanitized));
-                        display_text.push_str("   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n");
-                    }
-                    ChatMessage::Agent(text) => {
-                        let rendered = self.render_markdown(text);
-                        let sanitized = self.sanitize_text(&rendered);
-                        display_text.push_str(&format!("Agent:\n{}", sanitized));
-                        display_text
-                            .push_str("\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n");
-                    }
-                    ChatMessage::System(text) => {
-                        let sanitized = self.sanitize_text(text);
-                        display_text.push_str(&format!("System: {}\n\n", sanitized));
-                    }
-                    ChatMessage::ToolCall {
-                        tool_name,
-                        description,
-                        args,
-                        execution_id,
-                    } => {
-                        let sanitized_tool_name = self.sanitize_text(tool_name);
-                        let sanitized_description = self.sanitize_text(description);
-                        display_text.push_str(&format!(
-                            "Calling tool: {} - {}\n",
-                            sanitized_tool_name, sanitized_description
-                        ));
-                        if let Some(args) = args {
-                            let sanitized_args = self.sanitize_json(args);
-                            display_text.push_str(&format!("   Args: {}\n", sanitized_args));
-                        }
-                        display_text.push_str(&format!("   ID: {}\n\n", execution_id));
-                    }
-                    ChatMessage::ToolResult {
-                        tool_name,
-                        result,
-                        execution_id,
-                    } => {
-                        let sanitized_tool_name = self.sanitize_text(tool_name);
-                        display_text.push_str(&format!(
-                            "Tool {} result (ID: {}):\n",
-                            sanitized_tool_name, execution_id
-                        ));
-                        let sanitized_result = self.sanitize_json(result);
-                        display_text.push_str(&format!("{}\n\n", sanitized_result));
-                    }
-                    ChatMessage::Error(text) => {
-                        let sanitized = self.sanitize_text(text);
-                        display_text.push_str(&format!("Error: {}\n\n", sanitized));
-                    }
-                    ChatMessage::AgentThinking(text) => {
-                        let sanitized = self.sanitize_text(text);
-                        display_text.push_str(&format!("Agent (thinking): {}\n\n", sanitized));
-                    }
-                    ChatMessage::AgentPlan(plan) => {
-                        display_text.push_str("Agent Plan:\n");
-                        for (i, step) in plan.iter().enumerate() {
-                            let step_text = format!("{}: {}", step.tool_name, step.reason);
-                            let sanitized = self.sanitize_text(&step_text);
-                            display_text.push_str(&format!("  {}. {}\n", i + 1, sanitized));
-                        }
-                        display_text.push_str("\n");
-                    }
-                    ChatMessage::Processing {
-                        message,
-                        spinner_index,
-                    } => {
-                        let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-                        let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
-                        let sanitized = self.sanitize_text(message);
-                        display_text.push_str(&format!("{} {}\n\n", spinner_char, sanitized));
-                    }
-                }
+                display_text.push_str(&self.format_message_with_theme(message));
             }
 
             // Stable content update - only set if content actually changed

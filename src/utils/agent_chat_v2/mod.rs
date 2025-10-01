@@ -41,12 +41,21 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
     // Initialize the state and MCP services (safe now that problematic servers are disabled)
     let state = AdvancedChatState::new()?;
 
-    // Initialize MCP tools - this should work now that localhost:3000 server is disabled
-    if let Err(e) = state.initialize().await {
-        warn!(
-            "MCP initialization failed: {}, continuing without MCP tools",
-            e
-        );
+    // Initialize MCP tools with timeout to prevent hanging
+    let init_timeout = tokio::time::Duration::from_secs(5);
+    match tokio::time::timeout(init_timeout, state.initialize()).await {
+        Ok(Ok(())) => {
+            info!("✅ MCP tools initialized successfully");
+        }
+        Ok(Err(e)) => {
+            warn!(
+                "⚠️  MCP initialization failed: {}, continuing without MCP tools",
+                e
+            );
+        }
+        Err(_) => {
+            warn!("⏱️  MCP initialization timed out after 5s, continuing without MCP tools");
+        }
     }
 
     // Skip agent worker for now as it can still cause issues

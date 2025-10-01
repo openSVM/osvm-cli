@@ -1,11 +1,14 @@
-//! UI event handlers and callbacks
+//! Event handlers for the advanced chat UI
 
-use cursive::traits::*;
+use crate::utils::agent_chat_v2::agent::ThemeCommandType;
+use anyhow::{anyhow, Context, Result};
+use cursive::direction::Orientation;
+use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, Panel, SelectView, TextView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, SelectView, TextView,
 };
-use cursive::{Cursive, CursiveExt};
-use log::{error, info};
+use cursive::Cursive;
+use log::{error, info, warn};
 use uuid::Uuid;
 
 use super::super::agent::AgentCommand;
@@ -185,6 +188,12 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
     // Clear input
     if let Some(mut input) = siv.find_name::<EditView>("input") {
         input.set_content("");
+    }
+
+    // Check for theme commands first
+    if user_message.trim().starts_with("/theme") {
+        handle_theme_command(siv, &user_message, state);
+        return;
     }
 
     // Immediately add user message to session and update display
@@ -995,6 +1004,143 @@ pub fn start_live_processing(
             }
         };
 
+        // Try OSVM command planner first
+        use crate::utils::osvm_command_planner::OsvmCommandPlanner;
+
+        let planner = OsvmCommandPlanner::new(false);
+        if let Ok(osvm_plan) = rt.block_on(planner.create_plan(&user_input)) {
+            // Show OSVM plan in a dialog
+            processing_final.store(false, Ordering::Relaxed);
+            let _ = state_final.remove_last_processing_message(session_id);
+
+            let plan_text = format!(
+                "💭 {}\n\n🎯 Confidence: {:.0}%\n\n📋 Commands:\n{}",
+                osvm_plan.reasoning,
+                osvm_plan.confidence * 100.0,
+                osvm_plan
+                    .steps
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("{}. {}\n   → {}", i + 1, s.full_command, s.explanation))
+                    .collect::<Vec<_>>()
+                    .join("\n\n")
+            );
+
+            let _ = state_final.add_message_to_session(
+                session_id,
+                ChatMessage::Agent(format!(
+                    "🔧 OSVM Command Plan:\n{}\n\n✨ {}",
+                    plan_text, osvm_plan.expected_outcome
+                )),
+            );
+
+            cb_sink2
+                .send(Box::new(move |siv| {
+                    // Show confirmation dialog
+                    siv.add_layer(
+                        Dialog::text(format!("Execute this OSVM command plan?\n\n{}", plan_text))
+                            .title("OSVM Command Plan")
+                            .button("Execute", move |s| {
+                                s.pop_layer();
+                                // Execute in background
+                                let state_exec = match s.user_data::<AdvancedChatState>().cloned() {
+                                    Some(state) => state,
+                                    None => {
+                                        error!("Failed to get application state");
+                                        return;
+                                    }
+                                };
+                                let planner_exec = OsvmCommandPlanner::new(false);
+                                let plan_exec = osvm_plan.clone();
+                                let session_exec = session_id;
+                                let cb_exec = s.cb_sink().clone();
+
+                                thread::spawn(move || {
+                                    let rt_exec = match tokio::runtime::Runtime::new() {
+                                        Ok(rt) => rt,
+                                        Err(e) => {
+                                            error!("Failed to create runtime: {}", e);
+                                            let _ = state_exec.add_message_to_session(
+                                                session_exec,
+                                                ChatMessage::Error(format!(
+                                                    "Failed to create runtime: {}",
+                                                    e
+                                                )),
+                                            );
+                                            return;
+                                        }
+                                    };
+                                    match rt_exec
+                                        .block_on(planner_exec.execute_plan(&plan_exec, true))
+                                    {
+                                        Ok(results) => {
+                                            let result_text = results
+                                                .iter()
+                                                .map(|r| {
+                                                    let status =
+                                                        if r.success { "✅" } else { "❌" };
+                                                    let output = if !r.stdout.is_empty() {
+                                                        r.stdout
+                                                            .lines()
+                                                            .take(3)
+                                                            .collect::<Vec<_>>()
+                                                            .join("\n")
+                                                    } else {
+                                                        "No output".to_string()
+                                                    };
+                                                    format!(
+                                                        "{} {} ({}ms)\n{}",
+                                                        status,
+                                                        r.command,
+                                                        r.execution_time_ms,
+                                                        output
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>()
+                                                .join("\n\n");
+
+                                            let _ = state_exec.add_message_to_session(
+                                                session_exec,
+                                                ChatMessage::Agent(format!(
+                                                    "📊 Execution Results:\n\n{}",
+                                                    result_text
+                                                )),
+                                            );
+
+                                            cb_exec
+                                                .send(Box::new(|siv| {
+                                                    update_ui_displays(siv);
+                                                }))
+                                                .ok();
+                                        }
+                                        Err(e) => {
+                                            let _ = state_exec.add_message_to_session(
+                                                session_exec,
+                                                ChatMessage::Error(format!(
+                                                    "Execution failed: {}",
+                                                    e
+                                                )),
+                                            );
+                                            cb_exec
+                                                .send(Box::new(|siv| {
+                                                    update_ui_displays(siv);
+                                                }))
+                                                .ok();
+                                        }
+                                    }
+                                });
+                            })
+                            .button("Cancel", |s| {
+                                s.pop_layer();
+                            }),
+                    );
+                    update_ui_displays(siv);
+                }))
+                .ok();
+
+            return;
+        }
+
         // Get available tools context
         let tools_context = state_final.get_available_tools_context();
 
@@ -1455,5 +1601,91 @@ async fn execute_mcp_tool(
         _ => {
             format!("Executed {} on {} with parameters: {:?}", tool_name, server_id, params)
         }
+    }
+}
+
+/// Handle theme-related commands
+pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedChatState) {
+    use super::super::agent::{AgentCommand, ThemeCommandType};
+
+    if let Some(session) = state.get_active_session() {
+        // Add user command to chat
+        let _ = state.add_message_to_session(session.id, ChatMessage::User(command.to_string()));
+
+        let parts: Vec<&str> = command.trim().split_whitespace().collect();
+        let theme_cmd = match parts.as_slice() {
+            ["/theme", "list"] => ThemeCommandType::ListThemes,
+            ["/theme", "switch", theme_name] => {
+                ThemeCommandType::SwitchTheme(theme_name.to_string())
+            }
+            ["/theme", "preview"] => ThemeCommandType::PreviewTheme(None),
+            ["/theme", "preview", theme_name] => {
+                ThemeCommandType::PreviewTheme(Some(theme_name.to_string()))
+            }
+            ["/theme", "current"] => ThemeCommandType::ShowCurrentTheme,
+            ["/theme"] => ThemeCommandType::ShowCurrentTheme, // Default to showing current theme
+            _ => {
+                // Invalid theme command
+                let help_msg = "Theme commands:\n\
+                    /theme - Show current theme\n\
+                    /theme list - List available themes\n\
+                    /theme switch <theme_name> - Switch to a theme\n\
+                    /theme preview [theme_name] - Preview a theme\n\
+                    /theme current - Show current theme name";
+                let _ = state
+                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string()));
+                update_ui_displays(siv);
+                return;
+            }
+        };
+
+        // Execute theme command synchronously
+        let response = execute_theme_command(theme_cmd, &state);
+        let _ = state.add_message_to_session(session.id, ChatMessage::System(response));
+
+        // Update UI to reflect changes
+        update_ui_displays(siv);
+    }
+}
+
+/// Execute a theme command and return the response
+fn execute_theme_command(cmd: ThemeCommandType, state: &AdvancedChatState) -> String {
+    match cmd {
+        ThemeCommandType::ListThemes => match state.get_available_themes() {
+            Ok(themes) => {
+                if let Ok(current) = state.get_current_theme_name() {
+                    let mut output = String::from("Available themes:\n");
+                    for theme in themes {
+                        let marker = if theme == current { "▶ " } else { "  " };
+                        output.push_str(&format!("{}{}\n", marker, theme));
+                    }
+                    output
+                } else {
+                    format!("Available themes: {}", themes.join(", "))
+                }
+            }
+            Err(e) => format!("Error listing themes: {}", e),
+        },
+        ThemeCommandType::SwitchTheme(theme_name) => match state.switch_theme(&theme_name) {
+            Ok(_) => format!("✅ Switched to theme: {}", theme_name),
+            Err(e) => format!("❌ Failed to switch theme: {}", e),
+        },
+        ThemeCommandType::PreviewTheme(theme_name) => match theme_name {
+            Some(name) => match state.preview_theme(&name) {
+                Ok(preview) => format!("Preview of theme '{}':\n{}", name, preview),
+                Err(e) => format!("❌ Failed to preview theme '{}': {}", name, e),
+            },
+            None => match state.get_current_theme_name() {
+                Ok(current_name) => match state.preview_theme(&current_name) {
+                    Ok(preview) => format!("Current theme '{}':\n{}", current_name, preview),
+                    Err(e) => format!("❌ Failed to preview current theme: {}", e),
+                },
+                Err(e) => format!("❌ Failed to get current theme: {}", e),
+            },
+        },
+        ThemeCommandType::ShowCurrentTheme => match state.get_current_theme_name() {
+            Ok(name) => format!("Current theme: {}", name),
+            Err(e) => format!("❌ Failed to get current theme: {}", e),
+        },
     }
 }

@@ -214,7 +214,9 @@ impl VsockManager {
 
         let listener = VsockListener {
             addr,
-            socket_path: self.socket_dir.join(format!("{}_{}.sock", addr.cid, addr.port)),
+            socket_path: self
+                .socket_dir
+                .join(format!("{}_{}.sock", addr.cid, addr.port)),
         };
 
         // Register listener
@@ -230,7 +232,9 @@ impl VsockManager {
         from_component: ComponentId,
         to_addr: VsockAddr,
     ) -> Result<VsockConnection> {
-        let from_cid = self.get_cid(from_component).await
+        let from_cid = self
+            .get_cid(from_component)
+            .await
             .ok_or_else(|| anyhow!("Component {} has no CID allocated", from_component))?;
 
         log::info!("Connecting from {} to {}", from_cid, to_addr);
@@ -328,7 +332,11 @@ impl VsockConnection {
     /// Close connection
     pub async fn close(&mut self) -> Result<()> {
         self.connected = false;
-        log::debug!("vsock connection closed: {} -> {}", self.local_addr, self.remote_addr);
+        log::debug!(
+            "vsock connection closed: {} -> {}",
+            self.local_addr,
+            self.remote_addr
+        );
         Ok(())
     }
 }

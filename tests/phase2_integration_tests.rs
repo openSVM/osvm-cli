@@ -7,9 +7,9 @@
 //! - Orchestrator operations
 //! - End-to-end production scenarios
 
-use osvm::utils::isolation::*;
-use osvm::utils::isolation::network::{NetworkPolicy, ComponentPattern, PolicyEffect};
 use osvm::utils::isolation::config::HypervisorType;
+use osvm::utils::isolation::network::{ComponentPattern, NetworkPolicy, PolicyEffect};
+use osvm::utils::isolation::*;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -66,10 +66,12 @@ async fn test_component_registry() {
     assert_eq!(all.len(), 1);
 
     // List by type
-    let mcp_servers = registry.list_by_type(&ComponentType::McpServer {
-        name: "test-mcp".to_string(),
-        version: Some("1.0.0".to_string()),
-    }).await;
+    let mcp_servers = registry
+        .list_by_type(&ComponentType::McpServer {
+            name: "test-mcp".to_string(),
+            version: Some("1.0.0".to_string()),
+        })
+        .await;
     assert_eq!(mcp_servers.len(), 1);
 }
 
@@ -199,7 +201,9 @@ async fn test_end_to_end_component_deployment() {
     assert_eq!(cid, 3);
 
     // 2. Start component (simulated)
-    let runtime = runtime_manager.get_runtime(&component.isolation_config).unwrap();
+    let runtime = runtime_manager
+        .get_runtime(&component.isolation_config)
+        .unwrap();
     assert_eq!(runtime.name(), "Process");
 
     component.status = ComponentStatus::Running;
@@ -229,19 +233,27 @@ async fn test_network_policy() {
     let to_id = ComponentId::new();
 
     // Default should be deny
-    let allowed = network_manager.is_connection_allowed(from_id, to_id).await.unwrap();
+    let allowed = network_manager
+        .is_connection_allowed(from_id, to_id)
+        .await
+        .unwrap();
     assert!(!allowed, "Default policy should deny");
 
     // Add allow policy
-    network_manager.add_policy(NetworkPolicy {
-        source: ComponentPattern::Specific(from_id),
-        destination: ComponentPattern::Specific(to_id),
-        effect: PolicyEffect::Allow,
-        constraints: Default::default(),
-    }).await;
+    network_manager
+        .add_policy(NetworkPolicy {
+            source: ComponentPattern::Specific(from_id),
+            destination: ComponentPattern::Specific(to_id),
+            effect: PolicyEffect::Allow,
+            constraints: Default::default(),
+        })
+        .await;
 
     // Now should be allowed
-    let allowed = network_manager.is_connection_allowed(from_id, to_id).await.unwrap();
+    let allowed = network_manager
+        .is_connection_allowed(from_id, to_id)
+        .await
+        .unwrap();
     assert!(allowed, "Should be allowed after adding policy");
 }
 
@@ -388,17 +400,19 @@ mod performance_tests {
     #[tokio::test]
     async fn benchmark_registry_operations() {
         let registry = ComponentRegistry::new();
-        let components: Vec<_> = (0..100).map(|i| Component {
-            id: ComponentId::new(),
-            component_type: ComponentType::McpServer {
-                name: format!("server-{}", i),
-                version: Some("1.0.0".to_string()),
-            },
-            isolation_config: IsolationConfig::default(),
-            runtime_handle: None,
-            status: ComponentStatus::Running,
-            metadata: Default::default(),
-        }).collect();
+        let components: Vec<_> = (0..100)
+            .map(|i| Component {
+                id: ComponentId::new(),
+                component_type: ComponentType::McpServer {
+                    name: format!("server-{}", i),
+                    version: Some("1.0.0".to_string()),
+                },
+                isolation_config: IsolationConfig::default(),
+                runtime_handle: None,
+                status: ComponentStatus::Running,
+                metadata: Default::default(),
+            })
+            .collect();
 
         // Benchmark registration
         let start = std::time::Instant::now();
@@ -420,7 +434,11 @@ mod performance_tests {
         let list_time = start.elapsed();
 
         println!("Registry performance (100 components):");
-        println!("  Register: {:?} ({:?}/op)", register_time, register_time / 100);
+        println!(
+            "  Register: {:?} ({:?}/op)",
+            register_time,
+            register_time / 100
+        );
         println!("  Get: {:?} ({:?}/op)", get_time, get_time / 100);
         println!("  List: {:?}", list_time);
 

@@ -27,8 +27,91 @@ impl AdvancedChatUI {
         Ok(AdvancedChatUI { state })
     }
 
+    /// Apply current theme to cursive interface
+    pub fn apply_theme_to_cursive(&self, siv: &mut Cursive) -> Result<()> {
+        let theme_manager = self
+            .state
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        let theme = theme_manager.current_theme();
+
+        // Convert our theme to cursive theme
+        let mut cursive_theme = cursive::theme::Theme::default();
+
+        // Apply background colors
+        if let Some(bg) = &theme.background.background {
+            cursive_theme.palette[cursive::theme::PaletteColor::Background] =
+                self.convert_color_to_cursive(bg);
+        }
+
+        // Apply text colors
+        cursive_theme.palette[cursive::theme::PaletteColor::View] =
+            self.convert_color_to_cursive(&theme.text.color);
+
+        // Apply accent colors for highlights
+        cursive_theme.palette[cursive::theme::PaletteColor::Highlight] =
+            self.convert_color_to_cursive(&theme.accent.color);
+
+        // Apply border colors
+        cursive_theme.palette[cursive::theme::PaletteColor::TitlePrimary] =
+            self.convert_color_to_cursive(&theme.border.color);
+
+        siv.set_theme(cursive_theme);
+        Ok(())
+    }
+
+    /// Convert our color format to cursive Color
+    fn convert_color_to_cursive(
+        &self,
+        color: &crate::utils::themes::Color,
+    ) -> cursive::theme::Color {
+        use crate::utils::themes::Color as ThemeColor;
+        use cursive::theme::{BaseColor, Color as CursiveColor};
+
+        match color {
+            ThemeColor::Named(name) => match name.as_str() {
+                "black" => CursiveColor::Dark(BaseColor::Black),
+                "red" => CursiveColor::Dark(BaseColor::Red),
+                "green" => CursiveColor::Dark(BaseColor::Green),
+                "yellow" => CursiveColor::Dark(BaseColor::Yellow),
+                "blue" => CursiveColor::Dark(BaseColor::Blue),
+                "magenta" => CursiveColor::Dark(BaseColor::Magenta),
+                "cyan" => CursiveColor::Dark(BaseColor::Cyan),
+                "white" => CursiveColor::Dark(BaseColor::White),
+                _ => CursiveColor::Dark(BaseColor::White), // Default fallback
+            },
+            ThemeColor::Rgb(r, g, b) => CursiveColor::Rgb(*r, *g, *b),
+            ThemeColor::Hex(hex_str) => {
+                // Parse hex color
+                if let Ok(rgb) = self.parse_hex_color(hex_str) {
+                    CursiveColor::Rgb(rgb.0, rgb.1, rgb.2)
+                } else {
+                    CursiveColor::Dark(BaseColor::White)
+                }
+            }
+            ThemeColor::Indexed(index) => CursiveColor::from_256colors(*index as u8),
+            _ => CursiveColor::Dark(BaseColor::White), // Default fallback
+        }
+    }
+
+    /// Parse hex color string to RGB tuple
+    fn parse_hex_color(&self, hex: &str) -> Result<(u8, u8, u8), std::num::ParseIntError> {
+        let hex = hex.trim_start_matches('#');
+        let r = u8::from_str_radix(&hex[0..2], 16)?;
+        let g = u8::from_str_radix(&hex[2..4], 16)?;
+        let b = u8::from_str_radix(&hex[4..6], 16)?;
+        Ok((r, g, b))
+    }
+
     pub fn setup_far_ui(&self, siv: &mut Cursive) {
         let state = self.state.clone();
+
+        // Apply current theme to cursive interface
+        if let Err(e) = self.apply_theme_to_cursive(siv) {
+            log::warn!("Failed to apply theme to cursive: {}", e);
+        }
 
         // Main horizontal layout: Chat List | Chat History
         let mut main_layout = LinearLayout::horizontal();
