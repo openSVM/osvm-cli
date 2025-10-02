@@ -81,6 +81,7 @@ Traditional Setup          OSVM Setup
 - **TEE Integration** (SGX/SEV for keys)
 - **Auto-Scaler** (intelligent capacity)
 - **Certificate Authority** (automatic mTLS)
+- **ClickHouse Analytics** (transaction indexing)
 
 </td>
 </tr>

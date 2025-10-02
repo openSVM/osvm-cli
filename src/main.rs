@@ -98,6 +98,8 @@ fn is_known_command(sub_command: &str) -> bool {
             | "mcp"
             | "mount"
             | "snapshot"
+            | "db"
+            | "realtime"
             | "chat"
             | "agent"
             | "plan"
@@ -915,6 +917,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("OSVM CLI v{}", version);
         return Ok(());
     }
+
+    // Capture start time for command logging
+    let command_start_time = std::time::Instant::now();
+    let command_args: Vec<String> = std::env::args().collect();
 
     let app_matches = parse_command_line();
 
@@ -2250,6 +2256,68 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        "db" => {
+            // Handle database management commands
+            let Some((db_sub_command, db_sub_matches)) = matches.subcommand() else {
+                eprintln!("No database subcommand provided");
+                exit(1);
+            };
+
+            use crate::commands::database::{DatabaseArgs, execute_database_command};
+
+            let args = DatabaseArgs {
+                data_dir: db_sub_matches.get_one::<String>("data-dir").map(|s| s.to_string()),
+                query: db_sub_matches.get_one::<String>("query").map(|s| s.to_string()),
+                limit: db_sub_matches
+                    .get_one::<String>("limit")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(100),
+                session_id: db_sub_matches.get_one::<String>("session-id").map(|s| s.to_string()),
+                show_commands: db_sub_matches.get_flag("commands"),
+                show_chat: db_sub_matches.get_flag("chat"),
+                show_stats: db_sub_matches.get_flag("stats"),
+                // Sync arguments
+                sync_mode: db_sub_matches.get_one::<String>("mode").map(|s| s.to_string()),
+                programs: db_sub_matches.get_one::<String>("programs").map(|s| s.to_string()),
+                accounts: db_sub_matches.get_one::<String>("accounts").map(|s| s.to_string()),
+                pattern: db_sub_matches.get_one::<String>("pattern").map(|s| s.to_string()),
+                ledger_path: db_sub_matches.get_one::<String>("ledger-path").map(|s| s.to_string()),
+                snapshot_dir: db_sub_matches.get_one::<String>("snapshot-dir").map(|s| s.to_string()),
+            };
+
+            match execute_database_command(db_sub_command, &args).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Database command failed: {}", e);
+                    exit(1);
+                }
+            }
+        }
+        "realtime" => {
+            // Handle real-time sync daemon commands
+            let Some((realtime_sub_command, realtime_sub_matches)) = matches.subcommand() else {
+                eprintln!("No realtime subcommand provided");
+                exit(1);
+            };
+
+            use crate::commands::realtime::{RealtimeArgs, execute_realtime_command};
+
+            let args = RealtimeArgs {
+                programs: realtime_sub_matches.get_one::<String>("programs").map(|s| s.to_string()),
+                accounts: realtime_sub_matches.get_one::<String>("accounts").map(|s| s.to_string()),
+                patterns: realtime_sub_matches.get_one::<String>("patterns").map(|s| s.to_string()),
+                ledger_path: realtime_sub_matches.get_one::<String>("ledger-path").map(|s| s.to_string()),
+                snapshot_dir: realtime_sub_matches.get_one::<String>("snapshot-dir").map(|s| s.to_string()),
+            };
+
+            match execute_realtime_command(realtime_sub_command, &args).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Realtime command failed: {}", e);
+                    exit(1);
+                }
+            }
+        }
         "doctor" => {
             // Handle the doctor command for system diagnostics and repair
             let diagnostic_coordinator = DiagnosticCoordinator::new();
@@ -2496,11 +2564,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             exit(1);
         }
         cmd => {
-            return Err(format!("Unknown command: {cmd}").into());
+            let command_duration = command_start_time.elapsed();
+            let result: Result<(), Box<dyn std::error::Error>> = Err(format!("Unknown command: {cmd}").into());
+            
+            // Log command execution
+            log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
+            
+            return result;
         }
     };
 
+    // Log successful command execution
+    let command_duration = command_start_time.elapsed();
+    let result = Ok(());
+    log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
+
     Ok(())
+}
+
+/// Log command execution to ClickHouse if available
+async fn log_command_execution(
+    command_name: &str,
+    args: &[String],
+    result: &Result<(), Box<dyn std::error::Error>>,
+    duration: std::time::Duration,
+) {
+    // Try to log to ClickHouse if it's running
+    use crate::services::clickhouse_service::{ClickHouseService, ClickHouseStatus};
+    use crate::services::activity_logger::ActivityLogger;
+
+    if let Ok(service) = ClickHouseService::new() {
+        if let Ok(status) = service.status().await {
+            if matches!(status, ClickHouseStatus::Running) {
+                let logger = ActivityLogger::new(std::sync::Arc::new(service));
+                let exit_code = if result.is_ok() { 0 } else { 1 };
+                let duration_ms = duration.as_millis() as u64;
+                let error_message = result.as_ref().err().map(|e| e.to_string());
+                
+                let _ = logger.log_command(
+                    command_name,
+                    args,
+                    exit_code,
+                    duration_ms,
+                    error_message.as_deref(),
+                ).await;
+                
+                // Flush immediately for CLI commands
+                let _ = logger.flush_commands().await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

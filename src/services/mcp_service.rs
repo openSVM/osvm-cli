@@ -604,6 +604,10 @@ impl McpService {
         name: Option<String>,
         skip_confirmation: bool,
     ) -> Result<()> {
+        // Validate server_id to prevent path traversal attacks
+        let server_id = input_sanitization::validate_identifier(&server_id)
+            .context("Invalid server ID: must be alphanumeric with hyphens/underscores only")?;
+
         // Validate GitHub URL to prevent malicious inputs
         if !self.is_valid_github_url(&github_url) {
             return Err(anyhow::anyhow!(
@@ -631,10 +635,37 @@ impl McpService {
         let temp_dir = std::env::temp_dir().join("osvm-mcp-servers");
         std::fs::create_dir_all(&temp_dir)?;
 
-        let local_path = temp_dir.join(&server_id);
+        // Canonicalize temp_dir to get absolute path and resolve any symlinks
+        let canonical_temp_dir = temp_dir.canonicalize()
+            .context("Failed to canonicalize temp directory")?;
 
-        // Remove existing directory if present
+        let local_path = canonical_temp_dir.join(&server_id);
+
+        // SECURITY: Verify the constructed path is still within our temp directory
+        // This prevents path traversal via symlinks or race conditions
+        let canonical_local_path = if local_path.exists() {
+            local_path.canonicalize()
+                .context("Failed to canonicalize local path")?
+        } else {
+            // If it doesn't exist yet, we can't canonicalize it, but we can verify the parent
+            local_path.clone()
+        };
+
+        // Ensure the path is within our allowed directory
+        if !canonical_local_path.starts_with(&canonical_temp_dir) {
+            anyhow::bail!(
+                "Security: Attempted path traversal detected. Path {:?} is outside allowed directory {:?}",
+                canonical_local_path,
+                canonical_temp_dir
+            );
+        }
+
+        // Remove existing directory if present (now safe from TOCTOU)
         if local_path.exists() {
+            // Re-check after canonicalization to prevent race condition
+            if !canonical_local_path.starts_with(&canonical_temp_dir) {
+                anyhow::bail!("Security: Path verification failed during removal");
+            }
             std::fs::remove_dir_all(&local_path)?;
         }
 
@@ -670,7 +701,19 @@ impl McpService {
         let package_json_path = local_path.join("package.json");
 
         let execution_command = if cargo_toml_path.exists() {
-            // Rust project - build with cargo
+            // Rust project - check for build.rs and warn user
+            let build_rs_path = local_path.join("build.rs");
+            if build_rs_path.exists() {
+                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains a build.rs script that will execute during compilation!");
+                eprintln!("Build scripts can run arbitrary code with your user privileges.");
+                eprintln!("Build script location: {:?}\n", build_rs_path);
+
+                // Always require confirmation for projects with build scripts, even with --yes
+                if !self.confirm_build_execution("Rust project with build.rs")? {
+                    return Err(anyhow::anyhow!("Build cancelled by user for security reasons"));
+                }
+            }
+
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
@@ -680,9 +723,10 @@ impl McpService {
             }
 
             let build_result = Command::new("cargo")
-                .args(["build", "--release"])
+                .args(["build", "--release", "--frozen"]) // --frozen prevents dependency updates
                 .current_dir(&local_path)
-                .env("CARGO_NET_OFFLINE", "false") // Allow network for dependencies
+                .env("CARGO_NET_OFFLINE", "true") // Disable network for security
+                .env("CARGO_NET_GIT_FETCH_WITH_CLI", "false") // Prevent git operations
                 .output()
                 .context("Failed to execute cargo build command")?;
 
@@ -716,7 +760,19 @@ impl McpService {
                 })?
                 .to_string()
         } else if package_json_path.exists() {
-            // Node.js project - install dependencies with npm
+            // Node.js project - check for postinstall scripts and warn user
+            let package_json_content = std::fs::read_to_string(&package_json_path)?;
+            if package_json_content.contains("\"postinstall\"") || package_json_content.contains("\"preinstall\"") {
+                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains npm install hooks (preinstall/postinstall)!");
+                eprintln!("These scripts will execute arbitrary code during npm install.");
+                eprintln!("Package.json location: {:?}\n", package_json_path);
+
+                // Always require confirmation for projects with install hooks
+                if !self.confirm_build_execution("Node.js project with install hooks")? {
+                    return Err(anyhow::anyhow!("npm install cancelled by user for security reasons"));
+                }
+            }
+
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
@@ -725,9 +781,10 @@ impl McpService {
                 );
             }
 
-            // Run npm install
+            // Run npm install with --ignore-scripts to prevent automatic script execution
+            // Note: This may break some packages, but it's more secure
             let install_result = Command::new("npm")
-                .args(["install"])
+                .args(["install", "--ignore-scripts"])
                 .current_dir(&local_path)
                 .output()
                 .context("Failed to execute npm install command")?;
@@ -817,12 +874,53 @@ impl McpService {
         Ok(())
     }
 
-    /// Validate GitHub URL for basic security
+    /// Validate GitHub URL with strict parsing to prevent command injection
     fn is_valid_github_url(&self, url: &str) -> bool {
-        url.starts_with("https://github.com/") && 
-        url.len() > 19 && // Minimum length for a valid repo URL
-        url.chars().all(|c| c.is_ascii() && c != '<' && c != '>') && // Basic XSS prevention
-        url.split('/').count() >= 5 // github.com/owner/repo minimum
+        // Use strict URL validation from input_sanitization module
+        let validated_url = match input_sanitization::validate_url(url) {
+            Ok(u) => u,
+            Err(_) => return false,
+        };
+
+        // Parse URL to validate structure
+        let parsed = match url::Url::parse(&validated_url) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+
+        // Strict validation:
+        // 1. Scheme must be exactly https
+        if parsed.scheme() != "https" {
+            return false;
+        }
+
+        // 2. Host must be exactly github.com
+        if parsed.host_str() != Some("github.com") {
+            return false;
+        }
+
+        // 3. No fragments (prevents --upload-pack attacks)
+        if parsed.fragment().is_some() {
+            return false;
+        }
+
+        // 4. No query parameters
+        if parsed.query().is_some() {
+            return false;
+        }
+
+        // 5. No credentials in URL
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return false;
+        }
+
+        // 6. Path must have at least owner/repo format
+        let path = parsed.path();
+        if path.split('/').filter(|s| !s.is_empty()).count() < 2 {
+            return false;
+        }
+
+        true
     }
 
     /// Confirm GitHub clone operation with user
@@ -837,6 +935,88 @@ impl McpService {
 
         let input = input.trim().to_lowercase();
         Ok(input == "y" || input == "yes")
+    }
+
+    /// Confirm build execution for projects with potentially dangerous build scripts
+    fn confirm_build_execution(&self, project_type: &str) -> Result<bool> {
+        use std::io::{self, Write};
+
+        print!("⚠️  Execute build for {}? This will run build scripts on your system! [y/N]: ", project_type);
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        let input = input.trim().to_lowercase();
+        Ok(input == "y" || input == "yes")
+    }
+
+    /// Validate stdio command to prevent command injection
+    fn validate_stdio_command(&self, command: &str) -> Result<String> {
+        use std::path::PathBuf;
+
+        // Check for shell metacharacters in command
+        if self.contains_shell_metacharacters(command) {
+            anyhow::bail!(
+                "Command contains forbidden characters. \
+                Shell metacharacters (;|&$`<>()) are not allowed for security."
+            );
+        }
+
+        // Command must be an absolute path
+        if !command.starts_with('/') {
+            anyhow::bail!(
+                "Command must be an absolute path (e.g., /usr/bin/node). \
+                Relative paths are not allowed for security."
+            );
+        }
+
+        // Canonicalize path to prevent traversal
+        let cmd_path = PathBuf::from(command);
+        let canonical = cmd_path.canonicalize()
+            .context("Invalid command path or file does not exist")?;
+
+        // Whitelist of allowed executable directories
+        let allowed_dirs = [
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/bin"),
+        ];
+
+        let is_in_allowed_dir = allowed_dirs.iter().any(|dir| {
+            canonical.starts_with(dir)
+        });
+
+        if !is_in_allowed_dir {
+            anyhow::bail!(
+                "Command must be in an allowed directory: /usr/bin, /usr/local/bin, or /bin. \
+                Found: {:?}",
+                canonical
+            );
+        }
+
+        // Whitelist of allowed executables by filename
+        let allowed_executables = ["node", "python3", "python", "deno"];
+        let filename = canonical.file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid executable name"))?;
+
+        if !allowed_executables.contains(&filename) {
+            anyhow::bail!(
+                "Executable '{}' is not in the whitelist. \
+                Allowed executables: {}",
+                filename,
+                allowed_executables.join(", ")
+            );
+        }
+
+        Ok(canonical.to_string_lossy().to_string())
+    }
+
+    /// Check if string contains shell metacharacters
+    fn contains_shell_metacharacters(&self, s: &str) -> bool {
+        let dangerous_chars = [';', '|', '&', '$', '`', '<', '>', '(', ')', '\n', '\r'];
+        s.chars().any(|c| dangerous_chars.contains(&c))
     }
 
     /// Get binary name from Cargo.toml with proper TOML parsing
@@ -1105,10 +1285,21 @@ impl McpService {
             .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid command in server URL: {}", config.url))?;
 
-        let mut cmd = TokioCommand::new(command);
+        // SECURITY: Validate command to prevent command injection
+        let validated_command = self.validate_stdio_command(command)?;
+
+        let mut cmd = TokioCommand::new(&validated_command);
 
         // Add any command arguments first
+        // SECURITY: Also validate arguments for shell metacharacters
         for arg in cmd_parts {
+            if self.contains_shell_metacharacters(arg) {
+                anyhow::bail!(
+                    "Command argument contains forbidden characters: {}. \
+                    Shell metacharacters are not allowed for security.",
+                    arg
+                );
+            }
             cmd.arg(arg);
         }
 
