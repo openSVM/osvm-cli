@@ -220,7 +220,7 @@ impl SnapshotReader {
 
 /// Snapshot service for advanced operations
 pub struct SnapshotService {
-    snapshot_dir: PathBuf,
+    pub snapshot_dir: PathBuf,
 }
 
 impl SnapshotService {

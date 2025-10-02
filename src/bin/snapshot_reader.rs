@@ -2,7 +2,6 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::PathBuf;
 use solana_sdk::pubkey::Pubkey;
-use bincode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

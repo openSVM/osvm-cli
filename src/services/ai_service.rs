@@ -239,6 +239,13 @@ impl AiService {
     }
 
     pub async fn query_with_debug(&self, question: &str, debug_mode: bool) -> Result<String> {
+        // Fail fast if OpenAI is configured but no API key is provided
+        if self.use_openai && self.api_key.is_none() {
+            anyhow::bail!(
+                "OpenAI API key not configured. Please set the OPENAI_KEY environment variable or use the default OSVM AI service."
+            );
+        }
+
         let endpoint = if self.use_openai {
             EndpointId::openai()
         } else {

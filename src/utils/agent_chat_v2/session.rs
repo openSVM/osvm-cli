@@ -52,6 +52,24 @@ impl ChatSession {
                 }
             }
         }
+
+        // NEW: Log to ClickHouse if available (async operation, fire-and-forget)
+        if let Some(last_message) = self.messages.last() {
+            let session_clone = self.clone();
+            let message_clone = last_message.clone();
+            
+            tokio::spawn(async move {
+                // Try to get global activity logger if ClickHouse is running
+                if let Ok(service) = crate::services::clickhouse_service::ClickHouseService::new() {
+                    if let Ok(status) = service.status().await {
+                        if status == crate::services::clickhouse_service::ClickHouseStatus::Running {
+                            let logger = crate::services::activity_logger::ActivityLogger::new(std::sync::Arc::new(service));
+                            let _ = logger.log_chat_message(&session_clone, &message_clone).await;
+                        }
+                    }
+                }
+            });
+        }
     }
 
     fn save_message_to_recording(&self, message: &ChatMessage) -> Result<()> {
