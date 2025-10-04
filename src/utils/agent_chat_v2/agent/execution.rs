@@ -444,10 +444,17 @@ impl AdvancedChatState {
             if server_config.enabled {
                 // Initialize the server if needed
                 if let Err(e) = mcp_service.initialize_server(&planned_tool.server_id).await {
-                    warn!(
-                        "Failed to initialize MCP server {}: {}",
+                    error!(
+                        "Failed to initialize MCP server '{}': {}",
                         planned_tool.server_id, e
                     );
+                    // Return error info instead of falling back silently
+                    return Ok(serde_json::json!({
+                        "error": format!("Failed to initialize MCP server '{}': {}", planned_tool.server_id, e),
+                        "status": "initialization_failed",
+                        "server_id": planned_tool.server_id,
+                        "tool_name": planned_tool.tool_name
+                    }));
                 }
 
                 // Try to call the actual tool
@@ -459,32 +466,55 @@ impl AdvancedChatState {
                     )
                     .await
                 {
-                    Ok(result) => return Ok(result),
+                    Ok(result) => {
+                        info!(
+                            "Successfully executed MCP tool '{}' on server '{}'",
+                            planned_tool.tool_name, planned_tool.server_id
+                        );
+                        return Ok(result);
+                    }
                     Err(e) => {
-                        warn!("MCP tool call failed: {}, falling back to simulation", e);
+                        error!(
+                            "MCP tool call failed for '{}' on server '{}': {}",
+                            planned_tool.tool_name, planned_tool.server_id, e
+                        );
+                        // Return detailed error instead of falling back silently
+                        return Ok(serde_json::json!({
+                            "error": format!("MCP tool execution failed: {}", e),
+                            "status": "execution_failed",
+                            "server_id": planned_tool.server_id,
+                            "tool_name": planned_tool.tool_name,
+                            "hint": "Check if the MCP server is properly configured and running. Use 'osvm mcp list' to see configured servers and 'osvm mcp test <server_id>' to test connectivity."
+                        }));
                     }
                 }
+            } else {
+                warn!(
+                    "MCP server '{}' is disabled. Enable it with 'osvm mcp enable {}'",
+                    planned_tool.server_id, planned_tool.server_id
+                );
+                return Ok(serde_json::json!({
+                    "error": format!("MCP server '{}' is disabled", planned_tool.server_id),
+                    "status": "server_disabled",
+                    "server_id": planned_tool.server_id,
+                    "hint": format!("Enable the server with: osvm mcp enable {}", planned_tool.server_id)
+                }));
             }
-        }
-
-        // Fallback to simulation if MCP call fails
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        match planned_tool.tool_name.as_str() {
-            "get_balance" => Ok(serde_json::json!({"balance": "2.5 SOL", "usd_value": 250.75})),
-            "get_transactions" => Ok(serde_json::json!({
-                "transactions": [
-                    {"hash": "abc123", "amount": "0.1 SOL", "type": "sent"},
-                    {"hash": "def456", "amount": "1.0 SOL", "type": "received"}
-                ]
-            })),
-            "get_network_status" => Ok(serde_json::json!({
-                "network": "mainnet-beta",
-                "slot": 250000000,
-                "tps": 3000,
-                "validators": {"active": 1800, "delinquent": 12}
-            })),
-            _ => Ok(serde_json::json!({"result": "Tool executed successfully"})),
+        } else {
+            error!(
+                "MCP server '{}' not found in configuration",
+                planned_tool.server_id
+            );
+            return Ok(serde_json::json!({
+                "error": format!("MCP server '{}' not found", planned_tool.server_id),
+                "status": "server_not_found",
+                "server_id": planned_tool.server_id,
+                "available_servers": mcp_service.list_servers()
+                    .iter()
+                    .map(|(id, _)| id.as_str())
+                    .collect::<Vec<_>>(),
+                "hint": "Add the server with 'osvm mcp add-github <server_id> <github_url>' or check available servers with 'osvm mcp list'"
+            }));
         }
     }
 

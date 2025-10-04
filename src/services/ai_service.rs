@@ -16,9 +16,9 @@ use std::env;
 struct AiRequest {
     question: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    system_prompt: Option<String>,
+    systemPrompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ownPlan")]
-    only_plan: Option<bool>,
+    ownPlan: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -378,8 +378,8 @@ impl AiService {
     ) -> Result<String> {
         let request_body = AiRequest {
             question: question.to_string(),
-            system_prompt,
-            only_plan,
+            systemPrompt: system_prompt,
+            ownPlan: only_plan,
         };
 
         if debug_mode {
@@ -505,12 +505,12 @@ impl AiService {
     ) -> Result<ToolPlan> {
         // For OSVM AI with ownPlan, use JSON format
         if !self.use_openai {
-            let (planning_prompt, json_system_prompt) =
-                self.build_json_planning_prompt(user_request, available_tools)?;
+            let (planning_prompt, xml_system_prompt) =
+                self.build_planning_prompt(user_request, available_tools)?;
             let ai_response = self
                 .query_osvm_ai_with_options(
                     &planning_prompt,
-                    Some(json_system_prompt),
+                    Some(xml_system_prompt),
                     Some(true),
                     false,
                 )
@@ -597,55 +597,6 @@ impl AiService {
         }
     }
 
-    /// Build a structured prompt for tool planning
-    fn build_json_planning_prompt(
-        &self,
-        user_request: &str,
-        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
-    ) -> Result<(String, String)> {
-        let mut tools_context = String::new();
-
-        if available_tools.is_empty() {
-            tools_context.push_str("No MCP tools are currently available.\n");
-        } else {
-            tools_context.push_str("Available MCP Tools:\n");
-            for (server_id, tools) in available_tools {
-                tools_context.push_str(&format!("\nServer: {}\n", server_id));
-                for tool in tools {
-                    let description = tool
-                        .description
-                        .as_deref()
-                        .unwrap_or("No description available");
-                    tools_context.push_str(&format!("  - {}: {}\n", tool.name, description));
-                }
-            }
-        }
-
-        let system_prompt = format!(
-            r#"You are an AI assistant specialized in creating structured execution plans. When given a user query and available tools, analyze what needs to be done and return ONLY a JSON plan.
-
-{}
-
-IMPORTANT: Return ONLY the JSON structure below, no additional text:
-{{
-  "reasoning": "Brief explanation of the plan",
-  "osvm_tools_to_use": [
-    {{
-      "server_id": "exact_server_id",
-      "tool_name": "exact_tool_name",
-      "reason": "why this tool is needed",
-      "args": {{}}
-    }}
-  ],
-  "expected_outcome": "What the user should expect"
-}}"#,
-            tools_context
-        );
-
-        let user_prompt = format!("Create an execution plan for: {}", user_request);
-        Ok((user_prompt, system_prompt))
-    }
-
     fn build_planning_prompt(
         &self,
         user_request: &str,
@@ -679,32 +630,56 @@ IMPORTANT: Return ONLY the JSON structure below, no additional text:
 
         // Create system prompt with all tool descriptions
         let system_prompt = format!(
-            r#"You are an OSVM Agent assistant that creates execution plans.
+            r#"You are an AI assistant specialized in creating structured execution plans. When given a user query and available tools, analyze what needs to be done and return ONLY a JSON plan.
 
-{}
-
-IMPORTANT RESPONSE FORMAT:
-- You MUST respond with an OSVM plan in XML format
-- Your response MUST start with <osvm_plan> and end with </osvm_plan>
-- Do not include any text outside the XML tags
-- Only use tools from the available list above
-- Match tool names and server_ids exactly as provided
-- Provide realistic arguments based on the tool schemas
-
-Required XML structure:
-<osvm_plan>
-  <reasoning>Explain your analysis of the request and why you chose these tools</reasoning>
-  <confidence>0.0 to 1.0</confidence>
-  <tools>
-    <tool>
-      <server_id>exact_server_id</server_id>
-      <tool_name>exact_tool_name</tool_name>
-      <args>{{json_object}}</args>
-      <reason>Why this specific tool is needed</reason>
-    </tool>
-  </tools>
-  <expected_outcome>What the user should expect as a result</expected_outcome>
-</osvm_plan>"#,
+            {}
+            
+            ## OUTPUT FORMAT REQUIREMENTS
+            You MUST format your response using the following XML structure:
+            
+            <osvm_plan>
+              <overview>Brief description of what the plan will accomplish</overview>
+            
+              <tools>
+                <tool name="tool_name" priority="high|medium|low">
+                  <description>What this tool does</description>
+                  <endpoint>API endpoint or RPC method</endpoint>
+                  <parameters>
+                    <param name="param_name" type="string|number|object" required="true|false">Description</param>
+                  </parameters>
+                  <expected_output>What data this will return</expected_output>
+                </tool>
+                <!-- Add more tools as needed -->
+              </tools>
+            
+              <steps>
+                <step number="1">
+                  <action>What action to take</action>
+                  <tool_ref>tool_name from the available tools list</tool_ref>
+                  <dependencies>None or step numbers this depends on</dependencies>
+                  <data_flow>How data flows from/to this step</data_flow>
+                </step>
+                <!-- Add more steps as needed -->
+              </steps>
+            
+              <error_handling>
+                <scenario>Potential error scenario</scenario>
+                <mitigation>How to handle this error</mitigation>
+              </error_handling>
+            
+              <validation>
+                <check>What to validate after execution</check>
+              </validation>
+            
+              <estimated_time>Estimated total execution time</estimated_time>
+            </osvm_plan>
+            
+            IMPORTANT:
+            - Use ONLY the tools defined in the system prompt above
+            - Return ONLY the XML structure. No additional text before or after the XML
+            - Ensure tool_ref in steps matches the available tools from the system prompt
+            - Be specific about endpoints and parameters
+            - Do NOT execute anything, only plan"#,
             tools_context
         );
 
@@ -779,8 +754,8 @@ Required XML structure:
 
         // Extract expected outcome from overview or separate tag
         let expected_outcome = self.extract_xml_value(xml_response, "expected_outcome")
-            .or_else(|| self.extract_xml_value(xml_response, "estimatedTime"))
-            .unwrap_or_else(|| overview.clone());
+            .or_else(|_| self.extract_xml_value(xml_response, "estimatedTime"))
+            .unwrap_or_else(|_| overview.clone());
 
         Ok(ToolPlan {
             reasoning: overview,
@@ -848,25 +823,28 @@ Required XML structure:
                         let name_start = name_start + 6;
                         if let Some(name_end) = tool_xml[name_start..].find("\"") {
                             tool_xml[name_start..name_start + name_end].to_string()
-                        } else {
-                            self.extract_xml_value(tool_xml, "tool_name")
-                                .or_else(|_| self.extract_xml_value(tool_xml, "endpoint"))
-                                .unwrap_or_else(|_| "unknown".to_string())
-                        }
                     } else {
                         self.extract_xml_value(tool_xml, "tool_name")
-                            .or_else(|_| self.extract_xml_value(tool_xml, "endpoint"))
-                            .unwrap_or_else(|_| "unknown".to_string())
-                    };
+                            .ok()
+                            .or(self.extract_xml_value(tool_xml, "endpoint").ok())
+                            .unwrap_or_else(|| "unknown".to_string())
+                    }
+                } else {
+                    self.extract_xml_value(tool_xml, "tool_name")
+                        .ok()
+                        .or(self.extract_xml_value(tool_xml, "endpoint").ok())
+                        .unwrap_or_else(|| "unknown".to_string())
+                };
 
-                    // Extract tool fields
-                    let server_id = self
-                        .extract_xml_value(tool_xml, "server_id")
-                        .unwrap_or_else(|_| "osvm-mcp".to_string());
-                    let reason = self
-                        .extract_xml_value(tool_xml, "reason")
-                        .or_else(|_| self.extract_xml_value(tool_xml, "description"))
-                        .unwrap_or_else(|_| "Tool execution".to_string());
+                // Extract tool fields
+                let server_id = self
+                    .extract_xml_value(tool_xml, "server_id")
+                    .unwrap_or_else(|_| "osvm-mcp".to_string());
+                let reason = self
+                    .extract_xml_value(tool_xml, "reason")
+                    .ok()
+                    .or(self.extract_xml_value(tool_xml, "description").ok())
+                    .unwrap_or_else(|| "Tool execution".to_string());
 
                     // Extract args as JSON object
                     let args =

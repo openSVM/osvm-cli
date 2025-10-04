@@ -851,9 +851,16 @@ impl McpService {
                 ));
             }
 
-            // For Node.js MCP servers, we'll use a wrapper command that calls node
+            // For Node.js MCP servers, we need to find the absolute path to node
+            let node_path = which::which("node")
+                .context("Failed to find node in PATH. Please ensure Node.js is installed.")?;
+            
             format!(
-                "node {}",
+                "{} {}",
+                node_path.to_str().ok_or_else(|| anyhow!(
+                    "Node path contains non-UTF8 characters: {}",
+                    node_path.display()
+                ))?,
                 script_path.to_str().ok_or_else(|| anyhow!(
                     "Script path contains non-UTF8 characters: {}",
                     script_path.display()
