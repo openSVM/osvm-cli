@@ -1,4 +1,7 @@
-use crate::services::isolation_config::IsolationConfig;
+use crate::services::isolation_config::{IsolationConfig, ServerConfig};
+use crate::services::microvm_launcher::{
+    McpServerMicroVmConfig, McpServerMicroVmHandle, MicroVmLauncher, MountPoint,
+};
 use crate::services::unikernel_runtime::{UnikernelConfig, UnikernelRuntime};
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
@@ -219,6 +222,10 @@ pub struct McpService {
     isolation_config: IsolationConfig,
     /// Unikernel runtime for spawning isolated tool executions
     unikernel_runtime: UnikernelRuntime,
+    /// MicroVM launcher for spawning isolated MCP servers
+    microvm_launcher: Option<MicroVmLauncher>,
+    /// Active MCP server microVMs
+    mcp_server_microvms: HashMap<String, McpServerMicroVmHandle>,
 }
 
 impl McpService {
@@ -350,6 +357,12 @@ impl McpService {
                     .expect("Failed to create fallback unikernel runtime")
             });
         
+        // Initialize microVM launcher (graceful fallback if unavailable)
+        let microvm_launcher = MicroVmLauncher::new().ok();
+        if microvm_launcher.is_none() {
+            eprintln!("Warning: MicroVM launcher unavailable. MicroVM isolation disabled.");
+        }
+        
         Self {
             servers: HashMap::new(),
             client: reqwest::Client::new(),
@@ -359,6 +372,8 @@ impl McpService {
             stdio_processes: HashMap::new(),
             isolation_config,
             unikernel_runtime,
+            microvm_launcher,
+            mcp_server_microvms: HashMap::new(),
         }
     }
 
@@ -1195,11 +1210,108 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
+        // Check if should use microVM (clone to avoid borrow checker issues)
+        if let Some(iso_config) = self.isolation_config.get_server_config(server_id).cloned() {
+            if iso_config.use_microvm {
+                return self.initialize_server_in_microvm(server_id, &iso_config).await;
+            }
+        }
+
+        // Fallback to existing transport-based initialization
         match config.transport_type {
             McpTransportType::Http => self.initialize_http_server(&config).await,
             McpTransportType::Websocket => self.initialize_websocket_server(&config).await,
             McpTransportType::Stdio => self.initialize_stdio_server(server_id, &config).await,
         }
+    }
+
+    /// Initialize MCP server in a dedicated microVM
+    async fn initialize_server_in_microvm(
+        &mut self,
+        server_id: &str,
+        iso_config: &ServerConfig,
+    ) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Initializing MCP server '{}' in dedicated microVM",
+                server_id
+            );
+        }
+
+        // Check if microVM launcher is available
+        let launcher = self.microvm_launcher.as_ref()
+            .ok_or_else(|| anyhow!("MicroVM launcher not available. Please ensure Firecracker is installed."))?;
+
+        // Build MicroVM configuration from isolation config
+        let mounts: Vec<MountPoint> = iso_config.microvm_mounts.iter().map(|m| {
+            MountPoint {
+                host_path: m.host_path.clone(),
+                guest_path: m.vm_path.clone(),
+                readonly: m.readonly,
+            }
+        }).collect();
+
+        let microvm_config = McpServerMicroVmConfig {
+            server_id: server_id.to_string(),
+            memory_mb: iso_config.microvm_config.memory_mb,
+            vcpus: iso_config.microvm_config.vcpus,
+            server_command: iso_config.server_command.clone()
+                .unwrap_or_else(|| format!("mcp-server-{}", server_id)),
+            work_dir: PathBuf::from("/app"),
+            mounts,
+            vsock_cid: 0, // Auto-allocate
+        };
+
+        // Launch microVM
+        let handle = launcher.launch_mcp_server(microvm_config)
+            .context("Failed to launch MCP server microVM")?;
+
+        if self.debug_mode {
+            debug_success!(
+                "Launched MCP server '{}' at vsock CID {}",
+                server_id,
+                handle.vsock_cid()
+            );
+        }
+
+        // Send initialize request
+        let init_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_request_id(),
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": CLIENT_NAME,
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        });
+
+        let response = handle.send_request(init_request).await
+            .context("Failed to initialize MCP server in microVM")?;
+
+        // Validate response
+        if let Some(error) = response.get("error") {
+            return Err(anyhow!(
+                "MCP server initialization failed: {:?}",
+                error
+            ));
+        }
+
+        // Store handle for future requests
+        self.mcp_server_microvms.insert(server_id.to_string(), handle);
+
+        if self.debug_mode {
+            debug_success!(
+                "Successfully initialized MCP server '{}' in microVM",
+                server_id
+            );
+        }
+
+        Ok(())
     }
 
     /// Initialize HTTP-based MCP server
@@ -1436,6 +1548,62 @@ impl McpService {
                 }
             }
         }
+    }
+
+    /// Shutdown all MCP server microVMs gracefully
+    pub async fn shutdown_all_mcp_microvms(&mut self) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Shutting down {} MCP server microVMs",
+                self.mcp_server_microvms.len()
+            );
+        }
+
+        for (server_id, handle) in self.mcp_server_microvms.drain() {
+            if let Err(e) = handle.shutdown() {
+                warn!(
+                    "Failed to shutdown microVM for '{}': {}",
+                    server_id, e
+                );
+                if self.debug_mode {
+                    debug_warn!(
+                        "Error shutting down microVM for '{}': {}",
+                        server_id, e
+                    );
+                }
+            } else if self.debug_mode {
+                debug_success!("Successfully shut down microVM for '{}'", server_id);
+            }
+        }
+
+        if self.debug_mode {
+            debug_success!("All MCP server microVMs shut down");
+        }
+
+        Ok(())
+    }
+
+    /// Cleanup all resources (stdio processes and microVMs)
+    pub async fn cleanup_all(&mut self) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Cleaning up all MCP service resources"
+            );
+        }
+
+        // Cleanup stdio processes
+        self.cleanup_stdio_processes().await;
+
+        // Cleanup microVMs
+        self.shutdown_all_mcp_microvms().await?;
+
+        if self.debug_mode {
+            debug_success!("All MCP service resources cleaned up");
+        }
+
+        Ok(())
     }
 
     /// List available tools from an MCP server
@@ -1832,12 +2000,17 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
-        // Check if this tool should be executed in a unikernel
+        // Priority 1: Check if server is running in dedicated microVM
+        if let Some(handle) = self.mcp_server_microvms.get(server_id) {
+            return self.call_tool_via_microvm(handle, tool_name, arguments).await;
+        }
+
+        // Priority 2: Check if this tool should be executed in ephemeral unikernel
         if self.isolation_config.should_use_unikernel(server_id, tool_name) {
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
-                    "Executing tool '{}' in unikernel for enhanced security",
+                    "Executing tool '{}' in ephemeral unikernel for enhanced security",
                     tool_name
                 );
             }
@@ -1845,7 +2018,7 @@ impl McpService {
             return self.call_tool_unikernel(server_id, tool_name, arguments).await;
         }
 
-        // Otherwise, route to appropriate implementation based on transport type
+        // Priority 3: Direct execution based on transport type
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
                 self.call_tool_http(server_id, tool_name, arguments, config)
@@ -1856,6 +2029,58 @@ impl McpService {
                     .await
             }
         }
+    }
+
+    /// Call a tool via dedicated microVM handle
+    async fn call_tool_via_microvm(
+        &self,
+        handle: &McpServerMicroVmHandle,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Calling tool '{}' via dedicated microVM '{}'",
+                tool_name,
+                handle.server_id()
+            );
+        }
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_request_id(),
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        });
+
+        let response = handle.send_request(request).await
+            .context("Failed to call tool via microVM")?;
+
+        // Check for JSON-RPC error
+        if let Some(error) = response.get("error") {
+            return Err(anyhow!(
+                "Tool execution error: {:?}",
+                error
+            ));
+        }
+
+        let result = response.get("result")
+            .ok_or_else(|| anyhow!("No result in response"))?
+            .clone();
+
+        if self.debug_mode {
+            debug_success!(
+                "Successfully called tool '{}' via microVM '{}'",
+                tool_name,
+                handle.server_id()
+            );
+        }
+
+        Ok(result)
     }
 
     /// Call a tool in an isolated unikernel
