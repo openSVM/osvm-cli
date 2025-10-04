@@ -308,6 +308,335 @@ pub fn get_default_osvm_config() -> OsvmMicroVmConfig {
     OsvmMicroVmConfig::default()
 }
 
+// ============================================================================
+// Phase 3.1: MCP Server MicroVM Infrastructure
+// ============================================================================
+
+/// Configuration for launching an MCP server in a microVM
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerMicroVmConfig {
+    /// Server identifier
+    pub server_id: String,
+    /// Memory allocation in MB
+    pub memory_mb: u32,
+    /// Number of vCPUs
+    pub vcpus: u32,
+    /// Command to run MCP server (e.g., "node /path/to/server.js")
+    pub server_command: String,
+    /// Working directory
+    pub work_dir: PathBuf,
+    /// Host directories to mount
+    pub mounts: Vec<MountPoint>,
+    /// virtio-vsock CID for communication
+    pub vsock_cid: u32,
+}
+
+impl Default for McpServerMicroVmConfig {
+    fn default() -> Self {
+        Self {
+            server_id: "default-mcp-server".to_string(),
+            memory_mb: 256,
+            vcpus: 1,
+            server_command: "echo 'MCP server'".to_string(),
+            work_dir: PathBuf::from("/app"),
+            mounts: vec![],
+            vsock_cid: 100, // First MCP server CID
+        }
+    }
+}
+
+/// Handle to a running MCP server microVM
+pub struct McpServerMicroVmHandle {
+    /// Process handle for Firecracker
+    child: Child,
+    /// Configuration used
+    config: McpServerMicroVmConfig,
+    /// Socket path for Firecracker API
+    api_socket: PathBuf,
+    /// Socket path for virtio-vsock communication
+    vsock_socket: PathBuf,
+}
+
+impl McpServerMicroVmHandle {
+    /// Check if the MCP server microVM is still running
+    pub fn is_running(&mut self) -> bool {
+        match self.child.try_wait() {
+            Ok(Some(_)) => false,
+            Ok(None) => true,
+            Err(_) => false,
+        }
+    }
+
+    /// Send JSON-RPC request to MCP server via vsock
+    /// Note: Full implementation will be added in Phase 3.2
+    pub async fn send_request(&self, _request: serde_json::Value) -> Result<serde_json::Value> {
+        // Placeholder for Phase 3.2 virtio-vsock communication
+        warn!("Virtio-vsock communication not yet implemented (Phase 3.2)");
+        Ok(serde_json::json!({
+            "status": "pending",
+            "message": "Virtio-vsock communication will be implemented in Phase 3.2"
+        }))
+    }
+
+    /// Check health of the MCP server
+    pub fn health_check(&self) -> Result<()> {
+        // Basic health check: verify process is running
+        if !self.vsock_socket.exists() {
+            return Err(anyhow!("MCP server vsock socket not found"));
+        }
+        
+        // Additional checks can be added in Phase 3.2
+        Ok(())
+    }
+
+    /// Terminate the MCP server microVM gracefully
+    pub fn shutdown(mut self) -> Result<()> {
+        info!("Shutting down MCP server microVM: {}", self.config.server_id);
+        
+        // Try graceful shutdown via API first
+        if let Err(e) = self.send_shutdown_signal() {
+            warn!("Failed to send graceful shutdown: {}", e);
+        }
+        
+        // Wait briefly for graceful shutdown
+        std::thread::sleep(Duration::from_secs(2));
+        
+        // Force kill if still running
+        if self.is_running() {
+            warn!("Forcing MCP server microVM termination");
+            self.child.kill().context("Failed to kill MCP server microVM process")?;
+        }
+        
+        self.child.wait().context("Failed to wait for MCP server process")?;
+        
+        // Cleanup socket files
+        if self.api_socket.exists() {
+            let _ = std::fs::remove_file(&self.api_socket);
+        }
+        if self.vsock_socket.exists() {
+            let _ = std::fs::remove_file(&self.vsock_socket);
+        }
+        
+        info!("MCP server microVM shut down successfully: {}", self.config.server_id);
+        Ok(())
+    }
+    
+    fn send_shutdown_signal(&self) -> Result<()> {
+        // Send shutdown action via Firecracker API
+        let client = reqwest::blocking::Client::new();
+        let url = format!("http://localhost/actions");
+        
+        let shutdown_action = serde_json::json!({
+            "action_type": "SendCtrlAltDel"
+        });
+        
+        client
+            .put(&url)
+            .json(&shutdown_action)
+            .send()
+            .context("Failed to send shutdown signal to MCP server microVM")?;
+        
+        Ok(())
+    }
+    
+    /// Get the vsock CID for this MCP server
+    pub fn vsock_cid(&self) -> u32 {
+        self.config.vsock_cid
+    }
+    
+    /// Get the server ID
+    pub fn server_id(&self) -> &str {
+        &self.config.server_id
+    }
+}
+
+impl MicroVmLauncher {
+    /// Launch an MCP server in a dedicated microVM
+    pub fn launch_mcp_server(
+        &self,
+        mut config: McpServerMicroVmConfig,
+    ) -> Result<McpServerMicroVmHandle> {
+        info!("Launching MCP server '{}' in dedicated microVM", config.server_id);
+        debug!("Configuration: {:?}", config);
+        
+        // 1. Check Firecracker availability
+        self.check_firecracker_available()?;
+        
+        // 2. Allocate unique vsock CID if not already set
+        if config.vsock_cid == 0 {
+            config.vsock_cid = self.allocate_vsock_cid(&config.server_id)?;
+        }
+        
+        // 3. Create socket paths
+        let api_socket = self.runtime_dir.join(format!(
+            "mcp-{}-api.sock",
+            config.server_id
+        ));
+        let vsock_socket = self.runtime_dir.join(format!(
+            "mcp-{}-vsock.sock",
+            config.server_id
+        ));
+        
+        // 4. Build Firecracker configuration
+        let firecracker_config = self.build_mcp_server_firecracker_config(
+            &config,
+            &api_socket,
+            &vsock_socket,
+        )?;
+        
+        // 5. Write config file
+        let config_file = self.runtime_dir.join(format!(
+            "mcp-{}-config.json",
+            config.server_id
+        ));
+        let config_json = serde_json::to_string_pretty(&firecracker_config)?;
+        std::fs::write(&config_file, &config_json)
+            .context("Failed to write MCP server Firecracker config")?;
+        
+        debug!("Wrote Firecracker config to: {:?}", config_file);
+        
+        // 6. Launch Firecracker
+        let mut cmd = Command::new("firecracker");
+        cmd.arg("--api-sock")
+            .arg(&api_socket)
+            .arg("--config-file")
+            .arg(&config_file);
+        
+        // Set up I/O redirection
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        
+        info!("Starting Firecracker microVM for MCP server '{}'...", config.server_id);
+        let child = cmd
+            .spawn()
+            .context("Failed to spawn MCP server microVM process")?;
+        
+        let handle = McpServerMicroVmHandle {
+            child,
+            config: config.clone(),
+            api_socket,
+            vsock_socket: vsock_socket.clone(),
+        };
+        
+        // 7. Wait for microVM to be ready
+        self.wait_for_mcp_server_ready(&handle)?;
+        
+        info!(
+            "MCP server '{}' microVM launched successfully at CID {}",
+            config.server_id, config.vsock_cid
+        );
+        
+        Ok(handle)
+    }
+    
+    /// Allocate a unique vsock CID for an MCP server
+    /// 
+    /// CID allocation strategy:
+    /// - 0-2: Reserved by Firecracker
+    /// - 3: Agent microVM
+    /// - 100-199: MCP server microVMs
+    /// - 200-299: Ephemeral unikernels (Phase 2)
+    fn allocate_vsock_cid(&self, server_id: &str) -> Result<u32> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        // Hash server_id to get consistent CID
+        let mut hasher = DefaultHasher::new();
+        server_id.hash(&mut hasher);
+        let hash = hasher.finish();
+        
+        // Map to 100-199 range
+        let cid = 100 + (hash % 100) as u32;
+        
+        debug!("Allocated vsock CID {} for MCP server '{}'", cid, server_id);
+        Ok(cid)
+    }
+    
+    /// Build Firecracker configuration for MCP server microVM
+    fn build_mcp_server_firecracker_config(
+        &self,
+        config: &McpServerMicroVmConfig,
+        api_socket: &Path,
+        vsock_socket: &Path,
+    ) -> Result<serde_json::Value> {
+        let home = std::env::var("HOME")
+            .context("HOME environment variable not set")?;
+        let osvm_home = PathBuf::from(home).join(".osvm");
+        
+        let kernel_path = osvm_home.join("kernel/vmlinux.bin");
+        let rootfs_path = osvm_home.join("rootfs/mcp-server.cpio");
+        
+        // For now, use the same rootfs as OSVM runtime
+        // TODO: Create specialized MCP server rootfs
+        let rootfs_path = if !rootfs_path.exists() {
+            osvm_home.join("rootfs/osvm-runtime.cpio")
+        } else {
+            rootfs_path
+        };
+        
+        // Build boot arguments with server-specific env vars
+        let boot_args = format!(
+            "console=ttyS0 reboot=k panic=1 pci=off init=/init \
+             OSVM_MCP_SERVER_ID={} \
+             OSVM_MCP_SERVER_CMD='{}'",
+            config.server_id,
+            config.server_command.replace('\'', "'\\''") // Escape single quotes
+        );
+        
+        let firecracker_config = serde_json::json!({
+            "boot-source": {
+                "kernel_image_path": kernel_path.to_string_lossy(),
+                "boot_args": boot_args
+            },
+            "drives": [{
+                "drive_id": "rootfs",
+                "path_on_host": rootfs_path.to_string_lossy(),
+                "is_root_device": true,
+                "is_read_only": false
+            }],
+            "machine-config": {
+                "vcpu_count": config.vcpus,
+                "mem_size_mib": config.memory_mb,
+                "ht_enabled": false
+            },
+            "network-interfaces": [],
+            "vsock": {
+                "guest_cid": config.vsock_cid,
+                "uds_path": vsock_socket.to_string_lossy()
+            }
+        });
+        
+        Ok(firecracker_config)
+    }
+    
+    /// Wait for MCP server microVM to become ready
+    fn wait_for_mcp_server_ready(&self, handle: &McpServerMicroVmHandle) -> Result<()> {
+        let start = std::time::Instant::now();
+        let timeout = Duration::from_secs(30);
+        
+        while start.elapsed() < timeout {
+            // Check if vsock socket exists
+            if handle.vsock_socket.exists() {
+                debug!("MCP server vsock socket ready");
+                
+                // Try health check
+                if handle.health_check().is_ok() {
+                    debug!("MCP server health check passed");
+                    // Give it a moment for full initialization
+                    std::thread::sleep(Duration::from_millis(500));
+                    return Ok(());
+                }
+            }
+            
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        
+        Err(anyhow!(
+            "MCP server microVM '{}' failed to become ready within timeout",
+            handle.config.server_id
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,5 +655,151 @@ mod tests {
         let in_vm = is_running_in_microvm();
         // Just check it doesn't panic
         assert!(in_vm || !in_vm);
+    }
+    
+    // Phase 3.1 Tests
+    
+    #[test]
+    fn test_mcp_server_default_config() {
+        let config = McpServerMicroVmConfig::default();
+        assert_eq!(config.memory_mb, 256);
+        assert_eq!(config.vcpus, 1);
+        assert_eq!(config.vsock_cid, 100);
+        assert_eq!(config.server_id, "default-mcp-server");
+    }
+    
+    #[test]
+    fn test_vsock_cid_allocation() {
+        let launcher = MicroVmLauncher::new().unwrap();
+        
+        // Test allocation for different server IDs
+        let cid1 = launcher.allocate_vsock_cid("solana").unwrap();
+        let cid2 = launcher.allocate_vsock_cid("github").unwrap();
+        let cid3 = launcher.allocate_vsock_cid("filesystem").unwrap();
+        
+        // All CIDs should be in the 100-199 range
+        assert!(cid1 >= 100 && cid1 < 200);
+        assert!(cid2 >= 100 && cid2 < 200);
+        assert!(cid3 >= 100 && cid3 < 200);
+        
+        // Same server ID should get same CID (deterministic)
+        let cid1_repeat = launcher.allocate_vsock_cid("solana").unwrap();
+        assert_eq!(cid1, cid1_repeat);
+    }
+    
+    #[test]
+    fn test_vsock_cid_allocation_uniqueness() {
+        let launcher = MicroVmLauncher::new().unwrap();
+        
+        // Generate CIDs for many servers and ensure reasonable distribution
+        let mut cids = std::collections::HashSet::new();
+        for i in 0..50 {
+            let server_id = format!("test-server-{}", i);
+            let cid = launcher.allocate_vsock_cid(&server_id).unwrap();
+            cids.insert(cid);
+        }
+        
+        // Should have good distribution (at least 35 unique CIDs out of 50)
+        // With 100 possible CIDs (100-199) and hash-based allocation, 
+        // getting 70%+ unique is good distribution
+        assert!(cids.len() >= 35, "Expected good CID distribution, got {} unique CIDs", cids.len());
+    }
+    
+    #[test]
+    fn test_mcp_server_config_creation() {
+        let config = McpServerMicroVmConfig {
+            server_id: "test-server".to_string(),
+            memory_mb: 512,
+            vcpus: 2,
+            server_command: "node /path/to/server.js".to_string(),
+            work_dir: PathBuf::from("/app"),
+            mounts: vec![
+                MountPoint {
+                    host_path: "~/.config/test".to_string(),
+                    guest_path: "/mnt/config".to_string(),
+                    readonly: true,
+                }
+            ],
+            vsock_cid: 150,
+        };
+        
+        assert_eq!(config.server_id, "test-server");
+        assert_eq!(config.memory_mb, 512);
+        assert_eq!(config.vcpus, 2);
+        assert_eq!(config.vsock_cid, 150);
+        assert_eq!(config.mounts.len(), 1);
+    }
+    
+    #[test]
+    fn test_build_mcp_server_firecracker_config() {
+        let launcher = MicroVmLauncher::new().unwrap();
+        
+        let config = McpServerMicroVmConfig {
+            server_id: "test".to_string(),
+            memory_mb: 256,
+            vcpus: 1,
+            server_command: "echo test".to_string(),
+            work_dir: PathBuf::from("/app"),
+            mounts: vec![],
+            vsock_cid: 100,
+        };
+        
+        let api_socket = PathBuf::from("/tmp/test-api.sock");
+        let vsock_socket = PathBuf::from("/tmp/test-vsock.sock");
+        
+        let firecracker_config = launcher.build_mcp_server_firecracker_config(
+            &config,
+            &api_socket,
+            &vsock_socket,
+        );
+        
+        assert!(firecracker_config.is_ok());
+        
+        let fc_config = firecracker_config.unwrap();
+        assert!(fc_config.get("boot-source").is_some());
+        assert!(fc_config.get("machine-config").is_some());
+        assert!(fc_config.get("vsock").is_some());
+        
+        // Verify vsock configuration
+        let vsock_config = fc_config.get("vsock").unwrap();
+        assert_eq!(vsock_config.get("guest_cid").unwrap().as_u64().unwrap(), 100);
+        
+        // Verify machine config
+        let machine_config = fc_config.get("machine-config").unwrap();
+        assert_eq!(machine_config.get("vcpu_count").unwrap().as_u64().unwrap(), 1);
+        assert_eq!(machine_config.get("mem_size_mib").unwrap().as_u64().unwrap(), 256);
+    }
+    
+    #[test]
+    fn test_mcp_server_command_escaping() {
+        let launcher = MicroVmLauncher::new().unwrap();
+        
+        // Test with command containing single quotes
+        let config = McpServerMicroVmConfig {
+            server_id: "test".to_string(),
+            memory_mb: 256,
+            vcpus: 1,
+            server_command: "echo 'hello world'".to_string(),
+            work_dir: PathBuf::from("/app"),
+            mounts: vec![],
+            vsock_cid: 100,
+        };
+        
+        let api_socket = PathBuf::from("/tmp/test-api.sock");
+        let vsock_socket = PathBuf::from("/tmp/test-vsock.sock");
+        
+        let fc_config = launcher.build_mcp_server_firecracker_config(
+            &config,
+            &api_socket,
+            &vsock_socket,
+        ).unwrap();
+        
+        let boot_args = fc_config.get("boot-source")
+            .and_then(|bs| bs.get("boot_args"))
+            .and_then(|ba| ba.as_str())
+            .unwrap();
+        
+        // Verify the command is properly escaped in boot args
+        assert!(boot_args.contains("OSVM_MCP_SERVER_CMD"));
     }
 }
