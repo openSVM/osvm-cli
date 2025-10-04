@@ -114,12 +114,12 @@ impl AdvancedChatUI {
         chat_layout.add_child(Panel::new(input_layout).title("Input"));
 
         // Agent status bar with live updates
-        let agent_status = TextView::new("🤖 Agent: Initializing...").with_name("agent_status");
-        chat_layout.add_child(Panel::new(agent_status).title("🤖 Agent Status"));
+        let agent_status = TextView::new("Agent: Initializing...").with_name("agent_status");
+        chat_layout.add_child(Panel::new(agent_status).title("Agent Status"));
 
         // System status bar showing microVM/unikernel statuses and mounts
         let system_status = TextView::new("OSVM: Initializing...").with_name("system_status_bar");
-        chat_layout.add_child(Panel::new(system_status).title("⚙️ System Status"));
+        chat_layout.add_child(Panel::new(system_status).title("System Status"));
 
         // Control buttons
         let button_layout = LinearLayout::horizontal()

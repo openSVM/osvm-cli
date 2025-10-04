@@ -18,51 +18,29 @@ use super::layout::AdvancedChatUI;
 impl AdvancedChatUI {
     /// Apply theme styling to a message based on its type
     fn format_message_with_theme(&self, message: &ChatMessage) -> String {
-        let theme_manager = match self.state.theme_manager.read() {
-            Ok(tm) => tm,
-            Err(_) => return self.format_message_fallback(message), // Fallback if lock fails
-        };
-
-        let theme = theme_manager.current_theme();
-
         match message {
             ChatMessage::User(text) => {
                 let sanitized = self.sanitize_text(text);
-                let user_style = theme.get_style("primary");
-                let action_style = theme.get_style("muted");
                 format!(
-                    "{}\n{}\n\n",
-                    user_style.apply(&format!("👤 You: {}", sanitized)),
-                    action_style.apply("   [R]etry [C]opy [D]elete   (Alt+R/C/D)")
+                    "You: {}\n   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n",
+                    sanitized
                 )
             }
             ChatMessage::Agent(text) => {
                 let rendered = self.render_markdown(text);
                 let sanitized = self.sanitize_text(&rendered);
-                let agent_style = theme.get_style("secondary");
-                let action_style = theme.get_style("muted");
                 format!(
-                    "{}:\n{}\n{}\n\n",
-                    agent_style.apply("🤖 Agent"),
-                    theme.get_style("text").apply(&sanitized),
-                    action_style.apply("   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)")
+                    "Agent:\n{}\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n",
+                    sanitized
                 )
             }
             ChatMessage::System(text) => {
                 let sanitized = self.sanitize_text(text);
-                let system_style = theme.get_style("info");
-                format!(
-                    "{}\n\n",
-                    system_style.apply(&format!("ℹ️  System: {}", sanitized))
-                )
+                format!("System: {}\n\n", sanitized)
             }
             ChatMessage::Error(text) => {
                 let sanitized = self.sanitize_text(text);
-                let error_style = theme.get_style("error");
-                format!(
-                    "{}\n\n",
-                    error_style.apply(&format!("❌ Error: {}", sanitized))
-                )
+                format!("Error: {}\n\n", sanitized)
             }
             ChatMessage::ToolCall {
                 tool_name,
@@ -72,28 +50,17 @@ impl AdvancedChatUI {
             } => {
                 let sanitized_tool_name = self.sanitize_text(tool_name);
                 let sanitized_description = self.sanitize_text(description);
-                let tool_style = theme.get_style("command");
-                let info_style = theme.get_style("muted");
 
                 let mut result = format!(
-                    "{}\n",
-                    tool_style.apply(&format!(
-                        "⚡ Calling tool: {} - {}",
-                        sanitized_tool_name, sanitized_description
-                    ))
+                    "Calling tool: {} - {}\n",
+                    sanitized_tool_name, sanitized_description
                 );
 
                 if let Some(args) = args {
                     let sanitized_args = self.sanitize_json(args);
-                    result.push_str(&format!(
-                        "{}\n",
-                        info_style.apply(&format!("   Args: {}", sanitized_args))
-                    ));
+                    result.push_str(&format!("   Args: {}\n", sanitized_args));
                 }
-                result.push_str(&format!(
-                    "{}\n\n",
-                    info_style.apply(&format!("   ID: {}", execution_id))
-                ));
+                result.push_str(&format!("   ID: {}\n\n", execution_id));
                 result
             }
             ChatMessage::ToolResult {
@@ -102,38 +69,22 @@ impl AdvancedChatUI {
                 execution_id,
             } => {
                 let sanitized_tool_name = self.sanitize_text(tool_name);
-                let success_style = theme.get_style("success");
-                let info_style = theme.get_style("muted");
-                let result_text = format!(
-                    "✅ Tool {} result (ID: {}):\n",
-                    sanitized_tool_name, execution_id
-                );
                 let sanitized_result = self.sanitize_json(result);
                 format!(
-                    "{}{}\n\n",
-                    success_style.apply(&result_text),
-                    theme.get_style("text").apply(&sanitized_result)
+                    "Tool {} result (ID: {}):\n{}\n\n",
+                    sanitized_tool_name, execution_id, sanitized_result
                 )
             }
             ChatMessage::AgentThinking(text) => {
                 let sanitized = self.sanitize_text(text);
-                let thinking_style = theme.get_style("accent");
-                format!(
-                    "{}\n\n",
-                    thinking_style.apply(&format!("💭 Agent (thinking): {}", sanitized))
-                )
+                format!("Agent (thinking): {}\n\n", sanitized)
             }
             ChatMessage::AgentPlan(plan) => {
-                let plan_style = theme.get_style("accent");
-                let mut result = format!("{}\n", plan_style.apply("📋 Agent Plan:"));
-                let text_style = theme.get_style("text");
+                let mut result = String::from("Agent Plan:\n");
                 for (i, step) in plan.iter().enumerate() {
                     let step_text = format!("{}: {}", step.tool_name, step.reason);
                     let sanitized = self.sanitize_text(&step_text);
-                    result.push_str(&format!(
-                        "{}\n",
-                        text_style.apply(&format!("  {}. {}", i + 1, sanitized))
-                    ));
+                    result.push_str(&format!("  {}. {}\n", i + 1, sanitized));
                 }
                 result.push_str("\n");
                 result
@@ -142,14 +93,10 @@ impl AdvancedChatUI {
                 message,
                 spinner_index,
             } => {
-                let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                let spinner_chars = vec!["|", "/", "-", "\\", "|", "/", "-", "\\"];
                 let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
                 let sanitized = self.sanitize_text(message);
-                let processing_style = theme.get_style("accent");
-                format!(
-                    "{}\n\n",
-                    processing_style.apply(&format!("{} {}", spinner_char, sanitized))
-                )
+                format!("{} {}\n\n", spinner_char, sanitized)
             }
         }
     }
@@ -208,21 +155,22 @@ impl AdvancedChatUI {
 
                 for (id, name, agent_state) in session_names.iter() {
                     let status_icon = match agent_state {
-                        AgentState::Idle => "●",
-                        AgentState::Thinking => "◐",
-                        AgentState::Planning => "◑",
-                        AgentState::ExecutingTool(_) => "◒",
-                        AgentState::Waiting => "◯",
-                        AgentState::Paused => "⏸",
-                        AgentState::Error(_) => "⚠",
+                        AgentState::Idle => "*",
+                        AgentState::Thinking => "~",
+                        AgentState::Planning => "~",
+                        AgentState::ExecutingTool(_) => ">",
+                        AgentState::Waiting => ".",
+                        AgentState::Paused => "||",
+                        AgentState::Error(_) => "!",
                     };
 
+                    let text_name = format!("");
                     let display_name = format!("{} {}", status_icon, name);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("► {}", display_name)
+                        format!("►{}", display_name)
                     } else {
-                        format!("  {}", display_name)
+                        format!(" {}", display_name)
                     };
 
                     let session_id = *id;
@@ -230,7 +178,7 @@ impl AdvancedChatUI {
                         handle_chat_selection(siv, session_id);
                     });
 
-                    chat_list.add_child(&display_name, button);
+                    chat_list.add_child(&text_name, button);
                 }
             } else {
                 // Same session count - for now just do a full rebuild
@@ -239,19 +187,19 @@ impl AdvancedChatUI {
 
                 for (id, name, agent_state) in session_names.iter() {
                     let status_icon = match agent_state {
-                        AgentState::Idle => "●",
-                        AgentState::Thinking => "◐",
-                        AgentState::Planning => "◑",
-                        AgentState::ExecutingTool(_) => "◒",
-                        AgentState::Waiting => "◯",
-                        AgentState::Paused => "⏸",
-                        AgentState::Error(_) => "⚠",
+                        AgentState::Idle => "*",
+                        AgentState::Thinking => "~",
+                        AgentState::Planning => "~",
+                        AgentState::ExecutingTool(_) => ">",
+                        AgentState::Waiting => ".",
+                        AgentState::Paused => "||",
+                        AgentState::Error(_) => "!",
                     };
 
                     let display_name = format!("{} {}", status_icon, name);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("► {}", display_name)
+                        format!("> {}", display_name)
                     } else {
                         format!("  {}", display_name)
                     };
@@ -331,14 +279,14 @@ impl AdvancedChatUI {
         use std::sync::atomic::Ordering;
 
         let spinner_index = self.state.spinner_state.load(Ordering::Relaxed);
-        let spinner_chars = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let spinner_chars = vec!["|", "/", "-", "\\", "|", "/", "-", "\\"];
         let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
 
         let timestamp = Utc::now().format("%H:%M:%S");
 
         let status_text = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => format!("🤖 Agent: Idle | Ready for tasks | {}", timestamp),
+                AgentState::Idle => format!("Agent: Idle | Ready for tasks | {}", timestamp),
                 AgentState::Thinking => format!(
                     "{} Agent: Thinking... | Analyzing request | {}",
                     spinner_char, timestamp
@@ -352,16 +300,16 @@ impl AdvancedChatUI {
                     spinner_char, tool_name, timestamp
                 ),
                 AgentState::Waiting => {
-                    format!("⏳ Agent: Waiting | Awaiting response | {}", timestamp)
+                    format!("Agent: Waiting | Awaiting response | {}", timestamp)
                 }
                 AgentState::Paused => {
-                    format!("⏸️ Agent: Paused | Operations suspended | {}", timestamp)
+                    format!("Agent: Paused | Operations suspended | {}", timestamp)
                 }
-                AgentState::Error(ref err) => format!("⚠️ Agent: Error | {} | {}", err, timestamp),
+                AgentState::Error(ref err) => format!("Agent: Error | {} | {}", err, timestamp),
             }
         } else {
             format!(
-                "❓ Agent: No active session | Select a chat session | {}",
+                "Agent: No active session | Select a chat session | {}",
                 timestamp
             )
         };

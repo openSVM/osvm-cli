@@ -23,14 +23,14 @@ impl AdvancedChatState {
     pub async fn process_input_async(&self, session_id: Uuid, input: String) -> Result<()> {
         // Set agent state to thinking
         self.set_agent_state(session_id, AgentState::Thinking);
-        self.add_message_to_session(session_id, ChatMessage::User(input.clone()))?;
-        self.add_message_to_session(
+        let _ = self.add_message_to_session(session_id, ChatMessage::User(input.clone()));
+        let _ = self.add_message_to_session(
             session_id,
             ChatMessage::Processing {
                 message: "Analyzing your request...".to_string(),
                 spinner_index: self.spinner_state.load(Ordering::Relaxed),
             },
-        )?;
+        );
 
         // First, refresh available tools to ensure we have the latest
         if let Err(e) = self.refresh_tools_from_mcp().await {
@@ -38,20 +38,22 @@ impl AdvancedChatState {
         }
 
         self.set_agent_state(session_id, AgentState::Planning);
-        self.add_message_to_session(
+        let _ = self.add_message_to_session(
             session_id,
             ChatMessage::Processing {
                 message: "Creating execution plan...".to_string(),
                 spinner_index: self.spinner_state.load(Ordering::Relaxed),
             },
-        )?;
+        );
 
         // Get available tools
-        let available_tools = self
-            .available_tools
-            .read()
-            .map_err(|e| anyhow!("Failed to read available tools: {}", e))?
-            .clone();
+        let available_tools = match self.available_tools.read() {
+            Ok(tools) => tools.clone(),
+            Err(e) => {
+                error!("Failed to read available tools: {}", e);
+                HashMap::new() // Use empty map as fallback
+            }
+        };
 
         // Use the proper AI service method to create tool plan
         let tool_plan_result = tokio::time::timeout(
@@ -89,81 +91,93 @@ impl AdvancedChatState {
         match tool_plan_result {
             Err(_) => {
                 warn!("AI planning timed out");
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::Error(
                         "AI planning timed out. Using heuristic fallback.".to_string(),
                     ),
-                )?;
+                );
                 if no_configured_tools {
-                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
-                        .await?;
+                    let _ = self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await;
                 } else {
-                    self.simple_response(session_id, &input).await?;
+                    let _ = self.simple_response(session_id, &input).await;
                 }
             }
             Ok(Err(e)) => {
                 error!("AI service failed: {}", e);
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::Error(
                         "AI planning service failed. Using heuristic fallback.".to_string(),
                     ),
-                )?;
+                );
                 if no_configured_tools {
-                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
-                        .await?;
+                    let _ = self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await;
                 } else {
-                    self.simple_response(session_id, &input).await?;
+                    let _ = self.simple_response(session_id, &input).await;
                 }
             }
             Ok(Ok(tool_plan)) => {
                 // Successfully got tool plan from AI service
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::AgentPlan(tool_plan.osvm_tools_to_use.clone()),
-                )?;
+                );
 
                 if tool_plan.osvm_tools_to_use.is_empty() {
                     // No tools needed according to AI
-                    if no_configured_tools {
-                        // Try heuristic plan instead
-                        let heur = build_heuristic_plan(&input);
-                        if !heur.is_empty() {
-                            self.add_message_to_session(
-                                session_id,
-                                ChatMessage::AgentPlan(heur.clone()),
-                            )?;
-                            self.run_heuristic_fallback(session_id, &input, heur)
-                                .await?;
-                        } else {
-                            self.simple_response(session_id, &input).await?;
-                        }
+                if no_configured_tools {
+                    // Try heuristic plan instead
+                    let heur = build_heuristic_plan(&input);
+                    if !heur.is_empty() {
+                        let _ = self.add_message_to_session(
+                            session_id,
+                            ChatMessage::AgentPlan(heur.clone()),
+                        );
+                        let _ = self.run_heuristic_fallback(session_id, &input, heur).await;
                     } else {
-                        self.simple_response(session_id, &input).await?;
+                        let _ = self.simple_response(session_id, &input).await;
                     }
+                } else {
+                    let _ = self.simple_response(session_id, &input).await;
+                }
                 } else {
                     // Execute tools iteratively with potential for follow-up actions
                     let mut executed_tools = Vec::new();
                     let mut iteration_count = 0;
-                    let max_iterations = 5; // Allow up to 5 iterations of tool execution
+                    let max_iterations = 3; // Reduced to prevent excessive loops
 
                     let mut current_tools = tool_plan.osvm_tools_to_use;
+                    let mut executed_tool_signatures = std::collections::HashSet::new();
 
                     while !current_tools.is_empty() && iteration_count < max_iterations {
                         iteration_count += 1;
 
+                        // Filter out duplicate tools to prevent infinite loops
+                        current_tools.retain(|tool| {
+                            let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                            !executed_tool_signatures.contains(&signature)
+                        });
+
+                        if current_tools.is_empty() {
+                            warn!("All remaining tools are duplicates, breaking execution loop");
+                            break;
+                        }
+
                         // Execute current batch of tools
                         for planned_tool in &current_tools {
-                            self.execute_planned_tool(session_id, planned_tool.clone())
-                                .await?;
+                            let signature = format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
+                            executed_tool_signatures.insert(signature);
+                            
+                            let _ = self.execute_planned_tool(session_id, planned_tool.clone()).await;
                             executed_tools.push(planned_tool.clone());
                         }
 
                         // Check if we need follow-up actions based on results
-                        let session = self
-                            .get_session_by_id(session_id)
-                            .ok_or_else(|| anyhow!("Session not found"))?;
+                        let session = match self.get_session_by_id(session_id) {
+                            Some(s) => s,
+                            None => break, // Session not found, exit loop
+                        };
 
                         let recent_results: Vec<(String, Value)> = session
                             .messages
@@ -188,15 +202,26 @@ impl AdvancedChatState {
                                 )
                                 .await
                             {
-                                Ok(follow_up_tools) if !follow_up_tools.is_empty() => {
-                                    self.add_message_to_session(
-                                        session_id,
-                                        ChatMessage::AgentThinking(format!(
-                                            "Executing {} follow-up actions...",
-                                            follow_up_tools.len()
-                                        )),
-                                    )?;
-                                    current_tools = follow_up_tools;
+                                Ok(mut follow_up_tools) if !follow_up_tools.is_empty() => {
+                                    // Filter follow-up tools to remove duplicates
+                                    follow_up_tools.retain(|tool| {
+                                        let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                                        !executed_tool_signatures.contains(&signature)
+                                    });
+
+                                    if !follow_up_tools.is_empty() {
+                                        let _ = self.add_message_to_session(
+                                            session_id,
+                                            ChatMessage::AgentThinking(format!(
+                                                "Executing {} follow-up actions...",
+                                                follow_up_tools.len()
+                                            )),
+                                        );
+                                        current_tools = follow_up_tools;
+                                    } else {
+                                        warn!("All follow-up tools are duplicates, breaking execution loop");
+                                        break;
+                                    }
                                 }
                                 _ => break, // No more tools needed
                             }
@@ -206,14 +231,14 @@ impl AdvancedChatState {
                     }
 
                     // Generate final response with all executed tools
-                    self.generate_final_response(session_id, &input, &tool_plan.expected_outcome)
-                        .await?;
+                    let _ = self.generate_final_response(session_id, &input, &tool_plan.expected_outcome).await;
                 }
             }
         }
 
-        // Remove any lingering processing messages before completing
-        let _ = self.remove_last_processing_message(session_id);
+        // ALWAYS cleanup processing messages, even if errors occurred above
+        // This ensures the spinner stops regardless of success/failure
+        self.cleanup_processing_messages(session_id);
 
         self.set_agent_state(session_id, AgentState::Idle);
 
@@ -221,6 +246,29 @@ impl AdvancedChatState {
         let _ = self.generate_reply_suggestions(session_id).await;
 
         Ok(())
+    }
+
+    /// Helper to ensure cleanup always happens
+    fn cleanup_processing_messages(&self, session_id: Uuid) {
+        // Remove ALL processing messages from the session
+        loop {
+            match self.remove_last_processing_message(session_id) {
+                Ok(()) => {
+                    // Check if there are more processing messages
+                    if let Some(session) = self.get_session_by_id(session_id) {
+                        let has_more_processing = session.messages.iter().any(|msg| {
+                            matches!(msg, ChatMessage::Processing { .. })
+                        });
+                        if !has_more_processing {
+                            break; // No more processing messages
+                        }
+                    } else {
+                        break; // Session not found
+                    }
+                }
+                Err(_) => break, // Error or no processing message found
+            }
+        }
     }
 
     // Heuristic fallback execution simulating basic tools so user sees end-to-end flow

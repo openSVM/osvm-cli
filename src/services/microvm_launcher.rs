@@ -135,7 +135,10 @@ pub struct MicroVmLauncher {
 impl MicroVmLauncher {
     /// Create a new microVM launcher
     pub fn new() -> Result<Self> {
-        let runtime_dir = PathBuf::from("/var/run/osvm");
+        // Use ~/.osvm/run for runtime files
+        let home = std::env::var("HOME")
+            .context("HOME environment variable not set")?;
+        let runtime_dir = PathBuf::from(home).join(".osvm/run");
         
         // Create runtime directory if it doesn't exist
         if !runtime_dir.exists() {
@@ -221,15 +224,23 @@ impl MicroVmLauncher {
         config: &OsvmMicroVmConfig,
         api_socket: &Path,
     ) -> Result<serde_json::Value> {
+        // Get HOME directory for paths
+        let home = std::env::var("HOME")
+            .context("HOME environment variable not set")?;
+        let osvm_home = PathBuf::from(home).join(".osvm");
+        
+        let kernel_path = osvm_home.join("kernel/vmlinux.bin");
+        let rootfs_path = osvm_home.join("rootfs/osvm-runtime.cpio");
+        
         // Build comprehensive Firecracker configuration
         let firecracker_config = serde_json::json!({
             "boot-source": {
-                "kernel_image_path": "/var/osvm/kernel/vmlinux.bin",
-                "boot_args": "console=ttyS0 reboot=k panic=1 pci=off"
+                "kernel_image_path": kernel_path.to_string_lossy(),
+                "boot_args": "console=ttyS0 reboot=k panic=1 pci=off init=/init"
             },
             "drives": [{
                 "drive_id": "rootfs",
-                "path_on_host": "/var/osvm/rootfs/osvm-runtime.ext4",
+                "path_on_host": rootfs_path.to_string_lossy(),
                 "is_root_device": true,
                 "is_read_only": false
             }],

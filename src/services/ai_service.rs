@@ -589,7 +589,7 @@ impl AiService {
                 // Final fallback: return an empty plan instead of error so UI can proceed without showing a planning failure error
                 debug_warn!("Falling back to empty tool plan after parse failures");
                 Ok(ToolPlan {
-                    reasoning: format!("Could not parse structured plan reliably. Proceeding without tools. Raw snippet: {}", Self::truncate_for_reason(&ai_response, 160)),
+                    reasoning: "I couldn't create a structured plan, but I'll help you directly.".to_string(),
                     osvm_tools_to_use: vec![],
                     expected_outcome: "Provide a helpful direct answer based on the request.".to_string(),
                 })
@@ -719,13 +719,86 @@ Required XML structure:
 
     /// Parse AI response as JSON tool plan
     fn parse_json_tool_plan(&self, ai_response: &str) -> Result<ToolPlan> {
-        // Try to parse as JSON
-        let json_val: serde_json::Value = serde_json::from_str(ai_response)
-            .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+        // First try to parse as JSON
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(ai_response) {
+            // Use the existing salvage method which handles our JSON structure
+            return self.salvage_from_json(&json_val)
+                .ok_or_else(|| anyhow::anyhow!("Failed to extract tool plan from JSON response"));
+        }
 
-        // Use the existing salvage method which handles our JSON structure
-        self.salvage_from_json(&json_val)
-            .ok_or_else(|| anyhow::anyhow!("Failed to extract tool plan from JSON response"))
+        // If JSON parsing fails, try to parse as XML (osvm_plan format)
+        if ai_response.contains("<osvm_plan>") {
+            return self.parse_osvm_plan_xml(ai_response);
+        }
+
+        // If both fail, return error
+        anyhow::bail!("Response is neither valid JSON nor XML osvm_plan format");
+    }
+
+    /// Parse OSVM plan XML format
+    fn parse_osvm_plan_xml(&self, xml_response: &str) -> Result<ToolPlan> {
+        // Extract overview
+        let overview = self.extract_xml_value(xml_response, "overview")
+            .unwrap_or_else(|_| "Analyzing request and creating execution plan".to_string());
+
+        // Extract tools from XML
+        let mut tools = Vec::new();
+        if let Some(tools_section) = self.extract_xml_section(xml_response, "tools") {
+            // Find all tool sections
+            let mut pos = 0;
+            while let Some(tool_start) = tools_section[pos..].find("<tool") {
+                let start = pos + tool_start;
+                if let Some(tool_end) = tools_section[start..].find("</tool>") {
+                    let tool_xml = &tools_section[start..start + tool_end + 7];
+
+                    // Extract tool name
+                    let tool_name = self.extract_xml_attribute(tool_xml, "name")
+                        .or_else(|| self.extract_xml_value(tool_xml, "name").ok())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    // Extract tool description
+                    let description = self.extract_xml_value(tool_xml, "description")
+                        .unwrap_or_else(|_| "Tool execution".to_string());
+
+                    // Extract priority if available
+                    let _priority = self.extract_xml_attribute(tool_xml, "priority");
+
+                    tools.push(PlannedTool {
+                        server_id: "osvm-mcp".to_string(), // Default server
+                        tool_name,
+                        args: serde_json::json!({}), // Empty args for now
+                        reason: description,
+                    });
+
+                    pos = start + tool_end + 7;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Extract expected outcome from overview or separate tag
+        let expected_outcome = self.extract_xml_value(xml_response, "expected_outcome")
+            .or_else(|| self.extract_xml_value(xml_response, "estimatedTime"))
+            .unwrap_or_else(|| overview.clone());
+
+        Ok(ToolPlan {
+            reasoning: overview,
+            osvm_tools_to_use: tools,
+            expected_outcome,
+        })
+    }
+
+    /// Extract attribute value from XML tag
+    fn extract_xml_attribute(&self, xml: &str, attribute: &str) -> Option<String> {
+        // Look for attribute="value" pattern
+        let attr_pattern = format!(r#"{}="([^"]*)""#, attribute);
+        if let Ok(re) = regex::Regex::new(&attr_pattern) {
+            if let Some(caps) = re.captures(xml) {
+                return Some(caps.get(1)?.as_str().to_string());
+            }
+        }
+        None
     }
 
     /// Parse AI response into structured ToolPlan from OSVM XML format
@@ -874,7 +947,7 @@ Required XML structure:
                             server_id: "default".to_string(),
                             tool_name,
                             args: serde_json::json!({}),
-                            reason: "Salvaged from unstructured response".to_string(),
+                            reason: "Tool identified from response".to_string(),
                         });
                     }
                 }
@@ -884,10 +957,10 @@ Required XML structure:
         if reasoning.is_some() || expected.is_some() || !tools.is_empty() {
             return Some(ToolPlan {
                 reasoning: reasoning
-                    .unwrap_or_else(|| "Salvaged reasoning unavailable".to_string()),
+                    .unwrap_or_else(|| "Processing your request directly".to_string()),
                 osvm_tools_to_use: tools,
                 expected_outcome: expected
-                    .unwrap_or_else(|| "Attempt to fulfill request".to_string()),
+                    .unwrap_or_else(|| "Provide helpful assistance".to_string()),
             });
         }
 

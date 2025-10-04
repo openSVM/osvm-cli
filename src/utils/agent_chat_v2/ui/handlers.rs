@@ -196,8 +196,23 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         return;
     }
 
-    // Immediately add user message to session and update display
+    // Check for duplicate input to prevent processing the same message twice
     if let Some(session) = state.get_active_session() {
+        // Check if the last user message is the same as the current one
+        // Look through messages in reverse to find the last User message
+        if let Some(last_user_msg) = session.messages.iter().rev().find_map(|msg| {
+            if let ChatMessage::User(text) = msg {
+                Some(text)
+            } else {
+                None
+            }
+        }) {
+            if last_user_msg == &user_message {
+                warn!("Duplicate user input detected, ignoring: {}", user_message);
+                return;
+            }
+        }
+
         // Add user message to the session
         let _ = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()));
 
@@ -205,7 +220,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         let _ = state.add_message_to_session(
             session.id,
             ChatMessage::Processing {
-                message: "🤖 Processing your request...".to_string(),
+                message: "Processing your request...".to_string(),
                 spinner_index: 0,
             },
         );
@@ -390,7 +405,7 @@ pub fn show_settings(siv: &mut Cursive) {
 }
 
 pub fn export_chat(siv: &mut Cursive) {
-    siv.with_user_data(|state: &mut AdvancedChatState| {
+    let export_result = siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
             let filename = format!(
                 "osvm_chat_export_{}_{}.json",
@@ -403,34 +418,67 @@ pub fn export_chat(siv: &mut Cursive) {
                     match std::fs::write(&filename, json_content) {
                         Ok(_) => {
                             info!("Chat exported to {}", filename);
-                            // Add success message to current session
-                            if let Ok(mut sessions) = state.sessions.write() {
-                                if let Some(current_session) = sessions.get_mut(&session.id) {
-                                    current_session.add_message(ChatMessage::System(format!(
-                                        "Chat exported to {}",
-                                        filename
-                                    )));
-                                }
-                            }
+                            Ok((filename, None::<String>))
                         }
                         Err(e) => {
                             error!("Failed to write export file: {}", e);
+                            Err(format!("Failed to write export file: {}", e))
                         }
                     }
                 }
                 Err(e) => {
                     error!("Failed to serialize session: {}", e);
+                    Err(format!("Failed to serialize session: {}", e))
                 }
             }
+        } else {
+            Err("No active session found".to_string())
         }
     });
 
-    update_ui_displays(siv);
+    match export_result {
+        Some(Ok((filename, None))) => {
+            siv.add_layer(
+                Dialog::info(format!("✅ Chat exported successfully to:\n{}", filename))
+                    .title("Export Complete")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        Some(Ok((_, Some(e)))) => {
+            siv.add_layer(
+                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        Some(Err(e)) => {
+            siv.add_layer(
+                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        None => {
+            siv.add_layer(
+                Dialog::info("❌ No active session found")
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+    }
 }
 
 pub fn show_advanced_help(siv: &mut Cursive) {
     let help_text = "OSVM Advanced Agent Chat Help\n\n\
-        🔤 Keyboard Shortcuts:\n\
+        Keyboard Shortcuts:\n\
         • Tab - Switch between chat list and input\n\
         • Shift+Tab - Reverse navigation\n\
         • F10 - Context menu (Copy, Retry, Clear)\n\
@@ -443,17 +491,17 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         • Alt+X - Emergency clear processing\n\
         • Alt+M - Switch to standard mode\n\
         • Esc - Hide suggestions\n\n\
-        📋 Agent Controls:\n\
+        Agent Controls:\n\
         • Run - Resume agent processing\n\
         • Pause - Pause agent operations\n\
-        • Stop - Stop current agent task\n\n\
-        📹 Recording:\n\
+        • Stop - Current agent task\n\n\
+        Recording:\n\
         • Record - Start session recording\n\
         • Stop Rec - Stop recording\n\n\
-        🔄 Status Icons:\n\
-        • ● Idle  ◐ Thinking  ◑ Planning\n\
-        • ◒ Executing  ◯ Waiting  ⏸ Paused  ⚠ Error\n\n\
-        ✨ Features:\n\
+        Status Icons:\n\
+        • * Idle  ~ Thinking  ~ Planning\n\
+        • > Executing  . Waiting  || Paused  ! Error\n\n\
+        Features:\n\
         • AI-powered tool planning and execution\n\
         • Background agent processing\n\
         • Multi-chat session support\n\
@@ -462,7 +510,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
 
     siv.add_layer(
         Dialog::text(help_text)
-            .title("🚀 Advanced Help")
+            .title("Advanced Help")
             .button("Got it!", |s| {
                 s.pop_layer();
             })
@@ -925,31 +973,75 @@ pub fn start_live_processing(
     use std::time::Duration;
 
     let spinner_counter = Arc::new(AtomicUsize::new(0));
-    let processing_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
 
     // Get a callback sink to update UI from background thread
     let cb_sink = siv.cb_sink().clone();
-    let cb_sink2 = cb_sink.clone();
 
     // Clone for background thread
     let state_clone = state.clone();
     let spinner_clone = spinner_counter.clone();
-    let active_clone = processing_active.clone();
 
     // Start spinner animation in background thread
     thread::spawn(move || {
-        let stages = vec![
-            "🤖 Analyzing your request...",
-            "🔍 Searching for relevant information...",
-            "⚙️ Processing with AI...",
-            "📊 Generating response...",
-            "✨ Finalizing answer...",
+        let stages = [
+            "Analyzing your request...",
+            "Searching for relevant information...",
+            "Processing with AI...",
+            "Generating response...",
+            "Finalizing answer...",
+            "Almost done...",
+            "Wrapping up...",
+            "Just a moment...",
+            "Completing your request...",
+            "Preparing response...",
+            "Finalizing response...",
+            "Almost there...",
+            "Just a moment longer...",
+            "Completing the process...",
+            "Preparing the final response...",
+            "Finishing up...",
+            "Loading...",
+            "Thinking...",
+            "Working...",
+            "Processing...",
+            "Calculating...",
+            "Reviewing...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
         ];
 
         let mut stage_index = 0;
         let mut update_counter = 0;
+        let start_time = std::time::Instant::now();
+        const MAX_SPINNER_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
 
-        while active_clone.load(Ordering::Relaxed) {
+        loop {
+            // Check if processing message still exists in session BEFORE updating
+            let still_processing = state_clone
+                .get_session_by_id(session_id)
+                .map(|session| {
+                    session.messages.iter().any(|msg| {
+                        matches!(msg, ChatMessage::Processing { .. })
+                    })
+                })
+                .unwrap_or(false);
+            
+            if !still_processing {
+                break; // Exit loop when processing message is removed
+            }
+
+            // Safety timeout: force exit after 30 seconds
+            if start_time.elapsed() > MAX_SPINNER_DURATION {
+                // Force remove processing message and exit
+                let _ = state_clone.remove_last_processing_message(session_id);
+                break;
+            }
+            
             let spinner_index = spinner_clone.fetch_add(1, Ordering::Relaxed);
 
             // Change message every 30 updates (roughly 3 seconds)
@@ -960,12 +1052,27 @@ pub fn start_live_processing(
 
             let message = stages[stage_index].to_string();
 
-            // Update processing message in session
-            let _ = state_clone.update_processing_message(
-                session_id,
-                message.clone(),
-                spinner_index % 10,
-            );
+            // Only update if processing message still exists
+            // This check prevents re-adding the message after agent removes it
+            if still_processing {
+                // Double-check: only update if message still exists (race condition guard)
+                let still_processing_after_check = state_clone
+                    .get_session_by_id(session_id)
+                    .map(|session| {
+                        session.messages.iter().any(|msg| {
+                            matches!(msg, ChatMessage::Processing { .. })
+                        })
+                    })
+                    .unwrap_or(false);
+                
+                if still_processing_after_check {
+                    let _ = state_clone.update_processing_message(
+                        session_id,
+                        message.clone(),
+                        spinner_index % 10,
+                    );
+                }
+            }
 
             // Request UI update
             cb_sink
@@ -978,371 +1085,41 @@ pub fn start_live_processing(
         }
     });
 
-    // Process with real AI service
-    let state_final = state.clone();
-    let processing_final = processing_active.clone();
-    let ai_service = state_final.ai_service.clone();
-
-    thread::spawn(move || {
-        // Use tokio runtime for async AI call within thread
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(rt) => rt,
-            Err(e) => {
-                eprintln!("Failed to create tokio runtime: {}", e);
-                processing_final.store(false, Ordering::Relaxed);
-                let _ = state_final.remove_last_processing_message(session_id);
-                let _ = state_final.add_message_to_session(
-                    session_id,
-                    ChatMessage::Error("Failed to initialize AI processing".to_string()),
-                );
-                cb_sink2
-                    .send(Box::new(move |siv| {
-                        update_ui_displays(siv);
-                    }))
-                    .ok();
-                return;
-            }
-        };
-
-        // Try OSVM command planner first
-        use crate::utils::osvm_command_planner::OsvmCommandPlanner;
-
-        let planner = OsvmCommandPlanner::new(false);
-        if let Ok(osvm_plan) = rt.block_on(planner.create_plan(&user_input)) {
-            // Show OSVM plan in a dialog
-            processing_final.store(false, Ordering::Relaxed);
-            let _ = state_final.remove_last_processing_message(session_id);
-
-            let plan_text = format!(
-                "💭 {}\n\n🎯 Confidence: {:.0}%\n\n📋 Commands:\n{}",
-                osvm_plan.reasoning,
-                osvm_plan.confidence * 100.0,
-                osvm_plan
-                    .steps
-                    .iter()
-                    .enumerate()
-                    .map(|(i, s)| format!("{}. {}\n   → {}", i + 1, s.full_command, s.explanation))
-                    .collect::<Vec<_>>()
-                    .join("\n\n")
-            );
-
-            let _ = state_final.add_message_to_session(
-                session_id,
-                ChatMessage::Agent(format!(
-                    "🔧 OSVM Command Plan:\n{}\n\n✨ {}",
-                    plan_text, osvm_plan.expected_outcome
-                )),
-            );
-
-            cb_sink2
-                .send(Box::new(move |siv| {
-                    // Show confirmation dialog
-                    siv.add_layer(
-                        Dialog::text(format!("Execute this OSVM command plan?\n\n{}", plan_text))
-                            .title("OSVM Command Plan")
-                            .button("Execute", move |s| {
-                                s.pop_layer();
-                                // Execute in background
-                                let state_exec = match s.user_data::<AdvancedChatState>().cloned() {
-                                    Some(state) => state,
-                                    None => {
-                                        error!("Failed to get application state");
-                                        return;
-                                    }
-                                };
-                                let planner_exec = OsvmCommandPlanner::new(false);
-                                let plan_exec = osvm_plan.clone();
-                                let session_exec = session_id;
-                                let cb_exec = s.cb_sink().clone();
-
-                                thread::spawn(move || {
-                                    let rt_exec = match tokio::runtime::Runtime::new() {
-                                        Ok(rt) => rt,
-                                        Err(e) => {
-                                            error!("Failed to create runtime: {}", e);
-                                            let _ = state_exec.add_message_to_session(
-                                                session_exec,
-                                                ChatMessage::Error(format!(
-                                                    "Failed to create runtime: {}",
-                                                    e
-                                                )),
-                                            );
-                                            return;
-                                        }
-                                    };
-                                    match rt_exec
-                                        .block_on(planner_exec.execute_plan(&plan_exec, true))
-                                    {
-                                        Ok(results) => {
-                                            let result_text = results
-                                                .iter()
-                                                .map(|r| {
-                                                    let status =
-                                                        if r.success { "✅" } else { "❌" };
-                                                    let output = if !r.stdout.is_empty() {
-                                                        r.stdout
-                                                            .lines()
-                                                            .take(3)
-                                                            .collect::<Vec<_>>()
-                                                            .join("\n")
-                                                    } else {
-                                                        "No output".to_string()
-                                                    };
-                                                    format!(
-                                                        "{} {} ({}ms)\n{}",
-                                                        status,
-                                                        r.command,
-                                                        r.execution_time_ms,
-                                                        output
-                                                    )
-                                                })
-                                                .collect::<Vec<_>>()
-                                                .join("\n\n");
-
-                                            let _ = state_exec.add_message_to_session(
-                                                session_exec,
-                                                ChatMessage::Agent(format!(
-                                                    "📊 Execution Results:\n\n{}",
-                                                    result_text
-                                                )),
-                                            );
-
-                                            cb_exec
-                                                .send(Box::new(|siv| {
-                                                    update_ui_displays(siv);
-                                                }))
-                                                .ok();
-                                        }
-                                        Err(e) => {
-                                            let _ = state_exec.add_message_to_session(
-                                                session_exec,
-                                                ChatMessage::Error(format!(
-                                                    "Execution failed: {}",
-                                                    e
-                                                )),
-                                            );
-                                            cb_exec
-                                                .send(Box::new(|siv| {
-                                                    update_ui_displays(siv);
-                                                }))
-                                                .ok();
-                                        }
-                                    }
-                                });
-                            })
-                            .button("Cancel", |s| {
-                                s.pop_layer();
-                            }),
-                    );
-                    update_ui_displays(siv);
-                }))
-                .ok();
-
-            return;
-        }
-
-        // Get available tools context
-        let tools_context = state_final.get_available_tools_context();
-
-        // Create STRICT structured planning prompt
-        let planning_query = format!(
-            "You are OSVM Agent. You MUST respond in the exact XML format specified.
-
-\
-            USER REQUEST: '{}'
-
-\
-            AVAILABLE TOOLS:
-{}
-
-\
-            CRITICAL: You MUST respond ONLY in this format. Do not add any text before or after:
-
-\
-            <plan>
-\
-            <tool name=\"exact_tool_name\" server=\"exact_server_id\">
-\
-              <param name=\"param_name\">param_value</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            Brief explanation of what you're doing.
-\
-            </response>
-
-\
-            EXACT MAPPINGS - Use these tools for these requests:
-
-\
-            \"balance\" or \"how much SOL\" → get_balance tool
-\
-            \"transactions\" or \"recent transactions\" → get_recent_transactions tool
-\
-            \"transaction details\" + signature → get_transaction tool
-\
-            \"analyze transaction\" → analyze_transaction tool
-
-\
-            EXAMPLES (COPY EXACTLY):
-
-\
-            Request: \"What's my SOL balance?\"
-\
-            <plan>
-\
-            <tool name=\"get_balance\" server=\"osvm-api\">
-\
-              <param name=\"address\">user_default</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll check your SOL balance now.
-\
-            </response>
-
-\
-            Request: \"Show my recent transactions\"
-\
-            <plan>
-\
-            <tool name=\"get_recent_transactions\" server=\"osvm-api\">
-\
-              <param name=\"limit\">10</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll get your 10 most recent transactions.
-\
-            </response>
-
-\
-            Request: \"Get details for transaction ABC123\"
-\
-            <plan>
-\
-            <tool name=\"get_transaction\" server=\"osvm-api\">
-\
-              <param name=\"signature\">ABC123</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll get the details for transaction ABC123.
-\
-            </response>
-
-\
-            For general questions (no blockchain data needed), use:
-\
-            <plan></plan>
-\
-            <response>Your answer here</response>
-
-\
-            NOW RESPOND TO: '{}' - USE EXACT FORMAT ABOVE",
-            user_input, tools_context, user_input
-        );
-
-        let response = rt.block_on(async {
-            match ai_service.query_with_debug(&planning_query, false).await {
-                Ok(ai_response) => {
-                    // Parse the structured response and execute tools
-                    execute_ai_plan(ai_response, session_id, state_final.clone()).await
-                }
-                Err(e) => {
-                    eprintln!("AI service error: {}", e);
-                    // Fallback to mock response on AI service failure
-                    format!(
-                        "I encountered an issue connecting to the AI service: {}
-
-\
-                        However, I can still help with basic Solana operations. {}",
-                        e,
-                        generate_mock_response(&user_input)
-                    )
-                }
-            }
-        });
-
-        // Stop spinner
-        processing_final.store(false, Ordering::Relaxed);
-
-        // Remove processing message and add agent response
-        let _ = state_final.remove_last_processing_message(session_id);
-        let _ = state_final.add_message_to_session(session_id, ChatMessage::Agent(response));
-
-        // Generate intelligent follow-up suggestions using AI
-        let suggestions = rt.block_on(async {
-            let suggestion_query = format!(
-                "Based on the user query '{}' and your response, suggest 5 short follow-up questions \
-                or actions related to Solana/OSVM operations. Return only the suggestions, one per line, \
-                without numbers or bullets.",
-                user_input
-            );
-
-            match ai_service.query_with_debug(&suggestion_query, false).await {
-                Ok(ai_suggestions) => {
-                    // Parse AI suggestions into vec
-                    ai_suggestions
-                        .lines()
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty() && s.len() < 80) // Reasonable length limit
-                        .take(5)
-                        .collect::<Vec<String>>()
-                }
-                Err(_) => {
-                    // Fallback to context suggestions on AI failure
-                    generate_context_suggestions(&user_input)
-                }
-            }
-        });
-
-        if !suggestions.is_empty() {
-            if let Ok(mut current_suggestions) = state_final.current_suggestions.write() {
-                *current_suggestions = suggestions;
-            }
-            if let Ok(mut vis) = state_final.suggestions_visible.write() {
-                *vis = true;
-            }
-        }
-
-        // Final UI update
-        cb_sink2
-            .send(Box::new(move |siv| {
-                update_ui_displays(siv);
-            }))
-            .ok();
-    });
+    // Use the proper agent worker flow which calls AI service first
+    // Send to agent worker instead of handling inline
+    let command = AgentCommand::ProcessInput {
+        session_id,
+        input: user_input,
+    };
+    
+    // Send command through the proper channel
+    state.send_agent_command_sync(command);
+    
+    // NOTE: We don't stop the spinner here - it will keep running and be cleaned up
+    // when the agent worker completes and removes the processing message
 }
+
 
 // Generate mock response for demo
 fn generate_mock_response(input: &str) -> String {
     let input_lower = input.to_lowercase();
 
     if input_lower.contains("balance") {
-        "I'll check your SOL balance for you. According to the latest data, your wallet shows 2.45 SOL with some pending transactions.".to_string()
-    } else if input_lower.contains("transaction") {
-        "Here are your recent transactions:\n\n1. → Received 1.5 SOL (2 hours ago)\n2. ← Sent 0.3 SOL (1 day ago)\n3. → Staking rewards 0.025 SOL (2 days ago)\n\nWould you like more details on any of these?".to_string()
-    } else if input_lower.contains("price") {
-        "The current SOL price is approximately $23.45 USD, showing a 2.3% increase over the last 24 hours. The market looks relatively stable.".to_string()
+        "I'll check your SOL balance for you. According to the latest data, your wallet shows that all SOL is gone with some pending transactions.".to_string()
     } else if input_lower.contains("stake") || input_lower.contains("staking") {
         "For staking your SOL:\n\n1. Choose a validator with good performance\n2. Use 'solana delegate-stake' command\n3. Minimum stake amount is 0.001 SOL\n\nCurrent APY is around 6.8%. Would you like help selecting a validator?".to_string()
+    } else if input_lower.contains("send") || input_lower.contains("transfer") {
+        "To send SOL, you'll need the recipient's wallet address and ensure you have enough balance to cover both the amount and transaction fees. Use 'solana transfer <RECIPIENT_ADDRESS> <AMOUNT>' command.".to_string()
+    } else if input_lower.contains("validator") {
+        "You can check validator performance using 'solana validators' command. Look for high uptime and low commission rates. Would you like me to list some top validators for you?".to_string()
+    } else if input_lower.contains("rewards") {
+        "Staking rewards are typically distributed every 2 days. You can check your accumulated rewards using 'solana stake-account <STAKE_ACCOUNT_ADDRESS>' command.".to_string()
+    } else if input_lower.contains("history") || input_lower.contains("transactions") {
+        "You can export your transaction history using 'solana transaction-history' command. Would you like me to guide you through the steps?".to_string()
+    } else if input_lower.contains("market") || input_lower.contains("analysis") {
+        "The Solana market has been showing steady growth with increasing adoption. Recent trends indicate a bullish sentiment, but always consider market volatility.".to_string()
+    } else if input_lower.contains("security") || input_lower.contains("wallet") {
+        "For wallet security, ensure you use strong passwords, enable two-factor authentication,and regularly update your software. Avoid sharing your private keys.".to_string()
     } else {
         format!("I understand you're asking about: '{}'\n\nLet me help you with that. Based on your query, I can provide information about Solana operations, wallet management, and blockchain interactions.", input)
     }
@@ -1455,13 +1232,14 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
     let partial_owned = partial.to_string();
 
     // Spawn background AI suggestion generation (non-blocking)
+    let state_clone = state.clone();
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
             Err(_) => return, // Silently fail on runtime creation error
         };
 
-        let _ai_suggestions = rt.block_on(async {
+        let ai_suggestions = rt.block_on(async {
             let suggestion_query = format!(
                 "Complete this Solana/blockchain query: '{}'. \
                 Provide 3-5 likely completions, one per line, under 60 characters each.",
@@ -1474,8 +1252,28 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
                 .unwrap_or_default()
         });
 
-        // TODO: Update suggestions in state (requires more complex async handling)
-        // For now, we rely on the fast pattern matching below
+        // Parse AI suggestions and update state
+        if !ai_suggestions.is_empty() {
+            let suggestions: Vec<String> = ai_suggestions
+                .lines()
+                .filter_map(|line| {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() && trimmed.len() <= 60 {
+                        Some(trimmed.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .take(5)
+                .collect();
+
+            if !suggestions.is_empty() {
+                // Update suggestions in state
+                if let Ok(mut current_suggestions) = state_clone.current_suggestions.write() {
+                    *current_suggestions = suggestions;
+                }
+            }
+        }
     });
 
     // Return immediate pattern-based suggestions
