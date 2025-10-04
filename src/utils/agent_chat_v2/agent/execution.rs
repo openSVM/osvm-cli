@@ -1,14 +1,20 @@
 //! Agent execution logic for AI processing and tool execution
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::services::{ai_service::PlannedTool, mcp_service::McpTool};
+use crate::services::{
+    ai_service::PlannedTool,
+    isolation_config::IsolationConfig,
+    mcp_service::McpTool,
+    unikernel_runtime::{UnikernelConfig, UnikernelRuntime},
+};
 
 use super::super::state::AdvancedChatState;
 use super::super::types::{AgentState, ChatMessage};
@@ -283,6 +289,105 @@ impl AdvancedChatState {
     }
 
     async fn call_mcp_tool(&self, planned_tool: &PlannedTool) -> Result<Value> {
+        // Load isolation configuration
+        let isolation_config = match IsolationConfig::load() {
+            Ok(config) => config,
+            Err(e) => {
+                warn!("Failed to load isolation config: {}, using direct MCP execution", e);
+                return self.call_mcp_tool_direct(planned_tool).await;
+            }
+        };
+
+        // Check if this tool should be executed in a unikernel
+        if isolation_config.should_use_unikernel(&planned_tool.server_id, &planned_tool.tool_name) {
+            // Attempt unikernel execution with fallback
+            match self.execute_tool_in_unikernel(planned_tool, &isolation_config).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    warn!("Unikernel execution failed: {}, falling back to direct MCP", e);
+                    return self.call_mcp_tool_direct(planned_tool).await;
+                }
+            }
+        }
+
+        // Use direct MCP execution (MicroVM mode or no isolation config)
+        self.call_mcp_tool_direct(planned_tool).await
+    }
+
+    /// Execute tool in ephemeral unikernel for maximum isolation
+    async fn execute_tool_in_unikernel(
+        &self,
+        planned_tool: &PlannedTool,
+        isolation_config: &IsolationConfig,
+    ) -> Result<Value> {
+        info!(
+            "Executing tool '{}' in ephemeral unikernel for server '{}'",
+            planned_tool.tool_name, planned_tool.server_id
+        );
+
+        // Get tool-specific configuration
+        let tool_config = isolation_config.get_tool_config(
+            &planned_tool.server_id,
+            &planned_tool.tool_name,
+        );
+
+        // Validate unikernel image is configured
+        let unikernel_image = match &tool_config.unikernel_image {
+            Some(img) => img.clone(),
+            None => {
+                warn!(
+                    "No unikernel image configured for tool '{}' on server '{}', falling back",
+                    planned_tool.tool_name, planned_tool.server_id
+                );
+                return Err(anyhow!("No unikernel image configured"));
+            }
+        };
+
+        // Create unikernel runtime
+        let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
+            .context("Failed to create unikernel runtime")?;
+
+        // Build unikernel configuration
+        let unikernel_config = UnikernelConfig {
+            image_path: PathBuf::from(unikernel_image),
+            mounts: tool_config.mounts.clone(),
+            memory_mb: tool_config.memory_mb,
+            vcpus: tool_config.vcpus,
+            tool_name: planned_tool.tool_name.clone(),
+            server_id: planned_tool.server_id.clone(),
+        };
+
+        // Spawn the unikernel (~100ms overhead)
+        let handle = unikernel_runtime
+            .spawn_unikernel(unikernel_config)
+            .await
+            .context("Failed to spawn unikernel")?;
+
+        // Execute the tool in the isolated unikernel
+        let result = handle
+            .execute_tool(&planned_tool.tool_name, Some(planned_tool.args.clone()))
+            .await;
+
+        // Always terminate the ephemeral unikernel
+        handle.terminate();
+
+        match result {
+            Ok(value) => {
+                info!(
+                    "Successfully executed tool '{}' in unikernel",
+                    planned_tool.tool_name
+                );
+                Ok(value)
+            }
+            Err(e) => {
+                error!("Unikernel tool execution failed: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    /// Direct MCP tool execution without unikernel isolation
+    async fn call_mcp_tool_direct(&self, planned_tool: &PlannedTool) -> Result<Value> {
         // Try to call real MCP tool first
         let mut mcp_service = self.mcp_service.lock().await;
 

@@ -5,7 +5,7 @@ use anyhow::{anyhow, Context, Result};
 use cursive::direction::Orientation;
 use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, SelectView, TextView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView, TextView,
 };
 use cursive::Cursive;
 use log::{error, info, warn};
@@ -1687,5 +1687,259 @@ fn execute_theme_command(cmd: ThemeCommandType, state: &AdvancedChatState) -> St
             Ok(name) => format!("Current theme: {}", name),
             Err(e) => format!("❌ Failed to get current theme: {}", e),
         },
+    }
+}
+
+/// Show test tool dialog with input fields
+pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Get tool schema to build input form
+    let schema_info = siv.with_user_data(|state: &mut AdvancedChatState| {
+        let tools = state.available_tools.read().unwrap();
+        
+        if let Some(tool_list) = tools.get(&server_id) {
+            if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
+                Some(tool.input_schema.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+    
+    if let Some(Some(schema)) = schema_info {
+        let mut test_layout = LinearLayout::vertical();
+        
+        test_layout.add_child(TextView::new(format!("Testing: {}", tool_name)));
+        test_layout.add_child(DummyView.fixed_height(1));
+        test_layout.add_child(TextView::new("Enter parameters as JSON:"));
+        test_layout.add_child(DummyView.fixed_height(1));
+        
+        // Add text area for JSON input
+        test_layout.add_child(Panel::new(
+            EditView::new()
+                .content("{}")
+                .with_name("test_tool_params")
+                .min_width(60)
+                .min_height(5)
+        ).title("Parameters (JSON)"));
+        
+        test_layout.add_child(DummyView.fixed_height(1));
+        test_layout.add_child(TextView::new("Expected Schema:"));
+        test_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(
+                serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string())
+            ))
+            .max_height(5)
+        ));
+        
+        let server_clone = server_id.clone();
+        let tool_clone = tool_name.clone();
+        
+        siv.add_layer(
+            Dialog::around(test_layout)
+                .title(format!("🧪 Test Tool: {}", tool_name))
+                .button("Execute", move |s| {
+                    execute_test_tool(s, server_clone.clone(), tool_clone.clone());
+                })
+                .button("Cancel", |s| {
+                    s.pop_layer();
+                })
+                .max_width(80)
+        );
+    }
+}
+
+/// Execute a test tool call and show results with metrics
+fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Get JSON input from the form
+    let json_input = siv.find_name::<EditView>("test_tool_params")
+        .map(|v| v.get_content().to_string())
+        .unwrap_or_else(|| "{}".to_string());
+    
+    // Parse JSON
+    let params = match serde_json::from_str::<serde_json::Value>(&json_input) {
+        Ok(val) => val,
+        Err(e) => {
+            siv.add_layer(
+                Dialog::text(format!("❌ Invalid JSON: {}", e))
+                    .title("Parse Error")
+                    .button("OK", |s| { s.pop_layer(); })
+            );
+            return;
+        }
+    };
+    
+    // Close the test dialog
+    siv.pop_layer();
+    
+    // Show loading dialog
+    siv.add_layer(
+        Dialog::text("⚡ Executing tool...\nPlease wait...")
+            .title("Testing Tool")
+            .with_name("test_execution_dialog")
+    );
+    
+    // Execute in background and show results
+    let cb_sink = siv.cb_sink().clone();
+    let state_opt = siv.user_data::<AdvancedChatState>().cloned();
+    
+    std::thread::spawn(move || {
+        let start_time = std::time::Instant::now();
+        
+        if let Some(state) = state_opt {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let error_msg = format!("Failed to create runtime: {}", e);
+                    cb_sink.send(Box::new(move |s| {
+                        s.pop_layer(); // Remove loading dialog
+                        s.add_layer(
+                            Dialog::text(error_msg)
+                                .title("❌ Test Failed")
+                                .button("OK", |s| { s.pop_layer(); })
+                        );
+                    })).ok();
+                    return;
+                }
+            };
+            
+            let result = rt.block_on(async {
+                let mcp_service = state.mcp_service.lock().await;
+                mcp_service.call_tool(&server_id, &tool_name, Some(params)).await
+            });
+            
+            let execution_time_ms = start_time.elapsed().as_millis();
+            
+            cb_sink.send(Box::new(move |s| {
+                s.pop_layer(); // Remove loading dialog
+                
+                match result {
+                    Ok(response) => {
+                        let response_str = serde_json::to_string_pretty(&response)
+                            .unwrap_or_else(|_| format!("{:?}", response));
+                        
+                        let mut result_layout = LinearLayout::vertical();
+                        
+                        result_layout.add_child(TextView::new(format!("✅ Execution Successful")));
+                        result_layout.add_child(DummyView.fixed_height(1));
+                        
+                        result_layout.add_child(TextView::new(format!("⏱️  Execution Time: {}ms", execution_time_ms)));
+                        result_layout.add_child(TextView::new(format!("📦 Server: {}", server_id)));
+                        result_layout.add_child(TextView::new(format!("🔧 Tool: {}", tool_name)));
+                        result_layout.add_child(DummyView.fixed_height(1));
+                        
+                        result_layout.add_child(TextView::new("Response:"));
+                        result_layout.add_child(Panel::new(
+                            ScrollView::new(TextView::new(response_str.clone()))
+                                .max_height(15)
+                        ));
+                        
+                        s.add_layer(
+                            Dialog::around(result_layout)
+                                .title("🧪 Test Results")
+                                .button("Close", |s| { s.pop_layer(); })
+                                .button("Copy Response", move |s| {
+                                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                        let _ = clipboard.set_text(&response_str);
+                                        s.add_layer(
+                                            Dialog::info("Response copied to clipboard!")
+                                                .button("OK", |s| { s.pop_layer(); })
+                                        );
+                                    }
+                                })
+                                .max_width(100)
+                        );
+                    }
+                    Err(e) => {
+                        let error_msg = format!("❌ Tool execution failed:\n\n{}\n\n⏱️ Time: {}ms", e, execution_time_ms);
+                        s.add_layer(
+                            Dialog::text(error_msg)
+                                .title("Test Failed")
+                                .button("OK", |s| { s.pop_layer(); })
+                        );
+                    }
+                }
+            })).ok();
+        }
+    });
+}
+
+/// Show detailed information about an MCP tool
+pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Skip if this is a header (empty tool_name)
+    if tool_name.is_empty() {
+        return;
+    }
+    
+    let tool_info = siv.with_user_data(|state: &mut AdvancedChatState| {
+        let tools = state.available_tools.read().unwrap();
+        
+        if let Some(tool_list) = tools.get(&server_id) {
+            if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
+                let description = tool.description.as_ref()
+                    .map(|d| d.clone())
+                    .unwrap_or_else(|| "No description available".to_string());
+                    
+                let schema_str = serde_json::to_string_pretty(&tool.input_schema)
+                    .unwrap_or_else(|_| "{}".to_string());
+                
+                Some((tool.name.clone(), description, schema_str))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+    
+    if let Some(Some((name, description, schema))) = tool_info {
+        let mut details_layout = LinearLayout::vertical();
+        
+        details_layout.add_child(TextView::new(format!("Tool: {}", name)));
+        details_layout.add_child(DummyView.fixed_height(1));
+        
+        details_layout.add_child(TextView::new("Description:"));
+        details_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(description))
+                .max_height(5)
+        ));
+        details_layout.add_child(DummyView.fixed_height(1));
+        
+        details_layout.add_child(TextView::new("Input Schema:"));
+        details_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(schema))
+                .max_height(10)
+        ));
+        details_layout.add_child(DummyView.fixed_height(1));
+        
+        details_layout.add_child(TextView::new(format!("Server: {}", server_id)));
+        
+        let server_id_clone = server_id.clone();
+        let tool_name_clone = name.clone();
+        
+        siv.add_layer(
+            Dialog::around(details_layout)
+                .title(format!("📦 Tool Details: {}", name))
+                .button("Test Tool", move |s| {
+                    show_test_tool_dialog(s, server_id_clone.clone(), tool_name_clone.clone());
+                })
+                .button("Close", |s| {
+                    s.pop_layer();
+                })
+                .max_width(80)
+                .max_height(30)
+        );
+    } else {
+        siv.add_layer(
+            Dialog::text(format!(
+                "Tool '{}' not found on server '{}'",
+                tool_name, server_id
+            ))
+            .title("Tool Not Found")
+            .button("OK", |s| {
+                s.pop_layer();
+            })
+        );
     }
 }

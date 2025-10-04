@@ -936,11 +936,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (sub_command, sub_matches) = match app_matches.subcommand() {
         Some((cmd, matches)) => (cmd, matches),
         None => {
-            // No subcommand provided - default to advanced chat interface
-            println!("🚀 Welcome to OSVM! Starting Advanced Agent Chat Interface...");
-            println!("💡 Tip: Use 'osvm --help' to see all available commands\n");
-
-            // Launch advanced chat directly
+            // No subcommand - bootstrap OSVM agent with microVM isolation
+            use crate::services::microvm_launcher::{is_running_in_microvm, MicroVmLauncher, get_default_osvm_config};
+            
+            // Check if we should skip microVM
+            let skip_microvm = std::env::var("OSVM_SKIP_MICROVM")
+                .map(|v| v == "1" || v.to_lowercase() == "true")
+                .unwrap_or(false);
+            
+            if skip_microvm || is_running_in_microvm() {
+                // Already in microVM or explicitly skipping - run agent directly
+                if is_running_in_microvm() {
+                    println!("🚀 OSVM Agent Running in microVM isolation mode");
+                    std::env::set_var("OSVM_IN_MICROVM", "1");
+                } else {
+                    println!("🚀 OSVM Agent Starting (Direct Mode - OSVM_SKIP_MICROVM=1)");
+                }
+                println!("💡 Use 'osvm --help' to see all available commands\n");
+                
+                return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                    .await
+                    .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+            }
+            
+            // On host - launch in microVM for enhanced security
+            println!("🚀 Launching OSVM Agent in microVM...");
+            
+            // For now, Firecracker setup is complex - use direct mode with unikernel support
+            // Full microVM requires kernel image + rootfs setup
+            println!("⚠️  MicroVM launch requires Firecracker + kernel/rootfs setup");
+            println!("   Falling back to direct execution with unikernel tool isolation");
+            println!("   💡 Tool calls will still spawn ephemeral unikernels for security");
+            println!();
+            
+            // Run agent directly with unikernel support for tools
             return crate::utils::agent_chat_v2::run_advanced_agent_chat()
                 .await
                 .map_err(|e| format!("Failed to start advanced chat: {}", e).into());

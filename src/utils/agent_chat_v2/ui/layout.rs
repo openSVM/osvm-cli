@@ -194,10 +194,25 @@ impl AdvancedChatUI {
             },
         );
 
-        // Add resize handling to prevent crashes - gentle approach
+        // Add resize handling with error protection
         siv.add_global_callback(cursive::event::Event::WindowResize, |s| {
-            // Gentle refresh - just update displays, don't recreate UI
-            super::display::update_ui_displays(s);
+            // Protect against resize-induced panics
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Gentle refresh - just update displays, don't recreate UI
+                super::display::update_ui_displays(s);
+                
+                // Force screen refresh to prevent rendering artifacts
+                s.clear();
+            })) {
+                Ok(_) => {
+                    // Resize handled successfully
+                }
+                Err(e) => {
+                    log::error!("Window resize caused panic: {:?}", e);
+                    // Don't crash - just log and continue
+                    // The UI will be slightly off but functional
+                }
+            }
         });
     }
 

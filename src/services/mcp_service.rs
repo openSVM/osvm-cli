@@ -631,13 +631,15 @@ impl McpService {
             );
         }
 
-        // Create a temp directory for cloning
-        let temp_dir = std::env::temp_dir().join("osvm-mcp-servers");
-        std::fs::create_dir_all(&temp_dir)?;
+        // Create directory for cloning in user's home directory
+        let home_dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        let osvm_mcp_dir = home_dir.join(".osvm").join("mcp");
+        std::fs::create_dir_all(&osvm_mcp_dir)?;
 
-        // Canonicalize temp_dir to get absolute path and resolve any symlinks
-        let canonical_temp_dir = temp_dir.canonicalize()
-            .context("Failed to canonicalize temp directory")?;
+        // Canonicalize osvm_mcp_dir to get absolute path and resolve any symlinks
+        let canonical_temp_dir = osvm_mcp_dir.canonicalize()
+            .context("Failed to canonicalize MCP directory")?;
 
         let local_path = canonical_temp_dir.join(&server_id);
 
