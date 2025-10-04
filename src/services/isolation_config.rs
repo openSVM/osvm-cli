@@ -75,11 +75,48 @@ impl Default for ToolConfig {
     }
 }
 
+/// Resource configuration for MCP server microVMs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MicroVmResourceConfig {
+    /// Memory allocation in MB
+    #[serde(default = "default_server_memory_mb")]
+    pub memory_mb: u32,
+    /// Number of vCPUs
+    #[serde(default = "default_server_vcpus")]
+    pub vcpus: u32,
+}
+
+fn default_server_memory_mb() -> u32 {
+    256
+}
+
+fn default_server_vcpus() -> u32 {
+    1
+}
+
+impl Default for MicroVmResourceConfig {
+    fn default() -> Self {
+        Self {
+            memory_mb: default_server_memory_mb(),
+            vcpus: default_server_vcpus(),
+        }
+    }
+}
+
 /// Configuration for an MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// MicroVM ID where this server runs
     pub microvm_id: String,
+    /// Whether to run this server in a dedicated microVM (Phase 3.2)
+    #[serde(default)]
+    pub use_microvm: bool,
+    /// Resource configuration for the server's microVM (if use_microvm is true)
+    #[serde(default)]
+    pub microvm_config: MicroVmResourceConfig,
+    /// Command to run the MCP server (used when use_microvm is true)
+    #[serde(default)]
+    pub server_command: Option<String>,
     /// Mounts available to the microVM (server level)
     #[serde(default)]
     pub microvm_mounts: Vec<MountConfig>,
@@ -215,6 +252,12 @@ impl IsolationConfig {
             "solana".to_string(),
             ServerConfig {
                 microvm_id: "μVM-1".to_string(),
+                use_microvm: true,
+                microvm_config: MicroVmResourceConfig {
+                    memory_mb: 512,
+                    vcpus: 2,
+                },
+                server_command: Some("npx -y @modelcontextprotocol/server-solana".to_string()),
                 microvm_mounts: vec![MountConfig {
                     host_path: "~/.config/osvm".to_string(),
                     vm_path: "/mnt/osvm-config".to_string(),
@@ -241,6 +284,12 @@ impl IsolationConfig {
             "github".to_string(),
             ServerConfig {
                 microvm_id: "μVM-2".to_string(),
+                use_microvm: true,
+                microvm_config: MicroVmResourceConfig {
+                    memory_mb: 256,
+                    vcpus: 1,
+                },
+                server_command: Some("npx -y @modelcontextprotocol/server-github".to_string()),
                 microvm_mounts: vec![],
                 tools: github_tools,
             },

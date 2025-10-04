@@ -9,6 +9,17 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::time::timeout;
+
+/// vsock port for MCP server communication
+const VSOCK_MCP_PORT: u32 = 5252;
+
+/// Maximum response size (10 MB)
+const MAX_RESPONSE_SIZE: usize = 10 * 1024 * 1024;
+
+/// Timeout for vsock operations
+const VSOCK_TIMEOUT_SECS: u64 = 10;
 
 /// Configuration for launching OSVM in a microVM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,24 +379,193 @@ impl McpServerMicroVmHandle {
     }
 
     /// Send JSON-RPC request to MCP server via vsock
-    /// Note: Full implementation will be added in Phase 3.2
-    pub async fn send_request(&self, _request: serde_json::Value) -> Result<serde_json::Value> {
-        // Placeholder for Phase 3.2 virtio-vsock communication
-        warn!("Virtio-vsock communication not yet implemented (Phase 3.2)");
-        Ok(serde_json::json!({
-            "status": "pending",
-            "message": "Virtio-vsock communication will be implemented in Phase 3.2"
-        }))
+    pub async fn send_request(&self, request: serde_json::Value) -> Result<serde_json::Value> {
+        use tokio_vsock::VsockStream;
+        
+        debug!(
+            "Sending request to MCP server '{}' at CID {}",
+            self.config.server_id, self.config.vsock_cid
+        );
+        
+        // Connect to MCP server via vsock with timeout
+        let stream = timeout(
+            Duration::from_secs(VSOCK_TIMEOUT_SECS),
+            VsockStream::connect(self.config.vsock_cid, VSOCK_MCP_PORT),
+        )
+        .await
+        .context("Timeout connecting to MCP server via vsock")?
+        .context("Failed to connect to MCP server via vsock")?;
+        
+        let (mut reader, mut writer) = tokio::io::split(stream);
+        
+        // Serialize request
+        let request_bytes = serde_json::to_vec(&request)
+            .context("Failed to serialize request")?;
+        let request_len = request_bytes.len() as u32;
+        
+        debug!(
+            "Sending {} bytes to MCP server '{}'",
+            request_len, self.config.server_id
+        );
+        
+        // Send length prefix (4 bytes, little-endian)
+        writer
+            .write_all(&request_len.to_le_bytes())
+            .await
+            .context("Failed to write request length")?;
+        
+        // Send request payload
+        writer
+            .write_all(&request_bytes)
+            .await
+            .context("Failed to write request payload")?;
+        
+        writer
+            .flush()
+            .await
+            .context("Failed to flush request")?;
+        
+        // Read response length (4 bytes, little-endian)
+        let mut len_bytes = [0u8; 4];
+        timeout(
+            Duration::from_secs(VSOCK_TIMEOUT_SECS),
+            reader.read_exact(&mut len_bytes),
+        )
+        .await
+        .context("Timeout reading response length")?
+        .context("Failed to read response length")?;
+        
+        let response_len = u32::from_le_bytes(len_bytes) as usize;
+        
+        // Validate response size
+        if response_len > MAX_RESPONSE_SIZE {
+            return Err(anyhow!(
+                "Response too large: {} bytes (max: {})",
+                response_len,
+                MAX_RESPONSE_SIZE
+            ));
+        }
+        
+        debug!(
+            "Reading {} bytes from MCP server '{}'",
+            response_len, self.config.server_id
+        );
+        
+        // Read response payload
+        let mut response_bytes = vec![0u8; response_len];
+        timeout(
+            Duration::from_secs(VSOCK_TIMEOUT_SECS),
+            reader.read_exact(&mut response_bytes),
+        )
+        .await
+        .context("Timeout reading response payload")?
+        .context("Failed to read response payload")?;
+        
+        // Deserialize response
+        let response: serde_json::Value = serde_json::from_slice(&response_bytes)
+            .context("Failed to deserialize response")?;
+        
+        debug!(
+            "Received response from MCP server '{}'",
+            self.config.server_id
+        );
+        
+        Ok(response)
     }
 
-    /// Check health of the MCP server
+    /// Check health of the MCP server (basic check)
     pub fn health_check(&self) -> Result<()> {
         // Basic health check: verify process is running
         if !self.vsock_socket.exists() {
             return Err(anyhow!("MCP server vsock socket not found"));
         }
         
-        // Additional checks can be added in Phase 3.2
+        Ok(())
+    }
+    
+    /// Active health check via vsock communication
+    pub async fn health_check_active(&self) -> Result<()> {
+        use tokio_vsock::VsockStream;
+        
+        debug!(
+            "Performing active health check for MCP server '{}'",
+            self.config.server_id
+        );
+        
+        // Try to connect to the server
+        let stream = timeout(
+            Duration::from_secs(5),
+            VsockStream::connect(self.config.vsock_cid, VSOCK_MCP_PORT),
+        )
+        .await
+        .context("Timeout during health check connection")?
+        .context("Failed to connect during health check")?;
+        
+        let (mut reader, mut writer) = tokio::io::split(stream);
+        
+        // Send a simple ping request (JSON-RPC 2.0 initialize)
+        let ping_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "osvm-health-check",
+                    "version": "0.8.3"
+                }
+            }
+        });
+        
+        let request_bytes = serde_json::to_vec(&ping_request)?;
+        let request_len = request_bytes.len() as u32;
+        
+        // Send request
+        writer.write_all(&request_len.to_le_bytes()).await?;
+        writer.write_all(&request_bytes).await?;
+        writer.flush().await?;
+        
+        // Read response
+        let mut len_bytes = [0u8; 4];
+        timeout(
+            Duration::from_secs(5),
+            reader.read_exact(&mut len_bytes),
+        )
+        .await
+        .context("Timeout reading health check response")?
+        .context("Failed to read health check response length")?;
+        
+        let response_len = u32::from_le_bytes(len_bytes) as usize;
+        
+        if response_len > MAX_RESPONSE_SIZE {
+            return Err(anyhow!("Health check response too large"));
+        }
+        
+        let mut response_bytes = vec![0u8; response_len];
+        timeout(
+            Duration::from_secs(5),
+            reader.read_exact(&mut response_bytes),
+        )
+        .await
+        .context("Timeout reading health check response payload")?
+        .context("Failed to read health check response payload")?;
+        
+        let response: serde_json::Value = serde_json::from_slice(&response_bytes)?;
+        
+        // Check for error in response
+        if response.get("error").is_some() {
+            return Err(anyhow!(
+                "Health check failed with error: {:?}",
+                response.get("error")
+            ));
+        }
+        
+        debug!(
+            "Active health check passed for MCP server '{}'",
+            self.config.server_id
+        );
+        
         Ok(())
     }
 
