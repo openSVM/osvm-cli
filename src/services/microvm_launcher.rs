@@ -715,7 +715,7 @@ impl MicroVmLauncher {
     /// - 3: Agent microVM
     /// - 100-199: MCP server microVMs
     /// - 200-299: Ephemeral unikernels (Phase 2)
-    fn allocate_vsock_cid(&self, server_id: &str) -> Result<u32> {
+    pub fn allocate_vsock_cid(&self, server_id: &str) -> Result<u32> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         
