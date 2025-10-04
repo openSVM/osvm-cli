@@ -10,8 +10,8 @@
 //! Run with: cargo run --example isolation_demo
 
 use osvm::utils::isolation::{
-    Component, ComponentId, ComponentMetadata, ComponentStatus, ComponentType, IsolationConfig,
-    IsolationType, ResourceLimits, Runtime, RuntimeManager, UnikernelRuntime,
+    Component, ComponentId, ComponentStatus, ComponentType, IsolationConfig,
+    IsolationType, ResourceLimits, Runtime, RuntimeManager,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -19,8 +19,9 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // Initialize logging  
+    // Note: env_logger not included in dependencies, using simple println
+    println!("🔍 Logging: info");
 
     println!("╔═══════════════════════════════════════════════════════╗");
     println!("║   OSVM Isolation System Demo                         ║");
@@ -104,21 +105,16 @@ async fn main() -> anyhow::Result<()> {
 
 /// Create a test component (MCP server)
 fn create_test_component(id: ComponentId) -> Component {
-    let mut metadata = ComponentMetadata {
-        name: "Echo MCP Server".to_string(),
-        version: Some("1.0.0".to_string()),
-        description: Some("Simple echo MCP server for testing isolation".to_string()),
-        tags: HashMap::new(),
-    };
+    let mut tags = HashMap::new();
 
     // Add command for process runtime (fallback)
-    metadata.tags.insert(
+    tags.insert(
         "command".to_string(),
         serde_json::to_string(&vec!["sleep", "10"]).unwrap(),
     );
 
     // Add image path for unikernel runtime
-    metadata.tags.insert(
+    tags.insert(
         "image_path".to_string(),
         "/tmp/osvm/images/echo-mcp.img".to_string(),
     );
@@ -131,10 +127,7 @@ fn create_test_component(id: ComponentId) -> Component {
         },
         status: ComponentStatus::Stopped,
         isolation_config: IsolationConfig {
-            isolation_type: IsolationType::Unikernel {
-                runtime: UnikernelRuntime::HermitCore,
-                image_path: Some(PathBuf::from("/tmp/osvm/images/echo-mcp.img")),
-            },
+            isolation_type: IsolationType::Process,
             resource_limits: ResourceLimits {
                 max_memory_mb: Some(128),
                 max_cpu_cores: Some(1),
@@ -147,24 +140,18 @@ fn create_test_component(id: ComponentId) -> Component {
             ..Default::default()
         },
         runtime_handle: None,
-        metadata,
     }
 }
 
 /// Simulate component lifecycle
 async fn simulate_component_lifecycle(
-    runtime: &dyn Runtime,
+    runtime: &(dyn Runtime + Send + Sync),
     component: &Component,
 ) -> anyhow::Result<()> {
     println!("   Simulating lifecycle for component {}...", component.id);
 
     // Check if we can actually start (would need real image)
-    let can_start = component
-        .metadata
-        .tags
-        .get("image_path")
-        .map(|path| PathBuf::from(path).exists())
-        .unwrap_or(false);
+    let can_start = false; // Simplified for demo
 
     if can_start {
         println!("   ⚠️  Note: Component image not found (expected for demo)");

@@ -39,6 +39,92 @@ Traditional Setup          OSVM Setup
 
 ---
 
+## 🏗️ Revolutionary Architecture
+
+**OSVM's unique three-layer security model provides unparalleled protection:**
+
+### The Innovation: MicroVM + Unikernel Isolation
+
+<table>
+<tr>
+<td width="50%">
+
+**🔹 Unikernels (50KB)**
+- Single-purpose OS per component
+- No kernel/user separation
+- Zero system calls
+- Boot time: 10-50ms
+- Perfect for untrusted MCP servers
+
+</td>
+<td width="50%">
+
+**🔹 MicroVMs (5MB overhead)**
+- Hardware-enforced isolation (KVM)
+- Memory encryption (SEV/SGX)
+- Boot time: 125ms
+- Used for validators and RPC nodes
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**🔹 Zero-Trust Networking**
+- All connections use mTLS
+- Capability-based security
+- No "trusted" zones
+- Hardware-backed certificates
+
+</td>
+<td width="50%">
+
+**🔹 Hardware Security**
+- VT-x/AMD-V virtualization
+- Intel SGX/AMD SEV for keys
+- TPM for root of trust
+- Control flow integrity (CET)
+
+</td>
+</tr>
+</table>
+
+### Why Traditional Approaches Fail
+
+```
+Container (Shared Kernel):     OSVM (Isolated):
+┌──────────────────┐          ┌──────────────────┐
+│ Container Escape │          │ Hardware-Enforced│
+│ = Full Compromise│          │ Isolation Boundary│
+│                  │          │                  │
+│ 30M+ lines code  │   vs     │ 50KB-5MB code   │
+│ 100% attack surf │          │ 0.1-17% attack  │
+└──────────────────┘          └──────────────────┘
+```
+
+### 📖 Deep Dive: Complete Architecture Guide
+
+**→ [Read the comprehensive Architecture.md](Architecture.md)** - 2,150 lines covering:
+
+- **[Why traditional security fails](Architecture.md#the-problem-space)** - Containers, VMs, and their limitations
+- **[What is a Unikernel?](Architecture.md#21-what-is-a-unikernel)** - From 30MB OS to 50KB
+- **[What is a MicroVM?](Architecture.md#22-what-is-a-microvm)** - 125ms boot vs 30-60s
+- **[Hardware Security Features](Architecture.md#23-hardware-based-security-features)** - VT-x, SEV, SGX, TPM explained
+- **[Zero-Trust Networking](Architecture.md#24-zero-trust-networking)** - mTLS and capability-based security
+- **[Attack Surface Analysis](Architecture.md#25-the-attack-surface-concept)** - Quantifying the 99.9% reduction
+- **[The OSVM Innovation](Architecture.md#the-osvm-innovation)** - How we combine it all
+- **[Security Model](Architecture.md#security-model)** - Formal guarantees and threat analysis
+- **[Performance Characteristics](Architecture.md#performance-characteristics)** - Detailed benchmarks
+- **[Real-World Use Cases](Architecture.md#use-cases-and-applications)** - Validator security, DeFi RPC, MCP marketplace
+
+**Perfect for:**
+- 🎓 Understanding the "why" behind OSVM's design decisions
+- 🔒 Security teams evaluating blockchain infrastructure
+- 👨‍💻 Developers integrating OSVM into their stack
+- 📚 Anyone wanting to learn about modern secure systems design
+
+---
+
 ## ⚡ Revolutionary Features
 
 <table>

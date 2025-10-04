@@ -95,22 +95,22 @@ Modern Linux systems contain:
 Traditional Container Architecture:
 ┌──────────────────────────────────────────┐
 │         Application Space                │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│  │Container│  │Container│  │Container│ │
-│  │    A    │  │    B    │  │    C    │ │
-│  └─────────┘  └─────────┘  └─────────┘ │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐   │
+│  │Container│  │Container│  │Container│   │
+│  │    A    │  │    B    │  │    C    │   │
+│  └─────────┘  └─────────┘  └─────────┘   │
 │         ▲          ▲          ▲          │
 │         └──────────┴──────────┘          │
 │                   │                      │
-│      ┌────────────┴────────────┐        │
-│      │   SHARED KERNEL         │        │
-│      │  (30M+ lines of code)   │        │
-│      │  (All 400+ syscalls)    │        │
-│      └─────────────────────────┘        │
+│      ┌────────────┴────────────┐         │
+│      │   SHARED KERNEL         │         │
+│      │  (30M+ lines of code)   │         │
+│      │  (All 400+ syscalls)    │         │
+│      └─────────────────────────┘         │
 │                   │                      │
-│              ┌────┴────┐                │
-│              │ Hardware│                │
-│              └─────────┘                │
+│              ┌────┴────┐                 │
+│              │ Hardware│                 │
+│              └─────────┘                 │
 └──────────────────────────────────────────┘
 
 Problem: One container escape = full system compromise

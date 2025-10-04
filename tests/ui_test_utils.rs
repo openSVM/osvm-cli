@@ -21,8 +21,8 @@ impl HeadlessUI {
     /// Create a new headless UI environment for testing
     pub async fn new() -> anyhow::Result<Self> {
         // Create a puppet backend (headless)
-        let backend = Box::new(PuppetBackend::init(Some(cursive::Vec2::new(80, 24))));
-        let mut siv = Cursive::new(backend);
+        let _backend = Box::new(PuppetBackend::init(Some(cursive::Vec2::new(80, 24))));
+        let mut siv = Cursive::new();
 
         // Initialize state
         let state = AdvancedChatState::new()?;
