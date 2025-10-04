@@ -1,5 +1,6 @@
 /target/
 /program/target/
+/guest/mcp_vsock_wrapper/target/
 .cline/
 .ledger
 .vscode/*
@@ -82,3 +83,20 @@ packaging/termux/osvm_*
 packaging/debian/osvm-*
 packaging/debian/debian-packages/
 osvm_chat_export_*.json
+
+# MicroVM and Firecracker artifacts
+*.sock
+*.vsock
+mcp-*-api.sock
+mcp-*-vsock.sock
+mcp-*-config.json
+osvm-runtime-*.sock
+osvm-config-*.json
+
+# Guest wrapper build artifacts
+guest/mcp_vsock_wrapper/target/
+guest/mcp_vsock_wrapper/Cargo.lock
+
+# MicroVM runtime directory
+.osvm/run/
+**/.osvm/run/
