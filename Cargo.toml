@@ -99,6 +99,10 @@ criterion = "0.7.0"
 default = []
 remote-wallet = ["solana-remote-wallet"]
 
+[[bin]]
+name = "osvm-bootstrap"
+path = "src/bin/osvm_bootstrap.rs"
+
 [[bench]]
 name = "deployment_benchmarks"
 path = "benches/deployment_benchmarks.rs"

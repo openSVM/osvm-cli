@@ -328,22 +328,11 @@ impl AdvancedChatState {
                         Ok(tools) => tools,
                         Err(e) => {
                             warn!(
-                                "Failed to fetch tools from {}: {}, using defaults",
+                                "Failed to fetch tools from {}: {}",
                                 server_id, e
                             );
-                            // Fallback to default tools
-                            vec![
-                                McpTool {
-                                    name: "get_balance".to_string(),
-                                    description: Some("Get wallet balance".to_string()),
-                                    input_schema: serde_json::json!({}),
-                                },
-                                McpTool {
-                                    name: "get_transactions".to_string(),
-                                    description: Some("Get transaction history".to_string()),
-                                    input_schema: serde_json::json!({}),
-                                },
-                            ]
+                            // Don't show fallback tools - let it fail so the issue is visible
+                            vec![]
                         }
                     }
                 };

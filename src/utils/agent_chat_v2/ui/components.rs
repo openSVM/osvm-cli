@@ -63,10 +63,14 @@ impl AdvancedChatUI {
 
         chat_list_layout.add_child(DummyView.min_height(1));
 
-        // MCP Tools Panel - responsive height
-        let mcp_tools_view = TextView::new("").with_name("mcp_tools_list");
+        // MCP Tools Panel - responsive height with selectable tools
+        let mcp_tools_view = SelectView::<(String, String)>::new()
+            .on_submit(|siv, (server_id, tool_name)| {
+                show_tool_details(siv, server_id.clone(), tool_name.clone());
+            })
+            .with_name("mcp_tools_list");
         let mcp_panel = Panel::new(ScrollView::new(mcp_tools_view))
-            .title("MCP Tools")
+            .title("MCP Tools (Enter for details)")
             .min_height(3)
             .max_height(15); // Allow more flexibility
         chat_list_layout.add_child(mcp_panel);

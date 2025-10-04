@@ -269,17 +269,31 @@ impl AdvancedChatUI {
 
     pub fn update_mcp_tools_list(&self, siv: &mut Cursive) {
         let tools = self.state.available_tools.read().unwrap();
-        let mut content = String::new();
-        if tools.is_empty() {
-            content.push_str("No tools available.");
-        } else {
-            for (server_id, tool_list) in tools.iter() {
-                content.push_str(&format!("- {} ({} tools)\n", server_id, tool_list.len()));
+        
+        if let Some(mut mcp_tools_view) = siv.find_name::<SelectView<(String, String)>>("mcp_tools_list") {
+            mcp_tools_view.clear();
+            
+            if tools.is_empty() {
+                mcp_tools_view.add_item("No tools available", ("".to_string(), "".to_string()));
+            } else {
+                // Add each tool individually
+                for (server_id, tool_list) in tools.iter() {
+                    // Add server header
+                    mcp_tools_view.add_item(
+                        format!("─── {} ({} tools) ───", server_id, tool_list.len()),
+                        (server_id.clone(), "".to_string())
+                    );
+                    
+                    // Add individual tools
+                    for tool in tool_list.iter() {
+                        let display_name = format!("  • {}", tool.name);
+                        mcp_tools_view.add_item(
+                            display_name,
+                            (server_id.clone(), tool.name.clone())
+                        );
+                    }
+                }
             }
-        }
-
-        if let Some(mut mcp_tools_view) = siv.find_name::<TextView>("mcp_tools_list") {
-            mcp_tools_view.set_content(content);
         }
     }
 

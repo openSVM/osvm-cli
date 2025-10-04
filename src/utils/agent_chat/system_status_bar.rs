@@ -170,26 +170,46 @@ async fn get_mcp_deployments() -> Vec<McpToolDeployment> {
     deployments
 }
 
-/// Detect running MCP servers and their microVM IDs
+/// Detect configured MCP servers from config file
 async fn detect_mcp_servers() -> Vec<(String, String)> {
     let mut servers = Vec::new();
 
-    // Check for common MCP server processes
-    let server_names = vec!["solana-mcp", "github-mcp", "filesystem-mcp"];
-
-    for (idx, server_name) in server_names.iter().enumerate() {
-        if let Ok(output) = tokio::process::Command::new("pgrep")
-            .args(&["-f", server_name])
-            .output()
-            .await
-        {
-            if output.status.success() && !output.stdout.is_empty() {
-                servers.push((server_name.to_string(), format!("μVM-{}", idx + 1)));
+    // Load MCP server configuration
+    let config_path = get_mcp_config_path();
+    if let Ok(path) = config_path {
+        if path.exists() {
+            if let Ok(content) = tokio::fs::read_to_string(&path).await {
+                if let Ok(mcp_servers) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(servers_obj) = mcp_servers.as_object() {
+                        for (idx, (server_id, config)) in servers_obj.iter().enumerate() {
+                            // Check if server is enabled
+                            let is_enabled = config.get("enabled")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            
+                            if is_enabled {
+                                servers.push((
+                                    server_id.clone(),
+                                    format!("μVM-{}", idx + 1)
+                                ));
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
     servers
+}
+
+/// Get MCP server configuration file path
+fn get_mcp_config_path() -> Result<std::path::PathBuf> {
+    let home = std::env::var("HOME")?;
+    Ok(std::path::PathBuf::from(home)
+        .join(".config")
+        .join("osvm")
+        .join("mcp_servers.json"))
 }
 
 /// Get active unikernels for a specific MCP server
@@ -231,7 +251,13 @@ pub struct MountsConfig {
 /// Count running isolation processes
 async fn count_isolation_processes() -> (usize, usize) {
     // Check for firecracker processes (microvms)
-    let firecracker_count = count_processes_by_name("firecracker").await;
+    let mut firecracker_count = count_processes_by_name("firecracker").await;
+    
+    // Check if OSVM agent is running - count it as a microVM
+    // This is set when the advanced chat interface is active
+    if std::env::var("OSVM_AGENT_MODE").is_ok() || std::env::var("OSVM_IN_MICROVM").is_ok() {
+        firecracker_count += 1; // Count the agent runtime as a microVM
+    }
 
     // Check for hermit/unikernel processes
     let hermit_count = count_processes_by_name("hermit").await;
