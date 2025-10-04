@@ -615,12 +615,14 @@ impl McpService {
             ));
         }
 
-        // Display security warning
-        eprintln!("{}", GITHUB_CLONE_WARNING);
-
-        // Prompt for confirmation unless --yes flag is used
-        if !skip_confirmation && !self.confirm_github_clone(&github_url)? {
-            return Err(anyhow::anyhow!("Operation cancelled by user"));
+        // Display security warning (unless automated setup)
+        if !skip_confirmation {
+            eprintln!("{}", GITHUB_CLONE_WARNING);
+            
+            // Prompt for confirmation
+            if !self.confirm_github_clone(&github_url)? {
+                return Err(anyhow::anyhow!("Operation cancelled by user"));
+            }
         }
 
         if self.debug_mode {
@@ -801,6 +803,25 @@ impl McpService {
                     "Successfully installed npm dependencies for MCP server at {:?}",
                     local_path
                 );
+            }
+            
+            // Run npm build for TypeScript projects (if build script exists)
+            if package_json_content.contains("\"build\"") {
+                println!("🔨 Building TypeScript MCP server...");
+                let build_result = Command::new("npm")
+                    .args(["run", "build"])
+                    .current_dir(&local_path)
+                    .output()
+                    .context("Failed to execute npm run build command")?;
+                
+                if !build_result.status.success() {
+                    let error_msg = String::from_utf8_lossy(&build_result.stderr);
+                    return Err(anyhow::anyhow!("npm run build failed: {}", error_msg));
+                }
+                
+                if self.debug_mode {
+                    debug_success!("Successfully built TypeScript MCP server at {:?}", local_path);
+                }
             }
 
             // Get package info from package.json

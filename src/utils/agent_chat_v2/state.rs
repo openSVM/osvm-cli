@@ -176,25 +176,20 @@ impl AdvancedChatState {
     }
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
-        // Use try_write to prevent deadlocks
-        let mut sessions = self.sessions.try_write().map_err(|_| {
-            anyhow::anyhow!("Failed to acquire write lock for sessions (possible deadlock)")
+        // Blocking lock: very short critical section, avoids missing cleanup
+        let mut sessions = self.sessions.write().map_err(|e| {
+            anyhow!("Failed to acquire write lock for sessions: {}", e)
         })?;
 
-        // Atomic operation: check and remove in one step
+        // Remove ALL Processing messages from the session
         if let Some(session) = sessions.get_mut(&session_id) {
-            // Only pop if the last message is actually Processing type
-            match session.messages.last() {
-                Some(ChatMessage::Processing { .. }) => {
-                    session.messages.pop();
-                    debug!("Removed processing message from session {}", session_id);
-                }
-                _ => {
-                    debug!(
-                        "No processing message to remove from session {}",
-                        session_id
-                    );
-                }
+            let initial_count = session.messages.len();
+            session.messages.retain(|msg| {
+                !matches!(msg, ChatMessage::Processing { .. })
+            });
+            let removed_count = initial_count - session.messages.len();
+            if removed_count > 0 {
+                debug!("Removed {} processing message(s) from session {}", removed_count, session_id);
             }
         } else {
             warn!(
@@ -226,18 +221,25 @@ impl AdvancedChatState {
 
         // Use std::thread to avoid runtime conflicts
         std::thread::spawn(move || {
-            // Create a small runtime just for this operation
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-            runtime.block_on(async {
-                let sender_guard = sender.lock().await;
-                if let Some(sender) = sender_guard.as_ref() {
-                    if let Err(e) = sender.send(command) {
-                        error!("Failed to send agent command: {}", e);
-                    }
-                } else {
-                    error!("Agent worker not initialized");
+            // Create a small runtime just for this operation. If runtime creation fails,
+            // log the error and return early to avoid panics in the UI thread.
+            match tokio::runtime::Runtime::new() {
+                Ok(runtime) => {
+                    runtime.block_on(async {
+                        let sender_guard = sender.lock().await;
+                        if let Some(sender) = sender_guard.as_ref() {
+                            if let Err(e) = sender.send(command) {
+                                error!("Failed to send agent command: {}", e);
+                            }
+                        } else {
+                            error!("Agent worker not initialized");
+                        }
+                    });
                 }
-            });
+                Err(e) => {
+                    error!("Failed to create temporary Tokio runtime for send_agent_command_sync: {}", e);
+                }
+            }
         });
     }
 

@@ -98,8 +98,12 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
         }
     }
 
-    // Skip agent worker for now as it can still cause issues
-    // TODO: Make agent worker more robust
+    // Start agent worker for background processing
+    if let Err(e) = state.start_agent_worker().await {
+        warn!("Failed to start agent worker: {}, chat will work without background processing", e);
+    } else {
+        info!("✅ Agent worker started successfully");
+    }
 
     // Create default session
     let _default_session_id = state.create_session("Main Chat".to_string())?;

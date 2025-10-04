@@ -961,18 +961,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             
             // On host - launch in microVM for enhanced security
             println!("🚀 Launching OSVM Agent in microVM...");
-            
-            // For now, Firecracker setup is complex - use direct mode with unikernel support
-            // Full microVM requires kernel image + rootfs setup
-            println!("⚠️  MicroVM launch requires Firecracker + kernel/rootfs setup");
-            println!("   Falling back to direct execution with unikernel tool isolation");
-            println!("   💡 Tool calls will still spawn ephemeral unikernels for security");
             println!();
             
-            // Run agent directly with unikernel support for tools
-            return crate::utils::agent_chat_v2::run_advanced_agent_chat()
-                .await
-                .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+            // Create microVM launcher
+            let launcher = match MicroVmLauncher::new() {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("❌ Failed to initialize microVM launcher: {}", e);
+                    eprintln!("   Falling back to direct execution");
+                    eprintln!("   💡 Set OSVM_SKIP_MICROVM=1 to suppress this warning\n");
+                    
+                    return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                        .await
+                        .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+                }
+            };
+            
+            // Get default configuration
+            let config = get_default_osvm_config();
+            
+            // Launch OSVM runtime in microVM
+            match launcher.launch_osvm_runtime(config) {
+                Ok(mut handle) => {
+                    println!("✅ OSVM microVM launched successfully");
+                    println!("   MicroVM is now running in isolated environment");
+                    println!("   Press Ctrl+C to stop\n");
+                    
+                    // Wait for microVM to finish
+                    loop {
+                        if !handle.is_running() {
+                            println!("\n🛑 MicroVM terminated");
+                            break;
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    }
+                    
+                    return Ok(());
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to launch microVM: {}", e);
+                    eprintln!("   Falling back to direct execution");
+                    eprintln!();
+                    eprintln!("💡 To fix this:");
+                    eprintln!("   1. Ensure Firecracker is installed: ~/.osvm/bin/firecracker --version");
+                    eprintln!("   2. Check kernel exists: ls -lh ~/.osvm/kernel/vmlinux.bin");
+                    eprintln!("   3. Check rootfs exists: ls -lh ~/.osvm/rootfs/osvm-runtime.cpio");
+                    eprintln!("   4. Or set OSVM_SKIP_MICROVM=1 to skip microVM launch\n");
+                    
+                    return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                        .await
+                        .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+                }
+            }
         }
     };
 
