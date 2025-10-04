@@ -1,0 +1,27 @@
+[package]
+name = "simple-mcp-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt", "net", "io-util", "macros"], optional = true }
+
+# For standard build
+[target.'cfg(not(target_os = "hermit"))'.dependencies]
+tokio = { version = "1", features = ["rt", "net", "io-util", "macros"] }
+
+# For HermitCore unikernel build
+[target.'cfg(target_os = "hermit")'.dependencies]
+# HermitCore has its own async runtime
+
+[[bin]]
+name = "simple-mcp-server"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

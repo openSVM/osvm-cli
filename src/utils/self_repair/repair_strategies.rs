@@ -146,6 +146,48 @@ impl RepairTransaction {
         self.operations.push(operation);
     }
 
+    /// Sort operations by dependency order to prevent execution errors
+    ///
+    /// Correct order:
+    /// 1. InstallSystemDependencies (base requirements)
+    /// 2. UpdateSystemPackages (system updates)
+    /// 3. UpdateRustToolchain (if needed)
+    /// 4. InstallSolanaCli (needs system deps)
+    /// 5. CreateConfigDirectory (filesystem setup)
+    /// 6. GenerateKeypair (needs solana-keygen from CLI)
+    /// 7. ConfigureNetwork (configuration)
+    /// 8. TuneSystemParameters (optimization)
+    /// 9. Validation operations last
+    pub fn sort_operations_by_dependency(&mut self) {
+        use std::cmp::Ordering;
+
+        fn operation_priority(op: &RepairOperation) -> u8 {
+            match op {
+                RepairOperation::InstallSystemDependencies(_) => 1,
+                RepairOperation::UpdateSystemPackages => 2,
+                RepairOperation::UpdateRustToolchain => 3,
+                RepairOperation::InstallSolanaCli => 4,
+                RepairOperation::CreateConfigDirectory => 5,
+                RepairOperation::GenerateKeypair(_) => 6,
+                RepairOperation::ConfigureNetwork(_) => 7,
+                RepairOperation::TuneSystemParameters => 8,
+                RepairOperation::ValidateSystemHealth => 9,
+                RepairOperation::ValidateUserConfig => 10,
+            }
+        }
+
+        self.operations.sort_by(|a, b| {
+            let priority_a = operation_priority(a);
+            let priority_b = operation_priority(b);
+            priority_a.cmp(&priority_b)
+        });
+
+        println!(
+            "🔧 Sorted {} operations by dependency order",
+            self.operations.len()
+        );
+    }
+
     /// Set transaction timeout
     pub fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = timeout;

@@ -3,6 +3,7 @@
 //! This module provides a Claude Code-style chat interface that runs embedded
 //! in the terminal session with real-time auto-complete and suggestions.
 
+use super::system_status_bar::SystemStatusBarManager;
 use super::ui_components::{show_enhanced_status_bar, show_welcome_box};
 use super::*;
 use crate::services::ai_service::{AiService, PlannedTool, ToolPlan};
@@ -107,6 +108,9 @@ pub async fn run_agent_chat_ui() -> Result<()> {
     // Initialize task state
     let mut task_state = TaskState::new();
 
+    // Initialize system status bar manager
+    let mut status_bar_manager = SystemStatusBarManager::new();
+
     // Show initial setup - Claude Code style
     show_welcome_box();
 
@@ -175,6 +179,11 @@ pub async fn run_agent_chat_ui() -> Result<()> {
         // Update spinner frame
         if let Ok(_) = spinner_rx.try_recv() {
             task_state.update_spinner();
+        }
+
+        // Update and render top system status bar
+        if let Err(e) = status_bar_manager.update_and_render().await {
+            debug!("Status bar update failed: {}", e);
         }
 
         // Show enhanced status bar without clearing screen
@@ -1205,6 +1214,143 @@ async fn process_with_realtime_ai(
     ai_service: &Arc<AiService>,
     chat_history: &mut Vec<String>,
 ) -> Result<()> {
+    // Try OSVM command planner first
+    use crate::utils::osvm_command_planner::OsvmCommandPlanner;
+
+    let planner = OsvmCommandPlanner::new(false);
+    if let Ok(osvm_plan) = planner.create_plan(&message).await {
+        // Show OSVM plan
+        println!(
+            "\n{}┌─ OSVM Command Plan ──────────────────────────────────┐{}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│ 💭 {}  {}",
+            Colors::CYAN,
+            Colors::RESET,
+            osvm_plan.reasoning
+        );
+        println!(
+            "{}│ 🎯 Confidence: {:.0}%                                  {}",
+            Colors::CYAN,
+            osvm_plan.confidence * 100.0,
+            Colors::RESET
+        );
+        println!(
+            "{}│                                                        {}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+
+        for (i, step) in osvm_plan.steps.iter().enumerate() {
+            println!(
+                "{}│ {}. {}  {}",
+                Colors::CYAN,
+                i + 1,
+                step.full_command,
+                Colors::RESET
+            );
+            println!(
+                "{}│    → {}  {}",
+                Colors::CYAN,
+                step.explanation,
+                Colors::RESET
+            );
+        }
+
+        println!(
+            "{}│                                                        {}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+        println!(
+            "{}│ ✨ {}  {}",
+            Colors::CYAN,
+            osvm_plan.expected_outcome,
+            Colors::RESET
+        );
+        println!(
+            "{}└────────────────────────────────────────────────────────┘{}",
+            Colors::CYAN,
+            Colors::RESET
+        );
+
+        // Get user confirmation
+        println!(
+            "\n{}[1]{} Execute  {}[2]{} Cancel",
+            Colors::GREEN,
+            Colors::RESET,
+            Colors::RED,
+            Colors::RESET
+        );
+        print!("{}Choice: {}", Colors::YELLOW, Colors::RESET);
+        io::stdout().flush()?;
+
+        let mut choice = String::new();
+        io::stdin().read_line(&mut choice)?;
+
+        if choice.trim() == "1" {
+            show_animated_status("Executing OSVM commands", "⚡🔧⚙️✨", 500).await;
+
+            match planner.execute_plan(&osvm_plan, true).await {
+                Ok(results) => {
+                    println!(
+                        "\n{}┌─ Execution Results ──────────────────────────────────┐{}",
+                        Colors::GREEN,
+                        Colors::RESET
+                    );
+
+                    for (i, result) in results.iter().enumerate() {
+                        let status = if result.success { "✅" } else { "❌" };
+                        println!(
+                            "{}│ {}. {} {}  {}",
+                            Colors::GREEN,
+                            i + 1,
+                            status,
+                            result.command,
+                            Colors::RESET
+                        );
+
+                        if !result.stdout.is_empty() {
+                            for line in result.stdout.lines().take(5) {
+                                let truncated = if line.len() > 50 {
+                                    format!("{}...", &line[..47])
+                                } else {
+                                    line.to_string()
+                                };
+                                println!("{}│    {}  {}", Colors::GREEN, truncated, Colors::RESET);
+                            }
+                        }
+
+                        println!(
+                            "{}│    ⏱️  {}ms  {}",
+                            Colors::GREEN,
+                            result.execution_time_ms,
+                            Colors::RESET
+                        );
+                    }
+
+                    println!(
+                        "{}└────────────────────────────────────────────────────────┘{}",
+                        Colors::GREEN,
+                        Colors::RESET
+                    );
+
+                    chat_history.push(message);
+                    chat_history.push(format!("OSVM: Executed {} command(s)", results.len()));
+                    return Ok(());
+                }
+                Err(e) => {
+                    println!("{}❌ Execution failed: {}{}", Colors::RED, e, Colors::RESET);
+                }
+            }
+        } else {
+            println!("{}• Command cancelled{}", Colors::YELLOW, Colors::RESET);
+            return Ok(());
+        }
+    }
+
     // Show animated analysis
     show_animated_status("Analyzing your request", "🤔💭🧠💡", 800).await;
 

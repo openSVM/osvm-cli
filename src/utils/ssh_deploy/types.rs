@@ -90,19 +90,46 @@ impl ServerConfig {
     /// # Returns
     /// * `Result<ServerConfig, DeploymentError>` - Server config or error
     pub fn from_connection_string(conn_str: &str) -> Result<Self, DeploymentError> {
+        // Validate input is not empty
+        if conn_str.trim().is_empty() {
+            return Err(DeploymentError::InvalidConfig(
+                "Connection string cannot be empty".to_string(),
+            ));
+        }
+
         let parts: Vec<&str> = conn_str.split('@').collect();
         if parts.len() != 2 {
             return Err(DeploymentError::InvalidConfig(format!(
-                "Invalid connection string: {}",
+                "Invalid connection string format. Expected 'user@host[:port]', got: {}",
                 conn_str
             )));
         }
 
-        let username = parts[0].to_string();
+        // Validate and sanitize username
+        let username = parts[0].trim().to_string();
+        Self::validate_username(&username)?;
+
         let host_parts: Vec<&str> = parts[1].split(':').collect();
-        let host = host_parts[0].to_string();
+        let host = host_parts[0].trim().to_string();
+
+        // Validate host before proceeding
+        if host.is_empty() {
+            return Err(DeploymentError::InvalidConfig(
+                "Host cannot be empty in connection string".to_string(),
+            ));
+        }
+
+        // Parse port with proper error handling
         let port = if host_parts.len() > 1 {
-            host_parts[1].parse().unwrap_or(22)
+            host_parts[1]
+                .trim()
+                .parse::<u16>()
+                .map_err(|_| {
+                    DeploymentError::InvalidConfig(format!(
+                        "Invalid port number '{}'. Port must be a number between 1 and 65535",
+                        host_parts[1]
+                    ))
+                })?
         } else {
             22
         };
@@ -117,6 +144,53 @@ impl ServerConfig {
             },
             install_dir: "/opt/osvm".to_string(),
         })
+    }
+
+    /// Validate username to prevent injection attacks
+    fn validate_username(username: &str) -> Result<(), DeploymentError> {
+        // Check for empty username
+        if username.is_empty() {
+            return Err(DeploymentError::ValidationError(
+                "Username cannot be empty".to_string(),
+            ));
+        }
+
+        // Check length (Unix usernames typically max 32 chars)
+        if username.len() > 32 {
+            return Err(DeploymentError::ValidationError(
+                "Username too long (max 32 characters)".to_string(),
+            ));
+        }
+
+        // Check for dangerous characters
+        if username.contains(|c: char| {
+            matches!(c, ';' | '&' | '|' | '$' | '`' | '\n' | '\r' | '\0' | '(' | ')' | '<' | '>')
+        }) {
+            return Err(DeploymentError::ValidationError(
+                "Username contains invalid characters".to_string(),
+            ));
+        }
+
+        // Ensure username starts with letter or underscore (Unix convention)
+        if let Some(first_char) = username.chars().next() {
+            if !first_char.is_alphabetic() && first_char != '_' {
+                return Err(DeploymentError::ValidationError(
+                    "Username must start with a letter or underscore".to_string(),
+                ));
+            }
+        }
+
+        // Check that username only contains valid characters (alphanumeric, underscore, hyphen)
+        if !username
+            .chars()
+            .all(|c| c.is_alphanumeric() || matches!(c, '_' | '-'))
+        {
+            return Err(DeploymentError::ValidationError(
+                "Username can only contain letters, numbers, underscores, and hyphens".to_string(),
+            ));
+        }
+
+        Ok(())
     }
 }
 

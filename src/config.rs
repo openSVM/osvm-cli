@@ -14,6 +14,8 @@ pub struct Config {
     pub json_rpc_url: String,
     pub verbose: u8,
     pub no_color: bool,
+    pub theme_name: Option<String>,
+    pub auto_theme_switching: bool,
 }
 
 impl Config {
@@ -54,6 +56,14 @@ impl Config {
             }
         };
 
+        // Load theme configuration
+        let theme_name = sub_matches
+            .get_one::<String>("theme")
+            .map(|s| s.to_string());
+
+        // get_flag() returns bool, not Option<bool>, so no need for or_else/unwrap
+        let auto_theme_switching = sub_matches.get_flag("auto_theme");
+
         Ok(Self {
             json_rpc_url: normalize_to_url_if_moniker(
                 sub_matches
@@ -65,6 +75,8 @@ impl Config {
             verbose,
             no_color,
             commitment_config: CommitmentConfig::confirmed(),
+            theme_name,
+            auto_theme_switching,
         })
     }
 

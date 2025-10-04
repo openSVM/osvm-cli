@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
 use std::fs;
+use std::fs::OpenOptions; // For secure file creation
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -146,47 +147,57 @@ impl UserDependencyManager {
         }
     }
 
-    /// Create Solana configuration directory
+    /// Create OSVM configuration directory (NOT Solana's directory!)
     pub async fn create_solana_config_dir(&self) -> Result<String, UserDepsError> {
-        let config_dir = self.get_solana_config_dir();
+        // CRITICAL SECURITY FIX: This now creates ~/.config/osvm, NOT ~/.config/solana
+        // Also fixes TOCTOU by removing check-then-create pattern
+        let osvm_config_dir = self.get_osvm_config_dir();
 
-        if config_dir.exists() {
-            return Ok("Solana config directory already exists".to_string());
+        // TOCTOU FIX: create_dir_all is idempotent and safe, no need to check first
+        match fs::create_dir_all(&osvm_config_dir) {
+            Ok(_) => Ok(format!(
+                "Created OSVM config directory: {} (NOT touching ~/.config/solana)",
+                osvm_config_dir.display()
+            )),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                Ok("OSVM config directory already exists".to_string())
+            }
+            Err(e) => Err(UserDepsError::FileSystemError(format!(
+                "Failed to create OSVM config directory {}: {}",
+                osvm_config_dir.display(),
+                e
+            ))),
         }
-
-        fs::create_dir_all(&config_dir).map_err(|e| {
-            UserDepsError::FileSystemError(format!(
-                "Failed to create config directory {}: {}",
-                config_dir.display(),
-                e
-            ))
-        })?;
-
-        // Also create the CLI subdirectory
-        let cli_dir = config_dir.join("cli");
-        fs::create_dir_all(&cli_dir).map_err(|e| {
-            UserDepsError::FileSystemError(format!(
-                "Failed to create CLI config directory {}: {}",
-                cli_dir.display(),
-                e
-            ))
-        })?;
-
-        Ok(format!(
-            "Created Solana config directory: {}",
-            config_dir.display()
-        ))
     }
 
-    /// Generate a new Solana keypair
+    /// Generate a new Solana keypair (OSVM-specific paths only!)
     pub async fn generate_keypair(
         &self,
         output_path: Option<&str>,
     ) -> Result<String, UserDepsError> {
         let keypair_path = if let Some(path) = output_path {
-            PathBuf::from(path)
+            let pb = PathBuf::from(path);
+
+            // CRITICAL SECURITY CHECK: NEVER touch ~/.config/solana paths!
+            if path.contains("/.config/solana/") || path.contains("/.solana/") {
+                return Err(UserDepsError::PermissionError(
+                    "OSVM will NEVER create or modify keypairs in ~/.config/solana paths! \
+                     Use ~/.config/osvm/{purpose}.json instead. \
+                     Manage your Solana keypairs separately."
+                        .to_string(),
+                ));
+            }
+
+            // Warn if using non-OSVM path
+            if !path.contains("/.config/osvm/") {
+                log::warn!("⚠️  Creating keypair at non-standard path: {}", path);
+                log::warn!("⚠️  Recommended: Use ~/.config/osvm/{{purpose}}.json");
+            }
+
+            pb
         } else {
-            self.get_solana_config_dir().join("id.json")
+            // Default to OSVM config directory, NOT Solana's
+            self.get_osvm_config_dir().join("default.json")
         };
 
         // Ensure the parent directory exists
@@ -202,26 +213,80 @@ impl UserDependencyManager {
             }
         }
 
-        // Check if keypair already exists
-        if keypair_path.exists() {
-            return Err(UserDepsError::KeypairError(format!(
-                "Keypair already exists at {}",
-                keypair_path.display()
-            )));
-        }
+        // CRITICAL SECURITY FIX: Use O_EXCL to atomically create file or fail (prevents TOCTOU attacks)
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
 
-        // Generate the keypair
-        let output = Command::new("solana-keygen")
-            .arg("new")
-            .arg("-o")
-            .arg(&keypair_path)
-            .arg("--no-passphrase")
-            .output()
+        let mut keypair_file = {
+            let mut opts = OpenOptions::new();
+            opts.write(true).create_new(true);  // Atomically fails if file exists (prevents TOCTOU race)
+
+            #[cfg(unix)]
+            opts.mode(0o600);  // Secure permissions: owner read/write only
+
+            opts.open(&keypair_path)
+        }
             .map_err(|e| {
-                UserDepsError::CommandFailed(format!("Failed to execute solana-keygen: {}", e))
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    UserDepsError::KeypairError(format!(
+                        "Keypair already exists at {} - OSVM will never overwrite existing keypairs for security!",
+                        keypair_path.display()
+                    ))
+                } else {
+                    UserDepsError::FileSystemError(format!(
+                        "Failed to create keypair file: {}",
+                        e
+                    ))
+                }
             })?;
 
+        // Generate the keypair to stdout, then write to our securely-created file
+        let output = Command::new("solana-keygen")
+            .arg("new")
+            .arg("--outfile")
+            .arg("/dev/stdout") // Generate to stdout instead of directly to file
+            .arg("--no-passphrase")
+            .output();
+
+        let output = match output {
+            Ok(output) => output,
+            Err(e) => {
+                // Clean up the file on failure
+                drop(keypair_file);
+                let _ = fs::remove_file(&keypair_path);
+                return Err(UserDepsError::CommandFailed(format!(
+                    "Failed to execute solana-keygen: {}",
+                    e
+                )));
+            }
+        };
+
         if output.status.success() {
+            // Write the generated keypair to our securely-created file
+            use std::io::Write;
+            if let Err(e) = keypair_file.write_all(&output.stdout) {
+                // Clean up on write failure
+                drop(keypair_file);
+                let _ = fs::remove_file(&keypair_path);
+                return Err(UserDepsError::FileSystemError(format!(
+                    "Failed to write keypair: {}",
+                    e
+                )));
+            }
+
+            // Force to disk
+            if let Err(e) = keypair_file.sync_all() {
+                drop(keypair_file);
+                let _ = fs::remove_file(&keypair_path);
+                return Err(UserDepsError::FileSystemError(format!(
+                    "Failed to sync keypair: {}",
+                    e
+                )));
+            }
+
+            // Explicitly drop to close file before reading it back
+            drop(keypair_file);
+
             let pubkey = self
                 .get_pubkey_from_keypair(&keypair_path)
                 .await
@@ -233,6 +298,10 @@ impl UserDependencyManager {
                 pubkey
             ))
         } else {
+            // Clean up the empty file on solana-keygen failure
+            drop(keypair_file);
+            let _ = fs::remove_file(&keypair_path);
+
             let error_msg = String::from_utf8_lossy(&output.stderr);
             Err(UserDepsError::KeypairError(format!(
                 "Failed to generate keypair: {}",

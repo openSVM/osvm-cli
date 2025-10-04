@@ -1,7 +1,7 @@
-//! Background agent worker for processing commands
+//! Agent worker for background processing
 
 use anyhow::Result;
-use log::error;
+use log::{debug, error, info, warn};
 use tokio::sync::mpsc;
 
 use super::super::state::AdvancedChatState;
@@ -46,6 +46,14 @@ impl AdvancedChatState {
                             .get_agent_state(session_id)
                             .unwrap_or(AgentState::Error("Session not found".to_string()));
                         let _ = response.send(status);
+                    }
+                    AgentCommand::ThemeCommand {
+                        session_id: _,
+                        command: _,
+                    } => {
+                        // Theme commands are handled synchronously in the UI layer
+                        // This case should not be reached, but we handle it to avoid compiler errors
+                        warn!("Theme command received in background worker - this should be handled in UI layer");
                     }
                 }
             }

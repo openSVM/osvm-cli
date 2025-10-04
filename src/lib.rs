@@ -23,6 +23,7 @@
 #![allow(unused)]
 
 pub mod clparse;
+pub mod commands;
 pub mod prelude;
 pub mod services;
 pub mod utils;

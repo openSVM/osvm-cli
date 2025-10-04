@@ -3,6 +3,7 @@
 //! This module provides comprehensive self-repair functionality for OSVM CLI,
 //! including automatic dependency detection, system repairs, and rollback capabilities.
 
+use log::warn;
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use std::fmt;
@@ -150,9 +151,26 @@ impl SelfRepairSystem {
         if error.contains("Error reading keypair file")
             && error.contains("No such file or directory")
         {
-            // Extract the keypair path from the error message
-            if let Some(path) = extract_keypair_path(error) {
-                repairable_errors.push(RepairableError::MissingKeypair(path));
+            // CRITICAL SECURITY FIX: NEVER touch ~/.config/solana paths!
+            // Extract the requested path to determine purpose
+            if let Some(requested_path) = extract_keypair_path(error) {
+                // Determine purpose from requested path
+                let purpose = if requested_path.contains("validator") {
+                    "validator"
+                } else if requested_path.contains("rpc") {
+                    "rpc"
+                } else {
+                    "default"
+                };
+
+                // ALWAYS use OSVM-specific path: ~/.config/osvm/{purpose}.json
+                let osvm_path = get_osvm_keypair_path(purpose);
+
+                warn!("⚠️  Requested keypair: {}", requested_path);
+                warn!("⚠️  OSVM will create keypair at: {}", osvm_path);
+                warn!("⚠️  OSVM NEVER modifies ~/.config/solana - manage that separately!");
+
+                repairable_errors.push(RepairableError::MissingKeypair(osvm_path));
             }
 
             // Check if this is due to missing Solana CLI
@@ -160,10 +178,8 @@ impl SelfRepairSystem {
                 repairable_errors.push(RepairableError::MissingSolanaCli);
             }
 
-            // Check if config directory exists
-            if !self.config_directory_exists().await? {
-                repairable_errors.push(RepairableError::MissingConfigDirectory);
-            }
+            // REMOVED: Don't create ~/.config/solana directory - user manages that!
+            // We only create ~/.config/osvm
         }
 
         // Check for other system-level issues
@@ -224,6 +240,9 @@ impl SelfRepairSystem {
                 .await?;
         }
 
+        // Sort operations by dependency order before execution
+        repair_transaction.sort_operations_by_dependency();
+
         // Execute the repair transaction
         match repair_transaction.execute().await {
             Ok(_) => {
@@ -281,13 +300,21 @@ impl SelfRepairSystem {
                 transaction.add_operation(repair_strategies::RepairOperation::InstallSolanaCli);
             }
             RepairableError::MissingKeypair(path) => {
+                // Double-check this is an OSVM path, not a Solana path
+                if path.contains("/.config/solana/") {
+                    return Err(RepairError::PermissionError(
+                        "OSVM will never modify ~/.config/solana paths. Please manage Solana keypairs separately.".to_string()
+                    ));
+                }
+
                 transaction.add_operation(repair_strategies::RepairOperation::GenerateKeypair(
                     path.clone(),
                 ));
             }
             RepairableError::MissingConfigDirectory => {
-                transaction
-                    .add_operation(repair_strategies::RepairOperation::CreateConfigDirectory);
+                // REMOVED: Don't create ~/.config/solana - only create ~/.config/osvm
+                // The CreateConfigDirectory operation is now a no-op or creates OSVM dir
+                warn!("⚠️  OSVM does not create ~/.config/solana - manage your Solana installation separately");
             }
             RepairableError::SystemTuningRequired => {
                 if self.config.allow_system_repairs {
@@ -344,6 +371,15 @@ fn extract_keypair_path(error: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Get OSVM-specific keypair path (NEVER uses ~/.config/solana)
+fn get_osvm_keypair_path(purpose: &str) -> String {
+    if let Ok(home) = std::env::var("HOME") {
+        format!("{}/.config/osvm/{}.json", home, purpose)
+    } else {
+        format!(".osvm-keypairs/{}.json", purpose)
+    }
 }
 
 /// Convenience function to handle keypair reading with automatic repair
