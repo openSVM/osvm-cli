@@ -97,6 +97,15 @@ osvm-config-*.json
 guest/mcp_vsock_wrapper/target/
 guest/mcp_vsock_wrapper/Cargo.lock
 
+# Unikernel guest build artifacts
+guest/unikraft_tool_executor/target/
+guest/unikraft_tool_executor/Cargo.lock
+
+# Test reports and benchmarks
+test_reports/
+*.benchmark
+*.bench
+
 # MicroVM runtime directory
 .osvm/run/
 **/.osvm/run/

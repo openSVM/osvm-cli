@@ -13,7 +13,41 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 use super::isolation_config::{MountConfig, ToolConfig};
-use crate::utils::path_security::{create_secure_socket_dir, generate_socket_name, safe_path_validation};
+
+/// Tool execution request sent to unikernel
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolExecutionRequest {
+    jsonrpc: String,
+    id: u64,
+    server_id: String,
+    method: String,
+    params: Option<Value>,
+}
+
+/// Tool execution response from unikernel
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolExecutionResponse {
+    jsonrpc: String,
+    id: u64,
+    result: Option<Value>,
+    error: Option<ToolExecutionError>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolExecutionError {
+    code: i32,
+    message: String,
+}
+
+/// Unikernel launcher type
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnikernelLauncher {
+    /// Unikraft with kraft CLI (Phase 2 ephemeral unikernels)
+    Unikraft,
+    /// Firecracker (Phase 3 microVMs) - NOT USED for ExecutionMode::Unikernel
+    #[allow(dead_code)]
+    Firecracker,
+}
 
 /// Configuration for spawning a unikernel
 #[derive(Debug, Clone)]
@@ -30,6 +64,12 @@ pub struct UnikernelConfig {
     pub tool_name: String,
     /// Server ID for logging
     pub server_id: String,
+    /// Which launcher to use
+    pub launcher: UnikernelLauncher,
+    /// kraft.yaml configuration path (for Unikraft)
+    pub kraft_config: Option<PathBuf>,
+    /// vsock CID to allocate (200-299 range for ephemeral)
+    pub vsock_cid: Option<u32>,
 }
 
 /// Handle to a running unikernel instance
@@ -38,48 +78,68 @@ pub struct UnikernelHandle {
     pid: Option<u32>,
     /// Configuration used to spawn this unikernel
     config: UnikernelConfig,
-    /// Communication socket path
-    socket_path: PathBuf,
+    /// Vsock CID for communication
+    vsock_cid: u32,
+    /// Vsock port for communication (default: 5252)
+    vsock_port: u32,
 }
 
 impl UnikernelHandle {
-    /// Send a tool execution request to the unikernel
+    /// Send a tool execution request to the unikernel via vsock
     pub async fn execute_tool(
         &self,
         tool_name: &str,
         arguments: Option<Value>,
+        runtime: &UnikernelRuntime,
     ) -> Result<Value> {
-        // In a real implementation, this would communicate with the unikernel
-        // via virtio-vsock or a Unix socket. For now, we'll simulate the response.
-        
         info!(
-            "Executing tool '{}' in unikernel (PID: {:?})",
-            tool_name, self.pid
+            "Executing tool '{}' in unikernel (CID: {}, PID: {:?})",
+            tool_name, self.vsock_cid, self.pid
         );
         
-        // Simulate tool execution with timeout
-        let result: Result<Value> = timeout(Duration::from_secs(30), async {
-            // TODO: Actual communication with unikernel via virtio-vsock
-            // For now, return a placeholder response
-            Ok(serde_json::json!({
-                "status": "success",
-                "tool": tool_name,
-                "message": "Unikernel execution simulated (implementation pending)",
-                "arguments": arguments
-            }))
-        })
-        .await
-        .context("Unikernel execution timed out")?;
+        // Connect to unikernel via vsock
+        let mut stream = runtime
+            .connect_vsock(self.vsock_cid, self.vsock_port)
+            .await?;
         
-        result
+        // Build request
+        let request = ToolExecutionRequest {
+            jsonrpc: "2.0".to_string(),
+            id: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+            server_id: self.config.server_id.clone(),
+            method: tool_name.to_string(),
+            params: arguments,
+        };
+        
+        // Send request and get response
+        let response = runtime
+            .send_tool_request_vsock(&mut stream, request)
+            .await?;
+        
+        // Extract result or error
+        if let Some(result) = response.result {
+            info!("Tool '{}' executed successfully", tool_name);
+            Ok(result)
+        } else if let Some(error) = response.error {
+            Err(anyhow!(
+                "Tool execution failed: {} (code: {})",
+                error.message,
+                error.code
+            ))
+        } else {
+            Err(anyhow!("Invalid response: no result or error"))
+        }
     }
     
     /// Terminate the unikernel
     pub fn terminate(self) {
         if let Some(pid) = self.pid {
             info!(
-                "Terminating unikernel for tool '{}' (PID: {})",
-                self.config.tool_name, pid
+                "Terminating unikernel for tool '{}' (PID: {}, CID: {})",
+                self.config.tool_name, pid, self.vsock_cid
             );
             
             // Send SIGTERM to the unikernel process
@@ -94,12 +154,8 @@ impl UnikernelHandle {
             }
         }
         
-        // Clean up socket file
-        if self.socket_path.exists() {
-            if let Err(e) = std::fs::remove_file(&self.socket_path) {
-                warn!("Failed to remove socket file: {}", e);
-            }
-        }
+        // Note: vsock connections are automatically cleaned up when process terminates
+        // No socket file to remove
     }
 }
 
@@ -107,25 +163,147 @@ impl UnikernelHandle {
 pub struct UnikernelRuntime {
     /// Base directory for unikernel images
     unikernel_dir: PathBuf,
-    /// Temporary directory for sockets
-    socket_dir: PathBuf,
+    /// Path to kraft binary (default: "kraft" or with flatpak prefix)
+    kraft_binary: String,
 }
 
 impl UnikernelRuntime {
     /// Create a new unikernel runtime
     pub fn new(unikernel_dir: PathBuf) -> Result<Self> {
-        // Use secure socket directory with proper permissions (0700)
-        let socket_dir = create_secure_socket_dir()
-            .context("Failed to create secure socket directory")?;
+        // Detect if running in Flatpak environment
+        let kraft_binary = if std::path::Path::new("/.flatpak-info").exists() {
+            info!("Detected Flatpak environment, using flatpak-spawn for kraft");
+            "flatpak-spawn --host -- kraft".to_string()
+        } else {
+            "kraft".to_string()
+        };
         
         Ok(Self {
             unikernel_dir,
-            socket_dir,
+            kraft_binary,
         })
     }
     
+    /// Allocate an ephemeral vsock CID in the 200-299 range
+    fn allocate_ephemeral_cid(&self) -> Result<u32> {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        std::process::id().hash(&mut hasher);
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .hash(&mut hasher);
+        
+        let hash = hasher.finish();
+        let cid = 200 + (hash % 100) as u32; // 200-299 range
+        
+        debug!("Allocated ephemeral vsock CID: {}", cid);
+        Ok(cid)
+    }
+    
+    /// Build kraft command for launching unikernel
+    fn build_kraft_command(&self, config: &UnikernelConfig, cid: u32) -> Result<Command> {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c");
+        
+        // Build kraft run command
+        let kraft_cmd = format!(
+            "{} run --rm --memory {}M {}",
+            self.kraft_binary,
+            config.memory_mb,
+            config.image_path.display()
+        );
+        
+        cmd.arg(&kraft_cmd);
+        
+        // Pass configuration via environment variables
+        cmd.env("UNIKRAFT_VSOCK_CID", cid.to_string());
+        cmd.env("UNIKRAFT_TOOL_SERVER", &config.server_id);
+        
+        // Redirect output for debugging
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+        
+        debug!("kraft command: {}", kraft_cmd);
+        
+        Ok(cmd)
+    }
+    
+    /// Connect to unikernel via vsock
+    async fn connect_vsock(&self, cid: u32, port: u32) -> Result<tokio_vsock::VsockStream> {
+        use tokio_vsock::VsockStream;
+        
+        debug!("Connecting to vsock CID {} port {}", cid, port);
+        
+        let stream = timeout(
+            Duration::from_secs(10),
+            VsockStream::connect(cid, port),
+        )
+        .await
+        .context("Timeout connecting to unikernel vsock")?
+        .context("Failed to connect to unikernel vsock")?;
+        
+        debug!("Successfully connected to unikernel vsock");
+        Ok(stream)
+    }
+    
+    /// Send a tool execution request via vsock and receive response
+    async fn send_tool_request_vsock(
+        &self,
+        stream: &mut tokio_vsock::VsockStream,
+        request: ToolExecutionRequest,
+    ) -> Result<ToolExecutionResponse> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        
+        debug!("Sending tool request {} via vsock", request.id);
+        
+        // Serialize request
+        let request_bytes = serde_json::to_vec(&request)
+            .context("Failed to serialize request")?;
+        let len = request_bytes.len() as u32;
+        
+        // Send length prefix (4-byte little-endian)
+        stream.write_all(&len.to_le_bytes()).await
+            .context("Failed to write length prefix")?;
+        
+        // Send request payload
+        stream.write_all(&request_bytes).await
+            .context("Failed to write request")?;
+        
+        stream.flush().await
+            .context("Failed to flush vsock stream")?;
+        
+        debug!("Request sent, waiting for response...");
+        
+        // Read response length prefix
+        let mut len_bytes = [0u8; 4];
+        stream.read_exact(&mut len_bytes).await
+            .context("Failed to read response length")?;
+        let response_len = u32::from_le_bytes(len_bytes) as usize;
+        
+        // Validate response size
+        if response_len > 10 * 1024 * 1024 {
+            return Err(anyhow!("Response too large: {} bytes", response_len));
+        }
+        
+        // Read response payload
+        let mut response_bytes = vec![0u8; response_len];
+        stream.read_exact(&mut response_bytes).await
+            .context("Failed to read response payload")?;
+        
+        // Deserialize response
+        let response: ToolExecutionResponse = serde_json::from_slice(&response_bytes)
+            .context("Failed to deserialize response")?;
+        
+        debug!("Received response {}", response.id);
+        Ok(response)
+    }
+    
     /// Spawn a unikernel for tool execution
-    pub async fn spawn_unikernel(&self, config: UnikernelConfig) -> Result<UnikernelHandle> {
+    pub async fn spawn_unikernel(&self, mut config: UnikernelConfig) -> Result<UnikernelHandle> {
         info!(
             "Spawning unikernel for tool '{}' on server '{}'",
             config.tool_name, config.server_id
@@ -145,130 +323,39 @@ impl UnikernelRuntime {
             ));
         }
         
-        // Create socket path for communication
-        let socket_path = self.socket_dir.join(format!(
-            "{}-{}-{}.sock",
-            config.server_id,
-            config.tool_name,
-            std::process::id()
-        ));
+        // Allocate vsock CID if not provided
+        let vsock_cid = match config.vsock_cid {
+            Some(cid) => cid,
+            None => {
+                let cid = self.allocate_ephemeral_cid()?;
+                config.vsock_cid = Some(cid);
+                cid
+            }
+        };
         
-        // Build Firecracker command for unikernel
-        let mut cmd = self.build_firecracker_command(&config, &image_path, &socket_path)?;
+        // Build kraft command
+        let mut cmd = self.build_kraft_command(&config, vsock_cid)?;
         
         // Spawn the unikernel process
-        debug!("Spawning unikernel: {:?}", cmd);
+        debug!("Spawning unikernel with kraft: {:?}", cmd);
         let child = cmd
             .spawn()
             .context("Failed to spawn unikernel process")?;
         
         let pid = child.id();
-        info!("Unikernel spawned with PID: {}", pid);
+        info!("Unikernel spawned with PID: {}, CID: {}", pid, vsock_cid);
         
-        // Wait for unikernel to be ready (socket file appears)
-        self.wait_for_ready(&socket_path).await?;
+        // Wait for vsock to be ready (brief delay for unikernel boot)
+        tokio::time::sleep(Duration::from_millis(500)).await;
         
         Ok(UnikernelHandle {
             pid: Some(pid),
             config,
-            socket_path,
+            vsock_cid,
+            vsock_port: 5252,
         })
     }
     
-    /// Build Firecracker command for launching unikernel
-    fn build_firecracker_command(
-        &self,
-        config: &UnikernelConfig,
-        image_path: &PathBuf,
-        socket_path: &PathBuf,
-    ) -> Result<Command> {
-        // NOTE: This is a simplified version. Real implementation would use
-        // Firecracker API to configure the microVM properly.
-        
-        let mut cmd = Command::new("firecracker");
-        
-        // Basic Firecracker configuration
-        cmd.arg("--api-sock").arg(socket_path);
-        
-        // Kernel image (unikernel)
-        cmd.arg("--kernel-image-path").arg(image_path);
-        
-        // Memory configuration
-        cmd.arg("--mem-size-mib")
-            .arg(config.memory_mb.to_string());
-        
-        // vCPU configuration
-        cmd.arg("--vcpu-count").arg(config.vcpus.to_string());
-        
-        // Configure 9p mounts for filesystem access with security validation
-        for (idx, mount) in config.mounts.iter().enumerate() {
-            let mount_tag = format!("mount{}", idx);
-            
-            // Securely validate and canonicalize host path
-            // This prevents path traversal attacks and validates against sensitive directories
-            let validated_path = safe_path_validation(
-                &mount.host_path,
-                true,  // Must be directory
-                false, // Don't allow symlinks for security
-            ).with_context(|| format!("Invalid mount path: {}", mount.host_path))?;
-            
-            let canonical_path = validated_path.path().display().to_string();
-            
-            // Log security warnings for non-readonly mounts
-            if !mount.readonly {
-                warn!(
-                    "Mounting {} as read-write. Ensure this is intentional for security.",
-                    canonical_path
-                );
-            }
-            
-            cmd.arg("--fs")
-                .arg(format!(
-                    "{}:{}:{}",
-                    mount_tag,
-                    canonical_path,
-                    if mount.readonly { "ro" } else { "rw" }
-                ));
-        }
-        
-        // Redirect output for debugging
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
-        
-        Ok(cmd)
-    }
-    
-    /// Wait for unikernel to be ready
-    async fn wait_for_ready(&self, socket_path: &PathBuf) -> Result<()> {
-        let start = std::time::Instant::now();
-        let timeout_duration = Duration::from_secs(5);
-        
-        while start.elapsed() < timeout_duration {
-            if socket_path.exists() {
-                debug!("Unikernel ready (socket exists)");
-                return Ok(());
-            }
-            
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-        
-        Err(anyhow!("Unikernel failed to become ready within timeout"))
-    }
-}
-
-/// Request sent to unikernel
-#[derive(Debug, Serialize, Deserialize)]
-struct UnikernelRequest {
-    tool: String,
-    args: Option<Value>,
-}
-
-/// Response from unikernel
-#[derive(Debug, Serialize, Deserialize)]
-struct UnikernelResponse {
-    status: String,
-    result: Option<Value>,
-    error: Option<String>,
 }
 
 #[cfg(test)]
@@ -288,16 +375,37 @@ mod tests {
             vcpus: 1,
             tool_name: "test_tool".to_string(),
             server_id: "test_server".to_string(),
+            launcher: UnikernelLauncher::Unikraft,
+            kraft_config: None,
+            vsock_cid: None,
         };
         
         assert_eq!(config.memory_mb, 128);
         assert_eq!(config.vcpus, 1);
         assert_eq!(config.mounts.len(), 1);
+        assert_eq!(config.launcher, UnikernelLauncher::Unikraft);
     }
     
     #[tokio::test]
     async fn test_runtime_creation() {
         let runtime = UnikernelRuntime::new(PathBuf::from("/tmp/test-unikernels"));
         assert!(runtime.is_ok());
+        
+        let runtime = runtime.unwrap();
+        assert_eq!(runtime.unikernel_dir, PathBuf::from("/tmp/test-unikernels"));
+        
+        // kraft_binary should be set based on environment
+        assert!(!runtime.kraft_binary.is_empty());
+    }
+    
+    #[test]
+    fn test_cid_allocation_range() {
+        let runtime = UnikernelRuntime::new(PathBuf::from("/tmp/test-unikernels")).unwrap();
+        
+        // Test multiple allocations to verify range
+        for _ in 0..10 {
+            let cid = runtime.allocate_ephemeral_cid().unwrap();
+            assert!(cid >= 200 && cid < 300, "CID {} not in 200-299 range", cid);
+        }
     }
 }
