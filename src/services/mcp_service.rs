@@ -2103,6 +2103,8 @@ impl McpService {
         };
         
         // Build unikernel configuration
+        use crate::services::unikernel_runtime::UnikernelLauncher;
+        
         let unikernel_config = UnikernelConfig {
             image_path,
             mounts: tool_config.mounts.clone(),
@@ -2110,6 +2112,9 @@ impl McpService {
             vcpus: tool_config.vcpus,
             tool_name: tool_name.to_string(),
             server_id: server_id.to_string(),
+            launcher: UnikernelLauncher::Unikraft,
+            kraft_config: None,
+            vsock_cid: None, // Will be auto-allocated
         };
         
         if self.debug_mode {
@@ -2131,7 +2136,7 @@ impl McpService {
         }
         
         // Execute the tool in the unikernel
-        let result = handle.execute_tool(tool_name, arguments).await
+        let result = handle.execute_tool(tool_name, arguments, &self.unikernel_runtime).await
             .context("Failed to execute tool in unikernel")?;
         
         // Terminate the unikernel

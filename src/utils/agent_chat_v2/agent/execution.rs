@@ -396,6 +396,8 @@ impl AdvancedChatState {
             .context("Failed to create unikernel runtime")?;
 
         // Build unikernel configuration
+        use crate::services::unikernel_runtime::UnikernelLauncher;
+        
         let unikernel_config = UnikernelConfig {
             image_path: PathBuf::from(unikernel_image),
             mounts: tool_config.mounts.clone(),
@@ -403,6 +405,9 @@ impl AdvancedChatState {
             vcpus: tool_config.vcpus,
             tool_name: planned_tool.tool_name.clone(),
             server_id: planned_tool.server_id.clone(),
+            launcher: UnikernelLauncher::Unikraft,
+            kraft_config: None,
+            vsock_cid: None, // Will be auto-allocated
         };
 
         // Spawn the unikernel (~100ms overhead)
@@ -411,9 +416,13 @@ impl AdvancedChatState {
             .await
             .context("Failed to spawn unikernel")?;
 
-        // Execute the tool in the isolated unikernel
+        // Execute the tool in the isolated unikernel (pass runtime for vsock communication)
         let result = handle
-            .execute_tool(&planned_tool.tool_name, Some(planned_tool.args.clone()))
+            .execute_tool(
+                &planned_tool.tool_name,
+                Some(planned_tool.args.clone()),
+                &unikernel_runtime,
+            )
             .await;
 
         // Always terminate the ephemeral unikernel
