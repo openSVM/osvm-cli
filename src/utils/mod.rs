@@ -13,6 +13,8 @@ use std::{fs::File, io, path::Path};
 // UI and display utilities
 /// Agent chat interface using cursive-multiplex with MCP tools
 pub mod agent_chat;
+/// MicroVM-enabled agent chat with ephemeral tool execution
+pub mod agent_chat_microvm;
 #[cfg(test)]
 pub mod agent_chat_tests;
 pub mod agent_chat_v2;
