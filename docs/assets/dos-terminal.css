@@ -92,12 +92,19 @@ body::after {
 }
 
 /* Container */
-.container, main, .content, article {
-  max-width: 80ch;
+.container, main, .content, article, .terminal-window {
+  max-width: 100%;
   margin: 0 auto;
-  padding: 10px;
+  padding: 20px;
   position: relative;
   z-index: 1;
+}
+
+/* Main content wrapper */
+.main-wrapper, body > div {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 /* Headers with DOS box drawing */
@@ -268,11 +275,23 @@ blockquote::before {
 }
 
 /* Navigation */
-nav {
+nav, .main-navigation {
   background: #0a0a0a;
-  border: 1px solid var(--dos-white);
-  padding: 10px;
-  margin: 20px 0;
+  border-top: 1px solid var(--dos-white);
+  border-bottom: 1px solid var(--dos-white);
+  padding: 10px 20px;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.terminal-header {
+  background: var(--dos-black);
+  border-bottom: 1px solid var(--dos-gray);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 nav ul {

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../assets/dos-terminal.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Integration - OSVM CLI</title>
+    <script src="../assets/dos-interactive.js" defer></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>AI Integration</h1>
+
+        <h2>▓▓ Natural Language Commands</h2>
+        <p>OSVM understands natural language queries. Simply type what you want to do:</p>
+
+        <div class="command-item">
+            <code>osvm "deploy my program to mainnet"</code>
+            <p>AI interprets and executes your intent</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm "show me all validators on sonic"</code>
+            <p>Natural language query processing</p>
+        </div>
+
+        <h2>▓▓ Interactive Chat</h2>
+        <div class="command-item">
+            <code>osvm chat</code>
+            <p>Launch basic chat interface</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm chat --advanced</code>
+            <p>FAR-style multi-session interface</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm chat --microvm</code>
+            <p>Isolated chat with ephemeral tool VMs</p>
+        </div>
+
+        <h2>▓▓ AI-Powered Auditing</h2>
+        <div class="command-item">
+            <code>osvm audit github.com/project/contract</code>
+            <p>Security audit with AI analysis</p>
+        </div>
+
+        <h2>▓▓ Configuration</h2>
+        <h3>▒▒ OpenAI</h3>
+        <pre><code>export OPENAI_URL="https://api.openai.com/v1/chat/completions"
+export OPENAI_KEY="sk-your-key-here"</code></pre>
+
+        <h3>▒▒ Local AI (Ollama)</h3>
+        <pre><code>export OPENAI_URL="http://localhost:11434/v1/chat/completions"
+export OPENAI_KEY="ollama"</code></pre>
+
+        <h2>▓▓ Features</h2>
+        <ul>
+            <li>Natural language understanding</li>
+            <li>Context-aware responses</li>
+            <li>Tool planning and execution</li>
+            <li>Code generation</li>
+            <li>Error diagnosis</li>
+            <li>Performance optimization suggestions</li>
+        </ul>
+
+        <h2>▓▓ Circuit Breaker</h2>
+        <p>OSVM includes automatic failure protection:</p>
+        <ul>
+            <li>5 failure threshold</li>
+            <li>30 second timeout</li>
+            <li>Automatic recovery</li>
+            <li>Fallback to local processing</li>
+        </ul>
+    </div>
+</body>
+</html>
