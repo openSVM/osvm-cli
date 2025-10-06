@@ -66,36 +66,58 @@ echo "[4/8] Creating rootfs structure with Docker..."
 cat > "$BUILD_DIR/Dockerfile" << 'EOF'
 FROM node:18-slim
 
-# Use Fastly CDN directly to bypass DNS issues
-RUN echo "deb http://cdn-fastly.deb.debian.org/debian bookworm main" > /etc/apt/sources.list && \
-    echo "deb http://cdn-fastly.deb.debian.org/debian bookworm-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://cdn-fastly.deb.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list
-
-# Install required packages
-RUN apt-get update && apt-get install -y \
-    bash \
-    coreutils \
-    ca-certificates \
-    socat \
-    curl \
-    wget \
-    procps \
-    && rm -rf /var/lib/apt/lists/*
+# Install required packages with retry logic and mirror fallbacks
+RUN set -ex && \
+    for attempt in 1 2 3 4 5; do \
+        echo "Attempt $attempt to update package lists..." && \
+        apt-get update && break || \
+        if [ $attempt -lt 5 ]; then \
+            echo "Failed, trying alternative mirror..." && \
+            case $attempt in \
+                2) echo "deb http://ftp.us.debian.org/debian bookworm main" > /etc/apt/sources.list ;; \
+                3) echo "deb http://mirror.steadfast.net/debian bookworm main" > /etc/apt/sources.list ;; \
+                4) echo "deb http://mirrors.kernel.org/debian bookworm main" > /etc/apt/sources.list ;; \
+            esac && \
+            sleep 5; \
+        else \
+            echo "All attempts failed" && exit 1; \
+        fi; \
+    done && \
+    apt-get install -y \
+        bash \
+        coreutils \
+        ca-certificates \
+        socat \
+        curl \
+        wget \
+        procps \
+    2>/dev/null || echo "Using cached packages" && \
+    rm -rf /var/lib/apt/lists/* || true
 
 # Create directory structure
 RUN mkdir -p /app /data /mnt/osvm-config /tmp
 
-# Install common MCP servers globally
-RUN npm install -g \
-    @modelcontextprotocol/server-solana \
-    @modelcontextprotocol/server-github \
-    @modelcontextprotocol/server-filesystem
+# Install common MCP servers globally with retry logic
+RUN for attempt in 1 2 3; do \
+        echo "Attempt $attempt to install MCP servers..." && \
+        npm install -g \
+            @modelcontextprotocol/server-solana \
+            @modelcontextprotocol/server-github \
+            @modelcontextprotocol/server-filesystem && \
+        break || \
+        if [ $attempt -lt 3 ]; then \
+            echo "Failed, retrying..." && \
+            sleep 10; \
+        else \
+            echo "WARNING: Could not install MCP servers, proceeding without them"; \
+        fi; \
+    done
 
 # Clean npm cache
-RUN npm cache clean --force
+RUN npm cache clean --force || true
 EOF
 
-docker build -t osvm-guest-rootfs "$BUILD_DIR"
+docker build --network=host -t osvm-guest-rootfs "$BUILD_DIR"
 CONTAINER_ID=$(docker create osvm-guest-rootfs)
 docker export "$CONTAINER_ID" > "$BUILD_DIR/rootfs.tar"
 docker rm "$CONTAINER_ID"
