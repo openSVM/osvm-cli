@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../assets/dos-terminal.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Installation - OSVM CLI</title>
+    <script src="../assets/dos-interactive.js" defer></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>Installation Guide</h1>
+
+        <h2>▓▓ Quick Install</h2>
+        <pre><code>curl -sSf https://osvm.ai/install.sh | sh</code></pre>
+
+        <h2>▓▓ Build from Source</h2>
+        <pre><code># Clone repository
+git clone https://github.com/opensvm/osvm-cli.git
+cd osvm-cli
+
+# Build release version
+cargo build --release
+
+# Install globally
+sudo ./install-release.sh</code></pre>
+
+        <h2>▓▓ System Requirements</h2>
+        <ul>
+            <li>Rust 1.80.0 or higher</li>
+            <li>Solana CLI tools</li>
+            <li>Linux/macOS (Windows via WSL2)</li>
+            <li>4GB RAM minimum</li>
+            <li>10GB disk space</li>
+        </ul>
+
+        <h2>▓▓ Verify Installation</h2>
+        <div class="command-item">
+            <code>osvm --version</code>
+            <p>Check installed version</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm doctor</code>
+            <p>Run system diagnostics</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm doctor --fix</code>
+            <p>Auto-fix common issues</p>
+        </div>
+
+        <h2>▓▓ Configuration</h2>
+        <p>OSVM uses configuration from multiple sources:</p>
+        <ol>
+            <li>Command-line arguments (highest priority)</li>
+            <li>Environment variables</li>
+            <li>Config file: ~/.config/osvm/config.yml</li>
+            <li>Default values</li>
+        </ol>
+
+        <h3>▒▒ Example Config</h3>
+        <pre><code>json_rpc_url: https://api.mainnet-beta.solana.com
+keypair_path: ~/.config/solana/id.json
+commitment: confirmed</code></pre>
+    </div>
+</body>
+</html>

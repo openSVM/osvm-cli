@@ -33,23 +33,28 @@ const pages = {
     },
     'ai-integration': {
         title: 'AI Integration',
-        file: 'pages/ai.html',
+        file: 'pages/ai-integration.html',
         keywords: ['ai', 'artificial intelligence', 'analysis', 'security', 'audit']
     },
     'mcp-servers': {
         title: 'MCP Servers',
-        file: 'pages/mcp.html',
+        file: 'pages/mcp-servers.html',
         keywords: ['mcp', 'model context protocol', 'servers', 'blockchain', 'data']
     },
     'node-deployment': {
         title: 'Node Deployment',
-        file: 'pages/deployment.html',
+        file: 'pages/node-deployment.html',
         keywords: ['deployment', 'nodes', 'validators', 'rpc', 'ssh']
     },
     'api-reference': {
         title: 'API Reference',
-        file: 'pages/api.html',
+        file: 'pages/api-reference.html',
         keywords: ['api', 'reference', 'commands', 'documentation']
+    },
+    'isolation': {
+        title: 'Isolation & Security',
+        file: 'pages/isolation.html',
+        keywords: ['isolation', 'security', 'microvm', 'firecracker', 'ephemeral']
     }
 };
 
