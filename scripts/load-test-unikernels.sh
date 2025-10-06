@@ -57,7 +57,7 @@ echo -e "${BLUE}Checking prerequisites...${NC}"
 
 # Check if kraft is installed (adjust check for Flatpak)
 if [ -f "/.flatpak-info" ]; then
-    if ! flatpak-spawn --host -- kraft --version &> /dev/null; then
+    if ! flatpak-spawn --host -- kraft version &> /dev/null; then
         echo -e "${RED}✗ kraft CLI not found on host${NC}"
         echo "Install with: curl -sSf https://get.kraftkit.sh | sh"
         exit 1
@@ -72,12 +72,24 @@ fi
 echo -e "${GREEN}✓ kraft CLI installed${NC}"
 
 # Check if vsock module is loaded
-if ! lsmod | grep -q vhost_vsock; then
-    echo -e "${YELLOW}⚠ vhost_vsock module not loaded, attempting to load...${NC}"
-    sudo modprobe vhost_vsock || {
-        echo -e "${RED}✗ Failed to load vhost_vsock module${NC}"
+if [ -f "/.flatpak-info" ]; then
+    if ! flatpak-spawn --host -- lsmod | grep -q vhost_vsock; then
+        echo -e "${RED}✗ vhost_vsock module not loaded${NC}"
+        echo ""
+        echo "Please load the module manually with:"
+        echo "  flatpak-spawn --host -- sudo modprobe vhost_vsock"
+        echo ""
         exit 1
-    }
+    fi
+else
+    if ! lsmod | grep -q vhost_vsock; then
+        echo -e "${RED}✗ vhost_vsock module not loaded${NC}"
+        echo ""
+        echo "Please load the module manually with:"
+        echo "  sudo modprobe vhost_vsock"
+        echo ""
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓ vhost_vsock module loaded${NC}"
 
@@ -102,6 +114,19 @@ if [ "$REQUIRED_MEMORY_MB" -gt "$TOTAL_MEMORY_MB" ]; then
         exit 1
     fi
 fi
+
+echo ""
+echo -e "${BLUE}Pre-caching kraft image...${NC}"
+# Pre-pull the image by running kraft once then killing it
+$KRAFT_CMD run --rm --memory 64M "$GUEST_BINARY" > /tmp/kraft-precache.log 2>&1 &
+PRECACHE_PID=$!
+# Wait 3 seconds for image to download
+sleep 3
+# Kill the precache process
+kill -9 $PRECACHE_PID 2>/dev/null || true
+wait $PRECACHE_PID 2>/dev/null || true
+rm -f /tmp/kraft-precache.log
+echo -e "${GREEN}✓ Image cached${NC}"
 
 echo ""
 echo -e "${BLUE}Starting load test...${NC}"
@@ -169,8 +194,8 @@ echo ""
 
 for i in $(seq 0 $((NUM_UNIKERNELS - 1))); do
     spawn_unikernel $i
-    # Small delay to avoid overwhelming the system
-    sleep 0.1
+    # Delay to avoid kraft concurrent initialization conflicts
+    sleep 0.5
 done
 
 echo ""
@@ -187,17 +212,17 @@ FAILED_BOOTS=0
 TOTAL_BOOT_TIME=0
 
 for i in $(seq 0 $((NUM_UNIKERNELS - 1))); do
-    local pid=${PIDS[$i]}
-    local cid=${CIDS[$i]}
-    local start_time=${START_TIMES[$i]}
+    pid=${PIDS[$i]}
+    cid=${CIDS[$i]}
+    start_time=${START_TIMES[$i]}
     
     # Wait up to 2 seconds for unikernel to become responsive
-    local responsive=false
+    responsive=false
     for attempt in $(seq 1 10); do
         if check_unikernel $i; then
             responsive=true
-            local end_time=$(date +%s%3N)
-            local boot_time=$((end_time - start_time))
+            end_time=$(date +%s%3N)
+            boot_time=$((end_time - start_time))
             TOTAL_BOOT_TIME=$((TOTAL_BOOT_TIME + boot_time))
             
             if [ $boot_time -le $MAX_BOOT_TIME_MS ]; then
@@ -228,9 +253,9 @@ TOTAL_MEMORY_USED=0
 for pid in "${PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
         # Get RSS (Resident Set Size) in KB, convert to MB
-        local mem_kb=$(ps -o rss= -p "$pid" 2>/dev/null | tr -d ' ')
+        mem_kb=$(ps -o rss= -p "$pid" 2>/dev/null | tr -d ' ')
         if [ -n "$mem_kb" ]; then
-            local mem_mb=$((mem_kb / 1024))
+            mem_mb=$((mem_kb / 1024))
             TOTAL_MEMORY_USED=$((TOTAL_MEMORY_USED + mem_mb))
         fi
     fi
@@ -268,13 +293,13 @@ CLEANUP_SUCCESSFUL=0
 CLEANUP_FAILED=0
 
 for i in $(seq 0 $((NUM_UNIKERNELS - 1))); do
-    local pid=${PIDS[$i]}
+    pid=${PIDS[$i]}
     if kill -0 "$pid" 2>/dev/null; then
         echo "[$i] Terminating PID $pid..."
         kill -TERM "$pid" 2>/dev/null || true
         
         # Wait up to 2 seconds for graceful shutdown
-        local shutdown_ok=false
+        shutdown_ok=false
         for attempt in $(seq 1 10); do
             if ! kill -0 "$pid" 2>/dev/null; then
                 shutdown_ok=true
