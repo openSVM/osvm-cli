@@ -257,7 +257,7 @@ class InteractiveDOSTerminal {
       container.className = 'dos-terminal-interactive';
       container.innerHTML = `
         <div class="terminal-output" id="terminal-output">
-          <div class="terminal-line">C:\\OSVM> _</div>
+          <div class="terminal-line"></div>
         </div>
         <div class="terminal-input-area">
           <span class="terminal-prompt">C:\\OSVM> </span>
@@ -321,8 +321,7 @@ class InteractiveDOSTerminal {
     const output = document.getElementById('terminal-output');
     if (!output) return;
 
-    const welcome = `
-╔═══════════════════════════════════════════════════════════════╗
+    const welcome = `╔═══════════════════════════════════════════════════════════════╗
 ║                  OSVM CLI - Interactive Mode                  ║
 ║                     DOS Terminal v1.0                         ║
 ╚═══════════════════════════════════════════════════════════════╝
@@ -496,7 +495,7 @@ Type 'help' for available commands or try the examples below.`;
   clearTerminal() {
     const output = document.getElementById('terminal-output');
     if (output) {
-      output.innerHTML = '<div class="terminal-line">C:\\OSVM> _</div>';
+      output.innerHTML = '<pre>C:\\OSVM> _</pre>';
     }
   }
 
