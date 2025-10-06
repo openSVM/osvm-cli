@@ -339,7 +339,7 @@ impl FirecrackerRuntime {
             "machine-config": {
                 "vcpu_count": vm_config.vcpus,
                 "mem_size_mib": vm_config.memory_mb,
-                "ht_enabled": false,
+                "smt": false,
                 "track_dirty_pages": false
             },
             "network-interfaces": if let Some(ref net) = vm_config.network {

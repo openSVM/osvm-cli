@@ -582,7 +582,7 @@ ENTRYPOINT ["/app/osvm"]
   "machine-config": {
     "vcpu_count": 2,
     "mem_size_mib": 512,
-    "ht_enabled": false,
+    "smt": false,
     "track_dirty_pages": true
   },
   "network-interfaces": [

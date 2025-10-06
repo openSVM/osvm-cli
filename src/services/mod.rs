@@ -4,6 +4,7 @@ pub mod ai_service;
 pub mod audit_service;
 pub mod blockchain_indexer;
 pub mod clickhouse_service;
+pub mod ephemeral_microvm;
 pub mod isolation_config;
 pub mod ledger_service;
 pub mod mcp_service;

@@ -1,3 +1,4 @@
+use crate::services::ephemeral_microvm::{ChatVmOrchestrator, EphemeralVmManager};
 use crate::services::isolation_config::{IsolationConfig, ServerConfig};
 use crate::services::microvm_launcher::{
     McpServerMicroVmConfig, McpServerMicroVmHandle, MicroVmLauncher, MountPoint,
@@ -226,6 +227,10 @@ pub struct McpService {
     microvm_launcher: Option<MicroVmLauncher>,
     /// Active MCP server microVMs
     mcp_server_microvms: HashMap<String, McpServerMicroVmHandle>,
+    /// Ephemeral VM manager for tool execution
+    ephemeral_vm_manager: EphemeralVmManager,
+    /// Whether to use ephemeral VMs by default for tool execution
+    use_ephemeral_vms: bool,
 }
 
 impl McpService {
@@ -374,6 +379,8 @@ impl McpService {
             unikernel_runtime,
             microvm_launcher,
             mcp_server_microvms: HashMap::new(),
+            ephemeral_vm_manager: EphemeralVmManager::new(false),
+            use_ephemeral_vms: true, // Enable ephemeral VMs by default
         }
     }
 
@@ -381,6 +388,7 @@ impl McpService {
     pub fn new_with_debug(debug_mode: bool) -> Self {
         let mut service = Self::new();
         service.debug_mode = debug_mode;
+        service.ephemeral_vm_manager = EphemeralVmManager::new(debug_mode);
         service
     }
 
@@ -2000,12 +2008,28 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
-        // Priority 1: Check if server is running in dedicated microVM
+        // Priority 1: Use ephemeral microVM for tool execution if enabled
+        if self.use_ephemeral_vms {
+            if self.debug_mode {
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Launching ephemeral microVM for tool: {}/{}",
+                    server_id,
+                    tool_name
+                );
+            }
+            return self.ephemeral_vm_manager
+                .launch_tool_vm(server_id, tool_name, arguments)
+                .await
+                .context("Failed to execute tool in ephemeral VM");
+        }
+
+        // Priority 2: Check if server is running in dedicated microVM
         if let Some(handle) = self.mcp_server_microvms.get(server_id) {
             return self.call_tool_via_microvm(handle, tool_name, arguments).await;
         }
 
-        // Priority 2: Check if this tool should be executed in ephemeral unikernel
+        // Priority 3: Check if this tool should be executed in ephemeral unikernel
         if self.isolation_config.should_use_unikernel(server_id, tool_name) {
             if self.debug_mode {
                 debug_print!(

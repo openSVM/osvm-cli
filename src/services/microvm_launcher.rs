@@ -358,7 +358,7 @@ impl MicroVmLauncher {
             "machine-config": {
                 "vcpu_count": config.vcpus,
                 "mem_size_mib": config.memory_mb,
-                "ht_enabled": false
+                "smt": false
             },
             "network-interfaces": [],
             "vsock": {
@@ -986,7 +986,7 @@ impl MicroVmLauncher {
             "machine-config": {
                 "vcpu_count": config.vcpus,
                 "mem_size_mib": config.memory_mb,
-                "ht_enabled": false
+                "smt": false
             },
             "network-interfaces": [],
             "vsock": {

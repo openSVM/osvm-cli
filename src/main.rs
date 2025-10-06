@@ -899,6 +899,15 @@ async fn handle_mcp_command(
             }
         }
 
+        "microvm" => {
+            // Handle MCP microVM subcommands
+            use crate::commands::mcp_microvm;
+            if let Err(e) = mcp_microvm::handle_mcp_microvm_command(mcp_sub_matches).await {
+                eprintln!("❌ MCP microVM error: {}", e);
+                std::process::exit(1);
+            }
+        }
+
         _ => {
             eprintln!("Unknown MCP subcommand: {}", mcp_sub_command);
             std::process::exit(1);
@@ -1042,6 +1051,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check if test mode is requested
         if sub_matches.get_flag("test") {
             return crate::utils::agent_chat::run_chat_ui_tests()
+                .await
+                .map_err(|e| e.into());
+        } else if sub_matches.get_flag("microvm") {
+            // Run chat with microVM isolation for maximum security
+            return crate::utils::agent_chat_microvm::run_microvm_agent_chat()
                 .await
                 .map_err(|e| e.into());
         } else if sub_matches.get_flag("advanced") {
