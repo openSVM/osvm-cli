@@ -10,7 +10,7 @@ use std::collections::HashMap;
 static SENSITIVE_PATTERNS: &[(&str, &str)] = &[
     // API Keys and tokens
     (
-        r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[A-Za-z0-9+/=]{8,}",
+        r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[A-Za-z0-9+/=\-_]{8,}",
         "$1: [REDACTED]",
     ),
     // Private keys (base58/hex)

@@ -15,10 +15,10 @@ use std::env;
 #[derive(Serialize)]
 struct AiRequest {
     question: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    systemPrompt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
+    system_prompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ownPlan")]
-    ownPlan: Option<bool>,
+    own_plan: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -378,8 +378,8 @@ impl AiService {
     ) -> Result<String> {
         let request_body = AiRequest {
             question: question.to_string(),
-            systemPrompt: system_prompt,
-            ownPlan: only_plan,
+            system_prompt,
+            own_plan: only_plan,
         };
 
         if debug_mode {

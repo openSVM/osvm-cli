@@ -1,31 +1,68 @@
-//! UI components and rendering logic for the chat interface
+//! Modern UI components with enhanced visual styling
+//! Provides beautifully styled terminal UI elements with gradients, icons, and animations
 
 use super::{Colors, InputMode, InputState, TaskState, TodoPriority, SPINNER_FRAMES};
+use crate::utils::theme::{Theme, Gradient, StyledBox, ProgressBar, StatusIndicator};
 use anyhow::Result;
 use ratatui::{prelude::*, style::*, text::*, widgets::*, Frame};
 
-/// Show the welcome box using simple borders - compact version
+/// Show modern welcome box with gradient and rounded corners
 pub fn show_welcome_box() {
+    // Create gradient for the title
+    let title_gradient = Gradient::purple_gradient();
+    let title = "OSVM Agent Chat Interface";
+    let gradient_title = Gradient::apply_to_text(title, &title_gradient);
+    
+    // Use rounded corners with modern styling
+    println!();
     println!(
-        "{}┌─ OSVM Agent Chat Interface ─────────────────────┐{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}{}╭─────────────────────────────────────────────────────────╮{}",
+        Theme::PRIMARY,
+        Theme::BOLD,
+        Theme::RESET
     );
     println!(
-        "{}│ Real-time AI chat • MCP tools • Ctrl+T tasks    │{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}│  {} {}✨ {} │{}",
+        Theme::PRIMARY,
+        Theme::ICON_ROCKET,
+        gradient_title,
+        Theme::ICON_SPARKLES,
+        Theme::RESET
     );
     println!(
-        "{}│ Type your message or /help for commands         │{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}│                                                         │{}",
+        Theme::PRIMARY_LIGHT,
+        Theme::RESET
     );
     println!(
-        "{}└──────────────────────────────────────────────────┘{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}│   {} {}Real-time AI{} {} {}MCP Tools{} {} {}Smart Tasks{}   │{}",
+        Theme::PRIMARY_LIGHT,
+        Theme::ICON_LIGHTNING,
+        Theme::SUCCESS,
+        Theme::TEXT,
+        Theme::ICON_GEAR,
+        Theme::ACCENT_BRIGHT,
+        Theme::TEXT,
+        Theme::ICON_STAR,
+        Theme::WARNING_LIGHT,
+        Theme::TEXT,
+        Theme::RESET
     );
+    println!(
+        "{}│   {}Type your message or {}{}/help{} for commands        │{}",
+        Theme::PRIMARY_LIGHT,
+        Theme::TEXT_DIM,
+        Theme::ACCENT,
+        Theme::BOLD,
+        Theme::TEXT_DIM,
+        Theme::RESET
+    );
+    println!(
+        "{}╰─────────────────────────────────────────────────────────╯{}",
+        Theme::PRIMARY,
+        Theme::RESET
+    );
+    println!();
 }
 
 /// Show enhanced status bar using simple sequential output
@@ -37,31 +74,45 @@ pub fn show_enhanced_status_bar_in_place(
     Ok(())
 }
 
-/// Show enhanced status bar - compact version
+/// Show enhanced status bar with modern styling and icons
 pub fn show_enhanced_status_bar(task_state: &TaskState) {
-    let spinner = SPINNER_FRAMES[task_state.spinner_frame];
-    let mode_indicator = match task_state.input_mode {
-        InputMode::InputField => "INPUT",
-        InputMode::TaskSelection => "TASKS",
+    // Use modern spinner frames from theme
+    let spinner_frames = Theme::SPINNER_DOTS;
+    let spinner = spinner_frames[task_state.spinner_frame % spinner_frames.len()];
+    
+    // Mode indicator with icons
+    let (mode_icon, mode_text, mode_color) = match task_state.input_mode {
+        InputMode::InputField => (Theme::ICON_CHEVRON_RIGHT, "INPUT MODE", Theme::SUCCESS),
+        InputMode::TaskSelection => (Theme::ICON_BULLET, "TASK MODE", Theme::WARNING),
     };
 
+    // Create a modern status bar with gradient border
+    println!();
     println!(
-        "{}┌─ Status ─────────────────────────────────────────┐{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}╭─ {} Status {} ──────────────────────────────────────╮{}",
+        Theme::ACCENT,
+        Theme::ICON_INFO,
+        Theme::ICON_INFO,
+        Theme::RESET
     );
     println!(
-        "{}│ {} {} • Mode: {} │{}",
-        Colors::CYAN,
+        "{}│ {}{} {} {}│ {}{} {}{} {}│{}",
+        Theme::ACCENT,
+        Theme::ACCENT_BRIGHT,
         spinner,
+        Theme::TEXT,
         task_state.current_task,
-        mode_indicator,
-        Colors::RESET
+        mode_color,
+        mode_icon,
+        Theme::BOLD,
+        mode_text,
+        Theme::RESET,
+        Theme::RESET
     );
     println!(
-        "{}└──────────────────────────────────────────────────┘{}",
-        Colors::CYAN,
-        Colors::RESET
+        "{}╰──────────────────────────────────────────────────────╯{}",
+        Theme::ACCENT,
+        Theme::RESET
     );
 }
 
@@ -74,79 +125,126 @@ pub fn show_task_details_in_place(
     Ok(())
 }
 
-/// Show task details with simple borders
+/// Show task details with modern styling and progress indicators
 pub fn show_task_details_below_input(task_state: &TaskState) {
     let complete_count = task_state.todo_items.iter().filter(|t| t.completed).count();
+    let total_count = task_state.todo_items.len();
+    let progress = if total_count > 0 {
+        complete_count as f32 / total_count as f32
+    } else {
+        0.0
+    };
 
+    // Modern task header with progress bar
+    println!();
     println!(
-        "{}+-- Tasks ({}/{}) ------------------------------+{}",
-        Colors::YELLOW,
-        complete_count,
-        task_state.todo_items.len(),
-        Colors::RESET
+        "{}╭─ {} Tasks {} ─────────────────────────────────────────╮{}",
+        Theme::WARNING,
+        Theme::ICON_STAR,
+        ProgressBar::render(progress, 20, false),
+        Theme::RESET
     );
 
     for (i, item) in task_state.todo_items.iter().enumerate() {
-        let checkbox = if item.completed { "[X]" } else { "[ ]" };
-        let priority_color = match item.priority {
-            TodoPriority::High => Colors::RED,
-            TodoPriority::Medium => Colors::YELLOW,
-            TodoPriority::Low => Colors::GREEN,
+        // Use modern icons for checkboxes
+        let checkbox = if item.completed { 
+            format!("{}{}", Theme::SUCCESS, Theme::ICON_SUCCESS)
+        } else { 
+            format!("{}☐", Theme::TEXT_MUTED)
+        };
+        
+        // Priority with colored badges
+        let (priority_icon, priority_color) = match item.priority {
+            TodoPriority::High => (Theme::ICON_FIRE, Theme::ERROR),
+            TodoPriority::Medium => (Theme::ICON_WARNING, Theme::WARNING),
+            TodoPriority::Low => (Theme::ICON_ARROW_DOWN, Theme::SUCCESS_LIGHT),
         };
 
         let selection_indicator = if task_state.input_mode == InputMode::TaskSelection
             && i == task_state.selected_todo_index
         {
-            format!("{}>> {}", Colors::CYAN, Colors::RESET)
+            format!("{}{} ", Theme::ACCENT_BRIGHT, Theme::ICON_CHEVRON_RIGHT)
         } else {
-            "   ".to_string()
+            "  ".to_string()
         };
 
+        // Modern task item display
         println!(
-            "{}|{}{} {}{}{} |{}",
-            Colors::YELLOW,
+            "{}│ {}{} {} {} {}{}{}  {}│{}",
+            Theme::WARNING,
             selection_indicator,
             checkbox,
+            priority_icon,
             priority_color,
+            Theme::BOLD,
             item.text,
-            Colors::YELLOW,
-            Colors::RESET
+            Theme::RESET,
+            Theme::WARNING,
+            Theme::RESET
         );
 
         if let Some(ref results) = item.execution_results {
             println!(
-                "{}|    {}{}{} |{}",
-                Colors::YELLOW,
-                Colors::DIM,
+                "{}│     {} {}{}{}{}{}│{}",
+                Theme::WARNING,
+                Theme::ICON_ARROW_RIGHT,
+                Theme::TEXT_DIM,
+                Theme::ITALIC,
                 results,
-                Colors::YELLOW,
-                Colors::RESET
+                Theme::RESET,
+                Theme::WARNING,
+                Theme::RESET
             );
         }
     }
 
+    // Show task summary with modern styling
     println!(
-        "{}+-----------------------------------------------+{}",
-        Colors::YELLOW,
-        Colors::RESET
+        "{}├─────────────────────────────────────────────────────────┤{}",
+        Theme::WARNING,
+        Theme::RESET
+    );
+    println!(
+        "{}│ {} Completed: {}{}/{}{} {} Progress: {}{}%{}         {}│{}",
+        Theme::WARNING,
+        Theme::ICON_SUCCESS,
+        Theme::SUCCESS,
+        complete_count,
+        total_count,
+        Theme::RESET,
+        Theme::ICON_HOURGLASS,
+        Theme::ACCENT_BRIGHT,
+        (progress * 100.0) as u32,
+        Theme::RESET,
+        Theme::WARNING,
+        Theme::RESET
+    );
+    println!(
+        "{}╰─────────────────────────────────────────────────────────╯{}",
+        Theme::WARNING,
+        Theme::RESET
     );
 
     if !task_state.current_reasoning.is_empty() {
+        println!();
         println!(
-            "{}+-- Current Reasoning ---------------------------+{}",
-            Colors::BLUE,
-            Colors::RESET
+            "{}╭─ {} Current Reasoning ─────────────────────────────────╮{}",
+            Theme::ACCENT,
+            Theme::ICON_INFO,
+            Theme::RESET
         );
         println!(
-            "{}| {} |{}",
-            Colors::BLUE,
+            "{}│ {}{}{} │{}",
+            Theme::ACCENT,
+            Theme::TEXT,
             task_state.current_reasoning,
-            Colors::RESET
+            Theme::ACCENT,
+            Theme::RESET
         );
         println!(
-            "{}+-----------------------------------------------+{}",
-            Colors::BLUE,
-            Colors::RESET
+            "{}╰─────────────────────────────────────────────────────────╯{}",
+            Theme::ACCENT,
+            Theme::RESET
         );
     }
 }

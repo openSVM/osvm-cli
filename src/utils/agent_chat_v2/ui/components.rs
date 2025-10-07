@@ -12,12 +12,18 @@ use super::super::state::AdvancedChatState;
 use super::handlers::*;
 use super::layout::AdvancedChatUI;
 
+use super::theme::{Icons, StyledText, Decorations, ProgressBar};
+
 impl AdvancedChatUI {
     pub fn create_chat_list_panel(&self) -> impl View {
         let mut chat_list_layout = LinearLayout::vertical();
 
-        // Header
-        chat_list_layout.add_child(Panel::new(TextView::new("Chat Sessions")).title("Sessions"));
+        // Header with gradient effect and icon
+        let header_text = format!("{} Chat Sessions {}", Icons::CHAT, Icons::SPARKLES);
+        chat_list_layout.add_child(
+            Panel::new(TextView::new(StyledText::gradient(&header_text)))
+                .title(Decorations::section_divider("Sessions"))
+        );
 
         // Chat list - use ListView instead for more reliable navigation
         let chat_list = ListView::new().with_name("chat_list");
@@ -35,30 +41,33 @@ impl AdvancedChatUI {
             .max_height(20), // Allow more flexibility
         );
 
-        // New chat button
+        // New chat button with icon
         chat_list_layout.add_child(DummyView.fixed_height(1));
-        chat_list_layout.add_child(Button::new("+ New Chat", |siv| {
-            create_new_chat_dialog(siv);
-        }));
+        chat_list_layout.add_child(Button::new(
+            format!("{} New Chat", Icons::NEW), 
+            |siv| {
+                create_new_chat_dialog(siv);
+            }
+        ));
 
-        // Session controls - responsive spacing
+        // Session controls with icons - responsive spacing
         chat_list_layout.add_child(DummyView.min_height(1));
         chat_list_layout.add_child(
             LinearLayout::horizontal()
-                .child(Button::new("Run", |siv| resume_agent(siv)))
+                .child(Button::new(format!("{} Run", Icons::EXECUTING), |siv| resume_agent(siv)))
                 .child(DummyView.min_width(1))
-                .child(Button::new("Pause", |siv| pause_agent(siv)))
+                .child(Button::new(format!("{} Pause", Icons::PAUSED), |siv| pause_agent(siv)))
                 .child(DummyView.min_width(1))
-                .child(Button::new("Stop", |siv| stop_agent(siv))),
+                .child(Button::new(format!("{} Stop", Icons::STOP), |siv| stop_agent(siv))),
         );
 
-        // Recording controls - responsive spacing
+        // Recording controls with icons - responsive spacing
         chat_list_layout.add_child(DummyView.min_height(1));
         chat_list_layout.add_child(
             LinearLayout::horizontal()
-                .child(Button::new("Record", |siv| start_recording(siv)))
+                .child(Button::new(format!("{} Record", Icons::RECORD), |siv| start_recording(siv)))
                 .child(DummyView.min_width(1))
-                .child(Button::new("Stop Rec", |siv| stop_recording(siv))),
+                .child(Button::new(format!("{} Stop Rec", Icons::STOP), |siv| stop_recording(siv))),
         );
 
         chat_list_layout.add_child(DummyView.min_height(1));
@@ -70,7 +79,7 @@ impl AdvancedChatUI {
             })
             .with_name("mcp_tools_list");
         let mcp_panel = Panel::new(ScrollView::new(mcp_tools_view))
-            .title("MCP Tools (Enter for details)")
+            .title(format!("{} MCP Tools (Enter for details)", Icons::TOOL))
             .min_height(3)
             .max_height(15); // Allow more flexibility
         chat_list_layout.add_child(mcp_panel);
@@ -87,7 +96,7 @@ impl AdvancedChatUI {
             .with_name("chat_scroll");
 
         let chat_panel = Panel::new(chat_view)
-            .title("Chat History")
+            .title(format!("{} Chat History", Icons::CHAT))
             .title_position(cursive::align::HAlign::Left);
 
         chat_layout.add_child(chat_panel.full_height());
@@ -113,13 +122,15 @@ impl AdvancedChatUI {
 
         chat_layout.add_child(Panel::new(input_layout).title("Input"));
 
-        // Agent status bar with live updates
-        let agent_status = TextView::new("Agent: Initializing...").with_name("agent_status");
-        chat_layout.add_child(Panel::new(agent_status).title("Agent Status"));
+        // Agent status bar with live updates and icon
+        let agent_status = TextView::new(format!("{} Agent: Initializing...", Icons::LIGHTNING))
+            .with_name("agent_status");
+        chat_layout.add_child(Panel::new(agent_status).title(format!("{} Agent Status", Icons::ROCKET)));
 
-        // System status bar showing microVM/unikernel statuses and mounts
-        let system_status = TextView::new("OSVM: Initializing...").with_name("system_status_bar");
-        chat_layout.add_child(Panel::new(system_status).title("System Status"));
+        // System status bar showing microVM/unikernel statuses and mounts with icon
+        let system_status = TextView::new(format!("{} OSVM: Initializing...", Icons::STAR))
+            .with_name("system_status_bar");
+        chat_layout.add_child(Panel::new(system_status).title(format!("{} System Status", Icons::INFO)));
 
         // Control buttons
         let button_layout = LinearLayout::horizontal()

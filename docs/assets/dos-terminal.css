@@ -110,18 +110,21 @@ body::after {
   z-index: 1;
 }
 
-/* Main content wrapper */
+/* Main content wrapper - consistent padding */
 .main-wrapper, .page-content, body > div:not(.terminal-window) {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 0 20px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Ensure all content sections have consistent width */
-section, .intro, .features, .quick-start, .whats-new {
-  max-width: 1200px;
+section, .intro, .features, .quick-start, .whats-new, .examples, .cta-section {
+  max-width: 100%;
   margin-left: auto;
   margin-right: auto;
+  padding: 20px 0;
 }
 
 /* Headers with DOS box drawing */
@@ -419,12 +422,74 @@ select:focus {
 }
 
 /* Footer */
-footer {
+footer, .terminal-footer {
   margin-top: 40px;
   padding: 20px 0;
   border-top: double 3px var(--dos-white);
-  text-align: center;
   color: var(--dos-gray);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.footer-section h4 {
+  color: var(--dos-bright-white);
+  margin-bottom: 15px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.footer-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.footer-section li {
+  margin: 8px 0;
+}
+
+.footer-section li::before {
+  content: none;
+}
+
+.footer-section a {
+  color: var(--dos-cyan);
+  text-decoration: none;
+  border: none;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.footer-section a:hover {
+  color: var(--dos-bright-white);
+  background: transparent;
+  padding: 0;
+}
+
+.copyright {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  text-align: center;
+  border-top: 1px solid var(--dos-gray);
+}
+
+.command-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
 }
 
 /* Cursor blink animation */
@@ -515,6 +580,81 @@ footer {
   h1 { font-size: 20px; }
   h2 { font-size: 18px; }
   h3 { font-size: 16px; }
+
+  .main-wrapper, .page-content {
+    padding: 0 15px;
+  }
+
+  section {
+    padding: 15px 0;
+  }
+
+  .footer-content {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 0 15px;
+  }
+
+  .nav-menu {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .nav-brand {
+    margin-right: 15px;
+  }
+
+  pre {
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .ascii-art {
+    font-size: 8px;
+    overflow-x: auto;
+  }
+
+  .command-grid, .feature-grid, .news-grid {
+    grid-template-columns: 1fr !important;
+    gap: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 13px;
+    padding: 5px;
+  }
+
+  .main-wrapper, .page-content {
+    padding: 0 10px;
+  }
+
+  h1 { font-size: 18px; }
+  h2 { font-size: 16px; }
+  h3 { font-size: 14px; }
+
+  .nav-container {
+    padding: 0 10px;
+  }
+
+  .nav-menu {
+    gap: 5px;
+  }
+
+  nav a, .nav-link {
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+
+  pre {
+    font-size: 11px;
+    padding: 6px;
+  }
+
+  .footer-content {
+    padding: 0 10px;
+  }
 }
 
 /* Terminal prompt animation */

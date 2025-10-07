@@ -1,0 +1,149 @@
+<!-- Deployment Page -->
+<div class="page-header">
+    <div class="command-line">
+        <span class="prompt">user@osvm:~$</span>
+        <span class="command typing" data-speed="80">osvm deploy --help</span>
+    </div>
+</div>
+
+<!-- ASCII Art Header -->
+<pre class="ascii-art animate-on-scroll" data-animation="fadeIn">
+╔═══════════════════════════════════════════════════════╗
+║           SSH Deployment & Infrastructure            ║
+╟───────────────────────────────────────────────────────╢
+║  ██████╗ ███████╗██████╗ ██╗      ██████╗ ██╗   ██╗ ║
+║  ██╔══██╗██╔════╝██╔══██╗██║     ██╔═══██╗╚██╗ ██╔╝ ║
+║  ██║  ██║█████╗  ██████╔╝██║     ██║   ██║ ╚████╔╝  ║
+║  ██║  ██║██╔══╝  ██╔═══╝ ██║     ██║   ██║  ╚██╔╝   ║
+║  ██████╔╝███████╗██║     ███████╗╚██████╔╝   ██║    ║
+║  ╚═════╝ ╚══════╝╚═╝     ╚══════╝ ╚═════╝    ╚═╝    ║
+╚═══════════════════════════════════════════════════════╝
+</pre>
+
+<section class="content animate-on-scroll" data-animation="slideUp">
+    <h1>Deployment Solutions</h1>
+    <p class="subtitle">Zero-downtime deployment with hot-swap technology</p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h3>🚀 SSH Deployment</h3>
+            <pre class="code-block">
+<span class="comment"># Deploy validator to remote host</span>
+$ osvm user@remote-host \
+  --svm sonic,solana \
+  --node-type validator \
+  --network mainnet
+
+<span class="success">✓ SSH connection established</span>
+<span class="success">✓ Dependencies installed</span>
+<span class="success">✓ Services configured</span>
+<span class="success">✓ Validator running</span></pre>
+        </div>
+
+        <div class="feature-card">
+            <h3>🔄 Hot-Swap Updates</h3>
+            <pre class="code-block">
+<span class="comment"># Zero-downtime updates</span>
+$ osvm deploy --hot-swap
+
+<span class="info">Blue-green deployment:</span>
+1. Deploy new version (green)
+2. Sync state from blue
+3. Switch traffic to green
+4. Terminate blue instance
+
+<span class="success">✓ No downtime</span></pre>
+        </div>
+
+        <div class="feature-card">
+            <h3>📦 Program Deployment</h3>
+            <pre class="code-block">
+<span class="comment"># Deploy Solana program</span>
+$ osvm deploy ./target/deploy/program.so \
+  --program-id NEW \
+  --network devnet \
+  --publish-idl
+
+<span class="success">✓ Program deployed</span>
+<span class="success">✓ IDL published</span>
+<span class="info">ID: 7xKXt...9mPQ</span></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Supported SVMs</h2>
+        <pre class="terminal">
+$ osvm svm list
+┌─────────┬──────────┬─────────────────┬────────────────┐
+│ SVM     │ Status   │ Version         │ Network Support│
+├─────────┼──────────┼─────────────────┼────────────────┤
+│ <span class="success">Sonic</span>   │ Active   │ 1.0.0          │ Mainnet        │
+│ <span class="success">Solana</span>  │ Active   │ 3.0.0          │ All Networks   │
+│ <span class="success">Eclipse</span> │ Active   │ 0.9.0          │ Mainnet        │
+│ <span class="success">Soon</span>    │ Active   │ 0.5.0          │ Devnet         │
+│ <span class="info">Nitro</span>   │ Beta     │ 0.3.0          │ Testnet        │
+└─────────┴──────────┴─────────────────┴────────────────┘</pre>
+    </div>
+
+    <div class="section">
+        <h2>Infrastructure Automation</h2>
+        <pre class="terminal">
+<span class="comment"># Deploy complete infrastructure</span>
+$ osvm deploy-infrastructure \
+  --config ./infrastructure.yaml
+
+<span class="info">📋 Deployment Plan:</span>
+• 3 Validators (us-east, eu-west, asia)
+• 2 RPC nodes (load balanced)
+• 1 Archive node
+• Monitoring & alerting
+
+<span class="comment"># System optimization</span>
+$ osvm deploy --optimize
+<span class="success">✓ File descriptors: 1000000</span>
+<span class="success">✓ Network buffers: optimized</span>
+<span class="success">✓ CPU affinity: configured</span>
+<span class="success">✓ I/O scheduler: deadline</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Docker Deployment</h2>
+        <pre class="terminal">
+<span class="comment"># Build and deploy with Docker</span>
+$ ./build-docker.sh
+
+<span class="comment"># Run containerized OSVM</span>
+$ docker run -it osvm:latest \
+  -v ~/.osvm:/root/.osvm \
+  -p 8899:8899
+
+<span class="comment"># Docker Compose deployment</span>
+$ docker-compose up -d
+<span class="success">✓ osvm-validator   Running</span>
+<span class="success">✓ osvm-rpc         Running</span>
+<span class="success">✓ osvm-monitor     Running</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Monitoring & Health</h2>
+        <pre class="terminal">
+<span class="comment"># Monitor deployment status</span>
+$ osvm nodes status
+┌──────────┬─────────┬──────┬─────────┬──────────┐
+│ Node     │ Status  │ CPU% │ Memory  │ Disk I/O │
+├──────────┼─────────┼──────┼─────────┼──────────┤
+│ val-01   │ <span class="success">Healthy</span> │ 45%  │ 12.3 GB │ 450 MB/s │
+│ val-02   │ <span class="success">Healthy</span> │ 52%  │ 14.1 GB │ 380 MB/s │
+│ rpc-01   │ <span class="success">Healthy</span> │ 28%  │ 8.7 GB  │ 120 MB/s │
+└──────────┴─────────┴──────┴─────────┴──────────┘
+
+<span class="comment"># Real-time logs</span>
+$ osvm nodes logs val-01 --follow
+<span class="info">[2025-10-06 15:45:00] Processing slot 250000000</span>
+<span class="success">[2025-10-06 15:45:01] Block confirmed</span></pre>
+    </div>
+</section>
+
+<div class="navigation-hint animate-on-scroll" data-animation="fadeIn">
+    <p>Press <kbd>TAB</kbd> to cycle options • <kbd>ENTER</kbd> to select</p>
+</div>
