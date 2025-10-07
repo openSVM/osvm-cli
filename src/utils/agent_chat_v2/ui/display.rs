@@ -14,6 +14,7 @@ use super::super::utils::markdown::render_markdown;
 use super::super::utils::{sanitize_json_for_ui, sanitize_text_for_ui};
 use super::handlers::handle_chat_selection;
 use super::layout::AdvancedChatUI;
+use super::theme::{Icons, StyledText, Spinners, ProgressBar};
 
 impl AdvancedChatUI {
     /// Apply theme styling to a message based on its type
@@ -155,22 +156,22 @@ impl AdvancedChatUI {
 
                 for (id, name, agent_state) in session_names.iter() {
                     let status_icon = match agent_state {
-                        AgentState::Idle => "*",
-                        AgentState::Thinking => "~",
-                        AgentState::Planning => "~",
-                        AgentState::ExecutingTool(_) => ">",
-                        AgentState::Waiting => ".",
-                        AgentState::Paused => "||",
-                        AgentState::Error(_) => "!",
+                        AgentState::Idle => Icons::IDLE,
+                        AgentState::Thinking => Icons::THINKING,
+                        AgentState::Planning => Icons::PLANNING,
+                        AgentState::ExecutingTool(_) => Icons::EXECUTING,
+                        AgentState::Waiting => Icons::WAITING,
+                        AgentState::Paused => Icons::PAUSED,
+                        AgentState::Error(_) => Icons::ERROR,
                     };
 
                     let text_name = format!("");
                     let display_name = format!("{} {}", status_icon, name);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("►{}", display_name)
+                        format!("{} {}", Icons::ARROW_RIGHT, display_name)
                     } else {
-                        format!(" {}", display_name)
+                        format!("  {}", display_name)
                     };
 
                     let session_id = *id;
@@ -187,19 +188,19 @@ impl AdvancedChatUI {
 
                 for (id, name, agent_state) in session_names.iter() {
                     let status_icon = match agent_state {
-                        AgentState::Idle => "*",
-                        AgentState::Thinking => "~",
-                        AgentState::Planning => "~",
-                        AgentState::ExecutingTool(_) => ">",
-                        AgentState::Waiting => ".",
-                        AgentState::Paused => "||",
-                        AgentState::Error(_) => "!",
+                        AgentState::Idle => Icons::IDLE,
+                        AgentState::Thinking => Icons::THINKING,
+                        AgentState::Planning => Icons::PLANNING,
+                        AgentState::ExecutingTool(_) => Icons::EXECUTING,
+                        AgentState::Waiting => Icons::WAITING,
+                        AgentState::Paused => Icons::PAUSED,
+                        AgentState::Error(_) => Icons::ERROR,
                     };
 
                     let display_name = format!("{} {}", status_icon, name);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("> {}", display_name)
+                        format!("{} {}", Icons::ARROW_RIGHT, display_name)
                     } else {
                         format!("  {}", display_name)
                     };
@@ -226,15 +227,15 @@ impl AdvancedChatUI {
             } else {
                 // Add each tool individually
                 for (server_id, tool_list) in tools.iter() {
-                    // Add server header
+                    // Add server header with icon
                     mcp_tools_view.add_item(
-                        format!("─── {} ({} tools) ───", server_id, tool_list.len()),
+                        format!("{} {} ({} tools)", Icons::FOLDER, server_id, tool_list.len()),
                         (server_id.clone(), "".to_string())
                     );
                     
-                    // Add individual tools
+                    // Add individual tools with icons
                     for tool in tool_list.iter() {
-                        let display_name = format!("  • {}", tool.name);
+                        let display_name = format!("  {} {}", Icons::TOOL, tool.name);
                         mcp_tools_view.add_item(
                             display_name,
                             (server_id.clone(), tool.name.clone())
@@ -279,14 +280,14 @@ impl AdvancedChatUI {
         use std::sync::atomic::Ordering;
 
         let spinner_index = self.state.spinner_state.load(Ordering::Relaxed);
-        let spinner_chars = vec!["|", "/", "-", "\\", "|", "/", "-", "\\"];
+        let spinner_chars = Spinners::DOTS_WAVE;
         let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
 
         let timestamp = Utc::now().format("%H:%M:%S");
 
         let status_text = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => format!("Agent: Idle | Ready for tasks | {}", timestamp),
+                AgentState::Idle => format!("{} Agent: Idle | Ready for tasks | {}", Icons::IDLE, timestamp),
                 AgentState::Thinking => format!(
                     "{} Agent: Thinking... | Analyzing request | {}",
                     spinner_char, timestamp

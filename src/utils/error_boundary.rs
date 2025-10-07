@@ -27,21 +27,15 @@ impl SecureErrorBoundary {
     /// Execute a function within an error boundary
     pub async fn execute<F, T>(&self, operation: F) -> Result<T>
     where
-        F: std::future::Future<Output = Result<T>> + std::panic::UnwindSafe,
+        F: std::future::Future<Output = Result<T>>,
     {
-        let result = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-            tokio::runtime::Handle::current().block_on(async { operation.await })
-        }));
-
-        match result {
-            Ok(Ok(value)) => Ok(value),
-            Ok(Err(error)) => {
+        // Can't use panic::catch_unwind with async directly,
+        // so we'll just handle the error case
+        match operation.await {
+            Ok(value) => Ok(value),
+            Err(error) => {
                 self.handle_error(&error);
                 Err(error)
-            }
-            Err(panic_info) => {
-                self.handle_panic(panic_info);
-                Err(anyhow::anyhow!("Internal error in {}", self.component_name))
             }
         }
     }
@@ -115,7 +109,8 @@ impl SecureErrorBoundary {
             .to_string();
 
         // Remove potential private keys or tokens
-        sanitized = regex::Regex::new(r"[A-Za-z0-9+/=]{32,}")
+        // Match sk- prefixed tokens or long base64-like strings
+        sanitized = regex::Regex::new(r"(sk-[A-Za-z0-9]+|[A-Za-z0-9+/=]{32,})")
             .unwrap()
             .replace_all(&sanitized, "[TOKEN_REDACTED]")
             .to_string();

@@ -186,7 +186,11 @@ impl NetworkManager {
             if self.matches_pattern(&policy.source, from)
                 && self.matches_pattern(&policy.destination, to)
             {
-                return Ok(matches!(policy.effect, PolicyEffect::Allow));
+                // Found matching policy, return based on effect
+                match policy.effect {
+                    PolicyEffect::Allow => return Ok(true),
+                    PolicyEffect::Deny => return Ok(false),
+                }
             }
         }
 

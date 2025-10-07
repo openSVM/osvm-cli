@@ -61,6 +61,8 @@ pub mod secure_logger;
 pub mod secure_system;
 /// Advanced theme customization system
 pub mod themes;
+/// Modern theme system with gradients and effects
+pub mod theme;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions

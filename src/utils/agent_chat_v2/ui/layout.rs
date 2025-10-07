@@ -15,6 +15,7 @@ use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
 use super::handlers::show_context_menu;
 use super::handlers::*;
+use super::theme::{ModernTheme, Icons, Decorations};
 
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
@@ -108,9 +109,12 @@ impl AdvancedChatUI {
     pub fn setup_far_ui(&self, siv: &mut Cursive) {
         let state = self.state.clone();
 
-        // Apply current theme to cursive interface
+        // Apply modern dark theme instead of default
+        siv.set_theme(ModernTheme::dark());
+        
+        // Or try to apply current theme if available
         if let Err(e) = self.apply_theme_to_cursive(siv) {
-            log::warn!("Failed to apply theme to cursive: {}", e);
+            log::warn!("Failed to apply custom theme, using modern dark theme");
         }
 
         // Main horizontal layout: Chat List | Chat History
@@ -133,22 +137,22 @@ impl AdvancedChatUI {
         let chat_panel = self.create_chat_panel();
         main_layout.add_child(chat_panel.full_width());
 
-        // Wrap in main dialog with dynamic title showing agent status
+        // Wrap in main dialog with dynamic title showing agent status with icons
         let title = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => "OSVM Agent - Idle".to_string(),
-                AgentState::Thinking => "OSVM Agent - Thinking...".to_string(),
-                AgentState::Planning => "OSVM Agent - Planning...".to_string(),
-                AgentState::ExecutingTool(ref tool) => format!("OSVM Agent - Executing {}", tool),
-                AgentState::Waiting => "OSVM Agent - Waiting".to_string(),
-                AgentState::Paused => "OSVM Agent - Paused".to_string(),
-                AgentState::Error(ref err) => format!("OSVM Agent - Error: {}", err),
+                AgentState::Idle => format!("{} OSVM Agent - Idle", Icons::IDLE),
+                AgentState::Thinking => format!("{} OSVM Agent - Thinking...", Icons::THINKING),
+                AgentState::Planning => format!("{} OSVM Agent - Planning...", Icons::PLANNING),
+                AgentState::ExecutingTool(ref tool) => format!("{} OSVM Agent - Executing {}", Icons::EXECUTING, tool),
+                AgentState::Waiting => format!("{} OSVM Agent - Waiting", Icons::WAITING),
+                AgentState::Paused => format!("{} OSVM Agent - Paused", Icons::PAUSED),
+                AgentState::Error(ref err) => format!("{} OSVM Agent - Error: {}", Icons::ERROR, err),
             }
         } else {
-            "OSVM Agent".to_string()
+            format!("{} {} OSVM Agent Chat {}", Icons::ROCKET, Icons::SPARKLES, Icons::SPARKLES)
         };
         let dialog = Dialog::around(main_layout)
-            .title(title)
+            .title(Decorations::fancy_header(&title))
             .title_position(cursive::align::HAlign::Center);
 
         siv.add_fullscreen_layer(dialog);
