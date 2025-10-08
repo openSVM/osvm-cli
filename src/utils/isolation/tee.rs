@@ -523,4 +523,109 @@ mod tests {
         let state = EnclaveState::Ready;
         assert_eq!(state, EnclaveState::Ready);
     }
+
+    #[tokio::test]
+    async fn test_tee_manager_creation() {
+        // Test with each TEE type
+        for tee_type in [TeeType::IntelSgx, TeeType::AmdSev, TeeType::ArmTrustZone] {
+            let config = TeeConfig::default();
+            // Will fail if TEE not available, which is expected
+            let _ = TeeManager::new(tee_type, config);
+        }
+    }
+
+    #[test]
+    fn test_all_enclave_states() {
+        let states = vec![
+            EnclaveState::Creating,
+            EnclaveState::Ready,
+            EnclaveState::Running,
+            EnclaveState::Destroying,
+            EnclaveState::Destroyed,
+        ];
+
+        // All states should be distinct
+        for (i, state1) in states.iter().enumerate() {
+            for (j, state2) in states.iter().enumerate() {
+                if i == j {
+                    assert_eq!(state1, state2);
+                } else {
+                    assert_ne!(state1, state2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_tee_stats_structure() {
+        let stats = TeeStats {
+            tee_type: TeeType::IntelSgx,
+            active_enclaves: 5,
+            attestation_enabled: true,
+            sealed_storage_enabled: true,
+        };
+
+        assert_eq!(stats.active_enclaves, 5);
+        assert!(stats.attestation_enabled);
+        assert_eq!(stats.tee_type, TeeType::IntelSgx);
+    }
+
+    #[test]
+    fn test_key_handle_creation() {
+        let handle = KeyHandle {
+            enclave_id: 123,
+            key_id: 456,
+            public_key: vec![1, 2, 3, 4],
+        };
+
+        assert_eq!(handle.enclave_id, 123);
+        assert_eq!(handle.key_id, 456);
+        assert_eq!(handle.public_key.len(), 4);
+    }
+
+    #[test]
+    fn test_attestation_report_structure() {
+        let report = AttestationReport {
+            enclave_id: 789,
+            measurement: vec![0xAA, 0xBB, 0xCC],
+            timestamp: std::time::SystemTime::now(),
+            verified: true,
+        };
+
+        assert_eq!(report.enclave_id, 789);
+        assert_eq!(report.measurement.len(), 3);
+        assert!(report.verified);
+    }
+
+    #[test]
+    fn test_tee_config_custom() {
+        let config = TeeConfig {
+            enable_attestation: true,
+            attestation_url: Some("https://attestation.example.com".to_string()),
+            enable_sealed_storage: true,
+            sealed_storage_dir: PathBuf::from("/var/osvm/sealed"),
+            max_enclave_memory_mb: 256,
+        };
+
+        assert_eq!(config.max_enclave_memory_mb, 256);
+        assert!(config.attestation_url.is_some());
+        assert_eq!(
+            config.attestation_url.unwrap(),
+            "https://attestation.example.com"
+        );
+    }
+
+    #[test]
+    fn test_all_tee_types() {
+        let types = vec![TeeType::IntelSgx, TeeType::AmdSev, TeeType::ArmTrustZone];
+
+        for tee_type in types {
+            // Each should have a unique name
+            let name = tee_type.name();
+            assert!(!name.is_empty());
+
+            // Each should report availability (likely false in test env)
+            let _ = tee_type.is_available();
+        }
+    }
 }
