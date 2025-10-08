@@ -51,6 +51,16 @@ Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Sola
 - [**DeepLogic AI Analysis**](deeplogic-ai-analysis.md) - Advanced vulnerability detection
 - [**Security Audit**](security-audit.md) - Automated security analysis and reporting
 
+### 🧠 OVSM Language (NEW!)
+- [**OVSM Overview**](ovsm/OVSM_README.md) - Introduction to OVSM planning language
+- [**Core Specification**](ovsm/ovsm-spec.md) - Complete OVSM language reference (207 tools)
+- [**Agent Extensions**](ovsm/ovsm-agents.md) - Multi-agent research features (15 advanced capabilities)
+- [**Tool Index**](ovsm/COMPLETE_TOOL_INDEX.md) - Comprehensive tool reference
+- [**Planning Guide**](ovsm/PLANNING_FORMAT.md) - How to write OVSM research plans
+
+**What is OVSM?**
+OVSM (Open Versatile Seeker Mind) is a domain-specific language for expressing AI agent research plans with conditional branching, parallel execution, and adaptive learning. It enables sophisticated multi-agent workflows for blockchain investigation, statistical analysis, and knowledge discovery.
+
 ### 🔌 MCP Integration
 - [**MCP Integration Guide**](mcp-integration.md) - Model Context Protocol server setup
 - [**GitHub MCP Servers**](mcp-integration.md#github-integration) - Repository-based server deployment
