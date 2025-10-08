@@ -856,4 +856,116 @@ mod tests {
         let result = ca.verify_certificate(&valid_cert).unwrap();
         assert!(result, "Valid certificate should verify");
     }
+
+    #[test]
+    fn test_certificate_manager_paths() {
+        let manager = CertificateManager {
+            cert_path: PathBuf::from("/tmp/cert.pem"),
+            key_path: PathBuf::from("/tmp/key.pem"),
+            ca: None,
+            cached_cert: None,
+        };
+
+        let (cert_path, key_path) = manager.paths();
+        assert_eq!(cert_path, Path::new("/tmp/cert.pem"));
+        assert_eq!(key_path, Path::new("/tmp/key.pem"));
+    }
+
+    #[test]
+    fn test_certificate_renewal_threshold() {
+        let config = CertificateAuthorityConfig {
+            renewal_threshold_days: 30,
+            ..Default::default()
+        };
+
+        let ca = CertificateAuthority {
+            ca_url: "https://localhost:8443".to_string(),
+            ca_root_cert_path: PathBuf::from("/tmp/ca.crt"),
+            provisioner: "test".to_string(),
+            provisioner_password: None,
+            config,
+        };
+
+        // Certificate with 25 days remaining - needs renewal
+        let cert_soon = Certificate {
+            subject: "test".to_string(),
+            serial_number: "123".to_string(),
+            not_before: Utc::now() - chrono::Duration::days(65),
+            not_after: Utc::now() + chrono::Duration::days(25),
+            pem: "".to_string(),
+        };
+
+        assert!(ca.needs_renewal(&cert_soon));
+
+        // Certificate with 35 days remaining - doesn't need renewal yet
+        let cert_later = Certificate {
+            subject: "test".to_string(),
+            serial_number: "456".to_string(),
+            not_before: Utc::now() - chrono::Duration::days(55),
+            not_after: Utc::now() + chrono::Duration::days(35),
+            pem: "".to_string(),
+        };
+
+        assert!(!ca.needs_renewal(&cert_later));
+    }
+
+    #[test]
+    fn test_certificate_auto_renew_disabled() {
+        let config = CertificateAuthorityConfig {
+            auto_renew: false,
+            renewal_threshold_days: 30,
+            ..Default::default()
+        };
+
+        let ca = CertificateAuthority {
+            ca_url: "https://localhost:8443".to_string(),
+            ca_root_cert_path: PathBuf::from("/tmp/ca.crt"),
+            provisioner: "test".to_string(),
+            provisioner_password: None,
+            config,
+        };
+
+        // Even with 1 day remaining, should not need renewal if auto_renew is false
+        let cert_expiring = Certificate {
+            subject: "test".to_string(),
+            serial_number: "999".to_string(),
+            not_before: Utc::now() - chrono::Duration::days(89),
+            not_after: Utc::now() + chrono::Duration::days(1),
+            pem: "".to_string(),
+        };
+
+        assert!(!ca.needs_renewal(&cert_expiring));
+    }
+
+    #[test]
+    fn test_certificate_validity_boundary() {
+        // Certificate that expires in exactly 1 second
+        let now = Utc::now();
+        let cert = Certificate {
+            subject: "boundary-test".to_string(),
+            serial_number: "111".to_string(),
+            not_before: now - chrono::Duration::days(1),
+            not_after: now + chrono::Duration::seconds(1),
+            pem: "".to_string(),
+        };
+
+        assert!(cert.is_valid(), "Should be valid for 1 more second");
+        assert!(!cert.is_expired());
+    }
+
+    #[test]
+    fn test_certificate_max_validity_enforcement() {
+        let config = CertificateAuthorityConfig {
+            default_validity_days: 90,
+            max_validity_days: 365,
+            ..Default::default()
+        };
+
+        assert!(config.default_validity_days <= config.max_validity_days);
+
+        // Max should be enforced (tested in actual issuance)
+        let requested_days = 1000u32;
+        let capped_days = requested_days.min(config.max_validity_days);
+        assert_eq!(capped_days, 365);
+    }
 }

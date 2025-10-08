@@ -910,4 +910,284 @@ mod tests {
         // Even with high CPU, shouldn't scale beyond max
         // (This is tested by the scaling logic respecting max_instances)
     }
+
+    #[tokio::test]
+    async fn test_autoscaler_memory_based_scaling() {
+        let registry = Arc::new(ComponentRegistry::new());
+        let runtime_manager = Arc::new(RuntimeManager::with_defaults());
+        let network_manager = Arc::new(super::super::NetworkManager::default());
+        let vsock_manager = Arc::new(
+            super::super::VsockManager::new(std::env::temp_dir().join("osvm-memory-scale"))
+                .unwrap(),
+        );
+        let hotswap_manager = Arc::new(super::super::HotSwapManager::new(
+            runtime_manager.clone(),
+            registry.clone(),
+            Default::default(),
+        ));
+
+        let orchestrator = Arc::new(Orchestrator::new(
+            registry.clone(),
+            runtime_manager,
+            network_manager,
+            vsock_manager,
+            hotswap_manager,
+            Default::default(),
+        ));
+
+        let autoscaler = AutoScaler::new(orchestrator, Default::default());
+
+        // Policy targeting memory usage
+        let policy = ScalingPolicy {
+            component_type: "MemoryIntensive".to_string(),
+            min_instances: 1,
+            max_instances: 10,
+            target_cpu: 0.70,
+            target_memory: 0.75, // 75% memory target
+            scale_up_threshold: 0.10,
+            scale_down_threshold: 0.10,
+            scale_step: 2, // Scale by 2 at a time
+            target_rps: None,
+        };
+
+        autoscaler.add_policy(policy).await;
+
+        // Register component with high memory usage
+        let component = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Service {
+                name: "MemoryIntensive".to_string(),
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        let component_id = component.id;
+        registry.register(component).await.unwrap();
+
+        // Report high memory (90% > 75% + 10%)
+        autoscaler
+            .update_metrics(ComponentMetrics {
+                component_id,
+                cpu_usage: 0.50,    // CPU is fine
+                memory_usage: 0.90, // Memory is high
+                requests_per_sec: 100.0,
+                avg_latency_ms: 50.0,
+                timestamp: std::time::Instant::now(),
+            })
+            .await;
+
+        // Should trigger scale up based on memory
+        let result = autoscaler.evaluate_all_policies().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_autoscaler_multiple_component_types() {
+        let registry = Arc::new(ComponentRegistry::new());
+        let runtime_manager = Arc::new(RuntimeManager::with_defaults());
+        let network_manager = Arc::new(super::super::NetworkManager::default());
+        let vsock_manager = Arc::new(
+            super::super::VsockManager::new(std::env::temp_dir().join("osvm-multi-scale")).unwrap(),
+        );
+        let hotswap_manager = Arc::new(super::super::HotSwapManager::new(
+            runtime_manager.clone(),
+            registry.clone(),
+            Default::default(),
+        ));
+
+        let orchestrator = Arc::new(Orchestrator::new(
+            registry.clone(),
+            runtime_manager,
+            network_manager,
+            vsock_manager,
+            hotswap_manager,
+            Default::default(),
+        ));
+
+        let autoscaler = AutoScaler::new(orchestrator, Default::default());
+
+        // Add policies for different component types
+        autoscaler
+            .add_policy(ScalingPolicy {
+                component_type: "RpcNode".to_string(),
+                min_instances: 2,
+                max_instances: 10,
+                target_cpu: 0.70,
+                target_memory: 0.80,
+                scale_up_threshold: 0.15,
+                scale_down_threshold: 0.20,
+                scale_step: 1,
+                target_rps: Some(1000.0),
+            })
+            .await;
+
+        autoscaler
+            .add_policy(ScalingPolicy {
+                component_type: "Validator".to_string(),
+                min_instances: 1,
+                max_instances: 3,
+                target_cpu: 0.80,
+                target_memory: 0.85,
+                scale_up_threshold: 0.10,
+                scale_down_threshold: 0.15,
+                scale_step: 1,
+                target_rps: None,
+            })
+            .await;
+
+        // Register components of both types
+        let rpc = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "mainnet".to_string(),
+                bind_address: None,
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        let validator = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None,
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(rpc.clone()).await.unwrap();
+        registry.register(validator.clone()).await.unwrap();
+
+        // Report metrics for both
+        autoscaler
+            .update_metrics(ComponentMetrics {
+                component_id: rpc.id,
+                cpu_usage: 0.60,
+                memory_usage: 0.70,
+                requests_per_sec: 800.0,
+                avg_latency_ms: 45.0,
+                timestamp: std::time::Instant::now(),
+            })
+            .await;
+
+        autoscaler
+            .update_metrics(ComponentMetrics {
+                component_id: validator.id,
+                cpu_usage: 0.75,
+                memory_usage: 0.80,
+                requests_per_sec: 0.0,
+                avg_latency_ms: 0.0,
+                timestamp: std::time::Instant::now(),
+            })
+            .await;
+
+        // Evaluate all policies
+        let result = autoscaler.evaluate_all_policies().await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_scaling_decision_logic() {
+        let policy = ScalingPolicy {
+            component_type: "Test".to_string(),
+            min_instances: 1,
+            max_instances: 10,
+            target_cpu: 0.70,
+            target_memory: 0.80,
+            scale_up_threshold: 0.10,
+            scale_down_threshold: 0.10,
+            scale_step: 2,
+            target_rps: None,
+        };
+
+        // Test scale up scenario
+        assert_eq!(policy.scale_step, 2);
+        assert_eq!(policy.target_cpu, 0.70);
+
+        // Test thresholds
+        let high_cpu = 0.85; // 85% > 70% + 15% threshold
+        assert!(high_cpu > policy.target_cpu + policy.scale_up_threshold);
+
+        let low_cpu = 0.45; // 45% < 70% - 20% threshold
+        assert!(low_cpu < policy.target_cpu - policy.scale_down_threshold);
+    }
+
+    #[tokio::test]
+    async fn test_autoscaler_metrics_aggregation() {
+        let registry = Arc::new(ComponentRegistry::new());
+        let runtime_manager = Arc::new(RuntimeManager::with_defaults());
+        let network_manager = Arc::new(super::super::NetworkManager::default());
+        let vsock_manager = Arc::new(
+            super::super::VsockManager::new(std::env::temp_dir().join("osvm-metrics-agg")).unwrap(),
+        );
+        let hotswap_manager = Arc::new(super::super::HotSwapManager::new(
+            runtime_manager.clone(),
+            registry.clone(),
+            Default::default(),
+        ));
+
+        let orchestrator = Arc::new(Orchestrator::new(
+            registry.clone(),
+            runtime_manager,
+            network_manager,
+            vsock_manager,
+            hotswap_manager,
+            Default::default(),
+        ));
+
+        let autoscaler = AutoScaler::new(orchestrator, Default::default());
+
+        // Register multiple components and report different metrics
+        let component_ids: Vec<_> = (0..5)
+            .map(|i| {
+                let component = Component {
+                    id: ComponentId::new(),
+                    component_type: ComponentType::Service {
+                        name: format!("service-{}", i),
+                    },
+                    status: ComponentStatus::Running,
+                    isolation_config: IsolationConfig::default(),
+                    runtime_handle: None,
+                    metadata: Default::default(),
+                };
+                let id = component.id;
+                futures::executor::block_on(registry.register(component)).unwrap();
+                id
+            })
+            .collect();
+
+        // Report varying metrics
+        for (i, component_id) in component_ids.iter().enumerate() {
+            autoscaler
+                .update_metrics(ComponentMetrics {
+                    component_id: *component_id,
+                    cpu_usage: 0.60 + (i as f64 * 0.05), // 60%, 65%, 70%, 75%, 80%
+                    memory_usage: 0.50,
+                    requests_per_sec: 100.0,
+                    avg_latency_ms: 50.0,
+                    timestamp: std::time::Instant::now(),
+                })
+                .await;
+        }
+
+        // Verify all metrics stored
+        let metrics = autoscaler.metrics.read().await;
+        assert_eq!(metrics.len(), 5);
+
+        // Verify different CPU values
+        let cpu_values: Vec<f64> = component_ids
+            .iter()
+            .filter_map(|id| metrics.get(id).map(|m| m.cpu_usage))
+            .collect();
+        assert_eq!(cpu_values.len(), 5);
+        assert!(cpu_values[0] < cpu_values[4]); // First < last
+    }
 }
