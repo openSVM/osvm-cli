@@ -60,7 +60,10 @@ impl ActivityLogger {
     pub async fn set_enabled(&self, enabled: bool) {
         let mut state = self.enabled.lock().await;
         *state = enabled;
-        info!("Activity logging {}", if enabled { "enabled" } else { "disabled" });
+        info!(
+            "Activity logging {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     /// Check if activity logging is enabled
@@ -119,12 +122,22 @@ impl ActivityLogger {
             ChatMessage::System(content) => ("System", content.clone(), 0),
             ChatMessage::Processing { message, .. } => ("Processing", message.clone(), 0),
             ChatMessage::Error(content) => ("Error", content.clone(), 0),
-            ChatMessage::ToolCall { tool_name, description, .. } => {
-                ("System", format!("🔧 Tool: {} - {}", tool_name, description), 0)
-            }
-            ChatMessage::ToolResult { tool_name, result, .. } => {
-                ("System", format!("✓ Tool result ({}): {}", tool_name, result), 0)
-            }
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                ..
+            } => (
+                "System",
+                format!("🔧 Tool: {} - {}", tool_name, description),
+                0,
+            ),
+            ChatMessage::ToolResult {
+                tool_name, result, ..
+            } => (
+                "System",
+                format!("✓ Tool result ({}): {}", tool_name, result),
+                0,
+            ),
             ChatMessage::AgentThinking(content) => ("Processing", content.clone(), 0),
             ChatMessage::AgentPlan(_) => ("System", "Agent created execution plan".to_string(), 0),
         };
@@ -201,7 +214,10 @@ impl ActivityLogger {
             return Ok(());
         }
 
-        debug!("Flushing {} chat message log entries to database", buffer.len());
+        debug!(
+            "Flushing {} chat message log entries to database",
+            buffer.len()
+        );
 
         // Build batch insert query
         let mut values = Vec::new();
@@ -215,7 +231,7 @@ impl ActivityLogger {
                 "Error" => 5,
                 _ => 3,
             };
-            
+
             values.push(format!(
                 "({}, '{}', '{}', {}, '{}', {}, '{}')",
                 timestamp,
@@ -235,7 +251,10 @@ impl ActivityLogger {
 
         match self.clickhouse.execute_query(&sql).await {
             Ok(_) => {
-                debug!("Successfully flushed {} chat message log entries", buffer.len());
+                debug!(
+                    "Successfully flushed {} chat message log entries",
+                    buffer.len()
+                );
                 buffer.clear();
                 Ok(())
             }
@@ -338,8 +357,7 @@ impl ActivityLogger {
 
     /// Escape SQL string values
     fn escape_string(s: &str) -> String {
-        s.replace('\'', "''")
-            .replace('\\', "\\\\")
+        s.replace('\'', "''").replace('\\', "\\\\")
     }
 
     /// Validate limit parameter to prevent SQL injection
@@ -372,7 +390,7 @@ impl Drop for ActivityLogger {
         tokio::spawn(async move {
             let cmd_buf = command_buffer.lock().await;
             let chat_buf = chat_buffer.lock().await;
-            
+
             if !cmd_buf.is_empty() || !chat_buf.is_empty() {
                 debug!("Flushing activity logs on drop...");
             }
@@ -387,7 +405,10 @@ mod tests {
     #[test]
     fn test_escape_string() {
         assert_eq!(ActivityLogger::escape_string("hello'world"), "hello''world");
-        assert_eq!(ActivityLogger::escape_string("path\\to\\file"), "path\\\\to\\\\file");
+        assert_eq!(
+            ActivityLogger::escape_string("path\\to\\file"),
+            "path\\\\to\\\\file"
+        );
     }
 
     #[test]

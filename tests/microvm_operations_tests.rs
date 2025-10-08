@@ -2,15 +2,15 @@
 
 use anyhow::Result;
 use osvm::utils::isolation::{
-    ComponentId, ComponentType, ComponentStatus, ComponentRegistry,
-    IsolationManager, IsolationConfig, ResourceLimits,
+    network::{ComponentPattern, NetworkManager, NetworkPolicy, PolicyEffect},
     runtime::{Runtime, RuntimeConfig, RuntimeType},
-    network::{NetworkManager, NetworkPolicy, PolicyEffect, ComponentPattern},
+    ComponentId, ComponentRegistry, ComponentStatus, ComponentType, IsolationConfig,
+    IsolationManager, ResourceLimits,
 };
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::time::sleep;
 use tempfile::TempDir;
+use tokio::time::sleep;
 
 /// Create a test isolation configuration
 fn create_test_isolation_config(temp_dir: &TempDir) -> IsolationConfig {
@@ -46,21 +46,27 @@ mod component_tests {
 
         // Create component
         let component_id = ComponentId::new();
-        let component = registry.create_component(
-            component_id,
-            ComponentType::Runtime("test-runtime".to_string()),
-        ).await?;
+        let component = registry
+            .create_component(
+                component_id,
+                ComponentType::Runtime("test-runtime".to_string()),
+            )
+            .await?;
 
         assert_eq!(component.id(), component_id);
         assert_eq!(component.status(), ComponentStatus::Created);
 
         // Start component
-        registry.update_status(component_id, ComponentStatus::Running).await?;
+        registry
+            .update_status(component_id, ComponentStatus::Running)
+            .await?;
         let component = registry.get_component(component_id).await?;
         assert_eq!(component.status(), ComponentStatus::Running);
 
         // Stop component
-        registry.update_status(component_id, ComponentStatus::Stopped).await?;
+        registry
+            .update_status(component_id, ComponentStatus::Stopped)
+            .await?;
         let component = registry.get_component(component_id).await?;
         assert_eq!(component.status(), ComponentStatus::Stopped);
 
@@ -81,10 +87,9 @@ mod component_tests {
         for i in 0..5 {
             let id = ComponentId::new();
             component_ids.push(id);
-            registry.create_component(
-                id,
-                ComponentType::Service(format!("service-{}", i)),
-            ).await?;
+            registry
+                .create_component(id, ComponentType::Service(format!("service-{}", i)))
+                .await?;
         }
 
         // List all components
@@ -92,9 +97,9 @@ mod component_tests {
         assert_eq!(components.len(), 5);
 
         // Filter by type
-        let services = registry.list_components_by_type(
-            ComponentType::Service("".to_string())
-        ).await?;
+        let services = registry
+            .list_components_by_type(ComponentType::Service("".to_string()))
+            .await?;
         assert_eq!(services.len(), 5);
 
         // Cleanup
@@ -174,7 +179,7 @@ mod isolation_tests {
             name: "excessive-runtime".to_string(),
             runtime_type: RuntimeType::Process,
             resource_limits: ResourceLimits {
-                cpu_cores: 1000, // Way too many
+                cpu_cores: 1000,    // Way too many
                 memory_mb: 1000000, // Way too much
                 disk_gb: 10000,
                 network_bandwidth_mbps: Some(100000),
@@ -229,12 +234,11 @@ mod isolation_tests {
             handles.push(handle);
         }
 
-        let results: Vec<Result<ComponentId>> =
-            futures::future::join_all(handles)
-                .await
-                .into_iter()
-                .map(|r| r.unwrap())
-                .collect();
+        let results: Vec<Result<ComponentId>> = futures::future::join_all(handles)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
 
         assert_eq!(results.len(), 3);
         for result in results {
@@ -260,27 +264,37 @@ mod network_isolation_tests {
         let component_c = ComponentId::new();
 
         // Default should deny
-        let allowed = network_manager.is_connection_allowed(component_a, component_b).await?;
+        let allowed = network_manager
+            .is_connection_allowed(component_a, component_b)
+            .await?;
         assert!(!allowed);
 
         // Add allow policy for A -> B
-        network_manager.add_policy(NetworkPolicy {
-            source: ComponentPattern::Specific(component_a),
-            destination: ComponentPattern::Specific(component_b),
-            effect: PolicyEffect::Allow,
-            constraints: Default::default(),
-        }).await;
+        network_manager
+            .add_policy(NetworkPolicy {
+                source: ComponentPattern::Specific(component_a),
+                destination: ComponentPattern::Specific(component_b),
+                effect: PolicyEffect::Allow,
+                constraints: Default::default(),
+            })
+            .await;
 
         // Now A -> B should be allowed
-        let allowed = network_manager.is_connection_allowed(component_a, component_b).await?;
+        let allowed = network_manager
+            .is_connection_allowed(component_a, component_b)
+            .await?;
         assert!(allowed);
 
         // But A -> C should still be denied
-        let allowed = network_manager.is_connection_allowed(component_a, component_c).await?;
+        let allowed = network_manager
+            .is_connection_allowed(component_a, component_c)
+            .await?;
         assert!(!allowed);
 
         // And B -> A should be denied (policies are directional)
-        let allowed = network_manager.is_connection_allowed(component_b, component_a).await?;
+        let allowed = network_manager
+            .is_connection_allowed(component_b, component_a)
+            .await?;
         assert!(!allowed);
 
         Ok(())
@@ -295,16 +309,20 @@ mod network_isolation_tests {
         let service_1 = ComponentId::new();
 
         // Allow all runtimes to connect to any service
-        network_manager.add_policy(NetworkPolicy {
-            source: ComponentPattern::Type("runtime".to_string()),
-            destination: ComponentPattern::Type("service".to_string()),
-            effect: PolicyEffect::Allow,
-            constraints: Default::default(),
-        }).await;
+        network_manager
+            .add_policy(NetworkPolicy {
+                source: ComponentPattern::Type("runtime".to_string()),
+                destination: ComponentPattern::Type("service".to_string()),
+                effect: PolicyEffect::Allow,
+                constraints: Default::default(),
+            })
+            .await;
 
         // Runtime to service should be allowed
         // Note: This will pass because the matches_pattern for Type always returns true (TODO)
-        let allowed = network_manager.is_connection_allowed(runtime_1, service_1).await?;
+        let allowed = network_manager
+            .is_connection_allowed(runtime_1, service_1)
+            .await?;
         assert!(allowed);
 
         Ok(())
@@ -411,7 +429,9 @@ mod microvm_integration_tests {
             manager.stop_runtime(runtime_id).await?;
 
             // Restore from snapshot
-            let restored_id = manager.restore_runtime(&snapshot_path, runtime_config).await?;
+            let restored_id = manager
+                .restore_runtime(&snapshot_path, runtime_config)
+                .await?;
             assert_ne!(runtime_id, restored_id);
 
             // Cleanup

@@ -5,10 +5,8 @@
 
 use anyhow::Result;
 use osvm::services::isolation_config::{IsolationConfig, MicroVmResourceConfig, ServerConfig};
-use osvm::services::microvm_launcher::{
-    McpServerMicroVmConfig, MicroVmLauncher, MountPoint,
-};
 use osvm::services::mcp_service::McpService;
+use osvm::services::microvm_launcher::{McpServerMicroVmConfig, MicroVmLauncher, MountPoint};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -39,7 +37,10 @@ async fn test_microvm_launch_and_init() -> Result<()> {
     let mut handle = launcher.launch_mcp_server(config)?;
 
     // Verify it's running
-    assert!(handle.is_running(), "MicroVM should be running after launch");
+    assert!(
+        handle.is_running(),
+        "MicroVM should be running after launch"
+    );
 
     println!("MicroVM launched successfully, CID: {}", handle.vsock_cid());
 
@@ -251,11 +252,7 @@ async fn test_multiple_concurrent_servers() -> Result<()> {
 
     // Verify all are running
     for (i, handle) in handles.iter_mut().enumerate() {
-        assert!(
-            handle.is_running(),
-            "Server #{} should still be running",
-            i
-        );
+        assert!(handle.is_running(), "Server #{} should still be running", i);
     }
 
     // Shutdown all
@@ -384,7 +381,10 @@ async fn test_cid_allocation_determinism() -> Result<()> {
     let github_cid = launcher.allocate_vsock_cid("github")?;
     let filesystem_cid = launcher.allocate_vsock_cid("filesystem")?;
 
-    println!("github CID: {}, filesystem CID: {}", github_cid, filesystem_cid);
+    println!(
+        "github CID: {}, filesystem CID: {}",
+        github_cid, filesystem_cid
+    );
 
     println!("✓ Test 8 passed: CID allocation determinism verified");
     Ok(())
@@ -400,8 +400,8 @@ async fn test_resource_limit_configuration() -> Result<()> {
 
     // Test various memory/CPU configurations
     let configs = vec![
-        (256, 1), // Minimal
-        (512, 2), // Standard
+        (256, 1),  // Minimal
+        (512, 2),  // Standard
         (1024, 4), // Large
     ];
 
@@ -419,10 +419,7 @@ async fn test_resource_limit_configuration() -> Result<()> {
         assert_eq!(config.memory_mb, memory_mb);
         assert_eq!(config.vcpus, vcpus);
 
-        println!(
-            "✓ Configuration valid: {} MB, {} vCPUs",
-            memory_mb, vcpus
-        );
+        println!("✓ Configuration valid: {} MB, {} vCPUs", memory_mb, vcpus);
     }
 
     println!("✓ Test 9 passed: Resource limit configuration verified");
@@ -464,8 +461,14 @@ async fn test_mount_point_configuration() -> Result<()> {
     assert!(config.mounts[0].readonly);
     assert!(!config.mounts[1].readonly);
 
-    println!("Mount 1: {} -> {} (ro)", mounts[0].host_path, mounts[0].guest_path);
-    println!("Mount 2: {} -> {} (rw)", mounts[1].host_path, mounts[1].guest_path);
+    println!(
+        "Mount 1: {} -> {} (ro)",
+        mounts[0].host_path, mounts[0].guest_path
+    );
+    println!(
+        "Mount 2: {} -> {} (rw)",
+        mounts[1].host_path, mounts[1].guest_path
+    );
 
     println!("✓ Test 10 passed: Mount point configuration verified");
     Ok(())

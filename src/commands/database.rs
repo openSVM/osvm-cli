@@ -10,10 +10,7 @@ use crate::services::{
 };
 
 /// Execute database command
-pub async fn execute_database_command(
-    subcommand: &str,
-    args: &DatabaseArgs,
-) -> Result<()> {
+pub async fn execute_database_command(subcommand: &str, args: &DatabaseArgs) -> Result<()> {
     match subcommand {
         "init" => cmd_init(args).await,
         "start" => cmd_start(args).await,
@@ -22,7 +19,10 @@ pub async fn execute_database_command(
         "query" => cmd_query(args).await,
         "activity" => cmd_activity(args).await,
         "sync" => cmd_sync(args).await,
-        _ => Err(anyhow::anyhow!("Unknown database subcommand: {}", subcommand)),
+        _ => Err(anyhow::anyhow!(
+            "Unknown database subcommand: {}",
+            subcommand
+        )),
     }
 }
 
@@ -77,7 +77,10 @@ async fn cmd_init(args: &DatabaseArgs) -> Result<()> {
         ClickHouseService::new()?
     };
 
-    service.init().await.context("Failed to initialize ClickHouse")?;
+    service
+        .init()
+        .await
+        .context("Failed to initialize ClickHouse")?;
 
     println!("{}", "✓ ClickHouse initialized successfully".green().bold());
     println!();
@@ -94,9 +97,15 @@ async fn cmd_start(_args: &DatabaseArgs) -> Result<()> {
     println!("{}", "Starting ClickHouse server...".cyan().bold());
 
     let service = ClickHouseService::new()?;
-    service.start().await.context("Failed to start ClickHouse server")?;
+    service
+        .start()
+        .await
+        .context("Failed to start ClickHouse server")?;
 
-    println!("{}", "✓ ClickHouse server started successfully".green().bold());
+    println!(
+        "{}",
+        "✓ ClickHouse server started successfully".green().bold()
+    );
     println!();
     println!("Server is running on:");
     println!("  HTTP: {}", "http://localhost:8123".yellow());
@@ -110,9 +119,15 @@ async fn cmd_stop(_args: &DatabaseArgs) -> Result<()> {
     println!("{}", "Stopping ClickHouse server...".cyan().bold());
 
     let service = ClickHouseService::new()?;
-    service.stop().await.context("Failed to stop ClickHouse server")?;
+    service
+        .stop()
+        .await
+        .context("Failed to stop ClickHouse server")?;
 
-    println!("{}", "✓ ClickHouse server stopped successfully".green().bold());
+    println!(
+        "{}",
+        "✓ ClickHouse server stopped successfully".green().bold()
+    );
 
     Ok(())
 }
@@ -137,9 +152,15 @@ async fn cmd_status(_args: &DatabaseArgs) -> Result<()> {
             println!("To start the server, run: {}", "osvm db start".yellow());
         }
         ClickHouseStatus::Error(msg) => {
-            println!("{}", format!("● ClickHouse server error: {}", msg).red().bold());
+            println!(
+                "{}",
+                format!("● ClickHouse server error: {}", msg).red().bold()
+            );
             println!();
-            println!("Try restarting: {}", "osvm db stop && osvm db start".yellow());
+            println!(
+                "Try restarting: {}",
+                "osvm db stop && osvm db start".yellow()
+            );
         }
     }
 
@@ -158,9 +179,10 @@ async fn cmd_query(args: &DatabaseArgs) -> Result<()> {
         ));
     }
 
-    let query = args.query.as_ref().ok_or_else(|| {
-        anyhow::anyhow!("No query provided. Use --query \"SELECT ...\"")
-    })?;
+    let query = args
+        .query
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No query provided. Use --query \"SELECT ...\""))?;
 
     // SECURITY: Validate query to prevent SQL injection
     validate_sql_query(query)?;
@@ -168,7 +190,9 @@ async fn cmd_query(args: &DatabaseArgs) -> Result<()> {
     println!("{}", format!("Executing query: {}", query).cyan());
     println!();
 
-    let result = service.query_json(query).await
+    let result = service
+        .query_json(query)
+        .await
         .context("Failed to execute query")?;
 
     println!("{}", result);
@@ -182,18 +206,23 @@ fn validate_sql_query(query: &str) -> Result<()> {
 
     // Must start with SELECT
     if !query_upper.starts_with("SELECT") {
-        anyhow::bail!("Only SELECT queries are allowed. Other operations are forbidden for security.");
+        anyhow::bail!(
+            "Only SELECT queries are allowed. Other operations are forbidden for security."
+        );
     }
 
     // Reject dangerous keywords
     let dangerous_keywords = [
-        "DROP", "DELETE", "UPDATE", "ALTER", "INSERT", "CREATE",
-        "TRUNCATE", "RENAME", "GRANT", "REVOKE", "EXEC", "EXECUTE"
+        "DROP", "DELETE", "UPDATE", "ALTER", "INSERT", "CREATE", "TRUNCATE", "RENAME", "GRANT",
+        "REVOKE", "EXEC", "EXECUTE",
     ];
 
     for keyword in dangerous_keywords {
         if query_upper.contains(keyword) {
-            anyhow::bail!("Query contains forbidden keyword '{}'. Only SELECT queries are allowed.", keyword);
+            anyhow::bail!(
+                "Query contains forbidden keyword '{}'. Only SELECT queries are allowed.",
+                keyword
+            );
         }
     }
 
@@ -209,8 +238,15 @@ fn validate_sql_query(query: &str) -> Result<()> {
     }
 
     // Whitelist allowed tables (osvm database only)
-    let allowed_tables = ["osvm.cli_commands", "osvm.blockchain_accounts", "osvm.command_activity", "osvm.chat_history"];
-    let has_allowed_table = allowed_tables.iter().any(|table| query_upper.contains(&table.to_uppercase()));
+    let allowed_tables = [
+        "osvm.cli_commands",
+        "osvm.blockchain_accounts",
+        "osvm.command_activity",
+        "osvm.chat_history",
+    ];
+    let has_allowed_table = allowed_tables
+        .iter()
+        .any(|table| query_upper.contains(&table.to_uppercase()));
 
     if !has_allowed_table {
         anyhow::bail!(
@@ -230,7 +266,7 @@ fn validate_sql_query(query: &str) -> Result<()> {
 /// Show activity logs
 async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
     let service = Arc::new(ClickHouseService::new()?);
-    
+
     // Check if server is running
     let status = service.status().await?;
     if status != ClickHouseStatus::Running {
@@ -245,8 +281,10 @@ async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
     if args.show_stats {
         println!("{}", "Activity Statistics".cyan().bold());
         println!();
-        
-        let stats = logger.get_activity_stats().await
+
+        let stats = logger
+            .get_activity_stats()
+            .await
             .context("Failed to fetch activity statistics")?;
         println!("{}", stats);
         println!();
@@ -256,8 +294,10 @@ async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
     if args.show_commands {
         println!("{}", "CLI Command History".cyan().bold());
         println!();
-        
-        let history = logger.query_command_history(args.limit, args.session_id.as_deref()).await
+
+        let history = logger
+            .query_command_history(args.limit, args.session_id.as_deref())
+            .await
             .context("Failed to fetch command history")?;
         println!("{}", history);
         println!();
@@ -267,8 +307,10 @@ async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
     if args.show_chat {
         println!("{}", "Chat Message History".cyan().bold());
         println!();
-        
-        let history = logger.query_chat_history(args.limit, args.session_id.as_deref()).await
+
+        let history = logger
+            .query_chat_history(args.limit, args.session_id.as_deref())
+            .await
             .context("Failed to fetch chat history")?;
         println!("{}", history);
         println!();
@@ -284,7 +326,10 @@ async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
         println!("  {} - Show chat message history", "--chat".yellow());
         println!();
         println!("Options:");
-        println!("  {} <N> - Limit results to N entries (default: 100)", "--limit".yellow());
+        println!(
+            "  {} <N> - Limit results to N entries (default: 100)",
+            "--limit".yellow()
+        );
         println!("  {} <ID> - Filter by session ID", "--session-id".yellow());
         println!();
         println!("Examples:");
@@ -298,10 +343,12 @@ async fn cmd_activity(args: &DatabaseArgs) -> Result<()> {
 
 /// Sync blockchain data to ClickHouse
 async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
-    use crate::services::blockchain_indexer::{BlockchainIndexer, IndexingMode, parse_sync_args, SyncArgs};
-    
+    use crate::services::blockchain_indexer::{
+        parse_sync_args, BlockchainIndexer, IndexingMode, SyncArgs,
+    };
+
     let service = Arc::new(ClickHouseService::new()?);
-    
+
     // Check if server is running
     let status = service.status().await?;
     if status != ClickHouseStatus::Running {
@@ -310,7 +357,10 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
         ));
     }
 
-    println!("{}", "Syncing blockchain data to ClickHouse...".cyan().bold());
+    println!(
+        "{}",
+        "Syncing blockchain data to ClickHouse...".cyan().bold()
+    );
     println!();
 
     // Parse sync mode
@@ -324,9 +374,21 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
     // Build sync arguments
     let sync_args = SyncArgs {
         mode,
-        programs: args.programs.as_ref().map(|p| p.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
-        accounts: args.accounts.as_ref().map(|a| a.split(',').map(|s| s.trim().to_string()).collect()).unwrap_or_default(),
-        patterns: args.pattern.as_ref().map(|p| vec![p.clone()]).unwrap_or_default(),
+        programs: args
+            .programs
+            .as_ref()
+            .map(|p| p.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
+        accounts: args
+            .accounts
+            .as_ref()
+            .map(|a| a.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default(),
+        patterns: args
+            .pattern
+            .as_ref()
+            .map(|p| vec![p.clone()])
+            .unwrap_or_default(),
         ledger_path: args.ledger_path.clone(),
         snapshot_path: args.snapshot_dir.clone(),
     };
@@ -346,7 +408,12 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
     println!("📊 Syncing account data from snapshot...");
     match indexer.sync_accounts(0).await {
         Ok(count) => {
-            println!("{}", format!("✓ Indexed {} accounts successfully", count).green().bold());
+            println!(
+                "{}",
+                format!("✓ Indexed {} accounts successfully", count)
+                    .green()
+                    .bold()
+            );
         }
         Err(e) => {
             eprintln!("{}", format!("❌ Account sync failed: {}", e).red());
@@ -355,10 +422,10 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
     }
 
     println!();
-    
+
     // Sync transactions from ledger
     println!("📊 Syncing transaction data from ledger...");
-    
+
     // Determine slot range based on mode
     let current_slot = 1000000u64; // Placeholder - would query from ledger
     let slot_range = match config.mode {
@@ -373,10 +440,15 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
         IndexingMode::RealtimeOnly => current_slot..u64::MAX,
         _ => 0..current_slot,
     };
-    
+
     match indexer.sync_transactions(slot_range).await {
         Ok(count) => {
-            println!("{}", format!("✓ Indexed {} transactions successfully", count).green().bold());
+            println!(
+                "{}",
+                format!("✓ Indexed {} transactions successfully", count)
+                    .green()
+                    .bold()
+            );
         }
         Err(e) => {
             eprintln!("{}", format!("⚠ Transaction sync failed: {}", e).yellow());
@@ -389,8 +461,14 @@ async fn cmd_sync(args: &DatabaseArgs) -> Result<()> {
     println!("{}", "Sync completed successfully!".green().bold());
     println!();
     println!("Query your data with:");
-    println!("  Accounts: {}", "osvm db query --query \"SELECT * FROM osvm.blockchain_accounts LIMIT 10\"".yellow());
-    println!("  Transactions: {}", "osvm db query --query \"SELECT * FROM osvm.blockchain_transactions LIMIT 10\"".yellow());
+    println!(
+        "  Accounts: {}",
+        "osvm db query --query \"SELECT * FROM osvm.blockchain_accounts LIMIT 10\"".yellow()
+    );
+    println!(
+        "  Transactions: {}",
+        "osvm db query --query \"SELECT * FROM osvm.blockchain_transactions LIMIT 10\"".yellow()
+    );
 
     Ok(())
 }

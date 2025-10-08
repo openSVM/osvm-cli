@@ -15,7 +15,7 @@ use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
 use super::handlers::show_context_menu;
 use super::handlers::*;
-use super::theme::{ModernTheme, Icons, Decorations};
+use super::theme::{Decorations, Icons, ModernTheme};
 
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
@@ -111,7 +111,7 @@ impl AdvancedChatUI {
 
         // Apply modern dark theme instead of default
         siv.set_theme(ModernTheme::dark());
-        
+
         // Or try to apply current theme if available
         if let Err(e) = self.apply_theme_to_cursive(siv) {
             log::warn!("Failed to apply custom theme, using modern dark theme");
@@ -143,13 +143,22 @@ impl AdvancedChatUI {
                 AgentState::Idle => format!("{} OSVM Agent - Idle", Icons::IDLE),
                 AgentState::Thinking => format!("{} OSVM Agent - Thinking...", Icons::THINKING),
                 AgentState::Planning => format!("{} OSVM Agent - Planning...", Icons::PLANNING),
-                AgentState::ExecutingTool(ref tool) => format!("{} OSVM Agent - Executing {}", Icons::EXECUTING, tool),
+                AgentState::ExecutingTool(ref tool) => {
+                    format!("{} OSVM Agent - Executing {}", Icons::EXECUTING, tool)
+                }
                 AgentState::Waiting => format!("{} OSVM Agent - Waiting", Icons::WAITING),
                 AgentState::Paused => format!("{} OSVM Agent - Paused", Icons::PAUSED),
-                AgentState::Error(ref err) => format!("{} OSVM Agent - Error: {}", Icons::ERROR, err),
+                AgentState::Error(ref err) => {
+                    format!("{} OSVM Agent - Error: {}", Icons::ERROR, err)
+                }
             }
         } else {
-            format!("{} {} OSVM Agent Chat {}", Icons::ROCKET, Icons::SPARKLES, Icons::SPARKLES)
+            format!(
+                "{} {} OSVM Agent Chat {}",
+                Icons::ROCKET,
+                Icons::SPARKLES,
+                Icons::SPARKLES
+            )
         };
         let dialog = Dialog::around(main_layout)
             .title(Decorations::fancy_header(&title))
@@ -204,7 +213,7 @@ impl AdvancedChatUI {
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 // Gentle refresh - just update displays, don't recreate UI
                 super::display::update_ui_displays(s);
-                
+
                 // Force screen refresh to prevent rendering artifacts
                 s.clear();
             })) {

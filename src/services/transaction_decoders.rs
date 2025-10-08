@@ -24,58 +24,150 @@ pub struct DecodedInstruction {
 #[serde(tag = "type")]
 pub enum InstructionData {
     // SPL Token instructions
-    TokenTransfer { from: String, to: String, amount: u64 },
-    TokenApprove { delegate: String, amount: u64 },
-    TokenMint { to: String, amount: u64 },
-    TokenBurn { from: String, amount: u64 },
-    
+    TokenTransfer {
+        from: String,
+        to: String,
+        amount: u64,
+    },
+    TokenApprove {
+        delegate: String,
+        amount: u64,
+    },
+    TokenMint {
+        to: String,
+        amount: u64,
+    },
+    TokenBurn {
+        from: String,
+        amount: u64,
+    },
+
     // Perp DEX instructions
-    DriftOpenPosition { market: String, size: i64, direction: String },
-    DriftClosePosition { market: String },
-    MangoPlaceOrder { market: String, side: String, price: u64, size: u64 },
-    ZetaPlacePerpOrder { market: String, side: String, size: u64 },
-    
-    // DEX/AMM instructions  
-    OrcaSwap { amount_in: u64, minimum_amount_out: u64 },
-    RaydiumSwap { amount_in: u64, minimum_amount_out: u64 },
-    JupiterSwap { amount_in: u64, quoted_out_amount: u64, slippage_bps: u16 },
-    SerumNewOrder { side: String, price: u64, size: u64 },
-    PhoenixSwap { amount_in: u64, minimum_out: u64 },
-    
+    DriftOpenPosition {
+        market: String,
+        size: i64,
+        direction: String,
+    },
+    DriftClosePosition {
+        market: String,
+    },
+    MangoPlaceOrder {
+        market: String,
+        side: String,
+        price: u64,
+        size: u64,
+    },
+    ZetaPlacePerpOrder {
+        market: String,
+        side: String,
+        size: u64,
+    },
+
+    // DEX/AMM instructions
+    OrcaSwap {
+        amount_in: u64,
+        minimum_amount_out: u64,
+    },
+    RaydiumSwap {
+        amount_in: u64,
+        minimum_amount_out: u64,
+    },
+    JupiterSwap {
+        amount_in: u64,
+        quoted_out_amount: u64,
+        slippage_bps: u16,
+    },
+    SerumNewOrder {
+        side: String,
+        price: u64,
+        size: u64,
+    },
+    PhoenixSwap {
+        amount_in: u64,
+        minimum_out: u64,
+    },
+
     // Lending instructions
-    KaminoDeposit { amount: u64, reserve: String },
-    KaminoBorrow { amount: u64, reserve: String },
-    SolendDeposit { amount: u64 },
-    PortDeposit { amount: u64 },
-    
+    KaminoDeposit {
+        amount: u64,
+        reserve: String,
+    },
+    KaminoBorrow {
+        amount: u64,
+        reserve: String,
+    },
+    SolendDeposit {
+        amount: u64,
+    },
+    PortDeposit {
+        amount: u64,
+    },
+
     // Liquid staking
-    MarinadeDeposit { lamports: u64 },
-    MarinadeUnstake { msol_amount: u64 },
-    LidoDeposit { amount: u64 },
-    LidoWithdraw { amount: u64 },
-    
+    MarinadeDeposit {
+        lamports: u64,
+    },
+    MarinadeUnstake {
+        msol_amount: u64,
+    },
+    LidoDeposit {
+        amount: u64,
+    },
+    LidoWithdraw {
+        amount: u64,
+    },
+
     // Options
-    PsyOptionsCreateOption { strike: u64, expiry: i64 },
-    RibbonDeposit { amount: u64, vault: String },
-    
+    PsyOptionsCreateOption {
+        strike: u64,
+        expiry: i64,
+    },
+    RibbonDeposit {
+        amount: u64,
+        vault: String,
+    },
+
     // NFT
-    MetaplexMintNFT { name: String, uri: String },
-    CandyMachineMint { candy_machine: String },
-    TensorBuy { price: u64 },
-    MagicEdenBuy { price: u64 },
-    
+    MetaplexMintNFT {
+        name: String,
+        uri: String,
+    },
+    CandyMachineMint {
+        candy_machine: String,
+    },
+    TensorBuy {
+        price: u64,
+    },
+    MagicEdenBuy {
+        price: u64,
+    },
+
     // GameFi
-    StepnMint { nft_type: String },
-    HeliumMint { hotspot: String },
-    StarAtlasAction { action: String },
-    
+    StepnMint {
+        nft_type: String,
+    },
+    HeliumMint {
+        hotspot: String,
+    },
+    StarAtlasAction {
+        action: String,
+    },
+
     // Governance
-    GovernanceCreateProposal { description: String },
-    GovernanceVote { vote: String },
-    SquadsExecute { transaction_index: u64 },
-    
+    GovernanceCreateProposal {
+        description: String,
+    },
+    GovernanceVote {
+        vote: String,
+    },
+    SquadsExecute {
+        transaction_index: u64,
+    },
+
     // Generic fallback
-    Unknown { discriminator: Vec<u8> },
+    Unknown {
+        discriminator: Vec<u8>,
+    },
 }
 
 /// Transaction decoder trait
@@ -107,7 +199,9 @@ impl InstructionDecoder for SplTokenInstructionDecoder {
             return Ok(DecodedInstruction {
                 program: "SPL Token".to_string(),
                 instruction_type: "Unknown".to_string(),
-                data: InstructionData::Unknown { discriminator: vec![] },
+                data: InstructionData::Unknown {
+                    discriminator: vec![],
+                },
             });
         }
 
@@ -209,23 +303,36 @@ pub fn format_decoded_instruction(decoded: &DecodedInstruction) -> String {
         InstructionData::TokenMint { to, amount } => {
             format!("🏭 Mint Tokens\n    To: {}\n    Amount: {}", to, amount)
         }
-        InstructionData::DriftOpenPosition { market, size, direction } => {
+        InstructionData::DriftOpenPosition {
+            market,
+            size,
+            direction,
+        } => {
             format!(
                 "📊 Open Position (Drift)\n    Market: {}\n    Size: {}\n    Direction: {}",
                 market, size, direction
             )
         }
-        InstructionData::OrcaSwap { amount_in, minimum_amount_out } => {
+        InstructionData::OrcaSwap {
+            amount_in,
+            minimum_amount_out,
+        } => {
             format!(
                 "🔄 Swap (Orca)\n    Amount In: {}\n    Min Out: {}",
                 amount_in, minimum_amount_out
             )
         }
         InstructionData::MarinadeDeposit { lamports } => {
-            format!("⚓ Stake (Marinade)\n    Amount: {} SOL", lamports / 1_000_000_000)
+            format!(
+                "⚓ Stake (Marinade)\n    Amount: {} SOL",
+                lamports / 1_000_000_000
+            )
         }
         InstructionData::Unknown { discriminator } => {
-            format!("❓ Unknown Instruction\n    Discriminator: {:?}", discriminator)
+            format!(
+                "❓ Unknown Instruction\n    Discriminator: {:?}",
+                discriminator
+            )
         }
         _ => format!("Instruction: {}", decoded.instruction_type),
     }

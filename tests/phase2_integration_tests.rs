@@ -7,7 +7,6 @@
 //! - Orchestrator operations
 //! - End-to-end production scenarios
 
-use osvm::utils::isolation::config::HypervisorType;
 use osvm::utils::isolation::network::{ComponentPattern, NetworkPolicy, PolicyEffect};
 use osvm::utils::isolation::*;
 use std::sync::Arc;

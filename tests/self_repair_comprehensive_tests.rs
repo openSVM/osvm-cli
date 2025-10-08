@@ -2,21 +2,21 @@
 //! repair strategies, system dependencies, and user dependencies
 
 use anyhow::Result;
-use osvm::utils::self_repair::{
-    RepairableError, RepairStrategy, SelfRepair, RepairPlan, RepairResult,
-    SystemDependencyCheck, UserDependencyCheck,
-};
 use osvm::utils::self_repair::package_managers::{
-    PackageManager, detect_package_manager, AptManager, YumManager, BrewManager,
+    detect_package_manager, AptManager, BrewManager, PackageManager, YumManager,
 };
 use osvm::utils::self_repair::repair_strategies::{
-    InstallPackageStrategy, UpdateSystemStrategy, CreateDirectoryStrategy,
-    InstallSolanaStrategy, UpdateRustStrategy,
+    CreateDirectoryStrategy, InstallPackageStrategy, InstallSolanaStrategy, UpdateRustStrategy,
+    UpdateSystemStrategy,
+};
+use osvm::utils::self_repair::{
+    RepairPlan, RepairResult, RepairStrategy, RepairableError, SelfRepair, SystemDependencyCheck,
+    UserDependencyCheck,
 };
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-#[cfg(test)]]
+#[cfg(test)]
 mod package_manager_tests {
     use super::*;
 
@@ -30,8 +30,10 @@ mod package_manager_tests {
         match manager {
             PackageManager::Apt(_) => assert!(std::path::Path::new("/usr/bin/apt").exists()),
             PackageManager::Yum(_) => assert!(std::path::Path::new("/usr/bin/yum").exists()),
-            PackageManager::Brew(_) => assert!(std::path::Path::new("/usr/local/bin/brew").exists() ||
-                                                std::path::Path::new("/opt/homebrew/bin/brew").exists()),
+            PackageManager::Brew(_) => assert!(
+                std::path::Path::new("/usr/local/bin/brew").exists()
+                    || std::path::Path::new("/opt/homebrew/bin/brew").exists()
+            ),
             _ => {}
         }
 
@@ -95,8 +97,16 @@ mod repairable_error_tests {
         ];
 
         for error in errors {
-            assert!(error.is_repairable(), "Error {:?} should be repairable", error);
-            assert!(!error.is_critical(), "Error {:?} shouldn't be critical", error);
+            assert!(
+                error.is_repairable(),
+                "Error {:?} should be repairable",
+                error
+            );
+            assert!(
+                !error.is_critical(),
+                "Error {:?} shouldn't be critical",
+                error
+            );
         }
     }
 
@@ -278,7 +288,7 @@ mod self_repair_tests {
         // These should be ordered by severity
         let issues = vec![
             RepairableError::MissingConfigDirectory, // Low
-            RepairableError::OutdatedSystemPackages,  // Medium
+            RepairableError::OutdatedSystemPackages, // Medium
             RepairableError::InsufficientPermissions("test".to_string()), // High
         ];
 
@@ -325,8 +335,7 @@ mod self_repair_tests {
         assert!(result.is_err());
 
         if let Err(e) = result {
-            assert!(e.to_string().contains("permission") ||
-                    e.to_string().contains("Permission"));
+            assert!(e.to_string().contains("permission") || e.to_string().contains("Permission"));
         }
 
         Ok(())
@@ -339,9 +348,7 @@ mod self_repair_tests {
 
         std::env::set_var("OSVM_CONFIG_DIR", temp_dir.path().to_str().unwrap());
 
-        let issues = vec![
-            RepairableError::MissingConfigDirectory,
-        ];
+        let issues = vec![RepairableError::MissingConfigDirectory];
 
         let results = repair.execute_repairs(&issues).await?;
 
@@ -435,8 +442,10 @@ mod system_dependency_tests {
 
         assert!(result.total_checks > 0);
         // Should have checked for common tools
-        assert!(result.checks.iter().any(|c| c.name == "build-essential" ||
-                                                c.name == "gcc"));
+        assert!(result
+            .checks
+            .iter()
+            .any(|c| c.name == "build-essential" || c.name == "gcc"));
 
         Ok(())
     }

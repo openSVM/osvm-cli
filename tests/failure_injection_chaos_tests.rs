@@ -5,9 +5,9 @@
 use anyhow::Result;
 use mockito::Server;
 use serde_json::json;
-use std::time::Duration;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
 use tempfile::TempDir;
 
 #[cfg(test)]
@@ -19,7 +19,8 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // First request succeeds
-        let _mock1 = server.mock("GET", "/data")
+        let _mock1 = server
+            .mock("GET", "/data")
             .with_status(200)
             .with_body("success")
             .expect(1)
@@ -48,7 +49,8 @@ mod network_failure_injection_tests {
         for i in 0..10 {
             let status = if i % 2 == 0 { 200 } else { 503 };
 
-            let _mock = server.mock("GET", &format!("/api/{}", i))
+            let _mock = server
+                .mock("GET", &format!("/api/{}", i))
                 .with_status(status)
                 .expect(1)
                 .create_async()
@@ -60,7 +62,11 @@ mod network_failure_injection_tests {
         let mut failure_count = 0;
 
         for i in 0..10 {
-            match client.get(format!("{}/api/{}", server.url(), i)).send().await {
+            match client
+                .get(format!("{}/api/{}", server.url(), i))
+                .send()
+                .await
+            {
                 Ok(resp) if resp.status().is_success() => success_count += 1,
                 _ => failure_count += 1,
             }
@@ -77,7 +83,8 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // Simulates slow response
-        let _mock = server.mock("GET", "/slow")
+        let _mock = server
+            .mock("GET", "/slow")
             .with_status(200)
             .with_body_from_fn(|_| {
                 std::thread::sleep(Duration::from_millis(500));
@@ -103,7 +110,8 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // Server returns 503 (Service Unavailable)
-        let _mock = server.mock("GET", "/reset")
+        let _mock = server
+            .mock("GET", "/reset")
             .with_status(503)
             .create_async()
             .await;
@@ -121,14 +129,18 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // Incomplete JSON response
-        let _mock = server.mock("GET", "/partial")
+        let _mock = server
+            .mock("GET", "/partial")
             .with_status(200)
             .with_body("{\"data\":\"incomplete")
             .create_async()
             .await;
 
         let client = reqwest::Client::new();
-        let response = client.get(format!("{}/partial", server.url())).send().await?;
+        let response = client
+            .get(format!("{}/partial", server.url()))
+            .send()
+            .await?;
 
         let json_result: Result<serde_json::Value, _> = response.json().await;
 
@@ -143,7 +155,8 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // Says it's JSON but returns HTML
-        let _mock = server.mock("GET", "/wrong")
+        let _mock = server
+            .mock("GET", "/wrong")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("<html>Not JSON</html>")
@@ -165,7 +178,8 @@ mod network_failure_injection_tests {
         let mut server = Server::new_async().await;
 
         // Redirect to itself
-        let _mock = server.mock("GET", "/redirect")
+        let _mock = server
+            .mock("GET", "/redirect")
             .with_status(302)
             .with_header("Location", "/redirect")
             .expect_at_least(1)
@@ -176,7 +190,10 @@ mod network_failure_injection_tests {
             .redirect(reqwest::redirect::Policy::limited(10))
             .build()?;
 
-        let result = client.get(format!("{}/redirect", server.url())).send().await;
+        let result = client
+            .get(format!("{}/redirect", server.url()))
+            .send()
+            .await;
 
         // Should hit redirect limit
         assert!(result.is_err());
@@ -249,9 +266,7 @@ mod disk_failure_injection_tests {
             .open(&file_path)?;
 
         // Try to open again (might fail on some systems)
-        let result2 = OpenOptions::new()
-            .write(true)
-            .open(&file_path);
+        let result2 = OpenOptions::new().write(true).open(&file_path);
 
         // Behavior depends on OS
         let _ = result2;
@@ -444,12 +459,14 @@ mod service_degradation_tests {
 
         let results = futures::future::join_all(services).await;
 
-        let successes: Vec<_> = results.iter()
+        let successes: Vec<_> = results
+            .iter()
             .filter_map(|r| r.as_ref().ok())
             .filter_map(|r| r.as_ref().ok())
             .collect();
 
-        let failures: Vec<_> = results.iter()
+        let failures: Vec<_> = results
+            .iter()
             .filter_map(|r| r.as_ref().ok())
             .filter_map(|r| r.as_ref().err())
             .collect();
@@ -518,8 +535,12 @@ mod dependency_injection_failures {
         // A depends on B, B depends on A (circular)
         // Rust prevents this at compile time with Rc::new_cyclic or similar
 
-        let _a = ServiceA { name: "A".to_string() };
-        let _b = ServiceB { name: "B".to_string() };
+        let _a = ServiceA {
+            name: "A".to_string(),
+        };
+        let _b = ServiceB {
+            name: "B".to_string(),
+        };
 
         Ok(())
     }
@@ -578,7 +599,7 @@ mod clock_skew_and_timing_tests {
     #[tokio::test]
     async fn test_leap_second_handling() -> Result<()> {
         // Simulate leap second
-        use chrono::{NaiveDate, NaiveTime, NaiveDateTime};
+        use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
         // June 30, 2015 at 23:59:60 UTC (leap second)
         let date = NaiveDate::from_ymd_opt(2015, 6, 30).unwrap();

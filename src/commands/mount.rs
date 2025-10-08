@@ -36,12 +36,12 @@ impl MountsConfig {
             return Ok(Self::default());
         }
 
-        let content = std::fs::read_to_string(&config_path)
-            .context("Failed to read mounts configuration")?;
-        
-        let config: Self = serde_json::from_str(&content)
-            .context("Failed to parse mounts configuration")?;
-        
+        let content =
+            std::fs::read_to_string(&config_path).context("Failed to read mounts configuration")?;
+
+        let config: Self =
+            serde_json::from_str(&content).context("Failed to parse mounts configuration")?;
+
         Ok(config)
     }
 
@@ -51,24 +51,21 @@ impl MountsConfig {
 
         // Ensure directory exists
         if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create config directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
 
         let content = serde_json::to_string_pretty(self)
             .context("Failed to serialize mounts configuration")?;
-        
-        std::fs::write(&config_path, content)
-            .context("Failed to write mounts configuration")?;
+
+        std::fs::write(&config_path, content).context("Failed to write mounts configuration")?;
 
         Ok(())
     }
 
     /// Get configuration file path
     fn get_config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .context("HOME environment variable not set")?;
-        
+        let home = std::env::var("HOME").context("HOME environment variable not set")?;
+
         Ok(PathBuf::from(home)
             .join(".config")
             .join("osvm")
@@ -94,7 +91,12 @@ impl MountManager {
         let host_path = self.validate_host_path(host_path)?;
 
         // Check if already mounted
-        if self.config.osvm_mounts.iter().any(|m| m.host_path == host_path) {
+        if self
+            .config
+            .osvm_mounts
+            .iter()
+            .any(|m| m.host_path == host_path)
+        {
             return Err(anyhow!("Path {} is already mounted", host_path));
         }
 
@@ -136,28 +138,41 @@ impl MountManager {
     }
 
     /// Add mount for MCP tool
-    pub fn add_mcp_mount(&mut self, tool_name: &str, host_path: &str, readonly: bool) -> Result<String> {
+    pub fn add_mcp_mount(
+        &mut self,
+        tool_name: &str,
+        host_path: &str,
+        readonly: bool,
+    ) -> Result<String> {
         // Validate and canonicalize host path
         let host_path = self.validate_host_path(host_path)?;
 
         // Check if already mounted and generate path before getting mutable reference
         let tool_path = {
-            let existing_mounts = self.config.mcp_tool_mounts
+            let existing_mounts = self
+                .config
+                .mcp_tool_mounts
                 .get(tool_name)
                 .map(|v| v.as_slice())
                 .unwrap_or(&[]);
-            
+
             // Check if already mounted
             if existing_mounts.iter().any(|m| m.host_path == host_path) {
-                return Err(anyhow!("Path {} is already mounted for tool {}", host_path, tool_name));
+                return Err(anyhow!(
+                    "Path {} is already mounted for tool {}",
+                    host_path,
+                    tool_name
+                ));
             }
-            
+
             // Auto-generate tool path
             self.generate_tool_path(&host_path, existing_mounts)?
         };
 
         // Now get mutable reference and add the mount
-        let tool_mounts = self.config.mcp_tool_mounts
+        let tool_mounts = self
+            .config
+            .mcp_tool_mounts
             .entry(tool_name.to_string())
             .or_default();
 
@@ -179,7 +194,9 @@ impl MountManager {
     pub fn remove_mcp_mount(&mut self, tool_name: &str, host_path: &str) -> Result<()> {
         let host_path = self.validate_host_path(host_path)?;
 
-        let tool_mounts = self.config.mcp_tool_mounts
+        let tool_mounts = self
+            .config
+            .mcp_tool_mounts
             .get_mut(tool_name)
             .ok_or_else(|| anyhow!("No mounts found for tool: {}", tool_name))?;
 
@@ -201,7 +218,8 @@ impl MountManager {
 
     /// List mounts for MCP tool
     pub fn list_mcp_mounts(&self, tool_name: &str) -> Option<&[MountInfo]> {
-        self.config.mcp_tool_mounts
+        self.config
+            .mcp_tool_mounts
             .get(tool_name)
             .map(|v| v.as_slice())
     }
@@ -215,11 +233,11 @@ impl MountManager {
     fn validate_host_path(&self, path: &str) -> Result<String> {
         // Use centralized secure path validation with TOCTOU protection
         let validated_path = safe_path_validation(
-            path,
-            true,  // Must be a directory
+            path, true,  // Must be a directory
             false, // Don't allow symlinks for security
-        ).with_context(|| format!("Failed to validate mount path: {}", path))?;
-        
+        )
+        .with_context(|| format!("Failed to validate mount path: {}", path))?;
+
         Ok(validated_path.path().display().to_string())
     }
 
@@ -306,7 +324,7 @@ pub fn handle_mount_list() -> Result<()> {
     println!("OSVM Mounts:");
     println!("\nDefault:");
     println!("  ~/.config/osvm → /config");
-    
+
     println!("\nConfigured:");
     for mount in mounts {
         let ro = if mount.readonly { " (read-only)" } else { "" };
@@ -320,11 +338,14 @@ pub fn handle_mount_list() -> Result<()> {
 pub fn handle_mcp_mount(tool_name: &str, host_path: &str, readonly: bool) -> Result<()> {
     // Validate that the MCP tool exists before allowing mount
     validate_mcp_tool_exists(tool_name)?;
-    
+
     let mut manager = MountManager::new()?;
     let tool_path = manager.add_mcp_mount(tool_name, host_path, readonly)?;
 
-    println!("✓ Mounted {} → {} (for {})", host_path, tool_path, tool_name);
+    println!(
+        "✓ Mounted {} → {} (for {})",
+        host_path, tool_path, tool_name
+    );
     if readonly {
         println!("  (read-only)");
     }
@@ -336,7 +357,7 @@ pub fn handle_mcp_mount(tool_name: &str, host_path: &str, readonly: bool) -> Res
 pub fn handle_mcp_unmount(tool_name: &str, host_path: &str) -> Result<()> {
     // Provide helpful error message if tool doesn't exist
     validate_mcp_tool_exists(tool_name)?;
-    
+
     let mut manager = MountManager::new()?;
     manager.remove_mcp_mount(tool_name, host_path)?;
 
@@ -352,13 +373,13 @@ pub fn handle_mcp_mounts(tool_name: Option<&str>) -> Result<()> {
     if let Some(tool) = tool_name {
         // Validate tool exists for better error messages
         validate_mcp_tool_exists(tool)?;
-        
+
         // Show mounts for specific tool
         if let Some(mounts) = manager.list_mcp_mounts(tool) {
             println!("Mounts for {}:", tool);
             println!("\nDefault:");
             println!("  ~/.config/osvm → /config");
-            
+
             if !mounts.is_empty() {
                 println!("\nConfigured:");
                 for mount in mounts {
@@ -401,7 +422,7 @@ fn validate_mcp_tool_exists(tool_name: &str) -> Result<()> {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("./")))
         .join("osvm")
         .join("mcp_servers.json");
-    
+
     if !config_path.exists() {
         return Err(anyhow!(
             "MCP tool '{}' not found. No MCP servers are configured.\n\
@@ -414,15 +435,14 @@ fn validate_mcp_tool_exists(tool_name: &str) -> Result<()> {
             tool_name
         ));
     }
-    
+
     // Read and parse configuration
     let content = std::fs::read_to_string(&config_path)
         .context("Failed to read MCP servers configuration")?;
-    
-    let servers: std::collections::HashMap<String, serde_json::Value> = 
-        serde_json::from_str(&content)
-            .context("Failed to parse MCP servers configuration")?;
-    
+
+    let servers: std::collections::HashMap<String, serde_json::Value> =
+        serde_json::from_str(&content).context("Failed to parse MCP servers configuration")?;
+
     if servers.is_empty() {
         return Err(anyhow!(
             "MCP tool '{}' not found. No MCP servers are configured.\n\
@@ -435,11 +455,11 @@ fn validate_mcp_tool_exists(tool_name: &str) -> Result<()> {
             tool_name
         ));
     }
-    
+
     // List available servers for helpful error message
     let server_list: Vec<String> = servers.keys().cloned().collect();
     let server_names = server_list.join(", ");
-    
+
     Err(anyhow!(
         "MCP tool '{}' not found in configured servers.\n\
          \n\
@@ -464,24 +484,26 @@ mod tests {
     fn test_generate_vm_path() {
         let manager = MountManager::new().unwrap();
         let existing = vec![];
-        
-        let path = manager.generate_vm_path("/home/user/Documents", &existing).unwrap();
+
+        let path = manager
+            .generate_vm_path("/home/user/Documents", &existing)
+            .unwrap();
         assert_eq!(path, "/mnt/documents");
     }
 
     #[test]
     fn test_generate_vm_path_with_conflict() {
         let manager = MountManager::new().unwrap();
-        let existing = vec![
-            MountInfo {
-                host_path: "/home/user/Documents".to_string(),
-                vm_path: "/mnt/documents".to_string(),
-                readonly: false,
-                created_at: chrono::Utc::now(),
-            },
-        ];
-        
-        let path = manager.generate_vm_path("/home/other/Documents", &existing).unwrap();
+        let existing = vec![MountInfo {
+            host_path: "/home/user/Documents".to_string(),
+            vm_path: "/mnt/documents".to_string(),
+            readonly: false,
+            created_at: chrono::Utc::now(),
+        }];
+
+        let path = manager
+            .generate_vm_path("/home/other/Documents", &existing)
+            .unwrap();
         assert_eq!(path, "/mnt/documents-1");
     }
 
@@ -489,8 +511,10 @@ mod tests {
     fn test_generate_tool_path() {
         let manager = MountManager::new().unwrap();
         let existing = vec![];
-        
-        let path = manager.generate_tool_path("/home/user/solana-data", &existing).unwrap();
+
+        let path = manager
+            .generate_tool_path("/home/user/solana-data", &existing)
+            .unwrap();
         assert_eq!(path, "/data/solana-data");
     }
 }

@@ -10,7 +10,8 @@ use std::str::FromStr;
 
 // Known program IDs
 pub const SPL_TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-pub const SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+pub const SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID: &str =
+    "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 pub const STAKE_PROGRAM_ID: &str = "Stake11111111111111111111111111111111111111";
 pub const VOTE_PROGRAM_ID: &str = "Vote111111111111111111111111111111111111111";
 pub const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
@@ -739,11 +740,13 @@ impl AccountDecoder for BpfUpgradeableDecoder {
             return Ok(DecodedAccount::Unknown);
         }
 
-        Ok(DecodedAccount::BpfUpgradeableProgram(BpfUpgradeableProgramData {
-            program_data_address: None,
-            upgrade_authority_address: None,
-            slot: None,
-        }))
+        Ok(DecodedAccount::BpfUpgradeableProgram(
+            BpfUpgradeableProgramData {
+                program_data_address: None,
+                upgrade_authority_address: None,
+                slot: None,
+            },
+        ))
     }
 }
 
@@ -904,7 +907,7 @@ impl AccountDecoder for NameServiceDecoder {
     fn decode(&self, data: &[u8]) -> Result<DecodedAccount> {
         // Try to extract domain name from data
         let domain_name = String::from_utf8_lossy(data).trim().to_string();
-        
+
         Ok(DecodedAccount::NameService(NameServiceData {
             domain_name,
             owner: "Unknown".to_string(),
@@ -1149,22 +1152,64 @@ pub fn format_decoded_account(decoded: &DecodedAccount) -> String {
             )
         }
         DecodedAccount::JupiterAggregator(_) => "🪐 Jupiter Aggregator v6".to_string(),
-        DecodedAccount::MarinadeFinance(m) => format!("⚓ Marinade Finance\n    mSOL Mint: {}\n    Total Lamports: {}", m.msol_mint, m.total_lamports_under_control),
-        DecodedAccount::LidoSolana(l) => format!("🏔️  Lido Solana\n    stSOL Mint: {}\n    Total Lamports: {}", l.st_sol_mint, l.total_lamports),
-        DecodedAccount::Token2022(t) => format!("💎 SPL Token-2022\n    Mint: {}\n    Owner: {}\n    Amount: {}", t.mint, t.owner, t.amount),
-        DecodedAccount::MetaplexBubblegum(b) => format!("🌳 Metaplex Bubblegum (cNFT)\n    Max Depth: {}\n    Buffer Size: {}", b.max_depth, b.max_buffer_size),
-        DecodedAccount::PhoenixV1(p) => format!("🔥 Phoenix DEX\n    Base: {}\n    Quote: {}", p.base_mint, p.quote_mint),
-        DecodedAccount::OpenbookV2(o) => format!("📖 OpenBook v2\n    Base: {}\n    Quote: {}", o.base_mint, o.quote_mint),
+        DecodedAccount::MarinadeFinance(m) => format!(
+            "⚓ Marinade Finance\n    mSOL Mint: {}\n    Total Lamports: {}",
+            m.msol_mint, m.total_lamports_under_control
+        ),
+        DecodedAccount::LidoSolana(l) => format!(
+            "🏔️  Lido Solana\n    stSOL Mint: {}\n    Total Lamports: {}",
+            l.st_sol_mint, l.total_lamports
+        ),
+        DecodedAccount::Token2022(t) => format!(
+            "💎 SPL Token-2022\n    Mint: {}\n    Owner: {}\n    Amount: {}",
+            t.mint, t.owner, t.amount
+        ),
+        DecodedAccount::MetaplexBubblegum(b) => format!(
+            "🌳 Metaplex Bubblegum (cNFT)\n    Max Depth: {}\n    Buffer Size: {}",
+            b.max_depth, b.max_buffer_size
+        ),
+        DecodedAccount::PhoenixV1(p) => format!(
+            "🔥 Phoenix DEX\n    Base: {}\n    Quote: {}",
+            p.base_mint, p.quote_mint
+        ),
+        DecodedAccount::OpenbookV2(o) => format!(
+            "📖 OpenBook v2\n    Base: {}\n    Quote: {}",
+            o.base_mint, o.quote_mint
+        ),
         DecodedAccount::TensorSwap(_) => "⚡ Tensor Swap".to_string(),
-        DecodedAccount::MagicEdenV2(m) => format!("✨ Magic Eden v2\n    Collection: {}", m.collection),
-        DecodedAccount::JupiterLimitOrder(j) => format!("⏱️  Jupiter Limit Order\n    Maker: {}\n    In: {} → Out: {}", j.maker, j.input_mint, j.output_mint),
-        DecodedAccount::DriftV2(d) => format!("🌊 Drift v2\n    User: {}\n    Authority: {}", d.user, d.authority),
-        DecodedAccount::MangoV4(m) => format!("🥭 Mango Markets v4\n    Group: {}\n    Owner: {}", m.group, m.owner),
-        DecodedAccount::KaminoLending(k) => format!("💧 Kamino Lending\n    Reserve: {}\n    Market: {}", k.reserve, k.market),
-        DecodedAccount::SplStakePool(s) => format!("🏊 SPL Stake Pool\n    Pool Mint: {}\n    Total Lamports: {}", s.pool_mint, s.total_lamports),
+        DecodedAccount::MagicEdenV2(m) => {
+            format!("✨ Magic Eden v2\n    Collection: {}", m.collection)
+        }
+        DecodedAccount::JupiterLimitOrder(j) => format!(
+            "⏱️  Jupiter Limit Order\n    Maker: {}\n    In: {} → Out: {}",
+            j.maker, j.input_mint, j.output_mint
+        ),
+        DecodedAccount::DriftV2(d) => format!(
+            "🌊 Drift v2\n    User: {}\n    Authority: {}",
+            d.user, d.authority
+        ),
+        DecodedAccount::MangoV4(m) => format!(
+            "🥭 Mango Markets v4\n    Group: {}\n    Owner: {}",
+            m.group, m.owner
+        ),
+        DecodedAccount::KaminoLending(k) => format!(
+            "💧 Kamino Lending\n    Reserve: {}\n    Market: {}",
+            k.reserve, k.market
+        ),
+        DecodedAccount::SplStakePool(s) => format!(
+            "🏊 SPL Stake Pool\n    Pool Mint: {}\n    Total Lamports: {}",
+            s.pool_mint, s.total_lamports
+        ),
         DecodedAccount::LifinityAmm(_) => "♾️  Lifinity AMM".to_string(),
-        DecodedAccount::MeteoraPools(m) => format!("☄️  Meteora Pools\n    Type: {}\n    Token A: {}\n    Token B: {}", m.pool_type, m.token_a_mint, m.token_b_mint),
-        DecodedAccount::SquadsV3(s) => format!("🛡️  Squads v3 (Multisig)\n    Threshold: {}\n    Members: {}", s.threshold, s.members.len()),
+        DecodedAccount::MeteoraPools(m) => format!(
+            "☄️  Meteora Pools\n    Type: {}\n    Token A: {}\n    Token B: {}",
+            m.pool_type, m.token_a_mint, m.token_b_mint
+        ),
+        DecodedAccount::SquadsV3(s) => format!(
+            "🛡️  Squads v3 (Multisig)\n    Threshold: {}\n    Members: {}",
+            s.threshold,
+            s.members.len()
+        ),
         DecodedAccount::Unknown => "".to_string(),
     }
 }

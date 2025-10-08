@@ -2,12 +2,12 @@
 
 use anyhow::Result;
 use osvm::utils::{
-    error_boundary::{SecureErrorBoundary, CircuitBreaker, ErrorRecoveryManager},
-    self_repair::{SelfRepair, RepairableError, RepairStrategy},
-    diagnostics::{SystemHealth, HealthCheck, HealthStatus},
+    diagnostics::{HealthCheck, HealthStatus, SystemHealth},
+    error_boundary::{CircuitBreaker, ErrorRecoveryManager, SecureErrorBoundary},
+    self_repair::{RepairStrategy, RepairableError, SelfRepair},
 };
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 #[cfg(test)]
@@ -35,18 +35,16 @@ mod circuit_breaker_tests {
 
         // Make 3 failing calls
         for _ in 0..3 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Test failure"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Test failure")) })
+                .await;
         }
 
         // Circuit should be open now
         assert!(breaker.is_open());
 
         // Next call should fail immediately
-        let result = breaker.call(async {
-            Ok::<(), anyhow::Error>(())
-        }).await;
+        let result = breaker.call(async { Ok::<(), anyhow::Error>(()) }).await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("circuit breaker"));
@@ -60,9 +58,9 @@ mod circuit_breaker_tests {
 
         // Trip the circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Failure"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Failure")) })
+                .await;
         }
 
         assert!(breaker.is_open());
@@ -84,7 +82,11 @@ mod circuit_breaker_tests {
 
     #[tokio::test]
     async fn test_circuit_breaker_concurrent_access() -> Result<()> {
-        let breaker = Arc::new(CircuitBreaker::new("concurrent-service", 5, Duration::from_secs(1)));
+        let breaker = Arc::new(CircuitBreaker::new(
+            "concurrent-service",
+            5,
+            Duration::from_secs(1),
+        ));
 
         let mut handles = vec![];
 
@@ -92,10 +94,12 @@ mod circuit_breaker_tests {
         for i in 0..10 {
             let breaker_clone = Arc::clone(&breaker);
             let handle = tokio::spawn(async move {
-                breaker_clone.call(async move {
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                    Ok::<usize, anyhow::Error>(i)
-                }).await
+                breaker_clone
+                    .call(async move {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        Ok::<usize, anyhow::Error>(i)
+                    })
+                    .await
             });
             handles.push(handle);
         }
@@ -120,9 +124,9 @@ mod error_boundary_tests {
     async fn test_error_boundary_catches_errors() -> Result<()> {
         let boundary = SecureErrorBoundary::new("test-component", false);
 
-        let result = boundary.execute(async {
-            Err::<i32, anyhow::Error>(anyhow::anyhow!("Test error"))
-        }).await;
+        let result = boundary
+            .execute(async { Err::<i32, anyhow::Error>(anyhow::anyhow!("Test error")) })
+            .await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Test error"));
@@ -134,9 +138,9 @@ mod error_boundary_tests {
     async fn test_error_boundary_passes_success() -> Result<()> {
         let boundary = SecureErrorBoundary::new("test-component", false);
 
-        let result = boundary.execute(async {
-            Ok::<i32, anyhow::Error>(42)
-        }).await?;
+        let result = boundary
+            .execute(async { Ok::<i32, anyhow::Error>(42) })
+            .await?;
 
         assert_eq!(result, 42);
 
@@ -150,13 +154,13 @@ mod error_boundary_tests {
 
         let error_msg = "Sensitive error: API_KEY=sk-12345";
 
-        let result_debug = boundary_debug.execute(async {
-            Err::<(), anyhow::Error>(anyhow::anyhow!(error_msg))
-        }).await;
+        let result_debug = boundary_debug
+            .execute(async { Err::<(), anyhow::Error>(anyhow::anyhow!(error_msg)) })
+            .await;
 
-        let result_prod = boundary_prod.execute(async {
-            Err::<(), anyhow::Error>(anyhow::anyhow!(error_msg))
-        }).await;
+        let result_prod = boundary_prod
+            .execute(async { Err::<(), anyhow::Error>(anyhow::anyhow!(error_msg)) })
+            .await;
 
         // Both should fail but handle errors differently
         assert!(result_debug.is_err());
@@ -170,11 +174,13 @@ mod error_boundary_tests {
         let outer_boundary = SecureErrorBoundary::new("outer", false);
         let inner_boundary = SecureErrorBoundary::new("inner", false);
 
-        let result = outer_boundary.execute(async {
-            inner_boundary.execute(async {
-                Err::<i32, anyhow::Error>(anyhow::anyhow!("Inner error"))
-            }).await
-        }).await;
+        let result = outer_boundary
+            .execute(async {
+                inner_boundary
+                    .execute(async { Err::<i32, anyhow::Error>(anyhow::anyhow!("Inner error")) })
+                    .await
+            })
+            .await;
 
         assert!(result.is_err());
 
@@ -206,9 +212,18 @@ mod self_repair_tests {
     #[tokio::test]
     async fn test_repair_strategy_selection() -> Result<()> {
         let test_cases = vec![
-            (RepairableError::MissingSolanaCli, RepairStrategy::InstallSolanaCli),
-            (RepairableError::MissingBuildTools, RepairStrategy::InstallBuildTools),
-            (RepairableError::MissingConfigDirectory, RepairStrategy::CreateConfigDirectory),
+            (
+                RepairableError::MissingSolanaCli,
+                RepairStrategy::InstallSolanaCli,
+            ),
+            (
+                RepairableError::MissingBuildTools,
+                RepairStrategy::InstallBuildTools,
+            ),
+            (
+                RepairableError::MissingConfigDirectory,
+                RepairStrategy::CreateConfigDirectory,
+            ),
         ];
 
         for (error, expected_strategy) in test_cases {
@@ -297,10 +312,7 @@ mod health_check_tests {
         let health = SystemHealth::new();
 
         // Simulate a health check with timeout
-        let result = tokio::time::timeout(
-            Duration::from_secs(5),
-            health.check_all()
-        ).await;
+        let result = tokio::time::timeout(Duration::from_secs(5), health.check_all()).await;
 
         assert!(result.is_ok());
 
@@ -316,9 +328,15 @@ mod health_check_tests {
         ];
 
         // Aggregate status should be degraded
-        let overall = if individual_statuses.iter().all(|s| matches!(s, HealthStatus::Healthy)) {
+        let overall = if individual_statuses
+            .iter()
+            .all(|s| matches!(s, HealthStatus::Healthy))
+        {
             HealthStatus::Healthy
-        } else if individual_statuses.iter().any(|s| matches!(s, HealthStatus::Unhealthy)) {
+        } else if individual_statuses
+            .iter()
+            .any(|s| matches!(s, HealthStatus::Unhealthy))
+        {
             HealthStatus::Unhealthy
         } else {
             HealthStatus::Degraded
@@ -372,7 +390,8 @@ mod retry_logic_tests {
                     }
                 }
             }
-        }).await?;
+        })
+        .await?;
 
         assert_eq!(result, 42);
 
@@ -386,7 +405,8 @@ mod retry_logic_tests {
     async fn test_retry_exhaustion() -> Result<()> {
         let result = retry_with_backoff(3, Duration::from_millis(10), || async {
             Err::<i32, anyhow::Error>(anyhow::anyhow!("Persistent failure"))
-        }).await;
+        })
+        .await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("failure"));
@@ -474,7 +494,8 @@ mod fault_injection_tests {
 
         let results: Vec<Result<i32>> = futures::future::join_all(operations).await;
 
-        let successful: Vec<i32> = results.iter()
+        let successful: Vec<i32> = results
+            .iter()
             .filter_map(|r| r.as_ref().ok().copied())
             .collect();
 

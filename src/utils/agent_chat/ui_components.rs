@@ -2,7 +2,7 @@
 //! Provides beautifully styled terminal UI elements with gradients, icons, and animations
 
 use super::{Colors, InputMode, InputState, TaskState, TodoPriority, SPINNER_FRAMES};
-use crate::utils::theme::{Theme, Gradient, StyledBox, ProgressBar, StatusIndicator};
+use crate::utils::theme::{Gradient, ProgressBar, StatusIndicator, StyledBox, Theme};
 use anyhow::Result;
 use ratatui::{prelude::*, style::*, text::*, widgets::*, Frame};
 
@@ -12,7 +12,7 @@ pub fn show_welcome_box() {
     let title_gradient = Gradient::purple_gradient();
     let title = "OSVM Agent Chat Interface";
     let gradient_title = Gradient::apply_to_text(title, &title_gradient);
-    
+
     // Use rounded corners with modern styling
     println!();
     println!(
@@ -79,7 +79,7 @@ pub fn show_enhanced_status_bar(task_state: &TaskState) {
     // Use modern spinner frames from theme
     let spinner_frames = Theme::SPINNER_DOTS;
     let spinner = spinner_frames[task_state.spinner_frame % spinner_frames.len()];
-    
+
     // Mode indicator with icons
     let (mode_icon, mode_text, mode_color) = match task_state.input_mode {
         InputMode::InputField => (Theme::ICON_CHEVRON_RIGHT, "INPUT MODE", Theme::SUCCESS),
@@ -147,12 +147,12 @@ pub fn show_task_details_below_input(task_state: &TaskState) {
 
     for (i, item) in task_state.todo_items.iter().enumerate() {
         // Use modern icons for checkboxes
-        let checkbox = if item.completed { 
+        let checkbox = if item.completed {
             format!("{}{}", Theme::SUCCESS, Theme::ICON_SUCCESS)
-        } else { 
+        } else {
             format!("{}☐", Theme::TEXT_MUTED)
         };
-        
+
         // Priority with colored badges
         let (priority_icon, priority_color) = match item.priority {
             TodoPriority::High => (Theme::ICON_FIRE, Theme::ERROR),

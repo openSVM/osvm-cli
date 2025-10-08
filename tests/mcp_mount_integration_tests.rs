@@ -6,9 +6,8 @@
 //! - Mount listing
 //! - Error handling for invalid mounts
 
-use std::process::Command;
 use std::fs;
-use std::path::PathBuf;
+use std::process::Command;
 
 #[test]
 fn test_mcp_mount_help() {
@@ -39,10 +38,10 @@ fn test_mcp_mounts_list_help() {
     assert!(!stderr.contains("panic"), "Should not panic");
     // Either shows mounts, or indicates no mounts configured
     assert!(
-        output.status.success() ||
-        stdout.contains("No") ||
-        stdout.contains("mounts") ||
-        stderr.contains("mounts"),
+        output.status.success()
+            || stdout.contains("No")
+            || stdout.contains("mounts")
+            || stderr.contains("mounts"),
         "Should handle mounts listing"
     );
 }
@@ -59,10 +58,10 @@ fn test_mcp_mount_requires_arguments() {
 
     // Should indicate missing arguments
     assert!(
-        !output.status.success() ||
-        stderr.contains("required") ||
-        stderr.contains("argument") ||
-        stderr.contains("help"),
+        !output.status.success()
+            || stderr.contains("required")
+            || stderr.contains("argument")
+            || stderr.contains("help"),
         "Should require arguments for mount"
     );
 }
@@ -93,7 +92,10 @@ fn test_mcp_unmount_nonexistent() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Should handle gracefully - either succeed (no-op) or report not found
-    assert!(!stderr.contains("panic"), "Should not panic on nonexistent unmount");
+    assert!(
+        !stderr.contains("panic"),
+        "Should not panic on nonexistent unmount"
+    );
 }
 
 #[cfg(test)]
@@ -119,10 +121,10 @@ mod mount_validation_tests {
 
         // Should reject invalid server IDs (path traversal attempts)
         assert!(
-            !output.status.success() ||
-            stderr.contains("Invalid") ||
-            stderr.contains("invalid") ||
-            stderr.contains("identifier"),
+            !output.status.success()
+                || stderr.contains("Invalid")
+                || stderr.contains("invalid")
+                || stderr.contains("identifier"),
             "Should validate server ID and reject path traversal"
         );
     }
@@ -145,7 +147,10 @@ mod mount_validation_tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         // Should validate that path exists or handle error
-        assert!(!stderr.contains("panic"), "Should handle invalid path gracefully");
+        assert!(
+            !stderr.contains("panic"),
+            "Should handle invalid path gracefully"
+        );
     }
 
     #[test]
@@ -160,9 +165,9 @@ mod mount_validation_tests {
 
         // Should reject special characters in server ID
         assert!(
-            !output.status.success() ||
-            stderr.contains("Invalid") ||
-            stderr.contains("alphanumeric"),
+            !output.status.success()
+                || stderr.contains("Invalid")
+                || stderr.contains("alphanumeric"),
             "Should reject special characters in server ID"
         );
     }
@@ -224,16 +229,12 @@ mod mount_lifecycle_tests {
         assert!(!stderr.contains("panic"), "Should not panic");
 
         // Check for expected output format markers
-        let has_table_format = stdout.contains("Name") ||
-            stdout.contains("Path") ||
-            stdout.contains("Server");
+        let has_table_format =
+            stdout.contains("Name") || stdout.contains("Path") || stdout.contains("Server");
 
-        let has_list_format = stdout.contains("-") ||
-            stdout.contains("•") ||
-            stdout.contains("*");
+        let has_list_format = stdout.contains("-") || stdout.contains("•") || stdout.contains("*");
 
-        let has_empty_message = stdout.contains("No mounts") ||
-            stdout.contains("empty");
+        let has_empty_message = stdout.contains("No mounts") || stdout.contains("empty");
 
         assert!(
             has_table_format || has_list_format || has_empty_message,
@@ -265,9 +266,9 @@ mod mount_security_tests {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             assert!(
-                !output.status.success() ||
-                stderr.contains("Invalid") ||
-                stderr.contains("invalid"),
+                !output.status.success()
+                    || stderr.contains("Invalid")
+                    || stderr.contains("invalid"),
                 "Should reject path traversal attempt: {}",
                 attempt
             );
@@ -288,9 +289,7 @@ mod mount_security_tests {
 
         // Should reject excessively long identifiers
         assert!(
-            !output.status.success() ||
-            stderr.contains("Invalid") ||
-            stderr.contains("length"),
+            !output.status.success() || stderr.contains("Invalid") || stderr.contains("length"),
             "Should reject overly long server IDs"
         );
     }
@@ -316,9 +315,9 @@ mod mount_security_tests {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             assert!(
-                !output.status.success() ||
-                stderr.contains("Invalid") ||
-                stderr.contains("alphanumeric"),
+                !output.status.success()
+                    || stderr.contains("Invalid")
+                    || stderr.contains("alphanumeric"),
                 "Should reject invalid character in: {}",
                 invalid
             );

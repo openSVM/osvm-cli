@@ -33,10 +33,10 @@ pub struct AdvancedChatState {
     pub spinner_state: Arc<AtomicUsize>,
     pub theme_manager: Arc<RwLock<ThemeManager>>,
     pub status_bar_manager: Arc<RwLock<SystemStatusBarManager>>,
-    
+
     /// Cached status bar text to reduce blocking UI thread
     pub cached_status_text: Arc<RwLock<Option<String>>>,
-    
+
     /// Last time the status was updated
     pub last_status_update: Arc<RwLock<Option<std::time::Instant>>>,
 }
@@ -177,19 +177,23 @@ impl AdvancedChatState {
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
         // Blocking lock: very short critical section, avoids missing cleanup
-        let mut sessions = self.sessions.write().map_err(|e| {
-            anyhow!("Failed to acquire write lock for sessions: {}", e)
-        })?;
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| anyhow!("Failed to acquire write lock for sessions: {}", e))?;
 
         // Remove ALL Processing messages from the session
         if let Some(session) = sessions.get_mut(&session_id) {
             let initial_count = session.messages.len();
-            session.messages.retain(|msg| {
-                !matches!(msg, ChatMessage::Processing { .. })
-            });
+            session
+                .messages
+                .retain(|msg| !matches!(msg, ChatMessage::Processing { .. }));
             let removed_count = initial_count - session.messages.len();
             if removed_count > 0 {
-                debug!("Removed {} processing message(s) from session {}", removed_count, session_id);
+                debug!(
+                    "Removed {} processing message(s) from session {}",
+                    removed_count, session_id
+                );
             }
         } else {
             warn!(
@@ -237,7 +241,10 @@ impl AdvancedChatState {
                     });
                 }
                 Err(e) => {
-                    error!("Failed to create temporary Tokio runtime for send_agent_command_sync: {}", e);
+                    error!(
+                        "Failed to create temporary Tokio runtime for send_agent_command_sync: {}",
+                        e
+                    );
                 }
             }
         });
@@ -329,10 +336,7 @@ impl AdvancedChatState {
                     match service.list_tools(&server_id).await {
                         Ok(tools) => tools,
                         Err(e) => {
-                            warn!(
-                                "Failed to fetch tools from {}: {}",
-                                server_id, e
-                            );
+                            warn!("Failed to fetch tools from {}: {}", server_id, e);
                             // Don't show fallback tools - let it fail so the issue is visible
                             vec![]
                         }

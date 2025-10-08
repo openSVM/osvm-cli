@@ -946,13 +946,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some((cmd, matches)) => (cmd, matches),
         None => {
             // No subcommand - bootstrap OSVM agent with microVM isolation
-            use crate::services::microvm_launcher::{is_running_in_microvm, MicroVmLauncher, get_default_osvm_config};
-            
+            use crate::services::microvm_launcher::{
+                get_default_osvm_config, is_running_in_microvm, MicroVmLauncher,
+            };
+
             // Check if we should skip microVM
             let skip_microvm = std::env::var("OSVM_SKIP_MICROVM")
                 .map(|v| v == "1" || v.to_lowercase() == "true")
                 .unwrap_or(false);
-            
+
             if skip_microvm || is_running_in_microvm() {
                 // Already in microVM or explicitly skipping - run agent directly
                 if is_running_in_microvm() {
@@ -962,16 +964,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("🚀 OSVM Agent Starting (Direct Mode - OSVM_SKIP_MICROVM=1)");
                 }
                 println!("💡 Use 'osvm --help' to see all available commands\n");
-                
+
                 return crate::utils::agent_chat_v2::run_advanced_agent_chat()
                     .await
                     .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
             }
-            
+
             // On host - launch in microVM for enhanced security
             println!("🚀 Launching OSVM Agent in microVM...");
             println!();
-            
+
             // Create microVM launcher
             let launcher = match MicroVmLauncher::new() {
                 Ok(l) => l,
@@ -979,23 +981,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("❌ Failed to initialize microVM launcher: {}", e);
                     eprintln!("   Falling back to direct execution");
                     eprintln!("   💡 Set OSVM_SKIP_MICROVM=1 to suppress this warning\n");
-                    
+
                     return crate::utils::agent_chat_v2::run_advanced_agent_chat()
                         .await
                         .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
                 }
             };
-            
+
             // Get default configuration
             let config = get_default_osvm_config();
-            
+
             // Launch OSVM runtime in microVM
             match launcher.launch_osvm_runtime(config) {
                 Ok(mut handle) => {
                     println!("✅ OSVM microVM launched successfully");
                     println!("   MicroVM is now running in isolated environment");
                     println!("   Press Ctrl+C to stop\n");
-                    
+
                     // Wait for microVM to finish
                     loop {
                         if !handle.is_running() {
@@ -1004,7 +1006,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                     }
-                    
+
                     return Ok(());
                 }
                 Err(e) => {
@@ -1012,11 +1014,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("   Falling back to direct execution");
                     eprintln!();
                     eprintln!("💡 To fix this:");
-                    eprintln!("   1. Ensure Firecracker is installed: ~/.osvm/bin/firecracker --version");
+                    eprintln!(
+                        "   1. Ensure Firecracker is installed: ~/.osvm/bin/firecracker --version"
+                    );
                     eprintln!("   2. Check kernel exists: ls -lh ~/.osvm/kernel/vmlinux.bin");
                     eprintln!("   3. Check rootfs exists: ls -lh ~/.osvm/rootfs/osvm-runtime.cpio");
                     eprintln!("   4. Or set OSVM_SKIP_MICROVM=1 to skip microVM launch\n");
-                    
+
                     return crate::utils::agent_chat_v2::run_advanced_agent_chat()
                         .await
                         .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
@@ -2314,15 +2318,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                "list" => {
-                    match crate::commands::mount::handle_mount_list() {
-                        Ok(_) => {}
-                        Err(e) => {
-                            eprintln!("❌ Failed to list mounts: {}", e);
-                            exit(1);
-                        }
+                "list" => match crate::commands::mount::handle_mount_list() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("❌ Failed to list mounts: {}", e);
+                        exit(1);
                     }
-                }
+                },
                 _ => {
                     eprintln!("Unknown mount subcommand: {}", mount_sub_command);
                     exit(1);
@@ -2346,26 +2348,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             };
 
-            use crate::commands::database::{DatabaseArgs, execute_database_command};
+            use crate::commands::database::{execute_database_command, DatabaseArgs};
 
             let args = DatabaseArgs {
-                data_dir: db_sub_matches.get_one::<String>("data-dir").map(|s| s.to_string()),
-                query: db_sub_matches.get_one::<String>("query").map(|s| s.to_string()),
+                data_dir: db_sub_matches
+                    .get_one::<String>("data-dir")
+                    .map(|s| s.to_string()),
+                query: db_sub_matches
+                    .get_one::<String>("query")
+                    .map(|s| s.to_string()),
                 limit: db_sub_matches
                     .get_one::<String>("limit")
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(100),
-                session_id: db_sub_matches.get_one::<String>("session-id").map(|s| s.to_string()),
+                session_id: db_sub_matches
+                    .get_one::<String>("session-id")
+                    .map(|s| s.to_string()),
                 show_commands: db_sub_matches.get_flag("commands"),
                 show_chat: db_sub_matches.get_flag("chat"),
                 show_stats: db_sub_matches.get_flag("stats"),
                 // Sync arguments
-                sync_mode: db_sub_matches.get_one::<String>("mode").map(|s| s.to_string()),
-                programs: db_sub_matches.get_one::<String>("programs").map(|s| s.to_string()),
-                accounts: db_sub_matches.get_one::<String>("accounts").map(|s| s.to_string()),
-                pattern: db_sub_matches.get_one::<String>("pattern").map(|s| s.to_string()),
-                ledger_path: db_sub_matches.get_one::<String>("ledger-path").map(|s| s.to_string()),
-                snapshot_dir: db_sub_matches.get_one::<String>("snapshot-dir").map(|s| s.to_string()),
+                sync_mode: db_sub_matches
+                    .get_one::<String>("mode")
+                    .map(|s| s.to_string()),
+                programs: db_sub_matches
+                    .get_one::<String>("programs")
+                    .map(|s| s.to_string()),
+                accounts: db_sub_matches
+                    .get_one::<String>("accounts")
+                    .map(|s| s.to_string()),
+                pattern: db_sub_matches
+                    .get_one::<String>("pattern")
+                    .map(|s| s.to_string()),
+                ledger_path: db_sub_matches
+                    .get_one::<String>("ledger-path")
+                    .map(|s| s.to_string()),
+                snapshot_dir: db_sub_matches
+                    .get_one::<String>("snapshot-dir")
+                    .map(|s| s.to_string()),
             };
 
             match execute_database_command(db_sub_command, &args).await {
@@ -2383,14 +2403,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 exit(1);
             };
 
-            use crate::commands::realtime::{RealtimeArgs, execute_realtime_command};
+            use crate::commands::realtime::{execute_realtime_command, RealtimeArgs};
 
             let args = RealtimeArgs {
-                programs: realtime_sub_matches.get_one::<String>("programs").map(|s| s.to_string()),
-                accounts: realtime_sub_matches.get_one::<String>("accounts").map(|s| s.to_string()),
-                patterns: realtime_sub_matches.get_one::<String>("patterns").map(|s| s.to_string()),
-                ledger_path: realtime_sub_matches.get_one::<String>("ledger-path").map(|s| s.to_string()),
-                snapshot_dir: realtime_sub_matches.get_one::<String>("snapshot-dir").map(|s| s.to_string()),
+                programs: realtime_sub_matches
+                    .get_one::<String>("programs")
+                    .map(|s| s.to_string()),
+                accounts: realtime_sub_matches
+                    .get_one::<String>("accounts")
+                    .map(|s| s.to_string()),
+                patterns: realtime_sub_matches
+                    .get_one::<String>("patterns")
+                    .map(|s| s.to_string()),
+                ledger_path: realtime_sub_matches
+                    .get_one::<String>("ledger-path")
+                    .map(|s| s.to_string()),
+                snapshot_dir: realtime_sub_matches
+                    .get_one::<String>("snapshot-dir")
+                    .map(|s| s.to_string()),
             };
 
             match execute_realtime_command(realtime_sub_command, &args).await {
@@ -2648,11 +2678,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         cmd => {
             let command_duration = command_start_time.elapsed();
-            let result: Result<(), Box<dyn std::error::Error>> = Err(format!("Unknown command: {cmd}").into());
-            
+            let result: Result<(), Box<dyn std::error::Error>> =
+                Err(format!("Unknown command: {cmd}").into());
+
             // Log command execution
             log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
-            
+
             return result;
         }
     };
@@ -2673,8 +2704,8 @@ async fn log_command_execution(
     duration: std::time::Duration,
 ) {
     // Try to log to ClickHouse if it's running
-    use crate::services::clickhouse_service::{ClickHouseService, ClickHouseStatus};
     use crate::services::activity_logger::ActivityLogger;
+    use crate::services::clickhouse_service::{ClickHouseService, ClickHouseStatus};
 
     if let Ok(service) = ClickHouseService::new() {
         if let Ok(status) = service.status().await {
@@ -2683,15 +2714,17 @@ async fn log_command_execution(
                 let exit_code = if result.is_ok() { 0 } else { 1 };
                 let duration_ms = duration.as_millis() as u64;
                 let error_message = result.as_ref().err().map(|e| e.to_string());
-                
-                let _ = logger.log_command(
-                    command_name,
-                    args,
-                    exit_code,
-                    duration_ms,
-                    error_message.as_deref(),
-                ).await;
-                
+
+                let _ = logger
+                    .log_command(
+                        command_name,
+                        args,
+                        exit_code,
+                        duration_ms,
+                        error_message.as_deref(),
+                    )
+                    .await;
+
                 // Flush immediately for CLI commands
                 let _ = logger.flush_commands().await;
             }

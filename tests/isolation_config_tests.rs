@@ -3,8 +3,8 @@
 
 use anyhow::Result;
 use osvm::services::isolation_config::{
-    IsolationConfig, ResourceLimits, SecurityPolicy, NetworkIsolation,
-    FileSystemIsolation, IsolationLevel, IsolationValidator, PolicyEnforcement,
+    FileSystemIsolation, IsolationConfig, IsolationLevel, IsolationValidator, NetworkIsolation,
+    PolicyEnforcement, ResourceLimits, SecurityPolicy,
 };
 use std::collections::HashMap;
 
@@ -209,13 +209,9 @@ mod resource_limits_tests {
 
     #[test]
     fn test_limits_comparison() {
-        let limits1 = ResourceLimits::new()
-            .with_cpu_cores(2)
-            .with_memory_mb(512);
+        let limits1 = ResourceLimits::new().with_cpu_cores(2).with_memory_mb(512);
 
-        let limits2 = ResourceLimits::new()
-            .with_cpu_cores(4)
-            .with_memory_mb(1024);
+        let limits2 = ResourceLimits::new().with_cpu_cores(4).with_memory_mb(1024);
 
         assert!(limits2.is_more_restrictive_than(&limits1));
     }
@@ -352,11 +348,9 @@ mod security_policy_tests {
 
     #[test]
     fn test_policy_merge() -> Result<()> {
-        let policy1 = SecurityPolicy::new()
-            .with_network_allowed(true);
+        let policy1 = SecurityPolicy::new().with_network_allowed(true);
 
-        let policy2 = SecurityPolicy::new()
-            .with_file_write_allowed(&["/tmp"]);
+        let policy2 = SecurityPolicy::new().with_file_write_allowed(&["/tmp"]);
 
         let merged = policy1.merge(&policy2)?;
 
@@ -455,7 +449,10 @@ mod network_isolation_tests {
         isolation.configure_vpn("vpn.example.com", 1194);
 
         assert!(isolation.vpn_enabled());
-        assert_eq!(isolation.vpn_endpoint(), Some("vpn.example.com:1194".to_string()));
+        assert_eq!(
+            isolation.vpn_endpoint(),
+            Some("vpn.example.com:1194".to_string())
+        );
     }
 
     #[test]
@@ -464,7 +461,10 @@ mod network_isolation_tests {
 
         isolation.set_http_proxy("proxy.example.com:8080");
 
-        assert_eq!(isolation.http_proxy(), Some("proxy.example.com:8080".to_string()));
+        assert_eq!(
+            isolation.http_proxy(),
+            Some("proxy.example.com:8080".to_string())
+        );
     }
 }
 

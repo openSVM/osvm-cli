@@ -1,18 +1,18 @@
 //! Property-based tests for critical system behaviors
 
-use proptest::prelude::*;
 use osvm::{
     services::{
-        ai_service::{ToolPlan, ToolCall},
-        mcp_service::{McpTool, McpParameter},
+        ai_service::{ToolCall, ToolPlan},
+        mcp_service::{McpParameter, McpTool},
     },
     utils::{
         isolation::{ComponentId, ResourceLimits},
         secure_logger::SecureLogger,
     },
 };
-use std::collections::HashMap;
+use proptest::prelude::*;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Property: Tool plans should always serialize/deserialize correctly
 #[cfg(test)]
@@ -350,20 +350,13 @@ mod json_properties {
             Just(Value::Null),
         ];
 
-        leaf.prop_recursive(
-            8, 256, 10,
-            |inner| prop_oneof![
-                prop::collection::vec(inner.clone(), 0..10)
-                    .prop_map(Value::Array),
-                prop::collection::hash_map(
-                    "[a-z_]{1,20}",
-                    inner,
-                    0..10
-                ).prop_map(|map| {
-                    Value::Object(map.into_iter().collect())
-                }),
+        leaf.prop_recursive(8, 256, 10, |inner| {
+            prop_oneof![
+                prop::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
+                prop::collection::hash_map("[a-z_]{1,20}", inner, 0..10)
+                    .prop_map(|map| { Value::Object(map.into_iter().collect()) }),
             ]
-        )
+        })
     }
 
     proptest! {

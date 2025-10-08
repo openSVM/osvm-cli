@@ -589,9 +589,11 @@ impl AiService {
                 // Final fallback: return an empty plan instead of error so UI can proceed without showing a planning failure error
                 debug_warn!("Falling back to empty tool plan after parse failures");
                 Ok(ToolPlan {
-                    reasoning: "I couldn't create a structured plan, but I'll help you directly.".to_string(),
+                    reasoning: "I couldn't create a structured plan, but I'll help you directly."
+                        .to_string(),
                     osvm_tools_to_use: vec![],
-                    expected_outcome: "Provide a helpful direct answer based on the request.".to_string(),
+                    expected_outcome: "Provide a helpful direct answer based on the request."
+                        .to_string(),
                 })
             }
         }
@@ -697,7 +699,8 @@ impl AiService {
         // First try to parse as JSON
         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(ai_response) {
             // Use the existing salvage method which handles our JSON structure
-            return self.salvage_from_json(&json_val)
+            return self
+                .salvage_from_json(&json_val)
                 .ok_or_else(|| anyhow::anyhow!("Failed to extract tool plan from JSON response"));
         }
 
@@ -713,7 +716,8 @@ impl AiService {
     /// Parse OSVM plan XML format
     fn parse_osvm_plan_xml(&self, xml_response: &str) -> Result<ToolPlan> {
         // Extract overview
-        let overview = self.extract_xml_value(xml_response, "overview")
+        let overview = self
+            .extract_xml_value(xml_response, "overview")
             .unwrap_or_else(|_| "Analyzing request and creating execution plan".to_string());
 
         // Extract tools from XML
@@ -727,12 +731,14 @@ impl AiService {
                     let tool_xml = &tools_section[start..start + tool_end + 7];
 
                     // Extract tool name
-                    let tool_name = self.extract_xml_attribute(tool_xml, "name")
+                    let tool_name = self
+                        .extract_xml_attribute(tool_xml, "name")
                         .or_else(|| self.extract_xml_value(tool_xml, "name").ok())
                         .unwrap_or_else(|| "unknown".to_string());
 
                     // Extract tool description
-                    let description = self.extract_xml_value(tool_xml, "description")
+                    let description = self
+                        .extract_xml_value(tool_xml, "description")
                         .unwrap_or_else(|_| "Tool execution".to_string());
 
                     // Extract priority if available
@@ -753,7 +759,8 @@ impl AiService {
         }
 
         // Extract expected outcome from overview or separate tag
-        let expected_outcome = self.extract_xml_value(xml_response, "expected_outcome")
+        let expected_outcome = self
+            .extract_xml_value(xml_response, "expected_outcome")
             .or_else(|_| self.extract_xml_value(xml_response, "estimatedTime"))
             .unwrap_or_else(|_| overview.clone());
 
@@ -823,28 +830,28 @@ impl AiService {
                         let name_start = name_start + 6;
                         if let Some(name_end) = tool_xml[name_start..].find("\"") {
                             tool_xml[name_start..name_start + name_end].to_string()
+                        } else {
+                            self.extract_xml_value(tool_xml, "tool_name")
+                                .ok()
+                                .or(self.extract_xml_value(tool_xml, "endpoint").ok())
+                                .unwrap_or_else(|| "unknown".to_string())
+                        }
                     } else {
                         self.extract_xml_value(tool_xml, "tool_name")
                             .ok()
                             .or(self.extract_xml_value(tool_xml, "endpoint").ok())
                             .unwrap_or_else(|| "unknown".to_string())
-                    }
-                } else {
-                    self.extract_xml_value(tool_xml, "tool_name")
-                        .ok()
-                        .or(self.extract_xml_value(tool_xml, "endpoint").ok())
-                        .unwrap_or_else(|| "unknown".to_string())
-                };
+                    };
 
-                // Extract tool fields
-                let server_id = self
-                    .extract_xml_value(tool_xml, "server_id")
-                    .unwrap_or_else(|_| "osvm-mcp".to_string());
-                let reason = self
-                    .extract_xml_value(tool_xml, "reason")
-                    .ok()
-                    .or(self.extract_xml_value(tool_xml, "description").ok())
-                    .unwrap_or_else(|| "Tool execution".to_string());
+                    // Extract tool fields
+                    let server_id = self
+                        .extract_xml_value(tool_xml, "server_id")
+                        .unwrap_or_else(|_| "osvm-mcp".to_string());
+                    let reason = self
+                        .extract_xml_value(tool_xml, "reason")
+                        .ok()
+                        .or(self.extract_xml_value(tool_xml, "description").ok())
+                        .unwrap_or_else(|| "Tool execution".to_string());
 
                     // Extract args as JSON object
                     let args =

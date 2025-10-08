@@ -3,11 +3,11 @@
 
 use anyhow::Result;
 use osvm::utils::circuit_breaker::{
-    CircuitBreaker, GranularCircuitBreaker, CircuitState, CircuitBreakerConfig,
-    CircuitBreakerMetrics, FailureClassifier, BreakerPolicy,
+    BreakerPolicy, CircuitBreaker, CircuitBreakerConfig, CircuitBreakerMetrics, CircuitState,
+    FailureClassifier, GranularCircuitBreaker,
 };
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 #[cfg(test)]
@@ -43,22 +43,22 @@ mod circuit_breaker_basic_tests {
 
         // Make 3 failing calls
         for _ in 0..3 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Test failure"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Test failure")) })
+                .await;
         }
 
         // Circuit should be open
         assert!(breaker.is_open());
 
         // Next call should fail fast
-        let result = breaker.call(async {
-            Ok::<(), anyhow::Error>(())
-        }).await;
+        let result = breaker.call(async { Ok::<(), anyhow::Error>(()) }).await;
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("circuit") ||
-                result.unwrap_err().to_string().contains("open"));
+        assert!(
+            result.unwrap_err().to_string().contains("circuit")
+                || result.unwrap_err().to_string().contains("open")
+        );
 
         Ok(())
     }
@@ -69,9 +69,9 @@ mod circuit_breaker_basic_tests {
 
         // Trip the circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Failure"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Failure")) })
+                .await;
         }
 
         assert!(breaker.is_open());
@@ -91,9 +91,9 @@ mod circuit_breaker_basic_tests {
 
         // Trip circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                .await;
         }
 
         // Wait for half-open
@@ -114,9 +114,9 @@ mod circuit_breaker_basic_tests {
 
         // Trip circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                .await;
         }
 
         // Wait for half-open
@@ -124,9 +124,9 @@ mod circuit_breaker_basic_tests {
         assert!(breaker.is_half_open());
 
         // Failing call should reopen circuit
-        let _ = breaker.call(async {
-            Err::<(), anyhow::Error>(anyhow::anyhow!("Still failing"))
-        }).await;
+        let _ = breaker
+            .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Still failing")) })
+            .await;
 
         assert!(breaker.is_open());
 
@@ -139,9 +139,9 @@ mod circuit_breaker_basic_tests {
 
         // Trip circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                .await;
         }
 
         assert!(breaker.is_open());
@@ -162,9 +162,9 @@ mod circuit_breaker_basic_tests {
         // Make some calls
         for i in 0..10 {
             if i % 3 == 0 {
-                let _ = breaker.call(async {
-                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-                }).await;
+                let _ = breaker
+                    .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                    .await;
             } else {
                 breaker.call(async { Ok::<(), anyhow::Error>(()) }).await?;
             }
@@ -181,7 +181,11 @@ mod circuit_breaker_basic_tests {
 
     #[tokio::test]
     async fn test_concurrent_circuit_breaker_access() -> Result<()> {
-        let breaker = Arc::new(CircuitBreaker::new("concurrent", 10, Duration::from_secs(1)));
+        let breaker = Arc::new(CircuitBreaker::new(
+            "concurrent",
+            10,
+            Duration::from_secs(1),
+        ));
 
         let mut handles = vec![];
 
@@ -189,10 +193,12 @@ mod circuit_breaker_basic_tests {
         for i in 0..20 {
             let breaker_clone = Arc::clone(&breaker);
             let handle = tokio::spawn(async move {
-                breaker_clone.call(async move {
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                    Ok::<usize, anyhow::Error>(i)
-                }).await
+                breaker_clone
+                    .call(async move {
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        Ok::<usize, anyhow::Error>(i)
+                    })
+                    .await
             });
             handles.push(handle);
         }
@@ -219,10 +225,12 @@ mod circuit_breaker_basic_tests {
         );
 
         // This should timeout
-        let result = breaker.call(async {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Ok::<(), anyhow::Error>(())
-        }).await;
+        let result = breaker
+            .call(async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                Ok::<(), anyhow::Error>(())
+            })
+            .await;
 
         assert!(result.is_err());
 
@@ -262,9 +270,11 @@ mod granular_circuit_breaker_tests {
 
         // Fail endpoint1
         for _ in 0..2 {
-            let _ = breaker.call_endpoint("endpoint1", async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call_endpoint("endpoint1", async {
+                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
+                })
+                .await;
         }
 
         // endpoint1 should be open
@@ -274,9 +284,9 @@ mod granular_circuit_breaker_tests {
         assert!(!breaker.is_endpoint_open("endpoint2"));
 
         // Successful call to endpoint2
-        breaker.call_endpoint("endpoint2", async {
-            Ok::<(), anyhow::Error>(())
-        }).await?;
+        breaker
+            .call_endpoint("endpoint2", async { Ok::<(), anyhow::Error>(()) })
+            .await?;
 
         assert!(!breaker.is_endpoint_open("endpoint2"));
 
@@ -290,15 +300,17 @@ mod granular_circuit_breaker_tests {
 
         // Make calls to different endpoints
         for _ in 0..5 {
-            breaker.call_endpoint("api1", async {
-                Ok::<(), anyhow::Error>(())
-            }).await?;
+            breaker
+                .call_endpoint("api1", async { Ok::<(), anyhow::Error>(()) })
+                .await?;
         }
 
         for _ in 0..3 {
-            let _ = breaker.call_endpoint("api2", async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call_endpoint("api2", async {
+                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
+                })
+                .await;
         }
 
         let metrics = breaker.endpoint_metrics("api1");
@@ -337,9 +349,11 @@ mod granular_circuit_breaker_tests {
 
         // Trip endpoint
         for _ in 0..2 {
-            let _ = breaker.call_endpoint("api1", async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call_endpoint("api1", async {
+                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
+                })
+                .await;
         }
 
         assert!(breaker.is_endpoint_open("api1"));
@@ -485,18 +499,27 @@ mod advanced_scenarios_tests {
 
     #[tokio::test]
     async fn test_cascading_failures() -> Result<()> {
-        let breaker1 = Arc::new(CircuitBreaker::new("service1", 2, Duration::from_millis(50)));
-        let breaker2 = Arc::new(CircuitBreaker::new("service2", 2, Duration::from_millis(50)));
+        let breaker1 = Arc::new(CircuitBreaker::new(
+            "service1",
+            2,
+            Duration::from_millis(50),
+        ));
+        let breaker2 = Arc::new(CircuitBreaker::new(
+            "service2",
+            2,
+            Duration::from_millis(50),
+        ));
 
         // Service1 calls service2
         let b1 = Arc::clone(&breaker1);
         let b2 = Arc::clone(&breaker2);
 
-        let result = b1.call(async move {
-            b2.call(async {
-                Err::<(), anyhow::Error>(anyhow::anyhow!("Service2 failed"))
-            }).await
-        }).await;
+        let result = b1
+            .call(async move {
+                b2.call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Service2 failed")) })
+                    .await
+            })
+            .await;
 
         assert!(result.is_err());
 
@@ -517,10 +540,12 @@ mod advanced_scenarios_tests {
             let handle = tokio::spawn(async move {
                 let _permit = semaphore_clone.acquire().await.unwrap();
 
-                breaker_clone.call(async move {
-                    tokio::time::sleep(Duration::from_millis(50)).await;
-                    Ok::<usize, anyhow::Error>(i)
-                }).await
+                breaker_clone
+                    .call(async move {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                        Ok::<usize, anyhow::Error>(i)
+                    })
+                    .await
             });
 
             handles.push(handle);
@@ -542,17 +567,15 @@ mod advanced_scenarios_tests {
 
         // Trip circuit
         for _ in 0..2 {
-            let _ = breaker.call(async {
-                Err::<i32, anyhow::Error>(anyhow::anyhow!("Fail"))
-            }).await;
+            let _ = breaker
+                .call(async { Err::<i32, anyhow::Error>(anyhow::anyhow!("Fail")) })
+                .await;
         }
 
         assert!(breaker.is_open());
 
         // Use fallback when circuit is open
-        let result = match breaker.call(async {
-            Ok::<i32, anyhow::Error>(42)
-        }).await {
+        let result = match breaker.call(async { Ok::<i32, anyhow::Error>(42) }).await {
             Ok(value) => value,
             Err(_) => -1, // Fallback value
         };
@@ -571,16 +594,18 @@ mod advanced_scenarios_tests {
             let breaker_clone = Arc::clone(&breaker);
             let count = Arc::clone(&attempt_count);
 
-            breaker_clone.call(async move {
-                let mut c = count.lock().await;
-                *c += 1;
+            breaker_clone
+                .call(async move {
+                    let mut c = count.lock().await;
+                    *c += 1;
 
-                if *c < 3 {
-                    Err(anyhow::anyhow!("Temporary failure"))
-                } else {
-                    Ok(42)
-                }
-            }).await
+                    if *c < 3 {
+                        Err(anyhow::anyhow!("Temporary failure"))
+                    } else {
+                        Ok(42)
+                    }
+                })
+                .await
         }?;
 
         assert_eq!(result, 42);
@@ -605,9 +630,9 @@ mod circuit_breaker_metrics_tests {
 
         for i in 0..20 {
             if i % 3 == 0 {
-                let _ = breaker.call(async {
-                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-                }).await;
+                let _ = breaker
+                    .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                    .await;
                 failure += 1;
             } else {
                 breaker.call(async { Ok::<(), anyhow::Error>(()) }).await?;
@@ -633,9 +658,9 @@ mod circuit_breaker_metrics_tests {
             if i < 7 {
                 breaker.call(async { Ok::<(), anyhow::Error>(()) }).await?;
             } else {
-                let _ = breaker.call(async {
-                    Err::<(), anyhow::Error>(anyhow::anyhow!("Fail"))
-                }).await;
+                let _ = breaker
+                    .call(async { Err::<(), anyhow::Error>(anyhow::anyhow!("Fail")) })
+                    .await;
             }
         }
 

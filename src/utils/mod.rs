@@ -40,8 +40,6 @@ pub mod keybindings;
 pub mod network_security;
 /// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
-/// Path security validation and utilities
-pub mod path_security;
 /// Real-time security monitoring and threat detection
 // FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
 // pub mod security_monitor;
@@ -53,16 +51,18 @@ pub mod path_security;
 // pub mod security_testing;
 /// OSVM command planner for AI-powered command execution
 pub mod osvm_command_planner;
+/// Path security validation and utilities
+pub mod path_security;
 /// Plugin system for extending functionality
 pub mod plugins;
 /// Secure logging utilities to prevent information disclosure
 pub mod secure_logger;
 /// Secure system operations without privilege escalation
 pub mod secure_system;
-/// Advanced theme customization system
-pub mod themes;
 /// Modern theme system with gradients and effects
 pub mod theme;
+/// Advanced theme customization system
+pub mod themes;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions

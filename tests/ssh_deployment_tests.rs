@@ -2,15 +2,14 @@
 
 use anyhow::Result;
 use osvm::utils::ssh_deploy::{
-    SshClient, DeploymentConfig, NetworkType,
-    DeploymentResult, DeploymentStatus, HotSwapConfig,
+    DeploymentConfig, DeploymentResult, DeploymentStatus, HotSwapConfig, NetworkType, SshClient,
 };
 use std::collections::HashMap;
-use std::net::{TcpListener, SocketAddr};
+use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
+use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpStream;
-use std::time::Duration;
 
 /// Mock SSH server for testing
 struct MockSshServer {
@@ -43,7 +42,10 @@ mod connection_tests {
             ("user@host", ("user", "host", 22)),
             ("user@host:2222", ("user", "host", 2222)),
             ("user@192.168.1.100", ("user", "192.168.1.100", 22)),
-            ("deployer@example.com:2022", ("deployer", "example.com", 2022)),
+            (
+                "deployer@example.com:2022",
+                ("deployer", "example.com", 2022),
+            ),
         ];
 
         for (input, (expected_user, expected_host, expected_port)) in test_cases {
@@ -85,10 +87,7 @@ mod connection_tests {
         let client = SshClient::new("user", "192.0.2.1", 22)?; // TEST-NET-1 (unreachable)
 
         let start = std::time::Instant::now();
-        let result = tokio::time::timeout(
-            Duration::from_secs(2),
-            client.connect()
-        ).await;
+        let result = tokio::time::timeout(Duration::from_secs(2), client.connect()).await;
 
         let duration = start.elapsed();
 
@@ -260,13 +259,7 @@ mod dependency_installation_tests {
 
     #[test]
     fn test_dependency_detection() {
-        let required_deps = vec![
-            "build-essential",
-            "pkg-config",
-            "libssl-dev",
-            "git",
-            "curl",
-        ];
+        let required_deps = vec!["build-essential", "pkg-config", "libssl-dev", "git", "curl"];
 
         // Simulate checking which deps are missing
         let installed_deps = vec!["git", "curl"];
@@ -285,7 +278,10 @@ mod dependency_installation_tests {
     #[test]
     fn test_package_manager_detection() {
         let package_managers = vec![
-            ("apt", vec!["apt-get", "update", "&&", "apt-get", "install", "-y"]),
+            (
+                "apt",
+                vec!["apt-get", "update", "&&", "apt-get", "install", "-y"],
+            ),
             ("yum", vec!["yum", "install", "-y"]),
             ("dnf", vec!["dnf", "install", "-y"]),
             ("pacman", vec!["pacman", "-S", "--noconfirm"]),

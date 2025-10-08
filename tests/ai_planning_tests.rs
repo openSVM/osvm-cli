@@ -1,11 +1,11 @@
 //! Comprehensive tests for AI planning and tool calling functionality
 
 use anyhow::Result;
-use osvm::services::ai_service::{AiService, ToolPlan, ToolCall};
-use osvm::services::mcp_service::{McpService, McpTool, McpParameter};
-use std::collections::HashMap;
-use mockito::{Server, Mock};
+use mockito::{Mock, Server};
+use osvm::services::ai_service::{AiService, ToolCall, ToolPlan};
+use osvm::services::mcp_service::{McpParameter, McpService, McpTool};
 use serde_json::json;
+use std::collections::HashMap;
 
 /// Create a mock AI service for testing
 fn create_mock_ai_service(server_url: String) -> AiService {
@@ -21,14 +21,12 @@ fn create_sample_tools() -> HashMap<String, Vec<McpTool>> {
         McpTool {
             name: "get_balance".to_string(),
             description: "Get SOL balance for an address".to_string(),
-            parameters: vec![
-                McpParameter {
-                    name: "address".to_string(),
-                    param_type: "string".to_string(),
-                    required: true,
-                    description: Some("Solana wallet address".to_string()),
-                }
-            ],
+            parameters: vec![McpParameter {
+                name: "address".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                description: Some("Solana wallet address".to_string()),
+            }],
         },
         McpTool {
             name: "get_recent_transactions".to_string(),
@@ -45,33 +43,31 @@ fn create_sample_tools() -> HashMap<String, Vec<McpTool>> {
                     param_type: "number".to_string(),
                     required: false,
                     description: Some("Number of transactions to return".to_string()),
-                }
+                },
             ],
         },
     ];
     tools.insert("solana-mcp".to_string(), solana_tools);
 
     // OSVM MCP tools
-    let osvm_tools = vec![
-        McpTool {
-            name: "deploy_program".to_string(),
-            description: "Deploy a Solana program".to_string(),
-            parameters: vec![
-                McpParameter {
-                    name: "program_path".to_string(),
-                    param_type: "string".to_string(),
-                    required: true,
-                    description: Some("Path to program binary".to_string()),
-                },
-                McpParameter {
-                    name: "network".to_string(),
-                    param_type: "string".to_string(),
-                    required: false,
-                    description: Some("Target network (mainnet/devnet/testnet)".to_string()),
-                }
-            ],
-        },
-    ];
+    let osvm_tools = vec![McpTool {
+        name: "deploy_program".to_string(),
+        description: "Deploy a Solana program".to_string(),
+        parameters: vec![
+            McpParameter {
+                name: "program_path".to_string(),
+                param_type: "string".to_string(),
+                required: true,
+                description: Some("Path to program binary".to_string()),
+            },
+            McpParameter {
+                name: "network".to_string(),
+                param_type: "string".to_string(),
+                required: false,
+                description: Some("Target network (mainnet/devnet/testnet)".to_string()),
+            },
+        ],
+    }];
     tools.insert("osvm-mcp".to_string(), osvm_tools);
 
     tools
@@ -85,21 +81,25 @@ mod tests {
     #[tokio::test]
     async fn test_ai_planning_simple_request() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/api/getAnswer")
+        let mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "reasoning": "User wants to check balance",
-                "osvm_tools_to_use": [{
-                    "server_id": "solana-mcp",
-                    "tool_name": "get_balance",
-                    "reason": "Need to fetch wallet balance",
-                    "args": {
-                        "address": "7xKXtg2CW87d3TXQ5xmD7mSZQ4mPfFrPwJzQ7xRT7mF9"
-                    }
-                }],
-                "expected_outcome": "Balance will be displayed"
-            }).to_string())
+            .with_body(
+                json!({
+                    "reasoning": "User wants to check balance",
+                    "osvm_tools_to_use": [{
+                        "server_id": "solana-mcp",
+                        "tool_name": "get_balance",
+                        "reason": "Need to fetch wallet balance",
+                        "args": {
+                            "address": "7xKXtg2CW87d3TXQ5xmD7mSZQ4mPfFrPwJzQ7xRT7mF9"
+                        }
+                    }],
+                    "expected_outcome": "Balance will be displayed"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -121,33 +121,37 @@ mod tests {
     #[tokio::test]
     async fn test_ai_planning_complex_workflow() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/api/getAnswer")
+        let mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "reasoning": "User wants to deploy and verify a program",
-                "osvm_tools_to_use": [
-                    {
-                        "server_id": "osvm-mcp",
-                        "tool_name": "deploy_program",
-                        "reason": "Deploy the program to devnet",
-                        "args": {
-                            "program_path": "./target/deploy/program.so",
-                            "network": "devnet"
+            .with_body(
+                json!({
+                    "reasoning": "User wants to deploy and verify a program",
+                    "osvm_tools_to_use": [
+                        {
+                            "server_id": "osvm-mcp",
+                            "tool_name": "deploy_program",
+                            "reason": "Deploy the program to devnet",
+                            "args": {
+                                "program_path": "./target/deploy/program.so",
+                                "network": "devnet"
+                            }
+                        },
+                        {
+                            "server_id": "solana-mcp",
+                            "tool_name": "get_recent_transactions",
+                            "reason": "Verify deployment transaction",
+                            "args": {
+                                "address": "DeployerAddress123",
+                                "limit": 5
+                            }
                         }
-                    },
-                    {
-                        "server_id": "solana-mcp",
-                        "tool_name": "get_recent_transactions",
-                        "reason": "Verify deployment transaction",
-                        "args": {
-                            "address": "DeployerAddress123",
-                            "limit": 5
-                        }
-                    }
-                ],
-                "expected_outcome": "Program deployed and verified"
-            }).to_string())
+                    ],
+                    "expected_outcome": "Program deployed and verified"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -169,14 +173,18 @@ mod tests {
     #[tokio::test]
     async fn test_ai_planning_with_no_matching_tools() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/api/getAnswer")
+        let mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "reasoning": "No tools available for this request",
-                "osvm_tools_to_use": [],
-                "expected_outcome": "Cannot complete request without appropriate tools"
-            }).to_string())
+            .with_body(
+                json!({
+                    "reasoning": "No tools available for this request",
+                    "osvm_tools_to_use": [],
+                    "expected_outcome": "Cannot complete request without appropriate tools"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -197,7 +205,8 @@ mod tests {
     #[tokio::test]
     async fn test_ai_planning_error_handling() -> Result<()> {
         let mut server = Server::new_async().await;
-        let _mock = server.mock("POST", "/api/getAnswer")
+        let _mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(500)
             .with_body("Internal Server Error")
             .create_async()
@@ -206,9 +215,7 @@ mod tests {
         let ai_service = create_mock_ai_service(server.url());
         let tools = create_sample_tools();
 
-        let result = ai_service
-            .create_tool_plan("Check balance", &tools)
-            .await;
+        let result = ai_service.create_tool_plan("Check balance", &tools).await;
 
         assert!(result.is_err());
         Ok(())
@@ -217,7 +224,8 @@ mod tests {
     #[tokio::test]
     async fn test_ai_planning_malformed_response() -> Result<()> {
         let mut server = Server::new_async().await;
-        let _mock = server.mock("POST", "/api/getAnswer")
+        let _mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("{\"invalid\": \"json_structure\"}")
@@ -227,9 +235,7 @@ mod tests {
         let ai_service = create_mock_ai_service(server.url());
         let tools = create_sample_tools();
 
-        let result = ai_service
-            .create_tool_plan("Check balance", &tools)
-            .await;
+        let result = ai_service.create_tool_plan("Check balance", &tools).await;
 
         assert!(result.is_err());
         Ok(())
@@ -241,7 +247,8 @@ mod tests {
 
         // First 5 calls fail to trigger circuit breaker
         for _ in 0..5 {
-            let _mock = server.mock("POST", "/api/getAnswer")
+            let _mock = server
+                .mock("POST", "/api/getAnswer")
                 .with_status(500)
                 .with_body("Error")
                 .create_async()
@@ -254,16 +261,12 @@ mod tests {
 
         // Make 5 failing requests
         for _ in 0..5 {
-            let _ = ai_service
-                .create_tool_plan("Test", &tools)
-                .await;
+            let _ = ai_service.create_tool_plan("Test", &tools).await;
         }
 
         // Circuit should be open now, next call should fail immediately
         let start = std::time::Instant::now();
-        let result = ai_service
-            .create_tool_plan("Test", &tools)
-            .await;
+        let result = ai_service.create_tool_plan("Test", &tools).await;
         let duration = start.elapsed();
 
         assert!(result.is_err());
@@ -275,14 +278,18 @@ mod tests {
     #[tokio::test]
     async fn test_parallel_planning_requests() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/api/getAnswer")
+        let mock = server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "reasoning": "Planning",
-                "osvm_tools_to_use": [],
-                "expected_outcome": "Done"
-            }).to_string())
+            .with_body(
+                json!({
+                    "reasoning": "Planning",
+                    "osvm_tools_to_use": [],
+                    "expected_outcome": "Done"
+                })
+                .to_string(),
+            )
             .expect(3)
             .create_async()
             .await;

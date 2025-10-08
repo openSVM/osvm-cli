@@ -6,10 +6,10 @@
 //! - Message handling
 //! - Agent state transitions
 
-use std::process::{Command, Stdio};
 use std::io::Write;
-use std::time::Duration;
+use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Duration;
 
 #[test]
 fn test_chat_help_command() {
@@ -20,7 +20,10 @@ fn test_chat_help_command() {
 
     assert!(output.status.success(), "chat --help should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Interactive"), "Help should mention interactive mode");
+    assert!(
+        stdout.contains("Interactive"),
+        "Help should mention interactive mode"
+    );
 }
 
 #[test]
@@ -39,12 +42,17 @@ fn test_chat_basic_launch() {
 
     // Try to terminate gracefully
     let _ = child.kill();
-    let output = child.wait_with_output().expect("Failed to wait for process");
+    let output = child
+        .wait_with_output()
+        .expect("Failed to wait for process");
 
     // In test mode, it should exit cleanly
     // Note: exit code might be non-zero due to SIGKILL, but it shouldn't panic
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.contains("panic"), "Chat should not panic in test mode");
+    assert!(
+        !stderr.contains("panic"),
+        "Chat should not panic in test mode"
+    );
 }
 
 #[test]
@@ -80,8 +88,10 @@ fn test_chat_session_creation() {
         .expect("Failed to run chat");
 
     // Should exit cleanly with test message
-    assert!(output.status.success() || output.status.code() == Some(130),
-        "Chat should handle test message gracefully");
+    assert!(
+        output.status.success() || output.status.code() == Some(130),
+        "Chat should handle test message gracefully"
+    );
 }
 
 #[test]
@@ -142,9 +152,10 @@ mod chat_ui_tests {
 
         let output = child.wait_with_output().expect("Failed to wait");
         // Should exit with code 130 (128 + SIGINT=2)
-        assert!(output.status.code().unwrap_or(0) == 130 ||
-                output.status.success(),
-                "Should handle SIGINT gracefully");
+        assert!(
+            output.status.code().unwrap_or(0) == 130 || output.status.success(),
+            "Should handle SIGINT gracefully"
+        );
     }
 
     #[test]

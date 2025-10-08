@@ -14,16 +14,7 @@ use std::path::{Path, PathBuf};
 
 /// List of sensitive directories that should never be mounted
 const SENSITIVE_DIRECTORIES: &[&str] = &[
-    "/etc",
-    "/boot",
-    "/sys",
-    "/proc",
-    "/dev",
-    "/root",
-    "/var/run",
-    "/run",
-    "/tmp",
-    "/var/tmp",
+    "/etc", "/boot", "/sys", "/proc", "/dev", "/root", "/var/run", "/run", "/tmp", "/var/tmp",
 ];
 
 /// List of system-critical directories requiring extra validation
@@ -144,7 +135,7 @@ pub fn safe_path_validation(
         // Check if the original path is a symlink
         let metadata = fs::symlink_metadata(&path_buf)
             .with_context(|| format!("Failed to get metadata for: {}", path))?;
-        
+
         if metadata.is_symlink() {
             return Err(anyhow!(
                 "Symlinks are not allowed: {} points to {}",
@@ -166,17 +157,23 @@ pub fn safe_path_validation(
     // Step 6: Open file descriptor for TOCTOU protection
     use std::fs::File;
     use std::os::unix::fs::OpenOptionsExt;
-    
+
     let file = std::fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
         .open(&canonical)
-        .with_context(|| format!("Failed to open path for validation: {}", canonical.display()))?;
-    
+        .with_context(|| {
+            format!(
+                "Failed to open path for validation: {}",
+                canonical.display()
+            )
+        })?;
+
     let fd = file.as_raw_fd();
-    
+
     // Get metadata using the file descriptor (TOCTOU-safe)
-    let metadata = file.metadata()
+    let metadata = file
+        .metadata()
         .with_context(|| format!("Failed to get metadata via fd: {}", canonical.display()))?;
 
     // Step 7: Validate directory requirement
@@ -204,9 +201,8 @@ pub fn safe_path_validation(
 fn expand_tilde(path: &str) -> Result<String> {
     if path.starts_with("~/") || path == "~" {
         // Get HOME from environment
-        let home = std::env::var("HOME")
-            .context("HOME environment variable not set")?;
-        
+        let home = std::env::var("HOME").context("HOME environment variable not set")?;
+
         // Validate HOME is an absolute path
         let home_path = PathBuf::from(&home);
         if !home_path.is_absolute() {
@@ -308,13 +304,9 @@ pub fn create_secure_socket_dir() -> Result<PathBuf> {
     }
 
     // Fallback to user's home directory
-    let home = std::env::var("HOME")
-        .context("HOME environment variable not set")?;
-    let socket_dir = PathBuf::from(home)
-        .join(".local")
-        .join("run")
-        .join("osvm");
-    
+    let home = std::env::var("HOME").context("HOME environment variable not set")?;
+    let socket_dir = PathBuf::from(home).join(".local").join("run").join("osvm");
+
     create_dir_with_perms(&socket_dir, 0o700)
 }
 
@@ -326,7 +318,7 @@ fn create_dir_with_perms(path: &Path, mode: u32) -> Result<PathBuf> {
         // Verify existing directory has correct permissions
         let metadata = fs::metadata(path)
             .with_context(|| format!("Failed to get metadata for {}", path.display()))?;
-        
+
         if !metadata.is_dir() {
             return Err(anyhow!("{} exists but is not a directory", path.display()));
         }
@@ -358,14 +350,14 @@ fn create_dir_with_perms(path: &Path, mode: u32) -> Result<PathBuf> {
 /// Generate secure random socket name
 pub fn generate_socket_name(prefix: &str) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    
+
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    
+
     let pid = std::process::id();
-    
+
     // Use process-safe naming
     format!("{}-{}-{}.sock", prefix, pid, timestamp)
 }
@@ -378,8 +370,11 @@ mod tests {
     #[test]
     fn test_expand_tilde() {
         std::env::set_var("HOME", "/home/testuser");
-        
-        assert_eq!(expand_tilde("~/Documents").unwrap(), "/home/testuser/Documents");
+
+        assert_eq!(
+            expand_tilde("~/Documents").unwrap(),
+            "/home/testuser/Documents"
+        );
         assert_eq!(expand_tilde("~").unwrap(), "/home/testuser");
         assert!(expand_tilde("~otheruser/file").is_err());
     }
@@ -395,7 +390,7 @@ mod tests {
     fn test_generate_socket_name() {
         let name1 = generate_socket_name("test");
         let name2 = generate_socket_name("test");
-        
+
         assert!(name1.starts_with("test-"));
         assert!(name1.ends_with(".sock"));
         assert_ne!(name1, name2); // Should be unique

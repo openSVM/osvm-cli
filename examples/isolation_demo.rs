@@ -10,16 +10,14 @@
 //! Run with: cargo run --example isolation_demo
 
 use osvm::utils::isolation::{
-    Component, ComponentId, ComponentStatus, ComponentType, IsolationConfig,
-    IsolationType, ResourceLimits, Runtime, RuntimeManager,
+    Component, ComponentId, ComponentStatus, ComponentType, IsolationConfig, IsolationType,
+    ResourceLimits, Runtime, RuntimeManager,
 };
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging  
+    // Initialize logging
     // Note: env_logger not included in dependencies, using simple println
     println!("🔍 Logging: info");
 
@@ -145,7 +143,7 @@ fn create_test_component(id: ComponentId) -> Component {
 
 /// Simulate component lifecycle
 async fn simulate_component_lifecycle(
-    runtime: &(dyn Runtime + Send + Sync),
+    _runtime: &(dyn Runtime + Send + Sync),
     component: &Component,
 ) -> anyhow::Result<()> {
     println!("   Simulating lifecycle for component {}...", component.id);
@@ -252,7 +250,9 @@ fn print_resource_comparison() {
 }
 
 /// Demonstrate trust-based isolation
-async fn demonstrate_trust_based_isolation(runtime_manager: &RuntimeManager) -> anyhow::Result<()> {
+async fn demonstrate_trust_based_isolation(
+    _runtime_manager: &RuntimeManager,
+) -> anyhow::Result<()> {
     println!("   Trust-based isolation policies:\n");
 
     // Fully trusted component

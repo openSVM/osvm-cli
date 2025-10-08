@@ -1,13 +1,12 @@
 //! Advanced tests for agent chat UI and state management
 
 use anyhow::Result;
+use chrono::Utc;
 use osvm::utils::agent_chat_v2::{
-    ChatState, ChatSession, ChatMessage, AgentState,
-    SessionManager, MessageHistory,
+    AgentState, ChatMessage, ChatSession, ChatState, MessageHistory, SessionManager,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use chrono::Utc;
 use uuid::Uuid;
 
 #[cfg(test)]
@@ -87,19 +86,25 @@ mod message_history_tests {
         let mut state = ChatState::new()?;
         let session_id = state.create_session("Test".to_string())?;
 
-        state.add_message(session_id, ChatMessage {
-            role: "user".to_string(),
-            content: "Hello".to_string(),
-            timestamp: Utc::now(),
-            tool_calls: None,
-        })?;
+        state.add_message(
+            session_id,
+            ChatMessage {
+                role: "user".to_string(),
+                content: "Hello".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: None,
+            },
+        )?;
 
-        state.add_message(session_id, ChatMessage {
-            role: "assistant".to_string(),
-            content: "Hi there!".to_string(),
-            timestamp: Utc::now(),
-            tool_calls: None,
-        })?;
+        state.add_message(
+            session_id,
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "Hi there!".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: None,
+            },
+        )?;
 
         let messages = state.get_messages(session_id)?;
         assert_eq!(messages.len(), 2);
@@ -116,12 +121,15 @@ mod message_history_tests {
 
         // Add many messages
         for i in 0..1500 {
-            state.add_message(session_id, ChatMessage {
-                role: if i % 2 == 0 { "user" } else { "assistant" },
-                content: format!("Message {}", i),
-                timestamp: Utc::now(),
-                tool_calls: None,
-            })?;
+            state.add_message(
+                session_id,
+                ChatMessage {
+                    role: if i % 2 == 0 { "user" } else { "assistant" },
+                    content: format!("Message {}", i),
+                    timestamp: Utc::now(),
+                    tool_calls: None,
+                },
+            )?;
         }
 
         let messages = state.get_messages(session_id)?;
@@ -140,15 +148,18 @@ mod message_history_tests {
         let mut state = ChatState::new()?;
         let session_id = state.create_session("Tool Test".to_string())?;
 
-        state.add_message(session_id, ChatMessage {
-            role: "assistant".to_string(),
-            content: "I'll check your balance".to_string(),
-            timestamp: Utc::now(),
-            tool_calls: Some(vec![
-                "get_balance".to_string(),
-                "get_recent_transactions".to_string(),
-            ]),
-        })?;
+        state.add_message(
+            session_id,
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "I'll check your balance".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: Some(vec![
+                    "get_balance".to_string(),
+                    "get_recent_transactions".to_string(),
+                ]),
+            },
+        )?;
 
         let messages = state.get_messages(session_id)?;
         assert_eq!(messages.len(), 1);
@@ -172,19 +183,22 @@ mod message_history_tests {
         ];
 
         for (i, ts) in timestamps.iter().enumerate() {
-            state.add_message(session_id, ChatMessage {
-                role: "user".to_string(),
-                content: format!("Message {}", i),
-                timestamp: *ts,
-                tool_calls: None,
-            })?;
+            state.add_message(
+                session_id,
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: format!("Message {}", i),
+                    timestamp: *ts,
+                    tool_calls: None,
+                },
+            )?;
         }
 
         let messages = state.get_messages(session_id)?;
 
         // Messages should be in chronological order
         for i in 1..messages.len() {
-            assert!(messages[i].timestamp >= messages[i-1].timestamp);
+            assert!(messages[i].timestamp >= messages[i - 1].timestamp);
         }
 
         Ok(())
@@ -210,7 +224,10 @@ mod agent_state_tests {
         state.set_agent_state(session_id, AgentState::Planning)?;
         assert_eq!(state.get_agent_state(session_id)?, AgentState::Planning);
 
-        state.set_agent_state(session_id, AgentState::ExecutingTool("get_balance".to_string()))?;
+        state.set_agent_state(
+            session_id,
+            AgentState::ExecutingTool("get_balance".to_string()),
+        )?;
         if let AgentState::ExecutingTool(tool) = state.get_agent_state(session_id)? {
             assert_eq!(tool, "get_balance");
         } else {
@@ -305,24 +322,30 @@ mod session_recording_tests {
 
         // Add messages
         for i in 0..5 {
-            state.add_message(session_id, ChatMessage {
-                role: if i % 2 == 0 { "user" } else { "assistant" },
-                content: format!("Message {}", i),
-                timestamp: Utc::now(),
-                tool_calls: None,
-            })?;
+            state.add_message(
+                session_id,
+                ChatMessage {
+                    role: if i % 2 == 0 { "user" } else { "assistant" },
+                    content: format!("Message {}", i),
+                    timestamp: Utc::now(),
+                    tool_calls: None,
+                },
+            )?;
         }
 
         let recording_file = temp_dir.path().join("session_replay.json");
         state.start_recording(session_id, recording_file.clone())?;
 
         // Add more messages during recording
-        state.add_message(session_id, ChatMessage {
-            role: "user".to_string(),
-            content: "Recorded message".to_string(),
-            timestamp: Utc::now(),
-            tool_calls: None,
-        })?;
+        state.add_message(
+            session_id,
+            ChatMessage {
+                role: "user".to_string(),
+                content: "Recorded message".to_string(),
+                timestamp: Utc::now(),
+                tool_calls: None,
+            },
+        )?;
 
         state.stop_recording(session_id)?;
 
@@ -359,7 +382,8 @@ mod ui_rendering_tests {
     fn test_code_block_detection() {
         let message = ChatMessage {
             role: "assistant".to_string(),
-            content: "Here's some code:\n```rust\nfn main() {\n    println!(\"Hello\");\n}\n```".to_string(),
+            content: "Here's some code:\n```rust\nfn main() {\n    println!(\"Hello\");\n}\n```"
+                .to_string(),
             timestamp: Utc::now(),
             tool_calls: None,
         };
@@ -404,12 +428,15 @@ mod performance_tests {
 
         // Add 1000 messages
         for i in 0..1000 {
-            state.add_message(session_id, ChatMessage {
-                role: if i % 2 == 0 { "user" } else { "assistant" },
-                content: format!("Message {}", i),
-                timestamp: Utc::now(),
-                tool_calls: None,
-            })?;
+            state.add_message(
+                session_id,
+                ChatMessage {
+                    role: if i % 2 == 0 { "user" } else { "assistant" },
+                    content: format!("Message {}", i),
+                    timestamp: Utc::now(),
+                    tool_calls: None,
+                },
+            )?;
         }
 
         let duration = start.elapsed();
@@ -445,12 +472,16 @@ mod performance_tests {
             let state_clone = Arc::clone(&state);
             let handle = tokio::spawn(async move {
                 let mut s = state_clone.write().await;
-                s.add_message(session_id, ChatMessage {
-                    role: "user".to_string(),
-                    content: format!("Concurrent message {}", i),
-                    timestamp: Utc::now(),
-                    tool_calls: None,
-                }).unwrap();
+                s.add_message(
+                    session_id,
+                    ChatMessage {
+                        role: "user".to_string(),
+                        content: format!("Concurrent message {}", i),
+                        timestamp: Utc::now(),
+                        tool_calls: None,
+                    },
+                )
+                .unwrap();
             });
             handles.push(handle);
         }

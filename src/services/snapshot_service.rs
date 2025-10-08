@@ -12,7 +12,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use crate::services::account_decoders::{DecodedAccount, DecoderRegistry, format_decoded_account};
+use crate::services::account_decoders::{format_decoded_account, DecodedAccount, DecoderRegistry};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccountInfo {
@@ -155,24 +155,22 @@ impl SnapshotReader {
                 .build()?;
 
             pool.install(|| {
-                entries_to_process
-                    .par_iter()
-                    .for_each(|entry| {
-                        let path = entry.path();
-                        match read_account_file(&path) {
-                            Ok(info) => {
-                                if filter_matches(&info, &filter_options) {
-                                    results.lock().unwrap().push((entry.file_name(), info));
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("Error reading {:?}: {}", path, e);
+                entries_to_process.par_iter().for_each(|entry| {
+                    let path = entry.path();
+                    match read_account_file(&path) {
+                        Ok(info) => {
+                            if filter_matches(&info, &filter_options) {
+                                results.lock().unwrap().push((entry.file_name(), info));
                             }
                         }
-                        if let Some(ref pb) = progress {
-                            pb.inc(1);
+                        Err(e) => {
+                            eprintln!("Error reading {:?}: {}", path, e);
                         }
-                    });
+                    }
+                    if let Some(ref pb) = progress {
+                        pb.inc(1);
+                    }
+                });
             });
         } else {
             // Sequential processing
@@ -201,12 +199,7 @@ impl SnapshotReader {
         // Display results
         let results = results.lock().unwrap();
         for (idx, (filename, info)) in results.iter().enumerate() {
-            display_account(
-                idx + 1,
-                &filename.to_string_lossy(),
-                info,
-                &output_config,
-            )?;
+            display_account(idx + 1, &filename.to_string_lossy(), info, &output_config)?;
         }
 
         if !output_config.quiet {
@@ -339,7 +332,14 @@ impl SnapshotService {
             }
             ExportFormat::Csv => {
                 let mut wtr = csv::Writer::from_path(output_file)?;
-                wtr.write_record(&["pubkey", "lamports", "data_len", "owner", "executable", "rent_epoch"])?;
+                wtr.write_record([
+                    "pubkey",
+                    "lamports",
+                    "data_len",
+                    "owner",
+                    "executable",
+                    "rent_epoch",
+                ])?;
                 for account in accounts {
                     wtr.write_record(&[
                         account.pubkey.map(|p| p.to_string()).unwrap_or_default(),
@@ -408,9 +408,10 @@ impl SnapshotService {
         for (key, info2) in &accounts2 {
             if let Some(info1) = accounts1.get(key) {
                 // Account exists in both - check if modified
-                if info1.lamports != info2.lamports 
-                    || info1.data_len != info2.data_len 
-                    || info1.owner != info2.owner {
+                if info1.lamports != info2.lamports
+                    || info1.data_len != info2.data_len
+                    || info1.owner != info2.owner
+                {
                     modified_accounts.push(serde_json::json!({
                         "account": key,
                         "changes": {
@@ -470,7 +471,7 @@ impl SnapshotService {
 
     pub async fn validate(&self) -> Result<serde_json::Value> {
         let accounts_dir = self.snapshot_dir.join("accounts");
-        
+
         if !accounts_dir.exists() {
             return Ok(serde_json::json!({
                 "valid": false,
@@ -541,10 +542,16 @@ impl SnapshotService {
         info.push(format!("Successfully parsed: {}", successful_reads));
         info.push(format!("Failed to parse: {}", failed_reads));
         info.push(format!("Total lamports: {}", total_lamports));
-        info.push(format!("Zero-balance accounts with data: {}", zero_balance_accounts));
+        info.push(format!(
+            "Zero-balance accounts with data: {}",
+            zero_balance_accounts
+        ));
 
         if suspicious_balances > 0 {
-            warnings.push(format!("Found {} accounts with suspiciously large balances", suspicious_balances));
+            warnings.push(format!(
+                "Found {} accounts with suspiciously large balances",
+                suspicious_balances
+            ));
         }
 
         // Validate snapshot structure
@@ -748,19 +755,31 @@ fn display_account(
     let program_name = decoder_registry.get_program_name(&account.owner);
 
     if config.colorized {
-        println!("{} ({})", format!("Account #{}", index).bold().cyan(), filename.bright_black());
-        
+        println!(
+            "{} ({})",
+            format!("Account #{}", index).bold().cyan(),
+            filename.bright_black()
+        );
+
         // Show program type if known
         if let Some(name) = program_name {
             println!("  {}: {}", "Type".bold(), name.bright_magenta());
         }
-        
-        println!("  {}: {}", "Lamports".bold(), format_lamports(account.lamports).green());
+
+        println!(
+            "  {}: {}",
+            "Lamports".bold(),
+            format_lamports(account.lamports).green()
+        );
         println!("  {}: {} bytes", "Data Length".bold(), account.data_len);
-        println!("  {}: {}", "Owner".bold(), account.owner.to_string().bright_blue());
+        println!(
+            "  {}: {}",
+            "Owner".bold(),
+            account.owner.to_string().bright_blue()
+        );
         println!("  {}: {}", "Executable".bold(), account.executable);
         println!("  {}: {}", "Rent Epoch".bold(), account.rent_epoch);
-        
+
         // Display decoded data if available
         if let Some(DecodedAccount::Unknown) = decoded {
             // Don't show anything for unknown types
@@ -771,22 +790,22 @@ fn display_account(
                 println!("  {}", "Decoded Data:".bold().yellow());
                 for line in formatted.lines() {
                     println!("  {}", line);
-            }
+                }
             }
         }
     } else {
         println!("Account #{} ({})", index, filename);
-        
+
         if let Some(name) = program_name {
             println!("  Type: {}", name);
         }
-        
+
         println!("  Lamports: {}", account.lamports);
         println!("  Data Length: {} bytes", account.data_len);
         println!("  Owner: {}", account.owner);
         println!("  Executable: {}", account.executable);
         println!("  Rent Epoch: {}", account.rent_epoch);
-        
+
         // Display decoded data
         if let Some(DecodedAccount::Unknown) = decoded {
             // Don't show anything for unknown types

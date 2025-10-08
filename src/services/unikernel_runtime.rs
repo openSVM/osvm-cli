@@ -96,12 +96,12 @@ impl UnikernelHandle {
             "Executing tool '{}' in unikernel (CID: {}, PID: {:?})",
             tool_name, self.vsock_cid, self.pid
         );
-        
+
         // Connect to unikernel via vsock
         let mut stream = runtime
             .connect_vsock(self.vsock_cid, self.vsock_port)
             .await?;
-        
+
         // Build request
         let request = ToolExecutionRequest {
             jsonrpc: "2.0".to_string(),
@@ -113,12 +113,12 @@ impl UnikernelHandle {
             method: tool_name.to_string(),
             params: arguments,
         };
-        
+
         // Send request and get response
         let response = runtime
             .send_tool_request_vsock(&mut stream, request)
             .await?;
-        
+
         // Extract result or error
         if let Some(result) = response.result {
             info!("Tool '{}' executed successfully", tool_name);
@@ -133,7 +133,7 @@ impl UnikernelHandle {
             Err(anyhow!("Invalid response: no result or error"))
         }
     }
-    
+
     /// Terminate the unikernel
     pub fn terminate(self) {
         if let Some(pid) = self.pid {
@@ -141,19 +141,19 @@ impl UnikernelHandle {
                 "Terminating unikernel for tool '{}' (PID: {}, CID: {})",
                 self.config.tool_name, pid, self.vsock_cid
             );
-            
+
             // Send SIGTERM to the unikernel process
             #[cfg(unix)]
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
-                
+
                 if let Err(e) = kill(Pid::from_raw(pid as i32), Signal::SIGTERM) {
                     warn!("Failed to terminate unikernel PID {}: {}", pid, e);
                 }
             }
         }
-        
+
         // Note: vsock connections are automatically cleaned up when process terminates
         // No socket file to remove
     }
@@ -177,18 +177,18 @@ impl UnikernelRuntime {
         } else {
             "kraft".to_string()
         };
-        
+
         Ok(Self {
             unikernel_dir,
             kraft_binary,
         })
     }
-    
+
     /// Allocate an ephemeral vsock CID in the 200-299 range
     fn allocate_ephemeral_cid(&self) -> Result<u32> {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
         std::process::id().hash(&mut hasher);
         std::time::SystemTime::now()
@@ -196,19 +196,19 @@ impl UnikernelRuntime {
             .unwrap()
             .as_nanos()
             .hash(&mut hasher);
-        
+
         let hash = hasher.finish();
         let cid = 200 + (hash % 100) as u32; // 200-299 range
-        
+
         debug!("Allocated ephemeral vsock CID: {}", cid);
         Ok(cid)
     }
-    
+
     /// Build kraft command for launching unikernel
     fn build_kraft_command(&self, config: &UnikernelConfig, cid: u32) -> Result<Command> {
         let mut cmd = Command::new("sh");
         cmd.arg("-c");
-        
+
         // Build kraft run command
         let kraft_cmd = format!(
             "{} run --rm --memory {}M {}",
@@ -216,40 +216,37 @@ impl UnikernelRuntime {
             config.memory_mb,
             config.image_path.display()
         );
-        
+
         cmd.arg(&kraft_cmd);
-        
+
         // Pass configuration via environment variables
         cmd.env("UNIKRAFT_VSOCK_CID", cid.to_string());
         cmd.env("UNIKRAFT_TOOL_SERVER", &config.server_id);
-        
+
         // Redirect output for debugging
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
-        
+
         debug!("kraft command: {}", kraft_cmd);
-        
+
         Ok(cmd)
     }
-    
+
     /// Connect to unikernel via vsock
     async fn connect_vsock(&self, cid: u32, port: u32) -> Result<tokio_vsock::VsockStream> {
         use tokio_vsock::VsockStream;
-        
+
         debug!("Connecting to vsock CID {} port {}", cid, port);
-        
-        let stream = timeout(
-            Duration::from_secs(10),
-            VsockStream::connect(cid, port),
-        )
-        .await
-        .context("Timeout connecting to unikernel vsock")?
-        .context("Failed to connect to unikernel vsock")?;
-        
+
+        let stream = timeout(Duration::from_secs(10), VsockStream::connect(cid, port))
+            .await
+            .context("Timeout connecting to unikernel vsock")?
+            .context("Failed to connect to unikernel vsock")?;
+
         debug!("Successfully connected to unikernel vsock");
         Ok(stream)
     }
-    
+
     /// Send a tool execution request via vsock and receive response
     async fn send_tool_request_vsock(
         &self,
@@ -257,72 +254,81 @@ impl UnikernelRuntime {
         request: ToolExecutionRequest,
     ) -> Result<ToolExecutionResponse> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        
+
         debug!("Sending tool request {} via vsock", request.id);
-        
+
         // Serialize request
-        let request_bytes = serde_json::to_vec(&request)
-            .context("Failed to serialize request")?;
+        let request_bytes = serde_json::to_vec(&request).context("Failed to serialize request")?;
         let len = request_bytes.len() as u32;
-        
+
         // Send length prefix (4-byte little-endian)
-        stream.write_all(&len.to_le_bytes()).await
+        stream
+            .write_all(&len.to_le_bytes())
+            .await
             .context("Failed to write length prefix")?;
-        
+
         // Send request payload
-        stream.write_all(&request_bytes).await
+        stream
+            .write_all(&request_bytes)
+            .await
             .context("Failed to write request")?;
-        
-        stream.flush().await
+
+        stream
+            .flush()
+            .await
             .context("Failed to flush vsock stream")?;
-        
+
         debug!("Request sent, waiting for response...");
-        
+
         // Read response length prefix
         let mut len_bytes = [0u8; 4];
-        stream.read_exact(&mut len_bytes).await
+        stream
+            .read_exact(&mut len_bytes)
+            .await
             .context("Failed to read response length")?;
         let response_len = u32::from_le_bytes(len_bytes) as usize;
-        
+
         // Validate response size
         if response_len > 10 * 1024 * 1024 {
             return Err(anyhow!("Response too large: {} bytes", response_len));
         }
-        
+
         // Read response payload
         let mut response_bytes = vec![0u8; response_len];
-        stream.read_exact(&mut response_bytes).await
+        stream
+            .read_exact(&mut response_bytes)
+            .await
             .context("Failed to read response payload")?;
-        
+
         // Deserialize response
-        let response: ToolExecutionResponse = serde_json::from_slice(&response_bytes)
-            .context("Failed to deserialize response")?;
-        
+        let response: ToolExecutionResponse =
+            serde_json::from_slice(&response_bytes).context("Failed to deserialize response")?;
+
         debug!("Received response {}", response.id);
         Ok(response)
     }
-    
+
     /// Spawn a unikernel for tool execution
     pub async fn spawn_unikernel(&self, mut config: UnikernelConfig) -> Result<UnikernelHandle> {
         info!(
             "Spawning unikernel for tool '{}' on server '{}'",
             config.tool_name, config.server_id
         );
-        
+
         // Resolve image path
         let image_path = if config.image_path.is_absolute() {
             config.image_path.clone()
         } else {
             self.unikernel_dir.join(&config.image_path)
         };
-        
+
         if !image_path.exists() {
             return Err(anyhow!(
                 "Unikernel image not found: {}",
                 image_path.display()
             ));
         }
-        
+
         // Allocate vsock CID if not provided
         let vsock_cid = match config.vsock_cid {
             Some(cid) => cid,
@@ -332,22 +338,20 @@ impl UnikernelRuntime {
                 cid
             }
         };
-        
+
         // Build kraft command
         let mut cmd = self.build_kraft_command(&config, vsock_cid)?;
-        
+
         // Spawn the unikernel process
         debug!("Spawning unikernel with kraft: {:?}", cmd);
-        let child = cmd
-            .spawn()
-            .context("Failed to spawn unikernel process")?;
-        
+        let child = cmd.spawn().context("Failed to spawn unikernel process")?;
+
         let pid = child.id();
         info!("Unikernel spawned with PID: {}, CID: {}", pid, vsock_cid);
-        
+
         // Wait for vsock to be ready (brief delay for unikernel boot)
         tokio::time::sleep(Duration::from_millis(500)).await;
-        
+
         Ok(UnikernelHandle {
             pid: Some(pid),
             config,
@@ -355,13 +359,12 @@ impl UnikernelRuntime {
             vsock_port: 5252,
         })
     }
-    
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_unikernel_config_creation() {
         let config = UnikernelConfig {
@@ -379,29 +382,29 @@ mod tests {
             kraft_config: None,
             vsock_cid: None,
         };
-        
+
         assert_eq!(config.memory_mb, 128);
         assert_eq!(config.vcpus, 1);
         assert_eq!(config.mounts.len(), 1);
         assert_eq!(config.launcher, UnikernelLauncher::Unikraft);
     }
-    
+
     #[tokio::test]
     async fn test_runtime_creation() {
         let runtime = UnikernelRuntime::new(PathBuf::from("/tmp/test-unikernels"));
         assert!(runtime.is_ok());
-        
+
         let runtime = runtime.unwrap();
         assert_eq!(runtime.unikernel_dir, PathBuf::from("/tmp/test-unikernels"));
-        
+
         // kraft_binary should be set based on environment
         assert!(!runtime.kraft_binary.is_empty());
     }
-    
+
     #[test]
     fn test_cid_allocation_range() {
         let runtime = UnikernelRuntime::new(PathBuf::from("/tmp/test-unikernels")).unwrap();
-        
+
         // Test multiple allocations to verify range
         for _ in 0..10 {
             let cid = runtime.allocate_ephemeral_cid().unwrap();
