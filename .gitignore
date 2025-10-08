@@ -109,3 +109,39 @@ test_reports/
 # MicroVM runtime directory
 .osvm/run/
 **/.osvm/run/
+
+# Temporary Python/shell scripts for test generation
+complete_*.py
+fix_syntax.py
+fix_remaining.sh
+generate_qa.py
+fix_placeholders.py
+
+# Chat session exports and logs
+osvm_chat_*.log
+osvm_chat_*.json
+
+# Temporary test files in root
+test_*.rs
+TEST_REPORT_*.txt
+
+# Screenshot and temporary doc files
+osvm-docs-*.png
+docs.html
+
+# Snapshot and stream outputs
+snapshot_*.txt
+
+# Test output files
+stderr.txt
+stdout.txt
+
+# Temporary markdown files
+FINAL_*.md
+STATUS_*.md
+VALIDATION_*.md
+SYNTAX_FIX_*.md
+MANUAL_FIX_*.md
+
+# Temporary binaries
+osvm-local
