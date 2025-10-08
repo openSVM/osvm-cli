@@ -164,4 +164,89 @@ mod tests {
         assert!(IsolationLevel::Unikernel.has_hardware_isolation());
         assert!(IsolationLevel::TEE.has_hardware_isolation());
     }
+
+    #[test]
+    fn test_isolation_level_complete_ordering() {
+        let levels = vec![
+            IsolationLevel::None,
+            IsolationLevel::ProcessSandbox,
+            IsolationLevel::Container,
+            IsolationLevel::MicroVM,
+            IsolationLevel::Unikernel,
+            IsolationLevel::TEE,
+        ];
+
+        // Each level should be less than the next
+        for i in 0..levels.len() - 1 {
+            assert!(
+                levels[i] < levels[i + 1],
+                "{:?} should be < {:?}",
+                levels[i],
+                levels[i + 1]
+            );
+        }
+    }
+
+    #[test]
+    fn test_isolation_level_security_score_range() {
+        let all_levels = vec![
+            IsolationLevel::None,
+            IsolationLevel::ProcessSandbox,
+            IsolationLevel::Container,
+            IsolationLevel::MicroVM,
+            IsolationLevel::Unikernel,
+            IsolationLevel::TEE,
+        ];
+
+        // All scores should be 0-100
+        for level in all_levels {
+            let score = level.security_score();
+            assert!(
+                score >= 0 && score <= 100,
+                "Score {} out of range for {:?}",
+                score,
+                level
+            );
+        }
+    }
+
+    #[test]
+    fn test_isolation_level_hardware_boundary() {
+        // Software-based isolation
+        assert!(!IsolationLevel::None.has_hardware_isolation());
+        assert!(!IsolationLevel::ProcessSandbox.has_hardware_isolation());
+        assert!(!IsolationLevel::Container.has_hardware_isolation());
+
+        // Hardware-based isolation
+        assert!(IsolationLevel::MicroVM.has_hardware_isolation());
+        assert!(IsolationLevel::Unikernel.has_hardware_isolation());
+        assert!(IsolationLevel::TEE.has_hardware_isolation());
+    }
+
+    #[test]
+    fn test_isolation_level_for_component_types() {
+        use config::IsolationType;
+
+        // Validators should use at least MicroVM isolation
+        let validator_isolation = IsolationType::MicroVM {
+            hypervisor: config::HypervisorType::Firecracker,
+            kernel_path: None,
+            rootfs_path: None,
+        };
+        assert_eq!(validator_isolation.level(), IsolationLevel::MicroVM);
+
+        // MCP servers can use lighter isolation
+        let mcp_isolation = IsolationType::ProcessSandbox {
+            seccomp_profile: None,
+            apparmor_profile: None,
+        };
+        assert_eq!(mcp_isolation.level(), IsolationLevel::ProcessSandbox);
+
+        // TEE provides highest security
+        let tee_isolation = IsolationType::TEE {
+            tee_type: config::TEEType::IntelSGX,
+            enclave_path: None,
+        };
+        assert_eq!(tee_isolation.level(), IsolationLevel::TEE);
+    }
 }

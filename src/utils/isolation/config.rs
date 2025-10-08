@@ -399,4 +399,52 @@ mod tests {
             IsolationType::Unikernel { .. }
         ));
     }
+
+    #[test]
+    fn test_resource_limits_all_fields() {
+        let limits = ResourceLimits {
+            max_cpu_cores: Some(4),
+            max_memory_mb: Some(8192),
+            max_disk_mb: Some(50000),
+            max_network_bandwidth_mbps: Some(10000),
+            max_file_descriptors: Some(4096),
+            max_processes: Some(100),
+            max_execution_time_sec: Some(3600),
+        };
+
+        assert_eq!(limits.max_cpu_cores, Some(4));
+        assert_eq!(limits.max_memory_mb, Some(8192));
+        assert_eq!(limits.max_network_bandwidth_mbps, Some(10000));
+        assert_eq!(limits.max_execution_time_sec, Some(3600));
+    }
+
+    #[test]
+    fn test_resource_limits_default_values() {
+        let limits = ResourceLimits::default();
+        assert_eq!(limits.max_memory_mb, Some(512));
+        assert_eq!(limits.max_cpu_cores, Some(2));
+        assert_eq!(limits.max_disk_mb, Some(1024));
+        assert!(limits.max_network_bandwidth_mbps.is_some());
+    }
+
+    #[test]
+    fn test_firewall_rule_creation() {
+        let rule = FirewallRule {
+            action: FirewallAction::Allow,
+            direction: TrafficDirection::Inbound,
+            protocol: NetworkProtocol::TCP,
+            port_range: Some(PortRange {
+                start: 8000,
+                end: 9000,
+            }),
+            source: Some("10.0.0.0/8".to_string()),
+            destination: None,
+        };
+
+        // Verify rule was created (can't test equality without PartialEq)
+        assert!(matches!(rule.action, FirewallAction::Allow));
+        assert!(matches!(rule.direction, TrafficDirection::Inbound));
+        assert!(matches!(rule.protocol, NetworkProtocol::TCP));
+        assert_eq!(rule.source, Some("10.0.0.0/8".to_string()));
+    }
 }

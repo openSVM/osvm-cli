@@ -86,10 +86,33 @@ impl RuntimeManager {
         let preferred_runtime = match &config.isolation_type {
             IsolationType::None => "Process",
             IsolationType::ProcessSandbox { .. } => "Process",
-            IsolationType::Container { .. } => "Docker", // TODO: Implement
-            IsolationType::MicroVM { .. } => "Firecracker", // TODO: Implement
+            IsolationType::Container { .. } => {
+                // Container runtime implementation
+                // NOTE: Requires implementing a Docker/Podman runtime
+                // See runtime/docker.rs for stub implementation
+                log::warn!("Container isolation requested but not fully implemented - using Process runtime");
+                "Docker"
+            }
+            IsolationType::MicroVM { .. } => {
+                // MicroVM runtime (Firecracker)
+                // NOTE: Firecracker runtime is partially implemented in runtime/firecracker.rs
+                // Full production use requires:
+                // - Firecracker binary installed
+                // - KVM support enabled
+                // - Proper networking configuration
+                "Firecracker"
+            }
             IsolationType::Unikernel { .. } => "HermitCore",
-            IsolationType::TEE { .. } => "SGX", // TODO: Implement
+            IsolationType::TEE { .. } => {
+                // TEE (Trusted Execution Environment) runtime
+                // NOTE: Requires implementing SGX or AMD SEV support
+                // This is complex and requires:
+                // - Hardware TEE support (Intel SGX or AMD SEV)
+                // - Attestation service
+                // - Enclave/confidential VM runtime
+                log::warn!("TEE isolation requested but not implemented - using Process runtime");
+                "SGX"
+            }
         };
 
         // Find runtime by name
@@ -156,5 +179,64 @@ mod tests {
     fn test_process_runtime_always_available() {
         let manager = RuntimeManager::with_defaults();
         assert!(manager.is_runtime_available("Process"));
+    }
+
+    #[test]
+    fn test_runtime_manager_get_runtime_for_isolation_types() {
+        use crate::utils::isolation::config::{IsolationConfig, IsolationType};
+
+        let manager = RuntimeManager::with_defaults();
+
+        // Process isolation should always work
+        let process_config = IsolationConfig {
+            isolation_type: IsolationType::None,
+            ..Default::default()
+        };
+        let runtime = manager.get_runtime(&process_config);
+        assert!(runtime.is_ok());
+        assert_eq!(runtime.unwrap().name(), "Process");
+
+        // Process sandbox should use Process runtime
+        let sandbox_config = IsolationConfig {
+            isolation_type: IsolationType::ProcessSandbox {
+                seccomp_profile: None,
+                apparmor_profile: None,
+            },
+            ..Default::default()
+        };
+        let runtime = manager.get_runtime(&sandbox_config);
+        assert!(runtime.is_ok());
+    }
+
+    #[test]
+    fn test_runtime_manager_multiple_runtimes() {
+        let manager = RuntimeManager::with_defaults();
+        let available = manager.list_available_runtimes();
+
+        // Should have at least Process runtime
+        assert!(!available.is_empty());
+        assert!(available.contains(&"Process".to_string()));
+    }
+
+    #[test]
+    fn test_runtime_selection_fallback() {
+        use crate::utils::isolation::config::{HypervisorType, IsolationConfig, IsolationType};
+
+        let manager = RuntimeManager::with_defaults();
+
+        // Request MicroVM but it might not be available
+        // Should fallback to Process runtime
+        let microvm_config = IsolationConfig {
+            isolation_type: IsolationType::MicroVM {
+                hypervisor: HypervisorType::Firecracker,
+                kernel_path: None,
+                rootfs_path: None,
+            },
+            ..Default::default()
+        };
+
+        let runtime = manager.get_runtime(&microvm_config);
+        // Should get some runtime (likely Process as fallback)
+        assert!(runtime.is_ok());
     }
 }

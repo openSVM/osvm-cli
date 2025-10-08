@@ -398,6 +398,248 @@ mod tests {
     }
 
     #[test]
+    fn test_component_status_all_operational_states() {
+        assert!(ComponentStatus::Running.is_operational());
+        assert!(!ComponentStatus::Starting.is_operational());
+        assert!(!ComponentStatus::Stopping.is_operational());
+        assert!(!ComponentStatus::Stopped.is_operational());
+        assert!(!ComponentStatus::Failed.is_operational());
+        assert!(!ComponentStatus::Upgrading.is_operational());
+    }
+
+    #[test]
+    fn test_component_status_all_transitioning_states() {
+        assert!(ComponentStatus::Starting.is_transitioning());
+        assert!(ComponentStatus::Stopping.is_transitioning());
+        assert!(ComponentStatus::Upgrading.is_transitioning());
+        assert!(!ComponentStatus::Running.is_transitioning());
+        assert!(!ComponentStatus::Stopped.is_transitioning());
+        assert!(!ComponentStatus::Failed.is_transitioning());
+    }
+
+    #[test]
+    fn test_all_component_type_names() {
+        assert_eq!(ComponentType::OsvmCore.name(), "OSVM Core");
+        assert_eq!(
+            ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None
+            }
+            .name(),
+            "Validator"
+        );
+        assert_eq!(
+            ComponentType::RpcNode {
+                network: "testnet".to_string(),
+                bind_address: None
+            }
+            .name(),
+            "RPC Node"
+        );
+        assert_eq!(
+            ComponentType::McpServer {
+                name: "test".to_string(),
+                version: None
+            }
+            .name(),
+            "MCP Server"
+        );
+    }
+
+    #[test]
+    fn test_all_component_type_security_levels() {
+        assert!(ComponentType::OsvmCore.is_security_critical());
+        assert!(ComponentType::Validator {
+            network: "mainnet".to_string(),
+            identity: None
+        }
+        .is_security_critical());
+        assert!(!ComponentType::RpcNode {
+            network: "testnet".to_string(),
+            bind_address: None
+        }
+        .is_security_critical());
+        assert!(!ComponentType::McpServer {
+            name: "test".to_string(),
+            version: None
+        }
+        .is_security_critical());
+        assert!(!ComponentType::Service {
+            name: "test".to_string()
+        }
+        .is_security_critical());
+    }
+
+    #[tokio::test]
+    async fn test_registry_list_by_type() {
+        let registry = ComponentRegistry::new();
+
+        let rpc1 = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "mainnet".to_string(),
+                bind_address: None,
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        let rpc2 = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "mainnet".to_string(), // Same network as rpc1
+                bind_address: None,
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        let validator = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None,
+            },
+            status: ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(rpc1.clone()).await.unwrap();
+        registry.register(rpc2.clone()).await.unwrap();
+        registry.register(validator.clone()).await.unwrap();
+
+        let rpc_nodes = registry.list_by_type(&rpc1.component_type).await;
+        assert_eq!(rpc_nodes.len(), 2);
+
+        let validators = registry.list_by_type(&validator.component_type).await;
+        assert_eq!(validators.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_registration() {
+        use tokio::task::JoinSet;
+
+        let registry = Arc::new(ComponentRegistry::new());
+
+        let mut handles = JoinSet::new();
+
+        // Register 50 components concurrently
+        for i in 0..50 {
+            let reg = registry.clone();
+            handles.spawn(async move {
+                let component = Component {
+                    id: ComponentId::new(),
+                    component_type: ComponentType::Service {
+                        name: format!("service-{}", i),
+                    },
+                    status: ComponentStatus::Running,
+                    isolation_config: IsolationConfig::default(),
+                    runtime_handle: None,
+                    metadata: Default::default(),
+                };
+                reg.register(component).await
+            });
+        }
+
+        // Wait for all registrations
+        let mut success_count = 0;
+        while let Some(result) = handles.join_next().await {
+            if result.unwrap().is_ok() {
+                success_count += 1;
+            }
+        }
+
+        assert_eq!(success_count, 50);
+        assert_eq!(registry.count().await, 50);
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_status_updates() {
+        use tokio::task::JoinSet;
+
+        let registry = Arc::new(ComponentRegistry::new());
+        let component_ids: Vec<_> = (0..10)
+            .map(|i| {
+                let comp = Component {
+                    id: ComponentId::new(),
+                    component_type: ComponentType::Service {
+                        name: format!("service-{}", i),
+                    },
+                    status: ComponentStatus::Starting,
+                    isolation_config: IsolationConfig::default(),
+                    runtime_handle: None,
+                    metadata: Default::default(),
+                };
+                let id = comp.id;
+                futures::executor::block_on(registry.register(comp)).unwrap();
+                id
+            })
+            .collect();
+
+        let mut handles = JoinSet::new();
+
+        // Update all statuses concurrently
+        for id in component_ids.clone() {
+            let reg = registry.clone();
+            handles.spawn(async move { reg.update_status(id, ComponentStatus::Running).await });
+        }
+
+        while let Some(result) = handles.join_next().await {
+            assert!(result.unwrap().is_ok());
+        }
+
+        // Verify all are running
+        let running = registry.list_by_status(ComponentStatus::Running).await;
+        assert_eq!(running.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_component_registry_error_double_register() {
+        let registry = ComponentRegistry::new();
+        let component = create_test_component();
+        let id = component.id;
+
+        registry.register(component.clone()).await.unwrap();
+
+        // Trying to register same component again should fail
+        let result = registry.register(component).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_component_registry_error_get_nonexistent() {
+        let registry = ComponentRegistry::new();
+        let id = ComponentId::new();
+
+        let result = registry.get(id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_component_registry_error_unregister_nonexistent() {
+        let registry = ComponentRegistry::new();
+        let id = ComponentId::new();
+
+        let result = registry.unregister(id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_component_registry_error_update_nonexistent() {
+        let registry = ComponentRegistry::new();
+        let id = ComponentId::new();
+
+        let result = registry.update_status(id, ComponentStatus::Running).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_component_id_display() {
         let id = ComponentId::new();
         let id_str = id.to_string();

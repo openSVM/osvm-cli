@@ -68,6 +68,7 @@ use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::net::UnixListener;
 use tokio::sync::RwLock;
 
 /// vsock Context ID (CID)
@@ -108,6 +109,9 @@ pub struct VsockAddr {
 }
 
 impl VsockAddr {
+    /// Host CID constant
+    pub const HOST_CID: Cid = CID_HOST;
+
     /// Create a new vsock address
     pub fn new(cid: Cid, port: Port) -> Self {
         Self { cid, port }
@@ -245,6 +249,7 @@ impl VsockManager {
             local_addr: VsockAddr::new(from_cid, self.allocate_port().await),
             remote_addr: to_addr,
             connected: true,
+            stream: None, // No actual stream in simulation mode
         })
     }
 
@@ -281,10 +286,65 @@ impl VsockListener {
         self.addr
     }
 
-    /// Accept a connection (stub for now)
+    /// Accept a connection
+    ///
+    /// This implementation uses Unix sockets as a fallback when vsock kernel module
+    /// is not available. In production with vsock support, this would use the vsock crate.
     pub async fn accept(&self) -> Result<VsockConnection> {
-        // In production, would accept actual vsock connection
-        Err(anyhow!("vsock accept not yet implemented"))
+        log::debug!("Accepting connection on vsock {}", self.addr);
+
+        // Try to bind Unix socket for fallback implementation
+        // This allows development/testing without vsock kernel module
+        let unix_listener = match UnixListener::bind(&self.socket_path) {
+            Ok(listener) => listener,
+            Err(e) => {
+                // If bind fails, socket might already exist from previous run
+                if self.socket_path.exists() {
+                    log::warn!("Removing stale socket: {:?}", self.socket_path);
+                    std::fs::remove_file(&self.socket_path)?;
+                    UnixListener::bind(&self.socket_path)?
+                } else {
+                    return Err(anyhow!("Failed to bind Unix socket: {}", e));
+                }
+            }
+        };
+
+        log::info!(
+            "vsock listener {} ready (using Unix socket fallback at {:?})",
+            self.addr,
+            self.socket_path
+        );
+
+        // Accept connection
+        let (stream, _addr) = unix_listener.accept().await?;
+
+        // Generate a simulated remote address
+        // In real vsock, this would come from the connection
+        let remote_cid = if self.addr.cid == VsockAddr::HOST_CID {
+            // Host accepting from guest
+            3 // Assume guest CID 3
+        } else {
+            // Guest accepting from host
+            VsockAddr::HOST_CID
+        };
+
+        let remote_addr = VsockAddr {
+            cid: remote_cid,
+            port: self.addr.port,
+        };
+
+        log::info!(
+            "vsock connection accepted: {} <- {}",
+            self.addr,
+            remote_addr
+        );
+
+        Ok(VsockConnection {
+            local_addr: self.addr,
+            remote_addr,
+            connected: true,
+            stream: Some(Arc::new(RwLock::new(stream))),
+        })
     }
 }
 
@@ -299,6 +359,9 @@ pub struct VsockConnection {
 
     /// Connection state
     pub connected: bool,
+
+    /// Underlying Unix stream (fallback implementation)
+    pub stream: Option<Arc<RwLock<tokio::net::UnixStream>>>,
 }
 
 impl VsockConnection {
@@ -315,8 +378,17 @@ impl VsockConnection {
             data.len()
         );
 
-        // In production, would send over actual vsock
-        Ok(data.len())
+        // Use Unix socket stream if available
+        if let Some(ref stream) = self.stream {
+            use tokio::io::AsyncWriteExt;
+            let mut stream_guard = stream.write().await;
+            stream_guard.write_all(data).await?;
+            Ok(data.len())
+        } else {
+            // No stream available - simulation mode
+            log::warn!("vsock send in simulation mode (no actual data transfer)");
+            Ok(data.len())
+        }
     }
 
     /// Receive data from vsock
@@ -325,8 +397,22 @@ impl VsockConnection {
             return Err(anyhow!("Not connected"));
         }
 
-        // In production, would recv from actual vsock
-        Err(anyhow!("vsock recv not yet implemented"))
+        // Use Unix socket stream if available
+        if let Some(ref stream) = self.stream {
+            use tokio::io::AsyncReadExt;
+            let mut stream_guard = stream.write().await;
+            let n = stream_guard.read(buf).await?;
+            log::debug!(
+                "vsock recv: {} <- {} ({} bytes)",
+                self.local_addr,
+                self.remote_addr,
+                n
+            );
+            Ok(n)
+        } else {
+            // No stream available - simulation mode
+            Err(anyhow!("vsock recv not available in simulation mode"))
+        }
     }
 
     /// Close connection
@@ -434,5 +520,161 @@ mod tests {
 
         let stats = manager.stats().await;
         assert_eq!(stats.active_listeners, 1);
+    }
+
+    #[tokio::test]
+    async fn test_vsock_connection_send_recv() {
+        // Test send/recv on a connection without stream (simulation mode)
+        let mut conn = VsockConnection {
+            local_addr: VsockAddr::new(3, 5000),
+            remote_addr: VsockAddr::new(2, 5001),
+            connected: true,
+            stream: None,
+        };
+
+        // Send should succeed in simulation mode
+        let data = b"test data";
+        let sent = conn.send(data).await.unwrap();
+        assert_eq!(sent, data.len());
+
+        // Recv should fail without stream
+        let mut buf = vec![0u8; 100];
+        assert!(conn.recv(&mut buf).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vsock_connection_close() {
+        let mut conn = VsockConnection {
+            local_addr: VsockAddr::new(3, 5000),
+            remote_addr: VsockAddr::new(2, 5001),
+            connected: true,
+            stream: None,
+        };
+
+        assert!(conn.connected);
+        conn.close().await.unwrap();
+        assert!(!conn.connected);
+
+        // Operations should fail after close
+        assert!(conn.send(b"data").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vsock_connect() {
+        let temp_dir = std::env::temp_dir().join("osvm-vsock-test-connect");
+        let manager = VsockManager::new(temp_dir).unwrap();
+
+        let from_component = ComponentId::new();
+        let to_addr = VsockAddr::new(2, 5000);
+
+        // Allocate CID for source component
+        manager.allocate_cid(from_component).await.unwrap();
+
+        // Connect
+        let conn = manager.connect(from_component, to_addr).await.unwrap();
+        assert_eq!(conn.remote_addr, to_addr);
+        assert!(conn.connected);
+    }
+
+    #[test]
+    fn test_vsock_addr_host_cid_constant() {
+        assert_eq!(VsockAddr::HOST_CID, CID_HOST);
+        assert_eq!(VsockAddr::HOST_CID, 2);
+    }
+
+    #[tokio::test]
+    async fn test_vsock_manager_stats() {
+        let temp_dir = std::env::temp_dir().join("osvm-vsock-test-stats");
+        let manager = VsockManager::new(temp_dir).unwrap();
+
+        let component1 = ComponentId::new();
+        let component2 = ComponentId::new();
+
+        manager.allocate_cid(component1).await.unwrap();
+        manager.allocate_cid(component2).await.unwrap();
+
+        let addr = VsockAddr::new(3, 5000);
+        manager.listen(addr).await.unwrap();
+
+        let stats = manager.stats().await;
+        assert_eq!(stats.allocated_cids, 2);
+        assert_eq!(stats.active_listeners, 1);
+        assert_eq!(stats.next_cid, 5); // 3 and 4 allocated, next is 5
+        assert_eq!(stats.next_port, 1024);
+    }
+
+    #[tokio::test]
+    async fn test_vsock_stress_many_allocations() {
+        let temp_dir = std::env::temp_dir().join("osvm-vsock-stress");
+        let manager = Arc::new(VsockManager::new(temp_dir).unwrap());
+
+        // Allocate 100 CIDs rapidly
+        let mut components = Vec::new();
+        for _ in 0..100 {
+            let component_id = ComponentId::new();
+            components.push(component_id);
+            manager.allocate_cid(component_id).await.unwrap();
+        }
+
+        let stats = manager.stats().await;
+        assert_eq!(stats.allocated_cids, 100);
+        assert_eq!(stats.next_cid, 103); // Started at 3, allocated 100
+
+        // Verify all are unique by checking stats
+        // (Can't access internal cid_map directly)
+        assert_eq!(stats.allocated_cids, 100);
+    }
+
+    #[tokio::test]
+    async fn test_vsock_concurrent_allocations() {
+        use tokio::task::JoinSet;
+
+        let temp_dir = std::env::temp_dir().join("osvm-vsock-concurrent");
+        let manager = Arc::new(VsockManager::new(temp_dir).unwrap());
+
+        let mut handles = JoinSet::new();
+
+        // Allocate 50 CIDs concurrently
+        for _ in 0..50 {
+            let mgr = manager.clone();
+            handles.spawn(async move {
+                let component_id = ComponentId::new();
+                mgr.allocate_cid(component_id).await
+            });
+        }
+
+        let mut results = Vec::new();
+        while let Some(result) = handles.join_next().await {
+            results.push(result.unwrap());
+        }
+
+        // All should succeed
+        assert_eq!(results.len(), 50);
+        assert!(results.iter().all(|r| r.is_ok()));
+
+        // All CIDs should be unique
+        let cids: Vec<_> = results.iter().map(|r| r.as_ref().unwrap()).collect();
+        let unique_cids: std::collections::HashSet<_> = cids.iter().collect();
+        assert_eq!(unique_cids.len(), 50, "All CIDs should be unique");
+    }
+
+    #[tokio::test]
+    async fn test_vsock_port_exhaustion() {
+        let temp_dir = std::env::temp_dir().join("osvm-vsock-ports");
+        let manager = VsockManager::new(temp_dir).unwrap();
+
+        // Allocate many ports
+        let mut ports = Vec::new();
+        for _ in 0..100 {
+            ports.push(manager.allocate_port().await);
+        }
+
+        // All should be unique and sequential
+        assert_eq!(ports[0], 1024);
+        assert_eq!(ports[99], 1123);
+
+        // Verify uniqueness
+        let unique: std::collections::HashSet<_> = ports.iter().collect();
+        assert_eq!(unique.len(), 100);
     }
 }

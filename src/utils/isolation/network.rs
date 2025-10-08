@@ -26,7 +26,7 @@
 //! └─────────────────────────────────────────────────────┘
 //! ```
 
-use super::{CertificateManager, ComponentId, IsolationError};
+use super::{CertificateManager, ComponentId, ComponentRegistry, IsolationError};
 use anyhow::{anyhow, Context, Result};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -45,6 +45,9 @@ pub struct NetworkManager {
 
     /// CA root certificate path
     ca_root_cert: PathBuf,
+
+    /// Component registry (for type checking)
+    registry: Option<Arc<ComponentRegistry>>,
 }
 
 /// Network policy for connection authorization
@@ -114,13 +117,39 @@ impl NetworkManager {
                 },
             ])),
             ca_root_cert,
+            registry: None,
+        }
+    }
+
+    /// Create network manager with component registry for type checking
+    pub fn with_registry(ca_root_cert: PathBuf, registry: Arc<ComponentRegistry>) -> Self {
+        Self {
+            connections: Arc::new(RwLock::new(HashMap::new())),
+            policies: Arc::new(RwLock::new(vec![
+                // Default policy: deny all
+                NetworkPolicy {
+                    source: ComponentPattern::Any,
+                    destination: ComponentPattern::Any,
+                    effect: PolicyEffect::Deny,
+                    constraints: PolicyConstraints::default(),
+                },
+            ])),
+            ca_root_cert,
+            registry: Some(registry),
         }
     }
 
     /// Add a network policy
     pub async fn add_policy(&self, policy: NetworkPolicy) {
         let mut policies = self.policies.write().await;
-        policies.push(policy);
+        // Insert before the last policy (which is the default deny)
+        // This ensures user policies are evaluated before the default
+        let insert_pos = if !policies.is_empty() {
+            policies.len() - 1
+        } else {
+            0
+        };
+        policies.insert(insert_pos, policy);
     }
 
     /// Establish connection between components with mTLS
@@ -143,15 +172,50 @@ impl NetworkManager {
         }
 
         // Load client certificate and key
-        let (_cert_path, key_path) = from_cert.paths();
+        let (cert_path, key_path) = from_cert.paths();
 
-        // TODO: Implement actual mTLS connection using rustls or native-tls
-        // For now, create a basic TCP connection
+        // Implement mTLS connection
+        // NOTE: Full implementation requires adding `tokio-rustls` or `native-tls` dependency
+        //
+        // Steps for production implementation:
+        // 1. Add dependency: tokio-rustls = "0.24" or native-tls = "0.2"
+        // 2. Load CA certificate bundle for server verification
+        // 3. Load client cert + key for client authentication
+        // 4. Configure TLS connector with:
+        //    - CA root for verifying server
+        //    - Client cert + key for mutual auth
+        //    - TLS 1.3 minimum version
+        //    - Strong cipher suites only
+        // 5. Perform TLS handshake with mutual authentication
+        //
+        // Example with rustls:
+        // ```
+        // use tokio_rustls::{TlsConnector, rustls::ClientConfig};
+        // let mut config = ClientConfig::builder()
+        //     .with_safe_defaults()
+        //     .with_root_certificates(load_ca_certs(&self.ca_root_cert)?)
+        //     .with_client_auth_cert(load_cert(&cert_path)?, load_key(&key_path)?)?;
+        // let connector = TlsConnector::from(Arc::new(config));
+        // let stream = TcpStream::connect(to_address).await?;
+        // let stream = connector.connect(domain, stream).await?;
+        // ```
+
+        log::debug!(
+            "Loading certificates for mTLS: cert={:?}, key={:?}",
+            cert_path,
+            key_path
+        );
+
+        // For now, create a TCP connection (NOT SECURE - for development/testing only)
+        // Production deployments MUST implement full mTLS as described above
         let stream = TcpStream::connect(to_address)
             .await
             .context("Failed to connect to remote")?;
 
-        log::info!("mTLS connection established from {} to {}", from, to);
+        log::warn!(
+            "mTLS stub: TCP connection established from {} to {} (no encryption - add rustls for production)",
+            from, to
+        );
 
         let connection = Connection {
             source: from,
@@ -183,8 +247,8 @@ impl NetworkManager {
 
         // Evaluate policies in order
         for policy in policies.iter() {
-            if self.matches_pattern(&policy.source, from)
-                && self.matches_pattern(&policy.destination, to)
+            if self.matches_pattern(&policy.source, from).await
+                && self.matches_pattern(&policy.destination, to).await
             {
                 // Found matching policy, return based on effect
                 match policy.effect {
@@ -199,12 +263,36 @@ impl NetworkManager {
     }
 
     /// Check if component ID matches pattern
-    fn matches_pattern(&self, pattern: &ComponentPattern, id: ComponentId) -> bool {
+    async fn matches_pattern(&self, pattern: &ComponentPattern, id: ComponentId) -> bool {
         match pattern {
             ComponentPattern::Specific(pattern_id) => *pattern_id == id,
-            ComponentPattern::Type(_type_name) => {
-                // TODO: Check component type
-                true
+            ComponentPattern::Type(type_name) => {
+                // Check component type using registry
+                if let Some(ref registry) = self.registry {
+                    match registry.get(id).await {
+                        Ok(component) => {
+                            let component_type_name = match &component.component_type {
+                                super::ComponentType::OsvmCore => "OsvmCore",
+                                super::ComponentType::Validator { .. } => "Validator",
+                                super::ComponentType::RpcNode { .. } => "RpcNode",
+                                super::ComponentType::McpServer { .. } => "McpServer",
+                                super::ComponentType::Service { .. } => "Service",
+                            };
+                            component_type_name == type_name
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to get component {} for type checking: {}", id, e);
+                            false
+                        }
+                    }
+                } else {
+                    // No registry - cannot check type, allow by default
+                    log::warn!(
+                        "Component type pattern matching requested but no registry available - defaulting to allow for component {}",
+                        id
+                    );
+                    true
+                }
             }
             ComponentPattern::Any => true,
         }
@@ -352,5 +440,283 @@ mod tests {
 
         // Disconnect (should not error even if not connected)
         manager.disconnect(from, to).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_network_manager_with_registry() {
+        use crate::utils::isolation::{
+            Component, ComponentRegistry, ComponentType, IsolationConfig,
+        };
+
+        let registry = Arc::new(ComponentRegistry::new());
+        let manager = NetworkManager::with_registry(PathBuf::from("/tmp/ca.crt"), registry.clone());
+
+        // Register a component
+        let component = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "testnet".to_string(),
+                bind_address: Some("127.0.0.1:8899".to_string()),
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(component.clone()).await.unwrap();
+
+        // Test type-based policy matching
+        let policy = NetworkPolicy {
+            source: ComponentPattern::Type("RpcNode".to_string()),
+            destination: ComponentPattern::Any,
+            effect: PolicyEffect::Allow,
+            constraints: PolicyConstraints::default(),
+        };
+
+        manager.add_policy(policy).await;
+
+        // Should allow connection from RpcNode type
+        let allowed = manager
+            .is_connection_allowed(component.id, ComponentId::new())
+            .await
+            .unwrap();
+        assert!(allowed);
+    }
+
+    #[tokio::test]
+    async fn test_component_type_pattern_matching() {
+        use crate::utils::isolation::{
+            Component, ComponentRegistry, ComponentType, IsolationConfig,
+        };
+
+        let registry = Arc::new(ComponentRegistry::new());
+        let manager = NetworkManager::with_registry(PathBuf::from("/tmp/ca.crt"), registry.clone());
+
+        // Register validator component
+        let validator = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None,
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        // Register RPC component
+        let rpc = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "mainnet".to_string(),
+                bind_address: None,
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(validator.clone()).await.unwrap();
+        registry.register(rpc.clone()).await.unwrap();
+
+        // Allow only Validator -> RpcNode connections
+        let policy = NetworkPolicy {
+            source: ComponentPattern::Type("Validator".to_string()),
+            destination: ComponentPattern::Type("RpcNode".to_string()),
+            effect: PolicyEffect::Allow,
+            constraints: PolicyConstraints::default(),
+        };
+
+        manager.add_policy(policy).await;
+
+        // Validator -> RPC should be allowed
+        let allowed = manager
+            .is_connection_allowed(validator.id, rpc.id)
+            .await
+            .unwrap();
+        assert!(allowed);
+
+        // RPC -> Validator should be denied
+        let denied = manager
+            .is_connection_allowed(rpc.id, validator.id)
+            .await
+            .unwrap();
+        assert!(!denied);
+    }
+
+    #[tokio::test]
+    async fn test_network_policy_constraints() {
+        let manager = NetworkManager::new(PathBuf::from("/tmp/ca.crt"));
+
+        let policy = NetworkPolicy {
+            source: ComponentPattern::Any,
+            destination: ComponentPattern::Any,
+            effect: PolicyEffect::Allow,
+            constraints: PolicyConstraints {
+                max_message_size: Some(1024),
+                rate_limit: Some(100),
+                min_tls_version: Some(TlsVersion::Tls13),
+            },
+        };
+
+        manager.add_policy(policy.clone()).await;
+
+        // Verify policy constraints are stored correctly
+        let policies = manager.policies.read().await;
+        assert!(policies
+            .iter()
+            .any(|p| p.constraints.max_message_size == Some(1024)));
+    }
+
+    #[tokio::test]
+    async fn test_network_isolation_validator_to_rpc() {
+        use crate::utils::isolation::{
+            Component, ComponentRegistry, ComponentType, IsolationConfig,
+        };
+
+        let registry = Arc::new(ComponentRegistry::new());
+        let manager = NetworkManager::with_registry(PathBuf::from("/tmp/ca.crt"), registry.clone());
+
+        // Create validator
+        let validator = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None,
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        // Create RPC node
+        let rpc = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::RpcNode {
+                network: "mainnet".to_string(),
+                bind_address: Some("127.0.0.1:8899".to_string()),
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(validator.clone()).await.unwrap();
+        registry.register(rpc.clone()).await.unwrap();
+
+        // Allow Validator -> RPC
+        manager
+            .add_policy(NetworkPolicy {
+                source: ComponentPattern::Type("Validator".to_string()),
+                destination: ComponentPattern::Type("RpcNode".to_string()),
+                effect: PolicyEffect::Allow,
+                constraints: PolicyConstraints::default(),
+            })
+            .await;
+
+        // Test connection allowed
+        let allowed = manager
+            .is_connection_allowed(validator.id, rpc.id)
+            .await
+            .unwrap();
+        assert!(allowed, "Validator should be able to connect to RPC");
+    }
+
+    #[tokio::test]
+    async fn test_network_deny_mcp_to_validator() {
+        use crate::utils::isolation::{
+            Component, ComponentRegistry, ComponentType, IsolationConfig,
+        };
+
+        let registry = Arc::new(ComponentRegistry::new());
+        let manager = NetworkManager::with_registry(PathBuf::from("/tmp/ca.crt"), registry.clone());
+
+        // Create MCP server
+        let mcp = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::McpServer {
+                name: "untrusted-mcp".to_string(),
+                version: None,
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        // Create validator
+        let validator = Component {
+            id: ComponentId::new(),
+            component_type: ComponentType::Validator {
+                network: "mainnet".to_string(),
+                identity: None,
+            },
+            status: super::super::ComponentStatus::Running,
+            isolation_config: IsolationConfig::default(),
+            runtime_handle: None,
+            metadata: Default::default(),
+        };
+
+        registry.register(mcp.clone()).await.unwrap();
+        registry.register(validator.clone()).await.unwrap();
+
+        // Explicitly deny MCP -> Validator
+        manager
+            .add_policy(NetworkPolicy {
+                source: ComponentPattern::Type("McpServer".to_string()),
+                destination: ComponentPattern::Type("Validator".to_string()),
+                effect: PolicyEffect::Deny,
+                constraints: PolicyConstraints::default(),
+            })
+            .await;
+
+        // Should be denied
+        let denied = manager
+            .is_connection_allowed(mcp.id, validator.id)
+            .await
+            .unwrap();
+        assert!(!denied, "MCP should not be able to connect to Validator");
+    }
+
+    #[tokio::test]
+    async fn test_network_concurrent_policy_evaluation() {
+        use tokio::task::JoinSet;
+
+        let manager = Arc::new(NetworkManager::new(PathBuf::from("/tmp/ca.crt")));
+
+        // Add allow policy
+        manager
+            .add_policy(NetworkPolicy {
+                source: ComponentPattern::Any,
+                destination: ComponentPattern::Any,
+                effect: PolicyEffect::Allow,
+                constraints: PolicyConstraints::default(),
+            })
+            .await;
+
+        let mut handles = JoinSet::new();
+
+        // Test concurrent policy evaluations
+        for _ in 0..20 {
+            let mgr = manager.clone();
+            let from = ComponentId::new();
+            let to = ComponentId::new();
+
+            handles.spawn(async move { mgr.is_connection_allowed(from, to).await });
+        }
+
+        let mut results = Vec::new();
+        while let Some(result) = handles.join_next().await {
+            results.push(result.unwrap());
+        }
+
+        // All should succeed
+        assert_eq!(results.len(), 20);
+        assert!(results.iter().all(|r| r.is_ok()));
     }
 }
