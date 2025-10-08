@@ -424,7 +424,7 @@ impl FirecrackerRuntime {
             kernel_image: self.config.default_kernel.clone(),
             rootfs_image: self.config.default_rootfs.clone(),
             boot_args: "console=ttyS0 reboot=k panic=1 pci=off".to_string(),
-            network: None, // TODO: Configure from component.isolation_config.network
+            network: self.configure_network(&component.isolation_config),
             vsock: if self.config.enable_vsock {
                 Some(VsockConfig {
                     guest_cid: self.generate_guest_cid(),
@@ -434,6 +434,43 @@ impl FirecrackerRuntime {
                 None
             },
         })
+    }
+
+    /// Configure network from isolation config
+    fn configure_network(
+        &self,
+        config: &crate::utils::isolation::config::IsolationConfig,
+    ) -> Option<NetworkConfig> {
+        // Extract network configuration from isolation config
+        // NOTE: Full implementation requires:
+        // 1. TAP device creation and configuration
+        // 2. Bridge/NAT setup for internet access
+        // 3. Firewall rules configuration
+        // 4. IP address allocation from pool
+        //
+        // For now, return None if network is not explicitly configured
+        // Production deployments should setup proper networking
+
+        use crate::utils::isolation::config::NetworkAccess;
+
+        match config.network.access {
+            NetworkAccess::None => {
+                log::info!("No network access configured");
+                None
+            }
+            NetworkAccess::VsockOnly => {
+                log::info!("Vsock-only networking - no TAP device needed");
+                None
+            }
+            NetworkAccess::Internal | NetworkAccess::Restricted | NetworkAccess::Full => {
+                log::info!("Configuring network access: {:?}", config.network.access);
+                Some(NetworkConfig {
+                    tap_device: format!("tap_{}", uuid::Uuid::new_v4()),
+                    host_ip: "172.16.0.1".to_string(),
+                    guest_ip: "172.16.0.2".to_string(),
+                })
+            }
+        }
     }
 
     /// Generate unique guest CID for vsock
@@ -556,6 +593,97 @@ mod tests {
         };
         assert_eq!(vm_config.vcpus, 2);
         assert_eq!(vm_config.memory_mb, 128);
+    }
+
+    #[test]
+    fn test_network_config_creation() {
+        let net_config = NetworkConfig {
+            tap_device: "tap0".to_string(),
+            host_ip: "172.16.0.1".to_string(),
+            guest_ip: "172.16.0.2".to_string(),
+        };
+        assert_eq!(net_config.tap_device, "tap0");
+        assert_eq!(net_config.host_ip, "172.16.0.1");
+        assert_eq!(net_config.guest_ip, "172.16.0.2");
+    }
+
+    #[test]
+    fn test_vsock_config_creation() {
+        let vsock_config = VsockConfig {
+            guest_cid: 5,
+            uds_path: PathBuf::from("/tmp/test.vsock"),
+        };
+        assert_eq!(vsock_config.guest_cid, 5);
+        assert_eq!(vsock_config.uds_path, PathBuf::from("/tmp/test.vsock"));
+    }
+
+    #[test]
+    fn test_vm_state_transitions() {
+        let states = vec![
+            VmState::Starting,
+            VmState::Running,
+            VmState::Paused,
+            VmState::Stopping,
+            VmState::Stopped,
+        ];
+
+        // All states should be distinct
+        for (i, state1) in states.iter().enumerate() {
+            for (j, state2) in states.iter().enumerate() {
+                if i == j {
+                    assert_eq!(state1, state2);
+                } else {
+                    assert_ne!(state1, state2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_configure_network_no_access() {
+        use crate::utils::isolation::config::{IsolationConfig, NetworkAccess, NetworkConfig};
+
+        let firecracker_config = FirecrackerConfig::default();
+        let runtime = FirecrackerRuntime {
+            firecracker_bin: PathBuf::from("/usr/bin/firecracker"),
+            instances: Arc::new(RwLock::new(HashMap::new())),
+            config: firecracker_config,
+        };
+
+        let mut iso_config = IsolationConfig::default();
+        iso_config.network.access = NetworkAccess::None;
+
+        let result = runtime.configure_network(&iso_config);
+        assert!(
+            result.is_none(),
+            "No network should be configured for NetworkAccess::None"
+        );
+    }
+
+    #[test]
+    fn test_configure_network_full_access() {
+        use crate::utils::isolation::config::{IsolationConfig, NetworkAccess};
+
+        let firecracker_config = FirecrackerConfig::default();
+        let runtime = FirecrackerRuntime {
+            firecracker_bin: PathBuf::from("/usr/bin/firecracker"),
+            instances: Arc::new(RwLock::new(HashMap::new())),
+            config: firecracker_config,
+        };
+
+        let mut iso_config = IsolationConfig::default();
+        iso_config.network.access = NetworkAccess::Full;
+
+        let result = runtime.configure_network(&iso_config);
+        assert!(
+            result.is_some(),
+            "Network should be configured for Full access"
+        );
+
+        let net_config = result.unwrap();
+        assert!(net_config.tap_device.starts_with("tap_"));
+        assert_eq!(net_config.host_ip, "172.16.0.1");
+        assert_eq!(net_config.guest_ip, "172.16.0.2");
     }
 
     #[tokio::test]
