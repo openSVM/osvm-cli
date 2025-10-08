@@ -561,3 +561,62 @@ RETURN {
 ---
 
 [Continuing with Q13-Q100 - creating batch additions to reach 100 total questions with proper OVSM logic and ```ovsm blocks]
+
+## Q13: "How many SOL does the top holder have?"
+
+**Expected Plan:**
+[TIME: ~3s] [COST: free] [CONFIDENCE: 100%]
+
+**Available Tools:**
+From Standard Library: getLargestAccounts (Solana RPC), FIRST
+
+```ovsm
+**Main Branch:**
+$largest = getLargestAccounts(limit: 1)
+$top_account = FIRST(array: $largest)
+
+**Action:**
+RETURN {
+  address: $top_account.address,
+  balance_sol: $top_account.lamports / LAMPORTS_PER_SOL,
+  confidence: 100
+}
+```
+
+---
+
+## Q14: "Find all program-owned accounts for program ID ABC"
+
+**Expected Plan:**
+[TIME: ~10s] [COST: ~0.002 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getProgramAccounts, COUNT, SLICE
+
+```ovsm
+**Main Branch:**
+$program_id = "ABC"
+$accounts = getProgramAccounts(programId: $program_id)
+
+**Decision Point:** Handle large result sets
+  BRANCH A (COUNT($accounts) > 100):
+    $result = SLICE(array: $accounts, start: 0, end: 100)
+    $note = "Showing first 100 of {COUNT($accounts)}"
+  BRANCH B (COUNT($accounts) <= 100):
+    $result = $accounts
+    $note = "Complete list"
+
+**Action:**
+RETURN {
+  program: $program_id,
+  accounts: $result,
+  total: COUNT($accounts),
+  showing: COUNT($result),
+  note: $note,
+  confidence: 90
+}
+```
+
+---
+
+[Q15-Q100 pattern continues - adding in next batch]
