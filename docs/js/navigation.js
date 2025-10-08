@@ -55,6 +55,11 @@ const pages = {
         title: 'Isolation & Security',
         file: 'pages/isolation.html',
         keywords: ['isolation', 'security', 'microvm', 'firecracker', 'ephemeral']
+    },
+    'ovsm-language': {
+        title: 'OVSM Language',
+        file: 'pages/ovsm-language.html',
+        keywords: ['ovsm', 'language', 'planning', 'agent', 'research', 'multi-agent', 'tools', 'specification']
     }
 };
 
