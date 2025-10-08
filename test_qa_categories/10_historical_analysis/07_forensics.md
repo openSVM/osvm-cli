@@ -22,17 +22,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -67,17 +69,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -112,17 +116,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -157,17 +163,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -202,17 +210,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -247,17 +257,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -292,17 +304,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -337,17 +351,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -382,17 +398,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -427,17 +445,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -472,17 +492,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -517,17 +539,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -562,17 +586,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -607,17 +633,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -652,17 +680,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -697,17 +727,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -742,17 +774,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -787,17 +821,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -832,17 +868,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -877,17 +915,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -922,17 +962,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -967,17 +1009,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1012,17 +1056,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1057,17 +1103,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1102,17 +1150,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1147,17 +1197,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1192,17 +1244,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1237,17 +1291,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1282,17 +1338,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1327,17 +1385,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1372,17 +1432,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1417,17 +1479,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1462,17 +1526,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1507,17 +1573,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1552,17 +1620,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1597,17 +1667,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1642,17 +1714,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1687,17 +1761,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1732,17 +1808,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1777,17 +1855,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1822,17 +1902,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1867,17 +1949,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1912,17 +1996,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -1957,17 +2043,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2002,17 +2090,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2047,17 +2137,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2092,17 +2184,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2137,17 +2231,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2182,17 +2278,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2227,17 +2325,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2272,17 +2372,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2317,17 +2419,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2362,17 +2466,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2407,17 +2513,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2452,17 +2560,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2497,17 +2607,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2542,17 +2654,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2587,17 +2701,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2632,17 +2748,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2677,17 +2795,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2722,17 +2842,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2767,17 +2889,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2812,17 +2936,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2857,17 +2983,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2902,17 +3030,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2947,17 +3077,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -2992,17 +3124,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3037,17 +3171,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3082,17 +3218,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3127,17 +3265,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3172,17 +3312,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3217,17 +3359,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3262,17 +3406,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3307,17 +3453,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3352,17 +3500,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3397,17 +3547,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3442,17 +3594,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3487,17 +3641,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3532,17 +3688,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3577,17 +3735,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3622,17 +3782,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3667,17 +3829,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3712,17 +3876,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3757,17 +3923,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3802,17 +3970,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3847,17 +4017,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3892,17 +4064,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3937,17 +4111,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -3982,17 +4158,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4027,17 +4205,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4072,17 +4252,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4117,17 +4299,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4162,17 +4346,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4207,17 +4393,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4252,17 +4440,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4297,17 +4487,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "mint"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4342,17 +4534,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "epoch"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4387,17 +4581,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "addr"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4432,17 +4628,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "n"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?
@@ -4477,17 +4675,19 @@ From Standard Library:
 **Main Branch:**
 ```
 $signature = "input"
-$result = TOOL.getBlock($signature)
+$result = getBlock($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
+    RETURN ERROR(message: "Not found")
 ```
 
 **Decision Point:** Does the query return valid data?

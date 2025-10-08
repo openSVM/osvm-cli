@@ -20,20 +20,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -65,20 +66,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -110,20 +112,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -155,20 +158,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -200,20 +204,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -245,20 +250,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -290,20 +296,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -335,20 +342,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -380,20 +388,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -425,20 +434,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -470,20 +480,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -515,20 +526,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -560,20 +572,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -605,20 +618,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -650,20 +664,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -695,20 +710,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -740,20 +756,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -785,20 +802,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -830,20 +848,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -875,20 +894,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -920,20 +940,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -965,20 +986,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1010,20 +1032,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1055,20 +1078,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1100,20 +1124,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1145,20 +1170,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1190,20 +1216,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1235,20 +1262,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1280,20 +1308,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1325,20 +1354,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1370,20 +1400,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1415,20 +1446,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1460,20 +1492,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1505,20 +1538,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1550,20 +1584,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1595,20 +1630,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1640,20 +1676,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1685,20 +1722,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1730,20 +1768,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1775,20 +1814,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1820,20 +1860,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1865,20 +1906,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1910,20 +1952,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -1955,20 +1998,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2000,20 +2044,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2045,20 +2090,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2090,20 +2136,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2135,20 +2182,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2180,20 +2228,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2225,20 +2274,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2270,20 +2320,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2315,20 +2366,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2360,20 +2412,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2405,20 +2458,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2450,20 +2504,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2495,20 +2550,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2540,20 +2596,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2585,20 +2642,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2630,20 +2688,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2675,20 +2734,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2720,20 +2780,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2765,20 +2826,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2810,20 +2872,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2855,20 +2918,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2900,20 +2964,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2945,20 +3010,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -2990,20 +3056,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3035,20 +3102,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3080,20 +3148,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3125,20 +3194,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3170,20 +3240,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3215,20 +3286,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3260,20 +3332,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3305,20 +3378,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3350,20 +3424,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3395,20 +3470,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3440,20 +3516,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3485,20 +3562,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3530,20 +3608,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3575,20 +3654,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3620,20 +3700,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3665,20 +3746,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3710,20 +3792,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3755,20 +3838,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3800,20 +3884,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3845,20 +3930,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3890,20 +3976,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3935,20 +4022,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -3980,20 +4068,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4025,20 +4114,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4070,20 +4160,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4115,20 +4206,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4160,20 +4252,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4205,20 +4298,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4250,20 +4344,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "amount"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4295,20 +4390,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "n"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4340,20 +4436,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "pct"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4385,20 +4482,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4430,20 +4528,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "identity"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
@@ -4475,20 +4574,21 @@ From Standard Library:
   - Math operations (sum, avg, max, min)
 
 **Main Branch:**
-```
 $signature = "input"
-$result = TOOL.getVoteAccounts($signature)
+$result = getVoteAccounts($signature)
 
 DECISION: Check if result exists
   BRANCH A (result found):
-    $data = PARSE($result)
-    $metrics = ANALYZE($data)
-    OUTPUT: $metrics
+    // Data is already parsed in $result
+    // Extract specific metrics from $result
+    RETURN {
+  // Add specific fields here
+}
 
   BRANCH B (not found):
     ERROR: "Resource not found"
-    OUTPUT: null
-```
+    RETURN ERROR(message: "Not found")
+
 
 **Decision Point:** Does the query return valid data?
   BRANCH A (valid data):
