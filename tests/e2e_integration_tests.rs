@@ -1,22 +1,24 @@
 //! End-to-end integration tests for complete workflows
 
 use anyhow::Result;
+use mockito::Server;
 use osvm::{
     services::{
         ai_service::AiService,
-        mcp_service::{McpService, McpServerConfig, McpTransportType, McpAuthConfig},
+        mcp_service::{McpAuthConfig, McpServerConfig, McpService, McpTransportType},
     },
     utils::{
-        isolation::{IsolationManager, IsolationConfig, RuntimeConfig, RuntimeType, ResourceLimits},
-        agent_chat_v2::{ChatState, ChatMessage, AgentState},
+        agent_chat_v2::{AgentState, ChatMessage, ChatState},
+        isolation::{
+            IsolationConfig, IsolationManager, ResourceLimits, RuntimeConfig, RuntimeType,
+        },
     },
 };
+use serde_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::TempDir;
-use mockito::Server;
-use serde_json::json;
 use tokio::time::sleep;
 
 /// Complete workflow: User request -> AI Planning -> MCP Execution -> Result
@@ -31,50 +33,62 @@ mod complete_workflow_tests {
         let mut mcp_server = Server::new_async().await;
 
         // Mock AI planning response
-        let ai_mock = ai_server.mock("POST", "/api/getAnswer")
+        let ai_mock = ai_server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
-            .with_body(json!({
-                "reasoning": "User wants to check balance, using get_balance tool",
-                "osvm_tools_to_use": [{
-                    "server_id": "solana-mcp",
-                    "tool_name": "get_balance",
-                    "reason": "Fetch wallet balance",
-                    "args": {
-                        "address": "UserWallet123"
-                    }
-                }],
-                "expected_outcome": "Balance displayed to user"
-            }).to_string())
+            .with_body(
+                json!({
+                    "reasoning": "User wants to check balance, using get_balance tool",
+                    "osvm_tools_to_use": [{
+                        "server_id": "solana-mcp",
+                        "tool_name": "get_balance",
+                        "reason": "Fetch wallet balance",
+                        "args": {
+                            "address": "UserWallet123"
+                        }
+                    }],
+                    "expected_outcome": "Balance displayed to user"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock MCP tool discovery
-        let mcp_tools_mock = mcp_server.mock("POST", "/tools/list")
+        let mcp_tools_mock = mcp_server
+            .mock("POST", "/tools/list")
             .with_status(200)
-            .with_body(json!({
-                "tools": [{
-                    "name": "get_balance",
-                    "description": "Get SOL balance",
-                    "parameters": [{
-                        "name": "address",
-                        "type": "string",
-                        "required": true
+            .with_body(
+                json!({
+                    "tools": [{
+                        "name": "get_balance",
+                        "description": "Get SOL balance",
+                        "parameters": [{
+                            "name": "address",
+                            "type": "string",
+                            "required": true
+                        }]
                     }]
-                }]
-            }).to_string())
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock MCP tool execution
-        let mcp_exec_mock = mcp_server.mock("POST", "/tools/execute")
+        let mcp_exec_mock = mcp_server
+            .mock("POST", "/tools/execute")
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "balance": 42.5,
-                    "unit": "SOL"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "balance": 42.5,
+                        "unit": "SOL"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -101,21 +115,18 @@ mod complete_workflow_tests {
         tools.insert("solana-mcp".to_string(), mcp_tools);
 
         // Step 1: AI Planning
-        let plan = ai_service.create_tool_plan(
-            "What is my wallet balance?",
-            &tools
-        ).await?;
+        let plan = ai_service
+            .create_tool_plan("What is my wallet balance?", &tools)
+            .await?;
 
         assert_eq!(plan.tools_to_use.len(), 1);
         assert_eq!(plan.tools_to_use[0].tool_name, "get_balance");
 
         // Step 2: Execute planned tools
         for tool_call in plan.tools_to_use {
-            let result = mcp_service.execute_tool(
-                &tool_call.server_id,
-                &tool_call.tool_name,
-                tool_call.args
-            ).await?;
+            let result = mcp_service
+                .execute_tool(&tool_call.server_id, &tool_call.tool_name, tool_call.args)
+                .await?;
 
             assert!(result.success);
             assert_eq!(result.result["balance"], 42.5);
@@ -135,63 +146,75 @@ mod complete_workflow_tests {
         let mut mcp_server = Server::new_async().await;
 
         // Mock AI planning for deployment
-        let ai_mock = ai_server.mock("POST", "/api/getAnswer")
+        let ai_mock = ai_server
+            .mock("POST", "/api/getAnswer")
             .with_status(200)
-            .with_body(json!({
-                "reasoning": "Deploy program then verify",
-                "osvm_tools_to_use": [
-                    {
-                        "server_id": "osvm-mcp",
-                        "tool_name": "deploy_program",
-                        "reason": "Deploy to devnet",
-                        "args": {
-                            "program_path": "./program.so",
-                            "network": "devnet"
+            .with_body(
+                json!({
+                    "reasoning": "Deploy program then verify",
+                    "osvm_tools_to_use": [
+                        {
+                            "server_id": "osvm-mcp",
+                            "tool_name": "deploy_program",
+                            "reason": "Deploy to devnet",
+                            "args": {
+                                "program_path": "./program.so",
+                                "network": "devnet"
+                            }
+                        },
+                        {
+                            "server_id": "osvm-mcp",
+                            "tool_name": "verify_deployment",
+                            "reason": "Verify deployment success",
+                            "args": {
+                                "program_id": "PENDING"
+                            }
                         }
-                    },
-                    {
-                        "server_id": "osvm-mcp",
-                        "tool_name": "verify_deployment",
-                        "reason": "Verify deployment success",
-                        "args": {
-                            "program_id": "PENDING"
-                        }
-                    }
-                ],
-                "expected_outcome": "Program deployed and verified"
-            }).to_string())
+                    ],
+                    "expected_outcome": "Program deployed and verified"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock deployment execution
-        let deploy_mock = mcp_server.mock("POST", "/tools/execute")
+        let deploy_mock = mcp_server
+            .mock("POST", "/tools/execute")
             .match_body(mockito::Matcher::PartialJson(json!({
                 "tool": "deploy_program"
             })))
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "program_id": "ProgramID123",
-                    "transaction": "TxHash456"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "program_id": "ProgramID123",
+                        "transaction": "TxHash456"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock verification
-        let verify_mock = mcp_server.mock("POST", "/tools/execute")
+        let verify_mock = mcp_server
+            .mock("POST", "/tools/execute")
             .match_body(mockito::Matcher::PartialJson(json!({
                 "tool": "verify_deployment"
             })))
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "verified": true,
-                    "executable": true
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "verified": true,
+                        "executable": true
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -214,10 +237,9 @@ mod complete_workflow_tests {
         let mut tools = HashMap::new();
         tools.insert("osvm-mcp".to_string(), vec![]);
 
-        let plan = ai_service.create_tool_plan(
-            "Deploy my program to devnet",
-            &tools
-        ).await?;
+        let plan = ai_service
+            .create_tool_plan("Deploy my program to devnet", &tools)
+            .await?;
 
         let mut program_id = None;
         for mut tool_call in plan.tools_to_use {
@@ -225,15 +247,13 @@ mod complete_workflow_tests {
             if tool_call.tool_name == "verify_deployment" && program_id.is_some() {
                 tool_call.args.insert(
                     "program_id".to_string(),
-                    json!(program_id.as_ref().unwrap())
+                    json!(program_id.as_ref().unwrap()),
                 );
             }
 
-            let result = mcp_service.execute_tool(
-                &tool_call.server_id,
-                &tool_call.tool_name,
-                tool_call.args
-            ).await?;
+            let result = mcp_service
+                .execute_tool(&tool_call.server_id, &tool_call.tool_name, tool_call.args)
+                .await?;
 
             assert!(result.success);
 
@@ -298,9 +318,7 @@ mod isolated_execution_tests {
             },
             rootfs: Some(temp_dir.path().to_path_buf()),
             command: vec!["echo".to_string(), "MCP Server".to_string()],
-            env_vars: vec![
-                ("MCP_PORT".to_string(), "9090".to_string()),
-            ],
+            env_vars: vec![("MCP_PORT".to_string(), "9090".to_string())],
             mounts: vec![],
             network_enabled: true,
         };
@@ -309,15 +327,19 @@ mod isolated_execution_tests {
         isolation_manager.start_runtime(runtime_id).await?;
 
         // Mock MCP execution
-        let exec_mock = mcp_server.mock("POST", "/isolated/execute")
+        let exec_mock = mcp_server
+            .mock("POST", "/isolated/execute")
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "executed_in": "microvm",
-                    "isolation_level": "full"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "executed_in": "microvm",
+                        "isolation_level": "full"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -336,11 +358,9 @@ mod isolated_execution_tests {
         mcp_service.add_server(mcp_config).await?;
 
         // Execute tool in isolated environment
-        let result = mcp_service.execute_tool(
-            "isolated-mcp",
-            "execute",
-            HashMap::new()
-        ).await?;
+        let result = mcp_service
+            .execute_tool("isolated-mcp", "execute", HashMap::new())
+            .await?;
 
         assert!(result.success);
         assert_eq!(result.result["executed_in"], "microvm");
@@ -425,31 +445,39 @@ mod chat_integration_tests {
         let mut mcp_server = Server::new_async().await;
 
         // Mock AI response for chat
-        let ai_mock = ai_server.mock("POST", "/chat")
+        let ai_mock = ai_server
+            .mock("POST", "/chat")
             .with_status(200)
-            .with_body(json!({
-                "response": "I'll check your balance for you.",
-                "tool_plan": {
-                    "reasoning": "Need to check balance",
-                    "osvm_tools_to_use": [{
-                        "server_id": "solana-mcp",
-                        "tool_name": "get_balance",
-                        "reason": "Get balance",
-                        "args": {"address": "wallet123"}
-                    }],
-                    "expected_outcome": "Balance retrieved"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "response": "I'll check your balance for you.",
+                    "tool_plan": {
+                        "reasoning": "Need to check balance",
+                        "osvm_tools_to_use": [{
+                            "server_id": "solana-mcp",
+                            "tool_name": "get_balance",
+                            "reason": "Get balance",
+                            "args": {"address": "wallet123"}
+                        }],
+                        "expected_outcome": "Balance retrieved"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock tool execution
-        let tool_mock = mcp_server.mock("POST", "/tools/execute")
+        let tool_mock = mcp_server
+            .mock("POST", "/tools/execute")
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {"balance": 100.0}
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {"balance": 100.0}
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -465,7 +493,7 @@ mod chat_integration_tests {
                 content: "What's my balance?".to_string(),
                 timestamp: chrono::Utc::now(),
                 tool_calls: None,
-            }
+            },
         )?;
 
         // Update agent state
@@ -488,13 +516,18 @@ mod chat_integration_tests {
         mcp_service.add_server(mcp_config).await?;
 
         // Execute tool
-        chat_state.set_agent_state(session_id, AgentState::ExecutingTool("get_balance".to_string()))?;
+        chat_state.set_agent_state(
+            session_id,
+            AgentState::ExecutingTool("get_balance".to_string()),
+        )?;
 
-        let result = mcp_service.execute_tool(
-            "solana-mcp",
-            "get_balance",
-            [("address".to_string(), json!("wallet123"))].into()
-        ).await?;
+        let result = mcp_service
+            .execute_tool(
+                "solana-mcp",
+                "get_balance",
+                [("address".to_string(), json!("wallet123"))].into(),
+            )
+            .await?;
 
         assert!(result.success);
 
@@ -506,7 +539,7 @@ mod chat_integration_tests {
                 content: format!("Your balance is {} SOL", result.result["balance"]),
                 timestamp: chrono::Utc::now(),
                 tool_calls: Some(vec!["get_balance".to_string()]),
-            }
+            },
         )?;
 
         chat_state.set_agent_state(session_id, AgentState::Idle)?;
@@ -530,7 +563,10 @@ mod chat_integration_tests {
         // Simulate multi-turn conversation
         let turns = vec![
             ("user", "Hello, can you help me?"),
-            ("assistant", "Of course! I'm here to help. What do you need?"),
+            (
+                "assistant",
+                "Of course! I'm here to help. What do you need?",
+            ),
             ("user", "I want to check my balance"),
             ("assistant", "I'll check your balance for you."),
             ("user", "Also, show me recent transactions"),
@@ -545,7 +581,7 @@ mod chat_integration_tests {
                     content: content.to_string(),
                     timestamp: chrono::Utc::now(),
                     tool_calls: None,
-                }
+                },
             )?;
         }
 
@@ -570,7 +606,8 @@ mod stress_tests {
         let mut server = Server::new_async().await;
 
         // Mock that handles multiple concurrent requests
-        let mock = server.mock("POST", "/concurrent")
+        let mock = server
+            .mock("POST", "/concurrent")
             .with_status(200)
             .with_body(json!({"success": true}).to_string())
             .expect(10)
@@ -595,11 +632,13 @@ mod stress_tests {
         for i in 0..10 {
             let service = Arc::clone(&mcp_service);
             let handle = tokio::spawn(async move {
-                service.execute_tool(
-                    "concurrent-test",
-                    "test",
-                    [("id".to_string(), json!(i))].into()
-                ).await
+                service
+                    .execute_tool(
+                        "concurrent-test",
+                        "test",
+                        [("id".to_string(), json!(i))].into(),
+                    )
+                    .await
             });
             handles.push(handle);
         }

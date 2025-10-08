@@ -2,13 +2,13 @@
 //! log levels, filtering, rotation, and audit trail functionality
 
 use anyhow::Result;
+use chrono::Utc;
 use osvm::services::activity_logger::{
-    ActivityLogger, LogLevel, LogEntry, LogFilter, LogRotation,
-    AuditTrail, ActivityMetrics, LogFormatter, StructuredLogger,
+    ActivityLogger, ActivityMetrics, AuditTrail, LogEntry, LogFilter, LogFormatter, LogLevel,
+    LogRotation, StructuredLogger,
 };
 use std::path::PathBuf;
 use tempfile::TempDir;
-use chrono::Utc;
 
 #[cfg(test)]
 mod activity_logger_basic_tests {
@@ -64,7 +64,9 @@ mod activity_logger_basic_tests {
         metadata.insert("user_id".to_string(), "user_123".to_string());
         metadata.insert("action".to_string(), "deploy".to_string());
 
-        logger.log_structured(LogLevel::Info, "Deployment started", metadata).await?;
+        logger
+            .log_structured(LogLevel::Info, "Deployment started", metadata)
+            .await?;
 
         let entries = logger.get_recent_logs(1).await?;
         assert!(entries[0].metadata.contains_key("user_id"));
@@ -78,12 +80,14 @@ mod activity_logger_basic_tests {
         let temp_dir = TempDir::new()?;
         let logger = ActivityLogger::new(temp_dir.path().to_path_buf())?;
 
-        logger.log_with_context(
-            LogLevel::Info,
-            "Operation completed",
-            "deployment",
-            "deploy-001",
-        ).await?;
+        logger
+            .log_with_context(
+                LogLevel::Info,
+                "Operation completed",
+                "deployment",
+                "deploy-001",
+            )
+            .await?;
 
         let entries = logger.get_recent_logs(1).await?;
         assert_eq!(entries[0].context, Some("deployment".to_string()));
@@ -119,10 +123,9 @@ mod activity_logger_basic_tests {
         for i in 0..20 {
             let logger_clone = Arc::clone(&logger);
             let handle = tokio::spawn(async move {
-                logger_clone.log(
-                    LogLevel::Info,
-                    &format!("Concurrent log {}", i),
-                ).await
+                logger_clone
+                    .log(LogLevel::Info, &format!("Concurrent log {}", i))
+                    .await
             });
             handles.push(handle);
         }
@@ -184,7 +187,9 @@ mod activity_logger_basic_tests {
         let logger = ActivityLogger::new(temp_dir.path().to_path_buf())?;
 
         for i in 0..5 {
-            logger.log(LogLevel::Info, &format!("Buffered log {}", i)).await?;
+            logger
+                .log(LogLevel::Info, &format!("Buffered log {}", i))
+                .await?;
         }
 
         logger.flush().await?;
@@ -243,9 +248,15 @@ mod log_filtering_tests {
         let temp_dir = TempDir::new()?;
         let logger = ActivityLogger::new(temp_dir.path().to_path_buf())?;
 
-        logger.log_with_context(LogLevel::Info, "Deployment log", "deployment", "d1").await?;
-        logger.log_with_context(LogLevel::Info, "Audit log", "audit", "a1").await?;
-        logger.log_with_context(LogLevel::Info, "Deployment log 2", "deployment", "d2").await?;
+        logger
+            .log_with_context(LogLevel::Info, "Deployment log", "deployment", "d1")
+            .await?;
+        logger
+            .log_with_context(LogLevel::Info, "Audit log", "audit", "a1")
+            .await?;
+        logger
+            .log_with_context(LogLevel::Info, "Deployment log 2", "deployment", "d2")
+            .await?;
 
         let filter = LogFilter::new().with_context("deployment");
         let filtered = logger.get_filtered_logs(&filter).await?;
@@ -307,7 +318,9 @@ mod log_rotation_tests {
 
         // Write enough logs to trigger rotation
         for i in 0..100 {
-            logger.log(LogLevel::Info, &format!("Log entry {}", i)).await?;
+            logger
+                .log(LogLevel::Info, &format!("Log entry {}", i))
+                .await?;
         }
 
         // Should have created multiple log files
@@ -368,7 +381,9 @@ mod log_rotation_tests {
         let logger = ActivityLogger::with_rotation(temp_dir.path().to_path_buf(), rotation)?;
 
         for i in 0..100 {
-            logger.log(LogLevel::Info, &format!("Compressible log {}", i)).await?;
+            logger
+                .log(LogLevel::Info, &format!("Compressible log {}", i))
+                .await?;
         }
 
         logger.flush().await?;
@@ -405,11 +420,9 @@ mod audit_trail_tests {
         let temp_dir = TempDir::new()?;
         let audit = AuditTrail::new(temp_dir.path().to_path_buf())?;
 
-        audit.record_event(
-            "user_login",
-            "alice",
-            "Successful login from 192.168.1.100",
-        ).await?;
+        audit
+            .record_event("user_login", "alice", "Successful login from 192.168.1.100")
+            .await?;
 
         let events = audit.get_recent_events(1).await?;
         assert_eq!(events.len(), 1);
@@ -423,7 +436,9 @@ mod audit_trail_tests {
         let temp_dir = TempDir::new()?;
         let audit = AuditTrail::new(temp_dir.path().to_path_buf())?;
 
-        audit.record_event("test_event", "user1", "Test action").await?;
+        audit
+            .record_event("test_event", "user1", "Test action")
+            .await?;
 
         // Attempting to modify should fail
         let result = audit.modify_event(0);

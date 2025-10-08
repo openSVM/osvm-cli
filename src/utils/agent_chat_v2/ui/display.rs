@@ -14,7 +14,7 @@ use super::super::utils::markdown::render_markdown;
 use super::super::utils::{sanitize_json_for_ui, sanitize_text_for_ui};
 use super::handlers::handle_chat_selection;
 use super::layout::AdvancedChatUI;
-use super::theme::{Icons, StyledText, Spinners, ProgressBar};
+use super::theme::{Icons, ProgressBar, Spinners, StyledText};
 
 impl AdvancedChatUI {
     /// Apply theme styling to a message based on its type
@@ -218,10 +218,12 @@ impl AdvancedChatUI {
 
     pub fn update_mcp_tools_list(&self, siv: &mut Cursive) {
         let tools = self.state.available_tools.read().unwrap();
-        
-        if let Some(mut mcp_tools_view) = siv.find_name::<SelectView<(String, String)>>("mcp_tools_list") {
+
+        if let Some(mut mcp_tools_view) =
+            siv.find_name::<SelectView<(String, String)>>("mcp_tools_list")
+        {
             mcp_tools_view.clear();
-            
+
             if tools.is_empty() {
                 mcp_tools_view.add_item("No tools available", ("".to_string(), "".to_string()));
             } else {
@@ -229,17 +231,20 @@ impl AdvancedChatUI {
                 for (server_id, tool_list) in tools.iter() {
                     // Add server header with icon
                     mcp_tools_view.add_item(
-                        format!("{} {} ({} tools)", Icons::FOLDER, server_id, tool_list.len()),
-                        (server_id.clone(), "".to_string())
+                        format!(
+                            "{} {} ({} tools)",
+                            Icons::FOLDER,
+                            server_id,
+                            tool_list.len()
+                        ),
+                        (server_id.clone(), "".to_string()),
                     );
-                    
+
                     // Add individual tools with icons
                     for tool in tool_list.iter() {
                         let display_name = format!("  {} {}", Icons::TOOL, tool.name);
-                        mcp_tools_view.add_item(
-                            display_name,
-                            (server_id.clone(), tool.name.clone())
-                        );
+                        mcp_tools_view
+                            .add_item(display_name, (server_id.clone(), tool.name.clone()));
                     }
                 }
             }
@@ -287,7 +292,11 @@ impl AdvancedChatUI {
 
         let status_text = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => format!("{} Agent: Idle | Ready for tasks | {}", Icons::IDLE, timestamp),
+                AgentState::Idle => format!(
+                    "{} Agent: Idle | Ready for tasks | {}",
+                    Icons::IDLE,
+                    timestamp
+                ),
                 AgentState::Thinking => format!(
                     "{} Agent: Thinking... | Analyzing request | {}",
                     spinner_char, timestamp
@@ -322,43 +331,54 @@ impl AdvancedChatUI {
 
     pub fn update_status_bar(&self, siv: &mut Cursive) {
         use std::time::{Duration, Instant};
-        
+
         // Check if we need to refresh the cached status (throttle to avoid blocking UI thread too often)
         const REFRESH_INTERVAL_SECS: u64 = 2; // Refresh every 2 seconds
-        
+
         let should_refresh = {
             if let Ok(last_update) = self.state.last_status_update.read() {
-                last_update.map(|instant| instant.elapsed() > Duration::from_secs(REFRESH_INTERVAL_SECS))
+                last_update
+                    .map(|instant| instant.elapsed() > Duration::from_secs(REFRESH_INTERVAL_SECS))
                     .unwrap_or(true)
             } else {
                 true
             }
         };
-        
+
         // Only fetch new status if the cache is stale
         if should_refresh {
             // Spawn status fetch in background to avoid blocking UI thread
             // For now, we still need to block briefly, but we do it less frequently
             let status_text = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    let status = crate::utils::agent_chat::system_status_bar::get_system_status().await;
-                    
+                    let status =
+                        crate::utils::agent_chat::system_status_bar::get_system_status().await;
+
                     // Format status similar to the carousel format
                     let mcp_info = if status.mcp_deployments.is_empty() {
                         "no MCP".to_string()
                     } else {
-                        status.mcp_deployments.iter()
+                        status
+                            .mcp_deployments
+                            .iter()
                             .map(|d| {
                                 let server_short = d.server_name.replace("-mcp", "");
-                                let microvm = d.microvm_id.as_ref().map(|id| id.as_str()).unwrap_or("?");
+                                let microvm =
+                                    d.microvm_id.as_ref().map(|id| id.as_str()).unwrap_or("?");
                                 let extra_mounts = d.mounts.len().saturating_sub(1);
                                 let readonly_count = d.mounts.iter().filter(|m| m.readonly).count();
-                                
+
                                 if extra_mounts > 0 {
                                     if readonly_count > 0 {
-                                        format!("{}({}:cfg+{}:{}ro)", server_short, microvm, extra_mounts, readonly_count)
+                                        format!(
+                                            "{}({}:cfg+{}:{}ro)",
+                                            server_short, microvm, extra_mounts, readonly_count
+                                        )
                                     } else {
-                                        format!("{}({}:cfg+{})", server_short, microvm, extra_mounts)
+                                        format!(
+                                            "{}({}:cfg+{})",
+                                            server_short, microvm, extra_mounts
+                                        )
                                     }
                                 } else {
                                     format!("{}({}:cfg)", server_short, microvm)
@@ -378,7 +398,7 @@ impl AdvancedChatUI {
                     )
                 })
             });
-            
+
             // Update the cache
             if let Ok(mut cached_status) = self.state.cached_status_text.write() {
                 *cached_status = Some(status_text.clone());
@@ -386,7 +406,7 @@ impl AdvancedChatUI {
             if let Ok(mut last_update) = self.state.last_status_update.write() {
                 *last_update = Some(Instant::now());
             }
-            
+
             // Update the view
             if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
                 let content_ref = status_bar_view.get_content();
@@ -399,7 +419,9 @@ impl AdvancedChatUI {
             // Use cached status to avoid blocking
             if let Ok(cached_status) = self.state.cached_status_text.read() {
                 if let Some(status_text) = cached_status.as_ref() {
-                    if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
+                    if let Some(mut status_bar_view) =
+                        siv.find_name::<TextView>("system_status_bar")
+                    {
                         let content_ref = status_bar_view.get_content();
                         let current_content = content_ref.source().to_string();
                         if &current_content != status_text {

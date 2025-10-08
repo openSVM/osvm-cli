@@ -349,10 +349,13 @@ impl McpService {
     pub fn new() -> Self {
         // Load isolation config or use default
         let isolation_config = IsolationConfig::load().unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to load isolation config: {}. Using defaults.", e);
+            eprintln!(
+                "Warning: Failed to load isolation config: {}. Using defaults.",
+                e
+            );
             IsolationConfig::default()
         });
-        
+
         // Initialize unikernel runtime
         let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
             .unwrap_or_else(|e| {
@@ -361,13 +364,13 @@ impl McpService {
                 UnikernelRuntime::new(std::env::temp_dir().join("osvm-unikernels"))
                     .expect("Failed to create fallback unikernel runtime")
             });
-        
+
         // Initialize microVM launcher (graceful fallback if unavailable)
         let microvm_launcher = MicroVmLauncher::new().ok();
         if microvm_launcher.is_none() {
             eprintln!("Warning: MicroVM launcher unavailable. MicroVM isolation disabled.");
         }
-        
+
         Self {
             servers: HashMap::new(),
             client: reqwest::Client::new(),
@@ -408,7 +411,10 @@ impl McpService {
     fn load_from_file(&mut self) -> Result<()> {
         let config_dir = dirs::config_dir().unwrap_or_else(|| {
             std::env::current_dir().unwrap_or_else(|e| {
-                warn!("Failed to get current directory: {}. Using current path.", e);
+                warn!(
+                    "Failed to get current directory: {}. Using current path.",
+                    e
+                );
                 PathBuf::from("./")
             })
         });
@@ -440,7 +446,10 @@ impl McpService {
     pub fn save_config(&self) -> Result<()> {
         let base_dir = dirs::config_dir().unwrap_or_else(|| {
             std::env::current_dir().unwrap_or_else(|e| {
-                warn!("Failed to get current directory: {}. Using current path.", e);
+                warn!(
+                    "Failed to get current directory: {}. Using current path.",
+                    e
+                );
                 PathBuf::from("./")
             })
         });
@@ -641,7 +650,7 @@ impl McpService {
         // Display security warning (unless automated setup)
         if !skip_confirmation {
             eprintln!("{}", GITHUB_CLONE_WARNING);
-            
+
             // Prompt for confirmation
             if !self.confirm_github_clone(&github_url)? {
                 return Err(anyhow::anyhow!("Operation cancelled by user"));
@@ -663,7 +672,8 @@ impl McpService {
         std::fs::create_dir_all(&osvm_mcp_dir)?;
 
         // Canonicalize osvm_mcp_dir to get absolute path and resolve any symlinks
-        let canonical_temp_dir = osvm_mcp_dir.canonicalize()
+        let canonical_temp_dir = osvm_mcp_dir
+            .canonicalize()
             .context("Failed to canonicalize MCP directory")?;
 
         let local_path = canonical_temp_dir.join(&server_id);
@@ -671,7 +681,8 @@ impl McpService {
         // SECURITY: Verify the constructed path is still within our temp directory
         // This prevents path traversal via symlinks or race conditions
         let canonical_local_path = if local_path.exists() {
-            local_path.canonicalize()
+            local_path
+                .canonicalize()
                 .context("Failed to canonicalize local path")?
         } else {
             // If it doesn't exist yet, we can't canonicalize it, but we can verify the parent
@@ -737,7 +748,9 @@ impl McpService {
 
                 // Always require confirmation for projects with build scripts, even with --yes
                 if !self.confirm_build_execution("Rust project with build.rs")? {
-                    return Err(anyhow::anyhow!("Build cancelled by user for security reasons"));
+                    return Err(anyhow::anyhow!(
+                        "Build cancelled by user for security reasons"
+                    ));
                 }
             }
 
@@ -789,14 +802,18 @@ impl McpService {
         } else if package_json_path.exists() {
             // Node.js project - check for postinstall scripts and warn user
             let package_json_content = std::fs::read_to_string(&package_json_path)?;
-            if package_json_content.contains("\"postinstall\"") || package_json_content.contains("\"preinstall\"") {
+            if package_json_content.contains("\"postinstall\"")
+                || package_json_content.contains("\"preinstall\"")
+            {
                 eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains npm install hooks (preinstall/postinstall)!");
                 eprintln!("These scripts will execute arbitrary code during npm install.");
                 eprintln!("Package.json location: {:?}\n", package_json_path);
 
                 // Always require confirmation for projects with install hooks
                 if !self.confirm_build_execution("Node.js project with install hooks")? {
-                    return Err(anyhow::anyhow!("npm install cancelled by user for security reasons"));
+                    return Err(anyhow::anyhow!(
+                        "npm install cancelled by user for security reasons"
+                    ));
                 }
             }
 
@@ -827,7 +844,7 @@ impl McpService {
                     local_path
                 );
             }
-            
+
             // Run npm build for TypeScript projects (if build script exists)
             if package_json_content.contains("\"build\"") {
                 println!("🔨 Building TypeScript MCP server...");
@@ -836,14 +853,17 @@ impl McpService {
                     .current_dir(&local_path)
                     .output()
                     .context("Failed to execute npm run build command")?;
-                
+
                 if !build_result.status.success() {
                     let error_msg = String::from_utf8_lossy(&build_result.stderr);
                     return Err(anyhow::anyhow!("npm run build failed: {}", error_msg));
                 }
-                
+
                 if self.debug_mode {
-                    debug_success!("Successfully built TypeScript MCP server at {:?}", local_path);
+                    debug_success!(
+                        "Successfully built TypeScript MCP server at {:?}",
+                        local_path
+                    );
                 }
             }
 
@@ -877,7 +897,7 @@ impl McpService {
             // For Node.js MCP servers, we need to find the absolute path to node
             let node_path = which::which("node")
                 .context("Failed to find node in PATH. Please ensure Node.js is installed.")?;
-            
+
             format!(
                 "{} {}",
                 node_path.to_str().ok_or_else(|| anyhow!(
@@ -994,7 +1014,10 @@ impl McpService {
     fn confirm_build_execution(&self, project_type: &str) -> Result<bool> {
         use std::io::{self, Write};
 
-        print!("⚠️  Execute build for {}? This will run build scripts on your system! [y/N]: ", project_type);
+        print!(
+            "⚠️  Execute build for {}? This will run build scripts on your system! [y/N]: ",
+            project_type
+        );
         io::stdout().flush()?;
 
         let mut input = String::new();
@@ -1026,7 +1049,8 @@ impl McpService {
 
         // Canonicalize path to prevent traversal
         let cmd_path = PathBuf::from(command);
-        let canonical = cmd_path.canonicalize()
+        let canonical = cmd_path
+            .canonicalize()
             .context("Invalid command path or file does not exist")?;
 
         // Whitelist of allowed executable directories
@@ -1036,9 +1060,7 @@ impl McpService {
             PathBuf::from("/bin"),
         ];
 
-        let is_in_allowed_dir = allowed_dirs.iter().any(|dir| {
-            canonical.starts_with(dir)
-        });
+        let is_in_allowed_dir = allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
 
         if !is_in_allowed_dir {
             anyhow::bail!(
@@ -1050,7 +1072,8 @@ impl McpService {
 
         // Whitelist of allowed executables by filename
         let allowed_executables = ["node", "python3", "python", "deno"];
-        let filename = canonical.file_name()
+        let filename = canonical
+            .file_name()
             .and_then(|n| n.to_str())
             .ok_or_else(|| anyhow::anyhow!("Invalid executable name"))?;
 
@@ -1221,7 +1244,9 @@ impl McpService {
         // Check if should use microVM (clone to avoid borrow checker issues)
         if let Some(iso_config) = self.isolation_config.get_server_config(server_id).cloned() {
             if iso_config.use_microvm {
-                return self.initialize_server_in_microvm(server_id, &iso_config).await;
+                return self
+                    .initialize_server_in_microvm(server_id, &iso_config)
+                    .await;
             }
         }
 
@@ -1248,23 +1273,28 @@ impl McpService {
         }
 
         // Check if microVM launcher is available
-        let launcher = self.microvm_launcher.as_ref()
-            .ok_or_else(|| anyhow!("MicroVM launcher not available. Please ensure Firecracker is installed."))?;
+        let launcher = self.microvm_launcher.as_ref().ok_or_else(|| {
+            anyhow!("MicroVM launcher not available. Please ensure Firecracker is installed.")
+        })?;
 
         // Build MicroVM configuration from isolation config
-        let mounts: Vec<MountPoint> = iso_config.microvm_mounts.iter().map(|m| {
-            MountPoint {
+        let mounts: Vec<MountPoint> = iso_config
+            .microvm_mounts
+            .iter()
+            .map(|m| MountPoint {
                 host_path: m.host_path.clone(),
                 guest_path: m.vm_path.clone(),
                 readonly: m.readonly,
-            }
-        }).collect();
+            })
+            .collect();
 
         let microvm_config = McpServerMicroVmConfig {
             server_id: server_id.to_string(),
             memory_mb: iso_config.microvm_config.memory_mb,
             vcpus: iso_config.microvm_config.vcpus,
-            server_command: iso_config.server_command.clone()
+            server_command: iso_config
+                .server_command
+                .clone()
                 .unwrap_or_else(|| format!("mcp-server-{}", server_id)),
             work_dir: PathBuf::from("/app"),
             mounts,
@@ -1272,7 +1302,8 @@ impl McpService {
         };
 
         // Launch microVM
-        let handle = launcher.launch_mcp_server(microvm_config)
+        let handle = launcher
+            .launch_mcp_server(microvm_config)
             .context("Failed to launch MCP server microVM")?;
 
         if self.debug_mode {
@@ -1298,19 +1329,19 @@ impl McpService {
             }
         });
 
-        let response = handle.send_request(init_request).await
+        let response = handle
+            .send_request(init_request)
+            .await
             .context("Failed to initialize MCP server in microVM")?;
 
         // Validate response
         if let Some(error) = response.get("error") {
-            return Err(anyhow!(
-                "MCP server initialization failed: {:?}",
-                error
-            ));
+            return Err(anyhow!("MCP server initialization failed: {:?}", error));
         }
 
         // Store handle for future requests
-        self.mcp_server_microvms.insert(server_id.to_string(), handle);
+        self.mcp_server_microvms
+            .insert(server_id.to_string(), handle);
 
         if self.debug_mode {
             debug_success!(
@@ -1570,15 +1601,9 @@ impl McpService {
 
         for (server_id, handle) in self.mcp_server_microvms.drain() {
             if let Err(e) = handle.shutdown() {
-                warn!(
-                    "Failed to shutdown microVM for '{}': {}",
-                    server_id, e
-                );
+                warn!("Failed to shutdown microVM for '{}': {}", server_id, e);
                 if self.debug_mode {
-                    debug_warn!(
-                        "Error shutting down microVM for '{}': {}",
-                        server_id, e
-                    );
+                    debug_warn!("Error shutting down microVM for '{}': {}", server_id, e);
                 }
             } else if self.debug_mode {
                 debug_success!("Successfully shut down microVM for '{}'", server_id);
@@ -2018,7 +2043,8 @@ impl McpService {
                     tool_name
                 );
             }
-            return self.ephemeral_vm_manager
+            return self
+                .ephemeral_vm_manager
                 .launch_tool_vm(server_id, tool_name, arguments)
                 .await
                 .context("Failed to execute tool in ephemeral VM");
@@ -2026,11 +2052,16 @@ impl McpService {
 
         // Priority 2: Check if server is running in dedicated microVM
         if let Some(handle) = self.mcp_server_microvms.get(server_id) {
-            return self.call_tool_via_microvm(handle, tool_name, arguments).await;
+            return self
+                .call_tool_via_microvm(handle, tool_name, arguments)
+                .await;
         }
 
         // Priority 3: Check if this tool should be executed in ephemeral unikernel
-        if self.isolation_config.should_use_unikernel(server_id, tool_name) {
+        if self
+            .isolation_config
+            .should_use_unikernel(server_id, tool_name)
+        {
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
@@ -2038,8 +2069,10 @@ impl McpService {
                     tool_name
                 );
             }
-            
-            return self.call_tool_unikernel(server_id, tool_name, arguments).await;
+
+            return self
+                .call_tool_unikernel(server_id, tool_name, arguments)
+                .await;
         }
 
         // Priority 3: Direct execution based on transport type
@@ -2081,18 +2114,18 @@ impl McpService {
             }
         });
 
-        let response = handle.send_request(request).await
+        let response = handle
+            .send_request(request)
+            .await
             .context("Failed to call tool via microVM")?;
 
         // Check for JSON-RPC error
         if let Some(error) = response.get("error") {
-            return Err(anyhow!(
-                "Tool execution error: {:?}",
-                error
-            ));
+            return Err(anyhow!("Tool execution error: {:?}", error));
         }
 
-        let result = response.get("result")
+        let result = response
+            .get("result")
             .ok_or_else(|| anyhow!("No result in response"))?
             .clone();
 
@@ -2116,7 +2149,7 @@ impl McpService {
     ) -> Result<serde_json::Value> {
         // Get tool configuration from isolation config
         let tool_config = self.isolation_config.get_tool_config(server_id, tool_name);
-        
+
         // Get unikernel image path, using default if not specified
         let image_path = if let Some(ref image) = tool_config.unikernel_image {
             PathBuf::from(image)
@@ -2125,10 +2158,10 @@ impl McpService {
             PathBuf::from(&self.isolation_config.unikernel_dir)
                 .join(format!("{}-{}.img", server_id, tool_name))
         };
-        
+
         // Build unikernel configuration
         use crate::services::unikernel_runtime::UnikernelLauncher;
-        
+
         let unikernel_config = UnikernelConfig {
             image_path,
             mounts: tool_config.mounts.clone(),
@@ -2140,7 +2173,7 @@ impl McpService {
             kraft_config: None,
             vsock_cid: None, // Will be auto-allocated
         };
-        
+
         if self.debug_mode {
             debug_print!(
                 VerbosityLevel::Detailed,
@@ -2150,29 +2183,34 @@ impl McpService {
                 tool_config.vcpus
             );
         }
-        
+
         // Spawn the unikernel
-        let handle = self.unikernel_runtime.spawn_unikernel(unikernel_config).await
+        let handle = self
+            .unikernel_runtime
+            .spawn_unikernel(unikernel_config)
+            .await
             .context("Failed to spawn unikernel for tool execution")?;
-        
+
         if self.debug_mode {
             debug_success!("Unikernel spawned successfully for tool '{}'", tool_name);
         }
-        
+
         // Execute the tool in the unikernel
-        let result = handle.execute_tool(tool_name, arguments, &self.unikernel_runtime).await
+        let result = handle
+            .execute_tool(tool_name, arguments, &self.unikernel_runtime)
+            .await
             .context("Failed to execute tool in unikernel")?;
-        
+
         // Terminate the unikernel
         handle.terminate();
-        
+
         if self.debug_mode {
             debug_success!(
                 "Tool '{}' executed successfully in unikernel and terminated",
                 tool_name
             );
         }
-        
+
         Ok(result)
     }
 

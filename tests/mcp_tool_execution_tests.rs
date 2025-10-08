@@ -1,16 +1,16 @@
 //! Tests for MCP (Model Context Protocol) tool execution
 
 use anyhow::Result;
+use mockito::{Mock, Server};
 use osvm::services::mcp_service::{
-    McpService, McpServerConfig, McpTool, McpParameter,
-    McpTransportType, McpAuthConfig, McpToolResult
+    McpAuthConfig, McpParameter, McpServerConfig, McpService, McpTool, McpToolResult,
+    McpTransportType,
 };
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use mockito::{Server, Mock};
-use serde_json::{json, Value};
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Create a mock MCP server configuration
 fn create_mock_mcp_config(server_url: String) -> McpServerConfig {
@@ -38,47 +38,51 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_tool_discovery() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/tools/list")
+        let mock = server
+            .mock("POST", "/tools/list")
             .match_header("authorization", "Bearer test-token")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "tools": [
-                    {
-                        "name": "get_balance",
-                        "description": "Get SOL balance",
-                        "parameters": [
-                            {
-                                "name": "address",
-                                "type": "string",
-                                "required": true,
-                                "description": "Wallet address"
-                            }
-                        ]
-                    },
-                    {
-                        "name": "transfer_sol",
-                        "description": "Transfer SOL between wallets",
-                        "parameters": [
-                            {
-                                "name": "from",
-                                "type": "string",
-                                "required": true
-                            },
-                            {
-                                "name": "to",
-                                "type": "string",
-                                "required": true
-                            },
-                            {
-                                "name": "amount",
-                                "type": "number",
-                                "required": true
-                            }
-                        ]
-                    }
-                ]
-            }).to_string())
+            .with_body(
+                json!({
+                    "tools": [
+                        {
+                            "name": "get_balance",
+                            "description": "Get SOL balance",
+                            "parameters": [
+                                {
+                                    "name": "address",
+                                    "type": "string",
+                                    "required": true,
+                                    "description": "Wallet address"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "transfer_sol",
+                            "description": "Transfer SOL between wallets",
+                            "parameters": [
+                                {
+                                    "name": "from",
+                                    "type": "string",
+                                    "required": true
+                                },
+                                {
+                                    "name": "to",
+                                    "type": "string",
+                                    "required": true
+                                },
+                                {
+                                    "name": "amount",
+                                    "type": "number",
+                                    "required": true
+                                }
+                            ]
+                        }
+                    ]
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -100,7 +104,8 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_tool_execution_success() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/tools/execute")
+        let mock = server
+            .mock("POST", "/tools/execute")
             .match_header("authorization", "Bearer test-token")
             .match_body(mockito::Matcher::Json(json!({
                 "tool": "get_balance",
@@ -110,13 +115,16 @@ mod tests {
             })))
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "balance": 100.5,
-                    "unit": "SOL"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "balance": 100.5,
+                        "unit": "SOL"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -125,7 +133,10 @@ mod tests {
         mcp_service.add_server(config).await?;
 
         let mut args = HashMap::new();
-        args.insert("address".to_string(), json!("7xKXtg2CW87d3TXQ5xmD7mSZQ4mPfFrPwJzQ7xRT7mF9"));
+        args.insert(
+            "address".to_string(),
+            json!("7xKXtg2CW87d3TXQ5xmD7mSZQ4mPfFrPwJzQ7xRT7mF9"),
+        );
 
         let result = mcp_service
             .execute_tool("test-mcp", "get_balance", args)
@@ -142,13 +153,17 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_tool_execution_failure() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/tools/execute")
+        let mock = server
+            .mock("POST", "/tools/execute")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "success": false,
-                "error": "Insufficient balance for transfer"
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": false,
+                    "error": "Insufficient balance for transfer"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -230,7 +245,8 @@ mod tests {
         let mut server = Server::new_async().await;
 
         // Test Bearer auth
-        let mock_bearer = server.mock("POST", "/bearer/test")
+        let mock_bearer = server
+            .mock("POST", "/bearer/test")
             .match_header("authorization", "Bearer bearer-token")
             .with_status(200)
             .with_body("{\"success\": true}")
@@ -238,7 +254,8 @@ mod tests {
             .await;
 
         // Test Basic auth
-        let mock_basic = server.mock("POST", "/basic/test")
+        let mock_basic = server
+            .mock("POST", "/basic/test")
             .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass base64
             .with_status(200)
             .with_body("{\"success\": true}")
@@ -246,7 +263,8 @@ mod tests {
             .await;
 
         // Test API Key auth
-        let mock_apikey = server.mock("POST", "/apikey/test")
+        let mock_apikey = server
+            .mock("POST", "/apikey/test")
             .match_header("x-api-key", "api-key-123")
             .with_status(200)
             .with_body("{\"success\": true}")
@@ -323,13 +341,17 @@ mod tests {
     #[tokio::test]
     async fn test_mcp_concurrent_tool_execution() -> Result<()> {
         let mut server = Server::new_async().await;
-        let mock = server.mock("POST", "/tools/execute")
+        let mock = server
+            .mock("POST", "/tools/execute")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "success": true,
-                "result": {"value": 42}
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {"value": 42}
+                })
+                .to_string(),
+            )
             .expect(5)
             .create_async()
             .await;
@@ -350,12 +372,11 @@ mod tests {
             handles.push(handle);
         }
 
-        let results: Vec<Result<McpToolResult>> =
-            futures::future::join_all(handles)
-                .await
-                .into_iter()
-                .map(|r| r.unwrap())
-                .collect();
+        let results: Vec<Result<McpToolResult>> = futures::future::join_all(handles)
+            .await
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
 
         assert_eq!(results.len(), 5);
         for result in results {
@@ -375,17 +396,35 @@ mod tests {
 
         // Initially enabled
         let servers = mcp_service.list_servers().await?;
-        assert!(servers.iter().find(|s| s.name == "test-mcp").unwrap().enabled);
+        assert!(
+            servers
+                .iter()
+                .find(|s| s.name == "test-mcp")
+                .unwrap()
+                .enabled
+        );
 
         // Disable
         mcp_service.disable_server("test-mcp").await?;
         let servers = mcp_service.list_servers().await?;
-        assert!(!servers.iter().find(|s| s.name == "test-mcp").unwrap().enabled);
+        assert!(
+            !servers
+                .iter()
+                .find(|s| s.name == "test-mcp")
+                .unwrap()
+                .enabled
+        );
 
         // Re-enable
         mcp_service.enable_server("test-mcp").await?;
         let servers = mcp_service.list_servers().await?;
-        assert!(servers.iter().find(|s| s.name == "test-mcp").unwrap().enabled);
+        assert!(
+            servers
+                .iter()
+                .find(|s| s.name == "test-mcp")
+                .unwrap()
+                .enabled
+        );
 
         Ok(())
     }
@@ -401,11 +440,9 @@ mod integration_tests {
 
         // Test GitHub URL parsing
         let github_url = "https://github.com/opensvm/solana-mcp-server";
-        let result = mcp_service.add_github_server(
-            "solana-mcp",
-            github_url,
-            true
-        ).await;
+        let result = mcp_service
+            .add_github_server("solana-mcp", github_url, true)
+            .await;
 
         // This will fail in test environment but should parse correctly
         match result {
@@ -427,36 +464,44 @@ mod integration_tests {
         let mut server = Server::new_async().await;
 
         // Mock first tool
-        let mock1 = server.mock("POST", "/tools/execute")
+        let mock1 = server
+            .mock("POST", "/tools/execute")
             .match_body(mockito::Matcher::Json(json!({
                 "tool": "get_account_info",
                 "args": {"address": "wallet123"}
             })))
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "balance": 100,
-                    "program": "program456"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "balance": 100,
+                        "program": "program456"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         // Mock second tool using result from first
-        let mock2 = server.mock("POST", "/tools/execute")
+        let mock2 = server
+            .mock("POST", "/tools/execute")
             .match_body(mockito::Matcher::Json(json!({
                 "tool": "get_program_info",
                 "args": {"program_id": "program456"}
             })))
             .with_status(200)
-            .with_body(json!({
-                "success": true,
-                "result": {
-                    "name": "MyProgram",
-                    "version": "1.0.0"
-                }
-            }).to_string())
+            .with_body(
+                json!({
+                    "success": true,
+                    "result": {
+                        "name": "MyProgram",
+                        "version": "1.0.0"
+                    }
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -467,14 +512,18 @@ mod integration_tests {
         // Execute tool chain
         let mut args1 = HashMap::new();
         args1.insert("address".to_string(), json!("wallet123"));
-        let result1 = mcp_service.execute_tool("test-mcp", "get_account_info", args1).await?;
+        let result1 = mcp_service
+            .execute_tool("test-mcp", "get_account_info", args1)
+            .await?;
 
         assert!(result1.success);
         let program_id = result1.result["program"].as_str().unwrap();
 
         let mut args2 = HashMap::new();
         args2.insert("program_id".to_string(), json!(program_id));
-        let result2 = mcp_service.execute_tool("test-mcp", "get_program_info", args2).await?;
+        let result2 = mcp_service
+            .execute_tool("test-mcp", "get_program_info", args2)
+            .await?;
 
         assert!(result2.success);
         assert_eq!(result2.result["name"], "MyProgram");

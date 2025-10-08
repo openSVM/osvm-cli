@@ -12,7 +12,7 @@ use crate::services::{
 };
 
 /// Real-time daemon arguments
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct RealtimeArgs {
     pub programs: Option<String>,
     pub accounts: Option<String>,
@@ -21,34 +21,25 @@ pub struct RealtimeArgs {
     pub snapshot_dir: Option<String>,
 }
 
-impl Default for RealtimeArgs {
-    fn default() -> Self {
-        Self {
-            programs: None,
-            accounts: None,
-            patterns: None,
-            ledger_path: None,
-            snapshot_dir: None,
-        }
-    }
-}
-
 /// Execute realtime command
-pub async fn execute_realtime_command(
-    subcommand: &str,
-    args: &RealtimeArgs,
-) -> Result<()> {
+pub async fn execute_realtime_command(subcommand: &str, args: &RealtimeArgs) -> Result<()> {
     match subcommand {
         "start" => cmd_start(args).await,
         "stop" => cmd_stop().await,
         "status" => cmd_status().await,
-        _ => Err(anyhow::anyhow!("Unknown realtime subcommand: {}", subcommand)),
+        _ => Err(anyhow::anyhow!(
+            "Unknown realtime subcommand: {}",
+            subcommand
+        )),
     }
 }
 
 /// Start real-time sync daemon
 async fn cmd_start(args: &RealtimeArgs) -> Result<()> {
-    println!("{}", "Starting real-time blockchain sync daemon...".cyan().bold());
+    println!(
+        "{}",
+        "Starting real-time blockchain sync daemon...".cyan().bold()
+    );
 
     // Check if daemon is already running
     if is_daemon_running()? {
@@ -118,7 +109,12 @@ async fn cmd_start(args: &RealtimeArgs) -> Result<()> {
     let pid_path = get_pid_file_path()?;
     std::fs::write(&pid_path, child.id().to_string())?;
 
-    println!("{}", "✓ Real-time sync daemon started successfully".green().bold());
+    println!(
+        "{}",
+        "✓ Real-time sync daemon started successfully"
+            .green()
+            .bold()
+    );
     println!();
     println!("Daemon details:");
     println!("  PID: {}", child.id());
@@ -147,15 +143,14 @@ async fn cmd_stop() -> Result<()> {
 
     let pid_path = get_pid_file_path()?;
     let pid_str = std::fs::read_to_string(&pid_path)?;
-    let pid: i32 = pid_str.trim().parse()
-        .context("Invalid PID in PID file")?;
+    let pid: i32 = pid_str.trim().parse().context("Invalid PID in PID file")?;
 
     // Send SIGTERM to daemon
     #[cfg(unix)]
     {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
-        
+
         kill(Pid::from_raw(pid), Signal::SIGTERM)
             .context("Failed to send termination signal to daemon")?;
     }
@@ -171,7 +166,10 @@ async fn cmd_stop() -> Result<()> {
     // Remove PID file
     std::fs::remove_file(&pid_path)?;
 
-    println!("{}", "✓ Real-time daemon stopped successfully".green().bold());
+    println!(
+        "{}",
+        "✓ Real-time daemon stopped successfully".green().bold()
+    );
 
     Ok(())
 }
@@ -195,7 +193,10 @@ async fn cmd_status() -> Result<()> {
     } else {
         println!("{}", "● Real-time daemon is not running".red().bold());
         println!();
-        println!("To start the daemon, run: {}", "osvm realtime start".yellow());
+        println!(
+            "To start the daemon, run: {}",
+            "osvm realtime start".yellow()
+        );
     }
 
     Ok(())
@@ -204,21 +205,20 @@ async fn cmd_status() -> Result<()> {
 /// Check if daemon is running
 fn is_daemon_running() -> Result<bool> {
     let pid_path = get_pid_file_path()?;
-    
+
     if !pid_path.exists() {
         return Ok(false);
     }
 
     let pid_str = std::fs::read_to_string(&pid_path)?;
-    let pid: i32 = pid_str.trim().parse()
-        .context("Invalid PID in PID file")?;
+    let pid: i32 = pid_str.trim().parse().context("Invalid PID in PID file")?;
 
     // Check if process is actually running
     #[cfg(unix)]
     {
         use nix::sys::signal::{kill, Signal};
         use nix::unistd::Pid;
-        
+
         // Use null signal (0) to check if process exists without killing it
         match kill(Pid::from_raw(pid), None) {
             Ok(_) => Ok(true),
@@ -240,27 +240,28 @@ fn is_daemon_running() -> Result<bool> {
 /// Get PID file path
 fn get_pid_file_path() -> Result<PathBuf> {
     let home = std::env::var("HOME").context("HOME environment variable not set")?;
-    let path = PathBuf::from(home)
-        .join(".osvm")
-        .join("realtime.pid");
-    
+    let path = PathBuf::from(home).join(".osvm").join("realtime.pid");
+
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    
+
     Ok(path)
 }
 
 /// Run the real-time sync daemon (internal entry point)
-pub async fn run_realtime_daemon(config: IndexingConfig, clickhouse: Arc<ClickHouseService>) -> Result<()> {
-    use log::{info, warn};
+pub async fn run_realtime_daemon(
+    config: IndexingConfig,
+    clickhouse: Arc<ClickHouseService>,
+) -> Result<()> {
     use crate::services::ledger_service::LedgerService;
+    use log::{info, warn};
 
     info!("Real-time sync daemon started");
 
     let indexer = BlockchainIndexer::new(
-        None,  // Use default ledger path
-        None,  // Use default snapshot path
+        None, // Use default ledger path
+        None, // Use default snapshot path
         clickhouse,
         config.clone(),
     )?;
@@ -268,33 +269,36 @@ pub async fn run_realtime_daemon(config: IndexingConfig, clickhouse: Arc<ClickHo
     // Try to set up ledger monitoring
     // Note: ledger_path is not in IndexingConfig, using default path
     let ledger_path = PathBuf::from("devnet-ledger");
-    
+
     match LedgerService::new(ledger_path.clone()) {
         Ok(ledger_service) => {
             info!("Connected to ledger at: {:?}", ledger_path);
-            
+
             if ledger_service.has_transaction_history() {
                 info!("Ledger has transaction history - monitoring for new slots");
-                
+
                 // Get slot monitoring channel
                 match ledger_service.watch_for_new_slots() {
                     Ok(mut slot_rx) => {
                         info!("Started monitoring for new blocks");
-                        
+
                         // Process new slots as they arrive
                         while let Some(new_slot) = slot_rx.recv().await {
                             info!("New slot detected: {}", new_slot);
-                            
+
                             // In a full implementation, we would:
                             // 1. Fetch transactions from the new slot
                             // 2. Parse and decode them
                             // 3. Apply filters (programs, accounts, patterns)
                             // 4. Index to ClickHouse
-                            
+
                             // For now, just log the event
-                            info!("Processing slot {}... (indexing not yet fully implemented)", new_slot);
+                            info!(
+                                "Processing slot {}... (indexing not yet fully implemented)",
+                                new_slot
+                            );
                         }
-                        
+
                         warn!("Slot monitoring channel closed");
                     }
                     Err(e) => {
@@ -332,11 +336,12 @@ async fn run_polling_mode() -> Result<()> {
     loop {
         tick.tick().await;
         iteration += 1;
-        
-        if iteration % 12 == 0 {  // Every minute
+
+        if iteration % 12 == 0 {
+            // Every minute
             info!("Daemon active (iteration: {})", iteration);
         }
-        
+
         // In a full implementation, we would periodically:
         // 1. Check for new snapshot files
         // 2. Sync any new account data
@@ -347,7 +352,9 @@ async fn run_polling_mode() -> Result<()> {
 /// Validate daemon argument to prevent injection attacks
 fn validate_daemon_argument(arg: &str, arg_name: &str) -> Result<()> {
     // Check for shell metacharacters
-    let dangerous_chars = [';', '|', '&', '$', '`', '<', '>', '(', ')', '\n', '\r', '\\'];
+    let dangerous_chars = [
+        ';', '|', '&', '$', '`', '<', '>', '(', ')', '\n', '\r', '\\',
+    ];
     for ch in dangerous_chars {
         if arg.contains(ch) {
             return Err(anyhow::anyhow!(

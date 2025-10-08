@@ -3,9 +3,8 @@
 
 use anyhow::Result;
 use osvm::utils::prompt_templates::{
-    PromptTemplate, TemplateRegistry, TemplateVariable, TemplateContext,
-    SecurityAuditTemplate, CodeAnalysisTemplate, DeploymentTemplate,
-    ErrorDiagnosisTemplate, TemplateValidator,
+    CodeAnalysisTemplate, DeploymentTemplate, ErrorDiagnosisTemplate, PromptTemplate,
+    SecurityAuditTemplate, TemplateContext, TemplateRegistry, TemplateValidator, TemplateVariable,
 };
 use std::collections::HashMap;
 
@@ -15,10 +14,8 @@ mod template_basic_tests {
 
     #[test]
     fn test_template_creation() -> Result<()> {
-        let template = PromptTemplate::new(
-            "test_template",
-            "Hello, {{name}}! Welcome to {{system}}.",
-        );
+        let template =
+            PromptTemplate::new("test_template", "Hello, {{name}}! Welcome to {{system}}.");
 
         assert_eq!(template.name(), "test_template");
         assert!(template.content().contains("{{name}}"));
@@ -28,10 +25,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_simple_variable_substitution() -> Result<()> {
-        let template = PromptTemplate::new(
-            "greeting",
-            "Hello, {{name}}!",
-        );
+        let template = PromptTemplate::new("greeting", "Hello, {{name}}!");
 
         let mut context = TemplateContext::new();
         context.insert("name", "Alice");
@@ -65,10 +59,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_missing_variable_handling() -> Result<()> {
-        let template = PromptTemplate::new(
-            "missing_var",
-            "Hello, {{name}}!",
-        );
+        let template = PromptTemplate::new("missing_var", "Hello, {{name}}!");
 
         let context = TemplateContext::new();
 
@@ -82,10 +73,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_optional_variables() -> Result<()> {
-        let template = PromptTemplate::new(
-            "optional",
-            "Hello{{#if name}}, {{name}}{{/if}}!",
-        );
+        let template = PromptTemplate::new("optional", "Hello{{#if name}}, {{name}}{{/if}}!");
 
         // With name
         let mut context1 = TemplateContext::new();
@@ -103,10 +91,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_nested_variables() -> Result<()> {
-        let template = PromptTemplate::new(
-            "nested",
-            "{{user.name}} works at {{user.company}}",
-        );
+        let template = PromptTemplate::new("nested", "{{user.name}} works at {{user.company}}");
 
         let mut context = TemplateContext::new();
         let mut user_data = HashMap::new();
@@ -124,10 +109,8 @@ mod template_basic_tests {
 
     #[test]
     fn test_list_iteration() -> Result<()> {
-        let template = PromptTemplate::new(
-            "list",
-            "Services: {{#each services}}{{name}}, {{/each}}",
-        );
+        let template =
+            PromptTemplate::new("list", "Services: {{#each services}}{{name}}, {{/each}}");
 
         let mut context = TemplateContext::new();
         let services = vec!["API", "Database", "Cache"];
@@ -164,10 +147,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_template_comments() -> Result<()> {
-        let template = PromptTemplate::new(
-            "comments",
-            "Hello {{! This is a comment}} {{name}}!",
-        );
+        let template = PromptTemplate::new("comments", "Hello {{! This is a comment}} {{name}}!");
 
         let mut context = TemplateContext::new();
         context.insert("name", "Bob");
@@ -182,10 +162,7 @@ mod template_basic_tests {
 
     #[test]
     fn test_whitespace_handling() -> Result<()> {
-        let template = PromptTemplate::new(
-            "whitespace",
-            "{{~name~}}",
-        );
+        let template = PromptTemplate::new("whitespace", "{{~name~}}");
 
         let mut context = TemplateContext::new();
         context.insert("name", "  Alice  ");
@@ -578,7 +555,10 @@ mod template_validator_tests {
     fn test_undefined_helper() -> Result<()> {
         let validator = TemplateValidator::new();
 
-        let template = PromptTemplate::new("bad_helper", "{{#unknown_helper}}content{{/unknown_helper}}");
+        let template = PromptTemplate::new(
+            "bad_helper",
+            "{{#unknown_helper}}content{{/unknown_helper}}",
+        );
         let result = validator.validate(&template)?;
 
         // Might warn about unknown helper
@@ -592,10 +572,7 @@ mod template_validator_tests {
         let validator = TemplateValidator::with_security_checks();
 
         // Template with potential XSS
-        let dangerous_template = PromptTemplate::new(
-            "xss",
-            "{{user_input}}",
-        );
+        let dangerous_template = PromptTemplate::new("xss", "{{user_input}}");
 
         let result = validator.validate(&dangerous_template)?;
 

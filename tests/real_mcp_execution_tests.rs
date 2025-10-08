@@ -1,28 +1,21 @@
-///! Real MCP tool execution tests through unikernels
+//! Real MCP tool execution tests through unikernels
 //!
 //! Tests end-to-end MCP tool execution with actual MCP servers,
 //! validating the full flow: Host -> Unikernel -> Tool Response
 
+use serde_json::json;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
-use tokio::time::timeout;
-use serde_json::json;
 
 /// Helper to check if Node.js is available
 fn nodejs_available() -> bool {
-    Command::new("node")
-        .arg("--version")
-        .output()
-        .is_ok()
+    Command::new("node").arg("--version").output().is_ok()
 }
 
 /// Helper to check if kraft is available
 fn kraft_available() -> bool {
-    Command::new("kraft")
-        .arg("--version")
-        .output()
-        .is_ok()
+    Command::new("kraft").arg("--version").output().is_ok()
 }
 
 /// Helper to check if guest binary exists
@@ -40,7 +33,7 @@ async fn test_echo_tool_execution() {
         eprintln!("Skipping: missing Node.js, kraft, or guest binary");
         return;
     }
-    
+
     // Start echo MCP server
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
@@ -50,17 +43,17 @@ async fn test_echo_tool_execution() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     // Give server time to start
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // Test tool execution through MCP protocol
     // In a real test, we would:
     // 1. Configure MCP service with this server
     // 2. Spawn unikernel
     // 3. Execute tool via vsock
     // 4. Verify response
-    
+
     // For now, test direct server communication
     use std::io::Write;
     if let Some(mut stdin) = server_proc.stdin.take() {
@@ -70,13 +63,13 @@ async fn test_echo_tool_execution() {
             "method": "initialize",
             "params": {}
         });
-        
+
         writeln!(stdin, "{}", init_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         // Read response
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         // Call echo tool
         let tool_request = json!({
             "jsonrpc": "2.0",
@@ -89,16 +82,17 @@ async fn test_echo_tool_execution() {
                 }
             }
         });
-        
+
         writeln!(stdin, "{}", tool_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     // Cleanup
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Echo tool test completed (basic server validation)");
 }
 
@@ -110,7 +104,7 @@ async fn test_add_tool_execution() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     // Start echo MCP server
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
@@ -120,13 +114,13 @@ async fn test_add_tool_execution() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // Test add tool
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         let tool_request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -139,15 +133,16 @@ async fn test_add_tool_execution() {
                 }
             }
         });
-        
+
         writeln!(stdin, "{}", tool_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Add tool test completed");
 }
 
@@ -159,7 +154,7 @@ async fn test_error_handling() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -168,12 +163,12 @@ async fn test_error_handling() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         let error_request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -185,15 +180,16 @@ async fn test_error_handling() {
                 }
             }
         });
-        
+
         writeln!(stdin, "{}", error_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Error handling test completed");
 }
 
@@ -205,7 +201,7 @@ async fn test_invalid_parameters() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -214,12 +210,12 @@ async fn test_invalid_parameters() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         // Call add with missing parameters
         let invalid_request = json!({
             "jsonrpc": "2.0",
@@ -233,15 +229,16 @@ async fn test_invalid_parameters() {
                 }
             }
         });
-        
+
         writeln!(stdin, "{}", invalid_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Invalid parameters test completed");
 }
 
@@ -253,7 +250,7 @@ async fn test_unknown_tool() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -262,12 +259,12 @@ async fn test_unknown_tool() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         let unknown_request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -277,15 +274,16 @@ async fn test_unknown_tool() {
                 "arguments": {}
             }
         });
-        
+
         writeln!(stdin, "{}", unknown_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Unknown tool test completed");
 }
 
@@ -297,7 +295,7 @@ async fn test_concurrent_tool_executions() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -306,12 +304,12 @@ async fn test_concurrent_tool_executions() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         // Send multiple requests rapidly
         for i in 0..5 {
             let request = json!({
@@ -323,16 +321,17 @@ async fn test_concurrent_tool_executions() {
                     "arguments": {}
                 }
             });
-            
+
             writeln!(stdin, "{}", request).expect("Failed to write");
             stdin.flush().expect("Failed to flush");
         }
-        
+
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Concurrent executions test completed");
 }
 
@@ -344,7 +343,7 @@ async fn test_tool_execution_timeout() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -353,13 +352,13 @@ async fn test_tool_execution_timeout() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     // Simulate timeout by killing server mid-request
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         let request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -371,14 +370,15 @@ async fn test_tool_execution_timeout() {
                 }
             }
         });
-        
+
         writeln!(stdin, "{}", request).ok();
         stdin.flush().ok();
     }
-    
+
     // Kill immediately
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("Timeout handling test completed");
 }
 
@@ -390,7 +390,7 @@ async fn test_list_tools() {
         eprintln!("Skipping: Node.js not available");
         return;
     }
-    
+
     let server_path = "examples/test_mcp_servers/echo_server.js";
     let mut server_proc = Command::new("node")
         .arg(server_path)
@@ -399,27 +399,28 @@ async fn test_list_tools() {
         .stderr(Stdio::piped())
         .spawn()
         .expect("Failed to start echo server");
-    
+
     tokio::time::sleep(Duration::from_millis(500)).await;
-    
+
     if let Some(mut stdin) = server_proc.stdin.take() {
         use std::io::Write;
-        
+
         let list_request = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/list",
             "params": {}
         });
-        
+
         writeln!(stdin, "{}", list_request).expect("Failed to write");
         stdin.flush().expect("Failed to flush");
-        
+
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    
+
     server_proc.kill().ok();
-    
+    let _ = server_proc.wait();
+
     println!("List tools test completed");
 }
 
@@ -431,7 +432,7 @@ async fn test_full_unikernel_mcp_integration() {
         eprintln!("Skipping: missing prerequisites");
         return;
     }
-    
+
     // This test would perform the full integration:
     // 1. Start MCP server
     // 2. Configure MCP service
@@ -439,10 +440,10 @@ async fn test_full_unikernel_mcp_integration() {
     // 4. Execute tool through unikernel vsock
     // 5. Verify response
     // 6. Cleanup
-    
+
     // For now, this is a placeholder documenting the intended flow
     println!("Full integration test placeholder");
-    
+
     // Future implementation would use:
     // - osvm_cli::services::mcp_service::MCPService
     // - osvm_cli::services::unikernel_runtime::UnikernelRuntime

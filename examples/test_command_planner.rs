@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let planner = OsvmCommandPlanner::new(true);
 
     // Test different types of queries
-    let test_queries = vec![
+    let test_queries = [
         "show me all svms",
         "check my balance",
         "what's the status of the network?",

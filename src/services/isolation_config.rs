@@ -11,17 +11,13 @@ use std::path::PathBuf;
 /// Execution mode for MCP tools
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ExecutionMode {
     /// Execute tool in ephemeral unikernel (high security, ~100ms overhead)
+    #[default]
     Unikernel,
     /// Execute tool directly in microVM (lower security, minimal overhead)
     MicroVM,
-}
-
-impl Default for ExecutionMode {
-    fn default() -> Self {
-        ExecutionMode::Unikernel
-    }
 }
 
 /// Mount configuration for filesystem access
@@ -157,60 +153,57 @@ impl IsolationConfig {
     /// Load isolation configuration from file
     pub fn load() -> Result<Self> {
         let config_path = Self::get_config_path()?;
-        
+
         if !config_path.exists() {
             // Create default config if it doesn't exist
             let default_config = Self::create_default_config();
             default_config.save()?;
             return Ok(default_config);
         }
-        
+
         let content = std::fs::read_to_string(&config_path)
             .context("Failed to read isolation config file")?;
-        
-        let config: IsolationConfig = serde_json::from_str(&content)
-            .context("Failed to parse isolation config")?;
-        
+
+        let config: IsolationConfig =
+            serde_json::from_str(&content).context("Failed to parse isolation config")?;
+
         Ok(config)
     }
-    
+
     /// Save isolation configuration to file
     pub fn save(&self) -> Result<()> {
         let config_path = Self::get_config_path()?;
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("Failed to create config directory")?;
+            std::fs::create_dir_all(parent).context("Failed to create config directory")?;
         }
-        
-        let json = serde_json::to_string_pretty(self)
-            .context("Failed to serialize isolation config")?;
-        
-        std::fs::write(&config_path, json)
-            .context("Failed to write isolation config")?;
-        
+
+        let json =
+            serde_json::to_string_pretty(self).context("Failed to serialize isolation config")?;
+
+        std::fs::write(&config_path, json).context("Failed to write isolation config")?;
+
         Ok(())
     }
-    
+
     /// Get the path to the isolation config file
     fn get_config_path() -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .context("HOME environment variable not set")?;
-        
+        let home = std::env::var("HOME").context("HOME environment variable not set")?;
+
         Ok(PathBuf::from(home)
             .join(".config")
             .join("osvm")
             .join("isolation_config.json"))
     }
-    
+
     /// Create a default configuration with example entries
     fn create_default_config() -> Self {
         let mut config = Self::default();
-        
+
         // Example Solana MCP server configuration
         let mut solana_tools = HashMap::new();
-        
+
         solana_tools.insert(
             "get_balance".to_string(),
             ToolConfig {
@@ -225,7 +218,7 @@ impl IsolationConfig {
                 vcpus: 1,
             },
         );
-        
+
         solana_tools.insert(
             "transfer".to_string(),
             ToolConfig {
@@ -247,7 +240,7 @@ impl IsolationConfig {
                 vcpus: 1,
             },
         );
-        
+
         config.mcp_servers.insert(
             "solana".to_string(),
             ServerConfig {
@@ -266,7 +259,7 @@ impl IsolationConfig {
                 tools: solana_tools,
             },
         );
-        
+
         // Example GitHub MCP server (less sensitive, runs in microVM)
         let mut github_tools = HashMap::new();
         github_tools.insert(
@@ -279,7 +272,7 @@ impl IsolationConfig {
                 vcpus: 1,
             },
         );
-        
+
         config.mcp_servers.insert(
             "github".to_string(),
             ServerConfig {
@@ -294,10 +287,10 @@ impl IsolationConfig {
                 tools: github_tools,
             },
         );
-        
+
         config
     }
-    
+
     /// Get configuration for a specific tool
     pub fn get_tool_config(&self, server_id: &str, tool_name: &str) -> ToolConfig {
         self.mcp_servers
@@ -309,12 +302,12 @@ impl IsolationConfig {
                 ..Default::default()
             })
     }
-    
+
     /// Get server configuration
     pub fn get_server_config(&self, server_id: &str) -> Option<&ServerConfig> {
         self.mcp_servers.get(server_id)
     }
-    
+
     /// Check if a tool should use unikernel execution
     pub fn should_use_unikernel(&self, server_id: &str, tool_name: &str) -> bool {
         let tool_config = self.get_tool_config(server_id, tool_name);
@@ -325,7 +318,7 @@ impl IsolationConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = IsolationConfig::create_default_config();
@@ -333,23 +326,23 @@ mod tests {
         assert!(config.mcp_servers.contains_key("solana"));
         assert!(config.mcp_servers.contains_key("github"));
     }
-    
+
     #[test]
     fn test_tool_config_lookup() {
         let config = IsolationConfig::create_default_config();
-        
+
         let balance_config = config.get_tool_config("solana", "get_balance");
         assert_eq!(balance_config.execution_mode, ExecutionMode::Unikernel);
         assert_eq!(balance_config.mounts.len(), 1);
-        
+
         let github_config = config.get_tool_config("github", "create_issue");
         assert_eq!(github_config.execution_mode, ExecutionMode::MicroVM);
     }
-    
+
     #[test]
     fn test_should_use_unikernel() {
         let config = IsolationConfig::create_default_config();
-        
+
         assert!(config.should_use_unikernel("solana", "get_balance"));
         assert!(!config.should_use_unikernel("github", "create_issue"));
     }

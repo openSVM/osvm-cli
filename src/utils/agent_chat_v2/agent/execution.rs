@@ -98,7 +98,9 @@ impl AdvancedChatState {
                     ),
                 );
                 if no_configured_tools {
-                    let _ = self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await;
+                    let _ = self
+                        .run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await;
                 } else {
                     let _ = self.simple_response(session_id, &input).await;
                 }
@@ -112,7 +114,9 @@ impl AdvancedChatState {
                     ),
                 );
                 if no_configured_tools {
-                    let _ = self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input)).await;
+                    let _ = self
+                        .run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await;
                 } else {
                     let _ = self.simple_response(session_id, &input).await;
                 }
@@ -126,21 +130,21 @@ impl AdvancedChatState {
 
                 if tool_plan.osvm_tools_to_use.is_empty() {
                     // No tools needed according to AI
-                if no_configured_tools {
-                    // Try heuristic plan instead
-                    let heur = build_heuristic_plan(&input);
-                    if !heur.is_empty() {
-                        let _ = self.add_message_to_session(
-                            session_id,
-                            ChatMessage::AgentPlan(heur.clone()),
-                        );
-                        let _ = self.run_heuristic_fallback(session_id, &input, heur).await;
+                    if no_configured_tools {
+                        // Try heuristic plan instead
+                        let heur = build_heuristic_plan(&input);
+                        if !heur.is_empty() {
+                            let _ = self.add_message_to_session(
+                                session_id,
+                                ChatMessage::AgentPlan(heur.clone()),
+                            );
+                            let _ = self.run_heuristic_fallback(session_id, &input, heur).await;
+                        } else {
+                            let _ = self.simple_response(session_id, &input).await;
+                        }
                     } else {
                         let _ = self.simple_response(session_id, &input).await;
                     }
-                } else {
-                    let _ = self.simple_response(session_id, &input).await;
-                }
                 } else {
                     // Execute tools iteratively with potential for follow-up actions
                     let mut executed_tools = Vec::new();
@@ -166,10 +170,13 @@ impl AdvancedChatState {
 
                         // Execute current batch of tools
                         for planned_tool in &current_tools {
-                            let signature = format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
+                            let signature =
+                                format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
                             executed_tool_signatures.insert(signature);
-                            
-                            let _ = self.execute_planned_tool(session_id, planned_tool.clone()).await;
+
+                            let _ = self
+                                .execute_planned_tool(session_id, planned_tool.clone())
+                                .await;
                             executed_tools.push(planned_tool.clone());
                         }
 
@@ -205,7 +212,8 @@ impl AdvancedChatState {
                                 Ok(mut follow_up_tools) if !follow_up_tools.is_empty() => {
                                     // Filter follow-up tools to remove duplicates
                                     follow_up_tools.retain(|tool| {
-                                        let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                                        let signature =
+                                            format!("{}:{:?}", tool.tool_name, tool.args);
                                         !executed_tool_signatures.contains(&signature)
                                     });
 
@@ -231,7 +239,9 @@ impl AdvancedChatState {
                     }
 
                     // Generate final response with all executed tools
-                    let _ = self.generate_final_response(session_id, &input, &tool_plan.expected_outcome).await;
+                    let _ = self
+                        .generate_final_response(session_id, &input, &tool_plan.expected_outcome)
+                        .await;
                 }
             }
         }
@@ -256,9 +266,10 @@ impl AdvancedChatState {
                 Ok(()) => {
                     // Check if there are more processing messages
                     if let Some(session) = self.get_session_by_id(session_id) {
-                        let has_more_processing = session.messages.iter().any(|msg| {
-                            matches!(msg, ChatMessage::Processing { .. })
-                        });
+                        let has_more_processing = session
+                            .messages
+                            .iter()
+                            .any(|msg| matches!(msg, ChatMessage::Processing { .. }));
                         if !has_more_processing {
                             break; // No more processing messages
                         }
@@ -341,7 +352,10 @@ impl AdvancedChatState {
         let isolation_config = match IsolationConfig::load() {
             Ok(config) => config,
             Err(e) => {
-                warn!("Failed to load isolation config: {}, using direct MCP execution", e);
+                warn!(
+                    "Failed to load isolation config: {}, using direct MCP execution",
+                    e
+                );
                 return self.call_mcp_tool_direct(planned_tool).await;
             }
         };
@@ -349,10 +363,16 @@ impl AdvancedChatState {
         // Check if this tool should be executed in a unikernel
         if isolation_config.should_use_unikernel(&planned_tool.server_id, &planned_tool.tool_name) {
             // Attempt unikernel execution with fallback
-            match self.execute_tool_in_unikernel(planned_tool, &isolation_config).await {
+            match self
+                .execute_tool_in_unikernel(planned_tool, &isolation_config)
+                .await
+            {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    warn!("Unikernel execution failed: {}, falling back to direct MCP", e);
+                    warn!(
+                        "Unikernel execution failed: {}, falling back to direct MCP",
+                        e
+                    );
                     return self.call_mcp_tool_direct(planned_tool).await;
                 }
             }
@@ -374,10 +394,8 @@ impl AdvancedChatState {
         );
 
         // Get tool-specific configuration
-        let tool_config = isolation_config.get_tool_config(
-            &planned_tool.server_id,
-            &planned_tool.tool_name,
-        );
+        let tool_config =
+            isolation_config.get_tool_config(&planned_tool.server_id, &planned_tool.tool_name);
 
         // Validate unikernel image is configured
         let unikernel_image = match &tool_config.unikernel_image {
@@ -392,12 +410,13 @@ impl AdvancedChatState {
         };
 
         // Create unikernel runtime
-        let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
-            .context("Failed to create unikernel runtime")?;
+        let unikernel_runtime =
+            UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
+                .context("Failed to create unikernel runtime")?;
 
         // Build unikernel configuration
         use crate::services::unikernel_runtime::UnikernelLauncher;
-        
+
         let unikernel_config = UnikernelConfig {
             image_path: PathBuf::from(unikernel_image),
             mounts: tool_config.mounts.clone(),

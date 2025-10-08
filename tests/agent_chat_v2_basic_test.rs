@@ -3,8 +3,6 @@
 //! These tests validate core functionality without complex UI testing
 
 use anyhow::Result;
-use std::time::Duration;
-use uuid::Uuid;
 
 // We'll use the existing structure since our module is properly integrated
 use osvm::utils::agent_chat_v2::{

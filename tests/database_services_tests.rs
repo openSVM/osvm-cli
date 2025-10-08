@@ -1,16 +1,16 @@
 //! Comprehensive tests for database services (ClickHouse, RocksDB, Ledger)
 
 use anyhow::Result;
+use mockito::Server;
 use osvm::services::{
-    clickhouse_service::{ClickHouseService, ClickHouseConfig, QueryResult},
-    rocksdb_parser::{RocksDBParser, RocksDBConfig, KeyValuePair},
-    ledger_service::{LedgerService, LedgerEntry, LedgerQuery},
+    clickhouse_service::{ClickHouseConfig, ClickHouseService, QueryResult},
+    ledger_service::{LedgerEntry, LedgerQuery, LedgerService},
+    rocksdb_parser::{KeyValuePair, RocksDBConfig, RocksDBParser},
 };
+use serde_json::json;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use std::collections::HashMap;
-use mockito::Server;
-use serde_json::json;
 
 #[cfg(test)]
 mod clickhouse_tests {
@@ -21,7 +21,8 @@ mod clickhouse_tests {
         let mut server = Server::new_async().await;
 
         // Mock ClickHouse health check
-        let health_mock = server.mock("GET", "/ping")
+        let health_mock = server
+            .mock("GET", "/ping")
             .with_status(200)
             .with_body("Ok.\n")
             .create_async()
@@ -51,27 +52,31 @@ mod clickhouse_tests {
         let mut server = Server::new_async().await;
 
         // Mock query response
-        let query_mock = server.mock("POST", "/")
+        let query_mock = server
+            .mock("POST", "/")
             .match_body(mockito::Matcher::Regex("SELECT.*transactions".to_string()))
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "data": [
-                    {
-                        "signature": "5j7s6NiJS3JAk...txHash",
-                        "block_time": 1234567890,
-                        "slot": 150000000,
-                        "fee": 5000
-                    },
-                    {
-                        "signature": "3k8t7MjKT4KBl...txHash2",
-                        "block_time": 1234567891,
-                        "slot": 150000001,
-                        "fee": 5000
-                    }
-                ],
-                "rows": 2
-            }).to_string())
+            .with_body(
+                json!({
+                    "data": [
+                        {
+                            "signature": "5j7s6NiJS3JAk...txHash",
+                            "block_time": 1234567890,
+                            "slot": 150000000,
+                            "fee": 5000
+                        },
+                        {
+                            "signature": "3k8t7MjKT4KBl...txHash2",
+                            "block_time": 1234567891,
+                            "slot": 150000001,
+                            "fee": 5000
+                        }
+                    ],
+                    "rows": 2
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -102,7 +107,8 @@ mod clickhouse_tests {
         let mut server = Server::new_async().await;
 
         // Mock insert response
-        let insert_mock = server.mock("POST", "/")
+        let insert_mock = server
+            .mock("POST", "/")
             .match_body(mockito::Matcher::Regex("INSERT INTO.*".to_string()))
             .with_status(200)
             .with_body("")
@@ -148,7 +154,8 @@ mod clickhouse_tests {
         let mut server = Server::new_async().await;
 
         // Mock slow query
-        let slow_mock = server.mock("POST", "/")
+        let slow_mock = server
+            .mock("POST", "/")
             .with_status(200)
             .with_body_from_fn(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -171,8 +178,9 @@ mod clickhouse_tests {
 
         let result = tokio::time::timeout(
             std::time::Duration::from_millis(600),
-            service.query("SELECT * FROM slow_table")
-        ).await;
+            service.query("SELECT * FROM slow_table"),
+        )
+        .await;
 
         assert!(result.is_err() || result.unwrap().is_err());
 
@@ -184,13 +192,15 @@ mod clickhouse_tests {
         let mut server = Server::new_async().await;
 
         // First attempt fails, second succeeds
-        let retry_mock = server.mock("GET", "/ping")
+        let retry_mock = server
+            .mock("GET", "/ping")
             .with_status(500)
             .expect(1)
             .create_async()
             .await;
 
-        let success_mock = server.mock("GET", "/ping")
+        let success_mock = server
+            .mock("GET", "/ping")
             .with_status(200)
             .with_body("Ok.\n")
             .expect(1)

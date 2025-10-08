@@ -55,7 +55,9 @@ pub async fn run_microvm_chat_with_config(config: MicroVmChatConfig) -> Result<(
 
     // Start the main chat VM
     println!("⏳ Starting main chat microVM...");
-    orchestrator.start_chat_vm().await
+    orchestrator
+        .start_chat_vm()
+        .await
         .context("Failed to start chat microVM")?;
     println!("✅ Chat microVM started successfully");
     println!();
@@ -70,7 +72,8 @@ pub async fn run_microvm_chat_with_config(config: MicroVmChatConfig) -> Result<(
     }
 
     // Load MCP server configurations
-    mcp_service.load_config()
+    mcp_service
+        .load_config()
         .context("Failed to load MCP configurations")?;
 
     // Run the chat interface in the microVM
@@ -79,7 +82,9 @@ pub async fn run_microvm_chat_with_config(config: MicroVmChatConfig) -> Result<(
     // Cleanup on exit
     println!();
     println!("⏳ Shutting down microVMs...");
-    orchestrator.stop().await
+    orchestrator
+        .stop()
+        .await
         .context("Failed to stop chat orchestrator")?;
     println!("✅ All microVMs terminated");
 
@@ -145,9 +150,15 @@ async fn run_chat_in_vm(
             };
 
             // Execute tool in ephemeral microVM
-            println!("🔄 Launching ephemeral microVM for tool: {}/{}", server_id, tool_name);
+            println!(
+                "🔄 Launching ephemeral microVM for tool: {}/{}",
+                server_id, tool_name
+            );
 
-            match orchestrator.execute_tool(server_id, tool_name, arguments).await {
+            match orchestrator
+                .execute_tool(server_id, tool_name, arguments)
+                .await
+            {
                 Ok(result) => {
                     println!("✅ Tool execution successful");
                     println!("Result: {}", serde_json::to_string_pretty(&result)?);

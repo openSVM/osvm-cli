@@ -100,7 +100,10 @@ pub fn validate_port(port: u16, allow_privileged: bool) -> Result<()> {
     }
 
     if !allow_privileged && port < 1024 {
-        anyhow::bail!("Port number {} is privileged (< 1024). Use --allow-privileged if intended", port);
+        anyhow::bail!(
+            "Port number {} is privileged (< 1024). Use --allow-privileged if intended",
+            port
+        );
     }
 
     Ok(())
@@ -136,7 +139,10 @@ pub fn validate_url(url: &str) -> Result<String> {
     // Check scheme
     let scheme = parsed.scheme();
     if !matches!(scheme, "http" | "https" | "ws" | "wss" | "stdio") {
-        anyhow::bail!("URL scheme '{}' not allowed. Use http, https, ws, wss, or stdio", scheme);
+        anyhow::bail!(
+            "URL scheme '{}' not allowed. Use http, https, ws, wss, or stdio",
+            scheme
+        );
     }
 
     // Check for embedded credentials (security risk)
@@ -172,7 +178,9 @@ pub fn sanitize_shell_arg(input: &str) -> Result<String> {
     }
 
     // Check for dangerous characters
-    let dangerous_chars = [';', '&', '|', '$', '`', '\n', '\r', '(', ')', '<', '>', '\\', '"', '\''];
+    let dangerous_chars = [
+        ';', '&', '|', '$', '`', '\n', '\r', '(', ')', '<', '>', '\\', '"', '\'',
+    ];
     if input.chars().any(|c| dangerous_chars.contains(&c)) {
         anyhow::bail!("Input contains dangerous shell metacharacters");
     }
@@ -200,8 +208,7 @@ pub fn validate_json(json_str: &str, max_size: usize) -> Result<serde_json::Valu
     }
 
     // Parse JSON
-    let value: serde_json::Value =
-        serde_json::from_str(json_str).context("Invalid JSON format")?;
+    let value: serde_json::Value = serde_json::from_str(json_str).context("Invalid JSON format")?;
 
     Ok(value)
 }

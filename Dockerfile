@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     libudev-dev \
     perl \
     make \
+    g++ \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

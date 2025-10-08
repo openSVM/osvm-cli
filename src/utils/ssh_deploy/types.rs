@@ -121,15 +121,12 @@ impl ServerConfig {
 
         // Parse port with proper error handling
         let port = if host_parts.len() > 1 {
-            host_parts[1]
-                .trim()
-                .parse::<u16>()
-                .map_err(|_| {
-                    DeploymentError::InvalidConfig(format!(
-                        "Invalid port number '{}'. Port must be a number between 1 and 65535",
-                        host_parts[1]
-                    ))
-                })?
+            host_parts[1].trim().parse::<u16>().map_err(|_| {
+                DeploymentError::InvalidConfig(format!(
+                    "Invalid port number '{}'. Port must be a number between 1 and 65535",
+                    host_parts[1]
+                ))
+            })?
         } else {
             22
         };
@@ -164,7 +161,10 @@ impl ServerConfig {
 
         // Check for dangerous characters
         if username.contains(|c: char| {
-            matches!(c, ';' | '&' | '|' | '$' | '`' | '\n' | '\r' | '\0' | '(' | ')' | '<' | '>')
+            matches!(
+                c,
+                ';' | '&' | '|' | '$' | '`' | '\n' | '\r' | '\0' | '(' | ')' | '<' | '>'
+            )
         }) {
             return Err(DeploymentError::ValidationError(
                 "Username contains invalid characters".to_string(),

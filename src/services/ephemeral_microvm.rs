@@ -158,10 +158,16 @@ impl EphemeralVmManager {
         tool_args: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
         // Acquire semaphore permit to limit concurrent VMs
-        let _permit = self.launch_semaphore.acquire().await
+        let _permit = self
+            .launch_semaphore
+            .acquire()
+            .await
             .context("Failed to acquire VM launch permit")?;
 
-        info!("Launching ephemeral VM for tool: {}/{}", server_id, tool_name);
+        info!(
+            "Launching ephemeral VM for tool: {}/{}",
+            server_id, tool_name
+        );
 
         // Create configuration for this VM
         let mut config = EphemeralVmConfig::default();
@@ -181,7 +187,9 @@ impl EphemeralVmManager {
         }
 
         // Execute the tool in the VM
-        let result = self.execute_tool_in_vm(vsock_cid, tool_name, tool_args, config.timeout_secs).await;
+        let result = self
+            .execute_tool_in_vm(vsock_cid, tool_name, tool_args, config.timeout_secs)
+            .await;
 
         // Cleanup VM regardless of result
         self.cleanup_vm(&vm_id).await?;
@@ -193,7 +201,8 @@ impl EphemeralVmManager {
     async fn spawn_ephemeral_vm(&self, config: &EphemeralVmConfig) -> Result<EphemeralVmHandle> {
         // Create temporary directory for this VM
         let temp_dir = PathBuf::from("/tmp/osvm-ephemeral").join(&config.id);
-        tokio::fs::create_dir_all(&temp_dir).await
+        tokio::fs::create_dir_all(&temp_dir)
+            .await
             .context("Failed to create temp directory")?;
 
         // Prepare Firecracker configuration
@@ -225,11 +234,13 @@ impl EphemeralVmManager {
             })
             .kill_on_drop(true);
 
-        let firecracker_process = firecracker_cmd.spawn()
+        let firecracker_process = firecracker_cmd
+            .spawn()
             .context("Failed to spawn Firecracker process")?;
 
         // Wait for VM to be ready
-        self.wait_for_vm_ready(&api_socket, config.vsock_cid).await?;
+        self.wait_for_vm_ready(&api_socket, config.vsock_cid)
+            .await?;
 
         Ok(EphemeralVmHandle {
             config: config.clone(),
@@ -296,8 +307,10 @@ impl EphemeralVmManager {
                 // Try to connect via vsock
                 if let Ok(stream) = timeout(
                     Duration::from_secs(1),
-                    tokio_vsock::VsockStream::connect(vsock_cid, VSOCK_TOOL_PORT)
-                ).await {
+                    tokio_vsock::VsockStream::connect(vsock_cid, VSOCK_TOOL_PORT),
+                )
+                .await
+                {
                     if stream.is_ok() {
                         debug!("VM {} is ready", vsock_cid);
                         return Ok(());
@@ -336,7 +349,9 @@ impl EphemeralVmManager {
         });
 
         let request_bytes = serde_json::to_vec(&request)?;
-        stream.write_all(&request_bytes).await
+        stream
+            .write_all(&request_bytes)
+            .await
             .context("Failed to send tool request")?;
         stream.flush().await?;
 
@@ -373,8 +388,7 @@ impl EphemeralVmManager {
             }
         }
 
-        serde_json::from_slice(&buffer)
-            .context("Failed to parse tool response")
+        serde_json::from_slice(&buffer).context("Failed to parse tool response")
     }
 
     /// Cleanup a VM
@@ -460,7 +474,9 @@ impl ChatVmOrchestrator {
         tool_name: &str,
         tool_args: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
-        self.ephemeral_manager.launch_tool_vm(server_id, tool_name, tool_args).await
+        self.ephemeral_manager
+            .launch_tool_vm(server_id, tool_name, tool_args)
+            .await
     }
 
     /// Stop the chat VM and cleanup

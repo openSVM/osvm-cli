@@ -40,7 +40,8 @@ mod transaction_analysis_planning_tests {
 
     #[tokio::test]
     async fn test_plan_transaction_count_by_address() -> Result<()> {
-        let query = "How many transactions has address 7cvkjYAkUYs4W8XcXsca7cBrEGFeSUjeZmKoNBvXyzgv made?";
+        let query =
+            "How many transactions has address 7cvkjYAkUYs4W8XcXsca7cBrEGFeSUjeZmKoNBvXyzgv made?";
 
         // Should plan:
         // - get_signatures_for_address tool

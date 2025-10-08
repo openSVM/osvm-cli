@@ -13,7 +13,6 @@ use osvm::services::microvm_launcher::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-
     // Check if we should skip microVM isolation
     let skip_microvm = env::var("OSVM_SKIP_MICROVM")
         .map(|v| v == "1" || v.to_lowercase() == "true")

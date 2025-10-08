@@ -2,13 +2,13 @@
 //! connectivity tests, version validation, and rollback verification
 
 use anyhow::Result;
-use osvm::utils::diagnostics::{
-    SystemHealth, HealthCheck, HealthStatus, HealthReport, DiagnosticsRunner,
-    ConnectivityCheck, VersionChecker, RollbackValidator, SystemInfo,
-};
-use std::time::Duration;
 use mockito::Server;
+use osvm::utils::diagnostics::{
+    ConnectivityCheck, DiagnosticsRunner, HealthCheck, HealthReport, HealthStatus,
+    RollbackValidator, SystemHealth, SystemInfo, VersionChecker,
+};
 use serde_json::json;
+use std::time::Duration;
 
 #[cfg(test)]
 mod system_health_tests {
@@ -47,7 +47,9 @@ mod system_health_tests {
 
         assert!(!check_result.checks.is_empty());
         // Should check for essential tools
-        let has_rust_check = check_result.checks.iter()
+        let has_rust_check = check_result
+            .checks
+            .iter()
             .any(|c| c.name.contains("rust") || c.name.contains("cargo"));
         assert!(has_rust_check);
 
@@ -83,10 +85,7 @@ mod system_health_tests {
         let health = SystemHealth::new();
 
         // Should complete within 10 seconds
-        let result = tokio::time::timeout(
-            Duration::from_secs(10),
-            health.check_all()
-        ).await;
+        let result = tokio::time::timeout(Duration::from_secs(10), health.check_all()).await;
 
         assert!(result.is_ok(), "Health check timed out");
 
@@ -164,7 +163,9 @@ mod system_health_tests {
         let report = health.check_all().await?;
 
         // Filter by status
-        let failed_checks: Vec<_> = report.checks.iter()
+        let failed_checks: Vec<_> = report
+            .checks
+            .iter()
             .filter(|c| matches!(c.status, HealthStatus::Unhealthy))
             .collect();
 
@@ -184,13 +185,17 @@ mod connectivity_tests {
         let mut server = Server::new_async().await;
 
         // Mock healthy RPC endpoint
-        let _mock = server.mock("POST", "/")
+        let _mock = server
+            .mock("POST", "/")
             .with_status(200)
-            .with_body(json!({
-                "jsonrpc": "2.0",
-                "result": "ok",
-                "id": 1
-            }).to_string())
+            .with_body(
+                json!({
+                    "jsonrpc": "2.0",
+                    "result": "ok",
+                    "id": 1
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -208,7 +213,8 @@ mod connectivity_tests {
         let mut server = Server::new_async().await;
 
         // Mock failed endpoint
-        let _mock = server.mock("POST", "/")
+        let _mock = server
+            .mock("POST", "/")
             .with_status(500)
             .create_async()
             .await;
@@ -248,8 +254,9 @@ mod connectivity_tests {
         // This should timeout
         let result = tokio::time::timeout(
             Duration::from_millis(200),
-            checker.check_rpc_endpoint("http://192.0.2.1:8899") // TEST-NET-1 IP
-        ).await;
+            checker.check_rpc_endpoint("http://192.0.2.1:8899"), // TEST-NET-1 IP
+        )
+        .await;
 
         assert!(result.is_ok()); // The timeout wrapper completes
         if let Ok(check_result) = result {
@@ -264,7 +271,9 @@ mod connectivity_tests {
     async fn test_dns_resolution() -> Result<()> {
         let checker = ConnectivityCheck::new();
 
-        let result = checker.check_dns_resolution("api.mainnet-beta.solana.com").await?;
+        let result = checker
+            .check_dns_resolution("api.mainnet-beta.solana.com")
+            .await?;
 
         // Should resolve to at least one IP
         assert!(result.resolved || !result.resolved);
@@ -276,7 +285,8 @@ mod connectivity_tests {
     async fn test_network_latency_measurement() -> Result<()> {
         let mut server = Server::new_async().await;
 
-        let _mock = server.mock("POST", "/")
+        let _mock = server
+            .mock("POST", "/")
             .with_status(200)
             .with_body("{}")
             .create_async()
@@ -301,7 +311,9 @@ mod connectivity_tests {
         for _ in 0..10 {
             let checker_clone = checker.clone();
             let handle = tokio::spawn(async move {
-                checker_clone.check_rpc_endpoint("https://api.mainnet-beta.solana.com").await
+                checker_clone
+                    .check_rpc_endpoint("https://api.mainnet-beta.solana.com")
+                    .await
             });
             handles.push(handle);
         }
@@ -484,7 +496,9 @@ mod rollback_validator_tests {
         let rollback_id = validator.create_rollback_point("test").await?;
 
         // Cleanup old rollbacks (older than 30 days)
-        validator.cleanup_old_rollbacks(Duration::from_secs(30 * 24 * 60 * 60)).await?;
+        validator
+            .cleanup_old_rollbacks(Duration::from_secs(30 * 24 * 60 * 60))
+            .await?;
 
         // Recent rollback should still exist
         assert!(validator.rollback_exists(&rollback_id).await?);
@@ -570,10 +584,9 @@ mod diagnostics_runner_tests {
         let runner = DiagnosticsRunner::new();
 
         // Run only specific checks
-        let report = runner.run_diagnostics_with_filters(&[
-            "system_health",
-            "network",
-        ]).await?;
+        let report = runner
+            .run_diagnostics_with_filters(&["system_health", "network"])
+            .await?;
 
         assert!(report.system_health.is_some());
         assert!(report.connectivity.is_some());
@@ -609,9 +622,9 @@ mod system_info_tests {
         let info = SystemInfo::collect();
 
         assert!(
-            info.architecture == "x86_64" ||
-            info.architecture == "aarch64" ||
-            !info.architecture.is_empty()
+            info.architecture == "x86_64"
+                || info.architecture == "aarch64"
+                || !info.architecture.is_empty()
         );
     }
 

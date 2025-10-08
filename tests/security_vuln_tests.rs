@@ -6,9 +6,9 @@
 //! IMPORTANT: These tests demonstrate ACTUAL vulnerabilities and should be run
 //! in a safe, isolated environment only.
 
-use std::process::Command;
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Test case for Vuln 1: SQL Injection in Database Query Command
 ///
@@ -23,14 +23,7 @@ fn test_sql_injection_db_query() {
     let malicious_query = "SELECT 1; DROP TABLE IF EXISTS osvm.test_table; --";
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "db",
-            "query",
-            "--query",
-            malicious_query,
-        ])
+        .args(["run", "--", "db", "query", "--query", malicious_query])
         .output()
         .expect("Failed to execute command");
 
@@ -42,27 +35,21 @@ fn test_sql_injection_db_query() {
 
     // AFTER FIX: Should reject the query with validation error
     assert!(
-        !output.status.success() ||
-        stderr.contains("Invalid") ||
-        stderr.contains("not allowed") ||
-        stderr.contains("rejected"),
+        !output.status.success()
+            || stderr.contains("Invalid")
+            || stderr.contains("not allowed")
+            || stderr.contains("rejected"),
         "SQL injection should be blocked. stdout: {}, stderr: {}",
         stdout,
         stderr
     );
 
     // Additional test: UNION-based injection
-    let union_injection = "SELECT user FROM osvm.users UNION ALL SELECT table_name FROM system.tables";
+    let union_injection =
+        "SELECT user FROM osvm.users UNION ALL SELECT table_name FROM system.tables";
 
     let output2 = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "db",
-            "query",
-            "--query",
-            union_injection,
-        ])
+        .args(["run", "--", "db", "query", "--query", union_injection])
         .output()
         .expect("Failed to execute command");
 
@@ -106,10 +93,10 @@ fn test_command_injection_mcp() {
 
     // AFTER FIX: Should reject with validation error
     assert!(
-        !output.status.success() ||
-        stderr.contains("Invalid") ||
-        stderr.contains("not allowed") ||
-        stderr.contains("command"),
+        !output.status.success()
+            || stderr.contains("Invalid")
+            || stderr.contains("not allowed")
+            || stderr.contains("command"),
         "Command injection should be blocked. stderr: {}",
         stderr
     );
@@ -196,9 +183,9 @@ fn test_path_traversal_accounts() {
 
     // AFTER FIX: Should detect and reject symlinks
     assert!(
-        stderr.contains("symlink") ||
-        stderr.contains("Invalid file type") ||
-        !stdout.contains("SENSITIVE_DATA_12345"),
+        stderr.contains("symlink")
+            || stderr.contains("Invalid file type")
+            || !stdout.contains("SENSITIVE_DATA_12345"),
         "Symlink traversal should be blocked. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -225,8 +212,8 @@ fn test_sql_injection_batch_insert() {
     // Create account file with malicious data
     // The first 100 bytes should contain: 1,2,3); DROP TABLE osvm.test; --
     let malicious_data: Vec<u8> = vec![
-        49, 44, 50, 44, 51, 41, 59, 32, 68, 82, 79, 80, 32, 84, 65, 66, 76, 69, 32,
-        111, 115, 118, 109, 46, 116, 101, 115, 116, 59, 32, 45, 45,
+        49, 44, 50, 44, 51, 41, 59, 32, 68, 82, 79, 80, 32, 84, 65, 66, 76, 69, 32, 111, 115, 118,
+        109, 46, 116, 101, 115, 116, 59, 32, 45, 45,
     ];
 
     // Pad to make a valid-looking account file (this is simplified)
@@ -276,14 +263,7 @@ fn test_legitimate_query_works() {
     let safe_query = "SELECT COUNT(*) FROM osvm.cli_commands LIMIT 10";
 
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "db",
-            "query",
-            "--query",
-            safe_query,
-        ])
+        .args(["run", "--", "db", "query", "--query", safe_query])
         .output()
         .expect("Failed to execute command");
 

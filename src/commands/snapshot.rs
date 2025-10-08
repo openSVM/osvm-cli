@@ -172,8 +172,7 @@ fn get_snapshot_dir(matches: &ArgMatches) -> Result<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| {
             std::env::var("HOME").ok().map(|home| {
-                PathBuf::from(home)
-                    .join(".config/osvm/ledgers/devnet/remote/extracted")
+                PathBuf::from(home).join(".config/osvm/ledgers/devnet/remote/extracted")
             })
         })
         .context("Snapshot directory not specified and HOME not set")?;
@@ -258,7 +257,12 @@ fn display_statistics(stats: &Statistics) {
     if !stats.accounts_by_owner.is_empty() {
         println!("{}", "Top 10 Programs by Account Count:".bold());
         for (i, (owner, count)) in stats.accounts_by_owner.iter().take(10).enumerate() {
-            println!("  {:2}. {} ({} accounts)", i + 1, owner.bright_blue(), count);
+            println!(
+                "  {:2}. {} ({} accounts)",
+                i + 1,
+                owner.bright_blue(),
+                count
+            );
         }
         println!();
     }
@@ -297,29 +301,75 @@ fn display_diff(diff: &serde_json::Value) {
 
     if let Some(summary) = diff.get("summary") {
         println!("{}", "Summary".bold().yellow());
-        println!("  Total accounts (snapshot 1): {}", 
-            summary.get("total_accounts_snapshot1").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  Total accounts (snapshot 2): {}", 
-            summary.get("total_accounts_snapshot2").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  {} New accounts: {}", "✨".green(), 
-            summary.get("new_accounts").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  {} Deleted accounts: {}", "🗑️".red(), 
-            summary.get("deleted_accounts").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  {} Modified accounts: {}", "📝".yellow(), 
-            summary.get("modified_accounts").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  {} Unchanged accounts: {}", "✓".green(), 
-            summary.get("unchanged_accounts").and_then(|v| v.as_u64()).unwrap_or(0));
+        println!(
+            "  Total accounts (snapshot 1): {}",
+            summary
+                .get("total_accounts_snapshot1")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  Total accounts (snapshot 2): {}",
+            summary
+                .get("total_accounts_snapshot2")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  {} New accounts: {}",
+            "✨".green(),
+            summary
+                .get("new_accounts")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  {} Deleted accounts: {}",
+            "🗑️".red(),
+            summary
+                .get("deleted_accounts")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  {} Modified accounts: {}",
+            "📝".yellow(),
+            summary
+                .get("modified_accounts")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  {} Unchanged accounts: {}",
+            "✓".green(),
+            summary
+                .get("unchanged_accounts")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
         println!();
     }
 
     if let Some(new_accounts) = diff.get("new_accounts").and_then(|v| v.as_array()) {
         if !new_accounts.is_empty() {
-            println!("{} {} New Accounts", "✨".green(), new_accounts.len().to_string().bold());
+            println!(
+                "{} {} New Accounts",
+                "✨".green(),
+                new_accounts.len().to_string().bold()
+            );
             for (i, account) in new_accounts.iter().take(10).enumerate() {
-                println!("  {}. {} ({} lamports)", 
+                println!(
+                    "  {}. {} ({} lamports)",
                     i + 1,
-                    account.get("account").and_then(|v| v.as_str()).unwrap_or("unknown"),
-                    account.get("lamports").and_then(|v| v.as_u64()).unwrap_or(0));
+                    account
+                        .get("account")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown"),
+                    account
+                        .get("lamports")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                );
             }
             if new_accounts.len() > 10 {
                 println!("  ... and {} more", new_accounts.len() - 10);
@@ -330,12 +380,24 @@ fn display_diff(diff: &serde_json::Value) {
 
     if let Some(deleted) = diff.get("deleted_accounts").and_then(|v| v.as_array()) {
         if !deleted.is_empty() {
-            println!("{} {} Deleted Accounts", "🗑️".red(), deleted.len().to_string().bold());
+            println!(
+                "{} {} Deleted Accounts",
+                "🗑️".red(),
+                deleted.len().to_string().bold()
+            );
             for (i, account) in deleted.iter().take(10).enumerate() {
-                println!("  {}. {} ({} lamports)", 
+                println!(
+                    "  {}. {} ({} lamports)",
                     i + 1,
-                    account.get("account").and_then(|v| v.as_str()).unwrap_or("unknown"),
-                    account.get("lamports").and_then(|v| v.as_u64()).unwrap_or(0));
+                    account
+                        .get("account")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown"),
+                    account
+                        .get("lamports")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0)
+                );
             }
             if deleted.len() > 10 {
                 println!("  ... and {} more", deleted.len() - 10);
@@ -346,11 +408,18 @@ fn display_diff(diff: &serde_json::Value) {
 
     if let Some(modified) = diff.get("modified_accounts").and_then(|v| v.as_array()) {
         if !modified.is_empty() {
-            println!("{} {} Modified Accounts", "📝".yellow(), modified.len().to_string().bold());
+            println!(
+                "{} {} Modified Accounts",
+                "📝".yellow(),
+                modified.len().to_string().bold()
+            );
             for (i, account) in modified.iter().take(10).enumerate() {
-                let account_name = account.get("account").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let account_name = account
+                    .get("account")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 println!("  {}. {}", i + 1, account_name);
-                
+
                 if let Some(changes) = account.get("changes") {
                     if let Some(lamports) = changes.get("lamports") {
                         let old = lamports.get("old").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -378,26 +447,62 @@ fn display_validation(validation: &serde_json::Value) {
     println!("{}", "=".repeat(80).cyan());
     println!();
 
-    let is_valid = validation.get("valid").and_then(|v| v.as_bool()).unwrap_or(false);
-    
-    println!("{}: {}", 
+    let is_valid = validation
+        .get("valid")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    println!(
+        "{}: {}",
         "Status".bold(),
-        if is_valid { "✅ VALID".green() } else { "❌ INVALID".red() }
+        if is_valid {
+            "✅ VALID".green()
+        } else {
+            "❌ INVALID".red()
+        }
     );
     println!();
 
     if let Some(summary) = validation.get("summary") {
         println!("{}", "Summary".bold().yellow());
-        println!("  Total files: {}", summary.get("total_files").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  Successfully read: {}", summary.get("successful_reads").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  Failed reads: {}", summary.get("failed_reads").and_then(|v| v.as_u64()).unwrap_or(0));
-        println!("  Total lamports: {}", summary.get("total_lamports").and_then(|v| v.as_u64()).unwrap_or(0));
+        println!(
+            "  Total files: {}",
+            summary
+                .get("total_files")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  Successfully read: {}",
+            summary
+                .get("successful_reads")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  Failed reads: {}",
+            summary
+                .get("failed_reads")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
+        println!(
+            "  Total lamports: {}",
+            summary
+                .get("total_lamports")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        );
         println!();
     }
 
     if let Some(errors) = validation.get("errors").and_then(|v| v.as_array()) {
         if !errors.is_empty() {
-            println!("{} {} Errors Found", "❌".red(), errors.len().to_string().bold());
+            println!(
+                "{} {} Errors Found",
+                "❌".red(),
+                errors.len().to_string().bold()
+            );
             for error in errors {
                 if let Some(err_msg) = error.as_str() {
                     println!("  • {}", err_msg.red());
@@ -409,7 +514,11 @@ fn display_validation(validation: &serde_json::Value) {
 
     if let Some(warnings) = validation.get("warnings").and_then(|v| v.as_array()) {
         if !warnings.is_empty() {
-            println!("{} {} Warnings", "⚠️".yellow(), warnings.len().to_string().bold());
+            println!(
+                "{} {} Warnings",
+                "⚠️".yellow(),
+                warnings.len().to_string().bold()
+            );
             for warning in warnings {
                 if let Some(warn_msg) = warning.as_str() {
                     println!("  • {}", warn_msg.yellow());
@@ -442,11 +551,14 @@ fn display_account(account: &serde_json::Value) {
     println!("{}", "=".repeat(80).cyan());
     println!();
 
-    let found = account.get("found").and_then(|v| v.as_bool()).unwrap_or(false);
-    
+    let found = account
+        .get("found")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
     if found {
         println!("{}: {}", "Status".bold(), "✅ FOUND".green());
-        
+
         if let Some(file) = account.get("file").and_then(|v| v.as_str()) {
             println!("{}: {}", "File".bold(), file.bright_black());
         }
@@ -457,7 +569,11 @@ fn display_account(account: &serde_json::Value) {
                 println!("{}: {}", "Pubkey".bold(), pubkey.bright_blue());
             }
             if let Some(lamports) = acc_data.get("lamports").and_then(|v| v.as_u64()) {
-                println!("{}: {}", "Lamports".bold(), format_lamports(lamports).green());
+                println!(
+                    "{}: {}",
+                    "Lamports".bold(),
+                    format_lamports(lamports).green()
+                );
             }
             if let Some(data_len) = acc_data.get("data_len").and_then(|v| v.as_u64()) {
                 println!("{}: {} bytes", "Data Length".bold(), data_len);
@@ -477,7 +593,7 @@ fn display_account(account: &serde_json::Value) {
         }
     } else {
         println!("{}: {}", "Status".bold(), "❌ NOT FOUND".red());
-        
+
         if let Some(message) = account.get("message").and_then(|v| v.as_str()) {
             println!("{}: {}", "Message".bold(), message);
         }

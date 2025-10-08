@@ -183,15 +183,13 @@ async fn detect_mcp_servers() -> Vec<(String, String)> {
                     if let Some(servers_obj) = mcp_servers.as_object() {
                         for (idx, (server_id, config)) in servers_obj.iter().enumerate() {
                             // Check if server is enabled
-                            let is_enabled = config.get("enabled")
+                            let is_enabled = config
+                                .get("enabled")
                                 .and_then(|v| v.as_bool())
                                 .unwrap_or(false);
-                            
+
                             if is_enabled {
-                                servers.push((
-                                    server_id.clone(),
-                                    format!("μVM-{}", idx + 1)
-                                ));
+                                servers.push((server_id.clone(), format!("μVM-{}", idx + 1)));
                             }
                         }
                     }
@@ -252,7 +250,7 @@ pub struct MountsConfig {
 async fn count_isolation_processes() -> (usize, usize) {
     // Check for firecracker processes (microvms)
     let mut firecracker_count = count_processes_by_name("firecracker").await;
-    
+
     // Check if OSVM agent is running - count it as a microVM
     // This is set when the advanced chat interface is active
     if std::env::var("OSVM_AGENT_MODE").is_ok() || std::env::var("OSVM_IN_MICROVM").is_ok() {
@@ -361,11 +359,7 @@ fn format_mcp_deployments(deployments: &[McpToolDeployment]) -> String {
         let extra_mounts = deployment.mounts.len().saturating_sub(1);
 
         let mount_info = if extra_mounts > 0 {
-            let readonly_count = deployment
-                .mounts
-                .iter()
-                .filter(|m| m.readonly)
-                .count();
+            let readonly_count = deployment.mounts.iter().filter(|m| m.readonly).count();
             if readonly_count > 0 {
                 format!(":cfg+{}:{}ro", extra_mounts, readonly_count)
             } else {
@@ -541,25 +535,23 @@ mod tests {
 
     #[test]
     fn test_format_mcp_deployments() {
-        let deployments = vec![
-            McpToolDeployment {
-                server_name: "solana-mcp".to_string(),
-                microvm_id: Some("μVM-1".to_string()),
-                mounts: vec![
-                    MountInfo {
-                        host_path: "~/.config/osvm".to_string(),
-                        vm_path: "/config".to_string(),
-                        readonly: false,
-                    },
-                    MountInfo {
-                        host_path: "~/solana-data".to_string(),
-                        vm_path: "/data/solana-data".to_string(),
-                        readonly: false,
-                    },
-                ],
-                active_unikernels: vec![],
-            },
-        ];
+        let deployments = vec![McpToolDeployment {
+            server_name: "solana-mcp".to_string(),
+            microvm_id: Some("μVM-1".to_string()),
+            mounts: vec![
+                MountInfo {
+                    host_path: "~/.config/osvm".to_string(),
+                    vm_path: "/config".to_string(),
+                    readonly: false,
+                },
+                MountInfo {
+                    host_path: "~/solana-data".to_string(),
+                    vm_path: "/data/solana-data".to_string(),
+                    readonly: false,
+                },
+            ],
+            active_unikernels: vec![],
+        }];
 
         let result = format_mcp_deployments(&deployments);
         assert!(result.contains("solana"));

@@ -6,17 +6,17 @@
 use anyhow::Result;
 use osvm::services::microvm_launcher::{McpServerMicroVmConfig, MicroVmLauncher};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 const NUM_VMS: usize = 100;
-const PARALLEL_LAUNCHES: usize = 10;  // Launch 10 at a time to avoid overwhelming the system
-const MEM_PER_VM: u32 = 256;  // 256MB per VM (need more for cargo install)
-const VCPUS_PER_VM: u32 = 1;  // Changed from u8 to u32
-const BASE_CID: u32 = 1000;  // Starting CID
+const PARALLEL_LAUNCHES: usize = 10; // Launch 10 at a time to avoid overwhelming the system
+const MEM_PER_VM: u32 = 256; // 256MB per VM (need more for cargo install)
+const VCPUS_PER_VM: u32 = 1; // Changed from u8 to u32
+const BASE_CID: u32 = 1000; // Starting CID
 const VM_COMMAND: &str = "cargo install osvm && osvm whats current unix timestamp";
 
 #[tokio::test]
@@ -54,7 +54,9 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
     println!();
 
     // Launch VMs in batches
-    let mut tasks: JoinSet<Result<Option<osvm::services::microvm_launcher::McpServerMicroVmHandle>>> = JoinSet::new();
+    let mut tasks: JoinSet<
+        Result<Option<osvm::services::microvm_launcher::McpServerMicroVmHandle>>,
+    > = JoinSet::new();
 
     for vm_id in 0..NUM_VMS {
         let launcher = launcher.clone();
@@ -70,7 +72,7 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
                 server_id: format!("stress-test-vm-{}", vm_id),
                 memory_mb: MEM_PER_VM,
                 vcpus: VCPUS_PER_VM,
-                server_command: VM_COMMAND.to_string(),  // Run OSVM installation and timestamp query
+                server_command: VM_COMMAND.to_string(), // Run OSVM installation and timestamp query
                 work_dir: PathBuf::from("/app"),
                 mounts: vec![],
                 vsock_cid: BASE_CID + vm_id as u32,
@@ -100,11 +102,8 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
 
     // Wait for all launches to complete
     while let Some(result) = tasks.join_next().await {
-        match result {
-            Ok(Ok(Some(handle))) => {
-                handles.push(handle);
-            }
-            _ => {}
+        if let Ok(Ok(Some(handle))) = result {
+            handles.push(handle);
         }
     }
 
@@ -127,7 +126,10 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
         println!("Performance Metrics:");
         println!("  • Average launch time: {:.0}ms per VM", avg_launch_time);
         println!("  • Launch rate: {:.1} VMs/second", vms_per_second);
-        println!("  • Total memory allocated: {}MB", successful as u32 * MEM_PER_VM);
+        println!(
+            "  • Total memory allocated: {}MB",
+            successful as u32 * MEM_PER_VM
+        );
     }
 
     // Keep VMs running for a moment to verify stability
@@ -158,14 +160,17 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
 
     for handle in handles {
         shutdown_tasks.spawn(async move {
-            let _ = handle.shutdown();  // shutdown is not async, takes self by value
+            let _ = handle.shutdown(); // shutdown is not async, takes self by value
         });
     }
 
     while let Some(_) = shutdown_tasks.join_next().await {}
 
     let shutdown_duration = shutdown_start.elapsed();
-    println!("✓ All VMs shut down in {:.2}s", shutdown_duration.as_secs_f64());
+    println!(
+        "✓ All VMs shut down in {:.2}s",
+        shutdown_duration.as_secs_f64()
+    );
 
     println!();
     println!("🏁 Stress Test Complete!");
@@ -193,7 +198,7 @@ async fn test_vm_resource_limits() -> Result<()> {
     // Try to launch a VM with very limited resources
     let config = McpServerMicroVmConfig {
         server_id: "resource-test".to_string(),
-        memory_mb: 32,  // Very low memory
+        memory_mb: 32, // Very low memory
         vcpus: 1,
         server_command: "echo 'Resource test'".to_string(),
         work_dir: PathBuf::from("/app"),
@@ -202,7 +207,8 @@ async fn test_vm_resource_limits() -> Result<()> {
     };
 
     println!("Attempting to launch VM with 32MB RAM...");
-    match launcher.launch_mcp_server(config) {  // Not async
+    match launcher.launch_mcp_server(config) {
+        // Not async
         Ok(mut handle) => {
             println!("✓ VM launched with minimal resources");
 
@@ -213,7 +219,7 @@ async fn test_vm_resource_limits() -> Result<()> {
                 println!("✓ VM still running after 2 seconds");
             }
 
-            handle.shutdown()?;  // Not async, takes self by value
+            handle.shutdown()?; // Not async, takes self by value
             println!("✓ VM shut down successfully");
         }
         Err(e) => {
@@ -249,7 +255,7 @@ async fn test_rapid_vm_cycling() -> Result<()> {
 
         // Launch
         let launch_start = Instant::now();
-        let handle = launcher.launch_mcp_server(config)?;  // Not async, not mutable
+        let handle = launcher.launch_mcp_server(config)?; // Not async, not mutable
         total_launch_time += launch_start.elapsed();
 
         // Brief run
@@ -257,7 +263,7 @@ async fn test_rapid_vm_cycling() -> Result<()> {
 
         // Shutdown
         let shutdown_start = Instant::now();
-        handle.shutdown()?;  // Not async
+        handle.shutdown()?; // Not async
         total_shutdown_time += shutdown_start.elapsed();
 
         if (i + 1) % 5 == 0 {
@@ -268,10 +274,14 @@ async fn test_rapid_vm_cycling() -> Result<()> {
     println!();
     println!("Cycling Complete:");
     println!("  • Total cycles: {}", CYCLES);
-    println!("  • Avg launch time: {:.0}ms",
-        total_launch_time.as_millis() as f64 / CYCLES as f64);
-    println!("  • Avg shutdown time: {:.0}ms",
-        total_shutdown_time.as_millis() as f64 / CYCLES as f64);
+    println!(
+        "  • Avg launch time: {:.0}ms",
+        total_launch_time.as_millis() as f64 / CYCLES as f64
+    );
+    println!(
+        "  • Avg shutdown time: {:.0}ms",
+        total_shutdown_time.as_millis() as f64 / CYCLES as f64
+    );
 
     Ok(())
 }

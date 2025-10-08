@@ -1,13 +1,15 @@
 //! Comprehensive tests for security auditing functionality
 
 use anyhow::Result;
-use osvm::services::audit_service::{AuditService, AuditRequest, AuditResult, Vulnerability, VulneritySeverity};
+use mockito::Server;
+use osvm::services::audit_service::{
+    AuditRequest, AuditResult, AuditService, Vulnerability, VulneritySeverity,
+};
 use osvm::utils::secure_logger::SecureLogger;
+use serde_json::json;
+use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use std::fs;
-use mockito::Server;
-use serde_json::json;
 
 /// Create a test Solana program with vulnerabilities
 fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<PathBuf> {
@@ -15,7 +17,8 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
     fs::create_dir_all(program_path.parent().unwrap())?;
 
     let code = match vulnerability_type {
-        "unchecked_account" => r#"
+        "unchecked_account" => {
+            r#"
             use solana_program::{
                 account_info::AccountInfo,
                 entrypoint,
@@ -36,8 +39,10 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
                 data[0] = 42;
                 Ok(())
             }
-        "#,
-        "integer_overflow" => r#"
+        "#
+        }
+        "integer_overflow" => {
+            r#"
             use solana_program::{
                 account_info::AccountInfo,
                 entrypoint,
@@ -57,8 +62,10 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
                 let new_amount = amount + 1000000;  // Can overflow
                 Ok(())
             }
-        "#,
-        "missing_signer_check" => r#"
+        "#
+        }
+        "missing_signer_check" => {
+            r#"
             use solana_program::{
                 account_info::AccountInfo,
                 entrypoint,
@@ -78,8 +85,10 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
                 // Perform privileged operation without checking if authority is signer
                 Ok(())
             }
-        "#,
-        "reentrancy" => r#"
+        "#
+        }
+        "reentrancy" => {
+            r#"
             use solana_program::{
                 account_info::AccountInfo,
                 entrypoint,
@@ -105,8 +114,10 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
                 data[0] = 1;
                 Ok(())
             }
-        "#,
-        _ => r#"
+        "#
+        }
+        _ => {
+            r#"
             use solana_program::{
                 account_info::AccountInfo,
                 entrypoint,
@@ -123,7 +134,8 @@ fn create_vulnerable_program(dir: &TempDir, vulnerability_type: &str) -> Result<
             ) -> ProgramResult {
                 Ok(())
             }
-        "#,
+        "#
+        }
     };
 
     fs::write(&program_path, code)?;
@@ -141,7 +153,12 @@ mod audit_detection_tests {
 
         let audit_service = AuditService::new();
         let request = AuditRequest {
-            target: program_path.parent().unwrap().parent().unwrap().to_path_buf(),
+            target: program_path
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf(),
             output_dir: temp_dir.path().join("audit_results"),
             format: "json".to_string(),
             verbose: 1,
@@ -156,9 +173,10 @@ mod audit_detection_tests {
         let result = audit_service.run_audit(request).await?;
 
         assert!(result.vulnerabilities.len() > 0);
-        assert!(result.vulnerabilities.iter().any(|v|
-            v.category.contains("account") || v.category.contains("ownership")
-        ));
+        assert!(result
+            .vulnerabilities
+            .iter()
+            .any(|v| v.category.contains("account") || v.category.contains("ownership")));
 
         Ok(())
     }
@@ -170,7 +188,12 @@ mod audit_detection_tests {
 
         let audit_service = AuditService::new();
         let request = AuditRequest {
-            target: program_path.parent().unwrap().parent().unwrap().to_path_buf(),
+            target: program_path
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf(),
             output_dir: temp_dir.path().join("audit_results"),
             format: "json".to_string(),
             verbose: 1,
@@ -184,9 +207,10 @@ mod audit_detection_tests {
 
         let result = audit_service.run_audit(request).await?;
 
-        assert!(result.vulnerabilities.iter().any(|v|
-            v.category.contains("arithmetic") || v.category.contains("overflow")
-        ));
+        assert!(result
+            .vulnerabilities
+            .iter()
+            .any(|v| v.category.contains("arithmetic") || v.category.contains("overflow")));
 
         Ok(())
     }
@@ -198,7 +222,12 @@ mod audit_detection_tests {
 
         let audit_service = AuditService::new();
         let request = AuditRequest {
-            target: program_path.parent().unwrap().parent().unwrap().to_path_buf(),
+            target: program_path
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf(),
             output_dir: temp_dir.path().join("audit_results"),
             format: "json".to_string(),
             verbose: 1,
@@ -212,9 +241,10 @@ mod audit_detection_tests {
 
         let result = audit_service.run_audit(request).await?;
 
-        assert!(result.vulnerabilities.iter().any(|v|
-            v.category.contains("signer") || v.category.contains("authorization")
-        ));
+        assert!(result
+            .vulnerabilities
+            .iter()
+            .any(|v| v.category.contains("signer") || v.category.contains("authorization")));
 
         Ok(())
     }
@@ -226,29 +256,38 @@ mod audit_detection_tests {
         let program_path = create_vulnerable_program(&temp_dir, "unchecked_account")?;
 
         // Mock AI analysis response
-        let ai_mock = server.mock("POST", "/analyze")
+        let ai_mock = server
+            .mock("POST", "/analyze")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "vulnerabilities": [
-                    {
-                        "severity": "high",
-                        "category": "Access Control",
-                        "description": "Missing account ownership verification",
-                        "location": "lib.rs:15",
-                        "recommendation": "Add account.owner check before modifying data",
-                        "cwe": "CWE-284"
-                    }
-                ],
-                "risk_score": 8.5,
-                "summary": "Critical access control vulnerability detected"
-            }).to_string())
+            .with_body(
+                json!({
+                    "vulnerabilities": [
+                        {
+                            "severity": "high",
+                            "category": "Access Control",
+                            "description": "Missing account ownership verification",
+                            "location": "lib.rs:15",
+                            "recommendation": "Add account.owner check before modifying data",
+                            "cwe": "CWE-284"
+                        }
+                    ],
+                    "risk_score": 8.5,
+                    "summary": "Critical access control vulnerability detected"
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
         let audit_service = AuditService::new();
         let request = AuditRequest {
-            target: program_path.parent().unwrap().parent().unwrap().to_path_buf(),
+            target: program_path
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .to_path_buf(),
             output_dir: temp_dir.path().join("audit_results"),
             format: "json".to_string(),
             verbose: 2,
@@ -329,7 +368,8 @@ mod audit_detection_tests {
         // Should detect multiple vulnerability categories
         assert!(result.vulnerabilities.len() >= 2);
 
-        let categories: Vec<String> = result.vulnerabilities
+        let categories: Vec<String> = result
+            .vulnerabilities
             .iter()
             .map(|v| v.category.clone())
             .collect();
@@ -348,7 +388,12 @@ mod audit_detection_tests {
 
         for format in &["json", "html", "markdown"] {
             let request = AuditRequest {
-                target: program_path.parent().unwrap().parent().unwrap().to_path_buf(),
+                target: program_path
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf(),
                 output_dir: temp_dir.path().join(format!("audit_{}", format)),
                 format: format.to_string(),
                 verbose: 1,
@@ -364,7 +409,8 @@ mod audit_detection_tests {
             assert!(!result.vulnerabilities.is_empty());
 
             // Verify output file exists
-            let output_file = temp_dir.path()
+            let output_file = temp_dir
+                .path()
                 .join(format!("audit_{}", format))
                 .join(format!("audit_report.{}", format));
 
@@ -418,9 +464,9 @@ mod security_logger_tests {
             }
 
             assert!(
-                sanitized.contains("REDACTED") ||
-                sanitized.contains("[USER]") ||
-                sanitized.contains("[IP_REDACTED]"),
+                sanitized.contains("REDACTED")
+                    || sanitized.contains("[USER]")
+                    || sanitized.contains("[IP_REDACTED]"),
                 "Sanitized output doesn't contain redaction markers: {}",
                 sanitized
             );
@@ -441,7 +487,8 @@ mod security_logger_tests {
     #[test]
     fn test_nested_sensitive_data() {
         let logger = SecureLogger::new(false);
-        let input = r#"{"api_key": "sk-test123", "user": {"home": "/home/bob", "token": "xyz789"}}"#;
+        let input =
+            r#"{"api_key": "sk-test123", "user": {"home": "/home/bob", "token": "xyz789"}}"#;
 
         let sanitized = logger.sanitize(input);
 
@@ -519,7 +566,8 @@ mod vulnerability_classification_tests {
         ];
 
         // Calculate risk score based on severity
-        let risk_score: f64 = vulnerabilities.iter()
+        let risk_score: f64 = vulnerabilities
+            .iter()
             .map(|v| match v.severity {
                 VulneritySeverity::Critical => 10.0,
                 VulneritySeverity::High => 7.5,
@@ -549,10 +597,7 @@ mod github_audit_tests {
                 "https://github.com/solana-labs/example#develop",
                 ("solana-labs", "example", Some("develop")),
             ),
-            (
-                "opensvm/test-program",
-                ("opensvm", "test-program", None),
-            ),
+            ("opensvm/test-program", ("opensvm", "test-program", None)),
         ];
 
         for (input, (expected_owner, expected_repo, expected_branch)) in test_cases {

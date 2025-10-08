@@ -29,7 +29,7 @@ impl Default for ClickHouseConfig {
     fn default() -> Self {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
         let base_dir = PathBuf::from(home).join(".osvm").join("clickhouse");
-        
+
         Self {
             data_dir: base_dir.join("data"),
             config_dir: base_dir.join("config"),
@@ -75,8 +75,7 @@ impl ClickHouseService {
             .context("Failed to create data directory")?;
         std::fs::create_dir_all(&self.config.config_dir)
             .context("Failed to create config directory")?;
-        std::fs::create_dir_all(&self.config.log_dir)
-            .context("Failed to create log directory")?;
+        std::fs::create_dir_all(&self.config.log_dir).context("Failed to create log directory")?;
 
         // Check if ClickHouse is installed
         if !self.is_clickhouse_installed() {
@@ -233,7 +232,8 @@ impl ClickHouseService {
         }
 
         // Create database
-        self.execute_query("CREATE DATABASE IF NOT EXISTS osvm").await?;
+        self.execute_query("CREATE DATABASE IF NOT EXISTS osvm")
+            .await?;
 
         // Create tables
         self.create_cli_commands_table().await?;
@@ -359,7 +359,9 @@ impl ClickHouseService {
             }
         }
 
-        Err(anyhow!("ClickHouse server failed to start within 3 seconds"))
+        Err(anyhow!(
+            "ClickHouse server failed to start within 3 seconds"
+        ))
     }
 
     /// Stop the ClickHouse server process
@@ -368,13 +370,13 @@ impl ClickHouseService {
 
         if let Some(mut child) = process_guard.take() {
             info!("Stopping ClickHouse server...");
-            
+
             // Try graceful shutdown first
             #[cfg(unix)]
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
-                
+
                 if let Ok(pid) = child.id().try_into() {
                     let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
                 }
@@ -416,7 +418,9 @@ impl ClickHouseService {
             if is_running {
                 Ok(ClickHouseStatus::Running)
             } else {
-                Ok(ClickHouseStatus::Error("Process exists but not responding".to_string()))
+                Ok(ClickHouseStatus::Error(
+                    "Process exists but not responding".to_string(),
+                ))
             }
         } else {
             // Check if another instance is running
@@ -446,19 +450,18 @@ impl ClickHouseService {
     /// Execute a SQL query and return results as JSON
     pub async fn query_json(&self, sql: &str) -> Result<String> {
         // Use HTTP client directly to get JSON response
-        let url = format!("http://localhost:{}/?query={}&default_format=JSONEachRow", 
+        let url = format!(
+            "http://localhost:{}/?query={}&default_format=JSONEachRow",
             self.config.http_port,
             urlencoding::encode(sql)
         );
-        
+
         let response = reqwest::get(&url)
             .await
             .context("Failed to execute query")?;
-        
-        let text = response.text()
-            .await
-            .context("Failed to read response")?;
-        
+
+        let text = response.text().await.context("Failed to read response")?;
+
         // Parse each line as JSON and collect into an array
         let mut results = Vec::new();
         for line in text.lines() {
@@ -468,9 +471,8 @@ impl ClickHouseService {
                 }
             }
         }
-        
-        serde_json::to_string_pretty(&results)
-            .context("Failed to serialize results")
+
+        serde_json::to_string_pretty(&results).context("Failed to serialize results")
     }
 
     /// Get the ClickHouse binary path
@@ -485,7 +487,9 @@ impl ClickHouseService {
         if self.is_clickhouse_installed() {
             Ok(PathBuf::from("clickhouse"))
         } else {
-            Err(anyhow!("ClickHouse binary not found. Run 'osvm db init' first."))
+            Err(anyhow!(
+                "ClickHouse binary not found. Run 'osvm db init' first."
+            ))
         }
     }
 

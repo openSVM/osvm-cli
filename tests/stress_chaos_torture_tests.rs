@@ -3,11 +3,11 @@
 //! that normal testing won't catch. We're trying to make things fail!
 
 use anyhow::Result;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::{Mutex, Semaphore};
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
+use tokio::sync::{Mutex, Semaphore};
 
 #[cfg(test)]
 mod extreme_concurrency_tests {
@@ -193,8 +193,9 @@ mod extreme_concurrency_tests {
         // Use timeout to detect deadlock
         let result = tokio::time::timeout(
             Duration::from_secs(1),
-            futures::future::join_all(vec![handle1, handle2])
-        ).await;
+            futures::future::join_all(vec![handle1, handle2]),
+        )
+        .await;
 
         // Should complete or timeout
         assert!(result.is_ok() || result.is_err());
@@ -302,9 +303,7 @@ mod memory_exhaustion_tests {
 
         for size in (1..20).map(|i| 1024 * 1024 * i) {
             // 1MB, 2MB, ..., up to 19MB
-            match std::panic::catch_unwind(|| {
-                vec![0u8; size]
-            }) {
+            match std::panic::catch_unwind(|| vec![0u8; size]) {
                 Ok(buffer) => buffers.push(buffer),
                 Err(_) => break, // OOM
             }
@@ -526,19 +525,17 @@ mod timeout_and_hang_tests {
 
     #[tokio::test]
     async fn test_infinite_loop_detection() -> Result<()> {
-        let result = tokio::time::timeout(
-            Duration::from_millis(100),
-            async {
-                // Infinite loop
-                let mut counter = 0u64;
-                loop {
-                    counter = counter.wrapping_add(1);
-                    if counter == 0 {
-                        break; // Will never happen
-                    }
+        let result = tokio::time::timeout(Duration::from_millis(100), async {
+            // Infinite loop
+            let mut counter = 0u64;
+            loop {
+                counter = counter.wrapping_add(1);
+                if counter == 0 {
+                    break; // Will never happen
                 }
             }
-        ).await;
+        })
+        .await;
 
         assert!(result.is_err()); // Should timeout
 
@@ -552,9 +549,10 @@ mod timeout_and_hang_tests {
             Duration::from_millis(200),
             tokio::time::timeout(
                 Duration::from_millis(100),
-                tokio::time::sleep(Duration::from_secs(10))
-            )
-        ).await;
+                tokio::time::sleep(Duration::from_secs(10)),
+            ),
+        )
+        .await;
 
         // Inner timeout should trigger first
         assert!(result.is_ok());
@@ -614,8 +612,9 @@ mod timeout_and_hang_tests {
             tokio::task::spawn_blocking(|| {
                 std::thread::sleep(Duration::from_millis(100));
                 42
-            })
-        ).await??;
+            }),
+        )
+        .await??;
 
         assert_eq!(result, 42);
 
@@ -643,9 +642,7 @@ mod panic_and_error_propagation_tests {
     #[tokio::test]
     async fn test_cascading_failures() -> Result<()> {
         // Chain of tasks where each depends on previous
-        let task1 = tokio::spawn(async {
-            Err::<i32, _>(anyhow::anyhow!("Task 1 failed"))
-        });
+        let task1 = tokio::spawn(async { Err::<i32, _>(anyhow::anyhow!("Task 1 failed")) });
 
         let task2 = tokio::spawn(async move {
             task1.await??; // Propagates error
@@ -664,7 +661,8 @@ mod panic_and_error_propagation_tests {
         let result = std::panic::catch_unwind(|| {
             std::panic::catch_unwind(|| {
                 panic!("Inner panic");
-            }).unwrap_or_else(|_| {
+            })
+            .unwrap_or_else(|_| {
                 panic!("Panic while handling panic");
             });
         });

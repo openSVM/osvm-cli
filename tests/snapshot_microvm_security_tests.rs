@@ -2,15 +2,15 @@
 
 use anyhow::Result;
 use osvm::services::{
-    snapshot_service::{SnapshotService, SnapshotConfig, Snapshot, SnapshotMetadata},
-    microvm_launcher::{MicroVMLauncher, LaunchConfig, MicroVMInstance, VMStatus},
-    ephemeral_microvm::{EphemeralVM, EphemeralConfig, VMLifecycle},
+    ephemeral_microvm::{EphemeralConfig, EphemeralVM, VMLifecycle},
+    microvm_launcher::{LaunchConfig, MicroVMInstance, MicroVMLauncher, VMStatus},
+    snapshot_service::{Snapshot, SnapshotConfig, SnapshotMetadata, SnapshotService},
 };
-use osvm::utils::security_monitor::{SecurityMonitor, SecurityEvent, ThreatLevel, MonitorConfig};
+use osvm::utils::security_monitor::{MonitorConfig, SecurityEvent, SecurityMonitor, ThreatLevel};
 use std::path::PathBuf;
-use tempfile::TempDir;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
+use tempfile::TempDir;
 
 #[cfg(test)]
 mod snapshot_service_tests {
@@ -80,8 +80,12 @@ mod snapshot_service_tests {
         let base = service.create_snapshot("test-vm", 100).await?;
 
         // Create incremental snapshots
-        let inc1 = service.create_incremental_snapshot("test-vm", 200, &base.id).await?;
-        let inc2 = service.create_incremental_snapshot("test-vm", 300, &inc1.id).await?;
+        let inc1 = service
+            .create_incremental_snapshot("test-vm", 200, &base.id)
+            .await?;
+        let inc2 = service
+            .create_incremental_snapshot("test-vm", 300, &inc1.id)
+            .await?;
 
         assert_eq!(inc1.parent_id, Some(base.id));
         assert_eq!(inc2.parent_id, Some(inc1.id));
@@ -172,9 +176,8 @@ mod snapshot_service_tests {
         // Create snapshots concurrently
         for slot in 100..110 {
             let service_clone = Arc::clone(&service);
-            let handle = tokio::spawn(async move {
-                service_clone.create_snapshot("test-vm", slot).await
-            });
+            let handle =
+                tokio::spawn(async move { service_clone.create_snapshot("test-vm", slot).await });
             handles.push(handle);
         }
 
@@ -235,11 +238,11 @@ mod microvm_launcher_tests {
             // In real implementation, would transition through states
             assert!(matches!(
                 state,
-                VMStatus::Creating |
-                VMStatus::Starting |
-                VMStatus::Running |
-                VMStatus::Stopping |
-                VMStatus::Stopped
+                VMStatus::Creating
+                    | VMStatus::Starting
+                    | VMStatus::Running
+                    | VMStatus::Stopping
+                    | VMStatus::Stopped
             ));
         }
 
@@ -466,7 +469,11 @@ mod security_monitor_tests {
         for i in 0..5 {
             let event = SecurityEvent {
                 event_type: format!("event_{}", i),
-                threat_level: if i < 2 { ThreatLevel::High } else { ThreatLevel::Low },
+                threat_level: if i < 2 {
+                    ThreatLevel::High
+                } else {
+                    ThreatLevel::Low
+                },
                 source: "test".to_string(),
                 description: format!("Test event {}", i),
                 timestamp: chrono::Utc::now(),

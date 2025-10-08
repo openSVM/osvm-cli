@@ -5,7 +5,8 @@ use anyhow::{anyhow, Context, Result};
 use cursive::direction::Orientation;
 use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView, TextView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView,
+    TextView,
 };
 use cursive::Cursive;
 use log::{error, info, warn};
@@ -414,18 +415,16 @@ pub fn export_chat(siv: &mut Cursive) {
             );
 
             match serde_json::to_string_pretty(&session) {
-                Ok(json_content) => {
-                    match std::fs::write(&filename, json_content) {
-                        Ok(_) => {
-                            info!("Chat exported to {}", filename);
-                            Ok((filename, None::<String>))
-                        }
-                        Err(e) => {
-                            error!("Failed to write export file: {}", e);
-                            Err(format!("Failed to write export file: {}", e))
-                        }
+                Ok(json_content) => match std::fs::write(&filename, json_content) {
+                    Ok(_) => {
+                        info!("Chat exported to {}", filename);
+                        Ok((filename, None::<String>))
                     }
-                }
+                    Err(e) => {
+                        error!("Failed to write export file: {}", e);
+                        Err(format!("Failed to write export file: {}", e))
+                    }
+                },
                 Err(e) => {
                     error!("Failed to serialize session: {}", e);
                     Err(format!("Failed to serialize session: {}", e))
@@ -1025,12 +1024,13 @@ pub fn start_live_processing(
             let still_processing = state_clone
                 .get_session_by_id(session_id)
                 .map(|session| {
-                    session.messages.iter().any(|msg| {
-                        matches!(msg, ChatMessage::Processing { .. })
-                    })
+                    session
+                        .messages
+                        .iter()
+                        .any(|msg| matches!(msg, ChatMessage::Processing { .. }))
                 })
                 .unwrap_or(false);
-            
+
             if !still_processing {
                 break; // Exit loop when processing message is removed
             }
@@ -1041,7 +1041,7 @@ pub fn start_live_processing(
                 let _ = state_clone.remove_last_processing_message(session_id);
                 break;
             }
-            
+
             let spinner_index = spinner_clone.fetch_add(1, Ordering::Relaxed);
 
             // Change message every 30 updates (roughly 3 seconds)
@@ -1059,12 +1059,13 @@ pub fn start_live_processing(
                 let still_processing_after_check = state_clone
                     .get_session_by_id(session_id)
                     .map(|session| {
-                        session.messages.iter().any(|msg| {
-                            matches!(msg, ChatMessage::Processing { .. })
-                        })
+                        session
+                            .messages
+                            .iter()
+                            .any(|msg| matches!(msg, ChatMessage::Processing { .. }))
                     })
                     .unwrap_or(false);
-                
+
                 if still_processing_after_check {
                     let _ = state_clone.update_processing_message(
                         session_id,
@@ -1091,14 +1092,13 @@ pub fn start_live_processing(
         session_id,
         input: user_input,
     };
-    
+
     // Send command through the proper channel
     state.send_agent_command_sync(command);
-    
+
     // NOTE: We don't stop the spinner here - it will keep running and be cleaned up
     // when the agent worker completes and removes the processing message
 }
-
 
 // Generate mock response for demo
 fn generate_mock_response(input: &str) -> String {
@@ -1493,7 +1493,7 @@ pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: St
     // Get tool schema to build input form
     let schema_info = siv.with_user_data(|state: &mut AdvancedChatState| {
         let tools = state.available_tools.read().unwrap();
-        
+
         if let Some(tool_list) = tools.get(&server_id) {
             if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
                 Some(tool.input_schema.clone())
@@ -1504,36 +1504,39 @@ pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: St
             None
         }
     });
-    
+
     if let Some(Some(schema)) = schema_info {
         let mut test_layout = LinearLayout::vertical();
-        
+
         test_layout.add_child(TextView::new(format!("Testing: {}", tool_name)));
         test_layout.add_child(DummyView.fixed_height(1));
         test_layout.add_child(TextView::new("Enter parameters as JSON:"));
         test_layout.add_child(DummyView.fixed_height(1));
-        
+
         // Add text area for JSON input
-        test_layout.add_child(Panel::new(
-            EditView::new()
-                .content("{}")
-                .with_name("test_tool_params")
-                .min_width(60)
-                .min_height(5)
-        ).title("Parameters (JSON)"));
-        
+        test_layout.add_child(
+            Panel::new(
+                EditView::new()
+                    .content("{}")
+                    .with_name("test_tool_params")
+                    .min_width(60)
+                    .min_height(5),
+            )
+            .title("Parameters (JSON)"),
+        );
+
         test_layout.add_child(DummyView.fixed_height(1));
         test_layout.add_child(TextView::new("Expected Schema:"));
         test_layout.add_child(Panel::new(
             ScrollView::new(TextView::new(
-                serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string())
+                serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string()),
             ))
-            .max_height(5)
+            .max_height(5),
         ));
-        
+
         let server_clone = server_id.clone();
         let tool_clone = tool_name.clone();
-        
+
         siv.add_layer(
             Dialog::around(test_layout)
                 .title(format!("🧪 Test Tool: {}", tool_name))
@@ -1543,7 +1546,7 @@ pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: St
                 .button("Cancel", |s| {
                     s.pop_layer();
                 })
-                .max_width(80)
+                .max_width(80),
         );
     }
 }
@@ -1551,10 +1554,11 @@ pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: St
 /// Execute a test tool call and show results with metrics
 fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
     // Get JSON input from the form
-    let json_input = siv.find_name::<EditView>("test_tool_params")
+    let json_input = siv
+        .find_name::<EditView>("test_tool_params")
         .map(|v| v.get_content().to_string())
         .unwrap_or_else(|| "{}".to_string());
-    
+
     // Parse JSON
     let params = match serde_json::from_str::<serde_json::Value>(&json_input) {
         Ok(val) => val,
@@ -1562,103 +1566,125 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
             siv.add_layer(
                 Dialog::text(format!("❌ Invalid JSON: {}", e))
                     .title("Parse Error")
-                    .button("OK", |s| { s.pop_layer(); })
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
             );
             return;
         }
     };
-    
+
     // Close the test dialog
     siv.pop_layer();
-    
+
     // Show loading dialog
     siv.add_layer(
         Dialog::text("⚡ Executing tool...\nPlease wait...")
             .title("Testing Tool")
-            .with_name("test_execution_dialog")
+            .with_name("test_execution_dialog"),
     );
-    
+
     // Execute in background and show results
     let cb_sink = siv.cb_sink().clone();
     let state_opt = siv.user_data::<AdvancedChatState>().cloned();
-    
+
     std::thread::spawn(move || {
         let start_time = std::time::Instant::now();
-        
+
         if let Some(state) = state_opt {
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(rt) => rt,
                 Err(e) => {
                     let error_msg = format!("Failed to create runtime: {}", e);
-                    cb_sink.send(Box::new(move |s| {
-                        s.pop_layer(); // Remove loading dialog
-                        s.add_layer(
-                            Dialog::text(error_msg)
-                                .title("❌ Test Failed")
-                                .button("OK", |s| { s.pop_layer(); })
-                        );
-                    })).ok();
+                    cb_sink
+                        .send(Box::new(move |s| {
+                            s.pop_layer(); // Remove loading dialog
+                            s.add_layer(Dialog::text(error_msg).title("❌ Test Failed").button(
+                                "OK",
+                                |s| {
+                                    s.pop_layer();
+                                },
+                            ));
+                        }))
+                        .ok();
                     return;
                 }
             };
-            
+
             let result = rt.block_on(async {
                 let mcp_service = state.mcp_service.lock().await;
-                mcp_service.call_tool(&server_id, &tool_name, Some(params)).await
+                mcp_service
+                    .call_tool(&server_id, &tool_name, Some(params))
+                    .await
             });
-            
+
             let execution_time_ms = start_time.elapsed().as_millis();
-            
-            cb_sink.send(Box::new(move |s| {
-                s.pop_layer(); // Remove loading dialog
-                
-                match result {
-                    Ok(response) => {
-                        let response_str = serde_json::to_string_pretty(&response)
-                            .unwrap_or_else(|_| format!("{:?}", response));
-                        
-                        let mut result_layout = LinearLayout::vertical();
-                        
-                        result_layout.add_child(TextView::new(format!("✅ Execution Successful")));
-                        result_layout.add_child(DummyView.fixed_height(1));
-                        
-                        result_layout.add_child(TextView::new(format!("⏱️  Execution Time: {}ms", execution_time_ms)));
-                        result_layout.add_child(TextView::new(format!("📦 Server: {}", server_id)));
-                        result_layout.add_child(TextView::new(format!("🔧 Tool: {}", tool_name)));
-                        result_layout.add_child(DummyView.fixed_height(1));
-                        
-                        result_layout.add_child(TextView::new("Response:"));
-                        result_layout.add_child(Panel::new(
-                            ScrollView::new(TextView::new(response_str.clone()))
-                                .max_height(15)
-                        ));
-                        
-                        s.add_layer(
-                            Dialog::around(result_layout)
-                                .title("🧪 Test Results")
-                                .button("Close", |s| { s.pop_layer(); })
-                                .button("Copy Response", move |s| {
-                                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                                        let _ = clipboard.set_text(&response_str);
-                                        s.add_layer(
-                                            Dialog::info("Response copied to clipboard!")
-                                                .button("OK", |s| { s.pop_layer(); })
-                                        );
-                                    }
-                                })
-                                .max_width(100)
-                        );
+
+            cb_sink
+                .send(Box::new(move |s| {
+                    s.pop_layer(); // Remove loading dialog
+
+                    match result {
+                        Ok(response) => {
+                            let response_str = serde_json::to_string_pretty(&response)
+                                .unwrap_or_else(|_| format!("{:?}", response));
+
+                            let mut result_layout = LinearLayout::vertical();
+
+                            result_layout
+                                .add_child(TextView::new(format!("✅ Execution Successful")));
+                            result_layout.add_child(DummyView.fixed_height(1));
+
+                            result_layout.add_child(TextView::new(format!(
+                                "⏱️  Execution Time: {}ms",
+                                execution_time_ms
+                            )));
+                            result_layout
+                                .add_child(TextView::new(format!("📦 Server: {}", server_id)));
+                            result_layout
+                                .add_child(TextView::new(format!("🔧 Tool: {}", tool_name)));
+                            result_layout.add_child(DummyView.fixed_height(1));
+
+                            result_layout.add_child(TextView::new("Response:"));
+                            result_layout.add_child(Panel::new(
+                                ScrollView::new(TextView::new(response_str.clone())).max_height(15),
+                            ));
+
+                            s.add_layer(
+                                Dialog::around(result_layout)
+                                    .title("🧪 Test Results")
+                                    .button("Close", |s| {
+                                        s.pop_layer();
+                                    })
+                                    .button("Copy Response", move |s| {
+                                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                            let _ = clipboard.set_text(&response_str);
+                                            s.add_layer(
+                                                Dialog::info("Response copied to clipboard!")
+                                                    .button("OK", |s| {
+                                                        s.pop_layer();
+                                                    }),
+                                            );
+                                        }
+                                    })
+                                    .max_width(100),
+                            );
+                        }
+                        Err(e) => {
+                            let error_msg = format!(
+                                "❌ Tool execution failed:\n\n{}\n\n⏱️ Time: {}ms",
+                                e, execution_time_ms
+                            );
+                            s.add_layer(Dialog::text(error_msg).title("Test Failed").button(
+                                "OK",
+                                |s| {
+                                    s.pop_layer();
+                                },
+                            ));
+                        }
                     }
-                    Err(e) => {
-                        let error_msg = format!("❌ Tool execution failed:\n\n{}\n\n⏱️ Time: {}ms", e, execution_time_ms);
-                        s.add_layer(
-                            Dialog::text(error_msg)
-                                .title("Test Failed")
-                                .button("OK", |s| { s.pop_layer(); })
-                        );
-                    }
-                }
-            })).ok();
+                }))
+                .ok();
         }
     });
 }
@@ -1669,19 +1695,21 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
     if tool_name.is_empty() {
         return;
     }
-    
+
     let tool_info = siv.with_user_data(|state: &mut AdvancedChatState| {
         let tools = state.available_tools.read().unwrap();
-        
+
         if let Some(tool_list) = tools.get(&server_id) {
             if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
-                let description = tool.description.as_ref()
+                let description = tool
+                    .description
+                    .as_ref()
                     .map(|d| d.clone())
                     .unwrap_or_else(|| "No description available".to_string());
-                    
+
                 let schema_str = serde_json::to_string_pretty(&tool.input_schema)
                     .unwrap_or_else(|_| "{}".to_string());
-                
+
                 Some((tool.name.clone(), description, schema_str))
             } else {
                 None
@@ -1690,32 +1718,30 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
             None
         }
     });
-    
+
     if let Some(Some((name, description, schema))) = tool_info {
         let mut details_layout = LinearLayout::vertical();
-        
+
         details_layout.add_child(TextView::new(format!("Tool: {}", name)));
         details_layout.add_child(DummyView.fixed_height(1));
-        
+
         details_layout.add_child(TextView::new("Description:"));
         details_layout.add_child(Panel::new(
-            ScrollView::new(TextView::new(description))
-                .max_height(5)
+            ScrollView::new(TextView::new(description)).max_height(5),
         ));
         details_layout.add_child(DummyView.fixed_height(1));
-        
+
         details_layout.add_child(TextView::new("Input Schema:"));
         details_layout.add_child(Panel::new(
-            ScrollView::new(TextView::new(schema))
-                .max_height(10)
+            ScrollView::new(TextView::new(schema)).max_height(10),
         ));
         details_layout.add_child(DummyView.fixed_height(1));
-        
+
         details_layout.add_child(TextView::new(format!("Server: {}", server_id)));
-        
+
         let server_id_clone = server_id.clone();
         let tool_name_clone = name.clone();
-        
+
         siv.add_layer(
             Dialog::around(details_layout)
                 .title(format!("📦 Tool Details: {}", name))
@@ -1726,7 +1752,7 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
                     s.pop_layer();
                 })
                 .max_width(80)
-                .max_height(30)
+                .max_height(30),
         );
     } else {
         siv.add_layer(
@@ -1737,7 +1763,7 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
             .title("Tool Not Found")
             .button("OK", |s| {
                 s.pop_layer();
-            })
+            }),
         );
     }
 }

@@ -2,7 +2,6 @@
 ///
 /// This module provides commands to launch and manage MCP servers in isolated microVMs
 /// for secure tool execution.
-
 use anyhow::{Context, Result};
 use clap::ArgMatches;
 use std::collections::HashMap;
@@ -184,9 +183,7 @@ async fn show_microvm_status(_matches: &ArgMatches) -> Result<()> {
     let _mcp_service = McpService::new_with_debug(false);
 
     // Count Firecracker processes
-    let output = std::process::Command::new("ps")
-        .args(&["aux"])
-        .output()?;
+    let output = std::process::Command::new("ps").args(["aux"]).output()?;
 
     let process_list = String::from_utf8_lossy(&output.stdout);
     let firecracker_count = process_list

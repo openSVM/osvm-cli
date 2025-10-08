@@ -80,19 +80,19 @@ impl BlockchainIndexer {
         config: IndexingConfig,
     ) -> Result<Self> {
         use std::path::PathBuf;
-        
+
         let ledger_pb = ledger_path
             .as_ref()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("devnet-ledger"));
         let ledger_service = LedgerService::new(ledger_pb)?;
-        
+
         let snapshot_pb = snapshot_path
             .as_ref()
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("."));
         let snapshot_service = SnapshotService::new(snapshot_pb)?;
-        
+
         let decoder_registry = Arc::new(DecoderRegistry::new());
 
         Ok(Self {
@@ -150,9 +150,10 @@ impl BlockchainIndexer {
             }
 
             // Decode account if possible
-            let decoded = self.decoder_registry.decode(&account.owner, &account.data).unwrap_or(
-                crate::services::account_decoders::DecodedAccount::Unknown
-            );
+            let decoded = self
+                .decoder_registry
+                .decode(&account.owner, &account.data)
+                .unwrap_or(crate::services::account_decoders::DecodedAccount::Unknown);
             let decoded_json = serde_json::to_string(&format_decoded_account(&decoded))?;
 
             // Calculate data hash
@@ -192,7 +193,8 @@ impl BlockchainIndexer {
             // SECURITY: Sanitize program_type to prevent SQL injection through debug output
             let safe_program_type = Self::sanitize_identifier(&program_type);
 
-            let pubkey_str = account.pubkey
+            let pubkey_str = account
+                .pubkey
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| entry.file_name().to_string_lossy().to_string());
 
@@ -226,12 +228,18 @@ impl BlockchainIndexer {
             self.insert_account_batch(&batch_values).await?;
         }
 
-        info!("Successfully indexed {} accounts from snapshot", indexed_count);
+        info!(
+            "Successfully indexed {} accounts from snapshot",
+            indexed_count
+        );
         Ok(indexed_count)
     }
 
     /// Read account data from snapshot file
-    fn read_account_from_file(&self, path: &std::path::Path) -> Result<super::snapshot_service::AccountInfo> {
+    fn read_account_from_file(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<super::snapshot_service::AccountInfo> {
         use std::fs::File;
         use std::io::Read;
 
@@ -295,7 +303,9 @@ impl BlockchainIndexer {
             batch_values.join(", ")
         );
 
-        self.clickhouse.execute_query(&sql).await
+        self.clickhouse
+            .execute_query(&sql)
+            .await
             .context("Failed to insert account batch")?;
 
         debug!("Inserted batch of {} accounts", batch_values.len());
@@ -304,34 +314,38 @@ impl BlockchainIndexer {
 
     /// Sync transaction data from ledger to ClickHouse
     pub async fn sync_transactions(&self, slot_range: Range<u64>) -> Result<usize> {
-        info!("Syncing transactions from ledger for slot range {:?}", slot_range);
-        
+        info!(
+            "Syncing transactions from ledger for slot range {:?}",
+            slot_range
+        );
+
         if !self.ledger_service.has_transaction_history() {
             return Err(anyhow!("Ledger does not have transaction history. Start validator with --enable-rpc-transaction-history"));
         }
-        
+
         // Stream transactions in the slot range
-        let transactions = self.ledger_service
+        let transactions = self
+            .ledger_service
             .stream_transactions_in_range(slot_range.start, slot_range.end, None)
             .await?;
-        
+
         info!("Found {} transactions to index", transactions.len());
-        
+
         let mut batch_values = Vec::new();
         let mut indexed_count = 0;
-        
+
         for tx in transactions {
             // Apply filters if configured
             if self.should_filter_transaction(&tx) {
                 continue;
             }
-            
+
             // Build batch value for ClickHouse insert
             let accounts_str = self.format_transaction_accounts(&tx);
             let program_ids_str = self.format_transaction_programs(&tx);
             let instruction_data_str = self.format_instruction_data(&tx);
             let logs_str = self.format_transaction_logs(&tx);
-            
+
             batch_values.push(format!(
                 "({}, '{}', {}, {}, {}, '{}', '{}', '{}', '{}', {})",
                 tx.slot,
@@ -345,9 +359,9 @@ impl BlockchainIndexer {
                 Self::escape_string(&logs_str),
                 tx.instructions.len()
             ));
-            
+
             indexed_count += 1;
-            
+
             // Batch insert every 1000 transactions
             if batch_values.len() >= 1000 {
                 self.insert_transaction_batch(&batch_values).await?;
@@ -355,13 +369,16 @@ impl BlockchainIndexer {
                 info!("Indexed {} transactions so far...", indexed_count);
             }
         }
-        
+
         // Insert remaining transactions
         if !batch_values.is_empty() {
             self.insert_transaction_batch(&batch_values).await?;
         }
-        
-        info!("Successfully indexed {} transactions from ledger", indexed_count);
+
+        info!(
+            "Successfully indexed {} transactions from ledger",
+            indexed_count
+        );
         Ok(indexed_count)
     }
 
@@ -378,7 +395,9 @@ impl BlockchainIndexer {
             batch_values.join(", ")
         );
 
-        self.clickhouse.execute_query(&sql).await
+        self.clickhouse
+            .execute_query(&sql)
+            .await
             .context("Failed to insert transaction batch")?;
 
         debug!("Inserted batch of {} transactions", batch_values.len());
@@ -390,58 +409,66 @@ impl BlockchainIndexer {
         // Filter by program IDs if configured
         if !self.config.program_filters.is_empty() {
             let tx_has_program = tx.instructions.iter().any(|ix| {
-                self.config.program_filters.iter().any(|filter_program| {
-                    ix.program.contains(&filter_program.to_string())
-                })
+                self.config
+                    .program_filters
+                    .iter()
+                    .any(|filter_program| ix.program.contains(&filter_program.to_string()))
             });
             if !tx_has_program {
                 return true; // Filter out
             }
         }
-        
+
         false // Don't filter
     }
-    
+
     /// Format transaction accounts as JSON array string
     fn format_transaction_accounts(&self, tx: &super::ledger_service::TransactionInfo) -> String {
         if tx.accounts.is_empty() {
             return "[]".to_string();
         }
-        
-        let accounts: Vec<String> = tx.accounts
+
+        let accounts: Vec<String> = tx
+            .accounts
             .iter()
             .map(|acc| format!("\"{}\"", acc))
             .collect();
         format!("[{}]", accounts.join(","))
     }
-    
+
     /// Format transaction program IDs as JSON array string
     fn format_transaction_programs(&self, tx: &super::ledger_service::TransactionInfo) -> String {
-        let programs: Vec<String> = tx.instructions
+        let programs: Vec<String> = tx
+            .instructions
             .iter()
             .map(|ix| format!("\"{}\"", ix.program))
             .collect();
         format!("[{}]", programs.join(","))
     }
-    
+
     /// Format instruction data as JSON array string
     fn format_instruction_data(&self, tx: &super::ledger_service::TransactionInfo) -> String {
-        let instructions: Vec<String> = tx.instructions
+        let instructions: Vec<String> = tx
+            .instructions
             .iter()
             .map(|ix| {
-                format!("{{\"program\":\"{}\",\"type\":\"{}\"}}", ix.program, ix.instruction_type)
+                format!(
+                    "{{\"program\":\"{}\",\"type\":\"{}\"}}",
+                    ix.program, ix.instruction_type
+                )
             })
             .collect();
         format!("[{}]", instructions.join(","))
     }
-    
+
     /// Format transaction logs as JSON array string
     fn format_transaction_logs(&self, tx: &super::ledger_service::TransactionInfo) -> String {
         if tx.logs.is_empty() {
             return "[]".to_string();
         }
-        
-        let logs: Vec<String> = tx.logs
+
+        let logs: Vec<String> = tx
+            .logs
             .iter()
             .map(|log| format!("\"{}\"", Self::escape_string(log)))
             .collect();
@@ -452,17 +479,14 @@ impl BlockchainIndexer {
     #[allow(dead_code)]
     fn should_filter_account(&self, pubkey: &Pubkey, owner: &Pubkey, data: &[u8]) -> bool {
         // Filter by specific accounts
-        if !self.config.account_filters.is_empty() {
-            if !self.config.account_filters.contains(pubkey) {
-                return true;
-            }
+        if !self.config.account_filters.is_empty() && !self.config.account_filters.contains(pubkey)
+        {
+            return true;
         }
 
         // Filter by program/owner
-        if !self.config.program_filters.is_empty() {
-            if !self.config.program_filters.contains(owner) {
-                return true;
-            }
+        if !self.config.program_filters.is_empty() && !self.config.program_filters.contains(owner) {
+            return true;
         }
 
         // Filter by data patterns
@@ -498,8 +522,7 @@ impl BlockchainIndexer {
     /// Escape SQL string values
     #[allow(dead_code)]
     fn escape_string(s: &str) -> String {
-        s.replace('\'', "''")
-            .replace('\\', "\\\\")
+        s.replace('\'', "''").replace('\\', "\\\\")
     }
 
     /// Sanitize identifier to prevent SQL injection
@@ -511,7 +534,10 @@ impl BlockchainIndexer {
     }
 
     /// Validate account file path to prevent path traversal attacks
-    fn validate_account_file_path(file_path: &std::path::Path, accounts_dir: &std::path::Path) -> Result<()> {
+    fn validate_account_file_path(
+        file_path: &std::path::Path,
+        accounts_dir: &std::path::Path,
+    ) -> Result<()> {
         use std::fs;
 
         // Check if file exists
@@ -520,8 +546,7 @@ impl BlockchainIndexer {
         }
 
         // Get metadata using symlink_metadata to detect symlinks
-        let metadata = fs::symlink_metadata(file_path)
-            .context("Failed to get file metadata")?;
+        let metadata = fs::symlink_metadata(file_path).context("Failed to get file metadata")?;
 
         // Reject symlinks
         if metadata.file_type().is_symlink() {
@@ -534,9 +559,11 @@ impl BlockchainIndexer {
         }
 
         // Canonicalize both paths to resolve any .. or . components
-        let canonical_file = file_path.canonicalize()
+        let canonical_file = file_path
+            .canonicalize()
             .context("Failed to canonicalize file path")?;
-        let canonical_dir = accounts_dir.canonicalize()
+        let canonical_dir = accounts_dir
+            .canonicalize()
             .context("Failed to canonicalize accounts directory")?;
 
         // Verify file is within accounts directory
@@ -628,15 +655,31 @@ mod tests {
     fn test_data_pattern_matching() {
         let data = vec![0x01, 0x02, 0x03, 0x04, 0x05];
         let pattern = vec![0x02, 0x03];
-        
-        assert!(BlockchainIndexer::data_matches_pattern(&data, &pattern, None));
-        assert!(BlockchainIndexer::data_matches_pattern(&data, &pattern, Some(1)));
-        assert!(!BlockchainIndexer::data_matches_pattern(&data, &pattern, Some(0)));
+
+        assert!(BlockchainIndexer::data_matches_pattern(
+            &data, &pattern, None
+        ));
+        assert!(BlockchainIndexer::data_matches_pattern(
+            &data,
+            &pattern,
+            Some(1)
+        ));
+        assert!(!BlockchainIndexer::data_matches_pattern(
+            &data,
+            &pattern,
+            Some(0)
+        ));
     }
 
     #[test]
     fn test_escape_string() {
-        assert_eq!(BlockchainIndexer::escape_string("test'value"), "test''value");
-        assert_eq!(BlockchainIndexer::escape_string("path\\to\\file"), "path\\\\to\\\\file");
+        assert_eq!(
+            BlockchainIndexer::escape_string("test'value"),
+            "test''value"
+        );
+        assert_eq!(
+            BlockchainIndexer::escape_string("path\\to\\file"),
+            "path\\\\to\\\\file"
+        );
     }
 }

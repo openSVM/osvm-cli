@@ -17,9 +17,11 @@ fn test_plan_command_help() {
         .expect("Failed to execute plan --help");
 
     assert!(output.status.success(), "plan --help should succeed");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("plan") || stdout.contains("Plan"),
-        "Help should mention planning");
+    let _stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("plan") || stdout.contains("Plan"),
+        "Help should mention planning"
+    );
 }
 
 #[test]
@@ -30,7 +32,7 @@ fn test_plan_with_simple_query() {
         .output()
         .expect("Failed to run plan command");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Should attempt to create a plan without panicking
@@ -38,10 +40,10 @@ fn test_plan_with_simple_query() {
 
     // Should either succeed or provide helpful error about configuration
     assert!(
-        output.status.success() ||
-        stderr.contains("API") ||
-        stderr.contains("key") ||
-        stderr.contains("MCP"),
+        output.status.success()
+            || stderr.contains("API")
+            || stderr.contains("key")
+            || stderr.contains("MCP"),
         "Should execute or provide configuration guidance"
     );
 }
@@ -57,27 +59,25 @@ fn test_plan_validates_input() {
 
     // Should handle empty input gracefully
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.contains("panic"), "Should handle empty input without panic");
+    assert!(
+        !stderr.contains("panic"),
+        "Should handle empty input without panic"
+    );
 }
 
 #[test]
 fn test_plan_command_with_multiple_words() {
     let output = Command::new("cargo")
-        .args([
-            "run",
-            "--",
-            "plan",
-            "show",
-            "me",
-            "recent",
-            "transactions",
-        ])
+        .args(["run", "--", "plan", "show", "me", "recent", "transactions"])
         .env("CI", "1")
         .output()
         .expect("Failed to run plan command");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!stderr.contains("panic"), "Multi-word plan should not panic");
+    assert!(
+        !stderr.contains("panic"),
+        "Multi-word plan should not panic"
+    );
 }
 
 #[test]
@@ -90,19 +90,22 @@ fn test_plan_with_blockchain_query() {
         .output()
         .expect("Failed to run blockchain query");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Should process the query
-    assert!(!stderr.contains("panic"), "Blockchain query should not panic");
+    assert!(
+        !stderr.contains("panic"),
+        "Blockchain query should not panic"
+    );
 
     // May fail due to missing MCP/API config, but should handle gracefully
     assert!(
-        output.status.success() ||
-        stderr.contains("MCP") ||
-        stderr.contains("configured") ||
-        stdout.contains("plan") ||
-        stdout.contains("Plan"),
+        output.status.success()
+            || stderr.contains("MCP")
+            || stderr.contains("configured")
+            || stdout.contains("plan")
+            || stdout.contains("Plan"),
         "Should show plan or configuration message"
     );
 }
@@ -127,9 +130,7 @@ mod planner_logic_tests {
         // Should handle network errors gracefully
         assert!(!stderr.contains("panic"));
         assert!(
-            stderr.contains("failed") ||
-            stderr.contains("error") ||
-            stderr.contains("could not"),
+            stderr.contains("failed") || stderr.contains("error") || stderr.contains("could not"),
             "Should report network error clearly"
         );
     }
@@ -156,7 +157,7 @@ trait CommandExt {
 }
 
 impl CommandExt for Command {
-    fn timeout(&mut self, duration: Duration) -> &mut Self {
+    fn timeout(&mut self, _duration: Duration) -> &mut Self {
         // Simplified timeout - production code should use proper timeout mechanism
         // This is a placeholder for the test infrastructure
         self
@@ -175,7 +176,7 @@ mod tool_selection_tests {
             .output()
             .expect("Failed to run balance query");
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let _stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         // Should attempt to plan for balance query
@@ -204,7 +205,7 @@ mod tool_selection_tests {
             .expect("Failed to run with debug flag");
 
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let _stdout = String::from_utf8_lossy(&output.stdout);
 
         // Debug mode should provide more information
         assert!(!stderr.contains("panic"));

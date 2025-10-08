@@ -3,8 +3,8 @@
 
 use anyhow::Result;
 use osvm::utils::crypto_security::{
-    KeyManager, EncryptionService, SignatureValidator, SecureRandom,
-    KeyPair, EncryptedData, Signature, HashingService,
+    EncryptedData, EncryptionService, HashingService, KeyManager, KeyPair, SecureRandom, Signature,
+    SignatureValidator,
 };
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -166,7 +166,9 @@ mod key_management_tests {
         let keypair = key_manager.generate_keypair()?;
         let backup_path = temp_dir.path().join("backup");
 
-        key_manager.backup_keys(&[keypair.clone()], &backup_path).await?;
+        key_manager
+            .backup_keys(&[keypair.clone()], &backup_path)
+            .await?;
 
         // Verify backup exists
         assert!(backup_path.exists());
@@ -371,7 +373,8 @@ mod signature_tests {
         let keypair = key_manager.generate_keypair()?;
         let messages = vec![b"msg1".to_vec(), b"msg2".to_vec(), b"msg3".to_vec()];
 
-        let signatures: Vec<_> = messages.iter()
+        let signatures: Vec<_> = messages
+            .iter()
             .map(|msg| validator.sign(msg, &keypair.private_key).unwrap())
             .collect();
 
@@ -423,12 +426,7 @@ mod signature_tests {
         let signatures = vec![sig1, sig2, sig3];
 
         let threshold = 2; // 2-of-3 multisig
-        let is_valid = validator.verify_multisig(
-            message,
-            &signatures,
-            &public_keys,
-            threshold,
-        )?;
+        let is_valid = validator.verify_multisig(message, &signatures, &public_keys, threshold)?;
 
         assert!(is_valid);
 
@@ -663,15 +661,11 @@ mod integration_tests {
         let bob_keypair = key_manager.generate_keypair()?;
 
         // Derive shared secret
-        let alice_shared = key_manager.ecdh_key_exchange(
-            &alice_keypair.private_key,
-            &bob_keypair.public_key,
-        )?;
+        let alice_shared =
+            key_manager.ecdh_key_exchange(&alice_keypair.private_key, &bob_keypair.public_key)?;
 
-        let bob_shared = key_manager.ecdh_key_exchange(
-            &bob_keypair.private_key,
-            &alice_keypair.public_key,
-        )?;
+        let bob_shared =
+            key_manager.ecdh_key_exchange(&bob_keypair.private_key, &alice_keypair.public_key)?;
 
         // Both should derive the same shared secret
         assert_eq!(alice_shared, bob_shared);

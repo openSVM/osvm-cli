@@ -233,11 +233,7 @@ mod path_traversal_tests {
     #[test]
     fn test_symlink_bomb_pattern() {
         // Patterns that could create symlink loops
-        let patterns = vec![
-            "a/../a/../a/../a",
-            "./././././.",
-            "a/./b/../a/./b/../",
-        ];
+        let patterns = vec!["a/../a/../a/../a", "./././././.", "a/./b/../a/./b/../"];
 
         for pattern in patterns {
             let path = Path::new(pattern);
@@ -307,11 +303,13 @@ mod injection_attack_tests {
 
         for attack in cmd_attacks {
             // Should detect shell metacharacters
-            assert!(attack.contains(';') ||
-                    attack.contains('|') ||
-                    attack.contains('&') ||
-                    attack.contains('`') ||
-                    attack.contains('$'));
+            assert!(
+                attack.contains(';')
+                    || attack.contains('|')
+                    || attack.contains('&')
+                    || attack.contains('`')
+                    || attack.contains('$')
+            );
         }
     }
 
@@ -331,11 +329,7 @@ mod injection_attack_tests {
 
     #[test]
     fn test_ldap_injection_patterns() {
-        let ldap_attacks = vec![
-            "*)(uid=*",
-            "admin)(&(password=*))",
-            "*",
-        ];
+        let ldap_attacks = vec!["*)(uid=*", "admin)(&(password=*))", "*"];
 
         for attack in ldap_attacks {
             assert!(attack.contains('*') || attack.contains(')'));
@@ -428,12 +422,7 @@ mod format_string_attacks {
 
     #[test]
     fn test_printf_style_attacks() {
-        let attacks = vec![
-            "%x%x%x%x",
-            "%n",
-            "%s",
-            "%.1000000s",
-        ];
+        let attacks = vec!["%x%x%x%x", "%n", "%s", "%.1000000s"];
 
         for attack in attacks {
             // Should treat as literal string

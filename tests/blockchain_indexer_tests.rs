@@ -1,19 +1,18 @@
 //! Comprehensive tests for blockchain indexing and transaction processing
 
 use anyhow::Result;
-use osvm::services::{
-    blockchain_indexer::{
-        BlockchainIndexer, IndexerConfig, Block, Transaction,
-        IndexingStats, IndexingMode,
-    },
-    account_decoders::{AccountDecoder, TokenAccount, StakeAccount, VoteAccount},
-    transaction_decoders::{TransactionDecoder, InstructionData, TransferInstruction},
-};
-use std::path::PathBuf;
-use tempfile::TempDir;
 use mockito::Server;
+use osvm::services::{
+    account_decoders::{AccountDecoder, StakeAccount, TokenAccount, VoteAccount},
+    blockchain_indexer::{
+        Block, BlockchainIndexer, IndexerConfig, IndexingMode, IndexingStats, Transaction,
+    },
+    transaction_decoders::{InstructionData, TransactionDecoder, TransferInstruction},
+};
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tempfile::TempDir;
 
 #[cfg(test)]
 mod indexer_core_tests {
@@ -47,7 +46,8 @@ mod indexer_core_tests {
         let mut server = Server::new_async().await;
 
         // Mock getBlock response
-        let block_mock = server.mock("POST", "/")
+        let block_mock = server
+            .mock("POST", "/")
             .match_body(mockito::Matcher::Json(json!({
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -55,32 +55,35 @@ mod indexer_core_tests {
                 "params": [100000000]
             })))
             .with_status(200)
-            .with_body(json!({
-                "jsonrpc": "2.0",
-                "result": {
-                    "blockHeight": 100000000,
-                    "blockTime": 1234567890,
-                    "blockhash": "block_hash_123",
-                    "parentSlot": 99999999,
-                    "transactions": [
-                        {
-                            "transaction": {
-                                "signatures": ["sig1"],
-                                "message": {
-                                    "accountKeys": ["key1", "key2"],
-                                    "recentBlockhash": "recent_hash",
-                                    "instructions": []
+            .with_body(
+                json!({
+                    "jsonrpc": "2.0",
+                    "result": {
+                        "blockHeight": 100000000,
+                        "blockTime": 1234567890,
+                        "blockhash": "block_hash_123",
+                        "parentSlot": 99999999,
+                        "transactions": [
+                            {
+                                "transaction": {
+                                    "signatures": ["sig1"],
+                                    "message": {
+                                        "accountKeys": ["key1", "key2"],
+                                        "recentBlockhash": "recent_hash",
+                                        "instructions": []
+                                    }
+                                },
+                                "meta": {
+                                    "fee": 5000,
+                                    "err": null
                                 }
-                            },
-                            "meta": {
-                                "fee": 5000,
-                                "err": null
                             }
-                        }
-                    ]
-                },
-                "id": 1
-            }).to_string())
+                        ]
+                    },
+                    "id": 1
+                })
+                .to_string(),
+            )
             .create_async()
             .await;
 
@@ -345,7 +348,7 @@ mod transaction_decoder_tests {
         let decoder = TransactionDecoder::new();
 
         let program_ids = vec![
-            "11111111111111111111111111111111", // System Program
+            "11111111111111111111111111111111",            // System Program
             "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
             "Vote111111111111111111111111111111111111111", // Vote Program
         ];
@@ -489,7 +492,8 @@ mod error_handling_tests {
         let mut server = Server::new_async().await;
 
         // Mock failing RPC
-        let _fail_mock = server.mock("POST", "/")
+        let _fail_mock = server
+            .mock("POST", "/")
             .with_status(500)
             .with_body("Internal Server Error")
             .create_async()

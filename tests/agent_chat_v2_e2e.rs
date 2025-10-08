@@ -14,9 +14,7 @@ use tokio::time::timeout;
 use uuid::Uuid;
 
 // Import our refactored modules
-use osvm::utils::agent_chat_v2::{
-    AdvancedChatState, AgentCommand, AgentState, ChatMessage, ChatSession,
-};
+use osvm::utils::agent_chat_v2::{AdvancedChatState, AgentCommand, AgentState, ChatMessage};
 
 /// Mock AI Service for testing
 struct MockAiService {
