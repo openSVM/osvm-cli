@@ -1,0 +1,278 @@
+<div class="doc-content">
+    <h1>🧠 OVSM Language</h1>
+    <p class="subtitle">Open Versatile Seeker Mind - AI Agent Research Planning Language</p>
+
+    <div class="info-box">
+        <strong>OVSM</strong> (pronounced "OH-vism") is a domain-specific language for expressing AI agent research plans with conditional branching, parallel execution, and adaptive learning.
+    </div>
+
+    <h2>📋 Overview</h2>
+    <p>OVSM enables AI agents to articulate sophisticated investigation strategies for blockchain research, statistical analysis, and knowledge discovery.</p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h3>🔍 Research-Optimized</h3>
+            <p>Built for multi-step investigation workflows with conditional branching and decision points.</p>
+        </div>
+        <div class="feature-card">
+            <h3>🤖 Multi-Agent</h3>
+            <p>Native support for agent delegation, coordination, and result merging.</p>
+        </div>
+        <div class="feature-card">
+            <h3>📊 Statistical</h3>
+            <p>Built-in hypothesis testing, causal inference, and confidence scoring.</p>
+        </div>
+        <div class="feature-card">
+            <h3>🧠 Adaptive</h3>
+            <p>Meta-learning from past queries to optimize future research strategies.</p>
+        </div>
+    </div>
+
+    <h2>💡 Quick Example</h2>
+    <pre class="code-block"><code>## Q: "What is the average transaction fee on Solana?"
+
+**Expected Plan:**
+
+[TIME: ~15s] [COST: free] [CONFIDENCE: 95%]
+
+**Available Tools:**
+From Standard Library: getSlot, getBlock, MAP, MEAN, MEDIAN
+
+**Main Branch:**
+$current_slot = getSlot()
+$blocks = []
+
+FOR $i IN 0..10:
+  $block = getBlock(slot: $current_slot - $i)
+  $blocks = APPEND(array: $blocks, item: $block)
+
+$fees = MAP($blocks, b => b.transactions).flat().map(tx => tx.fee)
+$mean_fee = MEAN(data: $fees)
+
+DECISION: Check distribution
+  BRANCH A (high variance):
+    $result = MEDIAN(data: $fees)
+  BRANCH B (normal):
+    $result = $mean_fee
+
+**Action:**
+RETURN {average_fee: $result, confidence: 95}</code></pre>
+
+    <h2>📚 Documentation</h2>
+    <ul class="doc-links">
+        <li><a href="ovsm/OVSM_README.md" target="_blank">📘 OVSM Overview</a> - Start here! Introduction and quick examples</li>
+        <li><a href="ovsm/ovsm-spec.md" target="_blank">📕 Core Specification</a> - Complete language reference (2,811 lines, 104 tools)</li>
+        <li><a href="ovsm/ovsm-agents.md" target="_blank">📗 Agent Extensions</a> - Multi-agent features (1,908 lines, 103 tools)</li>
+        <li><a href="ovsm/COMPLETE_TOOL_INDEX.md" target="_blank">📑 Tool Index</a> - All 207 tools categorized</li>
+        <li><a href="ovsm/PLANNING_FORMAT.md" target="_blank">📋 Planning Guide</a> - Methodology and best practices</li>
+        <li><a href="ovsm/INDEX.md" target="_blank">🗂️ Full Documentation Index</a> - Complete navigation</li>
+    </ul>
+
+    <h2>🎯 Key Features</h2>
+
+    <h3>Core Language (104 tools)</h3>
+    <ul>
+        <li><strong>Variables:</strong> <code>$variable_name</code> (shell-style)</li>
+        <li><strong>Constants:</strong> <code>CONST NAME = value</code> (immutable)</li>
+        <li><strong>Control Flow:</strong> IF/ELSE, WHILE, FOR, LOOP EVERY, DECISION/BRANCH</li>
+        <li><strong>Error Handling:</strong> TRY/CATCH with FATAL/RECOVERABLE/WARNING types</li>
+        <li><strong>Parallel Execution:</strong> PARALLEL blocks, WAIT_ALL, WAIT_ANY, RACE</li>
+        <li><strong>Data Processing:</strong> MAP, FILTER, REDUCE, 27 collection operations</li>
+        <li><strong>Statistics:</strong> MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE</li>
+        <li><strong>Solana Tools:</strong> 18 RPC methods, 13 utility functions</li>
+    </ul>
+
+    <h3>Agent Extensions (103 tools, 15 features)</h3>
+    <div class="two-column">
+        <div>
+            <ul>
+                <li>🤖 Agent Delegation</li>
+                <li>📊 Research State Management</li>
+                <li>🌐 Knowledge Graph Building</li>
+                <li>🔬 Hypothesis Testing</li>
+                <li>🔄 Progressive Refinement</li>
+                <li>✅ Cross-Validation</li>
+                <li>🧠 Contextual Memory</li>
+                <li>🎯 Confidence Scoring</li>
+            </ul>
+        </div>
+        <div>
+            <ul>
+                <li>📚 Literature Review</li>
+                <li>⚡ Dynamic Query Planning</li>
+                <li>🔗 Causal Inference</li>
+                <li>🎨 Multi-Modal Fusion</li>
+                <li>💬 Explanation Generation</li>
+                <li>⏰ Real-Time Monitoring</li>
+                <li>📈 Meta-Learning</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>📖 Language Stats</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">207</div>
+            <div class="stat-label">Total Tools</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">19</div>
+            <div class="stat-label">Constants</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">25</div>
+            <div class="stat-label">Keywords</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">.ovsm</div>
+            <div class="stat-label">File Extension</div>
+        </div>
+    </div>
+
+    <h2>🚀 Tool Categories</h2>
+    <table class="tool-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Tools</th>
+                <th>Examples</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Solana RPC</strong></td>
+                <td>18</td>
+                <td>getSlot, getBlock, getTransaction</td>
+            </tr>
+            <tr>
+                <td><strong>Data Processing</strong></td>
+                <td>27</td>
+                <td>MAP, FILTER, REDUCE, SUM, AVG</td>
+            </tr>
+            <tr>
+                <td><strong>Statistical</strong></td>
+                <td>14</td>
+                <td>MEAN, T_TEST, CORRELATE</td>
+            </tr>
+            <tr>
+                <td><strong>Math</strong></td>
+                <td>8</td>
+                <td>ABS, SQRT, POW, ROUND</td>
+            </tr>
+            <tr>
+                <td><strong>Solana Utilities</strong></td>
+                <td>13</td>
+                <td>derivePDA, parseU64, deriveATA</td>
+            </tr>
+            <tr>
+                <td><strong>Agent Coordination</strong></td>
+                <td>103</td>
+                <td>SPAWN_AGENT, MERGE_RESULTS</td>
+            </tr>
+            <tr>
+                <td><strong>Utilities</strong></td>
+                <td>24</td>
+                <td>NOW, LOG, ERROR, INPUT</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h2>🎓 Learning Path</h2>
+    <div class="learning-path">
+        <div class="step">
+            <div class="step-number">1</div>
+            <div class="step-content">
+                <h4>Read OVSM Overview</h4>
+                <p>5 minutes - Understand philosophy and capabilities</p>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">2</div>
+            <div class="step-content">
+                <h4>Study Core Specification</h4>
+                <p>30 minutes - Learn syntax, operators, control flow</p>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">3</div>
+            <div class="step-content">
+                <h4>Practice with Examples</h4>
+                <p>20 minutes - Work through 4 executable examples</p>
+            </div>
+        </div>
+        <div class="step">
+            <div class="step-number">4</div>
+            <div class="step-content">
+                <h4>Explore Agent Extensions</h4>
+                <p>2-3 hours - Master all 15 advanced features</p>
+            </div>
+        </div>
+    </div>
+
+    <h2>🌟 Use Cases</h2>
+    <div class="use-cases">
+        <div class="use-case-section">
+            <h3>✅ Perfect For:</h3>
+            <ul>
+                <li>Blockchain research and investigation</li>
+                <li>Multi-step data analysis workflows</li>
+                <li>Statistical hypothesis testing</li>
+                <li>Cross-validation across data sources</li>
+                <li>Automated literature review</li>
+                <li>Real-time monitoring with alerts</li>
+                <li>Adaptive query optimization</li>
+            </ul>
+        </div>
+        <div class="use-case-section">
+            <h3>❌ Not Ideal For:</h3>
+            <ul>
+                <li>Real-time systems (&lt;1ms requirements)</li>
+                <li>Direct hardware control</li>
+                <li>Simple single-step queries</li>
+                <li>Non-research tasks</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>💻 Example: Multi-Agent Research</h2>
+    <pre class="code-block"><code>PARALLEL_AGENTS {
+  $price_analysis = SPAWN_AGENT(
+    agent_type: "price_analyzer",
+    task: "Track price movements",
+    context: {token: $token_address}
+  )
+
+  $volume_analysis = SPAWN_AGENT(
+    agent_type: "volume_analyzer",
+    task: "Analyze trading volume",
+    context: {token: $token_address}
+  )
+
+  $sentiment = SPAWN_AGENT(
+    agent_type: "sentiment_analyzer",
+    task: "Analyze social sentiment",
+    context: {token_name: $token_name}
+  )
+}
+WAIT_ALL
+
+$report = MERGE_RESULTS([$price_analysis, $volume_analysis, $sentiment])</code></pre>
+
+    <h2>🔗 Quick Links</h2>
+    <div class="button-group">
+        <a href="ovsm/OVSM_README.md" class="btn btn-primary" target="_blank">Get Started with OVSM</a>
+        <a href="ovsm/ovsm-spec.md" class="btn btn-secondary" target="_blank">Read Full Spec</a>
+        <a href="ovsm/COMPLETE_TOOL_INDEX.md" class="btn btn-secondary" target="_blank">Tool Reference</a>
+    </div>
+
+    <div class="info-box" style="margin-top: 2rem;">
+        <p><strong>Version:</strong> v1.1 (Stable)</p>
+        <p><strong>Status:</strong> Production-Ready ✅</p>
+        <p><strong>License:</strong> MIT</p>
+        <p><strong>Lines of Spec:</strong> 4,719</p>
+    </div>
+
+    <blockquote style="margin-top: 2rem; font-style: italic; border-left: 3px solid var(--accent-color); padding-left: 1rem;">
+        "Plan like you think, seek like a mind" - OVSM Language Philosophy
+    </blockquote>
+</div>

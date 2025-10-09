@@ -1,0 +1,126 @@
+<!-- MCP Integration Page -->
+<div class="page-header">
+    <div class="command-line">
+        <span class="prompt">user@osvm:~$</span>
+        <span class="command typing" data-speed="80">osvm mcp --help</span>
+    </div>
+</div>
+
+<!-- ASCII Art Header -->
+<pre class="ascii-art animate-on-scroll" data-animation="fadeIn">
+╔═══════════════════════════════════════════════════╗
+║     Model Context Protocol Integration           ║
+╟───────────────────────────────────────────────────╢
+║   ███╗   ███╗ ██████╗██████╗                     ║
+║   ████╗ ████║██╔════╝██╔══██╗                    ║
+║   ██╔████╔██║██║     ██████╔╝                    ║
+║   ██║╚██╔╝██║██║     ██╔═══╝                     ║
+║   ██║ ╚═╝ ██║╚██████╗██║                         ║
+║   ╚═╝     ╚═╝ ╚═════╝╚═╝                         ║
+╚═══════════════════════════════════════════════════╝
+</pre>
+
+<section class="content animate-on-scroll" data-animation="slideUp">
+    <h1>MCP Server Management</h1>
+    <p class="subtitle">Connect and manage Model Context Protocol servers</p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h3>🔌 Server Configuration</h3>
+            <pre class="code-block">
+<span class="comment"># Add a new MCP server</span>
+$ osvm mcp add my-server http://localhost:3000
+
+<span class="comment"># Add from GitHub</span>
+$ osvm mcp add-github solana-mcp \
+  https://github.com/opensvm/solana-mcp
+
+<span class="comment"># Quick Solana setup</span>
+$ osvm mcp setup</pre>
+        </div>
+
+        <div class="feature-card">
+            <h3>🛠️ Tool Management</h3>
+            <pre class="code-block">
+<span class="comment"># List available tools</span>
+$ osvm mcp tools solana-mcp
+
+<span class="success">Available tools:</span>
+• get_balance
+• get_recent_transactions
+• deploy_program
+• stake_sol</pre>
+        </div>
+
+        <div class="feature-card">
+            <h3>⚡ Tool Execution</h3>
+            <pre class="code-block">
+<span class="comment"># Execute MCP tool</span>
+$ osvm mcp call solana-mcp get_balance \
+  --address "Your...Address"
+
+<span class="info">Executing tool...</span>
+<span class="success">✓ Balance: 100.5 SOL</span></pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Server Management Commands</h2>
+        <pre class="terminal">
+<span class="comment"># List configured servers</span>
+$ osvm mcp list
+┌────────────┬─────────┬─────────────────────┬─────────┐
+│ Name       │ Status  │ URL                 │ Type    │
+├────────────┼─────────┼─────────────────────┼─────────┤
+│ solana-mcp │ <span class="success">Enabled</span> │ http://localhost:8080│ HTTP    │
+│ osvm-mcp   │ <span class="success">Enabled</span> │ stdio://./osvm-mcp  │ STDIO   │
+│ custom-mcp │ <span class="warning">Disabled</span>│ ws://10.0.0.1:9090 │ WebSocket│
+└────────────┴─────────┴─────────────────────┴─────────┘
+
+<span class="comment"># Enable/disable servers</span>
+$ osvm mcp enable solana-mcp
+$ osvm mcp disable custom-mcp
+
+<span class="comment"># Test server connectivity</span>
+$ osvm mcp test solana-mcp
+<span class="success">✓ Server responding</span>
+<span class="success">✓ Authentication successful</span>
+<span class="success">✓ 15 tools available</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Authentication Methods</h2>
+        <pre class="terminal">
+<span class="comment"># Bearer token authentication</span>
+$ osvm mcp add api-server https://api.example.com \
+  --auth bearer --token "YOUR_TOKEN"
+
+<span class="comment"># Basic authentication</span>
+$ osvm mcp add secure-server https://secure.example.com \
+  --auth basic --username user --password pass
+
+<span class="comment"># API key authentication</span>
+$ osvm mcp add key-server https://key.example.com \
+  --auth api_key --token "API_KEY_HERE"</pre>
+    </div>
+
+    <div class="section">
+        <h2>Integration with AI Chat</h2>
+        <pre class="terminal">
+<span class="comment"># MCP servers are automatically available in chat</span>
+$ osvm chat --advanced
+
+> "Check my wallet balance"
+<span class="info">🤖 Planning: Using solana-mcp.get_balance tool...</span>
+<span class="success">✓ Your balance is 250.75 SOL</span>
+
+> "Deploy my program to devnet"
+<span class="info">🤖 Planning: Using solana-mcp.deploy_program tool...</span>
+<span class="info">📦 Compiling program...</span>
+<span class="success">✓ Program deployed: 7xKX...9mPQ</span></pre>
+    </div>
+</section>
+
+<div class="navigation-hint animate-on-scroll" data-animation="fadeIn">
+    <p>Press <kbd>←</kbd> <kbd>→</kbd> to switch sections • <kbd>SPACE</kbd> to scroll</p>
+</div>

@@ -1,11 +1,20 @@
+use crate::services::ephemeral_microvm::{ChatVmOrchestrator, EphemeralVmManager};
+use crate::services::isolation_config::{IsolationConfig, ServerConfig};
+use crate::services::microvm_launcher::{
+    McpServerMicroVmConfig, McpServerMicroVmHandle, MicroVmLauncher, MountPoint,
+};
+use crate::services::unikernel_runtime::{UnikernelConfig, UnikernelRuntime};
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
 use crate::utils::debug_logger::VerbosityLevel;
+use crate::utils::input_sanitization;
+use crate::utils::path_security::create_secure_socket_dir;
 use crate::{debug_error, debug_print, debug_success, debug_warn};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use dirs;
+use log::warn;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -210,6 +219,18 @@ pub struct McpService {
     request_counter: std::sync::atomic::AtomicU64,
     /// Active stdio processes
     stdio_processes: HashMap<String, StdioProcess>,
+    /// Isolation configuration for unikernel execution
+    isolation_config: IsolationConfig,
+    /// Unikernel runtime for spawning isolated tool executions
+    unikernel_runtime: UnikernelRuntime,
+    /// MicroVM launcher for spawning isolated MCP servers
+    microvm_launcher: Option<MicroVmLauncher>,
+    /// Active MCP server microVMs
+    mcp_server_microvms: HashMap<String, McpServerMicroVmHandle>,
+    /// Ephemeral VM manager for tool execution
+    ephemeral_vm_manager: EphemeralVmManager,
+    /// Whether to use ephemeral VMs by default for tool execution
+    use_ephemeral_vms: bool,
 }
 
 impl McpService {
@@ -326,6 +347,30 @@ impl McpService {
 
     /// Create a new MCP service instance
     pub fn new() -> Self {
+        // Load isolation config or use default
+        let isolation_config = IsolationConfig::load().unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: Failed to load isolation config: {}. Using defaults.",
+                e
+            );
+            IsolationConfig::default()
+        });
+
+        // Initialize unikernel runtime
+        let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
+            .unwrap_or_else(|e| {
+                eprintln!("Warning: Failed to initialize unikernel runtime: {}. Unikernel execution will be disabled.", e);
+                // Create a fallback runtime with a temp directory
+                UnikernelRuntime::new(std::env::temp_dir().join("osvm-unikernels"))
+                    .expect("Failed to create fallback unikernel runtime")
+            });
+
+        // Initialize microVM launcher (graceful fallback if unavailable)
+        let microvm_launcher = MicroVmLauncher::new().ok();
+        if microvm_launcher.is_none() {
+            eprintln!("Warning: MicroVM launcher unavailable. MicroVM isolation disabled.");
+        }
+
         Self {
             servers: HashMap::new(),
             client: reqwest::Client::new(),
@@ -333,6 +378,12 @@ impl McpService {
             debug_mode: false,
             request_counter: std::sync::atomic::AtomicU64::new(1),
             stdio_processes: HashMap::new(),
+            isolation_config,
+            unikernel_runtime,
+            microvm_launcher,
+            mcp_server_microvms: HashMap::new(),
+            ephemeral_vm_manager: EphemeralVmManager::new(false),
+            use_ephemeral_vms: true, // Enable ephemeral VMs by default
         }
     }
 
@@ -340,6 +391,7 @@ impl McpService {
     pub fn new_with_debug(debug_mode: bool) -> Self {
         let mut service = Self::new();
         service.debug_mode = debug_mode;
+        service.ephemeral_vm_manager = EphemeralVmManager::new(debug_mode);
         service
     }
 
@@ -357,10 +409,17 @@ impl McpService {
 
     /// Load configurations from JSON file
     fn load_from_file(&mut self) -> Result<()> {
-        let config_path = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap())
-            .join("osvm")
-            .join("mcp_servers.json");
+        let config_dir = dirs::config_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|e| {
+                warn!(
+                    "Failed to get current directory: {}. Using current path.",
+                    e
+                );
+                PathBuf::from("./")
+            })
+        });
+
+        let config_path = config_dir.join("osvm").join("mcp_servers.json");
 
         if !config_path.exists() {
             return Ok(()); // No config file is fine
@@ -385,9 +444,17 @@ impl McpService {
 
     /// Save configurations to JSON file
     pub fn save_config(&self) -> Result<()> {
-        let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| std::env::current_dir().unwrap())
-            .join("osvm");
+        let base_dir = dirs::config_dir().unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|e| {
+                warn!(
+                    "Failed to get current directory: {}. Using current path.",
+                    e
+                );
+                PathBuf::from("./")
+            })
+        });
+
+        let config_dir = base_dir.join("osvm");
 
         std::fs::create_dir_all(&config_dir)?;
 
@@ -403,6 +470,123 @@ impl McpService {
         }
 
         Ok(())
+    }
+
+    /// Securely load MCP server configurations from specific environment variables
+    /// SECURITY: Only accesses predefined environment variables, no enumeration
+    fn load_mcp_servers_from_env_secure(&mut self) -> Result<()> {
+        // Define maximum number of MCP servers to prevent resource exhaustion
+        const MAX_MCP_SERVERS: u32 = 20;
+
+        // List of expected MCP server environment variable patterns
+        let expected_env_vars = [
+            "SOLANA_MCP_SERVER_URL",
+            "OSVM_MCP_SERVER_URL",
+            "DEVNET_MCP_SERVER_URL",
+            "MAINNET_MCP_SERVER_URL",
+        ];
+
+        // Load well-known MCP server environment variables
+        for env_var in &expected_env_vars {
+            if let Ok(url) = env::var(env_var) {
+                // Validate URL before use
+                if self.validate_mcp_url(&url)? {
+                    let server_name = env_var.to_lowercase().replace("_url", "").replace("_", "-");
+
+                    let config = McpServerConfig {
+                        name: server_name.clone(),
+                        url,
+                        transport_type: McpTransportType::Http,
+                        auth: None,
+                        enabled: true,
+                        extra_config: HashMap::new(),
+                        github_url: None,
+                        local_path: None,
+                    };
+
+                    self.servers.insert(server_name.clone(), config);
+
+                    if self.debug_mode {
+                        debug_success!("Loaded {} MCP server from environment", server_name);
+                    }
+                }
+            }
+        }
+
+        // Load numbered MCP servers (MCP_SERVER_1_URL, MCP_SERVER_2_URL, etc.)
+        for i in 1..=MAX_MCP_SERVERS {
+            let env_var = format!("MCP_SERVER_{}_URL", i);
+            if let Ok(url) = env::var(&env_var) {
+                // Validate URL before use
+                if self.validate_mcp_url(&url)? {
+                    let server_name = format!("mcp-server-{}", i);
+
+                    let config = McpServerConfig {
+                        name: server_name.clone(),
+                        url,
+                        transport_type: McpTransportType::Http,
+                        auth: None,
+                        enabled: true,
+                        extra_config: HashMap::new(),
+                        github_url: None,
+                        local_path: None,
+                    };
+
+                    self.servers.insert(server_name.clone(), config);
+
+                    if self.debug_mode {
+                        debug_success!("Loaded {} MCP server from environment", server_name);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate MCP server URL for security
+    fn validate_mcp_url(&self, url: &str) -> Result<bool> {
+        // Parse URL to validate format
+        let parsed_url = url::Url::parse(url).context("Invalid MCP server URL format")?;
+
+        // Only allow HTTP and HTTPS
+        if !matches!(parsed_url.scheme(), "http" | "https") {
+            warn!("Invalid MCP server URL scheme: {}", parsed_url.scheme());
+            return Ok(false);
+        }
+
+        // Block access to internal/private networks
+        if let Some(host) = parsed_url.host() {
+            match host {
+                url::Host::Ipv4(ip) => {
+                    if ip.is_loopback() || ip.is_private() || ip.is_link_local() {
+                        warn!("MCP server URL points to internal network: {}", ip);
+                        return Ok(false);
+                    }
+                }
+                url::Host::Ipv6(ip) => {
+                    if ip.is_loopback() {
+                        warn!("MCP server URL points to loopback: {}", ip);
+                        return Ok(false);
+                    }
+                }
+                url::Host::Domain(domain) => {
+                    let domain_lower = domain.to_lowercase();
+                    if matches!(domain_lower.as_str(), "localhost" | "127.0.0.1" | "::1") {
+                        warn!("MCP server URL points to localhost: {}", domain);
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+
+        // Validate URL length to prevent buffer overflows
+        if url.len() > 2048 {
+            warn!("MCP server URL too long: {} characters", url.len());
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 
     /// Load MCP server configurations from environment variables
@@ -428,33 +612,8 @@ impl McpService {
         }
 
         // Check for custom MCP servers
-        for (key, value) in env::vars() {
-            if key.starts_with("MCP_SERVER_") && key.ends_with("_URL") {
-                let server_name = key
-                    .strip_prefix("MCP_SERVER_")
-                    .unwrap()
-                    .strip_suffix("_URL")
-                    .unwrap()
-                    .to_lowercase();
-
-                let config = McpServerConfig {
-                    name: server_name.clone(),
-                    url: value,
-                    transport_type: McpTransportType::Http,
-                    auth: None,
-                    enabled: true,
-                    extra_config: HashMap::new(),
-                    github_url: None,
-                    local_path: None,
-                };
-
-                self.servers.insert(server_name.clone(), config);
-
-                if self.debug_mode {
-                    debug_success!("Loaded {} MCP server from environment", server_name);
-                }
-            }
-        }
+        // SECURITY FIX: Use specific environment variable access instead of env::vars()
+        self.load_mcp_servers_from_env_secure()?;
 
         Ok(())
     }
@@ -477,6 +636,10 @@ impl McpService {
         name: Option<String>,
         skip_confirmation: bool,
     ) -> Result<()> {
+        // Validate server_id to prevent path traversal attacks
+        let server_id = input_sanitization::validate_identifier(&server_id)
+            .context("Invalid server ID: must be alphanumeric with hyphens/underscores only")?;
+
         // Validate GitHub URL to prevent malicious inputs
         if !self.is_valid_github_url(&github_url) {
             return Err(anyhow::anyhow!(
@@ -484,12 +647,14 @@ impl McpService {
             ));
         }
 
-        // Display security warning
-        eprintln!("{}", GITHUB_CLONE_WARNING);
+        // Display security warning (unless automated setup)
+        if !skip_confirmation {
+            eprintln!("{}", GITHUB_CLONE_WARNING);
 
-        // Prompt for confirmation unless --yes flag is used
-        if !skip_confirmation && !self.confirm_github_clone(&github_url)? {
-            return Err(anyhow::anyhow!("Operation cancelled by user"));
+            // Prompt for confirmation
+            if !self.confirm_github_clone(&github_url)? {
+                return Err(anyhow::anyhow!("Operation cancelled by user"));
+            }
         }
 
         if self.debug_mode {
@@ -500,14 +665,45 @@ impl McpService {
             );
         }
 
-        // Create a temp directory for cloning
-        let temp_dir = std::env::temp_dir().join("osvm-mcp-servers");
-        std::fs::create_dir_all(&temp_dir)?;
+        // Create directory for cloning in user's home directory
+        let home_dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
+        let osvm_mcp_dir = home_dir.join(".osvm").join("mcp");
+        std::fs::create_dir_all(&osvm_mcp_dir)?;
 
-        let local_path = temp_dir.join(&server_id);
+        // Canonicalize osvm_mcp_dir to get absolute path and resolve any symlinks
+        let canonical_temp_dir = osvm_mcp_dir
+            .canonicalize()
+            .context("Failed to canonicalize MCP directory")?;
 
-        // Remove existing directory if present
+        let local_path = canonical_temp_dir.join(&server_id);
+
+        // SECURITY: Verify the constructed path is still within our temp directory
+        // This prevents path traversal via symlinks or race conditions
+        let canonical_local_path = if local_path.exists() {
+            local_path
+                .canonicalize()
+                .context("Failed to canonicalize local path")?
+        } else {
+            // If it doesn't exist yet, we can't canonicalize it, but we can verify the parent
+            local_path.clone()
+        };
+
+        // Ensure the path is within our allowed directory
+        if !canonical_local_path.starts_with(&canonical_temp_dir) {
+            anyhow::bail!(
+                "Security: Attempted path traversal detected. Path {:?} is outside allowed directory {:?}",
+                canonical_local_path,
+                canonical_temp_dir
+            );
+        }
+
+        // Remove existing directory if present (now safe from TOCTOU)
         if local_path.exists() {
+            // Re-check after canonicalization to prevent race condition
+            if !canonical_local_path.starts_with(&canonical_temp_dir) {
+                anyhow::bail!("Security: Path verification failed during removal");
+            }
             std::fs::remove_dir_all(&local_path)?;
         }
 
@@ -519,7 +715,12 @@ impl McpService {
                 "1",               // Shallow clone for security and performance
                 "--single-branch", // Only clone default branch
                 &github_url,
-                local_path.to_str().unwrap(),
+                local_path.to_str().ok_or_else(|| {
+                    anyhow!(
+                        "Invalid path contains non-UTF8 characters: {}",
+                        local_path.display()
+                    )
+                })?,
             ])
             .output()
             .context("Failed to execute git clone command")?;
@@ -538,7 +739,21 @@ impl McpService {
         let package_json_path = local_path.join("package.json");
 
         let execution_command = if cargo_toml_path.exists() {
-            // Rust project - build with cargo
+            // Rust project - check for build.rs and warn user
+            let build_rs_path = local_path.join("build.rs");
+            if build_rs_path.exists() {
+                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains a build.rs script that will execute during compilation!");
+                eprintln!("Build scripts can run arbitrary code with your user privileges.");
+                eprintln!("Build script location: {:?}\n", build_rs_path);
+
+                // Always require confirmation for projects with build scripts, even with --yes
+                if !self.confirm_build_execution("Rust project with build.rs")? {
+                    return Err(anyhow::anyhow!(
+                        "Build cancelled by user for security reasons"
+                    ));
+                }
+            }
+
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
@@ -548,9 +763,10 @@ impl McpService {
             }
 
             let build_result = Command::new("cargo")
-                .args(["build", "--release"])
+                .args(["build", "--release", "--frozen"]) // --frozen prevents dependency updates
                 .current_dir(&local_path)
-                .env("CARGO_NET_OFFLINE", "false") // Allow network for dependencies
+                .env("CARGO_NET_OFFLINE", "true") // Disable network for security
+                .env("CARGO_NET_GIT_FETCH_WITH_CLI", "false") // Prevent git operations
                 .output()
                 .context("Failed to execute cargo build command")?;
 
@@ -574,9 +790,33 @@ impl McpService {
                 ));
             }
 
-            binary_path.to_str().unwrap().to_string()
+            binary_path
+                .to_str()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Binary path contains non-UTF8 characters: {}",
+                        binary_path.display()
+                    )
+                })?
+                .to_string()
         } else if package_json_path.exists() {
-            // Node.js project - install dependencies with npm
+            // Node.js project - check for postinstall scripts and warn user
+            let package_json_content = std::fs::read_to_string(&package_json_path)?;
+            if package_json_content.contains("\"postinstall\"")
+                || package_json_content.contains("\"preinstall\"")
+            {
+                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains npm install hooks (preinstall/postinstall)!");
+                eprintln!("These scripts will execute arbitrary code during npm install.");
+                eprintln!("Package.json location: {:?}\n", package_json_path);
+
+                // Always require confirmation for projects with install hooks
+                if !self.confirm_build_execution("Node.js project with install hooks")? {
+                    return Err(anyhow::anyhow!(
+                        "npm install cancelled by user for security reasons"
+                    ));
+                }
+            }
+
             if self.debug_mode {
                 debug_print!(
                     VerbosityLevel::Basic,
@@ -585,9 +825,10 @@ impl McpService {
                 );
             }
 
-            // Run npm install
+            // Run npm install with --ignore-scripts to prevent automatic script execution
+            // Note: This may break some packages, but it's more secure
             let install_result = Command::new("npm")
-                .args(["install"])
+                .args(["install", "--ignore-scripts"])
                 .current_dir(&local_path)
                 .output()
                 .context("Failed to execute npm install command")?;
@@ -602,6 +843,28 @@ impl McpService {
                     "Successfully installed npm dependencies for MCP server at {:?}",
                     local_path
                 );
+            }
+
+            // Run npm build for TypeScript projects (if build script exists)
+            if package_json_content.contains("\"build\"") {
+                println!("🔨 Building TypeScript MCP server...");
+                let build_result = Command::new("npm")
+                    .args(["run", "build"])
+                    .current_dir(&local_path)
+                    .output()
+                    .context("Failed to execute npm run build command")?;
+
+                if !build_result.status.success() {
+                    let error_msg = String::from_utf8_lossy(&build_result.stderr);
+                    return Err(anyhow::anyhow!("npm run build failed: {}", error_msg));
+                }
+
+                if self.debug_mode {
+                    debug_success!(
+                        "Successfully built TypeScript MCP server at {:?}",
+                        local_path
+                    );
+                }
             }
 
             // Get package info from package.json
@@ -631,8 +894,21 @@ impl McpService {
                 ));
             }
 
-            // For Node.js MCP servers, we'll use a wrapper command that calls node
-            format!("node {}", script_path.to_str().unwrap())
+            // For Node.js MCP servers, we need to find the absolute path to node
+            let node_path = which::which("node")
+                .context("Failed to find node in PATH. Please ensure Node.js is installed.")?;
+
+            format!(
+                "{} {}",
+                node_path.to_str().ok_or_else(|| anyhow!(
+                    "Node path contains non-UTF8 characters: {}",
+                    node_path.display()
+                ))?,
+                script_path.to_str().ok_or_else(|| anyhow!(
+                    "Script path contains non-UTF8 characters: {}",
+                    script_path.display()
+                ))?
+            )
         } else {
             return Err(anyhow::anyhow!(
                 "No Cargo.toml or package.json found in the cloned repository. \
@@ -649,7 +925,17 @@ impl McpService {
             enabled: true,
             extra_config: HashMap::new(),
             github_url: Some(github_url),
-            local_path: Some(local_path.to_str().unwrap().to_string()),
+            local_path: Some(
+                local_path
+                    .to_str()
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "Local path contains non-UTF8 characters: {}",
+                            local_path.display()
+                        )
+                    })?
+                    .to_string(),
+            ),
         };
 
         self.servers.insert(server_id, config);
@@ -661,12 +947,53 @@ impl McpService {
         Ok(())
     }
 
-    /// Validate GitHub URL for basic security
+    /// Validate GitHub URL with strict parsing to prevent command injection
     fn is_valid_github_url(&self, url: &str) -> bool {
-        url.starts_with("https://github.com/") && 
-        url.len() > 19 && // Minimum length for a valid repo URL
-        url.chars().all(|c| c.is_ascii() && c != '<' && c != '>') && // Basic XSS prevention
-        url.split('/').count() >= 5 // github.com/owner/repo minimum
+        // Use strict URL validation from input_sanitization module
+        let validated_url = match input_sanitization::validate_url(url) {
+            Ok(u) => u,
+            Err(_) => return false,
+        };
+
+        // Parse URL to validate structure
+        let parsed = match url::Url::parse(&validated_url) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+
+        // Strict validation:
+        // 1. Scheme must be exactly https
+        if parsed.scheme() != "https" {
+            return false;
+        }
+
+        // 2. Host must be exactly github.com
+        if parsed.host_str() != Some("github.com") {
+            return false;
+        }
+
+        // 3. No fragments (prevents --upload-pack attacks)
+        if parsed.fragment().is_some() {
+            return false;
+        }
+
+        // 4. No query parameters
+        if parsed.query().is_some() {
+            return false;
+        }
+
+        // 5. No credentials in URL
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return false;
+        }
+
+        // 6. Path must have at least owner/repo format
+        let path = parsed.path();
+        if path.split('/').filter(|s| !s.is_empty()).count() < 2 {
+            return false;
+        }
+
+        true
     }
 
     /// Confirm GitHub clone operation with user
@@ -681,6 +1008,91 @@ impl McpService {
 
         let input = input.trim().to_lowercase();
         Ok(input == "y" || input == "yes")
+    }
+
+    /// Confirm build execution for projects with potentially dangerous build scripts
+    fn confirm_build_execution(&self, project_type: &str) -> Result<bool> {
+        use std::io::{self, Write};
+
+        print!(
+            "⚠️  Execute build for {}? This will run build scripts on your system! [y/N]: ",
+            project_type
+        );
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        let input = input.trim().to_lowercase();
+        Ok(input == "y" || input == "yes")
+    }
+
+    /// Validate stdio command to prevent command injection
+    fn validate_stdio_command(&self, command: &str) -> Result<String> {
+        use std::path::PathBuf;
+
+        // Check for shell metacharacters in command
+        if self.contains_shell_metacharacters(command) {
+            anyhow::bail!(
+                "Command contains forbidden characters. \
+                Shell metacharacters (;|&$`<>()) are not allowed for security."
+            );
+        }
+
+        // Command must be an absolute path
+        if !command.starts_with('/') {
+            anyhow::bail!(
+                "Command must be an absolute path (e.g., /usr/bin/node). \
+                Relative paths are not allowed for security."
+            );
+        }
+
+        // Canonicalize path to prevent traversal
+        let cmd_path = PathBuf::from(command);
+        let canonical = cmd_path
+            .canonicalize()
+            .context("Invalid command path or file does not exist")?;
+
+        // Whitelist of allowed executable directories
+        let allowed_dirs = [
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/bin"),
+        ];
+
+        let is_in_allowed_dir = allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
+
+        if !is_in_allowed_dir {
+            anyhow::bail!(
+                "Command must be in an allowed directory: /usr/bin, /usr/local/bin, or /bin. \
+                Found: {:?}",
+                canonical
+            );
+        }
+
+        // Whitelist of allowed executables by filename
+        let allowed_executables = ["node", "python3", "python", "deno"];
+        let filename = canonical
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| anyhow::anyhow!("Invalid executable name"))?;
+
+        if !allowed_executables.contains(&filename) {
+            anyhow::bail!(
+                "Executable '{}' is not in the whitelist. \
+                Allowed executables: {}",
+                filename,
+                allowed_executables.join(", ")
+            );
+        }
+
+        Ok(canonical.to_string_lossy().to_string())
+    }
+
+    /// Check if string contains shell metacharacters
+    fn contains_shell_metacharacters(&self, s: &str) -> bool {
+        let dangerous_chars = [';', '|', '&', '$', '`', '<', '>', '(', ')', '\n', '\r'];
+        s.chars().any(|c| dangerous_chars.contains(&c))
     }
 
     /// Get binary name from Cargo.toml with proper TOML parsing
@@ -829,11 +1241,116 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
+        // Check if should use microVM (clone to avoid borrow checker issues)
+        if let Some(iso_config) = self.isolation_config.get_server_config(server_id).cloned() {
+            if iso_config.use_microvm {
+                return self
+                    .initialize_server_in_microvm(server_id, &iso_config)
+                    .await;
+            }
+        }
+
+        // Fallback to existing transport-based initialization
         match config.transport_type {
             McpTransportType::Http => self.initialize_http_server(&config).await,
             McpTransportType::Websocket => self.initialize_websocket_server(&config).await,
             McpTransportType::Stdio => self.initialize_stdio_server(server_id, &config).await,
         }
+    }
+
+    /// Initialize MCP server in a dedicated microVM
+    async fn initialize_server_in_microvm(
+        &mut self,
+        server_id: &str,
+        iso_config: &ServerConfig,
+    ) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Initializing MCP server '{}' in dedicated microVM",
+                server_id
+            );
+        }
+
+        // Check if microVM launcher is available
+        let launcher = self.microvm_launcher.as_ref().ok_or_else(|| {
+            anyhow!("MicroVM launcher not available. Please ensure Firecracker is installed.")
+        })?;
+
+        // Build MicroVM configuration from isolation config
+        let mounts: Vec<MountPoint> = iso_config
+            .microvm_mounts
+            .iter()
+            .map(|m| MountPoint {
+                host_path: m.host_path.clone(),
+                guest_path: m.vm_path.clone(),
+                readonly: m.readonly,
+            })
+            .collect();
+
+        let microvm_config = McpServerMicroVmConfig {
+            server_id: server_id.to_string(),
+            memory_mb: iso_config.microvm_config.memory_mb,
+            vcpus: iso_config.microvm_config.vcpus,
+            server_command: iso_config
+                .server_command
+                .clone()
+                .unwrap_or_else(|| format!("mcp-server-{}", server_id)),
+            work_dir: PathBuf::from("/app"),
+            mounts,
+            vsock_cid: 0, // Auto-allocate
+        };
+
+        // Launch microVM
+        let handle = launcher
+            .launch_mcp_server(microvm_config)
+            .context("Failed to launch MCP server microVM")?;
+
+        if self.debug_mode {
+            debug_success!(
+                "Launched MCP server '{}' at vsock CID {}",
+                server_id,
+                handle.vsock_cid()
+            );
+        }
+
+        // Send initialize request
+        let init_request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_request_id(),
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": CLIENT_NAME,
+                    "version": env!("CARGO_PKG_VERSION")
+                }
+            }
+        });
+
+        let response = handle
+            .send_request(init_request)
+            .await
+            .context("Failed to initialize MCP server in microVM")?;
+
+        // Validate response
+        if let Some(error) = response.get("error") {
+            return Err(anyhow!("MCP server initialization failed: {:?}", error));
+        }
+
+        // Store handle for future requests
+        self.mcp_server_microvms
+            .insert(server_id.to_string(), handle);
+
+        if self.debug_mode {
+            debug_success!(
+                "Successfully initialized MCP server '{}' in microVM",
+                server_id
+            );
+        }
+
+        Ok(())
     }
 
     /// Initialize HTTP-based MCP server
@@ -949,10 +1466,21 @@ impl McpService {
             .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid command in server URL: {}", config.url))?;
 
-        let mut cmd = TokioCommand::new(command);
+        // SECURITY: Validate command to prevent command injection
+        let validated_command = self.validate_stdio_command(command)?;
+
+        let mut cmd = TokioCommand::new(&validated_command);
 
         // Add any command arguments first
+        // SECURITY: Also validate arguments for shell metacharacters
         for arg in cmd_parts {
+            if self.contains_shell_metacharacters(arg) {
+                anyhow::bail!(
+                    "Command argument contains forbidden characters: {}. \
+                    Shell metacharacters are not allowed for security.",
+                    arg
+                );
+            }
             cmd.arg(arg);
         }
 
@@ -1059,6 +1587,56 @@ impl McpService {
                 }
             }
         }
+    }
+
+    /// Shutdown all MCP server microVMs gracefully
+    pub async fn shutdown_all_mcp_microvms(&mut self) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Shutting down {} MCP server microVMs",
+                self.mcp_server_microvms.len()
+            );
+        }
+
+        for (server_id, handle) in self.mcp_server_microvms.drain() {
+            if let Err(e) = handle.shutdown() {
+                warn!("Failed to shutdown microVM for '{}': {}", server_id, e);
+                if self.debug_mode {
+                    debug_warn!("Error shutting down microVM for '{}': {}", server_id, e);
+                }
+            } else if self.debug_mode {
+                debug_success!("Successfully shut down microVM for '{}'", server_id);
+            }
+        }
+
+        if self.debug_mode {
+            debug_success!("All MCP server microVMs shut down");
+        }
+
+        Ok(())
+    }
+
+    /// Cleanup all resources (stdio processes and microVMs)
+    pub async fn cleanup_all(&mut self) -> Result<()> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Cleaning up all MCP service resources"
+            );
+        }
+
+        // Cleanup stdio processes
+        self.cleanup_stdio_processes().await;
+
+        // Cleanup microVMs
+        self.shutdown_all_mcp_microvms().await?;
+
+        if self.debug_mode {
+            debug_success!("All MCP service resources cleaned up");
+        }
+
+        Ok(())
     }
 
     /// List available tools from an MCP server
@@ -1455,7 +2033,49 @@ impl McpService {
             return Err(anyhow::anyhow!("Server '{}' is disabled", server_id));
         }
 
-        // Route to appropriate implementation based on transport type
+        // Priority 1: Use ephemeral microVM for tool execution if enabled
+        if self.use_ephemeral_vms {
+            if self.debug_mode {
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Launching ephemeral microVM for tool: {}/{}",
+                    server_id,
+                    tool_name
+                );
+            }
+            return self
+                .ephemeral_vm_manager
+                .launch_tool_vm(server_id, tool_name, arguments)
+                .await
+                .context("Failed to execute tool in ephemeral VM");
+        }
+
+        // Priority 2: Check if server is running in dedicated microVM
+        if let Some(handle) = self.mcp_server_microvms.get(server_id) {
+            return self
+                .call_tool_via_microvm(handle, tool_name, arguments)
+                .await;
+        }
+
+        // Priority 3: Check if this tool should be executed in ephemeral unikernel
+        if self
+            .isolation_config
+            .should_use_unikernel(server_id, tool_name)
+        {
+            if self.debug_mode {
+                debug_print!(
+                    VerbosityLevel::Basic,
+                    "Executing tool '{}' in ephemeral unikernel for enhanced security",
+                    tool_name
+                );
+            }
+
+            return self
+                .call_tool_unikernel(server_id, tool_name, arguments)
+                .await;
+        }
+
+        // Priority 3: Direct execution based on transport type
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
                 self.call_tool_http(server_id, tool_name, arguments, config)
@@ -1466,6 +2086,132 @@ impl McpService {
                     .await
             }
         }
+    }
+
+    /// Call a tool via dedicated microVM handle
+    async fn call_tool_via_microvm(
+        &self,
+        handle: &McpServerMicroVmHandle,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Basic,
+                "Calling tool '{}' via dedicated microVM '{}'",
+                tool_name,
+                handle.server_id()
+            );
+        }
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": self.next_request_id(),
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        });
+
+        let response = handle
+            .send_request(request)
+            .await
+            .context("Failed to call tool via microVM")?;
+
+        // Check for JSON-RPC error
+        if let Some(error) = response.get("error") {
+            return Err(anyhow!("Tool execution error: {:?}", error));
+        }
+
+        let result = response
+            .get("result")
+            .ok_or_else(|| anyhow!("No result in response"))?
+            .clone();
+
+        if self.debug_mode {
+            debug_success!(
+                "Successfully called tool '{}' via microVM '{}'",
+                tool_name,
+                handle.server_id()
+            );
+        }
+
+        Ok(result)
+    }
+
+    /// Call a tool in an isolated unikernel
+    async fn call_tool_unikernel(
+        &self,
+        server_id: &str,
+        tool_name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        // Get tool configuration from isolation config
+        let tool_config = self.isolation_config.get_tool_config(server_id, tool_name);
+
+        // Get unikernel image path, using default if not specified
+        let image_path = if let Some(ref image) = tool_config.unikernel_image {
+            PathBuf::from(image)
+        } else {
+            // Default unikernel image path
+            PathBuf::from(&self.isolation_config.unikernel_dir)
+                .join(format!("{}-{}.img", server_id, tool_name))
+        };
+
+        // Build unikernel configuration
+        use crate::services::unikernel_runtime::UnikernelLauncher;
+
+        let unikernel_config = UnikernelConfig {
+            image_path,
+            mounts: tool_config.mounts.clone(),
+            memory_mb: tool_config.memory_mb,
+            vcpus: tool_config.vcpus,
+            tool_name: tool_name.to_string(),
+            server_id: server_id.to_string(),
+            launcher: UnikernelLauncher::Unikraft,
+            kraft_config: None,
+            vsock_cid: None, // Will be auto-allocated
+        };
+
+        if self.debug_mode {
+            debug_print!(
+                VerbosityLevel::Detailed,
+                "Spawning unikernel for tool '{}' with {} MB memory, {} vCPUs",
+                tool_name,
+                tool_config.memory_mb,
+                tool_config.vcpus
+            );
+        }
+
+        // Spawn the unikernel
+        let handle = self
+            .unikernel_runtime
+            .spawn_unikernel(unikernel_config)
+            .await
+            .context("Failed to spawn unikernel for tool execution")?;
+
+        if self.debug_mode {
+            debug_success!("Unikernel spawned successfully for tool '{}'", tool_name);
+        }
+
+        // Execute the tool in the unikernel
+        let result = handle
+            .execute_tool(tool_name, arguments, &self.unikernel_runtime)
+            .await
+            .context("Failed to execute tool in unikernel")?;
+
+        // Terminate the unikernel
+        handle.terminate();
+
+        if self.debug_mode {
+            debug_success!(
+                "Tool '{}' executed successfully in unikernel and terminated",
+                tool_name
+            );
+        }
+
+        Ok(result)
     }
 
     /// Call a tool on an HTTP/WebSocket MCP server

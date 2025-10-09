@@ -24,6 +24,10 @@ pub use ui::{update_ui_displays, AdvancedChatUI};
 
 /// Main entry point for the advanced agent chat UI
 pub async fn run_advanced_agent_chat() -> Result<()> {
+    // Set environment variable to indicate OSVM agent is running
+    // This makes the status bar count the agent as a microVM
+    std::env::set_var("OSVM_AGENT_MODE", "1");
+
     println!("Starting OSVM Advanced Agent Chat Interface...");
 
     // Check if we're in a terminal environment - only fail if clearly no terminal support
@@ -41,16 +45,71 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
     // Initialize the state and MCP services (safe now that problematic servers are disabled)
     let state = AdvancedChatState::new()?;
 
-    // Initialize MCP tools - this should work now that localhost:3000 server is disabled
-    if let Err(e) = state.initialize().await {
-        warn!(
-            "MCP initialization failed: {}, continuing without MCP tools",
-            e
-        );
+    // Auto-clone, build, and start default OSVM MCP server
+    {
+        let mut mcp_service = state.mcp_service.lock().await;
+
+        // Load existing config
+        let _ = mcp_service.load_config();
+
+        // Check if osvm-mcp server already exists
+        let server_exists = mcp_service.get_server("osvm-mcp").is_some();
+
+        if !server_exists {
+            println!("🔧 Auto-cloning OSVM MCP server from GitHub...");
+            println!("   Repository: https://github.com/openSVM/osvm-mcp");
+
+            // Use add_server_from_github to clone and configure
+            match mcp_service
+                .add_server_from_github(
+                    "osvm-mcp".to_string(),
+                    "https://github.com/openSVM/osvm-mcp".to_string(),
+                    Some("OSVM MCP Server".to_string()),
+                    true, // skip_confirmation for automated setup
+                )
+                .await
+            {
+                Ok(_) => {
+                    println!("✅ OSVM MCP server cloned and built");
+                    println!("   Using stdio transport (Node.js MCP server)");
+                }
+                Err(e) => {
+                    warn!("⚠️  Failed to auto-clone osvm-mcp: {}", e);
+                    println!("   💡 You can manually run: osvm mcp add-github osvm-mcp https://github.com/openSVM/osvm-mcp");
+                }
+            }
+        }
+
+        // osvm-mcp uses stdio transport - it's started on-demand when tools are called
+        // No need to keep a persistent server process running
     }
 
-    // Skip agent worker for now as it can still cause issues
-    // TODO: Make agent worker more robust
+    // Initialize MCP tools with timeout to prevent hanging
+    let init_timeout = tokio::time::Duration::from_secs(5);
+    match tokio::time::timeout(init_timeout, state.initialize()).await {
+        Ok(Ok(())) => {
+            info!("✅ MCP tools initialized successfully");
+        }
+        Ok(Err(e)) => {
+            warn!(
+                "⚠️  MCP initialization failed: {}, continuing without MCP tools",
+                e
+            );
+        }
+        Err(_) => {
+            warn!("⏱️  MCP initialization timed out after 5s, continuing without MCP tools");
+        }
+    }
+
+    // Start agent worker for background processing
+    if let Err(e) = state.start_agent_worker().await {
+        warn!(
+            "Failed to start agent worker: {}, chat will work without background processing",
+            e
+        );
+    } else {
+        info!("✅ Agent worker started successfully");
+    }
 
     // Create default session
     let _default_session_id = state.create_session("Main Chat".to_string())?;

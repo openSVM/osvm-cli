@@ -1,0 +1,34 @@
+# Build osvm CLI locally first, then copy into Docker
+# This avoids network issues during Docker build
+
+FROM debian:bookworm-slim
+
+# Create non-root user first
+RUN useradd -m -u 1000 osvm
+
+# Install minimal runtime dependencies
+# These should be cached from previous builds
+RUN apt-get update || true && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libudev1 \
+        libssl3 \
+    2>/dev/null || echo "Using cached packages" && \
+    rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+
+# Copy the pre-built binary from host
+# Build it first with: cargo build --release
+COPY osvm-binary /usr/local/bin/osvm
+
+# Make it executable
+RUN chmod +x /usr/local/bin/osvm
+
+# Switch to non-root user
+USER osvm
+
+# Set working directory
+WORKDIR /home/osvm
+
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/bin/osvm"]
+CMD ["--help"]

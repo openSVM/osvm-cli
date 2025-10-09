@@ -4,6 +4,7 @@ pub mod components;
 pub mod display;
 pub mod handlers;
 pub mod layout;
+pub mod theme;
 
 pub use components::*;
 pub use display::*;

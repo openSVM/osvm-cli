@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../assets/dos-terminal.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Servers - OSVM CLI</title>
+    <script src="../assets/dos-interactive.js" defer></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>Model Context Protocol (MCP) Servers</h1>
+
+        <h2>▓▓ MCP with Ephemeral MicroVMs</h2>
+        <p class="warning">NEW: All MCP tools now execute in ephemeral microVMs by default!</p>
+
+        <div class="info">
+            <strong>[INFO]</strong> Each tool call:
+            <ul>
+                <li>Launches fresh microVM</li>
+                <li>Executes in complete isolation</li>
+                <li>Destroys VM after completion</li>
+                <li>Zero state persistence</li>
+            </ul>
+        </div>
+
+        <h2>▓▓ Quick Setup</h2>
+        <div class="command-item">
+            <code>osvm mcp setup</code>
+            <p>Quick setup for Solana MCP</p>
+        </div>
+
+        <h2>▓▓ Server Management</h2>
+        <div class="command-item">
+            <code>osvm mcp list</code>
+            <p>List configured servers</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm mcp add my-server stdio "node server.js"</code>
+            <p>Add stdio-based server</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm mcp add-github solana https://github.com/solana/mcp-server</code>
+            <p>Add server from GitHub</p>
+        </div>
+
+        <h2>▓▓ Tool Execution</h2>
+        <div class="command-item">
+            <code>osvm mcp tools solana-mcp</code>
+            <p>List available tools</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm mcp call solana-mcp get_balance</code>
+            <p>Execute tool (runs in ephemeral VM)</p>
+        </div>
+
+        <h2>▓▓ MicroVM Isolation</h2>
+        <div class="command-item">
+            <code>osvm mcp microvm launch my-server</code>
+            <p>Launch server in dedicated microVM</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm mcp microvm status</code>
+            <p>Check microVM status</p>
+        </div>
+
+        <h2>▓▓ Architecture</h2>
+        <pre>┌─────────────┐
+│  User Chat  │
+└──────┬──────┘
+       │
+┌──────▼──────┐
+│ MCP Service │
+└──────┬──────┘
+       │
+┌──────▼──────────────┐
+│ Ephemeral MicroVMs  │
+│ ┌────┐ ┌────┐ ┌────┐│
+│ │Tool│ │Tool│ │Tool││
+│ │ VM │ │ VM │ │ VM ││
+│ └────┘ └────┘ └────┘│
+└─────────────────────┘</pre>
+
+        <h2>▓▓ Transport Types</h2>
+        <ul>
+            <li><strong>stdio</strong> - Local process communication</li>
+            <li><strong>http</strong> - REST API based</li>
+            <li><strong>websocket</strong> - Real-time bidirectional</li>
+        </ul>
+
+        <h2>▓▓ Authentication</h2>
+        <ul>
+            <li>Bearer tokens</li>
+            <li>Basic auth</li>
+            <li>API keys</li>
+            <li>Custom headers</li>
+        </ul>
+    </div>
+</body>
+</html>

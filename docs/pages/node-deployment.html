@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../assets/dos-terminal.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Deployment - OSVM CLI</title>
+    <script src="../assets/dos-interactive.js" defer></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>Node Deployment</h1>
+
+        <h2>▓▓ SSH Deployment</h2>
+        <div class="command-item">
+            <code>osvm user@host --svm sonic --node-type validator</code>
+            <p>Deploy validator to remote host</p>
+        </div>
+
+        <h2>▓▓ Node Management</h2>
+        <div class="command-item">
+            <code>osvm nodes list</code>
+            <p>List all nodes with status</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes dashboard</code>
+            <p>Real-time monitoring dashboard</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes status node-123</code>
+            <p>Check specific node status</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes logs node-123 --follow</code>
+            <p>Stream node logs</p>
+        </div>
+
+        <h2>▓▓ Deployment Configuration</h2>
+        <pre><code>DeploymentConfig {
+    svm_type: "sonic",
+    node_type: "validator",
+    network: "mainnet",
+    hot_swap_enabled: true,
+    metrics_config: {
+        port: 8899,
+        enabled: true
+    }
+}</code></pre>
+
+        <h2>▓▓ Hot Swap Updates</h2>
+        <p>Zero-downtime updates with automatic rollback:</p>
+        <ul>
+            <li>Blue-green deployment</li>
+            <li>State preservation</li>
+            <li>Automatic health checks</li>
+            <li>Rollback on failure</li>
+        </ul>
+
+        <h2>▓▓ System Optimization</h2>
+        <p>Automatic system tuning:</p>
+        <ul>
+            <li>File descriptor limits</li>
+            <li>Network parameters</li>
+            <li>Memory management</li>
+            <li>CPU affinity</li>
+            <li>I/O scheduler</li>
+        </ul>
+
+        <h2>▓▓ Monitoring</h2>
+        <div class="command-item">
+            <code>osvm nodes monitor --metrics</code>
+            <p>Real-time metrics monitoring</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes health-check node-123</code>
+            <p>Run health diagnostics</p>
+        </div>
+
+        <h2>▓▓ Service Management</h2>
+        <div class="command-item">
+            <code>osvm nodes restart node-123</code>
+            <p>Restart node service</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes stop node-123</code>
+            <p>Stop node service</p>
+        </div>
+    </div>
+</body>
+</html>

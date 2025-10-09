@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  osvm:
+    build:
+      context: .
+      dockerfile: Dockerfile.fixed
+      network: host  # Use host network during build to avoid DNS issues
+      args:
+        - BUILDKIT_PROGRESS=plain
+    image: osvm-cli:latest
+    container_name: osvm-cli
+    networks:
+      - osvm-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    environment:
+      - RUST_LOG=info
+    volumes:
+      - ~/.config/solana:/home/osvm/.config/solana:ro
+      - ~/.osvm:/home/osvm/.osvm
+    command: --help
+
+networks:
+  osvm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

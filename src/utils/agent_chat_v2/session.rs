@@ -2,11 +2,12 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use fs2::FileExt;
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::fs::OpenOptions;
 use std::io::Write;
-use uuid::Uuid;
+use uuid::Uuid; // For file locking
 
 use super::types::{AgentState, ChatMessage};
 
@@ -51,18 +52,72 @@ impl ChatSession {
                 }
             }
         }
+
+        // NEW: Log to ClickHouse if available (async operation, fire-and-forget)
+        // CRITICAL FIX: Use std::thread::spawn instead of tokio::spawn since this is called
+        // from Cursive's synchronous UI thread which doesn't have a Tokio runtime context
+        if let Some(last_message) = self.messages.last() {
+            let session_clone = self.clone();
+            let message_clone = last_message.clone();
+
+            std::thread::spawn(move || {
+                // Create a new Tokio runtime for this thread
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        error!(
+                            "Failed to create Tokio runtime for ClickHouse logging: {}",
+                            e
+                        );
+                        return;
+                    }
+                };
+
+                rt.block_on(async move {
+                    // Try to get global activity logger if ClickHouse is running
+                    if let Ok(service) =
+                        crate::services::clickhouse_service::ClickHouseService::new()
+                    {
+                        if let Ok(status) = service.status().await {
+                            if status
+                                == crate::services::clickhouse_service::ClickHouseStatus::Running
+                            {
+                                let logger = crate::services::activity_logger::ActivityLogger::new(
+                                    std::sync::Arc::new(service),
+                                );
+                                let _ = logger
+                                    .log_chat_message(&session_clone, &message_clone)
+                                    .await;
+                            }
+                        }
+                    }
+                });
+            });
+        }
     }
 
     fn save_message_to_recording(&self, message: &ChatMessage) -> Result<()> {
         if let Some(file_path) = &self.recording_file {
+            // CRITICAL FIX: Use file locking to prevent corruption from concurrent writes
+            use fs2::FileExt;
+
             let mut file = OpenOptions::new()
                 .create(true)
                 .append(true)
                 .open(file_path)?;
 
+            // Acquire exclusive lock (blocks until available)
+            file.lock_exclusive()?;
+
             let timestamp = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
             let message_json = serde_json::to_string(message)?;
             writeln!(file, "[{}] {}", timestamp, message_json)?;
+
+            // Force to disk before releasing lock
+            file.sync_all()?;
+
+            // Lock automatically released when file is dropped
+            file.unlock()?;
         }
         Ok(())
     }

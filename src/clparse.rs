@@ -16,7 +16,71 @@ pub fn parse_command_line() -> clap::ArgMatches {
     command!()
         .disable_version_flag(true) // Disable the auto-generated --version flag
         .arg_required_else_help(false) // Allow no args to default to advanced chat
-        .before_help("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+        .after_help("
+REVOLUTIONARY ARCHITECTURE:
+  🛡️ OSVM uses revolutionary microVM/unikernel isolation:
+  • Unikernels (50KB) - 99.9% attack surface reduction, 10-50ms boot
+  • MicroVMs (5MB overhead) - Hardware isolation, 125ms boot, SEV/SGX support
+  • Zero-Trust mTLS - All connections authenticated and encrypted
+  • Hardware Security - VT-x/AMD-V, SEV/SGX, TPM, control flow integrity
+  
+  📖 Learn more: Architecture.md (comprehensive 2,150-line deep dive)
+
+COMMAND CATEGORIES:
+  Core Operations:
+    balance              Check SOL balance for an address
+    svm                  Manage Solana Virtual Machines
+    nodes                Manage validator and RPC nodes
+    
+  AI & Automation:
+    [default]            Interactive AI agent (microVM isolated by default)
+    chat                 Advanced multi-session chat interface
+    agent                Execute single AI-powered command
+    plan                 Create AI-powered execution plans
+    
+  Data Management:
+    snapshot             Analyze and manage Solana snapshots
+    db                   ClickHouse database for blockchain indexing
+    realtime             Real-time blockchain data sync daemon
+    
+  Infrastructure:
+    rpc-manager          Manage RPC nodes (local/remote)
+    deploy               Deploy eBPF programs to SVM networks
+    mount                Manage folder mounts for microVMs
+    
+  Tools & Configuration:
+    mcp                  Manage MCP (Model Context Protocol) servers
+    audit                Generate security audit reports
+    doctor               System health check and repair
+    examples             Show usage examples
+
+QUICK START:
+  osvm                        Launch AI agent (microVM isolated)
+  osvm chat --advanced        Advanced multi-session interface
+  osvm agent \"<prompt>\"      Execute single AI command
+  osvm doctor                 Check system health
+  osvm mcp setup              Set up Solana MCP integration
+  
+  # Isolation control:
+  OSVM_SKIP_MICROVM=1 osvm   Skip microVM for development
+
+AI-POWERED NATURAL LANGUAGE:
+  ⭐ Any unknown command is interpreted as an AI query!
+
+  Examples:
+  • osvm \"how do I deploy a validator?\"
+  • osvm \"check my wallet balance\"
+  • osvm \"what's the current network status?\"
+  • osvm \"show me recent transactions\"
+
+  The AI will:
+  → Understand your natural language request
+  → Plan and execute appropriate tools via MCP
+  → Provide intelligent responses with context
+
+For more info: osvm examples | Architecture.md
+Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
+        .before_help(format!("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░
 ......███░░░░░███..███░░░░░███░░███...░░███.░░██████.██████.......▐█░░░░
@@ -27,8 +91,12 @@ pub fn parse_command_line() -> clap::ArgMatches {
 ░░░░░░░░███████░░░░░█████████░░░░░░░███░░░░░░░███░░░░░░░███░░░░░▐█░░░░░░
  ███████████████████████████████████████████████████████████████████████
 
-🚀 OSVM CLI - OpenSVM Command Line Interface
-   Advanced Solana Virtual Machine management with AI-powered security auditing")
+🚀 OSVM CLI v{} - OpenSVM Command Line Interface
+   AI-Powered Solana Virtual Machine Management & Security Auditing
+   
+   🛡️ Revolutionary microVM/unikernel architecture with hardware isolation
+   ⚡ 99.9% attack surface reduction | <1ms latency | 125ms boot time",
+    env!("CARGO_PKG_VERSION")))
         // Add version aliases as subcommands
         .subcommand(Command::new("v").about("Show version information"))
         .subcommand(Command::new("ver").about("Show version information"))
@@ -118,7 +186,39 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 .default_value("mainnet")
                 .help("Network to deploy on")
         )
-        // MOVED RPC SUBCOMMAND TO BE FIRST
+        .arg(
+            Arg::new("theme")
+                .long("theme")
+                .value_name("THEME")
+                .global(true)
+                .help("UI theme to use")
+        )
+        .arg(
+            Arg::new("auto_theme")
+                .long("auto-theme")
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Enable automatic theme switching")
+        )
+        // Core commands
+        .subcommand(
+            Command::new("balance")
+                .about("Check SOL balance for an address")
+                .long_about("Check the SOL balance for a Solana address.\n\
+                           \n\
+                           If no address is provided, shows the balance of the configured keypair.\n\
+                           \n\
+                           Examples:\n\
+                           • osvm balance                                    # Your configured wallet\n\
+                           • osvm balance 4Nd1mBQtrMJVYVfKf2PJy9NZUZdTAsp7D4xWLs4gDB4T # Specific address")
+                .arg(
+                    Arg::new("address")
+                        .value_name("ADDRESS")
+                        .help("Solana address to check balance for (defaults to configured keypair)")
+                        .index(1)
+                )
+        )
+        // RPC management commands
         .subcommand(
             Command::new("rpc-manager") // Renamed from "rpc" to "rpc-manager"
                 .about("Manage RPC nodes (local/remote)")
@@ -214,8 +314,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                             Arg::new("ledger-path")
                                 .long("ledger-path")
                                 .value_name("PATH")
-                                .default_value("/tmp/test-ledger")
-                                .help("Ledger data directory path")
+                                .help("Ledger data directory path (default: ~/.config/osvm/ledgers/{network})")
                         )
                         .arg(
                             Arg::new("reset")
@@ -385,20 +484,20 @@ pub fn parse_command_line() -> clap::ArgMatches {
         )
         .subcommand(
             Command::new("chat")
-                .about("Launch interactive agent chat interface with MCP tools - now with advanced AI planning!")
+                .about("Interactive AI-powered agent chat with MCP tools and intelligent planning")
                 .long_about("Launch a comprehensive chat interface with AI-powered tool planning and execution.\n\
                            \n\
-                           Basic Mode (default):\n\
+                           Basic Mode:\n\
                            • Simple chat interface with MCP tool integration\n\
                            • Single chat session\n\
-                           • Basic tool calling\n\
+                           • Direct tool calling\n\
                            \n\
-                           Advanced Mode (--advanced):\n\
+                           Advanced Mode (--advanced, default when no args):\n\
                            • FAR-style/Borland TUI design with dual panels\n\
                            • AI-powered input parsing and intelligent tool planning\n\
-                           • Multiple chat sessions with background agent execution\n\
+                           • Multi-session management with background agent execution\n\
                            • Session recording and agent control (run/pause/stop)\n\
-                           • Professional multi-session management")
+                           • Professional keyboard shortcuts and vim-like navigation")
                 .arg(
                     Arg::new("debug")
                         .long("debug")
@@ -416,6 +515,52 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .long("advanced")
                         .action(ArgAction::SetTrue)
                         .help("Launch advanced FAR-style chat interface with AI planning and multi-session support")
+                )
+                .arg(
+                    Arg::new("microvm")
+                        .long("microvm")
+                        .action(ArgAction::SetTrue)
+                        .help("Run chat in isolated microVM with ephemeral VMs for all tool executions")
+                )
+        )
+        .subcommand(
+            Command::new("plan")
+                .about("Create an AI-powered execution plan for OSVM commands")
+                .long_about("Analyze a natural language request and generate an executable OSVM command plan.\n\
+                           \n\
+                           This command uses AI to understand your intent and suggests the appropriate\n\
+                           OSVM commands to accomplish your goal.\n\
+                           \n\
+                           Examples:\n\
+                           • osvm plan \"show me all validators\"\n\
+                           • osvm plan \"check network health\"\n\
+                           • osvm plan \"list my nodes\"")
+                .arg(
+                    Arg::new("query")
+                        .value_name("QUERY")
+                        .help("Natural language query describing what you want to do")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("execute")
+                        .long("execute")
+                        .short('e')
+                        .action(ArgAction::SetTrue)
+                        .help("Execute the plan automatically (skip confirmation for safe commands)")
+                )
+                .arg(
+                    Arg::new("yes")
+                        .long("yes")
+                        .short('y')
+                        .action(ArgAction::SetTrue)
+                        .help("Auto-confirm all commands including those requiring confirmation")
+                )
+                .arg(
+                    Arg::new("json")
+                        .long("json")
+                        .action(ArgAction::SetTrue)
+                        .help("Output results in JSON format")
                 )
         )
         .subcommand(
@@ -492,7 +637,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
                 .subcommand(
                     Command::new("install")
-                        .about("Install an SVM on a remote host")
+                        .about("🚧 COMING SOON: Install an SVM on a remote host")
                         .arg(
                             Arg::new("name")
                                 .value_name("NAME")
@@ -593,7 +738,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
                 .subcommand(
                     Command::new("restart")
-                        .about("Restart a node")
+                        .about("🚧 COMING SOON: Restart a node")
                         .arg(
                             Arg::new("node-id")
                                 .value_name("NODE_ID")
@@ -604,7 +749,7 @@ pub fn parse_command_line() -> clap::ArgMatches {
                 )
                 .subcommand(
                     Command::new("stop")
-                        .about("Stop a node")
+                        .about("🚧 COMING SOON: Stop a node")
                         .arg(
                             Arg::new("node-id")
                                 .value_name("NODE_ID")
@@ -749,123 +894,6 @@ pub fn parse_command_line() -> clap::ArgMatches {
                         .long("confirm-large")
                         .action(ArgAction::SetTrue)
                         .help("Require confirmation for deploying large binaries (>1MB)")
-                )
-        )
-        .subcommand(
-            Command::new("solana")
-                .about("Deploy and manage Solana validators")
-                .arg_required_else_help(true)
-                .subcommand(
-                    Command::new("validator")
-                        .about("Deploy a Solana validator node with enhanced features")
-                        .arg(
-                            Arg::new("connection")
-                                .help("SSH connection string (format: user@host[:port])")
-                                .required(true)
-                                .index(1)
-                        )
-                        .arg(
-                            Arg::new("network")
-                                .long("network")
-                                .value_name("NETWORK")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-                                .default_value("mainnet")
-                                .help("Network to deploy on")
-                        )
-                        .arg(
-                            Arg::new("version")
-                                .long("version")
-                                .value_name("VERSION")
-                                .help("Solana client version (e.g., v1.16.0, v1.18.23-jito)")
-                        )
-                        .arg(
-                            Arg::new("client-type")
-                                .long("client-type")
-                                .value_name("TYPE")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave", "firedancer", "sig"]))
-                                .default_value("agave")
-                                .help("Solana client type (standard, jito, agave, firedancer, sig)")
-                        )
-                        .arg(
-                            Arg::new("hot-swap")
-                                .long("hot-swap")
-                                .action(ArgAction::SetTrue)
-                                .help("Enable hot-swap capability for high availability")
-                        )
-                        .arg(
-                            Arg::new("ledger-disk")
-                                .long("ledger-disk")
-                                .value_name("DEVICE")
-                                .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-                        )
-                        .arg(
-                            Arg::new("accounts-disk")
-                                .long("accounts-disk")
-                                .value_name("DEVICE")
-                                .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-                        )
-                        .arg(
-                            Arg::new("metrics-config")
-                                .long("metrics-config")
-                                .value_name("CONFIG")
-                                .help("Metrics configuration string (e.g., host=https://metrics.solana.com:8086,db=mainnet-beta,u=mainnet-beta_write,p=password)")
-                        )
-                )
-                .subcommand(
-                    Command::new("rpc")
-                        .about("Deploy a Solana RPC node with enhanced features")
-                        .arg(
-                            Arg::new("connection")
-                                .help("SSH connection string (format: user@host[:port])")
-                                .required(true)
-                                .index(1)
-                        )
-                        .arg(
-                            Arg::new("network")
-                                .long("network")
-                                .value_name("NETWORK")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
-                                .default_value("mainnet")
-                                .help("Network to deploy on")
-                        )
-                        .arg(
-                            Arg::new("version")
-                                .long("version")
-                                .value_name("VERSION")
-                                .help("Solana client version (e.g., v1.16.0)")
-                        )
-                        .arg(
-                            Arg::new("client-type")
-                                .long("client-type")
-                                .value_name("TYPE")
-                                .value_parser(clap::builder::PossibleValuesParser::new(["standard", "jito", "agave", "firedancer", "sig"]))
-                                .default_value("agave")
-                                .help("Solana client type (standard, jito, agave, firedancer, sig)")
-                        )
-                        .arg(
-                            Arg::new("ledger-disk")
-                                .long("ledger-disk")
-                                .value_name("DEVICE")
-                                .help("Ledger disk device path (e.g., /dev/nvme0n1)")
-                        )
-                        .arg(
-                            Arg::new("accounts-disk")
-                                .long("accounts-disk")
-                                .value_name("DEVICE")
-                                .help("Accounts disk device path (e.g., /dev/nvme1n1)")
-                        )
-                        .arg(
-                            Arg::new("metrics-config")
-                                .long("metrics-config")
-                                .value_name("CONFIG")
-                                .help("Metrics configuration string")
-                        )
-                        .arg(
-                            Arg::new("enable-history")
-                                .long("enable-history")
-                                .action(ArgAction::SetTrue)
-                                .help("Enable transaction history (increases storage requirements)")
-                        )
                 )
         )
         .subcommand(
@@ -1162,6 +1190,558 @@ pub fn parse_command_line() -> clap::ArgMatches {
                                 .help("Output results in JSON format")
                         )
                 )
+                .subcommand(
+                    Command::new("microvm")
+                        .about("Manage MCP servers running in microVMs")
+                        .arg_required_else_help(true)
+                        .subcommand(
+                            Command::new("launch")
+                                .about("Launch an MCP server in a microVM")
+                                .arg(
+                                    Arg::new("server-id")
+                                        .help("Server identifier")
+                                        .required(true)
+                                        .index(1)
+                                )
+                                .arg(
+                                    Arg::new("memory")
+                                        .long("memory")
+                                        .value_name("MB")
+                                        .default_value("256")
+                                        .help("Memory allocation in MB")
+                                )
+                                .arg(
+                                    Arg::new("vcpus")
+                                        .long("vcpus")
+                                        .value_name("COUNT")
+                                        .default_value("1")
+                                        .help("Number of virtual CPUs")
+                                )
+                                .arg(
+                                    Arg::new("command")
+                                        .long("command")
+                                        .value_name("CMD")
+                                        .help("Command to run in the VM")
+                                )
+                        )
+                        .subcommand(
+                            Command::new("launch-many")
+                                .about("Launch multiple MCP servers for testing")
+                                .arg(
+                                    Arg::new("count")
+                                        .help("Number of VMs to launch")
+                                        .index(1)
+                                        .default_value("10")
+                                )
+                                .arg(
+                                    Arg::new("memory")
+                                        .long("memory")
+                                        .value_name("MB")
+                                        .default_value("256")
+                                        .help("Memory per VM in MB")
+                                )
+                        )
+                        .subcommand(
+                            Command::new("status")
+                                .about("Show status of running MCP microVMs")
+                        )
+                        .subcommand(
+                            Command::new("stop")
+                                .about("Stop a running MCP microVM")
+                                .arg(
+                                    Arg::new("server-id")
+                                        .help("Server identifier")
+                                        .required(true)
+                                        .index(1)
+                                )
+                        )
+                        .subcommand(
+                            Command::new("test")
+                                .about("Run microVM integration tests")
+                        )
+                )
+                .subcommand(
+                    Command::new("mount")
+                        .about("Mount a folder to an MCP tool (auto-detected tool path)")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name (e.g., solana-mcp)")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to mount (e.g., ~/solana-data)")
+                                .required(true)
+                                .index(2)
+                        )
+                        .arg(
+                            Arg::new("readonly")
+                                .long("readonly")
+                                .short('r')
+                                .action(ArgAction::SetTrue)
+                                .help("Mount as read-only")
+                        )
+                )
+                .subcommand(
+                    Command::new("unmount")
+                        .about("Unmount a folder from an MCP tool")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to unmount")
+                                .required(true)
+                                .index(2)
+                        )
+                )
+                .subcommand(
+                    Command::new("mounts")
+                        .about("List mounts for MCP tools")
+                        .arg(
+                            Arg::new("tool_name")
+                                .help("MCP tool name (optional, shows all if not specified)")
+                                .index(1)
+                        )
+                )
+        )
+        .subcommand(
+            Command::new("mount")
+                .about("Manage folder mounts for OSVM microVMs and MCP tools")
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("add")
+                        .about("Mount a folder to OSVM microVM (auto-detected VM path)")
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to mount (e.g., ~/Documents)")
+                                .required(true)
+                                .index(1)
+                        )
+                        .arg(
+                            Arg::new("readonly")
+                                .long("readonly")
+                                .short('r')
+                                .action(ArgAction::SetTrue)
+                                .help("Mount as read-only")
+                        )
+                )
+                .subcommand(
+                    Command::new("remove")
+                        .about("Unmount a folder from OSVM microVM")
+                        .arg(
+                            Arg::new("host_path")
+                                .help("Host folder path to unmount")
+                                .required(true)
+                                .index(1)
+                        )
+                )
+                .subcommand(
+                    Command::new("list")
+                        .about("List all OSVM microVM mounts")
+                )
+        )
+        .subcommand(
+            Command::new("snapshot")
+                .about("Analyze and manage Solana snapshots")
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("read")
+                        .about("Read and display snapshot accounts")
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory (default: ~/.config/osvm/ledgers/devnet/remote/extracted)")
+                        )
+                        .arg(
+                            Arg::new("limit")
+                                .long("limit")
+                                .short('n')
+                                .value_name("COUNT")
+                                .help("Limit number of accounts to display")
+                        )
+                        .arg(
+                            Arg::new("offset")
+                                .long("offset")
+                                .value_name("COUNT")
+                                .default_value("0")
+                                .help("Skip first N accounts")
+                        )
+                        .arg(
+                            Arg::new("parallel")
+                                .long("parallel")
+                                .action(ArgAction::SetTrue)
+                                .help("Enable parallel processing")
+                        )
+                        .arg(
+                            Arg::new("threads")
+                                .long("threads")
+                                .value_name("COUNT")
+                                .help("Number of threads for parallel processing (default: CPU count)")
+                        )
+                        .arg(
+                            Arg::new("filter-owner")
+                                .long("filter-owner")
+                                .value_name("PUBKEY")
+                                .help("Filter accounts by owner program")
+                        )
+                        .arg(
+                            Arg::new("filter-min-balance")
+                                .long("filter-min-balance")
+                                .value_name("LAMPORTS")
+                                .help("Filter accounts with balance >= LAMPORTS")
+                        )
+                        .arg(
+                            Arg::new("filter-max-balance")
+                                .long("filter-max-balance")
+                                .value_name("LAMPORTS")
+                                .help("Filter accounts with balance <= LAMPORTS")
+                        )
+                        .arg(
+                            Arg::new("filter-min-size")
+                                .long("filter-min-size")
+                                .value_name("BYTES")
+                                .help("Filter accounts with data size >= BYTES")
+                        )
+                        .arg(
+                            Arg::new("filter-max-size")
+                                .long("filter-max-size")
+                                .value_name("BYTES")
+                                .help("Filter accounts with data size <= BYTES")
+                        )
+                        .arg(
+                            Arg::new("filter-executable")
+                                .long("filter-executable")
+                                .action(ArgAction::SetTrue)
+                                .help("Filter only executable accounts")
+                        )
+                        .arg(
+                            Arg::new("filter-rent-exempt")
+                                .long("filter-rent-exempt")
+                                .action(ArgAction::SetTrue)
+                                .help("Filter only rent-exempt accounts")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format")
+                        )
+                        .arg(
+                            Arg::new("quiet")
+                                .long("quiet")
+                                .short('q')
+                                .action(ArgAction::SetTrue)
+                                .help("Suppress non-essential output")
+                        )
+                )
+                .subcommand(
+                    Command::new("stats")
+                        .about("Show comprehensive snapshot statistics")
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format")
+                        )
+                )
+                .subcommand(
+                    Command::new("export")
+                        .about("Export snapshot to various formats")
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("output")
+                                .long("output")
+                                .short('o')
+                                .value_name("FILE")
+                                .required(true)
+                                .help("Output file path")
+                        )
+                        .arg(
+                            Arg::new("format")
+                                .long("format")
+                                .short('f')
+                                .value_name("FORMAT")
+                                .value_parser(clap::builder::PossibleValuesParser::new(["json", "csv", "parquet", "msgpack"]))
+                                .default_value("json")
+                                .help("Export format")
+                        )
+                        .arg(
+                            Arg::new("filter-owner")
+                                .long("filter-owner")
+                                .value_name("PUBKEY")
+                                .help("Filter accounts by owner program")
+                        )
+                        .arg(
+                            Arg::new("filter-min-balance")
+                                .long("filter-min-balance")
+                                .value_name("LAMPORTS")
+                                .help("Filter accounts with balance >= LAMPORTS")
+                        )
+                        .arg(
+                            Arg::new("filter-max-balance")
+                                .long("filter-max-balance")
+                                .value_name("LAMPORTS")
+                                .help("Filter accounts with balance <= LAMPORTS")
+                        )
+                )
+                .subcommand(
+                    Command::new("compare")
+                        .about("Compare two snapshots and show differences")
+                        .arg(
+                            Arg::new("snapshot1")
+                                .value_name("SNAPSHOT1")
+                                .required(true)
+                                .index(1)
+                                .help("First snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("snapshot2")
+                                .value_name("SNAPSHOT2")
+                                .required(true)
+                                .index(2)
+                                .help("Second snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format")
+                        )
+                )
+                .subcommand(
+                    Command::new("validate")
+                        .about("Validate snapshot integrity")
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format")
+                        )
+                )
+                .subcommand(
+                    Command::new("find")
+                        .about("Find specific account by pubkey")
+                        .arg(
+                            Arg::new("pubkey")
+                                .value_name("PUBKEY")
+                                .required(true)
+                                .index(1)
+                                .help("Account public key to search for")
+                        )
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory")
+                        )
+                        .arg(
+                            Arg::new("json")
+                                .long("json")
+                                .action(ArgAction::SetTrue)
+                                .help("Output in JSON format")
+                        )
+                )
+                .subcommand(
+                    Command::new("interactive")
+                        .about("Launch interactive TUI for snapshot exploration")
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Path to snapshot directory")
+                        )
+                )
+        )
+        .subcommand(
+            Command::new("db")
+                .about("Manage ClickHouse database for blockchain data indexing")
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("init")
+                        .about("Initialize ClickHouse database")
+                        .arg(
+                            Arg::new("data-dir")
+                                .long("data-dir")
+                                .value_name("PATH")
+                                .help("Custom data directory path")
+                        )
+                )
+                .subcommand(
+                    Command::new("start")
+                        .about("Start ClickHouse database server")
+                )
+                .subcommand(
+                    Command::new("stop")
+                        .about("Stop ClickHouse database server")
+                )
+                .subcommand(
+                    Command::new("status")
+                        .about("Check ClickHouse database server status")
+                )
+                .subcommand(
+                    Command::new("query")
+                        .about("Execute SQL query on ClickHouse database")
+                        .arg(
+                            Arg::new("query")
+                                .long("query")
+                                .short('q')
+                                .value_name("SQL")
+                                .required(true)
+                                .help("SQL query to execute")
+                        )
+                )
+                .subcommand(
+                    Command::new("activity")
+                        .about("View activity logs (CLI commands and chat history)")
+                        .arg(
+                            Arg::new("stats")
+                                .long("stats")
+                                .action(ArgAction::SetTrue)
+                                .help("Show activity statistics")
+                        )
+                        .arg(
+                            Arg::new("commands")
+                                .long("commands")
+                                .action(ArgAction::SetTrue)
+                                .help("Show CLI command history")
+                        )
+                        .arg(
+                            Arg::new("chat")
+                                .long("chat")
+                                .action(ArgAction::SetTrue)
+                                .help("Show chat message history")
+                        )
+                        .arg(
+                            Arg::new("limit")
+                                .long("limit")
+                                .short('n')
+                                .value_name("COUNT")
+                                .default_value("100")
+                                .help("Limit number of results")
+                        )
+                        .arg(
+                            Arg::new("session-id")
+                                .long("session-id")
+                                .value_name("ID")
+                                .help("Filter by session ID")
+                        )
+                )
+                .subcommand(
+                    Command::new("sync")
+                        .about("Sync blockchain data from snapshots/ledger to ClickHouse")
+                        .arg(
+                            Arg::new("mode")
+                                .long("mode")
+                                .value_name("MODE")
+                                .value_parser(clap::builder::PossibleValuesParser::new([
+                                    "last-30-days",
+                                    "full-historical",
+                                    "realtime"
+                                ]))
+                                .default_value("last-30-days")
+                                .help("Sync mode")
+                        )
+                        .arg(
+                            Arg::new("programs")
+                                .long("programs")
+                                .value_name("PUBKEYS")
+                                .help("Comma-separated list of program IDs to index")
+                        )
+                        .arg(
+                            Arg::new("accounts")
+                                .long("accounts")
+                                .value_name("PUBKEYS")
+                                .help("Comma-separated list of account pubkeys to index")
+                        )
+                        .arg(
+                            Arg::new("pattern")
+                                .long("pattern")
+                                .value_name("HEX")
+                                .help("Hex byte pattern to match in account data (e.g., 0x1234abcd)")
+                        )
+                        .arg(
+                            Arg::new("ledger-path")
+                                .long("ledger-path")
+                                .value_name("PATH")
+                                .help("Custom ledger path")
+                        )
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Custom snapshot directory")
+                        )
+                )
+        )
+        .subcommand(
+            Command::new("realtime")
+                .about("Manage real-time blockchain data sync daemon")
+                .arg_required_else_help(true)
+                .subcommand(
+                    Command::new("start")
+                        .about("Start real-time sync daemon")
+                        .arg(
+                            Arg::new("programs")
+                                .long("programs")
+                                .value_name("PUBKEYS")
+                                .help("Comma-separated list of program IDs to monitor")
+                        )
+                        .arg(
+                            Arg::new("accounts")
+                                .long("accounts")
+                                .value_name("PUBKEYS")
+                                .help("Comma-separated list of account pubkeys to monitor")
+                        )
+                        .arg(
+                            Arg::new("patterns")
+                                .long("patterns")
+                                .value_name("HEX")
+                                .help("Hex byte patterns to match (e.g., 0x1234abcd)")
+                        )
+                        .arg(
+                            Arg::new("ledger-path")
+                                .long("ledger-path")
+                                .value_name("PATH")
+                                .help("Custom ledger path")
+                        )
+                        .arg(
+                            Arg::new("snapshot-dir")
+                                .long("snapshot-dir")
+                                .value_name("PATH")
+                                .help("Custom snapshot directory")
+                        )
+                )
+                .subcommand(
+                    Command::new("stop")
+                        .about("Stop real-time sync daemon")
+                )
+                .subcommand(
+                    Command::new("status")
+                        .about("Check real-time sync daemon status")
+                )
         )
         .subcommand(
             Command::new("audit")
@@ -1252,10 +1832,5 @@ If not specified, built-in templates embedded in the binary will be used.")
                         .help("Don't commit audit results to repository. If no output directory is provided, files will be copied to the current folder.")
                 )
         )
-        .subcommand(
-            Command::new("new_feature_command")
-                .about("New feature for testing")
-        )
-
-                .get_matches()
+        .get_matches()
 }

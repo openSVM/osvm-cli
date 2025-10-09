@@ -1,0 +1,29 @@
+[package]
+name = "unikraft_tool_executor"
+version = "0.1.0"
+edition = "2021"
+authors = ["OSVM Contributors"]
+description = "Ephemeral unikernel for executing MCP tools in isolation"
+
+[dependencies]
+tokio = { version = "1.47", features = ["rt-multi-thread", "io-util", "net", "time", "macros"] }
+tokio-vsock = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+
+[[bin]]
+name = "unikraft_tool_executor"
+path = "src/main.rs"

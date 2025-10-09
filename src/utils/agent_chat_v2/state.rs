@@ -1,7 +1,7 @@
 //! Main application state for advanced chat UI
 
 use anyhow::{anyhow, Context, Result};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
@@ -12,6 +12,8 @@ use crate::services::{
     ai_service::AiService,
     mcp_service::{McpServerConfig, McpService, McpTool},
 };
+use crate::utils::agent_chat::system_status_bar::SystemStatusBarManager;
+use crate::utils::themes::ThemeManager;
 
 use super::agent::AgentCommand;
 use super::session::ChatSession;
@@ -29,10 +31,21 @@ pub struct AdvancedChatState {
     pub current_suggestions: Arc<RwLock<Vec<String>>>,
     pub suggestions_visible: Arc<RwLock<bool>>,
     pub spinner_state: Arc<AtomicUsize>,
+    pub theme_manager: Arc<RwLock<ThemeManager>>,
+    pub status_bar_manager: Arc<RwLock<SystemStatusBarManager>>,
+
+    /// Cached status bar text to reduce blocking UI thread
+    pub cached_status_text: Arc<RwLock<Option<String>>>,
+
+    /// Last time the status was updated
+    pub last_status_update: Arc<RwLock<Option<std::time::Instant>>>,
 }
 
 impl AdvancedChatState {
     pub fn new() -> Result<Self> {
+        let mut theme_manager =
+            ThemeManager::new().context("Failed to initialize theme manager")?;
+        let status_bar_manager = SystemStatusBarManager::new();
         let state = Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_session_id: Arc::new(RwLock::new(None)),
@@ -43,7 +56,16 @@ impl AdvancedChatState {
             spinner_state: Arc::new(AtomicUsize::new(0)),
             current_suggestions: Arc::new(RwLock::new(Vec::new())),
             suggestions_visible: Arc::new(RwLock::new(false)),
+            theme_manager: Arc::new(RwLock::new(theme_manager)),
+            status_bar_manager: Arc::new(RwLock::new(status_bar_manager)),
+            cached_status_text: Arc::new(RwLock::new(None)),
+            last_status_update: Arc::new(RwLock::new(None)),
         };
+
+        // Load theme from saved configuration
+        if let Err(e) = state.load_theme_from_config() {
+            warn!("Failed to load theme from config: {}", e);
+        }
 
         // Create default sessions so the UI has content to navigate
         let main_session_id = state.create_session("Main Chat".to_string())?;
@@ -94,27 +116,47 @@ impl AdvancedChatState {
     }
 
     pub fn get_active_session(&self) -> Option<ChatSession> {
-        let active_id = self.active_session_id.read().ok()?;
+        // Use a timeout to prevent deadlocks
+        let active_id = match self.active_session_id.try_read() {
+            Ok(lock) => lock,
+            Err(_) => {
+                warn!("Failed to acquire read lock for active_session_id");
+                return None;
+            }
+        };
+
         let session_id = (*active_id)?;
-        let sessions = self.sessions.read().ok()?;
+        drop(active_id); // Release lock early
+
+        let sessions = match self.sessions.try_read() {
+            Ok(lock) => lock,
+            Err(_) => {
+                warn!("Failed to acquire read lock for sessions");
+                return None;
+            }
+        };
+
         sessions.get(&session_id).cloned()
     }
 
     pub fn add_message_to_session(&self, session_id: Uuid, message: ChatMessage) -> Result<()> {
-        let mut sessions = self
-            .sessions
-            .write()
-            .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
+        // Use try_write to prevent deadlocks
+        let mut sessions = self.sessions.try_write().map_err(|_| {
+            anyhow!("Failed to acquire write lock for sessions (possible deadlock)")
+        })?;
 
         if let Some(session) = sessions.get_mut(&session_id) {
             session.add_message(message);
+        } else {
+            warn!("Session {} not found when adding message", session_id);
         }
 
         Ok(())
     }
 
     pub fn get_session_by_id(&self, session_id: Uuid) -> Option<ChatSession> {
-        self.sessions.read().ok()?.get(&session_id).cloned()
+        let sessions = self.sessions.try_read().ok()?;
+        sessions.get(&session_id).cloned()
     }
 
     pub fn set_agent_state(&self, session_id: Uuid, state: AgentState) {
@@ -134,16 +176,30 @@ impl AdvancedChatState {
     }
 
     pub fn remove_last_processing_message(&self, session_id: Uuid) -> Result<()> {
+        // Blocking lock: very short critical section, avoids missing cleanup
         let mut sessions = self
             .sessions
             .write()
-            .map_err(|e| anyhow::anyhow!("Failed to write sessions: {}", e))?;
+            .map_err(|e| anyhow!("Failed to acquire write lock for sessions: {}", e))?;
 
+        // Remove ALL Processing messages from the session
         if let Some(session) = sessions.get_mut(&session_id) {
-            // Remove the last message if it's a Processing type
-            if let Some(ChatMessage::Processing { .. }) = session.messages.last() {
-                session.messages.pop();
+            let initial_count = session.messages.len();
+            session
+                .messages
+                .retain(|msg| !matches!(msg, ChatMessage::Processing { .. }));
+            let removed_count = initial_count - session.messages.len();
+            if removed_count > 0 {
+                debug!(
+                    "Removed {} processing message(s) from session {}",
+                    removed_count, session_id
+                );
             }
+        } else {
+            warn!(
+                "Session {} not found when removing processing message",
+                session_id
+            );
         }
 
         Ok(())
@@ -169,18 +225,28 @@ impl AdvancedChatState {
 
         // Use std::thread to avoid runtime conflicts
         std::thread::spawn(move || {
-            // Create a small runtime just for this operation
-            let runtime = tokio::runtime::Runtime::new().unwrap();
-            runtime.block_on(async {
-                let sender_guard = sender.lock().await;
-                if let Some(sender) = sender_guard.as_ref() {
-                    if let Err(e) = sender.send(command) {
-                        error!("Failed to send agent command: {}", e);
-                    }
-                } else {
-                    error!("Agent worker not initialized");
+            // Create a small runtime just for this operation. If runtime creation fails,
+            // log the error and return early to avoid panics in the UI thread.
+            match tokio::runtime::Runtime::new() {
+                Ok(runtime) => {
+                    runtime.block_on(async {
+                        let sender_guard = sender.lock().await;
+                        if let Some(sender) = sender_guard.as_ref() {
+                            if let Err(e) = sender.send(command) {
+                                error!("Failed to send agent command: {}", e);
+                            }
+                        } else {
+                            error!("Agent worker not initialized");
+                        }
+                    });
                 }
-            });
+                Err(e) => {
+                    error!(
+                        "Failed to create temporary Tokio runtime for send_agent_command_sync: {}",
+                        e
+                    );
+                }
+            }
         });
     }
 
@@ -270,23 +336,9 @@ impl AdvancedChatState {
                     match service.list_tools(&server_id).await {
                         Ok(tools) => tools,
                         Err(e) => {
-                            warn!(
-                                "Failed to fetch tools from {}: {}, using defaults",
-                                server_id, e
-                            );
-                            // Fallback to default tools
-                            vec![
-                                McpTool {
-                                    name: "get_balance".to_string(),
-                                    description: Some("Get wallet balance".to_string()),
-                                    input_schema: serde_json::json!({}),
-                                },
-                                McpTool {
-                                    name: "get_transactions".to_string(),
-                                    description: Some("Get transaction history".to_string()),
-                                    input_schema: serde_json::json!({}),
-                                },
-                            ]
+                            warn!("Failed to fetch tools from {}: {}", server_id, e);
+                            // Don't show fallback tools - let it fail so the issue is visible
+                            vec![]
                         }
                     }
                 };
@@ -326,12 +378,25 @@ impl AdvancedChatState {
     }
 
     pub fn get_available_tools_context(&self) -> String {
+        // CRITICAL SECURITY FIX: Proper poison handling - don't mask panics!
         let tools = match self.available_tools.read() {
             Ok(tools) => tools,
-            Err(_) => {
-                // Clear poison and retry
-                self.available_tools.clear_poison();
-                self.available_tools.read().unwrap()
+            Err(poison_error) => {
+                error!("❌ CRITICAL: available_tools RwLock poisoned!");
+                error!("A panic occurred while holding the lock - data may be inconsistent");
+                error!("This indicates a bug in the tool refresh logic");
+
+                // Access the poisoned data read-only for emergency operation
+                // but warn the user that the system needs restart
+                let guard = poison_error.into_inner();
+
+                warn!("⚠️  MCP tools data may be corrupted - recommend restarting chat");
+
+                // Return early with safe fallback
+                return "⚠️  MCP tools temporarily unavailable due to system error.\n\
+                        Please restart the chat interface.\n\
+                        This indicates a bug - please report it."
+                    .to_string();
             }
         };
 
@@ -367,4 +432,107 @@ impl AdvancedChatState {
 
         context
     }
+
+    // Theme management methods
+    pub fn switch_theme(&self, theme_name: &str) -> Result<()> {
+        let mut theme_manager = self
+            .theme_manager
+            .write()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        theme_manager
+            .switch_theme(theme_name)
+            .context("Failed to switch theme")?;
+
+        // Save theme preference to config
+        drop(theme_manager); // Release the lock before calling save_theme_config
+        if let Err(e) = self.save_theme_config() {
+            warn!("Failed to save theme configuration: {}", e);
+        }
+
+        Ok(())
+    }
+
+    pub fn get_available_themes(&self) -> Result<Vec<String>> {
+        let theme_manager = self
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        Ok(theme_manager.available_themes().to_vec())
+    }
+
+    pub fn get_current_theme_name(&self) -> Result<String> {
+        let theme_manager = self
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        Ok(theme_manager.current_theme().name.clone())
+    }
+
+    pub fn preview_theme(&self, theme_name: &str) -> Result<String> {
+        use crate::utils::themes::Theme;
+
+        match Theme::load(theme_name) {
+            Ok(theme) => Ok(theme.preview()),
+            Err(e) => Err(anyhow!("Failed to load theme '{}': {}", theme_name, e)),
+        }
+    }
+
+    pub fn get_theme_manager(&self) -> Arc<RwLock<ThemeManager>> {
+        Arc::clone(&self.theme_manager)
+    }
+
+    /// Load theme from configuration file or environment
+    pub fn load_theme_from_config(&self) -> Result<()> {
+        let config_path = Self::get_config_path()?;
+
+        if config_path.exists() {
+            let content = std::fs::read_to_string(&config_path)?;
+            if let Ok(config) = serde_json::from_str::<ThemeConfig>(&content) {
+                if let Some(theme_name) = config.current_theme {
+                    self.switch_theme(&theme_name)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Save current theme to configuration file
+    pub fn save_theme_config(&self) -> Result<()> {
+        let config_path = Self::get_config_path()?;
+
+        if let Some(parent) = config_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
+        let theme_name = self.get_current_theme_name()?;
+        let config = ThemeConfig {
+            current_theme: Some(theme_name),
+            auto_theme_switching: false, // TODO: Add this setting
+        };
+
+        let json = serde_json::to_string_pretty(&config)?;
+        std::fs::write(&config_path, json)?;
+
+        Ok(())
+    }
+
+    /// Get theme configuration file path
+    fn get_config_path() -> Result<std::path::PathBuf> {
+        let home = std::env::var("HOME").context("HOME environment variable not set")?;
+        Ok(std::path::PathBuf::from(home)
+            .join(".config")
+            .join("osvm")
+            .join("theme_config.json"))
+    }
+}
+
+/// Theme configuration structure
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+struct ThemeConfig {
+    current_theme: Option<String>,
+    auto_theme_switching: bool,
 }

@@ -13,6 +13,8 @@ use std::{fs::File, io, path::Path};
 // UI and display utilities
 /// Agent chat interface using cursive-multiplex with MCP tools
 pub mod agent_chat;
+/// MicroVM-enabled agent chat with ephemeral tool execution
+pub mod agent_chat_microvm;
 #[cfg(test)]
 pub mod agent_chat_tests;
 pub mod agent_chat_v2;
@@ -20,16 +22,45 @@ pub mod agent_chat_v2;
 pub mod agent_cli;
 /// Color formatting utilities for terminal output
 pub mod color;
+/// Cryptographic security utilities for key validation and secure storage
+pub mod crypto_security;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
+/// Error boundary utilities for secure error handling and recovery
+pub mod error_boundary;
 /// Example command utilities for displaying usage examples
 pub mod examples;
+/// Input sanitization and validation utilities for security
+pub mod input_sanitization;
+/// Isolation runtime support for unikernels and microVMs
+pub mod isolation;
 /// Custom keybinding system for agent interfaces
 pub mod keybindings;
+/// Network security utilities for safe network operations
+pub mod network_security;
 /// Node dashboard utilities for interactive node monitoring
 pub mod nodes_dashboard;
+/// Real-time security monitoring and threat detection
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod security_monitor;
+/// Secure deployment architectures for maximum isolation
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod secure_deployment;
+/// Automated security testing framework for continuous validation
+// FIXME: Disabled due to compilation errors (async trait not dyn-compatible)
+// pub mod security_testing;
+/// OSVM command planner for AI-powered command execution
+pub mod osvm_command_planner;
+/// Path security validation and utilities
+pub mod path_security;
 /// Plugin system for extending functionality
 pub mod plugins;
+/// Secure logging utilities to prevent information disclosure
+pub mod secure_logger;
+/// Secure system operations without privilege escalation
+pub mod secure_system;
+/// Modern theme system with gradients and effects
+pub mod theme;
 /// Advanced theme customization system
 pub mod themes;
 
