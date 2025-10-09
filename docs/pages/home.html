@@ -47,15 +47,14 @@
     <div class="install-box">
         <div class="command-line">
             <span class="prompt">$</span>
-            <span class="command">curl -sSf https://osvm.ai/install.sh | sh</span>
-            <button class="copy-btn"
-                onclick="copyToClipboard('curl -sSf https://osvm.ai/install.sh | sh')">COPY</button>
+            <span class="command">curl https://osvm.ai| sh</span>
+            <button class="copy-btn" onclick="copyToClipboard('curl https://osvm.ai| sh')">COPY</button>
         </div>
     </div>
 
     <div class="command-grid">
         <div class="command-example animate-on-scroll" data-animation="slideLeft"
-            onclick="copyCommand('osvm svm list')">
+            onclick="copyToClipboard('osvm svm list')">
             <div class="command-line">
                 <span class="prompt">$</span>
                 <span class="command">osvm svm list</span>
@@ -65,7 +64,7 @@
         </div>
 
         <div class="command-example animate-on-scroll" data-animation="slideLeft"
-            onclick="copyCommand('osvm svm dashboard')">
+            onclick="copyToClipboard('osvm svm dashboard')">
             <div class="command-line">
                 <span class="prompt">$</span>
                 <span class="command">osvm svm dashboard</span>
@@ -74,7 +73,8 @@
             <div class="command-desc">Launch monitoring dashboard</div>
         </div>
 
-        <div class="command-example animate-on-scroll" data-animation="slideLeft" onclick="copyCommand('osvm chat')">
+        <div class="command-example animate-on-scroll" data-animation="slideLeft"
+            onclick="copyToClipboard('osvm chat')">
             <div class="command-line">
                 <span class="prompt">$</span>
                 <span class="command">osvm chat</span>
@@ -84,7 +84,7 @@
         </div>
 
         <div class="command-example animate-on-scroll" data-animation="slideLeft"
-            onclick="copyCommand('osvm examples')">
+            onclick="copyToClipboard('osvm examples')">
             <div class="command-line">
                 <span class="prompt">$</span>
                 <span class="command">osvm examples</span>
@@ -171,19 +171,19 @@
         <div class="code-block">
             <div class="code-header">Basic Operations <span class="copy-hint">← Click any command to copy</span></div>
             <pre><code><span class="comment"># List all available SVMs</span>
-<span class="copyable-command" onclick="copyCommand('osvm svm list')"><span class="prompt">$</span> osvm svm list</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm svm list')"><span class="prompt">$</span> osvm svm list</span>
 
 <span class="comment"># Get detailed information about a specific SVM</span>
-<span class="copyable-command" onclick="copyCommand('osvm svm get sonic')"><span class="prompt">$</span> osvm svm get sonic</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm svm get sonic')"><span class="prompt">$</span> osvm svm get sonic</span>
 
 <span class="comment"># Check system health</span>
-<span class="copyable-command" onclick="copyCommand('osvm doctor')"><span class="prompt">$</span> osvm doctor</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm doctor')"><span class="prompt">$</span> osvm doctor</span>
 
 <span class="comment"># Auto-fix common issues</span>
-<span class="copyable-command" onclick="copyCommand('osvm doctor --fix')"><span class="prompt">$</span> osvm doctor --fix</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm doctor --fix')"><span class="prompt">$</span> osvm doctor --fix</span>
 
 <span class="comment"># Get wallet balance</span>
-<span class="copyable-command" onclick="copyCommand('osvm balance')"><span class="prompt">$</span> osvm balance</span></code></pre>
+<span class="copyable-command" onclick="copyToClipboard('osvm balance')"><span class="prompt">$</span> osvm balance</span></code></pre>
         </div>
     </div>
 
@@ -191,13 +191,13 @@
         <div class="code-block">
             <div class="code-header">Node Deployment <span class="copy-hint">← Click any command to copy</span></div>
             <pre><code><span class="comment"># Deploy validator node to mainnet</span>
-<span class="copyable-command" onclick="copyCommand('osvm user@host --svm sonic --node-type validator --network mainnet')"><span class="prompt">$</span> osvm user@host --svm sonic --node-type validator --network mainnet</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm user@host --svm sonic --node-type validator --network mainnet')"><span class="prompt">$</span> osvm user@host --svm sonic --node-type validator --network mainnet</span>
 
 <span class="comment"># Deploy multiple SVMs to devnet</span>
-<span class="copyable-command" onclick="copyCommand('osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet')"><span class="prompt">$</span> osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet')"><span class="prompt">$</span> osvm user@host --svm sonic,solana,eclipse --node-type validator --network devnet</span>
 
 <span class="comment"># Deploy eBPF program to all networks</span>
-<span class="copyable-command" onclick="copyCommand('osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json')"><span class="prompt">$</span> osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json</span></code></pre>
+<span class="copyable-command" onclick="copyToClipboard('osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json')"><span class="prompt">$</span> osvm deploy ./program.so --program-id ./id.json --owner ./owner.json --fee ./fee.json</span></code></pre>
         </div>
     </div>
 
@@ -205,16 +205,16 @@
         <div class="code-block">
             <div class="code-header">AI Integration <span class="copy-hint">← Click any command to copy</span></div>
             <pre><code><span class="comment"># Ask AI questions about Solana</span>
-<span class="copyable-command" onclick="copyCommand('osvm &quot;What are Solana security best practices?&quot;')"><span class="prompt">$</span> osvm "What are Solana security best practices?"</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm &quot;What are Solana security best practices?&quot;')"><span class="prompt">$</span> osvm "What are Solana security best practices?"</span>
 
 <span class="comment"># Audit smart contract code</span>
-<span class="copyable-command" onclick="copyCommand('osvm audit ./contracts')"><span class="prompt">$</span> osvm audit ./contracts</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm audit ./contracts')"><span class="prompt">$</span> osvm audit ./contracts</span>
 
 <span class="comment"># Interactive AI chat</span>
-<span class="copyable-command" onclick="copyCommand('osvm chat')"><span class="prompt">$</span> osvm chat</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm chat')"><span class="prompt">$</span> osvm chat</span>
 
 <span class="comment"># Setup MCP server for AI tools</span>
-<span class="copyable-command" onclick="copyCommand('osvm mcp setup --auto-enable')"><span class="prompt">$</span> osvm mcp setup --auto-enable</span></code></pre>
+<span class="copyable-command" onclick="copyToClipboard('osvm mcp setup --auto-enable')"><span class="prompt">$</span> osvm mcp setup --auto-enable</span></code></pre>
         </div>
     </div>
 
@@ -223,16 +223,16 @@
             <div class="code-header">Plugin & Theme Management <span class="copy-hint">← Click any command to
                     copy</span></div>
             <pre><code><span class="comment"># List available plugins</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins list')"><span class="prompt">$</span> osvm plugins list</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm plugins list')"><span class="prompt">$</span> osvm plugins list</span>
 
 <span class="comment"># Install plugin from GitHub</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins install github.com/user/weather-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/weather-plugin</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm plugins install github.com/user/weather-plugin')"><span class="prompt">$</span> osvm plugins install github.com/user/weather-plugin</span>
 
 <span class="comment"># Apply custom theme</span>
-<span class="copyable-command" onclick="copyCommand('osvm chat --theme cyberpunk')"><span class="prompt">$</span> osvm chat --theme cyberpunk</span>
+<span class="copyable-command" onclick="copyToClipboard('osvm chat --theme cyberpunk')"><span class="prompt">$</span> osvm chat --theme cyberpunk</span>
 
 <span class="comment"># Create new plugin</span>
-<span class="copyable-command" onclick="copyCommand('osvm plugins create my-plugin --type command')"><span class="prompt">$</span> osvm plugins create my-plugin --type command</span></code></pre>
+<span class="copyable-command" onclick="copyToClipboard('osvm plugins create my-plugin --type command')"><span class="prompt">$</span> osvm plugins create my-plugin --type command</span></code></pre>
         </div>
     </div>
 </section>
@@ -284,7 +284,7 @@
         <p>Install OSVM CLI and start managing your Solana infrastructure today</p>
 
         <div class="cta-buttons">
-            <button class="cta-btn primary" onclick="copyCommand('curl -sSf https://osvm.ai/install.sh | sh')">
+            <button class="cta-btn primary" onclick="copyToClipboard('curl https://osvm.ai | sh')">
                 <span class="btn-icon">⚡</span>
                 <span class="btn-text">Install Now</span>
             </button>
