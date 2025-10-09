@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OSVM CLI - Solana Virtual Machine Management</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="css/multipage.css">
+    <link rel="stylesheet" href="assets/dos-terminal.css">
+    <!-- <link rel="stylesheet" href="styles.css"> -->
+    <!-- <link rel="stylesheet" href="css/multipage.css"> -->
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <meta name="description" content="Command-line interface for managing Solana Virtual Machines with AI assistance, MCP integration, and plugin support">
+    <meta name="description"
+        content="Command-line interface for managing Solana Virtual Machines with AI assistance, MCP integration, and plugin support">
+    <script src="assets/dos-interactive.js" defer></script>
 </head>
+
 <body>
     <!-- Terminal Window Frame -->
     <div class="terminal-window">
@@ -40,9 +45,11 @@
                 <ul class="nav-menu">
                     <li><a href="#" data-page="home" class="nav-link active">Home</a></li>
                     <li><a href="#" data-page="installation" class="nav-link">Install</a></li>
+                    <li><a href="#" data-page="isolation" class="nav-link">🛡️ Isolation</a></li>
                     <li><a href="#" data-page="plugins" class="nav-link">Plugins</a></li>
                     <li><a href="#" data-page="themes" class="nav-link">Themes</a></li>
                     <li><a href="#" data-page="ai-integration" class="nav-link">AI</a></li>
+                    <li><a href="#" data-page="ovsm-language" class="nav-link">🧠 OVSM</a></li>
                     <li><a href="#" data-page="mcp-servers" class="nav-link">MCP</a></li>
                     <li><a href="#" data-page="node-deployment" class="nav-link">Deploy</a></li>
                     <li><a href="#" data-page="api-reference" class="nav-link">API</a></li>
@@ -74,14 +81,12 @@
                 <pre class="ascii-art">
                     ╔═══════════════════════════════════════════════╗
                     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
-                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
                     ║░░░░░░██████╗░██╗░░░██╗███████╗███╗░░░███╗░░░░░║
                     ║░░░░░██╔═══██╗██║░░░██║██╔════╝████╗░████║░░░░░║
                     ║░░░░░██║░░░██║██║░░░██║███████╗██╔████╔██║░░░░░║
                     ║░░░░░██║░░░██║╚██╗░██╔╝╚════██║██║╚██╔╝██║░░░░░║
                     ║░░░░░╚██████╔╝░╚████╔╝░███████║██║░╚═╝░██║░░░░░║
                     ║░░░░░░╚═════╝░░░╚═══╝░░╚══════╝╚═╝░░░░░╚═╝░░░░░║
-                    ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
                     ║░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
                     ╚═══════════════════════════════════════════════╝
                 </pre>
@@ -112,6 +117,8 @@
                     <h4>DOCUMENTATION</h4>
                     <ul>
                         <li><a href="#" data-page="installation">Installation</a></li>
+                        <li><a href="#" data-page="isolation">Isolation Infrastructure</a></li>
+                        <li><a href="#" data-page="ovsm-language">OVSM Language</a></li>
                         <li><a href="#" data-page="plugins">Plugin Development</a></li>
                         <li><a href="#" data-page="api-reference">API Reference</a></li>
                         <li><a href="#" data-page="node-deployment">Deployment Guide</a></li>
@@ -169,4 +176,5 @@
         });
     </script>
 </body>
+
 </html>

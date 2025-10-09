@@ -1,0 +1,932 @@
+/* DOS Terminal Theme for OSVM Documentation */
+
+/* Import DOS-era fonts */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap');
+
+/* CSS Variables for authentic DOS colors */
+:root {
+  --dos-black: #000000;
+  --dos-white: #c0c0c0;
+  --dos-bright-white: #ffffff;
+  --dos-gray: #808080;
+  --dos-dark-gray: #404040;
+  --dos-amber: #ffaa00;
+  --dos-bright-amber: #ffff55;
+  --dos-blue: #0000aa;
+  --dos-bright-blue: #5555ff;
+  --dos-cyan: #00aaaa;
+  --dos-bright-cyan: #55ffff;
+  --dos-red: #aa0000;
+  --dos-bright-red: #ff5555;
+  --crt-phosphor: #ffaa00;
+  --crt-glow: rgba(255, 170, 0, 0.3);
+}
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Body with CRT effect */
+body {
+  background: var(--dos-black);
+  color: var(--dos-white);
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-x: hidden;
+  position: relative;
+  min-height: 100vh;
+  padding: 20px;
+
+  /* CRT screen curve effect */
+  background: radial-gradient(ellipse at center, #000000 0%, #000000 60%, #000000 100%);
+
+  /* Text shadow for phosphor glow - subtle amber glow */
+  text-shadow:
+    0 0 1px var(--crt-glow),
+    0 0 2px var(--crt-glow);
+}
+
+/* Scanlines overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0.3) 1px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0) 3px
+    );
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* CRT flicker animation */
+@keyframes flicker {
+  0% { opacity: 0.98; }
+  2% { opacity: 1; }
+  4% { opacity: 0.98; }
+  100% { opacity: 0.98; }
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 170, 0, 0.01);
+  pointer-events: none;
+  z-index: 999;
+  animation: flicker 0.15s infinite;
+}
+
+/* Container */
+.container, main, .content, article {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Terminal window should be full width */
+.terminal-window {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Main content wrapper - consistent padding */
+.main-wrapper, .page-content, body > div:not(.terminal-window) {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure all content sections have consistent width */
+section, .intro, .features, .quick-start, .whats-new, .examples, .cta-section {
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 20px 0;
+}
+
+/* Headers with DOS box drawing */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--dos-bright-white);
+  text-transform: uppercase;
+  margin: 20px 0 10px 0;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+h1 {
+  font-size: 24px;
+  border: double 3px var(--dos-white);
+  padding: 10px;
+  text-align: center;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    rgba(192, 192, 192, 0.02) 2px,
+    rgba(192, 192, 192, 0.02) 4px
+  );
+}
+
+h1::before { content: "╔═══════════════════════════════════════╗\A"; white-space: pre; }
+h1::after { content: "\A╚═══════════════════════════════════════╝"; white-space: pre; }
+
+h2 {
+  font-size: 20px;
+  border-bottom: 1px solid var(--dos-white);
+  padding-bottom: 5px;
+}
+
+h2::before { content: "▓▓ "; }
+
+h3 {
+  font-size: 18px;
+  color: var(--dos-amber);
+}
+
+h3::before { content: "▒▒ "; }
+
+/* Paragraphs */
+p {
+  margin: 10px 0;
+  color: var(--dos-white);
+}
+
+/* Links */
+a {
+  color: var(--dos-cyan);
+  text-decoration: none;
+  border-bottom: 1px solid var(--dos-cyan);
+  transition: all 0.2s;
+}
+
+a:hover {
+  color: var(--dos-bright-white);
+  background: var(--dos-blue);
+  text-shadow: none;
+  padding: 0 2px;
+}
+
+a:visited {
+  color: var(--dos-amber);
+  border-bottom-color: var(--dos-amber);
+}
+
+/* Code blocks - DOS style */
+pre, code {
+  font-family: 'IBM Plex Mono', monospace;
+  background: #0c0c0c;
+  border: 1px solid var(--dos-gray);
+  color: var(--dos-bright-white);
+}
+
+code {
+  padding: 2px 4px;
+  margin: 0 2px;
+}
+
+pre {
+  padding: 10px;
+  margin: 15px 0;
+  overflow-x: auto;
+  position: relative;
+}
+
+pre::before {
+  content: "C:\\> ";
+  color: var(--dos-gray);
+}
+
+/* Lists */
+ul, ol {
+  margin: 10px 0 10px 30px;
+}
+
+li {
+  margin: 5px 0;
+  color: var(--dos-white);
+}
+
+ul li::before {
+  content: "■ ";
+  color: var(--dos-amber);
+  font-weight: bold;
+  margin-left: -20px;
+  margin-right: 10px;
+}
+
+ol {
+  counter-reset: dos-counter;
+  list-style: none;
+}
+
+ol li {
+  counter-increment: dos-counter;
+}
+
+ol li::before {
+  content: "[" counter(dos-counter) "] ";
+  color: var(--dos-amber);
+  font-weight: bold;
+  margin-left: -30px;
+  margin-right: 10px;
+}
+
+/* Tables - ASCII art style */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 15px 0;
+  color: var(--dos-white);
+}
+
+th {
+  background: #1a1a1a;
+  color: var(--dos-bright-white);
+  padding: 8px;
+  text-align: left;
+  border: 1px solid var(--dos-white);
+  text-transform: uppercase;
+}
+
+td {
+  padding: 8px;
+  border: 1px solid var(--dos-gray);
+}
+
+tr:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Blockquotes */
+blockquote {
+  border-left: 4px solid var(--dos-amber);
+  padding-left: 15px;
+  margin: 15px 0;
+  color: var(--dos-amber);
+  font-style: italic;
+}
+
+blockquote::before {
+  content: "║ ";
+  color: var(--dos-amber);
+}
+
+/* Navigation - full width */
+nav, .main-navigation {
+  background: #0a0a0a;
+  border-top: 1px solid var(--dos-white);
+  border-bottom: 1px solid var(--dos-white);
+  padding: 10px 0;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Nav content should be constrained */
+.nav-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 30px;
+  white-space: nowrap;
+}
+
+nav > ul, .main-navigation > * {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.terminal-header {
+  background: var(--dos-black);
+  border-bottom: 1px solid var(--dos-gray);
+  padding: 10px 0;
+  width: 100%;
+}
+
+.terminal-header > * {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+nav ul, .nav-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 15px;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+nav li::before {
+  content: none;
+}
+
+nav a, .nav-link {
+  color: var(--dos-bright-white);
+  border: none;
+  padding: 5px 8px;
+  display: inline-block;
+  font-size: 14px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+nav a:hover {
+  background: var(--dos-white);
+  color: var(--dos-black);
+  text-shadow: none;
+}
+
+/* Buttons */
+button, .button, input[type="submit"] {
+  background: var(--dos-black);
+  color: var(--dos-white);
+  border: 2px solid var(--dos-white);
+  padding: 8px 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-shadow: 0 0 2px var(--crt-glow);
+}
+
+button:hover, .button:hover {
+  background: var(--dos-white);
+  color: var(--dos-black);
+  text-shadow: none;
+  box-shadow: 0 0 5px var(--crt-glow);
+}
+
+/* Forms */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  background: var(--dos-black);
+  color: var(--dos-white);
+  border: 1px solid var(--dos-white);
+  padding: 5px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  width: 100%;
+  margin: 5px 0;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--dos-bright-white);
+  box-shadow: 0 0 3px var(--crt-glow);
+}
+
+/* Footer */
+footer, .terminal-footer {
+  margin-top: 40px;
+  padding: 20px 0;
+  border-top: double 3px var(--dos-white);
+  color: var(--dos-gray);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.footer-section h4 {
+  color: var(--dos-bright-white);
+  margin-bottom: 15px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.footer-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.footer-section li {
+  margin: 8px 0;
+}
+
+.footer-section li::before {
+  content: none;
+}
+
+.footer-section a {
+  color: var(--dos-cyan);
+  text-decoration: none;
+  border: none;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.footer-section a:hover {
+  color: var(--dos-bright-white);
+  background: transparent;
+  padding: 0;
+}
+
+.copyright {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  text-align: center;
+  border-top: 1px solid var(--dos-gray);
+}
+
+.command-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+/* Cursor blink animation */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.cursor::after {
+  content: "_";
+  animation: blink 1s infinite;
+  color: var(--dos-white);
+}
+
+/* Alert/Info boxes */
+.alert, .info, .warning, .error, .note {
+  padding: 10px;
+  margin: 15px 0;
+  border: 1px solid;
+}
+
+.info {
+  border-color: var(--dos-cyan);
+  color: var(--dos-cyan);
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.warning {
+  border-color: var(--dos-amber);
+  color: var(--dos-amber);
+  background: rgba(255, 176, 0, 0.05);
+}
+
+.error {
+  border-color: #ff0000;
+  color: #ff0000;
+  background: rgba(255, 0, 0, 0.05);
+}
+
+.info::before { content: "[INFO] "; }
+.warning::before { content: "[WARN] "; }
+.error::before { content: "[ERROR] "; }
+
+/* ASCII Art Header */
+.ascii-header {
+  color: var(--dos-bright-white);
+  white-space: pre;
+  font-size: 12px;
+  line-height: 1;
+  margin: 20px 0;
+  text-align: center;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dos-black);
+  border: 1px solid var(--dos-gray);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dos-gray);
+  border: 1px solid var(--dos-white);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dos-white);
+}
+
+/* Selection */
+::selection {
+  background: var(--dos-white);
+  color: var(--dos-black);
+  text-shadow: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  body {
+    font-size: 14px;
+    padding: 10px;
+  }
+
+  h1 { font-size: 20px; }
+  h2 { font-size: 18px; }
+  h3 { font-size: 16px; }
+
+  .main-wrapper, .page-content {
+    padding: 0 15px;
+  }
+
+  section {
+    padding: 15px 0;
+  }
+
+  .footer-content {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 0 15px;
+  }
+
+  .nav-menu {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .nav-brand {
+    margin-right: 15px;
+  }
+
+  pre {
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .ascii-art {
+    font-size: 8px;
+    overflow-x: auto;
+  }
+
+  .command-grid, .feature-grid, .news-grid {
+    grid-template-columns: 1fr !important;
+    gap: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 13px;
+    padding: 5px;
+  }
+
+  .main-wrapper, .page-content {
+    padding: 0 10px;
+  }
+
+  h1 { font-size: 18px; }
+  h2 { font-size: 16px; }
+  h3 { font-size: 14px; }
+
+  .nav-container {
+    padding: 0 10px;
+  }
+
+  .nav-menu {
+    gap: 5px;
+  }
+
+  nav a, .nav-link {
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+
+  pre {
+    font-size: 11px;
+    padding: 6px;
+  }
+
+  .footer-content {
+    padding: 0 10px;
+  }
+}
+
+/* Terminal prompt animation */
+.terminal-prompt::before {
+  content: "$ ";
+  color: var(--dos-gray);
+}
+
+/* Boot sequence animation */
+@keyframes bootup {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.boot-sequence {
+  animation: bootup 0.5s ease-out;
+}
+
+/* Force page content to respect max-width */
+#main-content, .page-content {
+  max-width: 1200px !important;
+  margin: 0 auto !important;
+  padding: 20px !important;
+}
+
+/* Specific page fixes */
+.feature-grid, .command-grid, .news-grid, .tab-content {
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Don't let pre/code blocks break layout */
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ======================== */
+/* Interactive Terminal CSS */
+/* ======================== */
+
+.dos-terminal-interactive {
+  background: var(--dos-black);
+  border: 2px solid var(--dos-white);
+  padding: 20px;
+  margin: 20px auto;
+  max-width: 900px;
+  font-family: 'IBM Plex Mono', monospace;
+  position: relative;
+}
+
+.terminal-output {
+  height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #0a0a0a;
+  border: 1px solid var(--dos-gray);
+  padding: 10px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.terminal-line {
+  color: var(--dos-white);
+  line-height: 1.4;
+  margin: 2px 0;
+}
+
+.terminal-line.command-input {
+  color: var(--dos-bright-white);
+}
+
+.terminal-line.output {
+  color: var(--dos-white);
+  margin-left: 20px;
+}
+
+.terminal-line.error {
+  color: var(--dos-bright-red);
+}
+
+.terminal-input-area {
+  display: flex;
+  align-items: center;
+  background: #0a0a0a;
+  border: 1px solid var(--dos-gray);
+  padding: 8px;
+}
+
+.terminal-prompt {
+  color: var(--dos-white);
+  margin-right: 5px;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--dos-bright-white);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  outline: none;
+}
+
+.terminal-cursor {
+  color: var(--dos-white);
+  animation: blink 1s infinite;
+}
+
+/* Command Palette */
+.command-palette {
+  margin-top: 20px;
+  border: 1px solid var(--dos-white);
+  background: #0a0a0a;
+  padding: 15px;
+  max-width: 100%;
+}
+
+.palette-header {
+  color: var(--dos-bright-white);
+  font-size: 16px;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--dos-white);
+  padding-bottom: 8px;
+}
+
+.command-category {
+  margin-bottom: 20px;
+}
+
+.category-header {
+  color: var(--dos-amber);
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  border: 1px solid var(--dos-gray);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.command-item:hover {
+  background: #2a2a2a;
+  border-color: var(--dos-white);
+}
+
+.command-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.command-text code {
+  color: var(--dos-bright-white);
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.command-desc {
+  color: var(--dos-gray);
+  font-size: 11px;
+}
+
+.command-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-try, .btn-copy {
+  background: var(--dos-black);
+  color: var(--dos-white);
+  border: 1px solid var(--dos-white);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.btn-try:hover, .btn-copy:hover {
+  background: var(--dos-white);
+  color: var(--dos-black);
+}
+
+/* Copy feedback */
+.copy-feedback {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--dos-black);
+  color: var(--dos-bright-white);
+  border: 2px solid var(--dos-white);
+  padding: 10px 20px;
+  z-index: 10000;
+  animation: slideIn 0.3s ease-out;
+}
+
+.copy-feedback.fade-out {
+  animation: fadeOut 0.3s ease-out forwards;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Progress bars for animated output */
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  border: 1px solid var(--dos-white);
+  background: var(--dos-black);
+  margin: 5px 0;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--dos-white) 0px,
+    var(--dos-white) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  animation: progress 2s linear;
+}
+
+@keyframes progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}

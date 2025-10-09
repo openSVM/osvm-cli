@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="../assets/dos-terminal.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference - OSVM CLI</title>
+    <script src="../assets/dos-interactive.js" defer></script>
+</head>
+<body>
+    <div class="main-wrapper">
+        <h1>API Reference</h1>
+
+        <h2>▓▓ Core Commands</h2>
+
+        <h3>▒▒ osvm balance</h3>
+        <pre><code>osvm balance [ADDRESS] [OPTIONS]
+
+OPTIONS:
+  -C, --config PATH    Config file path
+  -u, --url URL       RPC endpoint
+  -v, --verbose       Verbose output</code></pre>
+
+        <h3>▒▒ osvm svm</h3>
+        <pre><code>osvm svm SUBCOMMAND
+
+SUBCOMMANDS:
+  list        List all SVMs
+  get         Get SVM details
+  dashboard   Interactive dashboard
+  install     Deploy SVM to host</code></pre>
+
+        <h3>▒▒ osvm nodes</h3>
+        <pre><code>osvm nodes SUBCOMMAND
+
+SUBCOMMANDS:
+  list        List nodes
+  status      Node status
+  logs        View logs
+  restart     Restart node
+  stop        Stop node
+  deploy      Deploy new node</code></pre>
+
+        <h2>▓▓ Advanced Features</h2>
+
+        <h3>▒▒ osvm audit</h3>
+        <pre><code>osvm audit [REPOSITORY] [OPTIONS]
+
+OPTIONS:
+  --output-dir DIR    Output directory
+  --format FORMAT     json|html|markdown
+  --no-commit         Don't commit results
+  --gh-repo REPO      GitHub repository</code></pre>
+
+        <h3>▒▒ osvm mcp</h3>
+        <pre><code>osvm mcp SUBCOMMAND
+
+SUBCOMMANDS:
+  add         Add server
+  list        List servers
+  enable      Enable server
+  disable     Disable server
+  test        Test connectivity
+  tools       List tools
+  call        Execute tool</code></pre>
+
+        <h3>▒▒ osvm chat</h3>
+        <pre><code>osvm chat [OPTIONS]
+
+OPTIONS:
+  --advanced   FAR-style UI
+  --microvm    Run in microVM
+  --test       Run UI tests
+  --debug      Debug mode</code></pre>
+
+        <h2>▓▓ Environment Variables</h2>
+        <pre><code>SOLANA_CONFIG       Solana config path
+OPENAI_URL          AI endpoint URL
+OPENAI_KEY          AI API key
+NO_COLOR            Disable colors
+RUST_LOG            Log level
+RUST_BACKTRACE      Show backtrace</code></pre>
+
+        <h2>▓▓ Exit Codes</h2>
+        <table>
+            <tr><th>Code</th><th>Meaning</th></tr>
+            <tr><td>0</td><td>Success</td></tr>
+            <tr><td>1</td><td>General error</td></tr>
+            <tr><td>2</td><td>Authentication error</td></tr>
+            <tr><td>3</td><td>Network error</td></tr>
+            <tr><td>4</td><td>Configuration error</td></tr>
+            <tr><td>5</td><td>Validation error</td></tr>
+        </table>
+
+        <h2>▓▓ Configuration Priority</h2>
+        <ol>
+            <li>Command-line arguments</li>
+            <li>Environment variables</li>
+            <li>Config file</li>
+            <li>Default values</li>
+        </ol>
+    </div>
+</body>
+</html>

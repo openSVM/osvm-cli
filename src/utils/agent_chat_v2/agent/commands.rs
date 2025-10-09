@@ -24,4 +24,17 @@ pub enum AgentCommand {
         session_id: Uuid,
         response: oneshot::Sender<AgentState>,
     },
+    ThemeCommand {
+        session_id: Uuid,
+        command: ThemeCommandType,
+    },
+}
+
+/// Theme-related commands
+#[derive(Debug)]
+pub enum ThemeCommandType {
+    ListThemes,
+    SwitchTheme(String),
+    PreviewTheme(Option<String>), // None for current theme
+    ShowCurrentTheme,
 }

@@ -4,16 +4,8 @@
 //! in future iterations. They serve as specifications and regression tests.
 
 use anyhow::Result;
-use serde_json::json;
-use std::collections::HashMap;
-use std::time::Duration;
-use uuid::Uuid;
 
-use osvm::utils::agent_chat_v2::{
-    session::ChatSession,
-    state::AdvancedChatState,
-    types::{AgentState, ChatMessage},
-};
+use osvm::utils::agent_chat_v2::{state::AdvancedChatState, types::ChatMessage};
 
 // ============================================================================
 // FUTURE FEATURE 1: Advanced Message Search and Filtering
@@ -244,7 +236,7 @@ async fn test_cross_session_insights() -> Result<()> {
     let state = AdvancedChatState::new()?;
 
     // Create multiple sessions with different patterns
-    let sessions = vec![
+    let sessions = [
         state.create_session("Wallet Session".to_string())?,
         state.create_session("Trading Session".to_string())?,
         state.create_session("Analysis Session".to_string())?,

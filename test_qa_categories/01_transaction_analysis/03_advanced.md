@@ -1,0 +1,4509 @@
+# Transaction Analysis - Advanced Questions
+**Category:** 01_transaction_analysis
+**Focus:** Transaction queries, fees, instructions, CPIs
+**Level:** Advanced
+**Topic:** Complex transaction patterns and optimization
+**Questions:** Q201-Q300
+
+---
+
+## Q201: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q202: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q203: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q204: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q205: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q206: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q207: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q208: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q209: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q210: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q211: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q212: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q213: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q214: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q215: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q216: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q217: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q218: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q219: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q220: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q221: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q222: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q223: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q224: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q225: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q226: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q227: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q228: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q229: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q230: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q231: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q232: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q233: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q234: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q235: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q236: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q237: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q238: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q239: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q240: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q241: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q242: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q243: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q244: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q245: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q246: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q247: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q248: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q249: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q250: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q251: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q252: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q253: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q254: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q255: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q256: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q257: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q258: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q259: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q260: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q261: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q262: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q263: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q264: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q265: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q266: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q267: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q268: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q269: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q270: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q271: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q272: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q273: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q274: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q275: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q276: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q277: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q278: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q279: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q280: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q281: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q282: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q283: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q284: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q285: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q286: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q287: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q288: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q289: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q290: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q291: "What is the total fee paid for transaction signature 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q292: "How many instructions are in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q293: "Which programs were invoked in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q294: "What is the CPI depth of transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q295: "How many compute units did transaction 5J8..xyz consume?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q296: "What accounts were written to in transaction 5J8..xyz?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "sig"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q297: "Find all failed transactions for address 7xK...abc in the last 100 slots"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "addr"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q298: "Calculate the average transaction fee for program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA in the last hour"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "program"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q299: "Identify transactions with CPI depth greater than 100"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "n"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+
+## Q300: "What is the most expensive transaction in block 155000000?"
+
+**Expected Plan:**
+
+[TIME: ~10-30s] [COST: ~0.001 SOL]
+
+**Available Tools:**
+From Standard Library:
+  - getTransaction, getRecentBlockhash, simulateTransaction
+  - JSON parser, filter, aggregator
+  - Math operations (sum, avg, max, min)
+
+**Main Branch:**
+```
+$signature = "slot"
+$result = TOOL.getTransaction($signature)
+
+DECISION: Check if result exists
+  BRANCH A (result found):
+    $data = PARSE($result)
+    $metrics = ANALYZE($data)
+    OUTPUT: $metrics
+
+  BRANCH B (not found):
+    ERROR: "Resource not found"
+    OUTPUT: null
+```
+
+**Decision Point:** Does the query return valid data?
+  BRANCH A (valid data):
+    - Parse response
+    - Extract relevant fields
+    - Calculate metrics
+    - Format output
+
+  BRANCH B (error/not found):
+    - Log error
+    - Return error message
+    - Suggest alternative query
+
+**Action:**
+Return structured data showing advanced-level analysis of the requested blockchain resource with appropriate error handling and validation.
+
+---
+

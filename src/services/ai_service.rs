@@ -15,10 +15,10 @@ use std::env;
 #[derive(Serialize)]
 struct AiRequest {
     question: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
     system_prompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ownPlan")]
-    only_plan: Option<bool>,
+    own_plan: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -63,6 +63,82 @@ pub struct AiService {
 }
 
 impl AiService {
+    /// Get the templates directory path
+    fn get_templates_dir() -> String {
+        if let Ok(home) = env::var("HOME") {
+            format!("{}/.config/osvm/templates", home)
+        } else {
+            // Fallback to current directory if HOME not set
+            "./templates/ai_prompts".to_string()
+        }
+    }
+
+    /// Ensure default templates exist in user config directory
+    fn ensure_default_templates(templates_dir: &str) -> Result<()> {
+        use std::fs;
+        use std::path::Path;
+
+        let templates_path = Path::new(templates_dir);
+
+        // Create directory if it doesn't exist
+        if !templates_path.exists() {
+            fs::create_dir_all(templates_path)?;
+        }
+
+        // Default templates to copy
+        let default_templates = [
+            (
+                "fix_suggestion_general.yaml",
+                include_str!("../../templates/ai_prompts/fix_suggestion_general.yaml"),
+            ),
+            (
+                "deeplogic_economic_exploit.yaml",
+                include_str!("../../templates/ai_prompts/deeplogic_economic_exploit.yaml"),
+            ),
+        ];
+
+        // CRITICAL SECURITY FIX: Atomic create-if-not-exists to prevent TOCTOU attacks
+        use std::io::Write;
+        #[cfg(unix)]
+        use std::os::unix::fs::OpenOptionsExt;
+
+        for (filename, content) in &default_templates {
+            let target_path = templates_path.join(filename);
+
+            // Atomic create-if-not-exists with O_EXCL (prevents symlink attacks)
+            let file_result = {
+                let mut opts = std::fs::OpenOptions::new();
+                opts.write(true).create_new(true); // Atomically fails if file exists
+
+                #[cfg(unix)]
+                opts.mode(0o644); // Secure permissions: owner rw, group/other r
+
+                opts.open(&target_path)
+            };
+
+            match file_result {
+                Ok(mut file) => {
+                    file.write_all(content.as_bytes())?;
+                    file.sync_all()?; // Force to disk
+                    log::info!("✅ Copied default template: {}", filename);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // File exists, skip silently (user may have customized it)
+                    continue;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to create template {}: {}",
+                        filename,
+                        e
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn new() -> Self {
         Self::new_with_debug(true)
     }
@@ -126,12 +202,25 @@ impl AiService {
         let mut circuit_breaker = GranularCircuitBreaker::new();
         let mut template_manager = PromptTemplateManager::new();
 
-        // Initialize template manager
-        if let Err(e) =
-            template_manager.load_from_directory_with_debug("./templates/ai_prompts", debug_mode)
+        // Initialize template manager from user config directory
+        let templates_dir = Self::get_templates_dir();
+
+        // Ensure templates directory exists and copy defaults if needed
+        if let Err(e) = Self::ensure_default_templates(&templates_dir) {
+            if debug_mode {
+                debug_warn!("Failed to setup template directory: {}", e);
+            }
+        }
+
+        // Load templates from user config directory
+        if let Err(e) = template_manager.load_from_directory_with_debug(&templates_dir, debug_mode)
         {
             if debug_mode {
-                debug_warn!("Failed to load AI prompt templates: {}", e);
+                debug_warn!(
+                    "Failed to load AI prompt templates from {}: {}",
+                    templates_dir,
+                    e
+                );
             }
         }
 
@@ -150,6 +239,13 @@ impl AiService {
     }
 
     pub async fn query_with_debug(&self, question: &str, debug_mode: bool) -> Result<String> {
+        // Fail fast if OpenAI is configured but no API key is provided
+        if self.use_openai && self.api_key.is_none() {
+            anyhow::bail!(
+                "OpenAI API key not configured. Please set the OPENAI_KEY environment variable or use the default OSVM AI service."
+            );
+        }
+
         let endpoint = if self.use_openai {
             EndpointId::openai()
         } else {
@@ -180,10 +276,9 @@ impl AiService {
             Ok(_) => {
                 self.circuit_breaker.on_success_endpoint(&endpoint);
                 if debug_mode {
-                    println!(
-                        "🔍 AI Response received ({} chars)",
-                        result.as_ref().unwrap().len()
-                    );
+                    if let Ok(ref response) = result {
+                        println!("🔍 AI Response received ({} chars)", response.len());
+                    }
                 }
             }
             Err(e) => {
@@ -284,7 +379,7 @@ impl AiService {
         let request_body = AiRequest {
             question: question.to_string(),
             system_prompt,
-            only_plan,
+            own_plan: only_plan,
         };
 
         if debug_mode {
@@ -345,7 +440,11 @@ impl AiService {
     }
 
     async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
-        let api_key = self.api_key.as_ref().unwrap();
+        let api_key = self.api_key.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "OpenAI API key not available. Please set OPENAI_KEY environment variable."
+            )
+        })?;
 
         let request_body = OpenAiRequest {
             model: "gpt-3.5-turbo".to_string(),
@@ -406,12 +505,12 @@ impl AiService {
     ) -> Result<ToolPlan> {
         // For OSVM AI with ownPlan, use JSON format
         if !self.use_openai {
-            let (planning_prompt, json_system_prompt) =
-                self.build_json_planning_prompt(user_request, available_tools)?;
+            let (planning_prompt, xml_system_prompt) =
+                self.build_planning_prompt(user_request, available_tools)?;
             let ai_response = self
                 .query_osvm_ai_with_options(
                     &planning_prompt,
-                    Some(json_system_prompt),
+                    Some(xml_system_prompt),
                     Some(true),
                     false,
                 )
@@ -490,61 +589,14 @@ impl AiService {
                 // Final fallback: return an empty plan instead of error so UI can proceed without showing a planning failure error
                 debug_warn!("Falling back to empty tool plan after parse failures");
                 Ok(ToolPlan {
-                    reasoning: format!("Could not parse structured plan reliably. Proceeding without tools. Raw snippet: {}", Self::truncate_for_reason(&ai_response, 160)),
+                    reasoning: "I couldn't create a structured plan, but I'll help you directly."
+                        .to_string(),
                     osvm_tools_to_use: vec![],
-                    expected_outcome: "Provide a helpful direct answer based on the request.".to_string(),
+                    expected_outcome: "Provide a helpful direct answer based on the request."
+                        .to_string(),
                 })
             }
         }
-    }
-
-    /// Build a structured prompt for tool planning
-    fn build_json_planning_prompt(
-        &self,
-        user_request: &str,
-        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
-    ) -> Result<(String, String)> {
-        let mut tools_context = String::new();
-
-        if available_tools.is_empty() {
-            tools_context.push_str("No MCP tools are currently available.\n");
-        } else {
-            tools_context.push_str("Available MCP Tools:\n");
-            for (server_id, tools) in available_tools {
-                tools_context.push_str(&format!("\nServer: {}\n", server_id));
-                for tool in tools {
-                    let description = tool
-                        .description
-                        .as_deref()
-                        .unwrap_or("No description available");
-                    tools_context.push_str(&format!("  - {}: {}\n", tool.name, description));
-                }
-            }
-        }
-
-        let system_prompt = format!(
-            r#"You are an AI assistant specialized in creating structured execution plans. When given a user query and available tools, analyze what needs to be done and return ONLY a JSON plan.
-
-{}
-
-IMPORTANT: Return ONLY the JSON structure below, no additional text:
-{{
-  "reasoning": "Brief explanation of the plan",
-  "osvm_tools_to_use": [
-    {{
-      "server_id": "exact_server_id",
-      "tool_name": "exact_tool_name",
-      "reason": "why this tool is needed",
-      "args": {{}}
-    }}
-  ],
-  "expected_outcome": "What the user should expect"
-}}"#,
-            tools_context
-        );
-
-        let user_prompt = format!("Create an execution plan for: {}", user_request);
-        Ok((user_prompt, system_prompt))
     }
 
     fn build_planning_prompt(
@@ -580,32 +632,56 @@ IMPORTANT: Return ONLY the JSON structure below, no additional text:
 
         // Create system prompt with all tool descriptions
         let system_prompt = format!(
-            r#"You are an OSVM Agent assistant that creates execution plans.
+            r#"You are an AI assistant specialized in creating structured execution plans. When given a user query and available tools, analyze what needs to be done and return ONLY a JSON plan.
 
-{}
-
-IMPORTANT RESPONSE FORMAT:
-- You MUST respond with an OSVM plan in XML format
-- Your response MUST start with <osvm_plan> and end with </osvm_plan>
-- Do not include any text outside the XML tags
-- Only use tools from the available list above
-- Match tool names and server_ids exactly as provided
-- Provide realistic arguments based on the tool schemas
-
-Required XML structure:
-<osvm_plan>
-  <reasoning>Explain your analysis of the request and why you chose these tools</reasoning>
-  <confidence>0.0 to 1.0</confidence>
-  <tools>
-    <tool>
-      <server_id>exact_server_id</server_id>
-      <tool_name>exact_tool_name</tool_name>
-      <args>{{json_object}}</args>
-      <reason>Why this specific tool is needed</reason>
-    </tool>
-  </tools>
-  <expected_outcome>What the user should expect as a result</expected_outcome>
-</osvm_plan>"#,
+            {}
+            
+            ## OUTPUT FORMAT REQUIREMENTS
+            You MUST format your response using the following XML structure:
+            
+            <osvm_plan>
+              <overview>Brief description of what the plan will accomplish</overview>
+            
+              <tools>
+                <tool name="tool_name" priority="high|medium|low">
+                  <description>What this tool does</description>
+                  <endpoint>API endpoint or RPC method</endpoint>
+                  <parameters>
+                    <param name="param_name" type="string|number|object" required="true|false">Description</param>
+                  </parameters>
+                  <expected_output>What data this will return</expected_output>
+                </tool>
+                <!-- Add more tools as needed -->
+              </tools>
+            
+              <steps>
+                <step number="1">
+                  <action>What action to take</action>
+                  <tool_ref>tool_name from the available tools list</tool_ref>
+                  <dependencies>None or step numbers this depends on</dependencies>
+                  <data_flow>How data flows from/to this step</data_flow>
+                </step>
+                <!-- Add more steps as needed -->
+              </steps>
+            
+              <error_handling>
+                <scenario>Potential error scenario</scenario>
+                <mitigation>How to handle this error</mitigation>
+              </error_handling>
+            
+              <validation>
+                <check>What to validate after execution</check>
+              </validation>
+            
+              <estimated_time>Estimated total execution time</estimated_time>
+            </osvm_plan>
+            
+            IMPORTANT:
+            - Use ONLY the tools defined in the system prompt above
+            - Return ONLY the XML structure. No additional text before or after the XML
+            - Ensure tool_ref in steps matches the available tools from the system prompt
+            - Be specific about endpoints and parameters
+            - Do NOT execute anything, only plan"#,
             tools_context
         );
 
@@ -620,13 +696,91 @@ Required XML structure:
 
     /// Parse AI response as JSON tool plan
     fn parse_json_tool_plan(&self, ai_response: &str) -> Result<ToolPlan> {
-        // Try to parse as JSON
-        let json_val: serde_json::Value = serde_json::from_str(ai_response)
-            .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}", e))?;
+        // First try to parse as JSON
+        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(ai_response) {
+            // Use the existing salvage method which handles our JSON structure
+            return self
+                .salvage_from_json(&json_val)
+                .ok_or_else(|| anyhow::anyhow!("Failed to extract tool plan from JSON response"));
+        }
 
-        // Use the existing salvage method which handles our JSON structure
-        self.salvage_from_json(&json_val)
-            .ok_or_else(|| anyhow::anyhow!("Failed to extract tool plan from JSON response"))
+        // If JSON parsing fails, try to parse as XML (osvm_plan format)
+        if ai_response.contains("<osvm_plan>") {
+            return self.parse_osvm_plan_xml(ai_response);
+        }
+
+        // If both fail, return error
+        anyhow::bail!("Response is neither valid JSON nor XML osvm_plan format");
+    }
+
+    /// Parse OSVM plan XML format
+    fn parse_osvm_plan_xml(&self, xml_response: &str) -> Result<ToolPlan> {
+        // Extract overview
+        let overview = self
+            .extract_xml_value(xml_response, "overview")
+            .unwrap_or_else(|_| "Analyzing request and creating execution plan".to_string());
+
+        // Extract tools from XML
+        let mut tools = Vec::new();
+        if let Some(tools_section) = self.extract_xml_section(xml_response, "tools") {
+            // Find all tool sections
+            let mut pos = 0;
+            while let Some(tool_start) = tools_section[pos..].find("<tool") {
+                let start = pos + tool_start;
+                if let Some(tool_end) = tools_section[start..].find("</tool>") {
+                    let tool_xml = &tools_section[start..start + tool_end + 7];
+
+                    // Extract tool name
+                    let tool_name = self
+                        .extract_xml_attribute(tool_xml, "name")
+                        .or_else(|| self.extract_xml_value(tool_xml, "name").ok())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    // Extract tool description
+                    let description = self
+                        .extract_xml_value(tool_xml, "description")
+                        .unwrap_or_else(|_| "Tool execution".to_string());
+
+                    // Extract priority if available
+                    let _priority = self.extract_xml_attribute(tool_xml, "priority");
+
+                    tools.push(PlannedTool {
+                        server_id: "osvm-mcp".to_string(), // Default server
+                        tool_name,
+                        args: serde_json::json!({}), // Empty args for now
+                        reason: description,
+                    });
+
+                    pos = start + tool_end + 7;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Extract expected outcome from overview or separate tag
+        let expected_outcome = self
+            .extract_xml_value(xml_response, "expected_outcome")
+            .or_else(|_| self.extract_xml_value(xml_response, "estimatedTime"))
+            .unwrap_or_else(|_| overview.clone());
+
+        Ok(ToolPlan {
+            reasoning: overview,
+            osvm_tools_to_use: tools,
+            expected_outcome,
+        })
+    }
+
+    /// Extract attribute value from XML tag
+    fn extract_xml_attribute(&self, xml: &str, attribute: &str) -> Option<String> {
+        // Look for attribute="value" pattern
+        let attr_pattern = format!(r#"{}="([^"]*)""#, attribute);
+        if let Ok(re) = regex::Regex::new(&attr_pattern) {
+            if let Some(caps) = re.captures(xml) {
+                return Some(caps.get(1)?.as_str().to_string());
+            }
+        }
+        None
     }
 
     /// Parse AI response into structured ToolPlan from OSVM XML format
@@ -678,13 +832,15 @@ Required XML structure:
                             tool_xml[name_start..name_start + name_end].to_string()
                         } else {
                             self.extract_xml_value(tool_xml, "tool_name")
-                                .or_else(|_| self.extract_xml_value(tool_xml, "endpoint"))
-                                .unwrap_or_else(|_| "unknown".to_string())
+                                .ok()
+                                .or(self.extract_xml_value(tool_xml, "endpoint").ok())
+                                .unwrap_or_else(|| "unknown".to_string())
                         }
                     } else {
                         self.extract_xml_value(tool_xml, "tool_name")
-                            .or_else(|_| self.extract_xml_value(tool_xml, "endpoint"))
-                            .unwrap_or_else(|_| "unknown".to_string())
+                            .ok()
+                            .or(self.extract_xml_value(tool_xml, "endpoint").ok())
+                            .unwrap_or_else(|| "unknown".to_string())
                     };
 
                     // Extract tool fields
@@ -693,8 +849,9 @@ Required XML structure:
                         .unwrap_or_else(|_| "osvm-mcp".to_string());
                     let reason = self
                         .extract_xml_value(tool_xml, "reason")
-                        .or_else(|_| self.extract_xml_value(tool_xml, "description"))
-                        .unwrap_or_else(|_| "Tool execution".to_string());
+                        .ok()
+                        .or(self.extract_xml_value(tool_xml, "description").ok())
+                        .unwrap_or_else(|| "Tool execution".to_string());
 
                     // Extract args as JSON object
                     let args =
@@ -775,7 +932,7 @@ Required XML structure:
                             server_id: "default".to_string(),
                             tool_name,
                             args: serde_json::json!({}),
-                            reason: "Salvaged from unstructured response".to_string(),
+                            reason: "Tool identified from response".to_string(),
                         });
                     }
                 }
@@ -785,10 +942,10 @@ Required XML structure:
         if reasoning.is_some() || expected.is_some() || !tools.is_empty() {
             return Some(ToolPlan {
                 reasoning: reasoning
-                    .unwrap_or_else(|| "Salvaged reasoning unavailable".to_string()),
+                    .unwrap_or_else(|| "Processing your request directly".to_string()),
                 osvm_tools_to_use: tools,
                 expected_outcome: expected
-                    .unwrap_or_else(|| "Attempt to fulfill request".to_string()),
+                    .unwrap_or_else(|| "Provide helpful assistance".to_string()),
             });
         }
 

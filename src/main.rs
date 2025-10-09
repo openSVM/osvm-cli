@@ -3,6 +3,7 @@
 use {
     crate::config::Config,
     crate::utils::diagnostics::DiagnosticCoordinator,
+    crate::utils::input_sanitization,
     crate::utils::markdown_renderer::MarkdownRenderer,
     crate::utils::{dashboard, ebpf_deploy, examples, nodes, ssh_deploy, svm_info},
     clparse::parse_command_line,
@@ -10,6 +11,57 @@ use {
     solana_sdk::{native_token::Sol, pubkey::Pubkey, signature::Signer},
     std::{process::exit, str::FromStr},
 };
+
+/// Sanitize user input to prevent command injection and ensure safe processing
+fn sanitize_user_input(input: &str) -> Result<String, Box<dyn std::error::Error>> {
+    // Remove potentially dangerous characters and sequences
+    let sanitized = input
+        .chars()
+        .filter(|c| {
+            // Allow alphanumeric, spaces, basic punctuation, but block command injection chars
+            c.is_alphanumeric()
+                || matches!(
+                    *c,
+                    ' ' | '.'
+                        | ','
+                        | '?'
+                        | '!'
+                        | ':'
+                        | ';'
+                        | '\''
+                        | '"'
+                        | '-'
+                        | '_'
+                        | '('
+                        | ')'
+                        | '['
+                        | ']'
+                        | '{'
+                        | '}'
+                )
+        })
+        .collect::<String>();
+
+    // Remove potentially dangerous sequences
+    let sanitized = sanitized
+        .replace("&&", " and ")
+        .replace("||", " or ")
+        .replace("$(", " ")
+        .replace("`", " ")
+        .replace("${", " ");
+
+    // Limit length to prevent resource exhaustion
+    if sanitized.len() > 2048 {
+        return Err("Input too long (max 2048 characters)".into());
+    }
+
+    // Ensure non-empty after sanitization
+    if sanitized.trim().is_empty() {
+        return Err("Input cannot be empty after sanitization".into());
+    }
+
+    Ok(sanitized.trim().to_string())
+}
 
 // Helper function to handle the type mismatch between clap v2 and v4
 // This function remains as it's used by command handlers directly with `sub_matches`
@@ -23,6 +75,7 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<Pubkey> {
 #[cfg(feature = "remote-wallet")]
 use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
 pub mod clparse;
+pub mod commands;
 pub mod config; // Added
 pub mod prelude;
 pub mod services;
@@ -40,13 +93,16 @@ fn is_known_command(sub_command: &str) -> bool {
             | "examples"
             | "rpc-manager"
             | "deploy"
-            | "solana"
             | "doctor"
             | "audit"
             | "mcp"
+            | "mount"
+            | "snapshot"
+            | "db"
+            | "realtime"
             | "chat"
             | "agent"
-            | "new_feature_command"
+            | "plan"
             | "v"
             | "ver"
             | "version"
@@ -87,7 +143,7 @@ async fn handle_ai_query(
         }
     }
 
-    let query = query_parts.join(" ");
+    let query = sanitize_user_input(&query_parts.join(" "))?;
 
     // Get debug flag from global args
     let debug_mode = app_matches.get_flag("debug");
@@ -609,8 +665,9 @@ async fn handle_mcp_command(
             let json_output = mcp_sub_matches.get_flag("json");
 
             let arguments = if let Some(args_str) = mcp_sub_matches.get_one::<String>("arguments") {
+                // Validate JSON with size limit (max 1MB for arguments)
                 Some(
-                    serde_json::from_str(args_str)
+                    input_sanitization::validate_json(args_str, 1024 * 1024)
                         .map_err(|e| format!("Invalid JSON arguments: {}", e))?,
                 )
             } else {
@@ -795,6 +852,62 @@ async fn handle_mcp_command(
             }
         }
 
+        "mount" => {
+            let tool_name = mcp_sub_matches
+                .get_one::<String>("tool_name")
+                .expect("tool_name is required by clap");
+            let host_path = mcp_sub_matches
+                .get_one::<String>("host_path")
+                .expect("host_path is required by clap");
+            let readonly = mcp_sub_matches.get_flag("readonly");
+
+            match crate::commands::mount::handle_mcp_mount(tool_name, host_path, readonly) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to mount folder to MCP tool: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "unmount" => {
+            let tool_name = mcp_sub_matches
+                .get_one::<String>("tool_name")
+                .expect("tool_name is required by clap");
+            let host_path = mcp_sub_matches
+                .get_one::<String>("host_path")
+                .expect("host_path is required by clap");
+
+            match crate::commands::mount::handle_mcp_unmount(tool_name, host_path) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to unmount folder from MCP tool: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "mounts" => {
+            let tool_name = mcp_sub_matches.get_one::<String>("tool_name");
+
+            match crate::commands::mount::handle_mcp_mounts(tool_name.map(|s| s.as_str())) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Failed to list MCP tool mounts: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        "microvm" => {
+            // Handle MCP microVM subcommands
+            use crate::commands::mcp_microvm;
+            if let Err(e) = mcp_microvm::handle_mcp_microvm_command(mcp_sub_matches).await {
+                eprintln!("❌ MCP microVM error: {}", e);
+                std::process::exit(1);
+            }
+        }
+
         _ => {
             eprintln!("Unknown MCP subcommand: {}", mcp_sub_command);
             std::process::exit(1);
@@ -814,6 +927,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Capture start time for command logging
+    let command_start_time = std::time::Instant::now();
+    let command_args: Vec<String> = std::env::args().collect();
+
     let app_matches = parse_command_line();
 
     // Check for version flag (which includes aliases)
@@ -828,14 +945,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (sub_command, sub_matches) = match app_matches.subcommand() {
         Some((cmd, matches)) => (cmd, matches),
         None => {
-            // No subcommand provided - default to advanced chat interface
-            println!("🚀 Welcome to OSVM! Starting Advanced Agent Chat Interface...");
-            println!("💡 Tip: Use 'osvm --help' to see all available commands\n");
+            // No subcommand - bootstrap OSVM agent with microVM isolation
+            use crate::services::microvm_launcher::{
+                get_default_osvm_config, is_running_in_microvm, MicroVmLauncher,
+            };
 
-            // Launch advanced chat directly
-            return crate::utils::agent_chat_v2::run_advanced_agent_chat()
-                .await
-                .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+            // Check if we should skip microVM
+            let skip_microvm = std::env::var("OSVM_SKIP_MICROVM")
+                .map(|v| v == "1" || v.to_lowercase() == "true")
+                .unwrap_or(false);
+
+            if skip_microvm || is_running_in_microvm() {
+                // Already in microVM or explicitly skipping - run agent directly
+                if is_running_in_microvm() {
+                    println!("🚀 OSVM Agent Running in microVM isolation mode");
+                    std::env::set_var("OSVM_IN_MICROVM", "1");
+                } else {
+                    println!("🚀 OSVM Agent Starting (Direct Mode - OSVM_SKIP_MICROVM=1)");
+                }
+                println!("💡 Use 'osvm --help' to see all available commands\n");
+
+                return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                    .await
+                    .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+            }
+
+            // On host - launch in microVM for enhanced security
+            println!("🚀 Launching OSVM Agent in microVM...");
+            println!();
+
+            // Create microVM launcher
+            let launcher = match MicroVmLauncher::new() {
+                Ok(l) => l,
+                Err(e) => {
+                    eprintln!("❌ Failed to initialize microVM launcher: {}", e);
+                    eprintln!("   Falling back to direct execution");
+                    eprintln!("   💡 Set OSVM_SKIP_MICROVM=1 to suppress this warning\n");
+
+                    return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                        .await
+                        .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+                }
+            };
+
+            // Get default configuration
+            let config = get_default_osvm_config();
+
+            // Launch OSVM runtime in microVM
+            match launcher.launch_osvm_runtime(config) {
+                Ok(mut handle) => {
+                    println!("✅ OSVM microVM launched successfully");
+                    println!("   MicroVM is now running in isolated environment");
+                    println!("   Press Ctrl+C to stop\n");
+
+                    // Wait for microVM to finish
+                    loop {
+                        if !handle.is_running() {
+                            println!("\n🛑 MicroVM terminated");
+                            break;
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    }
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to launch microVM: {}", e);
+                    eprintln!("   Falling back to direct execution");
+                    eprintln!();
+                    eprintln!("💡 To fix this:");
+                    eprintln!(
+                        "   1. Ensure Firecracker is installed: ~/.osvm/bin/firecracker --version"
+                    );
+                    eprintln!("   2. Check kernel exists: ls -lh ~/.osvm/kernel/vmlinux.bin");
+                    eprintln!("   3. Check rootfs exists: ls -lh ~/.osvm/rootfs/osvm-runtime.cpio");
+                    eprintln!("   4. Or set OSVM_SKIP_MICROVM=1 to skip microVM launch\n");
+
+                    return crate::utils::agent_chat_v2::run_advanced_agent_chat()
+                        .await
+                        .map_err(|e| format!("Failed to start advanced chat: {}", e).into());
+                }
+            }
         }
     };
 
@@ -865,6 +1055,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check if test mode is requested
         if sub_matches.get_flag("test") {
             return crate::utils::agent_chat::run_chat_ui_tests()
+                .await
+                .map_err(|e| e.into());
+        } else if sub_matches.get_flag("microvm") {
+            // Run chat with microVM isolation for maximum security
+            return crate::utils::agent_chat_microvm::run_microvm_agent_chat()
                 .await
                 .map_err(|e| e.into());
         } else if sub_matches.get_flag("advanced") {
@@ -901,6 +1096,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await
         .map_err(|e| e.into());
+    }
+
+    // Handle plan command for AI-powered command planning
+    if sub_command == "plan" {
+        let query = sub_matches
+            .get_one::<String>("query")
+            .ok_or("No query provided for plan command")?;
+
+        let execute = sub_matches.get_flag("execute");
+        let yes = sub_matches.get_flag("yes");
+        let json_output = sub_matches.get_flag("json");
+        let debug = app_matches.get_flag("debug");
+
+        use crate::utils::osvm_command_planner::OsvmCommandPlanner;
+
+        let planner = OsvmCommandPlanner::new(debug);
+
+        println!("🧠 Analyzing your request: \"{}\"", query);
+        println!();
+
+        // Create the execution plan
+        match planner.create_plan(query).await {
+            Ok(plan) => {
+                if json_output {
+                    // JSON output mode
+                    println!("{}", serde_json::to_string_pretty(&plan)?);
+                } else {
+                    // Pretty print the plan
+                    println!("📋 Execution Plan");
+                    println!("{}", "━".repeat(50));
+                    println!("💭 Reasoning: {}", plan.reasoning);
+                    println!("🎯 Confidence: {:.0}%", plan.confidence * 100.0);
+                    println!("🔧 Steps: {}", plan.steps.len());
+                    println!();
+
+                    for (i, step) in plan.steps.iter().enumerate() {
+                        println!("{}. {}", i + 1, step.full_command);
+                        println!("   {}", step.explanation);
+                        if step.requires_confirmation {
+                            println!("   ⚠️  Requires confirmation");
+                        }
+                        println!();
+                    }
+
+                    println!("✨ Expected outcome: {}", plan.expected_outcome);
+                    println!();
+
+                    // Execute if requested
+                    if execute {
+                        println!("{}", "━".repeat(50));
+                        println!("⚡ Executing plan...");
+                        println!();
+
+                        match planner.execute_plan(&plan, yes).await {
+                            Ok(results) => {
+                                let formatted = planner.format_results(&plan, &results);
+                                println!("{}", formatted);
+                            }
+                            Err(e) => {
+                                eprintln!("❌ Execution failed: {}", e);
+                                return Err(e.into());
+                            }
+                        }
+                    } else {
+                        println!("💡 Use --execute to run this plan");
+                        println!("💡 Use --execute --yes to skip confirmations");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to create execution plan: {}", e);
+                eprintln!();
+                eprintln!("💡 Try rephrasing your request or use 'osvm examples' for help");
+                return Err(e.into());
+            }
+        }
+
+        return Ok(());
     }
 
     // Handle AI queries early to avoid config loading
@@ -1233,7 +1506,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "examples" => {
             // Handle the examples command
-            if matches.contains_id("list_categories") {
+            if matches.get_flag("list_categories") {
                 // List all available example categories
                 println!("Available example categories:");
                 println!("  basic       - Basic Commands");
@@ -1411,8 +1684,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .unwrap_or("9900");
                     let ledger_path = rpc_sub_matches
                         .get_one::<String>("ledger-path")
-                        .map(|s| s.as_str())
-                        .unwrap_or("/tmp/test-ledger");
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| {
+                            crate::utils::local_rpc::get_default_ledger_path(network, svm)
+                        });
                     let reset = rpc_sub_matches.get_flag("reset");
                     let background = rpc_sub_matches.get_flag("background");
                     let stop = rpc_sub_matches.get_flag("stop");
@@ -2008,6 +2283,154 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Handle the MCP command for managing Model Context Protocol servers
             return handle_mcp_command(&app_matches, sub_matches).await;
         }
+        "mount" => {
+            // Handle folder mount management for OSVM microVMs
+            let Some((mount_sub_command, mount_sub_matches)) = matches.subcommand() else {
+                eprintln!("No mount subcommand provided");
+                exit(1);
+            };
+
+            match mount_sub_command {
+                "add" => {
+                    let host_path = mount_sub_matches
+                        .get_one::<String>("host_path")
+                        .expect("host_path is required by clap");
+                    let readonly = mount_sub_matches.get_flag("readonly");
+
+                    match crate::commands::mount::handle_mount_add(host_path, readonly) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("❌ Failed to add mount: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                "remove" => {
+                    let host_path = mount_sub_matches
+                        .get_one::<String>("host_path")
+                        .expect("host_path is required by clap");
+
+                    match crate::commands::mount::handle_mount_remove(host_path) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("❌ Failed to remove mount: {}", e);
+                            exit(1);
+                        }
+                    }
+                }
+                "list" => match crate::commands::mount::handle_mount_list() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("❌ Failed to list mounts: {}", e);
+                        exit(1);
+                    }
+                },
+                _ => {
+                    eprintln!("Unknown mount subcommand: {}", mount_sub_command);
+                    exit(1);
+                }
+            }
+        }
+        "snapshot" => {
+            // Handle snapshot analysis and management commands
+            match crate::commands::snapshot::execute_snapshot_command(sub_matches).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Snapshot command failed: {}", e);
+                    exit(1);
+                }
+            }
+        }
+        "db" => {
+            // Handle database management commands
+            let Some((db_sub_command, db_sub_matches)) = matches.subcommand() else {
+                eprintln!("No database subcommand provided");
+                exit(1);
+            };
+
+            use crate::commands::database::{execute_database_command, DatabaseArgs};
+
+            let args = DatabaseArgs {
+                data_dir: db_sub_matches
+                    .get_one::<String>("data-dir")
+                    .map(|s| s.to_string()),
+                query: db_sub_matches
+                    .get_one::<String>("query")
+                    .map(|s| s.to_string()),
+                limit: db_sub_matches
+                    .get_one::<String>("limit")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(100),
+                session_id: db_sub_matches
+                    .get_one::<String>("session-id")
+                    .map(|s| s.to_string()),
+                show_commands: db_sub_matches.get_flag("commands"),
+                show_chat: db_sub_matches.get_flag("chat"),
+                show_stats: db_sub_matches.get_flag("stats"),
+                // Sync arguments
+                sync_mode: db_sub_matches
+                    .get_one::<String>("mode")
+                    .map(|s| s.to_string()),
+                programs: db_sub_matches
+                    .get_one::<String>("programs")
+                    .map(|s| s.to_string()),
+                accounts: db_sub_matches
+                    .get_one::<String>("accounts")
+                    .map(|s| s.to_string()),
+                pattern: db_sub_matches
+                    .get_one::<String>("pattern")
+                    .map(|s| s.to_string()),
+                ledger_path: db_sub_matches
+                    .get_one::<String>("ledger-path")
+                    .map(|s| s.to_string()),
+                snapshot_dir: db_sub_matches
+                    .get_one::<String>("snapshot-dir")
+                    .map(|s| s.to_string()),
+            };
+
+            match execute_database_command(db_sub_command, &args).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Database command failed: {}", e);
+                    exit(1);
+                }
+            }
+        }
+        "realtime" => {
+            // Handle real-time sync daemon commands
+            let Some((realtime_sub_command, realtime_sub_matches)) = matches.subcommand() else {
+                eprintln!("No realtime subcommand provided");
+                exit(1);
+            };
+
+            use crate::commands::realtime::{execute_realtime_command, RealtimeArgs};
+
+            let args = RealtimeArgs {
+                programs: realtime_sub_matches
+                    .get_one::<String>("programs")
+                    .map(|s| s.to_string()),
+                accounts: realtime_sub_matches
+                    .get_one::<String>("accounts")
+                    .map(|s| s.to_string()),
+                patterns: realtime_sub_matches
+                    .get_one::<String>("patterns")
+                    .map(|s| s.to_string()),
+                ledger_path: realtime_sub_matches
+                    .get_one::<String>("ledger-path")
+                    .map(|s| s.to_string()),
+                snapshot_dir: realtime_sub_matches
+                    .get_one::<String>("snapshot-dir")
+                    .map(|s| s.to_string()),
+            };
+
+            match execute_realtime_command(realtime_sub_command, &args).await {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("❌ Realtime command failed: {}", e);
+                    exit(1);
+                }
+            }
+        }
         "doctor" => {
             // Handle the doctor command for system diagnostics and repair
             let diagnostic_coordinator = DiagnosticCoordinator::new();
@@ -2253,15 +2676,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("   This indicates a programming error - please report this issue.");
             exit(1);
         }
-        "new_feature_command" => {
-            println!("Expected output for new feature");
-        }
         cmd => {
-            return Err(format!("Unknown command: {cmd}").into());
+            let command_duration = command_start_time.elapsed();
+            let result: Result<(), Box<dyn std::error::Error>> =
+                Err(format!("Unknown command: {cmd}").into());
+
+            // Log command execution
+            log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
+
+            return result;
         }
     };
 
+    // Log successful command execution
+    let command_duration = command_start_time.elapsed();
+    let result = Ok(());
+    log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
+
     Ok(())
+}
+
+/// Log command execution to ClickHouse if available
+async fn log_command_execution(
+    command_name: &str,
+    args: &[String],
+    result: &Result<(), Box<dyn std::error::Error>>,
+    duration: std::time::Duration,
+) {
+    // Try to log to ClickHouse if it's running
+    use crate::services::activity_logger::ActivityLogger;
+    use crate::services::clickhouse_service::{ClickHouseService, ClickHouseStatus};
+
+    if let Ok(service) = ClickHouseService::new() {
+        if let Ok(status) = service.status().await {
+            if matches!(status, ClickHouseStatus::Running) {
+                let logger = ActivityLogger::new(std::sync::Arc::new(service));
+                let exit_code = if result.is_ok() { 0 } else { 1 };
+                let duration_ms = duration.as_millis() as u64;
+                let error_message = result.as_ref().err().map(|e| e.to_string());
+
+                let _ = logger
+                    .log_command(
+                        command_name,
+                        args,
+                        exit_code,
+                        duration_ms,
+                        error_message.as_deref(),
+                    )
+                    .await;
+
+                // Flush immediately for CLI commands
+                let _ = logger.flush_commands().await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

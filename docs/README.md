@@ -1,15 +1,44 @@
 # OSVM CLI Documentation
 
-Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Machine command-line interface with integrated AI assistance, MCP server support, and extensible plugin architecture.
+Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Solana Virtual Machine command-line interface with **hardware-isolated microVM/unikernel architecture**, integrated AI assistance, and MCP server support.
 
 ## 🚀 Quick Access
 
+- [**🏗️ REVOLUTIONARY ARCHITECTURE**](../Architecture.md) - **Must-read 2,150-line deep dive into microVM/unikernel security**
 - [**📖 Main Documentation Website**](index.html) - Interactive terminal-style documentation
 - [**⚡ Getting Started**](#quick-start) - Begin your OSVM journey
 - [**📚 API Reference**](#api-reference) - Complete command reference
 - [**🧩 Plugin Development**](#plugin-development) - Extend OSVM functionality
 
 ## 📋 Documentation Index
+
+### 🏗️ Revolutionary Architecture (START HERE!)
+
+**[📖 Architecture.md - Complete Guide](../Architecture.md)** - Comprehensive 2,150-line architectural deep dive
+
+**Essential Reading:**
+- [**The Problem Space**](../Architecture.md#the-problem-space) - Why traditional approaches fail (containers, VMs, sandboxing)
+- [**What is a Unikernel?**](../Architecture.md#21-what-is-a-unikernel) - From 30MB OS to 50KB (99.83% reduction)
+- [**What is a MicroVM?**](../Architecture.md#22-what-is-a-microvm) - 125ms boot vs 30-60s traditional VMs
+- [**Hardware Security**](../Architecture.md#23-hardware-based-security-features) - VT-x, AMD-V, SEV, SGX, TPM explained
+- [**Zero-Trust Networking**](../Architecture.md#24-zero-trust-networking) - mTLS and capability-based security
+- [**Attack Surface Analysis**](../Architecture.md#25-the-attack-surface-concept) - Quantifying 99.9% reduction
+- [**The OSVM Innovation**](../Architecture.md#the-osvm-innovation) - How we combine it all
+- [**Security Model**](../Architecture.md#security-model) - Formal guarantees, threat analysis, defense-in-depth
+- [**Performance Characteristics**](../Architecture.md#performance-characteristics) - Detailed benchmarks
+- [**Use Cases**](../Architecture.md#use-cases-and-applications) - Validators, RPC nodes, MCP servers, compliance
+
+**Implementation Status:**
+- [**Implementation Complete**](../IMPLEMENTATION_COMPLETE.md) - All Phases 1-3 complete
+- [**Design Document**](../Design-Doc.md) - Technical implementation details
+- [**Phase 2 Features**](../PHASE2_COMPLETE.md) - Hot-swap, vsock, Firecracker MicroVMs
+
+**Key Metrics:**
+- ✅ 99.83% attack surface reduction (50KB vs 30MB)
+- ✅ Zero-downtime updates with automatic rollback
+- ✅ <1ms inter-VM communication (vsock)
+- ✅ 125ms boot time for MicroVMs (240-600x faster)
+- ✅ Hardware-enforced isolation (KVM, SEV, SGX)
 
 ### 🏗️ Core Features
 - [**SVM Management**](svm-management.md) - Deploy and manage Solana Virtual Machines
@@ -21,6 +50,16 @@ Welcome to the comprehensive documentation for OSVM CLI - the Solana Virtual Mac
 - [**AI Endpoint Configuration**](ai-endpoint-configuration.md) - Configure AI providers and endpoints
 - [**DeepLogic AI Analysis**](deeplogic-ai-analysis.md) - Advanced vulnerability detection
 - [**Security Audit**](security-audit.md) - Automated security analysis and reporting
+
+### 🧠 OVSM Language (NEW!)
+- [**OVSM Overview**](ovsm/OVSM_README.md) - Introduction to OVSM planning language
+- [**Core Specification**](ovsm/ovsm-spec.md) - Complete OVSM language reference (207 tools)
+- [**Agent Extensions**](ovsm/ovsm-agents.md) - Multi-agent research features (15 advanced capabilities)
+- [**Tool Index**](ovsm/COMPLETE_TOOL_INDEX.md) - Comprehensive tool reference
+- [**Planning Guide**](ovsm/PLANNING_FORMAT.md) - How to write OVSM research plans
+
+**What is OVSM?**
+OVSM (Open Versatile Seeker Mind) is a domain-specific language for expressing AI agent research plans with conditional branching, parallel execution, and adaptive learning. It enables sophisticated multi-agent workflows for blockchain investigation, statistical analysis, and knowledge discovery.
 
 ### 🔌 MCP Integration
 - [**MCP Integration Guide**](mcp-integration.md) - Model Context Protocol server setup
@@ -109,6 +148,15 @@ osvm mcp call solana-server getBalance --args '{"pubkey":"your-address"}'
 ## 🏗️ Architecture Overview
 
 OSVM CLI is built with a modular architecture consisting of:
+
+### Revolutionary Isolation Layer (NEW!)
+- **Firecracker MicroVMs** - ~125ms boot time, hardware isolation
+- **HermitCore Unikernels** - ~50-100ms boot, 99.83% attack surface reduction
+- **vsock Communication** - <1ms latency for VM-to-VM communication
+- **Hot-Swap Manager** - Zero-downtime updates with automatic rollback
+- **TEE Support** - Intel SGX/AMD SEV for hardware-protected keys
+- **Auto-Scaler** - Intelligent metric-based capacity management
+- **Orchestrator** - Central control plane for component lifecycle
 
 ### Core Components
 - **Command Router** - Central command processing and routing

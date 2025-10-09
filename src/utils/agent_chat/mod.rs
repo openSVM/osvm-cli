@@ -11,6 +11,7 @@ mod fuzzy_matcher;
 mod input_handler;
 mod responsive_layout;
 mod suggestions;
+pub mod system_status_bar;
 mod task_state;
 mod terminal_utils;
 mod ui_components;
@@ -24,7 +25,7 @@ pub use input_handler::{disable_raw_mode, enable_raw_mode, InputState};
 pub use task_state::TaskState;
 
 // Internal re-exports for module communication
-pub(crate) use colors::Colors;
+pub(crate) use colors::{Colors, GradientType};
 pub(crate) use fuzzy_matcher::FuzzyMatcher;
 pub(crate) use input_handler::{ArrowKey, InputChar, InputConfig};
 pub(crate) use suggestions::RealtimeSuggestion;

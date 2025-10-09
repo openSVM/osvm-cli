@@ -15,6 +15,7 @@ use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
 use super::handlers::show_context_menu;
 use super::handlers::*;
+use super::theme::{Decorations, Icons, ModernTheme};
 
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
@@ -27,8 +28,94 @@ impl AdvancedChatUI {
         Ok(AdvancedChatUI { state })
     }
 
+    /// Apply current theme to cursive interface
+    pub fn apply_theme_to_cursive(&self, siv: &mut Cursive) -> Result<()> {
+        let theme_manager = self
+            .state
+            .theme_manager
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire theme manager lock: {}", e))?;
+
+        let theme = theme_manager.current_theme();
+
+        // Convert our theme to cursive theme
+        let mut cursive_theme = cursive::theme::Theme::default();
+
+        // Apply background colors
+        if let Some(bg) = &theme.background.background {
+            cursive_theme.palette[cursive::theme::PaletteColor::Background] =
+                self.convert_color_to_cursive(bg);
+        }
+
+        // Apply text colors
+        cursive_theme.palette[cursive::theme::PaletteColor::View] =
+            self.convert_color_to_cursive(&theme.text.color);
+
+        // Apply accent colors for highlights
+        cursive_theme.palette[cursive::theme::PaletteColor::Highlight] =
+            self.convert_color_to_cursive(&theme.accent.color);
+
+        // Apply border colors
+        cursive_theme.palette[cursive::theme::PaletteColor::TitlePrimary] =
+            self.convert_color_to_cursive(&theme.border.color);
+
+        siv.set_theme(cursive_theme);
+        Ok(())
+    }
+
+    /// Convert our color format to cursive Color
+    fn convert_color_to_cursive(
+        &self,
+        color: &crate::utils::themes::Color,
+    ) -> cursive::theme::Color {
+        use crate::utils::themes::Color as ThemeColor;
+        use cursive::theme::{BaseColor, Color as CursiveColor};
+
+        match color {
+            ThemeColor::Named(name) => match name.as_str() {
+                "black" => CursiveColor::Dark(BaseColor::Black),
+                "red" => CursiveColor::Dark(BaseColor::Red),
+                "green" => CursiveColor::Dark(BaseColor::Green),
+                "yellow" => CursiveColor::Dark(BaseColor::Yellow),
+                "blue" => CursiveColor::Dark(BaseColor::Blue),
+                "magenta" => CursiveColor::Dark(BaseColor::Magenta),
+                "cyan" => CursiveColor::Dark(BaseColor::Cyan),
+                "white" => CursiveColor::Dark(BaseColor::White),
+                _ => CursiveColor::Dark(BaseColor::White), // Default fallback
+            },
+            ThemeColor::Rgb(r, g, b) => CursiveColor::Rgb(*r, *g, *b),
+            ThemeColor::Hex(hex_str) => {
+                // Parse hex color
+                if let Ok(rgb) = self.parse_hex_color(hex_str) {
+                    CursiveColor::Rgb(rgb.0, rgb.1, rgb.2)
+                } else {
+                    CursiveColor::Dark(BaseColor::White)
+                }
+            }
+            ThemeColor::Indexed(index) => CursiveColor::from_256colors(*index as u8),
+            _ => CursiveColor::Dark(BaseColor::White), // Default fallback
+        }
+    }
+
+    /// Parse hex color string to RGB tuple
+    fn parse_hex_color(&self, hex: &str) -> Result<(u8, u8, u8), std::num::ParseIntError> {
+        let hex = hex.trim_start_matches('#');
+        let r = u8::from_str_radix(&hex[0..2], 16)?;
+        let g = u8::from_str_radix(&hex[2..4], 16)?;
+        let b = u8::from_str_radix(&hex[4..6], 16)?;
+        Ok((r, g, b))
+    }
+
     pub fn setup_far_ui(&self, siv: &mut Cursive) {
         let state = self.state.clone();
+
+        // Apply modern dark theme instead of default
+        siv.set_theme(ModernTheme::dark());
+
+        // Or try to apply current theme if available
+        if let Err(e) = self.apply_theme_to_cursive(siv) {
+            log::warn!("Failed to apply custom theme, using modern dark theme");
+        }
 
         // Main horizontal layout: Chat List | Chat History
         let mut main_layout = LinearLayout::horizontal();
@@ -50,22 +137,31 @@ impl AdvancedChatUI {
         let chat_panel = self.create_chat_panel();
         main_layout.add_child(chat_panel.full_width());
 
-        // Wrap in main dialog with dynamic title showing agent status
+        // Wrap in main dialog with dynamic title showing agent status with icons
         let title = if let Some(session) = self.state.get_active_session() {
             match session.agent_state {
-                AgentState::Idle => "OSVM Agent - Idle".to_string(),
-                AgentState::Thinking => "OSVM Agent - Thinking...".to_string(),
-                AgentState::Planning => "OSVM Agent - Planning...".to_string(),
-                AgentState::ExecutingTool(ref tool) => format!("OSVM Agent - Executing {}", tool),
-                AgentState::Waiting => "OSVM Agent - Waiting".to_string(),
-                AgentState::Paused => "OSVM Agent - Paused".to_string(),
-                AgentState::Error(ref err) => format!("OSVM Agent - Error: {}", err),
+                AgentState::Idle => format!("{} OSVM Agent - Idle", Icons::IDLE),
+                AgentState::Thinking => format!("{} OSVM Agent - Thinking...", Icons::THINKING),
+                AgentState::Planning => format!("{} OSVM Agent - Planning...", Icons::PLANNING),
+                AgentState::ExecutingTool(ref tool) => {
+                    format!("{} OSVM Agent - Executing {}", Icons::EXECUTING, tool)
+                }
+                AgentState::Waiting => format!("{} OSVM Agent - Waiting", Icons::WAITING),
+                AgentState::Paused => format!("{} OSVM Agent - Paused", Icons::PAUSED),
+                AgentState::Error(ref err) => {
+                    format!("{} OSVM Agent - Error: {}", Icons::ERROR, err)
+                }
             }
         } else {
-            "OSVM Agent".to_string()
+            format!(
+                "{} {} OSVM Agent Chat {}",
+                Icons::ROCKET,
+                Icons::SPARKLES,
+                Icons::SPARKLES
+            )
         };
         let dialog = Dialog::around(main_layout)
-            .title(title)
+            .title(Decorations::fancy_header(&title))
             .title_position(cursive::align::HAlign::Center);
 
         siv.add_fullscreen_layer(dialog);
@@ -111,10 +207,25 @@ impl AdvancedChatUI {
             },
         );
 
-        // Add resize handling to prevent crashes - gentle approach
+        // Add resize handling with error protection
         siv.add_global_callback(cursive::event::Event::WindowResize, |s| {
-            // Gentle refresh - just update displays, don't recreate UI
-            super::display::update_ui_displays(s);
+            // Protect against resize-induced panics
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                // Gentle refresh - just update displays, don't recreate UI
+                super::display::update_ui_displays(s);
+
+                // Force screen refresh to prevent rendering artifacts
+                s.clear();
+            })) {
+                Ok(_) => {
+                    // Resize handled successfully
+                }
+                Err(e) => {
+                    log::error!("Window resize caused panic: {:?}", e);
+                    // Don't crash - just log and continue
+                    // The UI will be slightly off but functional
+                }
+            }
         });
     }
 

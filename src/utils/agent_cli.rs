@@ -15,6 +15,7 @@ use crate::services::{
     ai_service::{AiService, PlannedTool, ToolPlan},
     mcp_service::{McpService, McpTool},
 };
+use crate::utils::osvm_command_planner::OsvmCommandPlanner;
 
 /// Result of agent command execution
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,6 +103,81 @@ pub async fn execute_agent_command(
 
         if verbose > 0 {
             println!("\n⏳ Analyzing request...");
+        }
+    }
+
+    // Try OSVM command planner first (for CLI commands)
+    let planner = OsvmCommandPlanner::new(verbose > 1);
+    if let Ok(osvm_plan) = planner.create_plan(prompt).await {
+        if !json_output {
+            println!("\n💡 Detected OSVM command intent");
+            println!("{}", "━".repeat(50));
+            println!("📋 Execution Plan:");
+            println!("   💭 {}", osvm_plan.reasoning);
+            println!("   🎯 Confidence: {:.0}%", osvm_plan.confidence * 100.0);
+            println!();
+
+            for (i, step) in osvm_plan.steps.iter().enumerate() {
+                println!("   {}. {}", i + 1, step.full_command);
+                println!("      → {}", step.explanation);
+            }
+
+            println!();
+            println!("   ✨ Expected: {}", osvm_plan.expected_outcome);
+            println!();
+
+            // Execute the OSVM commands
+            match planner.execute_plan(&osvm_plan, true).await {
+                Ok(results) => {
+                    println!("{}", "━".repeat(50));
+                    println!("📊 Execution Results:");
+                    println!();
+
+                    for (i, cmd_result) in results.iter().enumerate() {
+                        let status = if cmd_result.success { "✅" } else { "❌" };
+                        println!("   {}. {} {}", i + 1, status, cmd_result.command);
+
+                        if !cmd_result.stdout.is_empty() {
+                            // Indent the output
+                            for line in cmd_result.stdout.lines() {
+                                println!("      {}", line);
+                            }
+                        }
+
+                        if !cmd_result.success && !cmd_result.stderr.is_empty() {
+                            println!("      ❌ {}", cmd_result.stderr);
+                        }
+
+                        println!("      ⏱️  {}ms", cmd_result.execution_time_ms);
+                        println!();
+                    }
+
+                    let agent_result = AgentExecutionResult {
+                        prompt: prompt.to_string(),
+                        plan: None,
+                        tool_results: vec![],
+                        final_response: format!(
+                            "Executed {} OSVM command(s) successfully",
+                            results.len()
+                        ),
+                        execution_time_ms: start_time.elapsed().as_millis(),
+                        success: results.iter().all(|r| r.success),
+                        error: None,
+                    };
+
+                    if json_output {
+                        println!("{}", serde_json::to_string_pretty(&agent_result)?);
+                    }
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    if verbose > 0 {
+                        println!("⚠️  OSVM command execution failed: {}", e);
+                        println!("   Falling back to MCP tools...\n");
+                    }
+                }
+            }
         }
     }
 

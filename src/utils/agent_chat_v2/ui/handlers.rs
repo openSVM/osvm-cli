@@ -1,11 +1,15 @@
-//! UI event handlers and callbacks
+//! Event handlers for the advanced chat UI
 
-use cursive::traits::*;
+use crate::utils::agent_chat_v2::agent::ThemeCommandType;
+use anyhow::{anyhow, Context, Result};
+use cursive::direction::Orientation;
+use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, Panel, SelectView, TextView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView,
+    TextView,
 };
-use cursive::{Cursive, CursiveExt};
-use log::{error, info};
+use cursive::Cursive;
+use log::{error, info, warn};
 use uuid::Uuid;
 
 use super::super::agent::AgentCommand;
@@ -187,8 +191,29 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         input.set_content("");
     }
 
-    // Immediately add user message to session and update display
+    // Check for theme commands first
+    if user_message.trim().starts_with("/theme") {
+        handle_theme_command(siv, &user_message, state);
+        return;
+    }
+
+    // Check for duplicate input to prevent processing the same message twice
     if let Some(session) = state.get_active_session() {
+        // Check if the last user message is the same as the current one
+        // Look through messages in reverse to find the last User message
+        if let Some(last_user_msg) = session.messages.iter().rev().find_map(|msg| {
+            if let ChatMessage::User(text) = msg {
+                Some(text)
+            } else {
+                None
+            }
+        }) {
+            if last_user_msg == &user_message {
+                warn!("Duplicate user input detected, ignoring: {}", user_message);
+                return;
+            }
+        }
+
         // Add user message to the session
         let _ = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()));
 
@@ -196,7 +221,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         let _ = state.add_message_to_session(
             session.id,
             ChatMessage::Processing {
-                message: "🤖 Processing your request...".to_string(),
+                message: "Processing your request...".to_string(),
                 spinner_index: 0,
             },
         );
@@ -381,7 +406,7 @@ pub fn show_settings(siv: &mut Cursive) {
 }
 
 pub fn export_chat(siv: &mut Cursive) {
-    siv.with_user_data(|state: &mut AdvancedChatState| {
+    let export_result = siv.with_user_data(|state: &mut AdvancedChatState| {
         if let Some(session) = state.get_active_session() {
             let filename = format!(
                 "osvm_chat_export_{}_{}.json",
@@ -390,38 +415,69 @@ pub fn export_chat(siv: &mut Cursive) {
             );
 
             match serde_json::to_string_pretty(&session) {
-                Ok(json_content) => {
-                    match std::fs::write(&filename, json_content) {
-                        Ok(_) => {
-                            info!("Chat exported to {}", filename);
-                            // Add success message to current session
-                            if let Ok(mut sessions) = state.sessions.write() {
-                                if let Some(current_session) = sessions.get_mut(&session.id) {
-                                    current_session.add_message(ChatMessage::System(format!(
-                                        "Chat exported to {}",
-                                        filename
-                                    )));
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Failed to write export file: {}", e);
-                        }
+                Ok(json_content) => match std::fs::write(&filename, json_content) {
+                    Ok(_) => {
+                        info!("Chat exported to {}", filename);
+                        Ok((filename, None::<String>))
                     }
-                }
+                    Err(e) => {
+                        error!("Failed to write export file: {}", e);
+                        Err(format!("Failed to write export file: {}", e))
+                    }
+                },
                 Err(e) => {
                     error!("Failed to serialize session: {}", e);
+                    Err(format!("Failed to serialize session: {}", e))
                 }
             }
+        } else {
+            Err("No active session found".to_string())
         }
     });
 
-    update_ui_displays(siv);
+    match export_result {
+        Some(Ok((filename, None))) => {
+            siv.add_layer(
+                Dialog::info(format!("✅ Chat exported successfully to:\n{}", filename))
+                    .title("Export Complete")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        Some(Ok((_, Some(e)))) => {
+            siv.add_layer(
+                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        Some(Err(e)) => {
+            siv.add_layer(
+                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+        None => {
+            siv.add_layer(
+                Dialog::info("❌ No active session found")
+                    .title("Export Failed")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+        }
+    }
 }
 
 pub fn show_advanced_help(siv: &mut Cursive) {
     let help_text = "OSVM Advanced Agent Chat Help\n\n\
-        🔤 Keyboard Shortcuts:\n\
+        Keyboard Shortcuts:\n\
         • Tab - Switch between chat list and input\n\
         • Shift+Tab - Reverse navigation\n\
         • F10 - Context menu (Copy, Retry, Clear)\n\
@@ -434,17 +490,17 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         • Alt+X - Emergency clear processing\n\
         • Alt+M - Switch to standard mode\n\
         • Esc - Hide suggestions\n\n\
-        📋 Agent Controls:\n\
+        Agent Controls:\n\
         • Run - Resume agent processing\n\
         • Pause - Pause agent operations\n\
-        • Stop - Stop current agent task\n\n\
-        📹 Recording:\n\
+        • Stop - Current agent task\n\n\
+        Recording:\n\
         • Record - Start session recording\n\
         • Stop Rec - Stop recording\n\n\
-        🔄 Status Icons:\n\
-        • ● Idle  ◐ Thinking  ◑ Planning\n\
-        • ◒ Executing  ◯ Waiting  ⏸ Paused  ⚠ Error\n\n\
-        ✨ Features:\n\
+        Status Icons:\n\
+        • * Idle  ~ Thinking  ~ Planning\n\
+        • > Executing  . Waiting  || Paused  ! Error\n\n\
+        Features:\n\
         • AI-powered tool planning and execution\n\
         • Background agent processing\n\
         • Multi-chat session support\n\
@@ -453,7 +509,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
 
     siv.add_layer(
         Dialog::text(help_text)
-            .title("🚀 Advanced Help")
+            .title("Advanced Help")
             .button("Got it!", |s| {
                 s.pop_layer();
             })
@@ -916,31 +972,76 @@ pub fn start_live_processing(
     use std::time::Duration;
 
     let spinner_counter = Arc::new(AtomicUsize::new(0));
-    let processing_active = Arc::new(std::sync::atomic::AtomicBool::new(true));
 
     // Get a callback sink to update UI from background thread
     let cb_sink = siv.cb_sink().clone();
-    let cb_sink2 = cb_sink.clone();
 
     // Clone for background thread
     let state_clone = state.clone();
     let spinner_clone = spinner_counter.clone();
-    let active_clone = processing_active.clone();
 
     // Start spinner animation in background thread
     thread::spawn(move || {
-        let stages = vec![
-            "🤖 Analyzing your request...",
-            "🔍 Searching for relevant information...",
-            "⚙️ Processing with AI...",
-            "📊 Generating response...",
-            "✨ Finalizing answer...",
+        let stages = [
+            "Analyzing your request...",
+            "Searching for relevant information...",
+            "Processing with AI...",
+            "Generating response...",
+            "Finalizing answer...",
+            "Almost done...",
+            "Wrapping up...",
+            "Just a moment...",
+            "Completing your request...",
+            "Preparing response...",
+            "Finalizing response...",
+            "Almost there...",
+            "Just a moment longer...",
+            "Completing the process...",
+            "Preparing the final response...",
+            "Finishing up...",
+            "Loading...",
+            "Thinking...",
+            "Working...",
+            "Processing...",
+            "Calculating...",
+            "Reviewing...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
+            "It's gone...",
         ];
 
         let mut stage_index = 0;
         let mut update_counter = 0;
+        let start_time = std::time::Instant::now();
+        const MAX_SPINNER_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
 
-        while active_clone.load(Ordering::Relaxed) {
+        loop {
+            // Check if processing message still exists in session BEFORE updating
+            let still_processing = state_clone
+                .get_session_by_id(session_id)
+                .map(|session| {
+                    session
+                        .messages
+                        .iter()
+                        .any(|msg| matches!(msg, ChatMessage::Processing { .. }))
+                })
+                .unwrap_or(false);
+
+            if !still_processing {
+                break; // Exit loop when processing message is removed
+            }
+
+            // Safety timeout: force exit after 30 seconds
+            if start_time.elapsed() > MAX_SPINNER_DURATION {
+                // Force remove processing message and exit
+                let _ = state_clone.remove_last_processing_message(session_id);
+                break;
+            }
+
             let spinner_index = spinner_clone.fetch_add(1, Ordering::Relaxed);
 
             // Change message every 30 updates (roughly 3 seconds)
@@ -951,12 +1052,28 @@ pub fn start_live_processing(
 
             let message = stages[stage_index].to_string();
 
-            // Update processing message in session
-            let _ = state_clone.update_processing_message(
-                session_id,
-                message.clone(),
-                spinner_index % 10,
-            );
+            // Only update if processing message still exists
+            // This check prevents re-adding the message after agent removes it
+            if still_processing {
+                // Double-check: only update if message still exists (race condition guard)
+                let still_processing_after_check = state_clone
+                    .get_session_by_id(session_id)
+                    .map(|session| {
+                        session
+                            .messages
+                            .iter()
+                            .any(|msg| matches!(msg, ChatMessage::Processing { .. }))
+                    })
+                    .unwrap_or(false);
+
+                if still_processing_after_check {
+                    let _ = state_clone.update_processing_message(
+                        session_id,
+                        message.clone(),
+                        spinner_index % 10,
+                    );
+                }
+            }
 
             // Request UI update
             cb_sink
@@ -969,220 +1086,18 @@ pub fn start_live_processing(
         }
     });
 
-    // Process with real AI service
-    let state_final = state.clone();
-    let processing_final = processing_active.clone();
-    let ai_service = state_final.ai_service.clone();
+    // Use the proper agent worker flow which calls AI service first
+    // Send to agent worker instead of handling inline
+    let command = AgentCommand::ProcessInput {
+        session_id,
+        input: user_input,
+    };
 
-    thread::spawn(move || {
-        // Use tokio runtime for async AI call within thread
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(rt) => rt,
-            Err(e) => {
-                eprintln!("Failed to create tokio runtime: {}", e);
-                processing_final.store(false, Ordering::Relaxed);
-                let _ = state_final.remove_last_processing_message(session_id);
-                let _ = state_final.add_message_to_session(
-                    session_id,
-                    ChatMessage::Error("Failed to initialize AI processing".to_string()),
-                );
-                cb_sink2
-                    .send(Box::new(move |siv| {
-                        update_ui_displays(siv);
-                    }))
-                    .ok();
-                return;
-            }
-        };
+    // Send command through the proper channel
+    state.send_agent_command_sync(command);
 
-        // Get available tools context
-        let tools_context = state_final.get_available_tools_context();
-
-        // Create STRICT structured planning prompt
-        let planning_query = format!(
-            "You are OSVM Agent. You MUST respond in the exact XML format specified.
-
-\
-            USER REQUEST: '{}'
-
-\
-            AVAILABLE TOOLS:
-{}
-
-\
-            CRITICAL: You MUST respond ONLY in this format. Do not add any text before or after:
-
-\
-            <plan>
-\
-            <tool name=\"exact_tool_name\" server=\"exact_server_id\">
-\
-              <param name=\"param_name\">param_value</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            Brief explanation of what you're doing.
-\
-            </response>
-
-\
-            EXACT MAPPINGS - Use these tools for these requests:
-
-\
-            \"balance\" or \"how much SOL\" → get_balance tool
-\
-            \"transactions\" or \"recent transactions\" → get_recent_transactions tool
-\
-            \"transaction details\" + signature → get_transaction tool
-\
-            \"analyze transaction\" → analyze_transaction tool
-
-\
-            EXAMPLES (COPY EXACTLY):
-
-\
-            Request: \"What's my SOL balance?\"
-\
-            <plan>
-\
-            <tool name=\"get_balance\" server=\"osvm-api\">
-\
-              <param name=\"address\">user_default</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll check your SOL balance now.
-\
-            </response>
-
-\
-            Request: \"Show my recent transactions\"
-\
-            <plan>
-\
-            <tool name=\"get_recent_transactions\" server=\"osvm-api\">
-\
-              <param name=\"limit\">10</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll get your 10 most recent transactions.
-\
-            </response>
-
-\
-            Request: \"Get details for transaction ABC123\"
-\
-            <plan>
-\
-            <tool name=\"get_transaction\" server=\"osvm-api\">
-\
-              <param name=\"signature\">ABC123</param>
-\
-            </tool>
-\
-            </plan>
-\
-            <response>
-\
-            I'll get the details for transaction ABC123.
-\
-            </response>
-
-\
-            For general questions (no blockchain data needed), use:
-\
-            <plan></plan>
-\
-            <response>Your answer here</response>
-
-\
-            NOW RESPOND TO: '{}' - USE EXACT FORMAT ABOVE",
-            user_input, tools_context, user_input
-        );
-
-        let response = rt.block_on(async {
-            match ai_service.query_with_debug(&planning_query, false).await {
-                Ok(ai_response) => {
-                    // Parse the structured response and execute tools
-                    execute_ai_plan(ai_response, session_id, state_final.clone()).await
-                }
-                Err(e) => {
-                    eprintln!("AI service error: {}", e);
-                    // Fallback to mock response on AI service failure
-                    format!(
-                        "I encountered an issue connecting to the AI service: {}
-
-\
-                        However, I can still help with basic Solana operations. {}",
-                        e,
-                        generate_mock_response(&user_input)
-                    )
-                }
-            }
-        });
-
-        // Stop spinner
-        processing_final.store(false, Ordering::Relaxed);
-
-        // Remove processing message and add agent response
-        let _ = state_final.remove_last_processing_message(session_id);
-        let _ = state_final.add_message_to_session(session_id, ChatMessage::Agent(response));
-
-        // Generate intelligent follow-up suggestions using AI
-        let suggestions = rt.block_on(async {
-            let suggestion_query = format!(
-                "Based on the user query '{}' and your response, suggest 5 short follow-up questions \
-                or actions related to Solana/OSVM operations. Return only the suggestions, one per line, \
-                without numbers or bullets.",
-                user_input
-            );
-
-            match ai_service.query_with_debug(&suggestion_query, false).await {
-                Ok(ai_suggestions) => {
-                    // Parse AI suggestions into vec
-                    ai_suggestions
-                        .lines()
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty() && s.len() < 80) // Reasonable length limit
-                        .take(5)
-                        .collect::<Vec<String>>()
-                }
-                Err(_) => {
-                    // Fallback to context suggestions on AI failure
-                    generate_context_suggestions(&user_input)
-                }
-            }
-        });
-
-        if !suggestions.is_empty() {
-            if let Ok(mut current_suggestions) = state_final.current_suggestions.write() {
-                *current_suggestions = suggestions;
-            }
-            if let Ok(mut vis) = state_final.suggestions_visible.write() {
-                *vis = true;
-            }
-        }
-
-        // Final UI update
-        cb_sink2
-            .send(Box::new(move |siv| {
-                update_ui_displays(siv);
-            }))
-            .ok();
-    });
+    // NOTE: We don't stop the spinner here - it will keep running and be cleaned up
+    // when the agent worker completes and removes the processing message
 }
 
 // Generate mock response for demo
@@ -1190,13 +1105,21 @@ fn generate_mock_response(input: &str) -> String {
     let input_lower = input.to_lowercase();
 
     if input_lower.contains("balance") {
-        "I'll check your SOL balance for you. According to the latest data, your wallet shows 2.45 SOL with some pending transactions.".to_string()
-    } else if input_lower.contains("transaction") {
-        "Here are your recent transactions:\n\n1. → Received 1.5 SOL (2 hours ago)\n2. ← Sent 0.3 SOL (1 day ago)\n3. → Staking rewards 0.025 SOL (2 days ago)\n\nWould you like more details on any of these?".to_string()
-    } else if input_lower.contains("price") {
-        "The current SOL price is approximately $23.45 USD, showing a 2.3% increase over the last 24 hours. The market looks relatively stable.".to_string()
+        "I'll check your SOL balance for you. According to the latest data, your wallet shows that all SOL is gone with some pending transactions.".to_string()
     } else if input_lower.contains("stake") || input_lower.contains("staking") {
         "For staking your SOL:\n\n1. Choose a validator with good performance\n2. Use 'solana delegate-stake' command\n3. Minimum stake amount is 0.001 SOL\n\nCurrent APY is around 6.8%. Would you like help selecting a validator?".to_string()
+    } else if input_lower.contains("send") || input_lower.contains("transfer") {
+        "To send SOL, you'll need the recipient's wallet address and ensure you have enough balance to cover both the amount and transaction fees. Use 'solana transfer <RECIPIENT_ADDRESS> <AMOUNT>' command.".to_string()
+    } else if input_lower.contains("validator") {
+        "You can check validator performance using 'solana validators' command. Look for high uptime and low commission rates. Would you like me to list some top validators for you?".to_string()
+    } else if input_lower.contains("rewards") {
+        "Staking rewards are typically distributed every 2 days. You can check your accumulated rewards using 'solana stake-account <STAKE_ACCOUNT_ADDRESS>' command.".to_string()
+    } else if input_lower.contains("history") || input_lower.contains("transactions") {
+        "You can export your transaction history using 'solana transaction-history' command. Would you like me to guide you through the steps?".to_string()
+    } else if input_lower.contains("market") || input_lower.contains("analysis") {
+        "The Solana market has been showing steady growth with increasing adoption. Recent trends indicate a bullish sentiment, but always consider market volatility.".to_string()
+    } else if input_lower.contains("security") || input_lower.contains("wallet") {
+        "For wallet security, ensure you use strong passwords, enable two-factor authentication,and regularly update your software. Avoid sharing your private keys.".to_string()
     } else {
         format!("I understand you're asking about: '{}'\n\nLet me help you with that. Based on your query, I can provide information about Solana operations, wallet management, and blockchain interactions.", input)
     }
@@ -1309,13 +1232,14 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
     let partial_owned = partial.to_string();
 
     // Spawn background AI suggestion generation (non-blocking)
+    let state_clone = state.clone();
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
             Err(_) => return, // Silently fail on runtime creation error
         };
 
-        let _ai_suggestions = rt.block_on(async {
+        let ai_suggestions = rt.block_on(async {
             let suggestion_query = format!(
                 "Complete this Solana/blockchain query: '{}'. \
                 Provide 3-5 likely completions, one per line, under 60 characters each.",
@@ -1328,8 +1252,28 @@ fn generate_smart_input_suggestions(partial: &str, state: AdvancedChatState) -> 
                 .unwrap_or_default()
         });
 
-        // TODO: Update suggestions in state (requires more complex async handling)
-        // For now, we rely on the fast pattern matching below
+        // Parse AI suggestions and update state
+        if !ai_suggestions.is_empty() {
+            let suggestions: Vec<String> = ai_suggestions
+                .lines()
+                .filter_map(|line| {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() && trimmed.len() <= 60 {
+                        Some(trimmed.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .take(5)
+                .collect();
+
+            if !suggestions.is_empty() {
+                // Update suggestions in state
+                if let Ok(mut current_suggestions) = state_clone.current_suggestions.write() {
+                    *current_suggestions = suggestions;
+                }
+            }
+        }
     });
 
     // Return immediate pattern-based suggestions
@@ -1455,5 +1399,371 @@ async fn execute_mcp_tool(
         _ => {
             format!("Executed {} on {} with parameters: {:?}", tool_name, server_id, params)
         }
+    }
+}
+
+/// Handle theme-related commands
+pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedChatState) {
+    use super::super::agent::{AgentCommand, ThemeCommandType};
+
+    if let Some(session) = state.get_active_session() {
+        // Add user command to chat
+        let _ = state.add_message_to_session(session.id, ChatMessage::User(command.to_string()));
+
+        let parts: Vec<&str> = command.trim().split_whitespace().collect();
+        let theme_cmd = match parts.as_slice() {
+            ["/theme", "list"] => ThemeCommandType::ListThemes,
+            ["/theme", "switch", theme_name] => {
+                ThemeCommandType::SwitchTheme(theme_name.to_string())
+            }
+            ["/theme", "preview"] => ThemeCommandType::PreviewTheme(None),
+            ["/theme", "preview", theme_name] => {
+                ThemeCommandType::PreviewTheme(Some(theme_name.to_string()))
+            }
+            ["/theme", "current"] => ThemeCommandType::ShowCurrentTheme,
+            ["/theme"] => ThemeCommandType::ShowCurrentTheme, // Default to showing current theme
+            _ => {
+                // Invalid theme command
+                let help_msg = "Theme commands:\n\
+                    /theme - Show current theme\n\
+                    /theme list - List available themes\n\
+                    /theme switch <theme_name> - Switch to a theme\n\
+                    /theme preview [theme_name] - Preview a theme\n\
+                    /theme current - Show current theme name";
+                let _ = state
+                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string()));
+                update_ui_displays(siv);
+                return;
+            }
+        };
+
+        // Execute theme command synchronously
+        let response = execute_theme_command(theme_cmd, &state);
+        let _ = state.add_message_to_session(session.id, ChatMessage::System(response));
+
+        // Update UI to reflect changes
+        update_ui_displays(siv);
+    }
+}
+
+/// Execute a theme command and return the response
+fn execute_theme_command(cmd: ThemeCommandType, state: &AdvancedChatState) -> String {
+    match cmd {
+        ThemeCommandType::ListThemes => match state.get_available_themes() {
+            Ok(themes) => {
+                if let Ok(current) = state.get_current_theme_name() {
+                    let mut output = String::from("Available themes:\n");
+                    for theme in themes {
+                        let marker = if theme == current { "▶ " } else { "  " };
+                        output.push_str(&format!("{}{}\n", marker, theme));
+                    }
+                    output
+                } else {
+                    format!("Available themes: {}", themes.join(", "))
+                }
+            }
+            Err(e) => format!("Error listing themes: {}", e),
+        },
+        ThemeCommandType::SwitchTheme(theme_name) => match state.switch_theme(&theme_name) {
+            Ok(_) => format!("✅ Switched to theme: {}", theme_name),
+            Err(e) => format!("❌ Failed to switch theme: {}", e),
+        },
+        ThemeCommandType::PreviewTheme(theme_name) => match theme_name {
+            Some(name) => match state.preview_theme(&name) {
+                Ok(preview) => format!("Preview of theme '{}':\n{}", name, preview),
+                Err(e) => format!("❌ Failed to preview theme '{}': {}", name, e),
+            },
+            None => match state.get_current_theme_name() {
+                Ok(current_name) => match state.preview_theme(&current_name) {
+                    Ok(preview) => format!("Current theme '{}':\n{}", current_name, preview),
+                    Err(e) => format!("❌ Failed to preview current theme: {}", e),
+                },
+                Err(e) => format!("❌ Failed to get current theme: {}", e),
+            },
+        },
+        ThemeCommandType::ShowCurrentTheme => match state.get_current_theme_name() {
+            Ok(name) => format!("Current theme: {}", name),
+            Err(e) => format!("❌ Failed to get current theme: {}", e),
+        },
+    }
+}
+
+/// Show test tool dialog with input fields
+pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Get tool schema to build input form
+    let schema_info = siv.with_user_data(|state: &mut AdvancedChatState| {
+        let tools = state.available_tools.read().unwrap();
+
+        if let Some(tool_list) = tools.get(&server_id) {
+            if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
+                Some(tool.input_schema.clone())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    if let Some(Some(schema)) = schema_info {
+        let mut test_layout = LinearLayout::vertical();
+
+        test_layout.add_child(TextView::new(format!("Testing: {}", tool_name)));
+        test_layout.add_child(DummyView.fixed_height(1));
+        test_layout.add_child(TextView::new("Enter parameters as JSON:"));
+        test_layout.add_child(DummyView.fixed_height(1));
+
+        // Add text area for JSON input
+        test_layout.add_child(
+            Panel::new(
+                EditView::new()
+                    .content("{}")
+                    .with_name("test_tool_params")
+                    .min_width(60)
+                    .min_height(5),
+            )
+            .title("Parameters (JSON)"),
+        );
+
+        test_layout.add_child(DummyView.fixed_height(1));
+        test_layout.add_child(TextView::new("Expected Schema:"));
+        test_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(
+                serde_json::to_string_pretty(&schema).unwrap_or_else(|_| "{}".to_string()),
+            ))
+            .max_height(5),
+        ));
+
+        let server_clone = server_id.clone();
+        let tool_clone = tool_name.clone();
+
+        siv.add_layer(
+            Dialog::around(test_layout)
+                .title(format!("🧪 Test Tool: {}", tool_name))
+                .button("Execute", move |s| {
+                    execute_test_tool(s, server_clone.clone(), tool_clone.clone());
+                })
+                .button("Cancel", |s| {
+                    s.pop_layer();
+                })
+                .max_width(80),
+        );
+    }
+}
+
+/// Execute a test tool call and show results with metrics
+fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Get JSON input from the form
+    let json_input = siv
+        .find_name::<EditView>("test_tool_params")
+        .map(|v| v.get_content().to_string())
+        .unwrap_or_else(|| "{}".to_string());
+
+    // Parse JSON
+    let params = match serde_json::from_str::<serde_json::Value>(&json_input) {
+        Ok(val) => val,
+        Err(e) => {
+            siv.add_layer(
+                Dialog::text(format!("❌ Invalid JSON: {}", e))
+                    .title("Parse Error")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
+            );
+            return;
+        }
+    };
+
+    // Close the test dialog
+    siv.pop_layer();
+
+    // Show loading dialog
+    siv.add_layer(
+        Dialog::text("⚡ Executing tool...\nPlease wait...")
+            .title("Testing Tool")
+            .with_name("test_execution_dialog"),
+    );
+
+    // Execute in background and show results
+    let cb_sink = siv.cb_sink().clone();
+    let state_opt = siv.user_data::<AdvancedChatState>().cloned();
+
+    std::thread::spawn(move || {
+        let start_time = std::time::Instant::now();
+
+        if let Some(state) = state_opt {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let error_msg = format!("Failed to create runtime: {}", e);
+                    cb_sink
+                        .send(Box::new(move |s| {
+                            s.pop_layer(); // Remove loading dialog
+                            s.add_layer(Dialog::text(error_msg).title("❌ Test Failed").button(
+                                "OK",
+                                |s| {
+                                    s.pop_layer();
+                                },
+                            ));
+                        }))
+                        .ok();
+                    return;
+                }
+            };
+
+            let result = rt.block_on(async {
+                let mcp_service = state.mcp_service.lock().await;
+                mcp_service
+                    .call_tool(&server_id, &tool_name, Some(params))
+                    .await
+            });
+
+            let execution_time_ms = start_time.elapsed().as_millis();
+
+            cb_sink
+                .send(Box::new(move |s| {
+                    s.pop_layer(); // Remove loading dialog
+
+                    match result {
+                        Ok(response) => {
+                            let response_str = serde_json::to_string_pretty(&response)
+                                .unwrap_or_else(|_| format!("{:?}", response));
+
+                            let mut result_layout = LinearLayout::vertical();
+
+                            result_layout
+                                .add_child(TextView::new(format!("✅ Execution Successful")));
+                            result_layout.add_child(DummyView.fixed_height(1));
+
+                            result_layout.add_child(TextView::new(format!(
+                                "⏱️  Execution Time: {}ms",
+                                execution_time_ms
+                            )));
+                            result_layout
+                                .add_child(TextView::new(format!("📦 Server: {}", server_id)));
+                            result_layout
+                                .add_child(TextView::new(format!("🔧 Tool: {}", tool_name)));
+                            result_layout.add_child(DummyView.fixed_height(1));
+
+                            result_layout.add_child(TextView::new("Response:"));
+                            result_layout.add_child(Panel::new(
+                                ScrollView::new(TextView::new(response_str.clone())).max_height(15),
+                            ));
+
+                            s.add_layer(
+                                Dialog::around(result_layout)
+                                    .title("🧪 Test Results")
+                                    .button("Close", |s| {
+                                        s.pop_layer();
+                                    })
+                                    .button("Copy Response", move |s| {
+                                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                            let _ = clipboard.set_text(&response_str);
+                                            s.add_layer(
+                                                Dialog::info("Response copied to clipboard!")
+                                                    .button("OK", |s| {
+                                                        s.pop_layer();
+                                                    }),
+                                            );
+                                        }
+                                    })
+                                    .max_width(100),
+                            );
+                        }
+                        Err(e) => {
+                            let error_msg = format!(
+                                "❌ Tool execution failed:\n\n{}\n\n⏱️ Time: {}ms",
+                                e, execution_time_ms
+                            );
+                            s.add_layer(Dialog::text(error_msg).title("Test Failed").button(
+                                "OK",
+                                |s| {
+                                    s.pop_layer();
+                                },
+                            ));
+                        }
+                    }
+                }))
+                .ok();
+        }
+    });
+}
+
+/// Show detailed information about an MCP tool
+pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String) {
+    // Skip if this is a header (empty tool_name)
+    if tool_name.is_empty() {
+        return;
+    }
+
+    let tool_info = siv.with_user_data(|state: &mut AdvancedChatState| {
+        let tools = state.available_tools.read().unwrap();
+
+        if let Some(tool_list) = tools.get(&server_id) {
+            if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
+                let description = tool
+                    .description
+                    .as_ref()
+                    .map(|d| d.clone())
+                    .unwrap_or_else(|| "No description available".to_string());
+
+                let schema_str = serde_json::to_string_pretty(&tool.input_schema)
+                    .unwrap_or_else(|_| "{}".to_string());
+
+                Some((tool.name.clone(), description, schema_str))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    if let Some(Some((name, description, schema))) = tool_info {
+        let mut details_layout = LinearLayout::vertical();
+
+        details_layout.add_child(TextView::new(format!("Tool: {}", name)));
+        details_layout.add_child(DummyView.fixed_height(1));
+
+        details_layout.add_child(TextView::new("Description:"));
+        details_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(description)).max_height(5),
+        ));
+        details_layout.add_child(DummyView.fixed_height(1));
+
+        details_layout.add_child(TextView::new("Input Schema:"));
+        details_layout.add_child(Panel::new(
+            ScrollView::new(TextView::new(schema)).max_height(10),
+        ));
+        details_layout.add_child(DummyView.fixed_height(1));
+
+        details_layout.add_child(TextView::new(format!("Server: {}", server_id)));
+
+        let server_id_clone = server_id.clone();
+        let tool_name_clone = name.clone();
+
+        siv.add_layer(
+            Dialog::around(details_layout)
+                .title(format!("📦 Tool Details: {}", name))
+                .button("Test Tool", move |s| {
+                    show_test_tool_dialog(s, server_id_clone.clone(), tool_name_clone.clone());
+                })
+                .button("Close", |s| {
+                    s.pop_layer();
+                })
+                .max_width(80)
+                .max_height(30),
+        );
+    } else {
+        siv.add_layer(
+            Dialog::text(format!(
+                "Tool '{}' not found on server '{}'",
+                tool_name, server_id
+            ))
+            .title("Tool Not Found")
+            .button("OK", |s| {
+                s.pop_layer();
+            }),
+        );
     }
 }

@@ -1,14 +1,20 @@
 //! Agent execution logic for AI processing and tool execution
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{debug, error, info, warn};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use uuid::Uuid;
 
-use crate::services::{ai_service::PlannedTool, mcp_service::McpTool};
+use crate::services::{
+    ai_service::PlannedTool,
+    isolation_config::IsolationConfig,
+    mcp_service::McpTool,
+    unikernel_runtime::{UnikernelConfig, UnikernelRuntime},
+};
 
 use super::super::state::AdvancedChatState;
 use super::super::types::{AgentState, ChatMessage};
@@ -17,14 +23,14 @@ impl AdvancedChatState {
     pub async fn process_input_async(&self, session_id: Uuid, input: String) -> Result<()> {
         // Set agent state to thinking
         self.set_agent_state(session_id, AgentState::Thinking);
-        self.add_message_to_session(session_id, ChatMessage::User(input.clone()))?;
-        self.add_message_to_session(
+        let _ = self.add_message_to_session(session_id, ChatMessage::User(input.clone()));
+        let _ = self.add_message_to_session(
             session_id,
             ChatMessage::Processing {
                 message: "Analyzing your request...".to_string(),
                 spinner_index: self.spinner_state.load(Ordering::Relaxed),
             },
-        )?;
+        );
 
         // First, refresh available tools to ensure we have the latest
         if let Err(e) = self.refresh_tools_from_mcp().await {
@@ -32,20 +38,22 @@ impl AdvancedChatState {
         }
 
         self.set_agent_state(session_id, AgentState::Planning);
-        self.add_message_to_session(
+        let _ = self.add_message_to_session(
             session_id,
             ChatMessage::Processing {
                 message: "Creating execution plan...".to_string(),
                 spinner_index: self.spinner_state.load(Ordering::Relaxed),
             },
-        )?;
+        );
 
         // Get available tools
-        let available_tools = self
-            .available_tools
-            .read()
-            .map_err(|e| anyhow!("Failed to read available tools: {}", e))?
-            .clone();
+        let available_tools = match self.available_tools.read() {
+            Ok(tools) => tools.clone(),
+            Err(e) => {
+                error!("Failed to read available tools: {}", e);
+                HashMap::new() // Use empty map as fallback
+            }
+        };
 
         // Use the proper AI service method to create tool plan
         let tool_plan_result = tokio::time::timeout(
@@ -83,40 +91,42 @@ impl AdvancedChatState {
         match tool_plan_result {
             Err(_) => {
                 warn!("AI planning timed out");
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::Error(
                         "AI planning timed out. Using heuristic fallback.".to_string(),
                     ),
-                )?;
+                );
                 if no_configured_tools {
-                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
-                        .await?;
+                    let _ = self
+                        .run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await;
                 } else {
-                    self.simple_response(session_id, &input).await?;
+                    let _ = self.simple_response(session_id, &input).await;
                 }
             }
             Ok(Err(e)) => {
                 error!("AI service failed: {}", e);
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::Error(
                         "AI planning service failed. Using heuristic fallback.".to_string(),
                     ),
-                )?;
+                );
                 if no_configured_tools {
-                    self.run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
-                        .await?;
+                    let _ = self
+                        .run_heuristic_fallback(session_id, &input, build_heuristic_plan(&input))
+                        .await;
                 } else {
-                    self.simple_response(session_id, &input).await?;
+                    let _ = self.simple_response(session_id, &input).await;
                 }
             }
             Ok(Ok(tool_plan)) => {
                 // Successfully got tool plan from AI service
-                self.add_message_to_session(
+                let _ = self.add_message_to_session(
                     session_id,
                     ChatMessage::AgentPlan(tool_plan.osvm_tools_to_use.clone()),
-                )?;
+                );
 
                 if tool_plan.osvm_tools_to_use.is_empty() {
                     // No tools needed according to AI
@@ -124,40 +134,57 @@ impl AdvancedChatState {
                         // Try heuristic plan instead
                         let heur = build_heuristic_plan(&input);
                         if !heur.is_empty() {
-                            self.add_message_to_session(
+                            let _ = self.add_message_to_session(
                                 session_id,
                                 ChatMessage::AgentPlan(heur.clone()),
-                            )?;
-                            self.run_heuristic_fallback(session_id, &input, heur)
-                                .await?;
+                            );
+                            let _ = self.run_heuristic_fallback(session_id, &input, heur).await;
                         } else {
-                            self.simple_response(session_id, &input).await?;
+                            let _ = self.simple_response(session_id, &input).await;
                         }
                     } else {
-                        self.simple_response(session_id, &input).await?;
+                        let _ = self.simple_response(session_id, &input).await;
                     }
                 } else {
                     // Execute tools iteratively with potential for follow-up actions
                     let mut executed_tools = Vec::new();
                     let mut iteration_count = 0;
-                    let max_iterations = 5; // Allow up to 5 iterations of tool execution
+                    let max_iterations = 3; // Reduced to prevent excessive loops
 
                     let mut current_tools = tool_plan.osvm_tools_to_use;
+                    let mut executed_tool_signatures = std::collections::HashSet::new();
 
                     while !current_tools.is_empty() && iteration_count < max_iterations {
                         iteration_count += 1;
 
+                        // Filter out duplicate tools to prevent infinite loops
+                        current_tools.retain(|tool| {
+                            let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                            !executed_tool_signatures.contains(&signature)
+                        });
+
+                        if current_tools.is_empty() {
+                            warn!("All remaining tools are duplicates, breaking execution loop");
+                            break;
+                        }
+
                         // Execute current batch of tools
                         for planned_tool in &current_tools {
-                            self.execute_planned_tool(session_id, planned_tool.clone())
-                                .await?;
+                            let signature =
+                                format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
+                            executed_tool_signatures.insert(signature);
+
+                            let _ = self
+                                .execute_planned_tool(session_id, planned_tool.clone())
+                                .await;
                             executed_tools.push(planned_tool.clone());
                         }
 
                         // Check if we need follow-up actions based on results
-                        let session = self
-                            .get_session_by_id(session_id)
-                            .ok_or_else(|| anyhow!("Session not found"))?;
+                        let session = match self.get_session_by_id(session_id) {
+                            Some(s) => s,
+                            None => break, // Session not found, exit loop
+                        };
 
                         let recent_results: Vec<(String, Value)> = session
                             .messages
@@ -182,15 +209,27 @@ impl AdvancedChatState {
                                 )
                                 .await
                             {
-                                Ok(follow_up_tools) if !follow_up_tools.is_empty() => {
-                                    self.add_message_to_session(
-                                        session_id,
-                                        ChatMessage::AgentThinking(format!(
-                                            "Executing {} follow-up actions...",
-                                            follow_up_tools.len()
-                                        )),
-                                    )?;
-                                    current_tools = follow_up_tools;
+                                Ok(mut follow_up_tools) if !follow_up_tools.is_empty() => {
+                                    // Filter follow-up tools to remove duplicates
+                                    follow_up_tools.retain(|tool| {
+                                        let signature =
+                                            format!("{}:{:?}", tool.tool_name, tool.args);
+                                        !executed_tool_signatures.contains(&signature)
+                                    });
+
+                                    if !follow_up_tools.is_empty() {
+                                        let _ = self.add_message_to_session(
+                                            session_id,
+                                            ChatMessage::AgentThinking(format!(
+                                                "Executing {} follow-up actions...",
+                                                follow_up_tools.len()
+                                            )),
+                                        );
+                                        current_tools = follow_up_tools;
+                                    } else {
+                                        warn!("All follow-up tools are duplicates, breaking execution loop");
+                                        break;
+                                    }
                                 }
                                 _ => break, // No more tools needed
                             }
@@ -200,14 +239,16 @@ impl AdvancedChatState {
                     }
 
                     // Generate final response with all executed tools
-                    self.generate_final_response(session_id, &input, &tool_plan.expected_outcome)
-                        .await?;
+                    let _ = self
+                        .generate_final_response(session_id, &input, &tool_plan.expected_outcome)
+                        .await;
                 }
             }
         }
 
-        // Remove any lingering processing messages before completing
-        let _ = self.remove_last_processing_message(session_id);
+        // ALWAYS cleanup processing messages, even if errors occurred above
+        // This ensures the spinner stops regardless of success/failure
+        self.cleanup_processing_messages(session_id);
 
         self.set_agent_state(session_id, AgentState::Idle);
 
@@ -215,6 +256,30 @@ impl AdvancedChatState {
         let _ = self.generate_reply_suggestions(session_id).await;
 
         Ok(())
+    }
+
+    /// Helper to ensure cleanup always happens
+    fn cleanup_processing_messages(&self, session_id: Uuid) {
+        // Remove ALL processing messages from the session
+        loop {
+            match self.remove_last_processing_message(session_id) {
+                Ok(()) => {
+                    // Check if there are more processing messages
+                    if let Some(session) = self.get_session_by_id(session_id) {
+                        let has_more_processing = session
+                            .messages
+                            .iter()
+                            .any(|msg| matches!(msg, ChatMessage::Processing { .. }));
+                        if !has_more_processing {
+                            break; // No more processing messages
+                        }
+                    } else {
+                        break; // Session not found
+                    }
+                }
+                Err(_) => break, // Error or no processing message found
+            }
+        }
     }
 
     // Heuristic fallback execution simulating basic tools so user sees end-to-end flow
@@ -283,6 +348,122 @@ impl AdvancedChatState {
     }
 
     async fn call_mcp_tool(&self, planned_tool: &PlannedTool) -> Result<Value> {
+        // Load isolation configuration
+        let isolation_config = match IsolationConfig::load() {
+            Ok(config) => config,
+            Err(e) => {
+                warn!(
+                    "Failed to load isolation config: {}, using direct MCP execution",
+                    e
+                );
+                return self.call_mcp_tool_direct(planned_tool).await;
+            }
+        };
+
+        // Check if this tool should be executed in a unikernel
+        if isolation_config.should_use_unikernel(&planned_tool.server_id, &planned_tool.tool_name) {
+            // Attempt unikernel execution with fallback
+            match self
+                .execute_tool_in_unikernel(planned_tool, &isolation_config)
+                .await
+            {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    warn!(
+                        "Unikernel execution failed: {}, falling back to direct MCP",
+                        e
+                    );
+                    return self.call_mcp_tool_direct(planned_tool).await;
+                }
+            }
+        }
+
+        // Use direct MCP execution (MicroVM mode or no isolation config)
+        self.call_mcp_tool_direct(planned_tool).await
+    }
+
+    /// Execute tool in ephemeral unikernel for maximum isolation
+    async fn execute_tool_in_unikernel(
+        &self,
+        planned_tool: &PlannedTool,
+        isolation_config: &IsolationConfig,
+    ) -> Result<Value> {
+        info!(
+            "Executing tool '{}' in ephemeral unikernel for server '{}'",
+            planned_tool.tool_name, planned_tool.server_id
+        );
+
+        // Get tool-specific configuration
+        let tool_config =
+            isolation_config.get_tool_config(&planned_tool.server_id, &planned_tool.tool_name);
+
+        // Validate unikernel image is configured
+        let unikernel_image = match &tool_config.unikernel_image {
+            Some(img) => img.clone(),
+            None => {
+                warn!(
+                    "No unikernel image configured for tool '{}' on server '{}', falling back",
+                    planned_tool.tool_name, planned_tool.server_id
+                );
+                return Err(anyhow!("No unikernel image configured"));
+            }
+        };
+
+        // Create unikernel runtime
+        let unikernel_runtime =
+            UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
+                .context("Failed to create unikernel runtime")?;
+
+        // Build unikernel configuration
+        use crate::services::unikernel_runtime::UnikernelLauncher;
+
+        let unikernel_config = UnikernelConfig {
+            image_path: PathBuf::from(unikernel_image),
+            mounts: tool_config.mounts.clone(),
+            memory_mb: tool_config.memory_mb,
+            vcpus: tool_config.vcpus,
+            tool_name: planned_tool.tool_name.clone(),
+            server_id: planned_tool.server_id.clone(),
+            launcher: UnikernelLauncher::Unikraft,
+            kraft_config: None,
+            vsock_cid: None, // Will be auto-allocated
+        };
+
+        // Spawn the unikernel (~100ms overhead)
+        let handle = unikernel_runtime
+            .spawn_unikernel(unikernel_config)
+            .await
+            .context("Failed to spawn unikernel")?;
+
+        // Execute the tool in the isolated unikernel (pass runtime for vsock communication)
+        let result = handle
+            .execute_tool(
+                &planned_tool.tool_name,
+                Some(planned_tool.args.clone()),
+                &unikernel_runtime,
+            )
+            .await;
+
+        // Always terminate the ephemeral unikernel
+        handle.terminate();
+
+        match result {
+            Ok(value) => {
+                info!(
+                    "Successfully executed tool '{}' in unikernel",
+                    planned_tool.tool_name
+                );
+                Ok(value)
+            }
+            Err(e) => {
+                error!("Unikernel tool execution failed: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    /// Direct MCP tool execution without unikernel isolation
+    async fn call_mcp_tool_direct(&self, planned_tool: &PlannedTool) -> Result<Value> {
         // Try to call real MCP tool first
         let mut mcp_service = self.mcp_service.lock().await;
 
@@ -291,10 +472,17 @@ impl AdvancedChatState {
             if server_config.enabled {
                 // Initialize the server if needed
                 if let Err(e) = mcp_service.initialize_server(&planned_tool.server_id).await {
-                    warn!(
-                        "Failed to initialize MCP server {}: {}",
+                    error!(
+                        "Failed to initialize MCP server '{}': {}",
                         planned_tool.server_id, e
                     );
+                    // Return error info instead of falling back silently
+                    return Ok(serde_json::json!({
+                        "error": format!("Failed to initialize MCP server '{}': {}", planned_tool.server_id, e),
+                        "status": "initialization_failed",
+                        "server_id": planned_tool.server_id,
+                        "tool_name": planned_tool.tool_name
+                    }));
                 }
 
                 // Try to call the actual tool
@@ -306,32 +494,55 @@ impl AdvancedChatState {
                     )
                     .await
                 {
-                    Ok(result) => return Ok(result),
+                    Ok(result) => {
+                        info!(
+                            "Successfully executed MCP tool '{}' on server '{}'",
+                            planned_tool.tool_name, planned_tool.server_id
+                        );
+                        return Ok(result);
+                    }
                     Err(e) => {
-                        warn!("MCP tool call failed: {}, falling back to simulation", e);
+                        error!(
+                            "MCP tool call failed for '{}' on server '{}': {}",
+                            planned_tool.tool_name, planned_tool.server_id, e
+                        );
+                        // Return detailed error instead of falling back silently
+                        return Ok(serde_json::json!({
+                            "error": format!("MCP tool execution failed: {}", e),
+                            "status": "execution_failed",
+                            "server_id": planned_tool.server_id,
+                            "tool_name": planned_tool.tool_name,
+                            "hint": "Check if the MCP server is properly configured and running. Use 'osvm mcp list' to see configured servers and 'osvm mcp test <server_id>' to test connectivity."
+                        }));
                     }
                 }
+            } else {
+                warn!(
+                    "MCP server '{}' is disabled. Enable it with 'osvm mcp enable {}'",
+                    planned_tool.server_id, planned_tool.server_id
+                );
+                return Ok(serde_json::json!({
+                    "error": format!("MCP server '{}' is disabled", planned_tool.server_id),
+                    "status": "server_disabled",
+                    "server_id": planned_tool.server_id,
+                    "hint": format!("Enable the server with: osvm mcp enable {}", planned_tool.server_id)
+                }));
             }
-        }
-
-        // Fallback to simulation if MCP call fails
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-
-        match planned_tool.tool_name.as_str() {
-            "get_balance" => Ok(serde_json::json!({"balance": "2.5 SOL", "usd_value": 250.75})),
-            "get_transactions" => Ok(serde_json::json!({
-                "transactions": [
-                    {"hash": "abc123", "amount": "0.1 SOL", "type": "sent"},
-                    {"hash": "def456", "amount": "1.0 SOL", "type": "received"}
-                ]
-            })),
-            "get_network_status" => Ok(serde_json::json!({
-                "network": "mainnet-beta",
-                "slot": 250000000,
-                "tps": 3000,
-                "validators": {"active": 1800, "delinquent": 12}
-            })),
-            _ => Ok(serde_json::json!({"result": "Tool executed successfully"})),
+        } else {
+            error!(
+                "MCP server '{}' not found in configuration",
+                planned_tool.server_id
+            );
+            return Ok(serde_json::json!({
+                "error": format!("MCP server '{}' not found", planned_tool.server_id),
+                "status": "server_not_found",
+                "server_id": planned_tool.server_id,
+                "available_servers": mcp_service.list_servers()
+                    .iter()
+                    .map(|(id, _)| id.as_str())
+                    .collect::<Vec<_>>(),
+                "hint": "Add the server with 'osvm mcp add-github <server_id> <github_url>' or check available servers with 'osvm mcp list'"
+            }));
         }
     }
 

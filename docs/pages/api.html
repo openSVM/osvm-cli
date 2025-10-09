@@ -1,0 +1,166 @@
+<!-- API Reference Page -->
+<div class="page-header">
+    <div class="command-line">
+        <span class="prompt">user@osvm:~$</span>
+        <span class="command typing" data-speed="80">osvm api --reference</span>
+    </div>
+</div>
+
+<!-- ASCII Art Header -->
+<pre class="ascii-art animate-on-scroll" data-animation="fadeIn">
+╔═══════════════════════════════════════════════════════╗
+║              API Reference & Documentation           ║
+╟───────────────────────────────────────────────────────╢
+║    ▄▄▄       ██▓███   ██▓                           ║
+║   ▒████▄    ▓██░  ██▒▓██▒                           ║
+║   ▒██  ▀█▄  ▓██░ ██▓▒▒██▒                           ║
+║   ░██▄▄▄▄██ ▒██▄█▓▒ ▒░██░                           ║
+║    ▓█   ▓██▒▒██▒ ░  ░░██░                           ║
+║    ▒▒   ▓▒█░▒▓▒░ ░  ░░▓                             ║
+╚═══════════════════════════════════════════════════════╝
+</pre>
+
+<section class="content animate-on-scroll" data-animation="slideUp">
+    <h1>Command Reference</h1>
+    <p class="subtitle">Complete API documentation for OSVM CLI</p>
+
+    <div class="section">
+        <h2>Core Commands</h2>
+        <pre class="terminal">
+<span class="comment"># Balance Operations</span>
+osvm balance [ADDRESS]                    <span class="comment"># Check SOL balance</span>
+  --url URL                               <span class="comment"># Custom RPC endpoint</span>
+  --commitment LEVEL                      <span class="comment"># Commitment level</span>
+
+<span class="comment"># SVM Management</span>
+osvm svm list                            <span class="comment"># List all SVMs</span>
+osvm svm get &lt;NAME&gt;                      <span class="comment"># Get SVM details</span>
+osvm svm dashboard                       <span class="comment"># Interactive dashboard</span>
+osvm svm install &lt;NAME&gt; &lt;HOST&gt;          <span class="comment"># Deploy SVM</span>
+
+<span class="comment"># Node Operations</span>
+osvm nodes list                          <span class="comment"># List all nodes</span>
+  --network NETWORK                      <span class="comment"># Filter by network</span>
+  --type TYPE                            <span class="comment"># Filter by type</span>
+  --status STATUS                        <span class="comment"># Filter by status</span>
+osvm nodes status &lt;NODE-ID&gt;             <span class="comment"># Check node status</span>
+osvm nodes logs &lt;NODE-ID&gt; [--follow]    <span class="comment"># View node logs</span>
+osvm nodes restart &lt;NODE-ID&gt;            <span class="comment"># Restart node</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Global Options</h2>
+        <pre class="terminal">
+<span class="comment"># Configuration</span>
+--config PATH         <span class="comment"># Path to config file</span>
+--keypair PATH        <span class="comment"># Path to keypair file</span>
+--url URL            <span class="comment"># RPC URL override</span>
+--commitment LEVEL   <span class="comment"># Commitment level (finalized|confirmed|processed)</span>
+
+<span class="comment"># Output Control</span>
+--verbose, -v        <span class="comment"># Verbose output (repeat for more)</span>
+--debug             <span class="comment"># Enable debug mode</span>
+--json              <span class="comment"># JSON output format</span>
+--no-color          <span class="comment"># Disable colored output</span>
+
+<span class="comment"># Help & Version</span>
+--help, -h          <span class="comment"># Show help information</span>
+--version, -V       <span class="comment"># Display version</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Environment Variables</h2>
+        <pre class="terminal">
+<span class="comment"># Solana Configuration</span>
+SOLANA_CONFIG        <span class="comment"># Path to Solana config file</span>
+SOLANA_RPC_URL      <span class="comment"># Default RPC endpoint</span>
+SOLANA_KEYPAIR      <span class="comment"># Default keypair path</span>
+
+<span class="comment"># AI Configuration</span>
+OPENAI_KEY          <span class="comment"># OpenAI API key</span>
+OPENAI_URL          <span class="comment"># AI endpoint URL</span>
+
+<span class="comment"># Debug Settings</span>
+RUST_LOG            <span class="comment"># Logging level (debug|info|warn|error)</span>
+RUST_BACKTRACE      <span class="comment"># Show backtraces (1|full)</span>
+NO_COLOR            <span class="comment"># Disable colors (1)</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Configuration File</h2>
+        <pre class="terminal">
+<span class="comment"># ~/.config/osvm/config.yml</span>
+<span class="info">json_rpc_url:</span> https://api.mainnet-beta.solana.com
+<span class="info">keypair_path:</span> ~/.config/solana/id.json
+<span class="info">commitment:</span> confirmed
+<span class="info">verbose:</span> false
+<span class="info">ai:</span>
+  <span class="info">provider:</span> openai
+  <span class="info">model:</span> gpt-4
+  <span class="info">temperature:</span> 0.7
+<span class="info">mcp:</span>
+  <span class="info">servers:</span>
+    - <span class="info">name:</span> solana-mcp
+      <span class="info">url:</span> http://localhost:8080
+      <span class="info">enabled:</span> true</pre>
+    </div>
+
+    <div class="section">
+        <h2>Exit Codes</h2>
+        <pre class="terminal">
+<span class="success">0</span>   Success
+<span class="warning">1</span>   General error or critical security finding (audit)
+<span class="warning">2</span>   Command line parsing error
+<span class="warning">3</span>   Configuration error
+<span class="warning">4</span>   Network/RPC error
+<span class="warning">5</span>   Authentication/keypair error
+<span class="warning">10</span>  Deployment failure
+<span class="warning">11</span>  SSH connection failure
+<span class="warning">20</span>  Self-repair failure</pre>
+    </div>
+
+    <div class="section">
+        <h2>Advanced Features</h2>
+        <pre class="terminal">
+<span class="comment"># Self-repair system</span>
+$ osvm doctor                    <span class="comment"># Run diagnostics</span>
+$ osvm doctor --fix              <span class="comment"># Auto-repair issues</span>
+
+<span class="comment"># Circuit breaker (automatic)</span>
+<span class="info">• Failure threshold: 5</span>
+<span class="info">• Success threshold: 2</span>
+<span class="info">• Timeout: 30s</span>
+<span class="info">• Reset timeout: 60s</span>
+
+<span class="comment"># Hot-swap deployment</span>
+$ osvm deploy --hot-swap         <span class="comment"># Zero-downtime update</span>
+<span class="info">• Blue-green deployment</span>
+<span class="info">• State preservation</span>
+<span class="info">• Automatic rollback</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Example Workflows</h2>
+        <pre class="terminal">
+<span class="comment"># Complete validator deployment</span>
+$ osvm user@validator.example.com \
+  --svm sonic \
+  --node-type validator \
+  --network mainnet \
+  --hot-swap
+
+<span class="comment"># AI-assisted development</span>
+$ osvm "create a token program with freeze authority"
+$ osvm audit ./program --ai
+$ osvm deploy ./target/deploy/program.so --network devnet
+
+<span class="comment"># MCP-powered automation</span>
+$ osvm mcp setup
+$ osvm chat --advanced
+> "Monitor my validator and alert on issues"</pre>
+    </div>
+</section>
+
+<div class="navigation-hint animate-on-scroll" data-animation="fadeIn">
+    <p>Press <kbd>?</kbd> for help • <kbd>/</kbd> to search</p>
+</div>
