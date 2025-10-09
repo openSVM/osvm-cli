@@ -6,7 +6,7 @@
 
 ---
 
-## Q701: "How can you build a statistical arbitrage model to exploit pricing inefficiencies between a token's spot price on Raydium and its perpetual futures price on a decentralized derivatives exchange like Zeta Markets?"
+## Q5701: "How can you build a statistical arbitrage model to exploit pricing inefficiencies between a token's spot price on Raydium and its perpetual futures price on a decentralized derivatives exchange like Zeta Markets?"
 **Expected Plan:**
 
 [TIME: ~3m] [COST: ~0.02 SOL] [CONFIDENCE: 85%]
@@ -72,9 +72,9 @@ RETURN {
 
 ---
 
-## Q702: "How can you use quantitative risk metrics (e.g., Value-at-Risk, Conditional Value-at-Risk) to quantify the tail risk of holding a highly volatile memecoin like WIF in a diversified portfolio of blue-chip assets like SOL and JUP?"
+## Q5702: "How can you use quantitative risk metrics (e.g., Value-at-Risk, Conditional Value-at-Risk) to quantify the tail risk of holding a highly volatile memecoin like WIF in a diversified portfolio of blue-chip assets like SOL and JUP?"
 
-## Q711: "What was the historical correlation between the price of SOL and the price of major Ethereum L2 tokens (e.g., ARB, OP) during the last market cycle?"
+## Q5711: "What was the historical correlation between the price of SOL and the price of major Ethereum L2 tokens (e.g., ARB, OP) during the last market cycle?"
 
 **Expected Plan:**
 [TIME: ~45s] [COST: ~0.004 SOL] [CONFIDENCE: 95%]
@@ -110,7 +110,7 @@ RETURN {
 
 ---
 
-## Q712: "Analyze the historical gas fees (priority fees) on Solana during the 2021 bull run. What was the average and peak fee paid for a standard DEX swap?"
+## Q5712: "Analyze the historical gas fees (priority fees) on Solana during the 2021 bull run. What was the average and peak fee paid for a standard DEX swap?"
 
 **Expected Plan:**
 [TIME: ~60s] [COST: ~0.01 SOL] [CONFIDENCE: 90%]
@@ -153,7 +153,7 @@ RETURN {
 
 ---
 
-## Q713: "What was the average daily active user count for the top 5 Solana NFT marketplaces during the 'DeGods' mint event?"
+## Q5713: "What was the average daily active user count for the top 5 Solana NFT marketplaces during the 'DeGods' mint event?"
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.006 SOL] [CONFIDENCE: 88%]
@@ -184,7 +184,7 @@ RETURN {
 
 ---
 
-## Q714: "Trace the flow of funds from the original 'Solana-Wormhole' hack in 2022. How much of the stolen ETH was eventually recovered, and where did the unrecovered funds go?"
+## Q5714: "Trace the flow of funds from the original 'Solana-Wormhole' hack in 2022. How much of the stolen ETH was eventually recovered, and where did the unrecovered funds go?"
 
 **Expected Plan:**
 [TIME: ~90s] [COST: ~0.02 SOL] [CONFIDENCE: 92%]
@@ -213,7 +213,7 @@ RETURN {
 
 ---
 
-## Q715: "Analyze the historical performance of staking SOL with Marinade Finance vs. Lido Finance since their inception. Which protocol offered a better APY?"
+## Q5715: "Analyze the historical performance of staking SOL with Marinade Finance vs. Lido Finance since their inception. Which protocol offered a better APY?"
 
 **Expected Plan:**
 [TIME: ~40s] [COST: ~0.004 SOL] [CONFIDENCE: 90%]
@@ -245,7 +245,7 @@ RETURN {
 
 ---
 
-## Q716: "What was the market cap of the top 3 Solana DEXs (Serum, Raydium, Orca) at the peak of the 2021 bull market?"
+## Q5716: "What was the market cap of the top 3 Solana DEXs (Serum, Raydium, Orca) at the peak of the 2021 bull market?"
 
 **Expected Plan:**
 [TIME: ~30s] [COST: ~0.003 SOL] [CONFIDENCE: 95%]
@@ -272,7 +272,7 @@ RETURN {
 
 ---
 
-## Q717: "How did the launch of the 'STEPN' (GMT) token affect the floor price of their sneaker NFTs in the first month?"
+## Q5717: "How did the launch of the 'STEPN' (GMT) token affect the floor price of their sneaker NFTs in the first month?"
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.005 SOL] [CONFIDENCE: 91%]
@@ -300,7 +300,7 @@ RETURN {
 
 ---
 
-## Q718: "Identify the wallets that held the 'Saber' (SBR) token from its launch and through the Cashio exploit. Did they sell off before, during, or after the crisis?"
+## Q5718: "Identify the wallets that held the 'Saber' (SBR) token from its launch and through the Cashio exploit. Did they sell off before, during, or after the crisis?"
 
 **Expected Plan:**
 [TIME: ~75s] [COST: ~0.015 SOL] [CONFIDENCE: 89%]
@@ -337,7 +337,7 @@ RETURN {
 
 ---
 
-## Q719: "What was the historical ratio of SOL staked vs. total SOL supply in early 2022 versus today?"
+## Q5719: "What was the historical ratio of SOL staked vs. total SOL supply in early 2022 versus today?"
 
 **Expected Plan:**
 [TIME: ~30s] [COST: ~0.003 SOL] [CONFIDENCE: 96%]
@@ -366,7 +366,7 @@ RETURN {
 
 ---
 
-## Q720: "Analyze the trading volume and price action of the 'COPE' token during the 2021 Solana network outage. How did the market react once the network came back online?"
+## Q5720: "Analyze the trading volume and price action of the 'COPE' token during the 2021 Solana network outage. How did the market react once the network came back online?"
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.005 SOL] [CONFIDENCE: 90%]
@@ -462,7 +462,7 @@ RETURN {
 
 ---
 
-## Q703: "How can you design and backtest a TWAP (Time-Weighted Average Price) algorithmic trading strategy to accumulate a $1M position in a low-liquidity token on Orca over 24 hours, while minimizing market impact and slippage?"
+## Q5703: "How can you design and backtest a TWAP (Time-Weighted Average Price) algorithmic trading strategy to accumulate a $1M position in a low-liquidity token on Orca over 24 hours, while minimizing market impact and slippage?"
 
 **Expected Plan:**
 
@@ -526,7 +526,7 @@ RETURN {
 
 ---
 
-## Q704: "Using a portfolio optimization framework like Mean-Variance Optimization, what is the 'efficient frontier' for a portfolio consisting of SOL, JTO (LST), and BONK (memecoin), and what is the optimal allocation for maximizing the Sharpe Ratio?"
+## Q5704: "Using a portfolio optimization framework like Mean-Variance Optimization, what is the 'efficient frontier' for a portfolio consisting of SOL, JTO (LST), and BONK (memecoin), and what is the optimal allocation for maximizing the Sharpe Ratio?"
 
 **Expected Plan:**
 
@@ -586,7 +586,7 @@ RETURN {
 
 ---
 
-## Q705: "How can you train a machine learning model (e.g., Gradient Boosting) to forecast the probability of a >30% price drop for a given token in the next 24 hours, using on-chain metrics like transaction velocity, whale movements, and DEX liquidity changes as features?"
+## Q5705: "How can you train a machine learning model (e.g., Gradient Boosting) to forecast the probability of a >30% price drop for a given token in the next 24 hours, using on-chain metrics like transaction velocity, whale movements, and DEX liquidity changes as features?"
 
 **Expected Plan:**
 
@@ -661,7 +661,7 @@ RETURN {
 
 ---
 
-## Q706: "How can you use quantitative momentum analysis to identify if a token is in a 'strong trend' or 'mean-reverting' regime, and backtest a strategy that switches between trend-following and mean-reversion based on this classification?"
+## Q5706: "How can you use quantitative momentum analysis to identify if a token is in a 'strong trend' or 'mean-reverting' regime, and backtest a strategy that switches between trend-following and mean-reversion based on this classification?"
 
 **Expected Plan:**
 
@@ -724,7 +724,7 @@ RETURN {
 
 ---
 
-## Q707: "How can you use statistical factor analysis (e.g., Principal Component Analysis) to decompose a token's returns into underlying drivers, such as 'market beta', 'DeFi sentiment', and 'memecoin hype'?"
+## Q5707: "How can you use statistical factor analysis (e.g., Principal Component Analysis) to decompose a token's returns into underlying drivers, such as 'market beta', 'DeFi sentiment', and 'memecoin hype'?"
 
 **Expected Plan:**
 
@@ -784,7 +784,7 @@ RETURN {
 
 ---
 
-## Q708: "How can you design an 'alpha decay' model to determine how quickly the predictive power of a new on-chain signal (e.g., a large whale transfer) fades, and what is the optimal trading horizon to act on it?"
+## Q5708: "How can you design an 'alpha decay' model to determine how quickly the predictive power of a new on-chain signal (e.g., a large whale transfer) fades, and what is the optimal trading horizon to act on it?"
 
 **Expected Plan:**
 
@@ -853,7 +853,7 @@ RETURN {
 
 ---
 
-## Q709: "How can you use a GARCH (Generalized Autoregressive Conditional Heteroskedasticity) model to forecast the 24-hour volatility of SOL, and how does this forecast change in response to major market news (e.g., a Fed announcement)?"
+## Q5709: "How can you use a GARCH (Generalized Autoregressive Conditional Heteroskedasticity) model to forecast the 24-hour volatility of SOL, and how does this forecast change in response to major market news (e.g., a Fed announcement)?"
 
 **Expected Plan:**
 
@@ -913,7 +913,7 @@ RETURN {
 
 ---
 
-## Q710: "How can you analyze high-frequency order book data from a DEX to identify 'iceberg' orders for a specific token, where a large order is broken into many small, visible chunks to hide its true size?"
+## Q5710: "How can you analyze high-frequency order book data from a DEX to identify 'iceberg' orders for a specific token, where a large order is broken into many small, visible chunks to hide its true size?"
 
 **Expected Plan:**
 
@@ -974,7 +974,7 @@ RETURN {
 
 ---
 
-## Q721: "Track the complete lifecycle of a notorious serial rugger across 15+ token launches spanning 2 years. Map all wallets, funding sources, and victim count/losses per rug."
+## Q5721: "Track the complete lifecycle of a notorious serial rugger across 15+ token launches spanning 2 years. Map all wallets, funding sources, and victim count/losses per rug."
 
 **Expected Plan:**
 
@@ -1042,7 +1042,7 @@ RETURN {
 
 ---
 
-## Q722: "Analyze the Mt. Gox-style 'slow distribution' of stolen funds from a major exploit 6 months ago. Track all distribution wallets and identify which have cashed out vs. still holding."
+## Q5722: "Analyze the Mt. Gox-style 'slow distribution' of stolen funds from a major exploit 6 months ago. Track all distribution wallets and identify which have cashed out vs. still holding."
 
 **Expected Plan:**
 
@@ -1111,7 +1111,7 @@ RETURN {
 
 ---
 
-## Q723: "Investigate a 'pump and dump' group that operated on Telegram in 2023. Find all coordinated pumps, member wallets, and calculate their collective profit vs. victim losses."
+## Q5723: "Investigate a 'pump and dump' group that operated on Telegram in 2023. Find all coordinated pumps, member wallets, and calculate their collective profit vs. victim losses."
 
 **Expected Plan:**
 
@@ -1190,7 +1190,7 @@ RETURN {
 
 ---
 
-## Q724: "Map the evolution of a scammer's tactics over 3 years by analyzing 50+ scams. Identify pattern changes, improvements in obfuscation, and victim targeting shifts."
+## Q5724: "Map the evolution of a scammer's tactics over 3 years by analyzing 50+ scams. Identify pattern changes, improvements in obfuscation, and victim targeting shifts."
 
 **Expected Plan:**
 
@@ -1270,7 +1270,7 @@ RETURN {
 
 ---
 
-## Q725: "Trace a stolen NFT collection (10,000+ NFTs) from a Discord hack through all resale platforms, wash trades, and identify current holders who may be unknowing buyers vs. laundering accomplices."
+## Q5725: "Trace a stolen NFT collection (10,000+ NFTs) from a Discord hack through all resale platforms, wash trades, and identify current holders who may be unknowing buyers vs. laundering accomplices."
 
 **Expected Plan:**
 
@@ -1366,7 +1366,7 @@ RETURN {
 
 ---
 
-## Q726: "Investigate a 'VC insider trading' case where early token allocations were sold before public announcement. Map the insider wallet cluster and calculate illegal front-running profits."
+## Q5726: "Investigate a 'VC insider trading' case where early token allocations were sold before public announcement. Map the insider wallet cluster and calculate illegal front-running profits."
 
 **Expected Plan:**
 
@@ -1452,7 +1452,7 @@ RETURN {
 
 ---
 
-## Q727: "Map a 'validator bribery ring' where validators accepted payments to prioritize specific transactions. Identify all participating validators, bribe payers, and calculate unfair MEV profits."
+## Q5727: "Map a 'validator bribery ring' where validators accepted payments to prioritize specific transactions. Identify all participating validators, bribe payers, and calculate unfair MEV profits."
 
 **Expected Plan:**
 
@@ -1546,7 +1546,7 @@ RETURN {
 
 ---
 
-## Q728: "Investigate a 'fake liquidity' scheme where the same wallets repeatedly add/remove liquidity to create the appearance of healthy trading. Identify the Sybil cluster and their coordination patterns."
+## Q5728: "Investigate a 'fake liquidity' scheme where the same wallets repeatedly add/remove liquidity to create the appearance of healthy trading. Identify the Sybil cluster and their coordination patterns."
 
 **Expected Plan:**
 
@@ -1611,7 +1611,7 @@ RETURN {
 
 ---
 
-## Q729: "Trace funds from a DeFi protocol exploit through multiple DEX swaps, cross-chain bridges, and privacy mixers to identify the final cash-out point 3 months later."
+## Q5729: "Trace funds from a DeFi protocol exploit through multiple DEX swaps, cross-chain bridges, and privacy mixers to identify the final cash-out point 3 months later."
 
 **Expected Plan:**
 
@@ -1693,7 +1693,7 @@ RETURN {
 
 ---
 
-## Q730: "Map a 'validator vote buying' scandal where a token project paid validators to vote for governance proposals. Identify all bribed validators, payment amounts, and proposal outcomes."
+## Q5730: "Map a 'validator vote buying' scandal where a token project paid validators to vote for governance proposals. Identify all bribed validators, payment amounts, and proposal outcomes."
 
 **Expected Plan:**
 
@@ -1762,7 +1762,7 @@ RETURN {
 
 ---
 
-## Q731: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
+## Q5731: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 89%]
@@ -1782,7 +1782,7 @@ RETURN {investigation: "Spoofed LP Token Scam", is_fake: !$verification.is_authe
 
 ---
 
-## Q732: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
+## Q5732: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 84%]
@@ -1801,7 +1801,7 @@ RETURN {investigation: "DAO Treasury Raid", drained_amount_sol: $proposal_analys
 
 ---
 
-## Q733: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
+## Q5733: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 87%]
@@ -1820,7 +1820,7 @@ RETURN {investigation: "Circular Trading Bot Network", bot_count: COUNT($bot_clu
 
 ---
 
-## Q734: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
+## Q5734: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 81%]
@@ -1839,7 +1839,7 @@ RETURN {investigation: "Bridge Exploit - Unlimited Mint", exploit_method: $analy
 
 ---
 
-## Q735: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
+## Q5735: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 85%]
@@ -1857,7 +1857,7 @@ RETURN {investigation: "Governance Token Rental Market", rental_volume_daily: $r
 
 ---
 
-## Q736: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
+## Q5736: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -1875,7 +1875,7 @@ RETURN {investigation: "MEV Sandwich Cartel", cartel_size: COUNT($coordination.c
 
 ---
 
-## Q737: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
+## Q5737: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -1894,7 +1894,7 @@ RETURN {investigation: "NFT Metadata Poisoning", poisoned_nfts: COUNT($malicious
 
 ---
 
-## Q738: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
+## Q5738: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 79%]
@@ -1913,7 +1913,7 @@ RETURN {investigation: "Stablecoin Depeg Manipulation", manipulation_detected: $
 
 ---
 
-## Q739: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
+## Q5739: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 80%]
@@ -1931,7 +1931,7 @@ RETURN {investigation: "Validator Sandwich Collusion", colluding_validators: COU
 
 ---
 
-## Q740: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
+## Q5740: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -1949,7 +1949,7 @@ RETURN {investigation: "Pump-as-a-Service Platform", total_campaigns: COUNT($cam
 
 ---
 
-## Q741: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
+## Q5741: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 88%]
@@ -1967,7 +1967,7 @@ RETURN {investigation: "Fake Liquidity Lock", is_fake_lock: $backdoors.can_bypas
 
 ---
 
-## Q742: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
+## Q5742: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 81%]
@@ -1985,7 +1985,7 @@ RETURN {investigation: "cNFT Overmint Exploit", exploit_detected: $overmint.dete
 
 ---
 
-## Q743: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
+## Q5743: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 76%]
@@ -2004,7 +2004,7 @@ RETURN {investigation: "Prediction Market Insider Trading", suspicious_traders: 
 
 ---
 
-## Q744: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
+## Q5744: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -2022,7 +2022,7 @@ RETURN {investigation: "Token Supply Inflation Attack", inflation_detected: $una
 
 ---
 
-## Q745: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
+## Q5745: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 82%]
@@ -2040,7 +2040,7 @@ RETURN {investigation: "Liquidation Bot Cartel", cartel_size: COUNT($coordinatio
 
 ---
 
-## Q746: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
+## Q5746: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -2058,7 +2058,7 @@ RETURN {investigation: "Fake Airdrop Drain Scam", is_drainer: $drain_pattern.is_
 
 ---
 
-## Q747: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
+## Q5747: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 78%]
@@ -2077,7 +2077,7 @@ RETURN {investigation: "Validator Censorship", censorship_detected: $censorship.
 
 ---
 
-## Q748: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
+## Q5748: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 83%]
@@ -2095,7 +2095,7 @@ RETURN {investigation: "Arbitrage Bot Network", network_clusters: COUNT($network
 
 ---
 
-## Q749: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
+## Q5749: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -2113,7 +2113,7 @@ RETURN {investigation: "Jito Bundle Frontrunning", systematic_frontrunners: COUN
 
 ---
 
-## Q750: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
+## Q5750: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 87%]
@@ -2130,7 +2130,7 @@ $malicious = DETECT_MALICIOUS_UPGRADES(upgrades: $upgrades, check_for: ["drain_f
 RETURN {investigation: "Malicious Program Upgrade", malicious_upgrade_detected: COUNT($malicious.suspicious_upgrades) > 0, upgrade_type: $malicious.suspicious_upgrades[0].malicious_changes, funds_at_risk_sol: $malicious.tvl_at_upgrade, confidence: 87}
 
 
-## Q751: "Identify wallets that consistently front-run trades on a specific DEX."
+## Q5751: "Identify wallets that consistently front-run trades on a specific DEX."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 85%]
@@ -2157,7 +2157,7 @@ RETURN {
   sample_size: COUNT($transactions)
 }
 
-## Q752: "Find the original funding source for a known scam wallet."
+## Q5752: "Find the original funding source for a known scam wallet."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 90%]
@@ -2180,7 +2180,7 @@ RETURN {
   confidence: 90
 }
 
-## Q753: "List all tokens held by a wallet that are not on any major token list."
+## Q5753: "List all tokens held by a wallet that are not on any major token list."
 
 **Expected Plan:**
 [TIME: ~3m] [COST: ~0.02 SOL] [CONFIDENCE: 95%]
@@ -2206,7 +2206,7 @@ RETURN {
   confidence: 95
 }
 
-## Q754: "Detect if a token has a 'honeypot' mechanism where tokens can be bought but not sold."
+## Q5754: "Detect if a token has a 'honeypot' mechanism where tokens can be bought but not sold."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.1 SOL] [CONFIDENCE: 80%]
@@ -2246,7 +2246,7 @@ RETURN {
   confidence: 80
 }
 
-## Q755: "Find accounts that received tokens from multiple different airdrops."
+## Q5755: "Find accounts that received tokens from multiple different airdrops."
 
 **Expected Plan:**
 [TIME: ~15m] [COST: ~0.2 SOL] [CONFIDENCE: 85%]
@@ -2275,7 +2275,7 @@ RETURN {
   confidence: 85
 }
 
-## Q756: "Analyze the distribution of a token's supply across its top 100 holders."
+## Q5756: "Analyze the distribution of a token's supply across its top 100 holders."
 
 **Expected Plan:**
 [TIME: ~2m] [COST: ~0.01 SOL] [CONFIDENCE: 99%]
@@ -2301,7 +2301,7 @@ RETURN {
   confidence: 99
 }
 
-## Q757: "Identify if a wallet has interacted with any known malicious dApps or contracts."
+## Q5757: "Identify if a wallet has interacted with any known malicious dApps or contracts."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 80%]
@@ -2332,7 +2332,7 @@ RETURN {
   caveats: ["Depends on the completeness of the malicious programs list."]
 }
 
-## Q758: "Find the transaction where a specific NFT was minted."
+## Q5758: "Find the transaction where a specific NFT was minted."
 
 **Expected Plan:**
 [TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 95%]
@@ -2366,7 +2366,7 @@ RETURN {
   confidence: 95
 }
 
-## Q759: "Calculate the total fees paid by a wallet in a given time period."
+## Q5759: "Calculate the total fees paid by a wallet in a given time period."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.1 SOL] [CONFIDENCE: 98%]
@@ -2393,7 +2393,7 @@ RETURN {
   confidence: 98
 }
 
-## Q760: "Check if a program is upgradeable and who the upgrade authority is."
+## Q5760: "Check if a program is upgradeable and who the upgrade authority is."
 
 **Expected Plan:**
 [TIME: ~1m] [COST: ~0.01 SOL] [CONFIDENCE: 100%]

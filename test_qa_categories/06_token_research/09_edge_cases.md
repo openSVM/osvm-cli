@@ -7,7 +7,7 @@
 
 ---
 
-## Q801: "How can you analyze the anatomy of a flash crash for the WIF/USDC pair on a specific DEX, identifying the trigger transaction, its cascading effects on other liquidity pools, and the total value lost in the initial price wick?"
+## Q5801: "How can you analyze the anatomy of a flash crash for the WIF/USDC pair on a specific DEX, identifying the trigger transaction, its cascading effects on other liquidity pools, and the total value lost in the initial price wick?"
 
 **Expected Plan:**
 
@@ -80,7 +80,7 @@ RETURN {
 
 ---
 
-## Q802: "How can you detect a potential oracle manipulation attack on the Solend lending protocol where the price of a low-liquidity collateral token is artificially inflated, and what is the total value at risk of being illegitimately borrowed?"
+## Q5802: "How can you detect a potential oracle manipulation attack on the Solend lending protocol where the price of a low-liquidity collateral token is artificially inflated, and what is the total value at risk of being illegitimately borrowed?"
 
 **Expected Plan:**
 
@@ -159,7 +159,7 @@ RETURN {
 
 ---
 
-## Q803: "How do you analyze a token's transaction success rate and fee market during a period of intense network-wide congestion on Solana to evaluate its resilience and user experience?"
+## Q5803: "How do you analyze a token's transaction success rate and fee market during a period of intense network-wide congestion on Solana to evaluate its resilience and user experience?"
 
 **Expected Plan:**
 
@@ -223,7 +223,7 @@ RETURN {
 
 ---
 
-## Q804: "Given the address of a known wallet drainer contract, how can you trace all interactions to identify affected wallets, calculate the total amount of a specific token (e.g., WIF) stolen, and pinpoint the final fund consolidation addresses?"
+## Q5804: "Given the address of a known wallet drainer contract, how can you trace all interactions to identify affected wallets, calculate the total amount of a specific token (e.g., WIF) stolen, and pinpoint the final fund consolidation addresses?"
 
 **Expected Plan:**
 
@@ -286,7 +286,7 @@ RETURN {
 
 ---
 
-## Q805: "How can you monitor the stSOL/SOL liquidity pool on Orca for signs of de-pegging during a validator slashing event, and model the arbitrage opportunity versus the risk of further de-pegging?"
+## Q5805: "How can you monitor the stSOL/SOL liquidity pool on Orca for signs of de-pegging during a validator slashing event, and model the arbitrage opportunity versus the risk of further de-pegging?"
 
 **Expected Plan:**
 
@@ -350,7 +350,7 @@ RETURN {
 
 ---
 
-## Q806: "How do you perform a forensic analysis of a memecoin 'rug pull', identifying the exact liquidity removal transaction, tracing the funds through mixers, and attempting to link the developer's wallet to a CEX deposit address?"
+## Q5806: "How do you perform a forensic analysis of a memecoin 'rug pull', identifying the exact liquidity removal transaction, tracing the funds through mixers, and attempting to link the developer's wallet to a CEX deposit address?"
 
 **Expected Plan:**
 
@@ -414,7 +414,7 @@ RETURN {
 
 ---
 
-## Q807: "How can you model a theoretical governance attack on a DAO where an attacker uses flash loans to acquire a large stake in the governance token, pass a malicious proposal to drain the treasury, and repay the loan in a single transaction?"
+## Q5807: "How can you model a theoretical governance attack on a DAO where an attacker uses flash loans to acquire a large stake in the governance token, pass a malicious proposal to drain the treasury, and repay the loan in a single transaction?"
 
 **Expected Plan:**
 
@@ -479,7 +479,7 @@ RETURN {
 
 ---
 
-## Q808: "How can you analyze a spam NFT airdropped to a wallet to determine if its metadata contains a malicious 'execute' link or if its associated contracts have functions designed to drain other tokens upon interaction?"
+## Q5808: "How can you analyze a spam NFT airdropped to a wallet to determine if its metadata contains a malicious 'execute' link or if its associated contracts have functions designed to drain other tokens upon interaction?"
 
 **Expected Plan:**
 
@@ -544,7 +544,7 @@ RETURN {
 
 ---
 
-## Q809: "How can you analyze a lending protocol's on-chain program to identify potential read-only re-entrancy vulnerabilities that could lead to inaccurate calculations or state readings?"
+## Q5809: "How can you analyze a lending protocol's on-chain program to identify potential read-only re-entrancy vulnerabilities that could lead to inaccurate calculations or state readings?"
 
 **Expected Plan:**
 
@@ -600,7 +600,7 @@ RETURN {
 
 ---
 
-## Q810: "How can you detect if a token's price is susceptible to TWAP (Time-Weighted Average Price) oracle manipulation by analyzing on-chain volume and price spikes around the oracle's update intervals?"
+## Q5810: "How can you detect if a token's price is susceptible to TWAP (Time-Weighted Average Price) oracle manipulation by analyzing on-chain volume and price spikes around the oracle's update intervals?"
 
 **Expected Plan:**
 
@@ -668,7 +668,7 @@ RETURN {
 
 ---
 
-## Q821: "Detect a 'slow drain' attack where a compromised wallet's tokens are being siphoned in small amounts (<$100) to avoid detection. Map the destination cluster and timing patterns."
+## Q5821: "Detect a 'slow drain' attack where a compromised wallet's tokens are being siphoned in small amounts (<$100) to avoid detection. Map the destination cluster and timing patterns."
 
 **Expected Plan:**
 
@@ -726,7 +726,7 @@ RETURN {
 
 ---
 
-## Q822: "Investigate a token where sells consistently fail due to hidden restrictions. Decompile the contract and identify the exact condition that blocks non-privileged wallets from selling."
+## Q5822: "Investigate a token where sells consistently fail due to hidden restrictions. Decompile the contract and identify the exact condition that blocks non-privileged wallets from selling."
 
 **Expected Plan:**
 
@@ -782,7 +782,7 @@ RETURN {
 
 ---
 
-## Q823: "Map a 'dusting attack' campaign by identifying wallets that received unsolicited small token amounts (<$1) and trace if any subsequently interacted with malicious contracts."
+## Q5823: "Map a 'dusting attack' campaign by identifying wallets that received unsolicited small token amounts (<$1) and trace if any subsequently interacted with malicious contracts."
 
 **Expected Plan:**
 
@@ -836,7 +836,7 @@ RETURN {
 
 ---
 
-## Q824: "Detect a validator 'jailing attack' where an attacker stakes to a validator, then immediately unstakes to damage their performance metrics and steal delegations."
+## Q5824: "Detect a validator 'jailing attack' where an attacker stakes to a validator, then immediately unstakes to damage their performance metrics and steal delegations."
 
 **Expected Plan:**
 
@@ -885,7 +885,7 @@ RETURN {
 
 ---
 
-## Q825: "Investigate a token where the LP was created with extremely low liquidity ($10) to manipulate the initial price and create an inflated market cap for marketing purposes."
+## Q5825: "Investigate a token where the LP was created with extremely low liquidity ($10) to manipulate the initial price and create an inflated market cap for marketing purposes."
 
 **Expected Plan:**
 
@@ -929,7 +929,7 @@ RETURN {
 
 ---
 
-## Q826: "Trace funds from a rug pull through a privacy mixer (Elusiv, Tornado) and identify the most likely exit wallets based on timing, amounts, and subsequent activity patterns."
+## Q5826: "Trace funds from a rug pull through a privacy mixer (Elusiv, Tornado) and identify the most likely exit wallets based on timing, amounts, and subsequent activity patterns."
 
 **Expected Plan:**
 
@@ -1000,7 +1000,7 @@ RETURN {
 
 ---
 
-## Q827: "Detect a 'fake team doxx' scam by cross-referencing the supposed team member's wallet with known scammer wallet clusters and previous rug pulls."
+## Q5827: "Detect a 'fake team doxx' scam by cross-referencing the supposed team member's wallet with known scammer wallet clusters and previous rug pulls."
 
 **Expected Plan:**
 
@@ -1061,7 +1061,7 @@ RETURN {
 
 ---
 
-## Q828: "Map a complex multi-layer scam where Layer 1 victims send funds to a fake investment pool, Layer 2 splits to intermediate wallets, and Layer 3 consolidates to CEX—identify all layers."
+## Q5828: "Map a complex multi-layer scam where Layer 1 victims send funds to a fake investment pool, Layer 2 splits to intermediate wallets, and Layer 3 consolidates to CEX—identify all layers."
 
 **Expected Plan:**
 
@@ -1144,7 +1144,7 @@ RETURN {
 
 ---
 
-## Q829: "Investigate an exploit where an attacker manipulates oracle prices by sandwiching a low-liquidity token's price feed update to trigger liquidations on a lending protocol."
+## Q5829: "Investigate an exploit where an attacker manipulates oracle prices by sandwiching a low-liquidity token's price feed update to trigger liquidations on a lending protocol."
 
 **Expected Plan:**
 
@@ -1218,7 +1218,7 @@ RETURN {
 
 ---
 
-## Q830: "Detect a 'fake airdrop' phishing campaign by identifying wallets that approved token transfers to a malicious contract after interacting with a fraudulent airdrop website."
+## Q5830: "Detect a 'fake airdrop' phishing campaign by identifying wallets that approved token transfers to a malicious contract after interacting with a fraudulent airdrop website."
 
 **Expected Plan:**
 
@@ -1284,7 +1284,7 @@ RETURN {
 
 ---
 
-## Q851: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
+## Q5851: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 89%]
@@ -1304,7 +1304,7 @@ RETURN {investigation: "Spoofed LP Token Scam", is_fake: !$verification.is_authe
 
 ---
 
-## Q852: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
+## Q5852: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 84%]
@@ -1323,7 +1323,7 @@ RETURN {investigation: "DAO Treasury Raid", drained_amount_sol: $proposal_analys
 
 ---
 
-## Q853: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
+## Q5853: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 87%]
@@ -1342,7 +1342,7 @@ RETURN {investigation: "Circular Trading Bot Network", bot_count: COUNT($bot_clu
 
 ---
 
-## Q854: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
+## Q5854: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 81%]
@@ -1361,7 +1361,7 @@ RETURN {investigation: "Bridge Exploit - Unlimited Mint", exploit_method: $analy
 
 ---
 
-## Q855: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
+## Q5855: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 85%]
@@ -1379,7 +1379,7 @@ RETURN {investigation: "Governance Token Rental Market", rental_volume_daily: $r
 
 ---
 
-## Q856: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
+## Q5856: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -1397,7 +1397,7 @@ RETURN {investigation: "MEV Sandwich Cartel", cartel_size: COUNT($coordination.c
 
 ---
 
-## Q857: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
+## Q5857: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -1416,7 +1416,7 @@ RETURN {investigation: "NFT Metadata Poisoning", poisoned_nfts: COUNT($malicious
 
 ---
 
-## Q858: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
+## Q5858: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 79%]
@@ -1435,7 +1435,7 @@ RETURN {investigation: "Stablecoin Depeg Manipulation", manipulation_detected: $
 
 ---
 
-## Q859: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
+## Q5859: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 80%]
@@ -1453,7 +1453,7 @@ RETURN {investigation: "Validator Sandwich Collusion", colluding_validators: COU
 
 ---
 
-## Q860: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
+## Q5860: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -1471,7 +1471,7 @@ RETURN {investigation: "Pump-as-a-Service Platform", total_campaigns: COUNT($cam
 
 ---
 
-## Q861: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
+## Q5861: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 88%]
@@ -1489,7 +1489,7 @@ RETURN {investigation: "Fake Liquidity Lock", is_fake_lock: $backdoors.can_bypas
 
 ---
 
-## Q862: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
+## Q5862: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 81%]
@@ -1507,7 +1507,7 @@ RETURN {investigation: "cNFT Overmint Exploit", exploit_detected: $overmint.dete
 
 ---
 
-## Q863: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
+## Q5863: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 76%]
@@ -1526,7 +1526,7 @@ RETURN {investigation: "Prediction Market Insider Trading", suspicious_traders: 
 
 ---
 
-## Q864: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
+## Q5864: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -1544,7 +1544,7 @@ RETURN {investigation: "Token Supply Inflation Attack", inflation_detected: $una
 
 ---
 
-## Q865: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
+## Q5865: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 82%]
@@ -1562,7 +1562,7 @@ RETURN {investigation: "Liquidation Bot Cartel", cartel_size: COUNT($coordinatio
 
 ---
 
-## Q866: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
+## Q5866: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -1580,7 +1580,7 @@ RETURN {investigation: "Fake Airdrop Drain Scam", is_drainer: $drain_pattern.is_
 
 ---
 
-## Q867: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
+## Q5867: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 78%]
@@ -1599,7 +1599,7 @@ RETURN {investigation: "Validator Censorship", censorship_detected: $censorship.
 
 ---
 
-## Q868: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
+## Q5868: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 83%]
@@ -1617,7 +1617,7 @@ RETURN {investigation: "Arbitrage Bot Network", network_clusters: COUNT($network
 
 ---
 
-## Q869: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
+## Q5869: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -1635,7 +1635,7 @@ RETURN {investigation: "Jito Bundle Frontrunning", systematic_frontrunners: COUN
 
 ---
 
-## Q870: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
+## Q5870: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 87%]
@@ -1655,7 +1655,7 @@ RETURN {investigation: "Malicious Program Upgrade", malicious_upgrade_detected: 
 
 ---
 
-## Q871: "Handle transactions that fail due to account data deserialization errors."
+## Q5871: "Handle transactions that fail due to account data deserialization errors."
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.006 SOL] [CONFIDENCE: 88%]

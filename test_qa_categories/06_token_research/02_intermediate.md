@@ -7,7 +7,7 @@
 
 ---
 
-## Q101: "What is the holder distribution for 'Pyth Network' (PYTH)? Calculate the Gini coefficient and the percentage of supply held by the top 100 wallets."
+## Q5101: "What is the holder distribution for 'Pyth Network' (PYTH)? Calculate the Gini coefficient and the percentage of supply held by the top 100 wallets."
 
 **Expected Plan:**
 
@@ -52,7 +52,7 @@ RETURN {
 
 ---
 
-## Q102: "How much liquidity is available for 'Bonk' (BONK) across all Raydium and Orca pools, and what is the 24-hour trading volume?"
+## Q5102: "How much liquidity is available for 'Bonk' (BONK) across all Raydium and Orca pools, and what is the 24-hour trading volume?"
 
 **Expected Plan:**
 
@@ -68,25 +68,25 @@ From Standard Library:
 $token_mint = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" // BONK
 
 
-## Q121: "Which meme tokens have the highest percentage of holders in profit, and what entry prices did they buy at?"
+## Q5121: "Which meme tokens have the highest percentage of holders in profit, and what entry prices did they buy at?"
 
-## Q122: "How can you analyze the liquidity depth of a new meme token to determine the maximum safe buy size for a trader?"
+## Q5122: "How can you analyze the liquidity depth of a new meme token to determine the maximum safe buy size for a trader?"
 
-## Q123: "What is the best way to track the top 10 wallets accumulating a meme token before a major event?"
+## Q5123: "What is the best way to track the top 10 wallets accumulating a meme token before a major event?"
 
-## Q124: "How can you use prediction market odds to inform entry and exit points for meme token trades?"
+## Q5124: "How can you use prediction market odds to inform entry and exit points for meme token trades?"
 
-## Q125: "What is the average time between a meme token's launch and its first major whale sell-off?"
+## Q5125: "What is the average time between a meme token's launch and its first major whale sell-off?"
 
-## Q126: "How can you identify wallets that are likely to dump a meme token based on on-chain behavioral patterns?"
+## Q5126: "How can you identify wallets that are likely to dump a meme token based on on-chain behavioral patterns?"
 
-## Q127: "What is the most profitable strategy for rotating between meme tokens and prediction market bets during high volatility?"
+## Q5127: "What is the most profitable strategy for rotating between meme tokens and prediction market bets during high volatility?"
 
-## Q128: "How can you use on-chain volume and order flow to predict the next meme token to trend on social media?"
+## Q5128: "How can you use on-chain volume and order flow to predict the next meme token to trend on social media?"
 
-## Q129: "What is the best way to hedge a meme token position using prediction markets on Solana?"
+## Q5129: "What is the best way to hedge a meme token position using prediction markets on Solana?"
 
-## Q130: "How can you detect and avoid wallets that are likely to be exit liquidity in a meme token pump and dump?"
+## Q5130: "How can you detect and avoid wallets that are likely to be exit liquidity in a meme token pump and dump?"
 $raydium_pools = RAYDIUM_GET_POOLS_FOR_TOKEN(mint: $token_mint)
 $orca_pools = ORCA_GET_POOLS_FOR_TOKEN(mint: $token_mint)
 
@@ -123,7 +123,7 @@ RETURN {
 
 ---
 
-## Q103: "What is the average sentiment score for 'dogwifhat' (WIF) on Twitter over the last 7 days?"
+## Q5103: "What is the average sentiment score for 'dogwifhat' (WIF) on Twitter over the last 7 days?"
 
 **Expected Plan:**
 
@@ -175,7 +175,7 @@ RETURN {
 
 ---
 
-## Q104: "Trace the origin of the funds used to create the 'Jeo Boden' (BODEN) token's liquidity pool on Raydium. Did they come from a centralized exchange?"
+## Q5104: "Trace the origin of the funds used to create the 'Jeo Boden' (BODEN) token's liquidity pool on Raydium. Did they come from a centralized exchange?"
 
 **Expected Plan:**
 
@@ -225,7 +225,7 @@ RETURN {
 
 ---
 
-## Q105: "How many unique wallets have interacted with the 'Tensor' (TNSR) smart contract in the last 30 days?"
+## Q5105: "How many unique wallets have interacted with the 'Tensor' (TNSR) smart contract in the last 30 days?"
 
 **Expected Plan:**
 
@@ -269,7 +269,7 @@ RETURN {
 
 ---
 
-## Q106: "What is the ratio of buys to sells for the 'Popcat' (POPCAT) token on all DEXs in the last hour?"
+## Q5106: "What is the ratio of buys to sells for the 'Popcat' (POPCAT) token on all DEXs in the last hour?"
 
 **Expected Plan:**
 
@@ -321,7 +321,7 @@ RETURN {
 
 ---
 
-## Q107: "Compare the market cap and 7-day performance of 'Jupiter' (JUP) vs. 'Pyth Network' (PYTH)."
+## Q5107: "Compare the market cap and 7-day performance of 'Jupiter' (JUP) vs. 'Pyth Network' (PYTH)."
 
 **Expected Plan:**
 
@@ -368,7 +368,7 @@ RETURN {
 
 ---
 
-## Q108: "What percentage of the 'Marinade Staked SOL' (mSOL) supply is currently being used as collateral in the Kamino Lend protocol?"
+## Q5108: "What percentage of the 'Marinade Staked SOL' (mSOL) supply is currently being used as collateral in the Kamino Lend protocol?"
 
 **Expected Plan:**
 
@@ -415,7 +415,7 @@ RETURN {
 
 ---
 
-## Q109: "Identify the first 10 wallets that bought 'MichiCoin' (MICHI) after the liquidity pool was created. Are any of them associated with the token deployer?"
+## Q5109: "Identify the first 10 wallets that bought 'MichiCoin' (MICHI) after the liquidity pool was created. Are any of them associated with the token deployer?"
 
 **Expected Plan:**
 
@@ -471,7 +471,7 @@ RETURN {
 
 ---
 
-## Q110: "What is the average gas fee (priority fee) in USD paid for transactions involving the 'WIF' token in the last hour?"
+## Q5110: "What is the average gas fee (priority fee) in USD paid for transactions involving the 'WIF' token in the last hour?"
 
 **Expected Plan:**
 
@@ -526,7 +526,7 @@ RETURN {
 
 ---
 
-## Q131: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
+## Q5131: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 89%]
@@ -546,7 +546,7 @@ RETURN {investigation: "Spoofed LP Token Scam", is_fake: !$verification.is_authe
 
 ---
 
-## Q132: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
+## Q5132: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 84%]
@@ -565,7 +565,7 @@ RETURN {investigation: "DAO Treasury Raid", drained_amount_sol: $proposal_analys
 
 ---
 
-## Q133: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
+## Q5133: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 87%]
@@ -584,7 +584,7 @@ RETURN {investigation: "Circular Trading Bot Network", bot_count: COUNT($bot_clu
 
 ---
 
-## Q134: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
+## Q5134: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 81%]
@@ -603,7 +603,7 @@ RETURN {investigation: "Bridge Exploit - Unlimited Mint", exploit_method: $analy
 
 ---
 
-## Q135: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
+## Q5135: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 85%]
@@ -621,7 +621,7 @@ RETURN {investigation: "Governance Token Rental Market", rental_volume_daily: $r
 
 ---
 
-## Q136: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
+## Q5136: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -639,7 +639,7 @@ RETURN {investigation: "MEV Sandwich Cartel", cartel_size: COUNT($coordination.c
 
 ---
 
-## Q137: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
+## Q5137: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -658,7 +658,7 @@ RETURN {investigation: "NFT Metadata Poisoning", poisoned_nfts: COUNT($malicious
 
 ---
 
-## Q138: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
+## Q5138: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 79%]
@@ -677,7 +677,7 @@ RETURN {investigation: "Stablecoin Depeg Manipulation", manipulation_detected: $
 
 ---
 
-## Q139: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
+## Q5139: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 80%]
@@ -695,7 +695,7 @@ RETURN {investigation: "Validator Sandwich Collusion", colluding_validators: COU
 
 ---
 
-## Q140: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
+## Q5140: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -713,7 +713,7 @@ RETURN {investigation: "Pump-as-a-Service Platform", total_campaigns: COUNT($cam
 
 ---
 
-## Q141: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
+## Q5141: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 88%]
@@ -731,7 +731,7 @@ RETURN {investigation: "Fake Liquidity Lock", is_fake_lock: $backdoors.can_bypas
 
 ---
 
-## Q142: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
+## Q5142: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 81%]
@@ -749,7 +749,7 @@ RETURN {investigation: "cNFT Overmint Exploit", exploit_detected: $overmint.dete
 
 ---
 
-## Q143: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
+## Q5143: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 76%]
@@ -768,7 +768,7 @@ RETURN {investigation: "Prediction Market Insider Trading", suspicious_traders: 
 
 ---
 
-## Q144: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
+## Q5144: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -786,7 +786,7 @@ RETURN {investigation: "Token Supply Inflation Attack", inflation_detected: $una
 
 ---
 
-## Q145: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
+## Q5145: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 82%]
@@ -804,7 +804,7 @@ RETURN {investigation: "Liquidation Bot Cartel", cartel_size: COUNT($coordinatio
 
 ---
 
-## Q146: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
+## Q5146: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -822,7 +822,7 @@ RETURN {investigation: "Fake Airdrop Drain Scam", is_drainer: $drain_pattern.is_
 
 ---
 
-## Q147: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
+## Q5147: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 78%]
@@ -841,7 +841,7 @@ RETURN {investigation: "Validator Censorship", censorship_detected: $censorship.
 
 ---
 
-## Q148: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
+## Q5148: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 83%]
@@ -859,7 +859,7 @@ RETURN {investigation: "Arbitrage Bot Network", network_clusters: COUNT($network
 
 ---
 
-## Q149: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
+## Q5149: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -877,7 +877,7 @@ RETURN {investigation: "Jito Bundle Frontrunning", systematic_frontrunners: COUN
 
 ---
 
-## Q150: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
+## Q5150: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 87%]
@@ -894,7 +894,7 @@ $malicious = DETECT_MALICIOUS_UPGRADES(upgrades: $upgrades, check_for: ["drain_f
 RETURN {investigation: "Malicious Program Upgrade", malicious_upgrade_detected: COUNT($malicious.suspicious_upgrades) > 0, upgrade_type: $malicious.suspicious_upgrades[0].malicious_changes, funds_at_risk_sol: $malicious.tvl_at_upgrade, confidence: 87}
 
 
-## Q111: "Analyze the on-chain volume impact on 'WEN' token after its listing on a major CEX like Binance or Coinbase."
+## Q5111: "Analyze the on-chain volume impact on 'WEN' token after its listing on a major CEX like Binance or Coinbase."
 
 **Expected Plan:**
 [TIME: ~45s] [COST: ~0.004 SOL] [CONFIDENCE: 92%]
@@ -937,7 +937,7 @@ RETURN {
 
 ---
 
-## Q112: "Compare the holder growth rate of 'cat in a dogs world' (MEW) vs. 'dogwifhat' (WIF) over the last 30 days."
+## Q5112: "Compare the holder growth rate of 'cat in a dogs world' (MEW) vs. 'dogwifhat' (WIF) over the last 30 days."
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.005 SOL] [CONFIDENCE: 94%]
@@ -975,7 +975,7 @@ RETURN {
 
 ---
 
-## Q113: "Identify the top 5 most active trading pairs for the 'Jito' (JTO) token on Raydium."
+## Q5113: "Identify the top 5 most active trading pairs for the 'Jito' (JTO) token on Raydium."
 
 **Expected Plan:**
 [TIME: ~35s] [COST: ~0.003 SOL] [CONFIDENCE: 96%]
@@ -1008,7 +1008,7 @@ RETURN {
 
 ---
 
-## Q114: "Find wallets that are providing liquidity for 'BONK' on both Orca and Raydium simultaneously."
+## Q5114: "Find wallets that are providing liquidity for 'BONK' on both Orca and Raydium simultaneously."
 
 **Expected Plan:**
 [TIME: ~60s] [COST: ~0.007 SOL] [CONFIDENCE: 90%]
@@ -1037,7 +1037,7 @@ RETURN {
 
 ---
 
-## Q115: "Calculate the average holding duration for the 'Pyth Network' (PYTH) token among its top 1000 holders."
+## Q5115: "Calculate the average holding duration for the 'Pyth Network' (PYTH) token among its top 1000 holders."
 
 **Expected Plan:**
 [TIME: ~70s] [COST: ~0.01 SOL] [CONFIDENCE: 88%]
@@ -1069,7 +1069,7 @@ RETURN {
 
 ---
 
-## Q116: "Detect large transfers of 'mSOL' from personal wallets to known CEX deposit addresses in the last 24 hours."
+## Q5116: "Detect large transfers of 'mSOL' from personal wallets to known CEX deposit addresses in the last 24 hours."
 
 **Expected Plan:**
 [TIME: ~40s] [COST: ~0.004 SOL] [CONFIDENCE: 93%]
@@ -1099,7 +1099,7 @@ RETURN {
 
 ---
 
-## Q117: "What percentage of the 'Tensor' (TNSR) token supply is held in smart contracts (e.g., vesting, staking, LPs) vs. regular wallets?"
+## Q5117: "What percentage of the 'Tensor' (TNSR) token supply is held in smart contracts (e.g., vesting, staking, LPs) vs. regular wallets?"
 
 **Expected Plan:**
 [TIME: ~55s] [COST: ~0.006 SOL] [CONFIDENCE: 91%]
@@ -1132,7 +1132,7 @@ RETURN {
 
 ---
 
-## Q118: "Identify wallets that are accumulating 'BODEN' ahead of the US election, and correlate their activity with polling data."
+## Q5118: "Identify wallets that are accumulating 'BODEN' ahead of the US election, and correlate their activity with polling data."
 
 **Expected Plan:**
 [TIME: ~75s] [COST: ~0.01 SOL] [CONFIDENCE: 85%]
@@ -1165,7 +1165,7 @@ RETURN {
 
 ---
 
-## Q119: "Track the change in 'token velocity' for 'dogwifhat' (WIF) over the past 3 months. Is it increasing or decreasing?"
+## Q5119: "Track the change in 'token velocity' for 'dogwifhat' (WIF) over the past 3 months. Is it increasing or decreasing?"
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.005 SOL] [CONFIDENCE: 90%]
@@ -1194,7 +1194,7 @@ RETURN {
 
 ---
 
-## Q120: "Find the largest single sell order for 'Popcat' (POPCAT) in the last 7 days and trace where the proceeds went."
+## Q5120: "Find the largest single sell order for 'Popcat' (POPCAT) in the last 7 days and trace where the proceeds went."
 
 **Expected Plan:**
 [TIME: ~60s] [COST: ~0.008 SOL] [CONFIDENCE: 92%]

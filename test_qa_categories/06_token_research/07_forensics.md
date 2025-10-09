@@ -6,7 +6,7 @@
 
 ---
 
-## Q601: "How can I detect wash trading activity for the memecoin 'POPCAT' (POPCAT) on Raydium by analyzing transaction patterns and wallet clusters?"
+## Q5601: "How can I detect wash trading activity for the memecoin 'POPCAT' (POPCAT) on Raydium by analyzing transaction patterns and wallet clusters?"
 
 
 [TIME: ~55s] [COST: ~0.008 SOL] [CONFIDENCE: 90%]
@@ -63,28 +63,28 @@ RETURN {
 
 ---
 
-## Q602: "A token just rugged. What is the forensic plan to trace the scammer's funds from the liquidity pull to a potential CEX deposit address?"
+## Q5602: "A token just rugged. What is the forensic plan to trace the scammer's funds from the liquidity pull to a potential CEX deposit address?"
 
 
-## Q611: "Which wallets have been linked to the most successful meme token rugs, and what on-chain patterns do they share?"
+## Q5611: "Which wallets have been linked to the most successful meme token rugs, and what on-chain patterns do they share?"
 
-## Q612: "How can you trace the flow of funds from a memecoin exploit to prediction market bets placed immediately after?"
+## Q5612: "How can you trace the flow of funds from a memecoin exploit to prediction market bets placed immediately after?"
 
-## Q613: "What is the fastest way to identify a wallet that is likely to dump a large meme token position based on recent on-chain activity?"
+## Q5613: "What is the fastest way to identify a wallet that is likely to dump a large meme token position based on recent on-chain activity?"
 
-## Q614: "How can you detect a wallet that is farming multiple prediction markets with Sybil-like behavior?"
+## Q5614: "How can you detect a wallet that is farming multiple prediction markets with Sybil-like behavior?"
 
-## Q615: "What is the most common laundering path for funds stolen from meme token pools on Solana?"
+## Q5615: "What is the most common laundering path for funds stolen from meme token pools on Solana?"
 
-## Q616: "How can you identify wallets that consistently frontrun prediction market odds changes using on-chain data?"
+## Q5616: "How can you identify wallets that consistently frontrun prediction market odds changes using on-chain data?"
 
-## Q617: "What is the average time between a meme token's launch and its first major scam or exploit, and how can you spot early warning signs?"
+## Q5617: "What is the average time between a meme token's launch and its first major scam or exploit, and how can you spot early warning signs?"
 
-## Q618: "How can you use on-chain data to prove collusion between meme token deployers and prediction market creators?"
+## Q5618: "How can you use on-chain data to prove collusion between meme token deployers and prediction market creators?"
 
-## Q619: "What is the best method to identify wallets that are likely to be 'exit liquidity' in a meme token pump and dump?"
+## Q5619: "What is the best method to identify wallets that are likely to be 'exit liquidity' in a meme token pump and dump?"
 
-## Q620: "How can you detect and trace the use of privacy protocols (mixers) by meme token insiders before a major exploit?"
+## Q5620: "How can you detect and trace the use of privacy protocols (mixers) by meme token insiders before a major exploit?"
 
 [TIME: ~120s] [COST: ~0.015 SOL] [CONFIDENCE: 85%]
 
@@ -139,7 +139,7 @@ RETURN {
 
 ---
 
-## Q603: "My wallet received a spam NFT. How do I analyze its associated smart contract and transaction history to determine if it's a wallet drainer?"
+## Q5603: "My wallet received a spam NFT. How do I analyze its associated smart contract and transaction history to determine if it's a wallet drainer?"
 
 **Expected Plan:**
 
@@ -197,7 +197,7 @@ RETURN {
 
 ---
 
-## Q604: "An MEV bot front-ran my swap on Jupiter. Can I analyze the bot's bundle and historical behavior to understand its strategy?"
+## Q5604: "An MEV bot front-ran my swap on Jupiter. Can I analyze the bot's bundle and historical behavior to understand its strategy?"
 
 **Expected Plan:**
 
@@ -249,7 +249,7 @@ RETURN {
 
 ---
 
-## Q605: "A governance proposal for 'Marinade' seems suspicious. How can I forensically analyze the proposer and the whale wallets voting for it?"
+## Q5605: "A governance proposal for 'Marinade' seems suspicious. How can I forensically analyze the proposer and the whale wallets voting for it?"
 
 **Expected Plan:**
 
@@ -309,7 +309,7 @@ RETURN {
 
 ---
 
-## Q606: "A flash loan exploit just occurred on the 'Solend' protocol. What is the step-by-step process to trace the stolen funds through a mixer?"
+## Q5606: "A flash loan exploit just occurred on the 'Solend' protocol. What is the step-by-step process to trace the stolen funds through a mixer?"
 
 **Expected Plan:**
 
@@ -374,7 +374,7 @@ RETURN {
 
 ---
 
-## Q607: "How can I analyze the 'Claynosaurz' NFT collection on Magic Eden to identify a ring of wallets wash trading to inflate the floor price?"
+## Q5607: "How can I analyze the 'Claynosaurz' NFT collection on Magic Eden to identify a ring of wallets wash trading to inflate the floor price?"
 
 **Expected Plan:**
 
@@ -428,7 +428,7 @@ RETURN {
 
 ---
 
-## Q608: "An NFT claims to be from a famous artist but was 'sleep minted.' How can I forensically verify the true origin and creator by analyzing its mint transaction?"
+## Q5608: "An NFT claims to be from a famous artist but was 'sleep minted.' How can I forensically verify the true origin and creator by analyzing its mint transaction?"
 
 **Expected Plan:**
 
@@ -478,7 +478,7 @@ RETURN {
 
 ---
 
-## Q609: "I have a known phishing scammer's wallet address. How can I build a complete profile of their operations, including other wallets they control and total funds stolen?"
+## Q5609: "I have a known phishing scammer's wallet address. How can I build a complete profile of their operations, including other wallets they control and total funds stolen?"
 
 **Expected Plan:**
 
@@ -534,7 +534,7 @@ RETURN {
 
 ---
 
-## Q610: "How can I analyze a new token's on-chain program to determine if it's a honeypot (buyable but not sellable) before I invest?"
+## Q5610: "How can I analyze a new token's on-chain program to determine if it's a honeypot (buyable but not sellable) before I invest?"
 
 **Expected Plan:**
 
@@ -598,7 +598,7 @@ RETURN {
 
 ---
 
-## Q621: "Build a complete 'money laundering network map' starting from a known scam wallet. Identify all layering wallets, integration points, and final legitimate-seeming destinations."
+## Q5621: "Build a complete 'money laundering network map' starting from a known scam wallet. Identify all layering wallets, integration points, and final legitimate-seeming destinations."
 
 **Expected Plan:**
 
@@ -670,7 +670,7 @@ RETURN {
 
 ---
 
-## Q622: "Detect a 'romance scam crypto network' where victims send crypto to fake online partners. Map the receiver cluster, identify the operation's scale, and find the cashout wallets."
+## Q5622: "Detect a 'romance scam crypto network' where victims send crypto to fake online partners. Map the receiver cluster, identify the operation's scale, and find the cashout wallets."
 
 **Expected Plan:**
 
@@ -740,7 +740,7 @@ RETURN {
 
 ---
 
-## Q623: "Investigate a 'crypto Ponzi scheme' by analyzing the referral tree, calculating each level's ROI, and identifying when the scheme became mathematically unsustainable."
+## Q5623: "Investigate a 'crypto Ponzi scheme' by analyzing the referral tree, calculating each level's ROI, and identifying when the scheme became mathematically unsustainable."
 
 **Expected Plan:**
 
@@ -818,7 +818,7 @@ RETURN {
 
 ---
 
-## Q624: "Trace a 'SIM swap attack' where an attacker gained control of a victim's phone number and drained their Solana wallet. Map the attack timeline and fund destinations."
+## Q5624: "Trace a 'SIM swap attack' where an attacker gained control of a victim's phone number and drained their Solana wallet. Map the attack timeline and fund destinations."
 
 **Expected Plan:**
 
@@ -890,7 +890,7 @@ RETURN {
 
 ---
 
-## Q625: "Map an 'airdrop hunter Sybil farm' with 500+ wallets claiming airdrops. Identify the common funding source, consolidation points, and total airdrop value harvested."
+## Q5625: "Map an 'airdrop hunter Sybil farm' with 500+ wallets claiming airdrops. Identify the common funding source, consolidation points, and total airdrop value harvested."
 
 **Expected Plan:**
 
@@ -974,7 +974,7 @@ RETURN {
 
 ---
 
-## Q626: "Investigate a 'wash trading ring' on an NFT marketplace. Identify all participants, calculate artificial volume, and determine the real price vs manipulated floor."
+## Q5626: "Investigate a 'wash trading ring' on an NFT marketplace. Identify all participants, calculate artificial volume, and determine the real price vs manipulated floor."
 
 **Expected Plan:**
 
@@ -1044,7 +1044,7 @@ RETURN {
 
 ---
 
-## Q627: "Detect an 'employment scam' where victims pay upfront fees for fake crypto jobs. Map the scammer's wallets, victim count, and find connections to other scam operations."
+## Q5627: "Detect an 'employment scam' where victims pay upfront fees for fake crypto jobs. Map the scammer's wallets, victim count, and find connections to other scam operations."
 
 **Expected Plan:**
 
@@ -1107,7 +1107,7 @@ RETURN {
 
 ---
 
-## Q628: "Map a 'crypto impersonation scam' where scammers pretend to be support staff. Track all victim sends to fake support wallets and trace the cashout chain."
+## Q5628: "Map a 'crypto impersonation scam' where scammers pretend to be support staff. Track all victim sends to fake support wallets and trace the cashout chain."
 
 **Expected Plan:**
 
@@ -1174,7 +1174,7 @@ RETURN {
 
 ---
 
-## Q629: "Investigate a 'fake ICO/presale' where funds were collected but no token was ever delivered. Identify all investors, calculate total scammed, and trace fund distribution."
+## Q5629: "Investigate a 'fake ICO/presale' where funds were collected but no token was ever delivered. Identify all investors, calculate total scammed, and trace fund distribution."
 
 **Expected Plan:**
 
@@ -1251,7 +1251,7 @@ RETURN {
 
 ---
 
-## Q630: "Detect a 'validator front-running' scheme where a validator operator uses their block production privilege to extract MEV from transactions in their blocks. Quantify unfair profits."
+## Q5630: "Detect a 'validator front-running' scheme where a validator operator uses their block production privilege to extract MEV from transactions in their blocks. Quantify unfair profits."
 
 **Expected Plan:**
 
@@ -1326,7 +1326,7 @@ RETURN {
 
 ---
 
-## Q661: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
+## Q5661: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 89%]
@@ -1346,7 +1346,7 @@ RETURN {investigation: "Spoofed LP Token Scam", is_fake: !$verification.is_authe
 
 ---
 
-## Q662: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
+## Q5662: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 84%]
@@ -1365,7 +1365,7 @@ RETURN {investigation: "DAO Treasury Raid", drained_amount_sol: $proposal_analys
 
 ---
 
-## Q663: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
+## Q5663: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 87%]
@@ -1384,7 +1384,7 @@ RETURN {investigation: "Circular Trading Bot Network", bot_count: COUNT($bot_clu
 
 ---
 
-## Q664: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
+## Q5664: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 81%]
@@ -1403,7 +1403,7 @@ RETURN {investigation: "Bridge Exploit - Unlimited Mint", exploit_method: $analy
 
 ---
 
-## Q665: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
+## Q5665: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 85%]
@@ -1421,7 +1421,7 @@ RETURN {investigation: "Governance Token Rental Market", rental_volume_daily: $r
 
 ---
 
-## Q666: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
+## Q5666: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -1439,7 +1439,7 @@ RETURN {investigation: "MEV Sandwich Cartel", cartel_size: COUNT($coordination.c
 
 ---
 
-## Q667: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
+## Q5667: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -1458,7 +1458,7 @@ RETURN {investigation: "NFT Metadata Poisoning", poisoned_nfts: COUNT($malicious
 
 ---
 
-## Q668: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
+## Q5668: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 79%]
@@ -1477,7 +1477,7 @@ RETURN {investigation: "Stablecoin Depeg Manipulation", manipulation_detected: $
 
 ---
 
-## Q669: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
+## Q5669: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 80%]
@@ -1495,7 +1495,7 @@ RETURN {investigation: "Validator Sandwich Collusion", colluding_validators: COU
 
 ---
 
-## Q670: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
+## Q5670: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -1513,7 +1513,7 @@ RETURN {investigation: "Pump-as-a-Service Platform", total_campaigns: COUNT($cam
 
 ---
 
-## Q671: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
+## Q5671: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 88%]
@@ -1531,7 +1531,7 @@ RETURN {investigation: "Fake Liquidity Lock", is_fake_lock: $backdoors.can_bypas
 
 ---
 
-## Q672: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
+## Q5672: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 81%]
@@ -1549,7 +1549,7 @@ RETURN {investigation: "cNFT Overmint Exploit", exploit_detected: $overmint.dete
 
 ---
 
-## Q673: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
+## Q5673: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 76%]
@@ -1568,7 +1568,7 @@ RETURN {investigation: "Prediction Market Insider Trading", suspicious_traders: 
 
 ---
 
-## Q674: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
+## Q5674: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -1586,7 +1586,7 @@ RETURN {investigation: "Token Supply Inflation Attack", inflation_detected: $una
 
 ---
 
-## Q675: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
+## Q5675: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 82%]
@@ -1604,7 +1604,7 @@ RETURN {investigation: "Liquidation Bot Cartel", cartel_size: COUNT($coordinatio
 
 ---
 
-## Q676: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
+## Q5676: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -1622,7 +1622,7 @@ RETURN {investigation: "Fake Airdrop Drain Scam", is_drainer: $drain_pattern.is_
 
 ---
 
-## Q677: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
+## Q5677: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 78%]
@@ -1641,7 +1641,7 @@ RETURN {investigation: "Validator Censorship", censorship_detected: $censorship.
 
 ---
 
-## Q678: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
+## Q5678: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 83%]
@@ -1659,7 +1659,7 @@ RETURN {investigation: "Arbitrage Bot Network", network_clusters: COUNT($network
 
 ---
 
-## Q679: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
+## Q5679: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -1677,7 +1677,7 @@ RETURN {investigation: "Jito Bundle Frontrunning", systematic_frontrunners: COUN
 
 ---
 
-## Q680: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
+## Q5680: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 87%]
@@ -1697,7 +1697,7 @@ RETURN {investigation: "Malicious Program Upgrade", malicious_upgrade_detected: 
 
 ---
 
-## Q681: "Reconstruct the transaction flow of a token airdrop scam to identify the scammer's cash-out method."
+## Q5681: "Reconstruct the transaction flow of a token airdrop scam to identify the scammer's cash-out method."
 
 **Expected Plan:**
 [TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 84%]
@@ -1732,7 +1732,7 @@ RETURN {
 ---
 
 
-## Q682: "Investigate cross-program reentrancy exploits in DeFi protocols."
+## Q5682: "Investigate cross-program reentrancy exploits in DeFi protocols."
 
 **Expected Plan:**
 [TIME: ~100s] [COST: ~0.018 SOL] [CONFIDENCE: 77%]
@@ -1757,7 +1757,7 @@ RETURN {
 
 ---
 
-## Q683: "Track the dispersal pattern of hacked funds using graph analysis."
+## Q5683: "Track the dispersal pattern of hacked funds using graph analysis."
 
 **Expected Plan:**
 [TIME: ~110s] [COST: ~0.02 SOL] [CONFIDENCE: 85%]
@@ -1787,7 +1787,7 @@ RETURN {
 
 ---
 
-## Q684: "Identify pump-and-dump coordinator wallets using statistical clustering."
+## Q5684: "Identify pump-and-dump coordinator wallets using statistical clustering."
 
 **Expected Plan:**
 [TIME: ~95s] [COST: ~0.016 SOL] [CONFIDENCE: 81%]
@@ -1813,7 +1813,7 @@ RETURN {
 
 ---
 
-## Q685: "Reverse-engineer a token's smart contract to find hidden backdoors."
+## Q5685: "Reverse-engineer a token's smart contract to find hidden backdoors."
 
 **Expected Plan:**
 [TIME: ~120s] [COST: ~0.022 SOL] [CONFIDENCE: 74%]
@@ -1839,7 +1839,7 @@ RETURN {
 
 ---
 
-## Q686: "Trace NFT theft from wallet compromise through multiple marketplaces."
+## Q5686: "Trace NFT theft from wallet compromise through multiple marketplaces."
 
 **Expected Plan:**
 [TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 89%]
@@ -1871,7 +1871,7 @@ RETURN {
 
 ---
 
-## Q687: "Detect oracle manipulation attempts by analyzing price feed anomalies."
+## Q5687: "Detect oracle manipulation attempts by analyzing price feed anomalies."
 
 **Expected Plan:**
 [TIME: ~75s] [COST: ~0.012 SOL] [CONFIDENCE: 86%]
@@ -1897,7 +1897,7 @@ RETURN {
 
 ---
 
-## Q688: "Investigate fake liquidity pools created to trap traders."
+## Q5688: "Investigate fake liquidity pools created to trap traders."
 
 **Expected Plan:**
 [TIME: ~80s] [COST: ~0.013 SOL] [CONFIDENCE: 83%]
@@ -1924,7 +1924,7 @@ RETURN {
 
 ---
 
-## Q689: "Analyze smart contract upgrade patterns to detect malicious changes."
+## Q5689: "Analyze smart contract upgrade patterns to detect malicious changes."
 
 **Expected Plan:**
 [TIME: ~95s] [COST: ~0.016 SOL] [CONFIDENCE: 78%]
@@ -1951,7 +1951,7 @@ RETURN {
 
 ---
 
-## Q690: "Reconstruct the attack timeline of a multi-stage DeFi exploit."
+## Q5690: "Reconstruct the attack timeline of a multi-stage DeFi exploit."
 
 **Expected Plan:**
 [TIME: ~105s] [COST: ~0.019 SOL] [CONFIDENCE: 80%]
@@ -1974,3 +1974,1253 @@ RETURN {
   total_value_extracted: $timeline.total_stolen,
   confidence: 80
 }
+
+---
+
+## Q5691: "Analyze cross-protocol flash loan attacks to identify attack pattern reuse across exploits."
+
+**Expected Plan:**
+[TIME: ~110s] [COST: ~0.018 SOL] [CONFIDENCE: 82%]
+
+**Available Tools:**
+From Standard Library: GET_FLASH_LOAN_ATTACKS, IDENTIFY_ATTACK_PATTERNS
+
+**Main Branch:**
+$flash_loan_attacks = GET_FLASH_LOAN_ATTACKS(period: "90d", min_value: 100000)
+
+$attack_patterns = MAP($flash_loan_attacks, attack => {
+  RETURN IDENTIFY_ATTACK_PATTERNS(
+    transactions: attack.txs,
+    loan_source: attack.loan_protocol,
+    target_protocol: attack.target
+  )
+})
+
+$pattern_clusters = GROUP_BY($attack_patterns, p => p.pattern_signature)
+$repeated_patterns = FILTER($pattern_clusters, cluster => COUNT(cluster) > 1)
+
+**Action:**
+RETURN {forensics: "Flash Loan Attack Patterns", total_attacks: COUNT($flash_loan_attacks), unique_patterns: COUNT($pattern_clusters), repeated_patterns: COUNT($repeated_patterns), most_common_pattern: MAX_BY($pattern_clusters, c => COUNT(c)), confidence: 82}
+
+---
+
+## Q5692: "Trace stolen NFTs through multiple wallet hops to identify final destination wallets."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 87%]
+
+**Available Tools:**
+From Standard Library: GET_NFT_TRANSFER_HISTORY, TRACE_NFT_PATH
+
+**Main Branch:**
+$stolen_nft_mint = "..."
+$theft_timestamp = 1728000000
+
+$transfer_history = GET_NFT_TRANSFER_HISTORY(
+  nft: $stolen_nft_mint,
+  since: $theft_timestamp
+)
+
+$trace_path = TRACE_NFT_PATH(transfers: $transfer_history)
+
+$final_destinations = FILTER($trace_path.wallets, w => w.is_terminal && w.holding_period > 604800) // Held for > 7 days
+
+**Action:**
+RETURN {forensics: "Stolen NFT Tracing", nft: $stolen_nft_mint, total_hops: COUNT($transfer_history), final_destinations: $final_destinations, likely_thief_wallet: $trace_path.most_likely_culprit, confidence: 87}
+
+---
+
+## Q5693: "Detect smart contract backdoors by analyzing unusual admin function calls."
+
+**Expected Plan:**
+[TIME: ~75s] [COST: ~0.012 SOL] [CONFIDENCE: 84%]
+
+**Available Tools:**
+From Standard Library: GET_PROGRAM_INSTRUCTIONS, DETECT_BACKDOOR_PATTERNS
+
+**Main Branch:**
+$program_id = "..."
+
+$all_instructions = GET_PROGRAM_INSTRUCTIONS(program: $program_id, period: "30d")
+
+$admin_calls = FILTER($all_instructions, ix => ix.signer == ix.program_admin || ix.requires_admin_authority)
+
+$backdoor_analysis = DETECT_BACKDOOR_PATTERNS(
+  admin_calls: $admin_calls,
+  check_for: ["emergency_withdrawals", "arbitrary_transfers", "authority_changes"]
+)
+
+**Action:**
+RETURN {forensics: "Smart Contract Backdoor Detection", program: $program_id, total_admin_calls: COUNT($admin_calls), suspicious_calls: $backdoor_analysis.suspicious_count, backdoor_functions: $backdoor_analysis.potential_backdoors, risk_level: $backdoor_analysis.risk_score, confidence: 84}
+
+---
+
+## Q5694: "Investigate pump-and-dump coordination by analyzing Telegram/Discord timestamps correlated with on-chain buys."
+
+**Expected Plan:**
+[TIME: ~120s] [COST: ~0.020 SOL] [CONFIDENCE: 76%]
+
+**Available Tools:**
+From Standard Library: GET_SOCIAL_MESSAGES, GET_TOKEN_TRADES, CORRELATE_TIMESTAMPS
+
+**Main Bridge:**
+$token_mint = "..."
+$pump_date = "2024-10-05"
+
+$social_messages = GET_SOCIAL_MESSAGES(
+  platforms: ["Telegram", "Discord"],
+  keywords: ["pump", "buy now", "moon"],
+  date: $pump_date
+)
+
+$on_chain_trades = GET_TOKEN_TRADES(
+  token: $token_mint,
+  date: $pump_date,
+  type: "buy"
+)
+
+$correlation = CORRELATE_TIMESTAMPS(
+  social_events: $social_messages,
+  trading_events: $on_chain_trades,
+  time_window_seconds: 300 // 5-minute correlation window
+)
+
+**Action:**
+RETURN {forensics: "Pump-and-Dump Coordination", token: $token_mint, social_pump_messages: COUNT($social_messages), coordinated_buys: $correlation.correlated_count, correlation_strength: $correlation.correlation_coefficient, suspected_organizers: $correlation.key_influencers, confidence: 76}
+
+---
+
+## Q5695: "Analyze MEV bot profit extraction patterns to identify systematic frontrunning operations."
+
+**Expected Plan:**
+[TIME: ~100s] [COST: ~0.016 SOL] [CONFIDENCE: 85%]
+
+**Available Tools:**
+From Standard Library: FIND_MEV_BOTS, ANALYZE_FRONTRUNNING_PATTERNS
+
+**Main Branch:**
+$time_period = {start: 1727000000, end: 1728000000}
+
+$mev_bots = FIND_MEV_BOTS(
+  period: $time_period,
+  min_profit_sol: 1,
+  strategy: "frontrunning"
+)
+
+$bot_patterns = MAP($mev_bots, bot => {
+  $pattern = ANALYZE_FRONTRUNNING_PATTERNS(
+    bot_wallet: bot.wallet,
+    transactions: bot.txs
+  )
+  RETURN {
+    wallet: bot.wallet,
+    total_profit: bot.total_profit_sol,
+    avg_profit_per_tx: bot.total_profit_sol / COUNT(bot.txs),
+    frontrun_success_rate: $pattern.success_rate,
+    target_protocols: $pattern.targeted_protocols
+  }
+})
+
+$top_performers = TOP_N(SORT_BY($bot_patterns, b => -b.total_profit), 10)
+
+**Action:**
+RETURN {forensics: "MEV Frontrunning Analysis", time_period_days: 30, total_mev_bots: COUNT($mev_bots), total_extracted_sol: SUM(MAP($mev_bots, b => b.total_profit_sol)), top_10_bots: $top_performers, confidence: 85}
+
+---
+
+## Q5696: "Trace laundered funds through Tornado Cash-style mixers on Solana."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 79%]
+
+**Available Tools:**
+From Standard Library: IDENTIFY_MIXER_USAGE, TRACE_THROUGH_MIXERS
+
+**Main Branch:**
+$suspicious_wallet = "..."
+$stolen_amount_sol = 500
+
+$mixer_deposits = IDENTIFY_MIXER_USAGE(
+  wallet: $suspicious_wallet,
+  lookback_days: 30
+)
+
+TRY:
+  $trace_results = TRACE_THROUGH_MIXERS(
+    deposits: $mixer_deposits,
+    expected_amount: $stolen_amount_sol,
+    confidence_threshold: 0.7
+  )
+CATCH RECOVERABLE:
+  $trace_results = {likely_destinations: [], confidence: 0}
+
+**Decision Point:** Evaluate tracing success
+  BRANCH A (COUNT($trace_results.likely_destinations) > 0):
+    $verdict = "Partial trace successful"
+    $details = "Found likely destination wallets despite mixer obfuscation"
+  BRANCH B (default):
+    $verdict = "Trace lost in mixer"
+    $details = "Mixer effectively obscured fund flow"
+
+**Action:**
+RETURN {forensics: "Mixer Fund Tracing", source_wallet: $suspicious_wallet, mixer_deposits_sol: SUM(MAP($mixer_deposits, d => d.amount)), likely_destinations: $trace_results.likely_destinations, verdict: $verdict, confidence: 79}
+
+---
+
+## Q5697: "Detect Sybil attack networks in token airdrops by analyzing wallet funding patterns."
+
+**Expected Plan:**
+[TIME: ~90s] [COST: ~0.014 SOL] [CONFIDENCE: 83%]
+
+**Available Tools:**
+From Standard Library: GET_AIRDROP_CLAIMERS, DETECT_SYBIL_PATTERNS
+
+**Main Branch:**
+$airdrop_contract = "..."
+
+$all_claimers = GET_AIRDROP_CLAIMERS(contract: $airdrop_contract)
+
+$sybil_analysis = DETECT_SYBIL_PATTERNS(
+  wallets: $all_claimers,
+  check_patterns: ["common_funding_source", "sequential_creation", "similar_transaction_patterns", "coordinated_claiming"]
+)
+
+$sybil_clusters = $sybil_analysis.identified_clusters
+$total_sybil_wallets = SUM(MAP($sybil_clusters, c => COUNT(c.wallets)))
+
+$legitimate_claimers = COUNT($all_claimers) - $total_sybil_wallets
+$sybil_percentage = ($total_sybil_wallets / COUNT($all_claimers)) * 100
+
+**Action:**
+RETURN {forensics: "Sybil Attack Detection", total_claimers: COUNT($all_claimers), sybil_wallets: $total_sybil_wallets, sybil_percentage: $sybil_percentage, sybil_clusters: COUNT($sybil_clusters), largest_cluster_size: MAX(MAP($sybil_clusters, c => COUNT(c.wallets))), confidence: 83}
+
+---
+
+## Q5698: "Investigate insider trading by correlating wallet purchases with upcoming token listings or announcements."
+
+**Expected Plan:**
+[TIME: ~105s] [COST: ~0.017 SOL] [CONFIDENCE: 78%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_LISTINGS, GET_LARGE_PURCHASES, CORRELATE_EVENTS
+
+**Main Branch:**
+$token_mint = "..."
+$listing_date = "2024-10-10"
+
+$large_purchases_before_listing = GET_LARGE_PURCHASES(
+  token: $token_mint,
+  start_date: $listing_date - 604800, // 7 days before
+  end_date: $listing_date,
+  min_size_usd: 10000
+)
+
+$purchase_timings = MAP($large_purchases_before_listing, p => {
+  $hours_before_listing = ($listing_date - p.timestamp) / 3600
+  RETURN {wallet: p.wallet, amount_usd: p.amount_usd, hours_before: $hours_before_listing}
+})
+
+$suspicious_purchases = FILTER($purchase_timings, p => p.hours_before < 48 && p.amount_usd > 50000)
+
+**Action:**
+RETURN {forensics: "Insider Trading Investigation", token: $token_mint, listing_date: $listing_date, total_large_purchases_7d_before: COUNT($large_purchases_before_listing), suspicious_insider_purchases: COUNT($suspicious_purchases), suspected_insiders: MAP($suspicious_purchases, p => p.wallet), confidence: 78}
+
+---
+
+## Q5699: "Analyze governance attack vectors by identifying wallets that suddenly acquired large voting power."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.013 SOL] [CONFIDENCE: 86%]
+
+**Available Tools:**
+From Standard Library: GET_GOVERNANCE_TOKEN_HOLDERS, DETECT_SUDDEN_ACCUMULATION
+
+**Main Branch:**
+$governance_token = "..."
+$proposal_date = "2024-10-08"
+
+$holders_before = GET_GOVERNANCE_TOKEN_HOLDERS(
+  token: $governance_token,
+  snapshot_date: $proposal_date - 604800 // 7 days before
+)
+
+$holders_at_vote = GET_GOVERNANCE_TOKEN_HOLDERS(
+  token: $governance_token,
+  snapshot_date: $proposal_date
+)
+
+$new_large_holders = DETECT_SUDDEN_ACCUMULATION(
+  before: $holders_before,
+  after: $holders_at_vote,
+  threshold_increase_pct: 500 // 5x increase
+)
+
+$attack_likelihood = COUNT($new_large_holders) > 5 ? "High" : (COUNT($new_large_holders) > 2 ? "Medium" : "Low")
+
+**Action:**
+RETURN {forensics: "Governance Attack Detection", governance_token: $governance_token, proposal_date: $proposal_date, wallets_with_sudden_power: COUNT($new_large_holders), attack_likelihood: $attack_likelihood, suspected_attackers: $new_large_holders, confidence: 86}
+
+---
+
+## Q5700: "Detect token supply manipulation by analyzing unexpected mint authority usage."
+
+**Expected Plan:**
+[TIME: ~70s] [COST: ~0.011 SOL] [CONFIDENCE: 88%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_MINT_HISTORY, ANALYZE_MINT_AUTHORITY_USAGE
+
+**Main Branch:**
+$token_mint = "..."
+
+$mint_history = GET_TOKEN_MINT_HISTORY(token: $token_mint, period: "90d")
+
+$unauthorized_mints = FILTER($mint_history, mint_event => {
+  $is_after_renounce = mint_event.timestamp > $token_mint.authority_renounced_at
+  $is_excessive = mint_event.amount > ($token_mint.total_supply * 0.05) // >5% of supply
+  RETURN $is_after_renounce || $is_excessive
+})
+
+**Action:**
+RETURN {forensics: "Token Supply Manipulation", token: $token_mint, total_mint_events: COUNT($mint_history), unauthorized_mints: COUNT($unauthorized_mints), supply_inflation_pct: (SUM(MAP($unauthorized_mints, m => m.amount)) / $token_mint.total_supply) * 100, confidence: 88}
+
+---
+
+## Q5701: "Investigate NFT wash trading rings by analyzing circular transfer patterns."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 81%]
+
+**Available Tools:**
+From Standard Library: GET_NFT_COLLECTION_TRADES, DETECT_CIRCULAR_TRADING
+
+**Main Branch:**
+$collection = "..."
+
+$all_trades = GET_NFT_COLLECTION_TRADES(collection: $collection, period: "30d")
+
+$circular_patterns = DETECT_CIRCULAR_TRADING(
+  trades: $all_trades,
+  max_circle_length: 5,
+  min_circle_repetitions: 3
+)
+
+$involved_wallets = UNIQUE(FLATTEN(MAP($circular_patterns, pattern => pattern.wallets)))
+$fake_volume_sol = SUM(MAP($circular_patterns, p => p.total_volume))
+
+**Action:**
+RETURN {forensics: "NFT Wash Trading Detection", collection: $collection, circular_patterns_found: COUNT($circular_patterns), involved_wallets: COUNT($involved_wallets), fake_volume_sol: $fake_volume_sol, real_vs_fake_volume_ratio: ($all_trades.total_volume - $fake_volume_sol) / $fake_volume_sol, confidence: 81}
+
+---
+
+## Q5702: "Trace rug pull funds from liquidity removal through DEX aggregators to final CEX deposits."
+
+**Expected Plan:**
+[TIME: ~115s] [COST: ~0.019 SOL] [CONFIDENCE: 80%]
+
+**Available Tools:**
+From Standard Library: TRACE_RUG_PULL_FUNDS, IDENTIFY_CEX_DEPOSITS
+
+**Main Branch:**
+$rug_tx = "..."
+
+$liquidity_removed = GET_TRANSACTION_DETAILS(tx: $rug_tx)
+$stolen_amount_sol = $liquidity_removed.sol_amount
+
+$fund_trace = TRACE_RUG_PULL_FUNDS(
+  source_tx: $rug_tx,
+  max_hops: 20,
+  through_aggregators: true
+)
+
+$cex_deposits = IDENTIFY_CEX_DEPOSITS(
+  destination_wallets: $fund_trace.terminal_wallets
+)
+
+**Action:**
+RETURN {forensics: "Rug Pull Fund Tracing", rug_tx: $rug_tx, stolen_sol: $stolen_amount_sol, trace_hops: COUNT($fund_trace.all_transactions), terminal_wallets: COUNT($fund_trace.terminal_wallets), cex_deposits_found: COUNT($cex_deposits), identified_exchanges: MAP($cex_deposits, d => d.exchange_name), confidence: 80}
+
+---
+
+## Q5703: "Analyze smart contract exploit simulations to predict vulnerable protocol targets."
+
+**Expected Plan:**
+[TIME: ~125s] [COST: ~0.021 SOL] [CONFIDENCE: 74%]
+
+**Available Tools:**
+From Standard Library: GET_RECENT_EXPLOITS, IDENTIFY_SIMILAR_VULNERABILITIES
+
+**Main Branch:**
+$recent_exploits = GET_RECENT_EXPLOITS(period: "180d", min_value: 100000)
+
+$exploit_patterns = MAP($recent_exploits, exploit => {
+  RETURN {
+    vulnerability_type: exploit.vulnerability,
+    protocol_type: exploit.protocol_category,
+    attack_vector: exploit.attack_method
+  }
+})
+
+$pattern_frequency = GROUP_BY($exploit_patterns, p => p.vulnerability_type)
+
+$vulnerable_protocols = IDENTIFY_SIMILAR_VULNERABILITIES(
+  known_exploits: $recent_exploits,
+  scan_protocols: GET_ALL_DEFI_PROTOCOLS()
+)
+
+**Action:**
+RETURN {forensics: "Exploit Pattern Analysis", exploits_analyzed: COUNT($recent_exploits), most_common_vulnerability: MAX_BY($pattern_frequency, g => COUNT(g)).vulnerability_type, potentially_vulnerable_protocols: $vulnerable_protocols, confidence: 74}
+
+---
+
+## Q5704: "Detect oracle price manipulation attacks by comparing multiple oracle sources."
+
+**Expected Plan:**
+[TIME: ~80s] [COST: ~0.013 SOL] [CONFIDENCE: 85%]
+
+**Available Tools:**
+From Standard Library: GET_MULTI_ORACLE_PRICES, DETECT_PRICE_DIVERGENCE
+
+**Main Branch:**
+$asset = "SOL/USD"
+$timestamp = 1728000000
+
+$oracle_prices = GET_MULTI_ORACLE_PRICES(
+  asset: $asset,
+  timestamp: $timestamp,
+  oracles: ["Pyth", "Switchboard", "Chainlink"]
+)
+
+$divergence_analysis = DETECT_PRICE_DIVERGENCE(
+  prices: $oracle_prices,
+  max_acceptable_divergence_pct: 2
+)
+
+**Decision Point:** Evaluate manipulation likelihood
+  BRANCH A ($divergence_analysis.max_divergence > 5):
+    $verdict = "Likely manipulation detected"
+    $manipulated_oracle = $divergence_analysis.outlier_oracle
+  BRANCH B ($divergence_analysis.max_divergence > 2):
+    $verdict = "Possible manipulation or stale data"
+    $manipulated_oracle = $divergence_analysis.outlier_oracle
+  BRANCH C (default):
+    $verdict = "No manipulation detected"
+    $manipulated_oracle = null
+
+**Action:**
+RETURN {forensics: "Oracle Manipulation Detection", asset: $asset, oracle_count: COUNT($oracle_prices), max_divergence_pct: $divergence_analysis.max_divergence, verdict: $verdict, suspected_oracle: $manipulated_oracle, confidence: 85}
+
+---
+
+## Q5705: "Investigate token launch sniper bots by analyzing first-block purchase patterns."
+
+**Expected Plan:**
+[TIME: ~75s] [COST: ~0.012 SOL] [CONFIDENCE: 87%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_LAUNCH_BLOCK, GET_FIRST_BUYERS
+
+**Main Branch:**
+$token_mint = "..."
+
+$launch_block = GET_TOKEN_LAUNCH_BLOCK(token: $token_mint)
+$first_100_buyers = GET_FIRST_BUYERS(token: $token_mint, count: 100)
+
+$sniper_bots = FILTER($first_100_buyers, buyer => {
+  $purchased_in_launch_block = buyer.purchase_slot == $launch_block
+  $large_purchase = buyer.amount_usd > 1000
+  $has_bot_characteristics = buyer.tx_priority_fee > 0.01 || buyer.uses_private_rpc
+  RETURN $purchased_in_launch_block && ($large_purchase || $has_bot_characteristics)
+})
+
+$sniper_percentage = (COUNT($sniper_bots) / COUNT($first_100_buyers)) * 100
+
+**Action:**
+RETURN {forensics: "Launch Sniper Bot Detection", token: $token_mint, launch_slot: $launch_block, first_100_buyers: COUNT($first_100_buyers), sniper_bots_identified: COUNT($sniper_bots), sniper_percentage: $sniper_percentage, total_sniped_value_usd: SUM(MAP($sniper_bots, s => s.amount_usd)), confidence: 87}
+
+---
+
+## Q5706: "Trace Ponzi scheme reward payments through affiliate referral trees."
+
+**Expected Plan:**
+[TIME: ~100s] [COST: ~0.016 SOL] [CONFIDENCE: 82%]
+
+**Available Tools:**
+From Standard Library: BUILD_REFERRAL_TREE, ANALYZE_PONZI_MECHANICS
+
+**Main Branch:**
+$ponzi_program = "..."
+
+$all_participants = GET_PROGRAM_PARTICIPANTS(program: $ponzi_program)
+
+$referral_tree = BUILD_REFERRAL_TREE(
+  participants: $all_participants,
+  root_identifiers: ["deployer", "first_depositor"]
+)
+
+$ponzi_analysis = ANALYZE_PONZI_MECHANICS(
+  tree: $referral_tree,
+  payment_flow: GET_REWARD_PAYMENTS($ponzi_program)
+)
+
+$profitablelevels = FILTER($ponzi_analysis.level_profitability, level => level.net_profit > 0)
+
+**Action:**
+RETURN {forensics: "Ponzi Scheme Analysis", program: $ponzi_program, total_participants: COUNT($all_participants), tree_depth: $referral_tree.max_depth, profitable_levels: MAP($profitable_levels, l => l.level_number), total_deposits_sol: $ponzi_analysis.total_inflow, total_withdrawals_sol: $ponzi_analysis.total_outflow, collapse_imminent: $ponzi_analysis.collapse_probability > 0.7, confidence: 82}
+
+---
+
+## Q5707: "Detect fake trading volume bots by analyzing repetitive transaction patterns."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 84%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_TRADES, DETECT_REPETITIVE_PATTERNS
+
+**Main Branch:**
+$token_mint = "..."
+
+$all_trades = GET_TOKEN_TRADES(token: $token_mint, period: "7d")
+
+$pattern_analysis = DETECT_REPETITIVE_PATTERNS(
+  trades: $all_trades,
+  check_for: ["identical_amounts", "regular_intervals", "ping_pong_trading"]
+)
+
+$bot_wallets = UNIQUE(FLATTEN(MAP($pattern_analysis.detected_patterns, p => p.involved_wallets)))
+$fake_volume = SUM(MAP($pattern_analysis.detected_patterns, p => p.volume_sol))
+
+$fake_volume_percentage = ($fake_volume / $all_trades.total_volume_sol) * 100
+
+**Action:**
+RETURN {forensics: "Fake Volume Bot Detection", token: $token_mint, total_volume_sol: $all_trades.total_volume_sol, fake_volume_sol: $fake_volume, fake_volume_percentage: $fake_volume_percentage, bot_wallets: COUNT($bot_wallets), repetitive_patterns_found: COUNT($pattern_analysis.detected_patterns), confidence: 84}
+
+---
+
+## Q5708: "Investigate liquidity pool reentrancy exploits by analyzing transaction call stacks."
+
+**Expected Plan:**
+[TIME: ~90s] [COST: ~0.015 SOL] [CONFIDENCE: 83%]
+
+**Available Tools:**
+From Standard Library: GET_EXPLOIT_TRANSACTION, ANALYZE_CALL_STACK
+
+**Main Branch:**
+$exploit_tx = "..."
+
+$tx_details = GET_EXPLOIT_TRANSACTION(signature: $exploit_tx)
+
+$call_stack_analysis = ANALYZE_CALL_STACK(
+  transaction: $tx_details,
+  check_for: ["reentrancy", "recursive_calls", "state_manipulation"]
+)
+
+$reentrancy_detected = $call_stack_analysis.reentrancy_count > 0
+
+**Decision Point:** Classify exploit type
+  BRANCH A ($call_stack_analysis.reentrancy_count > 1):
+    $exploit_type = "Reentrancy Attack"
+    $severity = "Critical"
+  BRANCH B ($call_stack_analysis.has_state_manipulation):
+    $exploit_type = "State Manipulation"
+    $severity = "High"
+  BRANCH C (default):
+    $exploit_type = "Unknown"
+    $severity = "Medium"
+
+**Action:**
+RETURN {forensics: "Reentrancy Exploit Analysis", exploit_tx: $exploit_tx, reentrancy_detected: $reentrancy_detected, reentrancy_depth: $call_stack_analysis.reentrancy_count, exploit_type: $exploit_type, severity: $severity, stolen_amount_sol: $tx_details.value_extracted, confidence: 83}
+
+---
+
+## Q5709: "Analyze mempool frontrunning by comparing transaction submission timing vs inclusion order."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 81%]
+
+**Available Tools:**
+From Standard Library: GET_BLOCK_TRANSACTIONS, ANALYZE_TX_ORDERING
+
+**Main Branch:**
+$block_slot = 250000000
+
+$block_txs = GET_BLOCK_TRANSACTIONS(slot: $block_slot)
+
+$ordering_analysis = ANALYZE_TX_ORDERING(
+  transactions: $block_txs,
+  compare: ["submission_timestamp", "inclusion_order", "priority_fees"]
+)
+
+$frontrun_cases = FILTER($ordering_analysis.tx_pairs, pair => {
+  $victim_submitted_first = pair.victim_timestamp < pair.frontrunner_timestamp
+  $frontrunner_executed_first = pair.frontrunner_position < pair.victim_position
+  RETURN $victim_submitted_first && $frontrunner_executed_first
+})
+
+**Action:**
+RETURN {forensics: "Mempool Frontrunning Analysis", block_slot: $block_slot, total_transactions: COUNT($block_txs), frontrun_cases_detected: COUNT($frontrun_cases), frontrunner_wallets: UNIQUE(MAP($frontrun_cases, c => c.frontrunner_wallet)), average_priority_fee_advantage: AVG(MAP($frontrun_cases, c => c.fee_difference)), confidence: 81}
+
+---
+
+## Q5710: "Detect coordinated market manipulation by identifying synchronized wallet activity."
+
+**Expected Plan:**
+[TIME: ~105s] [COST: ~0.017 SOL] [CONFIDENCE: 79%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_TRADERS, DETECT_SYNCHRONIZED_ACTIVITY
+
+**Main Branch:**
+$token_mint = "..."
+$suspicious_date = "2024-10-05"
+
+$all_traders = GET_TOKEN_TRADERS(
+  token: $token_mint,
+  date: $suspicious_date,
+  min_trade_size: 1000
+)
+
+$synchronization_analysis = DETECT_SYNCHRONIZED_ACTIVITY(
+  wallets: $all_traders,
+  time_window_seconds: 60,
+  min_cluster_size: 5
+)
+
+$coordinated_clusters = FILTER($synchronization_analysis.clusters, cluster => cluster.synchronization_score > 0.8)
+
+**Action:**
+RETURN {forensics: "Market Manipulation Detection", token: $token_mint, date: $suspicious_date, total_traders: COUNT($all_traders), coordinated_clusters: COUNT($coordinated_clusters), largest_cluster_size: MAX(MAP($coordinated_clusters, c => COUNT(c.wallets))), manipulation_probability: AVG(MAP($coordinated_clusters, c => c.synchronization_score)), confidence: 79}
+
+---
+
+## Q5711: "Investigate token freezing authority abuse by analyzing freeze/thaw transaction patterns."
+
+**Expected Plan:**
+[TIME: ~75s] [COST: ~0.012 SOL] [CONFIDENCE: 86%]
+
+**Available Tools:**
+From Standard Library: GET_FREEZE_AUTHORITY_ACTIONS, ANALYZE_FREEZE_PATTERNS
+
+**Main Branch:**
+$token_mint = "..."
+
+$freeze_actions = GET_FREEZE_AUTHORITY_ACTIONS(
+  token: $token_mint,
+  period: "90d"
+)
+
+$freeze_pattern_analysis = ANALYZE_FREEZE_PATTERNS(
+  actions: $freeze_actions,
+  check_for: ["selective_freezing", "frontrun_freezing", "censorship_patterns"]
+)
+
+$abuse_indicators = {
+  selective_targeting: $freeze_pattern_analysis.targets_specific_wallets,
+  timing_suspicious: $freeze_pattern_analysis.correlated_with_price_movements,
+  censorship_detected: $freeze_pattern_analysis.blocks_large_sellers
+}
+
+$abuse_score = SUM([
+  $abuse_indicators.selective_targeting ? 1 : 0,
+  $abuse_indicators.timing_suspicious ? 1 : 0,
+  $abuse_indicators.censorship_detected ? 1 : 0
+])
+
+**Action:**
+RETURN {forensics: "Freeze Authority Abuse", token: $token_mint, total_freeze_actions: COUNT($freeze_actions), freeze_count: $freeze_pattern_analysis.freeze_count, thaw_count: $freeze_pattern_analysis.thaw_count, abuse_indicators: $abuse_indicators, abuse_score: $abuse_score, confidence: 86}
+
+---
+
+## Q5712: "Trace cross-chain bridge exploits from source chain to destination chain fund movements."
+
+**Expected Plan:**
+[TIME: ~110s] [COST: ~0.018 SOL] [CONFIDENCE: 77%]
+
+**Available Tools:**
+From Standard Library: GET_BRIDGE_EXPLOIT_TX, TRACE_CROSS_CHAIN_FUNDS
+
+**Main Branch:**
+$exploit_tx_source_chain = "..."
+$bridge_contract = "Wormhole"
+
+$exploit_details = GET_BRIDGE_EXPLOIT_TX(
+  tx: $exploit_tx_source_chain,
+  bridge: $bridge_contract
+)
+
+$cross_chain_trace = TRACE_CROSS_CHAIN_FUNDS(
+  source_tx: $exploit_tx_source_chain,
+  source_chain: $exploit_details.source_chain,
+  dest_chain: "Solana",
+  bridge: $bridge_contract
+)
+
+$destination_wallets = $cross_chain_trace.destination_wallets
+$fund_movements = $cross_chain_trace.all_movements
+
+**Action:**
+RETURN {forensics: "Cross-Chain Bridge Exploit Tracing", exploit_tx: $exploit_tx_source_chain, bridge: $bridge_contract, stolen_amount_usd: $exploit_details.value_stolen, destination_chain: "Solana", destination_wallets: COUNT($destination_wallets), total_movements: COUNT($fund_movements), funds_recovered_pct: $cross_chain_trace.recovery_percentage, confidence: 77}
+
+---
+
+## Q5713: "Detect honeypot tokens by analyzing failed sell transaction patterns."
+
+**Expected Plan:**
+[TIME: ~80s] [COST: ~0.013 SOL] [CONFIDENCE: 88%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_TRANSACTIONS, ANALYZE_FAILED_SELLS
+
+**Main Branch:**
+$token_mint = "..."
+
+$all_txs = GET_TOKEN_TRANSACTIONS(token: $token_mint, period: "30d")
+
+$sell_attempts = FILTER($all_txs, tx => tx.transaction_type == "sell")
+
+$failed_sells = FILTER($sell_attempts, tx => tx.status == "failed")
+
+$failure_analysis = ANALYZE_FAILED_SELLS(
+  failed_txs: $failed_sells,
+  check_reasons: ["transfer_disabled", "high_sell_tax", "blacklist", "max_sell_limit"]
+)
+
+$honeypot_score = ($failed_sells.count / $sell_attempts.count) * 100
+
+**Decision Point:** Classify honeypot risk
+  BRANCH A ($honeypot_score > 80 && $failure_analysis.transfer_disabled):
+    $verdict = "Definite Honeypot"
+    $risk = "Critical"
+  BRANCH B ($honeypot_score > 50):
+    $verdict = "Likely Honeypot"
+    $risk = "High"
+  BRANCH C ($honeypot_score > 20):
+    $verdict = "Possible Restrictions"
+    $risk = "Medium"
+  BRANCH D (default):
+    $verdict = "Normal Token"
+    $risk = "Low"
+
+**Action:**
+RETURN {forensics: "Honeypot Token Detection", token: $token_mint, total_sell_attempts: COUNT($sell_attempts), failed_sells: COUNT($failed_sells), failure_rate_pct: $honeypot_score, failure_reasons: $failure_analysis.reasons, verdict: $verdict, risk_level: $risk, confidence: 88}
+
+---
+
+## Q5714: "Investigate smart contract upgrade backdoors inserted via malicious governance proposals."
+
+**Expected Plan:**
+[TIME: ~100s] [COST: ~0.016 SOL] [CONFIDENCE: 75%]
+
+**Available Tools:**
+From Standard Library: GET_GOVERNANCE_PROPOSALS, ANALYZE_PROPOSAL_CODE_CHANGES
+
+**Main Branch:**
+$dao_program = "..."
+
+$all_proposals = GET_GOVERNANCE_PROPOSALS(
+  dao: $dao_program,
+  status: "executed",
+  period: "180d"
+)
+
+$upgrade_proposals = FILTER($all_proposals, p => p.proposal_type == "program_upgrade")
+
+$code_change_analysis = MAP($upgrade_proposals, proposal => {
+  RETURN ANALYZE_PROPOSAL_CODE_CHANGES(
+    proposal: proposal,
+    check_for: ["new_admin_functions", "backdoor_patterns", "emergency_withdrawals"]
+  )
+})
+
+$malicious_proposals = FILTER($code_change_analysis, analysis => analysis.risk_score > 0.7)
+
+**Action:**
+RETURN {forensics: "Governance Backdoor Investigation", dao: $dao_program, total_proposals: COUNT($all_proposals), upgrade_proposals: COUNT($upgrade_proposals), suspicious_upgrades: COUNT($malicious_proposals), malicious_proposals: $malicious_proposals, confidence: 75}
+
+---
+
+## Q5715: "Analyze liquidation bot competition and potential collusion patterns."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 80%]
+
+**Available Tools:**
+From Standard Library: FIND_LIQUIDATION_BOTS, ANALYZE_BOT_COMPETITION
+
+**Main Branch:**
+$lending_protocol = "Solend"
+
+$liquidation_bots = FIND_LIQUIDATION_BOTS(
+  protocol: $lending_protocol,
+  period: "30d",
+  min_liquidations: 10
+)
+
+$competition_analysis = ANALYZE_BOT_COMPETITION(
+  bots: $liquidation_bots,
+  check_for: ["overlapping_targets", "coordinated_timing", "profit_sharing_patterns"]
+)
+
+$collusion_detected = $competition_analysis.collusion_score > 0.6
+
+**Action:**
+RETURN {forensics: "Liquidation Bot Analysis", protocol: $lending_protocol, active_bots: COUNT($liquidation_bots), total_liquidations: SUM(MAP($liquidation_bots, b => b.liquidation_count)), collusion_detected: $collusion_detected, collusion_score: $competition_analysis.collusion_score, suspected_cartel_size: COUNT($competition_analysis.potential_cartel_members), confidence: 80}
+
+---
+
+## Q5716: "Detect NFT metadata manipulation attacks where images/attributes are changed post-mint."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 84%]
+
+**Available Tools:**
+From Standard Library: GET_NFT_METADATA_HISTORY, DETECT_METADATA_CHANGES
+
+**Main Branch:**
+$nft_collection = "..."
+
+$all_nfts = GET_COLLECTION_NFTS(collection: $nft_collection, sample_size: 1000)
+
+$metadata_changes = MAP($all_nfts, nft => {
+  $history = GET_NFT_METADATA_HISTORY(nft: nft.mint)
+  RETURN DETECT_METADATA_CHANGES(
+    history: $history,
+    check_for: ["image_url_change", "attribute_modification", "suspicious_timing"]
+  )
+})
+
+$manipulated_nfts = FILTER($metadata_changes, change => change.manipulation_detected)
+
+**Action:**
+RETURN {forensics: "NFT Metadata Manipulation", collection: $nft_collection, nfts_checked: COUNT($all_nfts), manipulated_nfts: COUNT($manipulated_nfts), manipulation_rate_pct: (COUNT($manipulated_nfts) / COUNT($all_nfts)) * 100, common_manipulation_types: GROUP_BY($manipulated_nfts, m => m.manipulation_type), confidence: 84}
+
+---
+
+## Q5717: "Investigate validator MEV extraction bias toward affiliated protocols."
+
+**Expected Plan:**
+[TIME: ~105s] [COST: ~0.017 SOL] [CONFIDENCE: 78%]
+
+**Available Tools:**
+From Standard Library: GET_VALIDATOR_BLOCKS, ANALYZE_MEV_EXTRACTION
+
+**Main Branch:**
+$validator_identity = "..."
+
+$validator_blocks = GET_VALIDATOR_BLOCKS(
+  validator: $validator_identity,
+  period: "30d"
+)
+
+$mev_analysis = ANALYZE_MEV_EXTRACTION(
+  blocks: $validator_blocks,
+  check_for: ["protocol_favoritism", "tx_ordering_bias", "affiliated_bot_preference"]
+)
+
+$affiliated_protocols = $mev_analysis.protocols_with_preferential_treatment
+
+**Decision Point:** Evaluate bias severity
+  BRANCH A (COUNT($affiliated_protocols) > 3 && $mev_analysis.bias_score > 0.7):
+    $verdict = "Significant bias detected"
+    $severity = "High"
+  BRANCH B (COUNT($affiliated_protocols) > 0):
+    $verdict = "Some bias detected"
+    $severity = "Medium"
+  BRANCH C (default):
+    $verdict = "No significant bias"
+    $severity = "Low"
+
+**Action:**
+RETURN {forensics: "Validator MEV Bias Investigation", validator: $validator_identity, blocks_analyzed: COUNT($validator_blocks), affiliated_protocols: $affiliated_protocols, bias_score: $mev_analysis.bias_score, verdict: $verdict, severity: $severity, confidence: 78}
+
+---
+
+## Q5718: "Trace phishing attack proceeds from fake airdrop sites to final cash-out points."
+
+**Expected Plan:**
+[TIME: ~90s] [COST: ~0.014 SOL] [CONFIDENCE: 82%]
+
+**Available Tools:**
+From Standard Library: IDENTIFY_PHISHING_VICTIMS, TRACE_STOLEN_ASSETS
+
+**Main Branch:**
+$phishing_contract = "..."
+
+$victims = IDENTIFY_PHISHING_VICTIMS(
+  contract: $phishing_contract,
+  period: "14d"
+)
+
+$stolen_assets = MAP($victims, victim => victim.assets_lost)
+
+$trace_results = TRACE_STOLEN_ASSETS(
+  assets: FLATTEN($stolen_assets),
+  max_hops: 15,
+  identify_cashout: true
+)
+
+$cashout_points = $trace_results.identified_cashout_locations
+
+**Action:**
+RETURN {forensics: "Phishing Attack Tracing", phishing_contract: $phishing_contract, total_victims: COUNT($victims), total_stolen_usd: SUM(MAP($stolen_assets, a => a.value_usd)), trace_successful: $trace_results.success, cashout_points: $cashout_points, exchanges_identified: MAP($cashout_points, c => c.exchange_name), confidence: 82}
+
+---
+
+## Q5719: "Detect sandwich attack patterns and identify systematic sandwiching bots."
+
+**Expected Plan:**
+[TIME: ~100s] [COST: ~0.016 SOL] [CONFIDENCE: 85%]
+
+**Available Tools:**
+From Standard Library: GET_DEX_TRANSACTIONS, DETECT_SANDWICH_ATTACKS
+
+**Main Branch:**
+$dex = "Raydium"
+$time_period = {start: 1727000000, end: 1728000000}
+
+$all_dex_txs = GET_DEX_TRANSACTIONS(
+  dex: $dex,
+  period: $time_period,
+  tx_types: ["swap"]
+)
+
+$sandwich_analysis = DETECT_SANDWICH_ATTACKS(
+  transactions: $all_dex_txs,
+  detection_window_slots: 2
+)
+
+$sandwich_bots = GROUP_BY($sandwich_analysis.sandwiches, s => s.attacker_wallet)
+
+$systematic_bots = FILTER($sandwich_bots, bot => COUNT(bot.sandwiches) > 100)
+
+**Action:**
+RETURN {forensics: "Sandwich Attack Detection", dex: $dex, period_days: 30, total_sandwiches: COUNT($sandwich_analysis.sandwiches), unique_attackers: COUNT($sandwich_bots), systematic_bots: COUNT($systematic_bots), total_extracted_sol: SUM(MAP($sandwich_analysis.sandwiches, s => s.profit_sol)), top_bot: MAX_BY($systematic_bots, b => SUM(MAP(b.sandwiches, s => s.profit_sol))), confidence: 85}
+
+---
+
+## Q5720: "Analyze token vesting contract bypasses where locked tokens are accessed early."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.013 SOL] [CONFIDENCE: 81%]
+
+**Available Tools:**
+From Standard Library: GET_VESTING_CONTRACTS, DETECT_EARLY_WITHDRAWALS
+
+**Main Branch:**
+$vesting_program = "..."
+
+$all_vesting_contracts = GET_VESTING_CONTRACTS(program: $vesting_program)
+
+$early_withdrawal_analysis = MAP($all_vesting_contracts, contract => {
+  RETURN DETECT_EARLY_WITHDRAWALS(
+    contract: contract,
+    check_methods: ["exploit", "admin_override", "contract_bug"]
+  )
+})
+
+$bypassed_contracts = FILTER($early_withdrawal_analysis, analysis => analysis.early_withdrawal_detected)
+
+$total_unlocked_early = SUM(MAP($bypassed_contracts, c => c.amount_withdrawn_early))
+
+**Action:**
+RETURN {forensics: "Vesting Contract Bypass Detection", vesting_program: $vesting_program, total_contracts: COUNT($all_vesting_contracts), contracts_bypassed: COUNT($bypassed_contracts), total_unlocked_early: $total_unlocked_early, bypass_methods: GROUP_BY($bypassed_contracts, c => c.bypass_method), confidence: 81}
+
+---
+
+## Q5721: "Investigate coordinated governance attacks via flash-loaned voting power."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 79%]
+
+**Available Tools:**
+From Standard Library: GET_GOVERNANCE_VOTES, DETECT_FLASH_LOAN_VOTING
+
+**Main Branch:**
+$dao = "..."
+$proposal_id = "..."
+
+$all_votes = GET_GOVERNANCE_VOTES(
+  dao: $dao,
+  proposal: $proposal_id
+)
+
+$flash_loan_voting_analysis = DETECT_FLASH_LOAN_VOTING(
+  votes: $all_votes,
+  check_patterns: ["borrow_vote_return", "voting_power_spike", "same_block_borrowing"]
+)
+
+$flash_loan_votes = $flash_loan_voting_analysis.identified_flash_votes
+
+$attack_success = $flash_loan_voting_analysis.changed_outcome
+
+**Action:**
+RETURN {forensics: "Flash Loan Governance Attack", dao: $dao, proposal: $proposal_id, total_votes: COUNT($all_votes), flash_loan_votes: COUNT($flash_loan_votes), flash_loan_voting_power: SUM(MAP($flash_loan_votes, v => v.voting_power)), attack_changed_outcome: $attack_success, confidence: 79}
+
+---
+
+## Q5722: "Detect token supply auditing failures by comparing on-chain supply with claimed tokenomics."
+
+**Expected Plan:**
+[TIME: ~70s] [COST: ~0.011 SOL] [CONFIDENCE: 87%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_SUPPLY, GET_TOKENOMICS_DOCUMENTATION
+
+**Main Branch:**
+$token_mint = "..."
+
+$onchain_supply = GET_TOKEN_SUPPLY(token: $token_mint)
+
+$claimed_tokenomics = GET_TOKENOMICS_DOCUMENTATION(
+  token: $token_mint,
+  sources: ["whitepaper", "website", "social_media"]
+)
+
+$supply_discrepancy = ABS($onchain_supply.total - $claimed_tokenomics.stated_total)
+$discrepancy_pct = ($supply_discrepancy / $claimed_tokenomics.stated_total) * 100
+
+**Decision Point:** Evaluate discrepancy severity
+  BRANCH A ($discrepancy_pct > 10):
+    $verdict = "Major tokenomics discrepancy"
+    $risk = "High"
+  BRANCH B ($discrepancy_pct > 2):
+    $verdict = "Minor tokenomics mismatch"
+    $risk = "Medium"
+  BRANCH C (default):
+    $verdict = "Tokenomics match on-chain data"
+    $risk = "Low"
+
+**Action:**
+RETURN {forensics: "Tokenomics Audit", token: $token_mint, onchain_supply: $onchain_supply.total, claimed_supply: $claimed_tokenomics.stated_total, discrepancy: $supply_discrepancy, discrepancy_pct: $discrepancy_pct, verdict: $verdict, risk_level: $risk, confidence: 87}
+
+---
+
+## Q5723: "Analyze cross-protocol arbitrage bot networks and their shared infrastructure."
+
+**Expected Plan:**
+[TIME: ~110s] [COST: ~0.018 SOL] [CONFIDENCE: 76%]
+
+**Available Tools:**
+From Standard Library: FIND_ARBITRAGE_BOTS, BUILD_BOT_NETWORK_GRAPH
+
+**Main Branch:**
+$protocols = ["Raydium", "Orca", "Phoenix", "Serum"]
+
+$arb_bots = FIND_ARBITRAGE_BOTS(
+  protocols: $protocols,
+  period: "30d",
+  min_trades: 50
+)
+
+$network_graph = BUILD_BOT_NETWORK_GRAPH(
+  bots: $arb_bots,
+  link_by: ["shared_funding", "similar_strategies", "coordinated_timing", "common_rpc"]
+)
+
+$bot_clusters = $network_graph.identified_clusters
+
+**Action:**
+RETURN {forensics: "Arbitrage Bot Network Analysis", protocols_monitored: COUNT($protocols), total_arb_bots: COUNT($arb_bots), bot_clusters: COUNT($bot_clusters), largest_cluster_size: MAX(MAP($bot_clusters, c => COUNT(c.bots))), shared_infrastructure_evidence: $network_graph.infrastructure_overlap, confidence: 76}
+
+---
+
+## Q5724: "Investigate NFT royalty bypass techniques and measure ecosystem royalty evasion."
+
+**Expected Plan:**
+[TIME: ~90s] [COST: ~0.014 SOL] [CONFIDENCE: 83%]
+
+**Available Tools:**
+From Standard Library: GET_NFT_SALES, DETECT_ROYALTY_BYPASS
+
+**Main Branch:**
+$collection = "..."
+
+$all_sales = GET_NFT_SALES(
+  collection: $collection,
+  period: "60d"
+)
+
+$royalty_analysis = MAP($all_sales, sale => {
+  RETURN DETECT_ROYALTY_BYPASS(
+    sale: sale,
+    expected_royalty_pct: $collection.royalty_percentage,
+    bypass_methods: ["p2p_transfer", "zero_royalty_marketplace", "fake_sale"]
+  )
+})
+
+$bypassed_sales = FILTER($royalty_analysis, a => a.royalty_paid < a.expected_royalty * 0.5)
+
+$lost_royalties_sol = SUM(MAP($bypassed_sales, s => s.expected_royalty - s.royalty_paid))
+
+**Action:**
+RETURN {forensics: "NFT Royalty Evasion Analysis", collection: $collection, total_sales: COUNT($all_sales), bypassed_sales: COUNT($bypassed_sales), bypass_rate_pct: (COUNT($bypassed_sales) / COUNT($all_sales)) * 100, lost_royalties_sol: $lost_royalties_sol, common_bypass_methods: GROUP_BY($bypassed_sales, s => s.bypass_method), confidence: 83}
+
+---
+
+## Q5725: "Detect automated trading bot failures that result in significant losses."
+
+**Expected Plan:**
+[TIME: ~80s] [COST: ~0.013 SOL] [CONFIDENCE: 82%]
+
+**Available Tools:**
+From Standard Library: IDENTIFY_TRADING_BOTS, ANALYZE_BOT_PERFORMANCE
+
+**Main Branch:**
+$time_period = {start: 1727000000, end: 1728000000}
+
+$trading_bots = IDENTIFY_TRADING_BOTS(
+  period: $time_period,
+  min_trades: 100,
+  bot_indicators: ["high_frequency", "algorithmic_patterns"]
+)
+
+$performance_analysis = MAP($trading_bots, bot => {
+  RETURN ANALYZE_BOT_PERFORMANCE(
+    bot_wallet: bot.wallet,
+    trades: bot.trades,
+    detect_failures: true
+  )
+})
+
+$failed_bots = FILTER($performance_analysis, p => p.total_loss_sol > 10)
+
+**Action:**
+RETURN {forensics: "Trading Bot Failure Analysis", period_days: 30, total_bots: COUNT($trading_bots), failed_bots: COUNT($failed_bots), total_bot_losses_sol: SUM(MAP($failed_bots, b => b.total_loss_sol)), common_failure_reasons: GROUP_BY($failed_bots, b => b.failure_reason), confidence: 82}
+
+---
+
+## Q5726: "Investigate token migration scams where new tokens are not equivalent to old tokens."
+
+**Expected Plan:**
+[TIME: ~85s] [COST: ~0.014 SOL] [CONFIDENCE: 84%]
+
+**Available Tools:**
+From Standard Library: GET_TOKEN_MIGRATION_EVENTS, VERIFY_MIGRATION_FAIRNESS
+
+**Main Branch:**
+$old_token = "..."
+$new_token = "..."
+
+$migration_data = GET_TOKEN_MIGRATION_EVENTS(
+  old_token: $old_token,
+  new_token: $new_token
+)
+
+$fairness_analysis = VERIFY_MIGRATION_FAIRNESS(
+  migration: $migration_data,
+  check_for: ["incorrect_ratio", "missing_holders", "dev_allocation_increase"]
+)
+
+$scam_indicators = {
+  unfair_ratio: $fairness_analysis.actual_ratio != $fairness_analysis.announced_ratio,
+  holders_excluded: $fairness_analysis.unmigrated_holders > 0.05 * $fairness_analysis.total_old_holders,
+  dev_supply_increase: $fairness_analysis.new_dev_allocation > $fairness_analysis.old_dev_allocation
+}
+
+$scam_score = SUM([
+  $scam_indicators.unfair_ratio ? 1 : 0,
+  $scam_indicators.holders_excluded ? 1 : 0,
+  $scam_indicators.dev_supply_increase ? 1 : 0
+])
+
+**Action:**
+RETURN {forensics: "Token Migration Scam Investigation", old_token: $old_token, new_token: $new_token, announced_ratio: $fairness_analysis.announced_ratio, actual_ratio: $fairness_analysis.actual_ratio, scam_indicators: $scam_indicators, scam_score: $scam_score, verdict: $scam_score >= 2 ? "Likely Scam" : "Appears Legitimate", confidence: 84}
+
+---
+
+## Q5727: "Analyze staking pool validator selection manipulation for MEV extraction advantages."
+
+**Expected Plan:**
+[TIME: ~95s] [COST: ~0.015 SOL] [CONFIDENCE: 78%]
+
+**Available Tools:**
+From Standard Library: GET_STAKING_POOL_VALIDATORS, ANALYZE_VALIDATOR_SELECTION_BIAS
+
+**Main Branch:**
+$staking_pool = "..."
+
+$validator_selections = GET_STAKING_POOL_VALIDATORS(
+  pool: $staking_pool,
+  period: "90d",
+  include_history: true
+)
+
+$bias_analysis = ANALYZE_VALIDATOR_SELECTION_BIAS(
+  selections: $validator_selections,
+  check_for: ["mev_optimized_only", "affiliated_validators", "unfair_rotation"]
+)
+
+$biased_selections = $bias_analysis.bias_detected
+
+**Decision Point:** Evaluate manipulation
+  BRANCH A ($bias_analysis.mev_optimization_bias > 0.7):
+    $verdict = "Validator selection manipulated for MEV extraction"
+  BRANCH B ($bias_analysis.affiliation_bias > 0.6):
+    $verdict = "Validator selection favors affiliated operators"
+  BRANCH C (default):
+    $verdict = "Validator selection appears fair"
+
+**Action:**
+RETURN {forensics: "Validator Selection Manipulation", staking_pool: $staking_pool, total_validators: COUNT($validator_selections), bias_detected: $biased_selections, mev_bias_score: $bias_analysis.mev_optimization_bias, affiliation_bias_score: $bias_analysis.affiliation_bias, verdict: $verdict, confidence: 78}
+
+---
+
+## Q5728: "Detect token bundler exploits where multiple token operations are combined for manipulation."
+
+**Expected Plan:**
+[TIME: ~90s] [COST: ~0.014 SOL] [CONFIDENCE: 80%]
+
+**Available Tools:**
+From Standard Library: GET_BUNDLED_TRANSACTIONS, ANALYZE_BUNDLE_MANIPULATION
+
+**Main Branch:**
+$token_mint = "..."
+
+$bundled_txs = GET_BUNDLED_TRANSACTIONS(
+  token: $token_mint,
+  period: "30d",
+  bundle_source: "Jito"
+)
+
+$manipulation_analysis = MAP($bundled_txs, bundle => {
+  RETURN ANALYZE_BUNDLE_MANIPULATION(
+    bundle: bundle,
+    check_for: ["sandwich_within_bundle", "flash_loan_abuse", "price_oracle_manipulation"]
+  )
+})
+
+$exploitative_bundles = FILTER($manipulation_analysis, a => a.manipulation_score > 0.7)
+
+**Action:**
+RETURN {forensics: "Token Bundler Exploit Detection", token: $token_mint, total_bundles: COUNT($bundled_txs), exploitative_bundles: COUNT($exploitative_bundles), exploitation_rate_pct: (COUNT($exploitative_bundles) / COUNT($bundled_txs)) * 100, total_extracted_value_sol: SUM(MAP($exploitative_bundles, e => e.extracted_value)), common_exploit_types: GROUP_BY($exploitative_bundles, e => e.manipulation_type), confidence: 80}
+
+---
+
+## Q5729: "Investigate MEV searcher collusion rings that coordinate to avoid competition."
+
+**Expected Plan:**
+[TIME: ~105s] [COST: ~0.017 SOL] [CONFIDENCE: 77%]
+
+**Available Tools:**
+From Standard Library: FIND_MEV_SEARCHERS, DETECT_SEARCHER_COLLUSION
+
+**Main Branch:**
+$time_period = {start: 1727000000, end: 1728000000}
+
+$mev_searchers = FIND_MEV_SEARCHERS(
+  period: $time_period,
+  min_profit: 5,
+  strategies: ["arbitrage", "liquidation", "sandwich"]
+)
+
+$collusion_analysis = DETECT_SEARCHER_COLLUSION(
+  searchers: $mev_searchers,
+  indicators: ["non_competing_targets", "coordinated_timing", "profit_sharing", "shared_infrastructure"]
+)
+
+$collusion_rings = $collusion_analysis.identified_rings
+
+**Action:**
+RETURN {forensics: "MEV Searcher Collusion Investigation", period_days: 30, total_searchers: COUNT($mev_searchers), collusion_rings_found: COUNT($collusion_rings), largest_ring_size: MAX(MAP($collusion_rings, r => COUNT(r.members))), total_coordinated_profit_sol: SUM(MAP($collusion_rings, r => r.total_profit)), collusion_evidence_strength: $collusion_analysis.confidence_score, confidence: 77}
+
