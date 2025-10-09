@@ -7,7 +7,7 @@
 
 ---
 
-## Q901: "How can you identify and track a cluster of wallets belonging to a single high-profile influencer, and what does their token accumulation and disposal pattern reveal about their market strategy and its impact on their followers?"
+## Q5901: "How can you identify and track a cluster of wallets belonging to a single high-profile influencer, and what does their token accumulation and disposal pattern reveal about their market strategy and its impact on their followers?"
 
 **Expected Plan:**
 
@@ -96,7 +96,7 @@ RETURN {
 
 ---
 
-## Q902: "How can you model the potential for a liquidation cascade on a specific lending protocol for a given token, identifying the key collateral thresholds and liquidation bots involved?"
+## Q5902: "How can you model the potential for a liquidation cascade on a specific lending protocol for a given token, identifying the key collateral thresholds and liquidation bots involved?"
 
 **Expected Plan:**
 
@@ -193,7 +193,7 @@ RETURN {
 
 ---
 
-## Q903: "What is the most profitable MEV strategy currently targeting the WIF/SOL pair on Raydium, and what is its net profitability after accounting for JITO bundle costs and failed attempts?"
+## Q5903: "What is the most profitable MEV strategy currently targeting the WIF/SOL pair on Raydium, and what is its net profitability after accounting for JITO bundle costs and failed attempts?"
 
 **Expected Plan:**
 
@@ -269,7 +269,7 @@ RETURN {
 
 ---
 
-## Q904: "How can you analyze the first 100 blocks of a new memecoin launch to identify sniper bots, measure their profitability, and differentiate them from organic buyers?"
+## Q5904: "How can you analyze the first 100 blocks of a new memecoin launch to identify sniper bots, measure their profitability, and differentiate them from organic buyers?"
 
 **Expected Plan:**
 
@@ -345,7 +345,7 @@ RETURN {
 
 ---
 
-## Q905: "How can you detect sophisticated NFT wash trading rings that use multiple wallets, obfuscated funding loops, and marketplace manipulation to artificially inflate a collection's volume and floor price?"
+## Q5905: "How can you detect sophisticated NFT wash trading rings that use multiple wallets, obfuscated funding loops, and marketplace manipulation to artificially inflate a collection's volume and floor price?"
 
 **Expected Plan:**
 
@@ -414,7 +414,7 @@ RETURN {
 
 ---
 
-## Q906: "How can you correlate on-chain token velocity and new holder growth with off-chain social media sentiment (e.g., Twitter/X, Telegram) to quantify the 'narrative velocity' of a memecoin in real-time?"
+## Q5906: "How can you correlate on-chain token velocity and new holder growth with off-chain social media sentiment (e.g., Twitter/X, Telegram) to quantify the 'narrative velocity' of a memecoin in real-time?"
 
 **Expected Plan:**
 
@@ -484,7 +484,7 @@ RETURN {
 
 ---
 
-## Q907: "How can you analyze wallet funding patterns, transaction timings, and on-chain activity across thousands of wallets to identify and score large-scale Sybil clusters farming a potential airdrop?"
+## Q5907: "How can you analyze wallet funding patterns, transaction timings, and on-chain activity across thousands of wallets to identify and score large-scale Sybil clusters farming a potential airdrop?"
 
 **Expected Plan:**
 
@@ -555,7 +555,7 @@ RETURN {
 
 ---
 
-## Q908: "How does the token's holder distribution evolve when modeled with principles from evolutionary game theory, predicting which holder strategies (HODL, trade, farm) are evolutionarily stable?"
+## Q5908: "How does the token's holder distribution evolve when modeled with principles from evolutionary game theory, predicting which holder strategies (HODL, trade, farm) are evolutionarily stable?"
 
 **Expected Plan:**
 
@@ -616,7 +616,7 @@ RETURN {
 
 ---
 
-## Q909: "Applying fractal geometry, are there self-similar patterns in the token's price chart across different time scales (e.g., 1-minute, 1-hour, 1-day), and what does the fractal dimension suggest about its volatility and predictability?"
+## Q5909: "Applying fractal geometry, are there self-similar patterns in the token's price chart across different time scales (e.g., 1-minute, 1-hour, 1-day), and what does the fractal dimension suggest about its volatility and predictability?"
 
 **Expected Plan:**
 
@@ -678,7 +678,7 @@ RETURN {
 
 ---
 
-## Q910: "Using Schelling Point analysis, what are the most likely implicit coordination points for traders of the token 'WIF' during a market panic, such as specific psychological price levels or moving averages?"
+## Q5910: "Using Schelling Point analysis, what are the most likely implicit coordination points for traders of the token 'WIF' during a market panic, such as specific psychological price levels or moving averages?"
 
 **Expected Plan:**
 
@@ -744,7 +744,7 @@ RETURN {
 
 ---
 
-## Q921: "Map a suspected Sybil cluster by analyzing SOL and token transfer patterns between wallets. Which accounts are linked by transfers within 5/15/30/60 minutes, and what's the confidence score for each cluster?"
+## Q5921: "Map a suspected Sybil cluster by analyzing SOL and token transfer patterns between wallets. Which accounts are linked by transfers within 5/15/30/60 minutes, and what's the confidence score for each cluster?"
 
 **Expected Plan:**
 
@@ -795,7 +795,7 @@ RETURN {
 
 ---
 
-## Q922: "Trace the source of funds for the top 50 delegators to a suspicious validator. Are they funded from a single source, mixer, or CEX within 48 hours of delegation?"
+## Q5922: "Trace the source of funds for the top 50 delegators to a suspicious validator. Are they funded from a single source, mixer, or CEX within 48 hours of delegation?"
 
 **Expected Plan:**
 
@@ -856,7 +856,7 @@ RETURN {
 
 ---
 
-## Q923: "Detect a memecoin rug by analyzing the deployer's wallet cluster. Map all accounts that received tokens from the deployer within 1 hour of launch and trace their subsequent sell patterns."
+## Q5923: "Detect a memecoin rug by analyzing the deployer's wallet cluster. Map all accounts that received tokens from the deployer within 1 hour of launch and trace their subsequent sell patterns."
 
 **Expected Plan:**
 
@@ -922,7 +922,7 @@ RETURN {
 
 ---
 
-## Q924: "Auto-cluster wallets by CEX deposit patterns. Which wallets deposit to the same CEX address within 5-minute windows, suggesting coordinated cashout?"
+## Q5924: "Auto-cluster wallets by CEX deposit patterns. Which wallets deposit to the same CEX address within 5-minute windows, suggesting coordinated cashout?"
 
 **Expected Plan:**
 
@@ -984,7 +984,7 @@ RETURN {
 
 ---
 
-## Q925: "Investigate a token presale scam by mapping all ETH/SOL deposits to the presale wallet and identifying which wallets never received tokens after the 'launch'."
+## Q5925: "Investigate a token presale scam by mapping all ETH/SOL deposits to the presale wallet and identifying which wallets never received tokens after the 'launch'."
 
 **Expected Plan:**
 
@@ -1052,7 +1052,7 @@ RETURN {
 
 ---
 
-## Q926: "Map an airdrop farming operation by clustering wallets that perform identical sequences of protocol interactions (same contracts, same order, similar timing) across 100+ accounts."
+## Q5926: "Map an airdrop farming operation by clustering wallets that perform identical sequences of protocol interactions (same contracts, same order, similar timing) across 100+ accounts."
 
 **Expected Plan:**
 
@@ -1131,7 +1131,7 @@ RETURN {
 
 ---
 
-## Q927: "Detect a validator vote-buying scheme by analyzing if delegators receive SOL kickbacks within 24 hours of staking, and map the flow back to the validator's associated wallets."
+## Q5927: "Detect a validator vote-buying scheme by analyzing if delegators receive SOL kickbacks within 24 hours of staking, and map the flow back to the validator's associated wallets."
 
 **Expected Plan:**
 
@@ -1205,7 +1205,7 @@ RETURN {
 
 ---
 
-## Q928: "Investigate a wash trading ring by building a transaction graph and identifying circular trading paths where the same NFT/token returns to the original seller within 72 hours through 2-5 intermediaries."
+## Q5928: "Investigate a wash trading ring by building a transaction graph and identifying circular trading paths where the same NFT/token returns to the original seller within 72 hours through 2-5 intermediaries."
 
 **Expected Plan:**
 
@@ -1282,7 +1282,7 @@ RETURN {
 
 ---
 
-## Q929: "Trace a memecoin deployer's history by finding all previous tokens they've launched (via similar funding sources and deployment patterns) and calculate their historical rug rate."
+## Q5929: "Trace a memecoin deployer's history by finding all previous tokens they've launched (via similar funding sources and deployment patterns) and calculate their historical rug rate."
 
 **Expected Plan:**
 
@@ -1368,7 +1368,7 @@ RETURN {
 
 ---
 
-## Q930: "Auto-map a money laundering network by identifying wallets that receive funds from exploits/scams, split them across multiple intermediaries, and consolidate at CEX deposits—all within coordinated time windows."
+## Q5930: "Auto-map a money laundering network by identifying wallets that receive funds from exploits/scams, split them across multiple intermediaries, and consolidate at CEX deposits—all within coordinated time windows."
 
 **Expected Plan:**
 
@@ -1456,7 +1456,7 @@ RETURN {
 
 ---
 
-## Q931: "Detect a 'cross-chain rug coordination' where the same team rugs on Solana and Ethereum simultaneously. Map wallet connections across both chains and identify the bridge transactions."
+## Q5931: "Detect a 'cross-chain rug coordination' where the same team rugs on Solana and Ethereum simultaneously. Map wallet connections across both chains and identify the bridge transactions."
 
 **Expected Plan:**
 
@@ -1517,7 +1517,7 @@ RETURN {
 
 ---
 
-## Q932: "Investigate a 'token metadata manipulation' attack where scammers change token name/symbol after launch to impersonate legitimate projects. Track all metadata changes and victim trades."
+## Q5932: "Investigate a 'token metadata manipulation' attack where scammers change token name/symbol after launch to impersonate legitimate projects. Track all metadata changes and victim trades."
 
 **Expected Plan:**
 
@@ -1571,7 +1571,7 @@ RETURN {
 
 ---
 
-## Q933: "Map a 'coordinated short attack' where a group spreads FUD while simultaneously shorting a token on prediction markets. Correlate social media timestamps with short positions."
+## Q5933: "Map a 'coordinated short attack' where a group spreads FUD while simultaneously shorting a token on prediction markets. Correlate social media timestamps with short positions."
 
 **Expected Plan:**
 
@@ -1638,7 +1638,7 @@ RETURN {
 
 ---
 
-## Q934: "Detect a 'liquidity provision Sybil attack' where one entity controls 95%+ of a pool through multiple wallets to manipulate prices and fees."
+## Q5934: "Detect a 'liquidity provision Sybil attack' where one entity controls 95%+ of a pool through multiple wallets to manipulate prices and fees."
 
 **Expected Plan:**
 
@@ -1697,7 +1697,7 @@ RETURN {
 
 ---
 
-## Q935: "Trace a 'ransomware payment' in crypto by identifying the victim's wallet, ransom amount, and following funds through privacy layers to final cashout."
+## Q5935: "Trace a 'ransomware payment' in crypto by identifying the victim's wallet, ransom amount, and following funds through privacy layers to final cashout."
 
 **Expected Plan:**
 
@@ -1752,7 +1752,7 @@ RETURN {
 
 ---
 
-## Q936: "Investigate a 'validator MEV cartel' where multiple validators coordinate to maximize MEV extraction and share profits. Map the cartel structure and profit distribution."
+## Q5936: "Investigate a 'validator MEV cartel' where multiple validators coordinate to maximize MEV extraction and share profits. Map the cartel structure and profit distribution."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 81%]
@@ -1770,7 +1770,7 @@ RETURN {investigation: "Validator MEV Cartel", cartel_size: COUNT($coordination.
 
 ---
 
-## Q937: "Map 'vote buying' in a DAO by detecting wallets that received tokens immediately before voting, then returned them after."
+## Q5937: "Map 'vote buying' in a DAO by detecting wallets that received tokens immediately before voting, then returned them after."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 86%]
@@ -1788,7 +1788,7 @@ RETURN {investigation: "DAO Vote Buying", rented_vote_count: COUNT($vote_buying.
 
 ---
 
-## Q938: "Detect 'NFT royalty evasion' schemes where collections are traded through contracts that bypass creator fees."
+## Q5938: "Detect 'NFT royalty evasion' schemes where collections are traded through contracts that bypass creator fees."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -1806,7 +1806,7 @@ RETURN {investigation: "NFT Royalty Evasion", evasion_contract: $evasion.bypass_
 
 ---
 
-## Q939: "Identify a 'flash loan arbitrage bot network' by clustering bots with similar strategies, shared funding, and coordinated execution timing."
+## Q5939: "Identify a 'flash loan arbitrage bot network' by clustering bots with similar strategies, shared funding, and coordinated execution timing."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -1823,7 +1823,7 @@ RETURN {investigation: "Flash Loan Bot Network", bot_networks: COUNT($clusters),
 
 ---
 
-## Q940: "Attribute anonymous CEX deposit addresses to specific exchanges by analyzing transaction patterns, dust amounts, and sweep behaviors."
+## Q5940: "Attribute anonymous CEX deposit addresses to specific exchanges by analyzing transaction patterns, dust amounts, and sweep behaviors."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 87%]
@@ -1841,7 +1841,7 @@ RETURN {investigation: "CEX Address Attribution", identified_exchange: $attribut
 
 ---
 
-## Q941: "Detect 'AMM manipulation' via just-in-time (JIT) liquidity where LPs add liquidity for a single trade then immediately remove it."
+## Q5941: "Detect 'AMM manipulation' via just-in-time (JIT) liquidity where LPs add liquidity for a single trade then immediately remove it."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -1859,7 +1859,7 @@ RETURN {investigation: "JIT Liquidity Manipulation", jit_lp_count: COUNT(UNIQUE(
 
 ---
 
-## Q942: "Investigate a 'staking derivative exploit' where attackers manipulate the exchange rate between staked tokens and liquid staking tokens."
+## Q5942: "Investigate a 'staking derivative exploit' where attackers manipulate the exchange rate between staked tokens and liquid staking tokens."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -1877,7 +1877,7 @@ RETURN {investigation: "LST Exchange Rate Manipulation", manipulation_detected: 
 
 ---
 
-## Q943: "Map an 'oracle front-running syndicate' that monitors oracle updates and executes trades microseconds before the price feed updates on DeFi protocols."
+## Q5943: "Map an 'oracle front-running syndicate' that monitors oracle updates and executes trades microseconds before the price feed updates on DeFi protocols."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 80%]
@@ -1895,7 +1895,7 @@ RETURN {investigation: "Oracle Front-Running Syndicate", syndicate_size: COUNT($
 
 ---
 
-## Q944: "Link multiple DeFi protocol exploits to the same attacker by analyzing funding sources, code similarities, and timing patterns."
+## Q5944: "Link multiple DeFi protocol exploits to the same attacker by analyzing funding sources, code similarities, and timing patterns."
 
 **Expected Plan:**
 [TIME: ~15m] [COST: ~0.15 SOL] [CONFIDENCE: 78%]
@@ -1913,7 +1913,7 @@ RETURN {investigation: "Cross-Protocol Exploit Attribution", linked_exploits: CO
 
 ---
 
-## Q945: "Detect a 'governance attack' where an attacker borrows governance tokens via flash loans to pass a malicious proposal."
+## Q5945: "Detect a 'governance attack' where an attacker borrows governance tokens via flash loans to pass a malicious proposal."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -1931,7 +1931,7 @@ RETURN {investigation: "Flash Loan Governance Attack", attack_detected: COUNT($f
 
 ---
 
-## Q946: "Investigate 'synthetic asset manipulation' where attackers exploit pricing oracles to mint undercollateralized synthetic tokens."
+## Q5946: "Investigate 'synthetic asset manipulation' where attackers exploit pricing oracles to mint undercollateralized synthetic tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -1949,7 +1949,7 @@ RETURN {investigation: "Synthetic Asset Manipulation", undercollateralized_mints
 
 ---
 
-## Q947: "Map a 'liquidation cascade' where coordinated actors trigger mass liquidations to profit from the price impact and liquidation bonuses."
+## Q5947: "Map a 'liquidation cascade' where coordinated actors trigger mass liquidations to profit from the price impact and liquidation bonuses."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 85%]
@@ -1967,7 +1967,7 @@ RETURN {investigation: "Coordinated Liquidation Cascade", coordinated_liquidator
 
 ---
 
-## Q948: "Detect 'yield farming Sybil attacks' where one entity uses 1000+ wallets to game referral bonuses and farming rewards."
+## Q5948: "Detect 'yield farming Sybil attacks' where one entity uses 1000+ wallets to game referral bonuses and farming rewards."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 88%]
@@ -1985,7 +1985,7 @@ RETURN {investigation: "Yield Farming Sybil Attack", sybil_clusters: COUNT($sybi
 
 ---
 
-## Q949: "Investigate 'token vesting bypass' where team members exploit contract vulnerabilities to unlock tokens before the vesting schedule."
+## Q5949: "Investigate 'token vesting bypass' where team members exploit contract vulnerabilities to unlock tokens before the vesting schedule."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 86%]
@@ -2003,7 +2003,7 @@ RETURN {investigation: "Token Vesting Bypass", bypass_detected: COUNT($early_unl
 
 ---
 
-## Q950: "Trace a 'multi-sig compromise' by analyzing all signers' wallets for signs of key theft, social engineering, or insider collusion."
+## Q5950: "Trace a 'multi-sig compromise' by analyzing all signers' wallets for signs of key theft, social engineering, or insider collusion."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 77%]
@@ -2021,7 +2021,7 @@ $compromise_analysis = ANALYZE_MULTISIG_COMPROMISE(multisig: $multisig_address, 
 **Action:**
 RETURN {investigation: "Multi-Sig Compromise Forensics", compromise_type: $compromise_analysis.attack_vector, compromised_signers: $compromise_analysis.compromised_keys, stolen_amount_sol: $compromise_analysis.stolen_value, confidence: 77}
 
-## Q951: "Detect 'liquidity provider collusion' where a group of LPs coordinate to manipulate prices in a specific pool."
+## Q5951: "Detect 'liquidity provider collusion' where a group of LPs coordinate to manipulate prices in a specific pool."
 
 **Expected Plan:**
 [TIME: ~15m] [COST: ~0.1 SOL] [CONFIDENCE: 75%]
@@ -2072,7 +2072,7 @@ RETURN {
   caveats: ["Requires a robust 'isLpInteraction' and 'coordinated_lp_movements' pattern definition."]
 }
 
-## Q952: "Identify 'oracle manipulation' via flash loan attacks that target a specific DeFi protocol."
+## Q5952: "Identify 'oracle manipulation' via flash loan attacks that target a specific DeFi protocol."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 90%]
@@ -2119,7 +2119,7 @@ RETURN {
   confidence: 90
 }
 
-## Q953: "Trace funds from a 'governance attack' where malicious proposals are used to steal from a treasury."
+## Q5953: "Trace funds from a 'governance attack' where malicious proposals are used to steal from a treasury."
 
 **Expected Plan:**
 [TIME: ~20m] [COST: ~0.2 SOL] [CONFIDENCE: 85%]
@@ -2170,7 +2170,7 @@ RETURN {
   confidence: 85
 }
 
-## Q954: "Analyze the impact of a 'time-based exploit' on a lending protocol, such as exploiting a re-pricing mechanism that has a delay."
+## Q5954: "Analyze the impact of a 'time-based exploit' on a lending protocol, such as exploiting a re-pricing mechanism that has a delay."
 
 **Expected Plan:**
 [TIME: ~30m] [COST: ~0.25 SOL] [CONFIDENCE: 80%]
@@ -2227,7 +2227,7 @@ RETURN {
   confidence: 80
 }
 
-## Q955: "Detect 'NFT sleep-minting' and trace the flow of illicitly created NFTs to identify the ultimate beneficiary."
+## Q5955: "Detect 'NFT sleep-minting' and trace the flow of illicitly created NFTs to identify the ultimate beneficiary."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 95%]
@@ -2279,7 +2279,7 @@ RETURN {
   confidence: 95
 }
 
-## Q956: "Identify 'Sybil attacks' during a token airdrop by analyzing wallet creation times, funding patterns, and on-chain activity."
+## Q5956: "Identify 'Sybil attacks' during a token airdrop by analyzing wallet creation times, funding patterns, and on-chain activity."
 
 **Expected Plan:**
 [TIME: ~45m] [COST: ~0.5 SOL] [CONFIDENCE: 80%]
@@ -2337,7 +2337,7 @@ RETURN {
   confidence: 80
 }
 
-## Q957: "Analyze the 'economic viability' of a complex structured product on-chain, identifying conditions under which it becomes unprofitable or insolvent."
+## Q5957: "Analyze the 'economic viability' of a complex structured product on-chain, identifying conditions under which it becomes unprofitable or insolvent."
 
 **Expected Plan:**
 [TIME: ~1h] [COST: ~1.0 SOL] [CONFIDENCE: 70%]
@@ -2396,7 +2396,7 @@ RETURN {
   caveats: ["Model accuracy depends on the quality of the MODEL_SCENARIO tool and input parameters."]
 }
 
-## Q958: "Detect 'cross-chain MEV' attacks involving coordinated actions on Solana and another blockchain (e.g., Ethereum) to arbitrage a price difference."
+## Q5958: "Detect 'cross-chain MEV' attacks involving coordinated actions on Solana and another blockchain (e.g., Ethereum) to arbitrage a price difference."
 
 **Expected Plan:**
 [TIME: ~30m] [COST: ~0.5 SOL] [CONFIDENCE: 75%]
@@ -2457,7 +2457,7 @@ RETURN {
   caveats: ["Reliably identifying the same entity across chains is extremely difficult and often impossible without external data."]
 }
 
-## Q959: "Identify 'smart contract upgrade exploits' where a malicious upgrade is pushed to a program, and trace the subsequent flow of funds."
+## Q5959: "Identify 'smart contract upgrade exploits' where a malicious upgrade is pushed to a program, and trace the subsequent flow of funds."
 
 **Expected Plan:**
 [TIME: ~15m] [COST: ~0.1 SOL] [CONFIDENCE: 90%]
@@ -2507,7 +2507,7 @@ RETURN {
   confidence: 90
 }
 
-## Q960: "Trace the source of funds for a 'political censorship attack' on a decentralized application, where an attacker spams a platform with content to disrupt it."
+## Q5960: "Trace the source of funds for a 'political censorship attack' on a decentralized application, where an attacker spams a platform with content to disrupt it."
 
 **Expected Plan:**
 [TIME: ~25m] [COST: ~0.3 SOL] [CONFIDENCE: 70%]
@@ -2567,7 +2567,7 @@ RETURN {
 
 ---
 
-## Q961: "Design a cross-program invocation (CPI) vulnerability scanner for Solana programs."
+## Q5961: "Design a cross-program invocation (CPI) vulnerability scanner for Solana programs."
 
 **Expected Plan:**
 [TIME: ~150s] [COST: ~0.025 SOL] [CONFIDENCE: 79%]

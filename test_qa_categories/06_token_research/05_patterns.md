@@ -7,7 +7,7 @@
 
 ---
 
-## Q401: "How can I identify 'smart money' wallets that consistently buy new tokens like 'WIF' before they experience a major price pump?"
+## Q5401: "How can I identify 'smart money' wallets that consistently buy new tokens like 'WIF' before they experience a major price pump?"
 
 **Expected Plan:**
 
@@ -62,7 +62,7 @@ RETURN {
 
 ---
 
-## Q402: "What on-chain patterns indicate a large-scale accumulation of the 'PYTH' token by institutional players or whales?"
+## Q5402: "What on-chain patterns indicate a large-scale accumulation of the 'PYTH' token by institutional players or whales?"
 
 **Expected Plan:**
 
@@ -115,7 +115,7 @@ RETURN {
 
 ---
 
-## Q403: "How can I identify patterns of airdrop farming for a potential 'Kamino Finance' token by analyzing wallet interactions?"
+## Q5403: "How can I identify patterns of airdrop farming for a potential 'Kamino Finance' token by analyzing wallet interactions?"
 
 **Expected Plan:**
 
@@ -161,7 +161,7 @@ RETURN {
 
 ---
 
-## Q404: "What wallet activity patterns preceded the recent 'Tensor' (TNSR) CEX listing announcement, suggesting potential insider trading?"
+## Q5404: "What wallet activity patterns preceded the recent 'Tensor' (TNSR) CEX listing announcement, suggesting potential insider trading?"
 
 **Expected Plan:**
 
@@ -213,7 +213,7 @@ RETURN {
 
 ---
 
-## Q405: "How can I identify patterns of token distribution from the 'SharkyFi' team/investor wallets to detect if they are selling into market rallies?"
+## Q5405: "How can I identify patterns of token distribution from the 'SharkyFi' team/investor wallets to detect if they are selling into market rallies?"
 
 **Expected Plan:**
 
@@ -264,7 +264,7 @@ RETURN {
 
 ---
 
-## Q406: "What are the behavioral patterns of wallets that successfully trade Solana memecoins, and how can I find more wallets like them?"
+## Q5406: "What are the behavioral patterns of wallets that successfully trade Solana memecoins, and how can I find more wallets like them?"
 
 **Expected Plan:**
 
@@ -342,7 +342,7 @@ RETURN {
 
 ---
 
-## Q412: "Find the pattern of a 'Jito backrun' MEV, where a bot sees a large DEX swap and places a trade immediately after it in the same Jito bundle to profit from the price slippage."
+## Q5412: "Find the pattern of a 'Jito backrun' MEV, where a bot sees a large DEX swap and places a trade immediately after it in the same Jito bundle to profit from the price slippage."
 
 **Expected Plan:**
 [TIME: ~45s] [COST: ~0.005 SOL] [CONFIDENCE: 92%]
@@ -375,7 +375,7 @@ RETURN {
 
 ---
 
-## Q413: "Identify a 'funding-and-dumping' pattern where a fresh wallet is funded by a CEX, buys a large amount of a new token, and then dumps it shortly after the first pump."
+## Q5413: "Identify a 'funding-and-dumping' pattern where a fresh wallet is funded by a CEX, buys a large amount of a new token, and then dumps it shortly after the first pump."
 
 **Expected Plan:**
 [TIME: ~70s] [COST: ~0.01 SOL] [CONFIDENCE: 88%]
@@ -414,7 +414,7 @@ RETURN {
 
 ---
 
-## Q414: "Detect the pattern of a 'sandwich attack' on a specific Raydium liquidity pool."
+## Q5414: "Detect the pattern of a 'sandwich attack' on a specific Raydium liquidity pool."
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.006 SOL] [CONFIDENCE: 94%]
@@ -444,7 +444,7 @@ RETURN {
 
 ---
 
-## Q415: "Identify the pattern of 'cyclical whale dumping' for a token, where a large holder sells off a fixed amount every few days."
+## Q5415: "Identify the pattern of 'cyclical whale dumping' for a token, where a large holder sells off a fixed amount every few days."
 
 **Expected Plan:**
 [TIME: ~60s] [COST: ~0.007 SOL] [CONFIDENCE: 85%]
@@ -478,7 +478,7 @@ RETURN {
 
 ---
 
-## Q416: "Find the on-chain footprint of a 'social media influencer pump', characterized by a surge of small buys immediately following a known influencer's post."
+## Q5416: "Find the on-chain footprint of a 'social media influencer pump', characterized by a surge of small buys immediately following a known influencer's post."
 
 **Expected Plan:**
 [TIME: ~75s] [COST: ~0.01 SOL] [CONFIDENCE: 80%]
@@ -518,7 +518,7 @@ RETURN {
 
 ---
 
-## Q417: "Detect a 'stop-loss hunting' pattern where a sharp, temporary price drop triggers a cascade of liquidations or stop-loss orders, followed by an immediate recovery."
+## Q5417: "Detect a 'stop-loss hunting' pattern where a sharp, temporary price drop triggers a cascade of liquidations or stop-loss orders, followed by an immediate recovery."
 
 **Expected Plan:**
 [TIME: ~55s] [COST: ~0.006 SOL] [CONFIDENCE: 87%]
@@ -550,7 +550,7 @@ RETURN {
 
 ---
 
-## Q418: "Identify the pattern of a 'developer rug pull' on Raydium, characterized by the deployer removing liquidity shortly after launch."
+## Q5418: "Identify the pattern of a 'developer rug pull' on Raydium, characterized by the deployer removing liquidity shortly after launch."
 
 **Expected Plan:**
 [TIME: ~40s] [COST: ~0.004 SOL] [CONFIDENCE: 95%]
@@ -594,7 +594,7 @@ RETURN {
 
 ---
 
-## Q419: "Find a 'token impersonation' pattern where a scammer airdrops a fake token with the same name/symbol as a popular token to a large number of wallets."
+## Q5419: "Find a 'token impersonation' pattern where a scammer airdrops a fake token with the same name/symbol as a popular token to a large number of wallets."
 
 **Expected Plan:**
 [TIME: ~60s] [COST: ~0.007 SOL] [CONFIDENCE: 91%]
@@ -630,7 +630,7 @@ RETURN {
 
 ---
 
-## Q420: "Detect a 'flash loan arbitrage' pattern where a user borrows a large sum from a protocol like Solend, manipulates prices on a DEX, and repays the loan in the same transaction."
+## Q5420: "Detect a 'flash loan arbitrage' pattern where a user borrows a large sum from a protocol like Solend, manipulates prices on a DEX, and repays the loan in the same transaction."
 
 **Expected Plan:**
 [TIME: ~50s] [COST: ~0.005 SOL] [CONFIDENCE: 93%]
@@ -681,7 +681,7 @@ RETURN {
 
 ---
 
-## Q407: "How can I detect a 'token migration' scam pattern, where a fake token is created to trick holders of a legitimate token?"
+## Q5407: "How can I detect a 'token migration' scam pattern, where a fake token is created to trick holders of a legitimate token?"
 
 **Expected Plan:**
 
@@ -734,7 +734,7 @@ RETURN {
 
 ---
 
-## Q408: "What on-chain patterns differentiate a genuine community-driven memecoin from one manipulated by a small group of insiders?"
+## Q5408: "What on-chain patterns differentiate a genuine community-driven memecoin from one manipulated by a small group of insiders?"
 
 **Expected Plan:**
 
@@ -785,7 +785,7 @@ RETURN {
 
 ---
 
-## Q409: "How can I identify a 'slow rug' pattern, where the team gradually sells off their holdings instead of a single large liquidity pull?"
+## Q5409: "How can I identify a 'slow rug' pattern, where the team gradually sells off their holdings instead of a single large liquidity pull?"
 
 **Expected Plan:**
 
@@ -837,7 +837,7 @@ RETURN {
 
 ---
 
-## Q410: "What on-chain patterns indicate that a token's social media hype on Twitter/Telegram is artificially inflated by bots?"
+## Q5410: "What on-chain patterns indicate that a token's social media hype on Twitter/Telegram is artificially inflated by bots?"
 
 **Expected Plan:**
 
@@ -887,7 +887,7 @@ RETURN {
 
 ---
 
-## Q421: "Map a 'crypto laundering service' that accepts dirty funds and returns 'clean' crypto for a fee. Track all clients, calculate service volume, and find operator wallets."
+## Q5421: "Map a 'crypto laundering service' that accepts dirty funds and returns 'clean' crypto for a fee. Track all clients, calculate service volume, and find operator wallets."
 
 **Expected Plan:**
 
@@ -930,7 +930,7 @@ RETURN {
 
 ---
 
-## Q422: "Detect 'insider trading' on token launches by identifying wallets that buy large amounts seconds after deployment but before public announcement."
+## Q5422: "Detect 'insider trading' on token launches by identifying wallets that buy large amounts seconds after deployment but before public announcement."
 
 **Expected Plan:**
 
@@ -967,7 +967,7 @@ RETURN {
 
 ---
 
-## Q423: "Identify 'MEV protection failures' by finding transactions that paid for MEV protection but still got sandwiched. Calculate wasted protection fees."
+## Q5423: "Identify 'MEV protection failures' by finding transactions that paid for MEV protection but still got sandwiched. Calculate wasted protection fees."
 
 **Expected Plan:**
 
@@ -998,7 +998,7 @@ RETURN {
 
 ---
 
-## Q424: "Map a 'Ponzi token' with referral rewards. Build the referral tree, calculate each level's profitability, and identify the collapse point."
+## Q5424: "Map a 'Ponzi token' with referral rewards. Build the referral tree, calculate each level's profitability, and identify the collapse point."
 
 **Expected Plan:**
 
@@ -1036,7 +1036,7 @@ RETURN {
 
 ---
 
-## Q425: "Detect 'fake volume bots' by analyzing trading patterns: repetitive amounts, perfect timing intervals, circular fund flows between limited wallets."
+## Q5425: "Detect 'fake volume bots' by analyzing trading patterns: repetitive amounts, perfect timing intervals, circular fund flows between limited wallets."
 
 **Expected Plan:**
 
@@ -1071,7 +1071,7 @@ RETURN {
 
 ---
 
-## Q426: "Investigate a 'liquidity migration scam' where devs drain LP from one DEX, promise to migrate to another, but never do. Track fund flow."
+## Q5426: "Investigate a 'liquidity migration scam' where devs drain LP from one DEX, promise to migrate to another, but never do. Track fund flow."
 
 **Expected Plan:**
 
@@ -1114,7 +1114,7 @@ RETURN {
 
 ---
 
-## Q427: "Map 'connected scammer networks' by finding common funding sources, shared infrastructure wallets, or coordinated launch timing across multiple rugs."
+## Q5427: "Map 'connected scammer networks' by finding common funding sources, shared infrastructure wallets, or coordinated launch timing across multiple rugs."
 
 **Expected Plan:**
 
@@ -1144,7 +1144,7 @@ RETURN {
 
 ---
 
-## Q428: "Detect 'pump and dump discord groups' by correlating coordinated buying with Discord/Telegram message timestamps and member wallets."
+## Q5428: "Detect 'pump and dump discord groups' by correlating coordinated buying with Discord/Telegram message timestamps and member wallets."
 
 **Expected Plan:**
 
@@ -1175,7 +1175,7 @@ RETURN {
 
 ---
 
-## Q429: "Identify 'token lockup bypass exploits' where teams find ways to access supposedly locked tokens early. Trace the exploit path."
+## Q5429: "Identify 'token lockup bypass exploits' where teams find ways to access supposedly locked tokens early. Trace the exploit path."
 
 **Expected Plan:**
 
@@ -1207,7 +1207,7 @@ RETURN {
 
 ---
 
-## Q430: "Map 'validator collusion' where multiple validators coordinate to censor specific transactions or prioritize their own MEV extraction."
+## Q5430: "Map 'validator collusion' where multiple validators coordinate to censor specific transactions or prioritize their own MEV extraction."
 
 **Expected Plan:**
 
@@ -1241,7 +1241,7 @@ RETURN {
 
 ---
 
-## Q431: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
+## Q5431: "Detect 'spoofed LP tokens' where scammers create fake LP tokens that look identical to real ones to trick users into depositing value."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 89%]
@@ -1261,7 +1261,7 @@ RETURN {investigation: "Spoofed LP Token Scam", is_fake: !$verification.is_authe
 
 ---
 
-## Q432: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
+## Q5432: "Map a 'DAO treasury raid' where malicious proposal drains funds. Trace the proposal creation, voting patterns, and fund destinations."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 84%]
@@ -1280,7 +1280,7 @@ RETURN {investigation: "DAO Treasury Raid", drained_amount_sol: $proposal_analys
 
 ---
 
-## Q433: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
+## Q5433: "Identify 'circular trading bots' that create artificial volume by trading between their own wallets with no real market impact."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 87%]
@@ -1299,7 +1299,7 @@ RETURN {investigation: "Circular Trading Bot Network", bot_count: COUNT($bot_clu
 
 ---
 
-## Q434: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
+## Q5434: "Investigate a 'bridge exploit' where attacker mints unlimited tokens by exploiting cross-chain message verification."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 81%]
@@ -1318,7 +1318,7 @@ RETURN {investigation: "Bridge Exploit - Unlimited Mint", exploit_method: $analy
 
 ---
 
-## Q435: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
+## Q5435: "Detect 'governance token rental markets' where users rent voting power, potentially enabling vote manipulation."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 85%]
@@ -1336,7 +1336,7 @@ RETURN {investigation: "Governance Token Rental Market", rental_volume_daily: $r
 
 ---
 
-## Q436: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
+## Q5436: "Map a 'MEV sandwich cartel' where multiple bots coordinate to avoid competing on the same victim transactions."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 82%]
@@ -1354,7 +1354,7 @@ RETURN {investigation: "MEV Sandwich Cartel", cartel_size: COUNT($coordination.c
 
 ---
 
-## Q437: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
+## Q5437: "Investigate 'NFT metadata poisoning' where scammers inject malicious URLs into NFT metadata to phish holders."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 90%]
@@ -1373,7 +1373,7 @@ RETURN {investigation: "NFT Metadata Poisoning", poisoned_nfts: COUNT($malicious
 
 ---
 
-## Q438: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
+## Q5438: "Detect 'stablecoin depeg manipulation' where whales intentionally cause depegs to profit from panic selling."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 79%]
@@ -1392,7 +1392,7 @@ RETURN {investigation: "Stablecoin Depeg Manipulation", manipulation_detected: $
 
 ---
 
-## Q439: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
+## Q5439: "Map 'validator sandwich attack coordination' where validators collude to sandwich user transactions in their own blocks."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 80%]
@@ -1410,7 +1410,7 @@ RETURN {investigation: "Validator Sandwich Collusion", colluding_validators: COU
 
 ---
 
-## Q440: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
+## Q5440: "Investigate 'pump-and-dump as a service' platforms that coordinate paid pump campaigns for tokens."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 83%]
@@ -1428,7 +1428,7 @@ RETURN {investigation: "Pump-as-a-Service Platform", total_campaigns: COUNT($cam
 
 ---
 
-## Q441: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
+## Q5441: "Detect 'fake liquidity lock' where scammers lock liquidity in a contract they control and can withdraw anytime."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 88%]
@@ -1446,7 +1446,7 @@ RETURN {investigation: "Fake Liquidity Lock", is_fake_lock: $backdoors.can_bypas
 
 ---
 
-## Q442: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
+## Q5442: "Map 'cNFT minting exploits' where attackers mint compressed NFTs beyond the tree capacity by exploiting Merkle tree verification."
 
 **Expected Plan:**
 [TIME: ~9m] [COST: ~0.09 SOL] [CONFIDENCE: 81%]
@@ -1464,7 +1464,7 @@ RETURN {investigation: "cNFT Overmint Exploit", exploit_detected: $overmint.dete
 
 ---
 
-## Q443: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
+## Q5443: "Investigate 'prediction market oracle manipulation' where insiders with early knowledge manipulate market odds before public announcement."
 
 **Expected Plan:**
 [TIME: ~11m] [COST: ~0.11 SOL] [CONFIDENCE: 76%]
@@ -1483,7 +1483,7 @@ RETURN {investigation: "Prediction Market Insider Trading", suspicious_traders: 
 
 ---
 
-## Q444: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
+## Q5444: "Detect 'token supply inflation' attacks where minter role is exploited to create unlimited tokens and dump on market."
 
 **Expected Plan:**
 [TIME: ~6m] [COST: ~0.06 SOL] [CONFIDENCE: 91%]
@@ -1501,7 +1501,7 @@ RETURN {investigation: "Token Supply Inflation Attack", inflation_detected: $una
 
 ---
 
-## Q445: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
+## Q5445: "Map a 'liquidation bot frontrunning cartel' where bots coordinate to avoid competing on the same liquidation opportunities."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.12 SOL] [CONFIDENCE: 82%]
@@ -1519,7 +1519,7 @@ RETURN {investigation: "Liquidation Bot Cartel", cartel_size: COUNT($coordinatio
 
 ---
 
-## Q446: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
+## Q5446: "Investigate 'fake airdrop claim' scams that require users to approve unlimited token spending to claim worthless tokens."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.07 SOL] [CONFIDENCE: 89%]
@@ -1537,7 +1537,7 @@ RETURN {investigation: "Fake Airdrop Drain Scam", is_drainer: $drain_pattern.is_
 
 ---
 
-## Q447: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
+## Q5447: "Detect 'validator censorship' where specific validators consistently exclude certain transactions or protocols from their blocks."
 
 **Expected Plan:**
 [TIME: ~14m] [COST: ~0.14 SOL] [CONFIDENCE: 78%]
@@ -1556,7 +1556,7 @@ RETURN {investigation: "Validator Censorship", censorship_detected: $censorship.
 
 ---
 
-## Q448: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
+## Q5448: "Map 'cross-DEX arbitrage bot networks' that share infrastructure and coordinate to reduce gas competition."
 
 **Expected Plan:**
 [TIME: ~13m] [COST: ~0.13 SOL] [CONFIDENCE: 83%]
@@ -1574,7 +1574,7 @@ RETURN {investigation: "Arbitrage Bot Network", network_clusters: COUNT($network
 
 ---
 
-## Q449: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
+## Q5449: "Investigate 'mempool frontrunning on Solana' by analyzing Jito bundle patterns and identifying systematic frontrunners."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 84%]
@@ -1592,7 +1592,7 @@ RETURN {investigation: "Jito Bundle Frontrunning", systematic_frontrunners: COUN
 
 ---
 
-## Q450: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
+## Q5450: "Detect 'rug pull via upgrade authority' where devs use program upgrade authority to inject malicious code after launch."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.08 SOL] [CONFIDENCE: 87%]
@@ -1609,7 +1609,7 @@ $malicious = DETECT_MALICIOUS_UPGRADES(upgrades: $upgrades, check_for: ["drain_f
 RETURN {investigation: "Malicious Program Upgrade", malicious_upgrade_detected: COUNT($malicious.suspicious_upgrades) > 0, upgrade_type: $malicious.suspicious_upgrades[0].malicious_changes, funds_at_risk_sol: $malicious.tvl_at_upgrade, confidence: 87}
 
 
-## Q451: "Identify wallets that consistently front-run trades on a specific DEX."
+## Q5451: "Identify wallets that consistently front-run trades on a specific DEX."
 
 **Expected Plan:**
 [TIME: ~10m] [COST: ~0.1 SOL] [CONFIDENCE: 85%]
@@ -1636,7 +1636,7 @@ RETURN {
   sample_size: COUNT($transactions)
 }
 
-## Q452: "Find the original funding source for a known scam wallet."
+## Q5452: "Find the original funding source for a known scam wallet."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 90%]
@@ -1659,7 +1659,7 @@ RETURN {
   confidence: 90
 }
 
-## Q453: "List all tokens held by a wallet that are not on any major token list."
+## Q5453: "List all tokens held by a wallet that are not on any major token list."
 
 **Expected Plan:**
 [TIME: ~3m] [COST: ~0.02 SOL] [CONFIDENCE: 95%]
@@ -1685,7 +1685,7 @@ RETURN {
   confidence: 95
 }
 
-## Q454: "Detect if a token has a 'honeypot' mechanism where tokens can be bought but not sold."
+## Q5454: "Detect if a token has a 'honeypot' mechanism where tokens can be bought but not sold."
 
 **Expected Plan:**
 [TIME: ~8m] [COST: ~0.1 SOL] [CONFIDENCE: 80%]
@@ -1725,7 +1725,7 @@ RETURN {
   confidence: 80
 }
 
-## Q455: "Find accounts that received tokens from multiple different airdrops."
+## Q5455: "Find accounts that received tokens from multiple different airdrops."
 
 **Expected Plan:**
 [TIME: ~15m] [COST: ~0.2 SOL] [CONFIDENCE: 85%]
@@ -1754,7 +1754,7 @@ RETURN {
   confidence: 85
 }
 
-## Q456: "Analyze the distribution of a token's supply across its top 100 holders."
+## Q5456: "Analyze the distribution of a token's supply across its top 100 holders."
 
 **Expected Plan:**
 [TIME: ~2m] [COST: ~0.01 SOL] [CONFIDENCE: 99%]
@@ -1780,7 +1780,7 @@ RETURN {
   confidence: 99
 }
 
-## Q457: "Identify if a wallet has interacted with any known malicious dApps or contracts."
+## Q5457: "Identify if a wallet has interacted with any known malicious dApps or contracts."
 
 **Expected Plan:**
 [TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 80%]
@@ -1811,7 +1811,7 @@ RETURN {
   caveats: ["Depends on the completeness of the malicious programs list."]
 }
 
-## Q458: "Find the transaction where a specific NFT was minted."
+## Q5458: "Find the transaction where a specific NFT was minted."
 
 **Expected Plan:**
 [TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 95%]
@@ -1845,7 +1845,7 @@ RETURN {
   confidence: 95
 }
 
-## Q459: "Calculate the total fees paid by a wallet in a given time period."
+## Q5459: "Calculate the total fees paid by a wallet in a given time period."
 
 **Expected Plan:**
 [TIME: ~7m] [COST: ~0.1 SOL] [CONFIDENCE: 98%]
@@ -1872,7 +1872,7 @@ RETURN {
   confidence: 98
 }
 
-## Q460: "Check if a program is upgradeable and who the upgrade authority is."
+## Q5460: "Check if a program is upgradeable and who the upgrade authority is."
 
 **Expected Plan:**
 [TIME: ~1m] [COST: ~0.01 SOL] [CONFIDENCE: 100%]
@@ -1902,3 +1902,772 @@ RETURN {
   upgrade_authority: $upgrade_authority,
   confidence: 100
 }
+
+---
+
+## Q5461: "Detect recurring wallet-to-wallet transfers that may indicate money laundering patterns."
+
+**Expected Plan:**
+[TIME: ~2m] [COST: ~0.02 SOL] [CONFIDENCE: 92%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, GROUP_BY, DETECT_RECURRING_TRANSFERS
+
+**Main Branch:**
+$wallet = "..."
+$signatures = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $signatures, fn: s => getTransaction(s.signature))
+$recurring = DETECT_RECURRING_TRANSFERS(transactions: $txs, min_repeats: 5)
+
+**Action:**
+RETURN {wallet: $wallet, recurring_patterns: $recurring, confidence: 92}
+
+---
+
+## Q5462: "Identify wallets that frequently interact with newly deployed programs within 24 hours of deployment."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, FIND_NEW_PROGRAMS, MAP, FILTER
+
+**Main Branch:**
+$wallet = "..."
+$new_programs = FIND_NEW_PROGRAMS(period: "24h")
+$interactions = []
+FOR $program IN $new_programs:
+  $sigs = getSignaturesForAddress(address: $program, limit: 1000)
+  $txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+  IF ANY($txs, tx => tx.message.accountKeys[0] == $wallet):
+    $interactions = APPEND($interactions, $program)
+
+**Action:**
+RETURN {wallet: $wallet, new_program_interactions: $interactions, confidence: 90}
+
+---
+
+## Q5463: "Detect flash loan attack patterns by analyzing rapid borrow/repay cycles in a single block."
+
+**Expected Plan:**
+[TIME: ~4m] [COST: ~0.04 SOL] [CONFIDENCE: 93%]
+
+**Available Tools:**
+From Standard Library: getBlock, MAP, DETECT_FLASH_LOAN_CYCLES
+
+**Main Branch:**
+$slot = ...
+$block = getBlock(slot: $slot)
+$flash_loan_patterns = DETECT_FLASH_LOAN_CYCLES(block: $block, min_cycles: 2)
+
+**Action:**
+RETURN {slot: $slot, flash_loan_patterns: $flash_loan_patterns, confidence: 93}
+
+---
+
+## Q5464: "Find wallets that repeatedly provide and remove liquidity from the same pool within short intervals."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_LIQUIDITY_CHURN
+
+**Main Branch:**
+$pool = "..."
+$sigs = getSignaturesForAddress(address: $pool, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$churners = DETECT_LIQUIDITY_CHURN(transactions: $txs, min_cycles: 3, max_interval_min: 60)
+
+**Action:**
+RETURN {pool: $pool, churn_wallets: $churners, confidence: 91}
+
+---
+
+## Q5465: "Detect sandwich attack patterns in DEX swap transactions."
+
+**Expected Plan:**
+[TIME: ~5m] [COST: ~0.05 SOL] [CONFIDENCE: 95%]
+
+**Available Tools:**
+From Standard Library: getBlock, MAP, DETECT_SANDWICH_ATTACKS
+
+**Main Branch:**
+$slot = ...
+$block = getBlock(slot: $slot)
+$sandwiches = DETECT_SANDWICH_ATTACKS(block: $block)
+
+**Action:**
+RETURN {slot: $slot, sandwich_attacks: $sandwiches, confidence: 95}
+
+---
+
+## Q5466: "Identify wallets that consistently frontrun large trades on Raydium."
+
+**Expected Plan:**
+[TIME: ~4m] [COST: ~0.04 SOL] [CONFIDENCE: 92%]
+
+**Available Tools:**
+From Standard Library: getBlock, MAP, DETECT_FRONTRUNNING
+
+**Main Branch:**
+$slot = ...
+$block = getBlock(slot: $slot)
+$frontrunners = DETECT_FRONTRUNNING(block: $block, min_trade_size: 10000)
+
+**Action:**
+RETURN {slot: $slot, frontrunners: $frontrunners, confidence: 92}
+
+---
+
+## Q5467: "Detect wallets that frequently interact with known scam tokens."
+
+**Expected Plan:**
+[TIME: ~2m] [COST: ~0.02 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, FILTER, KNOWN_SCAM_TOKENS
+
+**Main Branch:**
+$wallet = "..."
+$scam_tokens = KNOWN_SCAM_TOKENS()
+$interactions = []
+FOR $token IN $scam_tokens:
+  $sigs = getSignaturesForAddress(address: $token, limit: 1000)
+  $txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+  IF ANY($txs, tx => tx.message.accountKeys[0] == $wallet):
+    $interactions = APPEND($interactions, $token)
+
+**Action:**
+RETURN {wallet: $wallet, scam_token_interactions: $interactions, confidence: 90}
+
+---
+
+## Q5468: "Find wallets that receive airdrops from multiple unrelated projects in a short time window."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, GROUP_BY, DETECT_AIRDROP_PATTERNS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$airdrop_patterns = DETECT_AIRDROP_PATTERNS(transactions: $txs, min_projects: 3, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, airdrop_patterns: $airdrop_patterns, confidence: 91}
+
+---
+
+## Q5469: "Detect wallets that split large incoming transfers into many small outgoing transfers (smurfing)."
+
+**Expected Plan:**
+[TIME: ~2m] [COST: ~0.02 SOL] [CONFIDENCE: 93%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_SMURFING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$smurfing = DETECT_SMURFING(transactions: $txs, min_split: 5)
+
+**Action:**
+RETURN {wallet: $wallet, smurfing_patterns: $smurfing, confidence: 93}
+
+---
+
+## Q5470: "Identify wallets that repeatedly interact with the same set of addresses (potential botnets)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, GROUP_BY, DETECT_BOTNETS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$botnet_patterns = DETECT_BOTNETS(transactions: $txs, min_peers: 5, min_interactions: 10)
+
+**Action:**
+RETURN {wallet: $wallet, botnet_patterns: $botnet_patterns, confidence: 90}
+
+---
+
+## Q5471: "Detect wallets that frequently participate in pump-and-dump schemes."
+
+**Expected Plan:**
+[TIME: ~4m] [COST: ~0.04 SOL] [CONFIDENCE: 92%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_PUMP_AND_DUMP
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$pump_and_dump = DETECT_PUMP_AND_DUMP(transactions: $txs)
+
+**Action:**
+RETURN {wallet: $wallet, pump_and_dump_patterns: $pump_and_dump, confidence: 92}
+
+---
+
+## Q5472: "Identify wallets that interact with multiple DEXes in rapid succession (arbitrage bots)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_ARBITRAGE_BOTS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$arbitrage_patterns = DETECT_ARBITRAGE_BOTS(transactions: $txs, min_dexes: 2, max_window_min: 10)
+
+**Action:**
+RETURN {wallet: $wallet, arbitrage_patterns: $arbitrage_patterns, confidence: 91}
+
+---
+
+## Q5473: "Detect wallets that frequently interact with bridge contracts (potential cross-chain arbitrage)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_BRIDGE_ARBITRAGE
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$bridge_arbitrage = DETECT_BRIDGE_ARBITRAGE(transactions: $txs)
+
+**Action:**
+RETURN {wallet: $wallet, bridge_arbitrage_patterns: $bridge_arbitrage, confidence: 90}
+
+---
+
+## Q5474: "Identify wallets that receive funds from many unrelated sources in a short period (potential mixers)."
+
+**Expected Plan:**
+[TIME: ~2m] [COST: ~0.02 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_MIXER_USAGE
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$mixer_usage = DETECT_MIXER_USAGE(transactions: $txs, min_sources: 10, max_window_hr: 1)
+
+**Action:**
+RETURN {wallet: $wallet, mixer_usage_patterns: $mixer_usage, confidence: 91}
+
+---
+
+## Q5475: "Detect wallets that repeatedly interact with the same NFT minting contract (potential NFT botting)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_NFT_BOTTING
+
+**Main Branch:**
+$wallet = "..."
+$nft_contract = "..."
+$sigs = getSignaturesForAddress(address: $nft_contract, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$nft_botting = DETECT_NFT_BOTTING(transactions: $txs, wallet: $wallet)
+
+**Action:**
+RETURN {wallet: $wallet, nft_botting_patterns: $nft_botting, confidence: 90}
+
+---
+
+## Q5476: "Identify wallets that frequently interact with governance contracts just before major proposals."
+
+**Expected Plan:**
+[TIME: ~4m] [COST: ~0.04 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_GOVERNANCE_ACTIVITY
+
+**Main Branch:**
+$wallet = "..."
+$governance_contract = "..."
+$sigs = getSignaturesForAddress(address: $governance_contract, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$gov_activity = DETECT_GOVERNANCE_ACTIVITY(transactions: $txs, wallet: $wallet, pre_proposal_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, governance_activity_patterns: $gov_activity, confidence: 91}
+
+---
+
+## Q5477: "Detect wallets that interact with multiple meme tokens in a short period (potential airdrop farmers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_AIRDROP_FARMING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$airdrop_farming = DETECT_AIRDROP_FARMING(transactions: $txs, min_tokens: 5, max_window_hr: 48)
+
+**Action:**
+RETURN {wallet: $wallet, airdrop_farming_patterns: $airdrop_farming, confidence: 90}
+
+---
+
+## Q5478: "Detect wallets that frequently interact with the same validator vote account (potential collusion)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_VALIDATOR_COLLUSION
+
+**Main Branch:**
+$wallet = "..."
+$validator_vote = "..."
+$sigs = getSignaturesForAddress(address: $validator_vote, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$collusion = DETECT_VALIDATOR_COLLUSION(transactions: $txs, wallet: $wallet)
+
+**Action:**
+RETURN {wallet: $wallet, validator_collusion_patterns: $collusion, confidence: 91}
+
+---
+
+## Q5479: "Identify wallets that interact with multiple NFT collections in rapid succession (potential NFT flippers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_NFT_FLIPPING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$nft_flipping = DETECT_NFT_FLIPPING(transactions: $txs, min_collections: 3, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, nft_flipping_patterns: $nft_flipping, confidence: 90}
+
+---
+
+## Q5480: "Detect wallets that frequently interact with token mint authorities (potential insider activity)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_MINT_AUTHORITY_INTERACTIONS
+
+**Main Branch:**
+$wallet = "..."
+$mint_authority = "..."
+$sigs = getSignaturesForAddress(address: $mint_authority, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$insider_activity = DETECT_MINT_AUTHORITY_INTERACTIONS(transactions: $txs, wallet: $wallet)
+
+**Action:**
+RETURN {wallet: $wallet, mint_authority_interaction_patterns: $insider_activity, confidence: 91}
+
+---
+
+## Q5481: "Detect wallets that interact with multiple launchpad contracts in a short period (potential launchpad snipers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_LAUNCHPAD_SNIPING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$launchpad_sniping = DETECT_LAUNCHPAD_SNIPING(transactions: $txs, min_launchpads: 2, max_window_hr: 12)
+
+**Action:**
+RETURN {wallet: $wallet, launchpad_sniping_patterns: $launchpad_sniping, confidence: 90}
+
+---
+
+## Q5482: "Identify wallets that frequently interact with the same set of CEX deposit addresses (potential off-ramping)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_CEX_OFFRAMPING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$offramping = DETECT_CEX_OFFRAMPING(transactions: $txs, min_cex: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, cex_offramping_patterns: $offramping, confidence: 91}
+
+---
+
+## Q5483: "Detect wallets that interact with multiple meme token deployers (potential serial deployers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_SERIAL_DEPLOYERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$serial_deployers = DETECT_SERIAL_DEPLOYERS(transactions: $txs, min_deployers: 3, max_window_hr: 48)
+
+**Action:**
+RETURN {wallet: $wallet, serial_deployer_patterns: $serial_deployers, confidence: 90}
+
+---
+
+## Q5484: "Identify wallets that frequently interact with the same set of NFT marketplaces (potential wash traders)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_NFT_MARKETPLACE_WASH_TRADING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$marketplace_wash_trading = DETECT_NFT_MARKETPLACE_WASH_TRADING(transactions: $txs, min_marketplaces: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, nft_marketplace_wash_trading_patterns: $marketplace_wash_trading, confidence: 91}
+
+---
+
+## Q5485: "Detect wallets that interact with multiple staking pools in a short period (potential yield chasers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_YIELD_CHASING
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$yield_chasing = DETECT_YIELD_CHASING(transactions: $txs, min_pools: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, yield_chasing_patterns: $yield_chasing, confidence: 90}
+
+---
+
+## Q5486: "Identify wallets that frequently interact with the same set of DAO treasuries (potential governance attackers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_DAO_ATTACKERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$dao_attackers = DETECT_DAO_ATTACKERS(transactions: $txs, min_daos: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, dao_attacker_patterns: $dao_attackers, confidence: 91}
+
+---
+
+## Q5487: "Detect wallets that interact with multiple lending protocols in a short period (potential liquidation bots)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_LIQUIDATION_BOTS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$liquidation_bots = DETECT_LIQUIDATION_BOTS(transactions: $txs, min_protocols: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, liquidation_bot_patterns: $liquidation_bots, confidence: 90}
+
+---
+
+## Q5488: "Identify wallets that frequently interact with the same set of token mints (potential token deployers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_TOKEN_DEPLOYERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$token_deployers = DETECT_TOKEN_DEPLOYERS(transactions: $txs, min_mints: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, token_deployer_patterns: $token_deployers, confidence: 91}
+
+---
+
+## Q5489: "Detect wallets that interact with multiple prediction market contracts in a short period (potential prediction market manipulators)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_PREDICTION_MARKET_MANIPULATION
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$prediction_market_manipulation = DETECT_PREDICTION_MARKET_MANIPULATION(transactions: $txs, min_markets: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, prediction_market_manipulation_patterns: $prediction_market_manipulation, confidence: 90}
+
+---
+
+## Q5490: "Identify wallets that frequently interact with the same set of token swap pools (potential liquidity providers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_LIQUIDITY_PROVIDERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$liquidity_providers = DETECT_LIQUIDITY_PROVIDERS(transactions: $txs, min_pools: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, liquidity_provider_patterns: $liquidity_providers, confidence: 91}
+
+---
+
+## Q5491: "Detect wallets that interact with multiple token burn contracts in a short period (potential burn bots)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_BURN_BOTS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$burn_bots = DETECT_BURN_BOTS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, burn_bot_patterns: $burn_bots, confidence: 90}
+
+---
+
+## Q5492: "Identify wallets that frequently interact with the same set of token vesting contracts (potential early unlockers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_EARLY_UNLOCKERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$early_unlockers = DETECT_EARLY_UNLOCKERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, early_unlocker_patterns: $early_unlockers, confidence: 91}
+
+---
+
+## Q5493: "Detect wallets that interact with multiple token faucet contracts in a short period (potential faucet abusers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_FAUCET_ABUSERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$faucet_abusers = DETECT_FAUCET_ABUSERS(transactions: $txs, min_faucets: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, faucet_abuser_patterns: $faucet_abusers, confidence: 90}
+
+---
+
+## Q5494: "Identify wallets that frequently interact with the same set of token lock contracts (potential lock bypassers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_LOCK_BYPASSERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$lock_bypassers = DETECT_LOCK_BYPASSERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, lock_bypasser_patterns: $lock_bypassers, confidence: 91}
+
+---
+
+## Q5495: "Detect wallets that interact with multiple token migration contracts in a short period (potential migration exploiters)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_MIGRATION_EXPLOITERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$migration_exploiters = DETECT_MIGRATION_EXPLOITERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, migration_exploiter_patterns: $migration_exploiters, confidence: 90}
+
+---
+
+## Q5496: "Identify wallets that frequently interact with the same set of token claim contracts (potential claim farmers)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_CLAIM_FARMERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$claim_farmers = DETECT_CLAIM_FARMERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, claim_farmer_patterns: $claim_farmers, confidence: 91}
+
+---
+
+## Q5497: "Detect wallets that interact with multiple token distribution contracts in a short period (potential distribution exploiters)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_DISTRIBUTION_EXPLOITERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$distribution_exploiters = DETECT_DISTRIBUTION_EXPLOITERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, distribution_exploiter_patterns: $distribution_exploiters, confidence: 90}
+
+---
+
+## Q5498: "Identify wallets that frequently interact with the same set of token governance contracts (potential governance manipulators)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_GOVERNANCE_MANIPULATORS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$governance_manipulators = DETECT_GOVERNANCE_MANIPULATORS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, governance_manipulator_patterns: $governance_manipulators, confidence: 91}
+
+---
+
+## Q5499: "Detect wallets that interact with multiple token airdrop claim contracts in a short period (potential airdrop exploiters)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 90%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_AIRDROP_EXPLOITERS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$airdrop_exploiters = DETECT_AIRDROP_EXPLOITERS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, airdrop_exploiter_patterns: $airdrop_exploiters, confidence: 90}
+
+---
+
+## Q5500: "Identify wallets that frequently interact with the same set of token buyback contracts (potential buyback manipulators)."
+
+**Expected Plan:**
+[TIME: ~3m] [COST: ~0.03 SOL] [CONFIDENCE: 91%]
+
+**Available Tools:**
+From Standard Library: getSignaturesForAddress, getTransaction, MAP, DETECT_BUYBACK_MANIPULATORS
+
+**Main Branch:**
+$wallet = "..."
+$sigs = getSignaturesForAddress(address: $wallet, limit: 1000)
+$txs = MAP(collection: $sigs, fn: s => getTransaction(s.signature))
+$buyback_manipulators = DETECT_BUYBACK_MANIPULATORS(transactions: $txs, min_contracts: 2, max_window_hr: 24)
+
+**Action:**
+RETURN {wallet: $wallet, buyback_manipulator_patterns: $buyback_manipulators, confidence: 91}

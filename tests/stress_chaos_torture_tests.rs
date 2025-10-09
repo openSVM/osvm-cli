@@ -148,16 +148,18 @@ mod extreme_concurrency_tests {
     #[tokio::test]
     async fn test_spawn_bomb() -> Result<()> {
         // Exponentially spawn tasks (fork bomb style)
-        async fn spawn_recursive(depth: usize, max_depth: usize) {
-            if depth >= max_depth {
-                return;
-            }
+        fn spawn_recursive(depth: usize, max_depth: usize) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+            Box::pin(async move {
+                if depth >= max_depth {
+                    return;
+                }
 
-            let handle1 = tokio::spawn(spawn_recursive(depth + 1, max_depth));
-            let handle2 = tokio::spawn(spawn_recursive(depth + 1, max_depth));
+                let handle1 = tokio::spawn(spawn_recursive(depth + 1, max_depth));
+                let handle2 = tokio::spawn(spawn_recursive(depth + 1, max_depth));
 
-            let _ = handle1.await;
-            let _ = handle2.await;
+                let _ = handle1.await;
+                let _ = handle2.await;
+            })
         }
 
         // This creates 2^5 - 1 = 31 tasks
@@ -564,12 +566,14 @@ mod timeout_and_hang_tests {
     #[tokio::test]
     async fn test_slow_operation_cascade() -> Result<()> {
         // Chain of slow operations
-        async fn slow_op(depth: usize) -> usize {
-            if depth == 0 {
-                return 0;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-            slow_op(depth - 1).await + 1
+        fn slow_op(depth: usize) -> std::pin::Pin<Box<dyn std::future::Future<Output = usize> + Send>> {
+            Box::pin(async move {
+                if depth == 0 {
+                    return 0;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                slow_op(depth - 1).await + 1
+            })
         }
 
         let start = tokio::time::Instant::now();
@@ -695,11 +699,11 @@ mod panic_and_error_propagation_tests {
         let data = Arc::new(Mutex::new(vec![1, 2, 3]));
 
         let data_clone = Arc::clone(&data);
-        let result = std::panic::catch_unwind(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
             let mut d = futures::executor::block_on(data_clone.lock());
             d.push(4);
             panic!("Oops!");
-        });
+        }));
 
         assert!(result.is_err());
 

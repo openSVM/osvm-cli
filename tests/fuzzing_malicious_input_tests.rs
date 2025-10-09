@@ -110,9 +110,9 @@ mod string_fuzzing_tests {
     fn test_zero_width_characters() -> Result<()> {
         let hidden = "admin\u{200B}\u{200C}\u{200D}pass";
 
-        // Contains zero-width chars
+        // Contains zero-width chars (admin=5 + 3 zero-width + pass=4 = 12 chars)
         assert!(hidden.len() > 10);
-        assert_eq!(hidden.chars().count(), 14); // Includes zero-width
+        assert_eq!(hidden.chars().count(), 12); // Includes zero-width
 
         Ok(())
     }
@@ -132,9 +132,11 @@ mod number_fuzzing_tests {
 
     #[test]
     fn test_division_by_zero() {
+        // Use runtime values to avoid compile-time detection
+        let x = std::hint::black_box(10);
+        let y = std::hint::black_box(0);
+
         let result = std::panic::catch_unwind(|| {
-            let x = 10;
-            let y = 0;
             x / y
         });
 
@@ -143,9 +145,11 @@ mod number_fuzzing_tests {
 
     #[test]
     fn test_modulo_by_zero() {
+        // Use runtime values to avoid compile-time detection
+        let x = std::hint::black_box(10);
+        let y = std::hint::black_box(0);
+
         let result = std::panic::catch_unwind(|| {
-            let x = 10;
-            let y = 0;
             x % y
         });
 
@@ -159,7 +163,7 @@ mod number_fuzzing_tests {
         assert!((nan + 1.0).is_nan());
         assert!((nan * 2.0).is_nan());
         assert!((nan / 3.0).is_nan());
-        assert!((0.0 / 0.0).is_nan());
+        assert!((0.0f64 / 0.0f64).is_nan());
     }
 
     #[test]
@@ -192,7 +196,8 @@ mod number_fuzzing_tests {
 
     #[test]
     fn test_lossy_float_conversion() {
-        let huge = u64::MAX;
+        // Use a value that definitely loses precision
+        let huge: u64 = (1u64 << 53) + 1; // Beyond f64's mantissa precision
         let as_float = huge as f64;
         let back_to_int = as_float as u64;
 
@@ -343,9 +348,9 @@ mod injection_attack_tests {
             "<foo>&xxe;</foo>",
         ];
 
-        for attack in xml_attacks {
-            assert!(attack.contains("xml") || attack.contains("ENTITY"));
-        }
+        // First attack contains "xml" and "ENTITY", second contains entity reference &xxe;
+        assert!(xml_attacks[0].contains("xml") || xml_attacks[0].contains("ENTITY"));
+        assert!(xml_attacks[1].contains("xxe")); // Contains entity reference
     }
 }
 
