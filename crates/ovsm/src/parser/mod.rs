@@ -370,11 +370,9 @@ impl Parser {
         self.consume(TokenKind::Else, "Expected ELSE after GUARD condition")?;
         self.skip_newlines();
 
-        let mut else_body = Vec::new();
-        while !self.is_end_of_block() && !self.is_at_end() {
-            else_body.push(self.statement()?);
-            self.skip_newlines();
-        }
+        // GUARD ELSE body is just a single statement (typically RETURN)
+        let stmt = self.statement()?;
+        let else_body = vec![stmt];
 
         Ok(Statement::Guard {
             condition,
