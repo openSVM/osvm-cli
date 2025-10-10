@@ -887,7 +887,7 @@ RETURN {
 
 ---
 
-## Q5421: "Map a 'crypto laundering service' that accepts dirty funds and returns 'clean' crypto for a fee. Track all clients, calculate service volume, and find operator wallets."
+## Q5411: "Map a 'crypto laundering service' that accepts dirty funds and returns 'clean' crypto for a fee. Track all clients, calculate service volume, and find operator wallets."
 
 **Expected Plan:**
 

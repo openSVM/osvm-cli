@@ -262,7 +262,8 @@ impl Scanner {
 
         let text = self.get_lexeme();
 
-        // Check if it's a keyword
+        // Check if it's a keyword FIRST (before checking uppercase)
+        // This ensures AND, OR, etc. are recognized as keywords
         if let Some(keyword) = TokenKind::keyword(&text) {
             self.add_token(keyword);
         }
@@ -275,6 +276,7 @@ impl Scanner {
             self.add_token(TokenKind::Null);
         }
         // Check if it's a constant (all uppercase with underscores)
+        // Only if it's not a keyword
         else if text.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
             self.add_token(TokenKind::Constant(text));
         } else {

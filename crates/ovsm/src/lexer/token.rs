@@ -188,6 +188,10 @@ impl TokenKind {
             "FATAL" => Some(TokenKind::Fatal),
             "RECOVERABLE" => Some(TokenKind::Recoverable),
             "WARNING" => Some(TokenKind::Warning),
+            // Logical operators as keywords
+            "AND" => Some(TokenKind::And),
+            "OR" => Some(TokenKind::Or),
+            "NOT" => Some(TokenKind::Not),
             _ => None,
         }
     }

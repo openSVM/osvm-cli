@@ -18,7 +18,13 @@
 // Module declarations
 pub mod error;
 pub mod lexer;
+pub mod parser;
+pub mod runtime;
+pub mod tools;
 
 // Re-export main types
 pub use error::{Error, Result};
 pub use lexer::{Scanner, Token, TokenKind};
+pub use parser::{Parser, Program, Statement, Expression, BinaryOp, UnaryOp};
+pub use runtime::{Evaluator, Value, Environment};
+pub use tools::{Tool, ToolRegistry};

@@ -99,7 +99,7 @@ RETURN {
 
 ---
 
-## Q5211: "Design a statistical model to predict token rug pulls based on on-chain behavior patterns."
+## Q5212: "Design a statistical model to predict token rug pulls based on on-chain behavior patterns."
 
 **Expected Plan:**
 [TIME: ~12m] [COST: ~0.15 SOL] [CONFIDENCE: 78%]
