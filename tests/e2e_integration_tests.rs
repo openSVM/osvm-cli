@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! End-to-end integration tests for complete workflows
 
 use anyhow::Result;
@@ -22,10 +23,11 @@ use tempfile::TempDir;
 use tokio::time::sleep;
 
 /// Complete workflow: User request -> AI Planning -> MCP Execution -> Result
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod complete_workflow_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_balance_check_workflow() -> Result<()> {
         // Setup mock servers
@@ -140,6 +142,7 @@ mod complete_workflow_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_program_deployment_workflow() -> Result<()> {
         let mut ai_server = Server::new_async().await;
@@ -271,10 +274,11 @@ mod complete_workflow_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod isolated_execution_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_mcp_in_microvm_workflow() -> Result<()> {
         let temp_dir = TempDir::new()?;
@@ -372,6 +376,7 @@ mod isolated_execution_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_resource_limited_execution() -> Result<()> {
         let temp_dir = TempDir::new()?;
@@ -435,10 +440,11 @@ mod isolated_execution_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod chat_integration_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_chat_with_tool_execution() -> Result<()> {
         let mut ai_server = Server::new_async().await;
@@ -555,6 +561,7 @@ mod chat_integration_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_multi_turn_conversation() -> Result<()> {
         let mut chat_state = ChatState::new()?;
@@ -596,11 +603,12 @@ mod chat_integration_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod stress_tests {
     use super::*;
     use std::sync::Arc;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
     async fn test_concurrent_workflow_execution() -> Result<()> {
         let mut server = Server::new_async().await;

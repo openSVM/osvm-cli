@@ -1,18 +1,22 @@
 //! Comprehensive tests for AI prompt templates including template loading,
 //! variable substitution, template validation, and specialized prompts
+//!
+//! Note: These tests use an API that doesn't match the actual implementation.
+//! The actual API uses PromptTemplateManager, not PromptTemplate::new().
+//! See src/utils/prompt_templates.rs for the actual implementation.
+//!
+//! These tests are ignored until they can be properly rewritten.
 
 use anyhow::Result;
-use osvm::utils::prompt_templates::{
-    CodeAnalysisTemplate, DeploymentTemplate, ErrorDiagnosisTemplate, PromptTemplate,
-    SecurityAuditTemplate, TemplateContext, TemplateRegistry, TemplateValidator, TemplateVariable,
-};
 use std::collections::HashMap;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod template_basic_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_template_creation() -> Result<()> {
         let template =
             PromptTemplate::new("test_template", "Hello, {{name}}! Welcome to {{system}}.");
@@ -23,7 +27,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_simple_variable_substitution() -> Result<()> {
         let template = PromptTemplate::new("greeting", "Hello, {{name}}!");
 
@@ -38,7 +44,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_multiple_variable_substitution() -> Result<()> {
         let template = PromptTemplate::new(
             "multi_var",
@@ -57,7 +65,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_missing_variable_handling() -> Result<()> {
         let template = PromptTemplate::new("missing_var", "Hello, {{name}}!");
 
@@ -71,7 +81,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_optional_variables() -> Result<()> {
         let template = PromptTemplate::new("optional", "Hello{{#if name}}, {{name}}{{/if}}!");
 
@@ -89,7 +101,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_nested_variables() -> Result<()> {
         let template = PromptTemplate::new("nested", "{{user.name}} works at {{user.company}}");
 
@@ -107,7 +121,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_list_iteration() -> Result<()> {
         let template =
             PromptTemplate::new("list", "Services: {{#each services}}{{name}}, {{/each}}");
@@ -125,7 +141,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_conditional_rendering() -> Result<()> {
         let template = PromptTemplate::new(
             "conditional",
@@ -145,7 +163,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_template_comments() -> Result<()> {
         let template = PromptTemplate::new("comments", "Hello {{! This is a comment}} {{name}}!");
 
@@ -160,7 +180,9 @@ mod template_basic_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_whitespace_handling() -> Result<()> {
         let template = PromptTemplate::new("whitespace", "{{~name~}}");
 
@@ -175,17 +197,21 @@ mod template_basic_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod template_registry_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_registry_creation() {
         let registry = TemplateRegistry::new();
         assert!(registry.is_empty());
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_register_template() -> Result<()> {
         let mut registry = TemplateRegistry::new();
 
@@ -198,7 +224,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_get_template() -> Result<()> {
         let mut registry = TemplateRegistry::new();
 
@@ -211,7 +239,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_template_not_found() {
         let registry = TemplateRegistry::new();
 
@@ -219,7 +249,9 @@ mod template_registry_tests {
         assert!(result.is_err());
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_template_overwrite() -> Result<()> {
         let mut registry = TemplateRegistry::new();
 
@@ -235,7 +267,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_list_templates() -> Result<()> {
         let mut registry = TemplateRegistry::new();
 
@@ -249,7 +283,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_remove_template() -> Result<()> {
         let mut registry = TemplateRegistry::new();
 
@@ -262,7 +298,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_load_from_file() -> Result<()> {
         use tempfile::TempDir;
         let temp_dir = TempDir::new()?;
@@ -278,7 +316,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_load_from_directory() -> Result<()> {
         use tempfile::TempDir;
         let temp_dir = TempDir::new()?;
@@ -294,7 +334,9 @@ mod template_registry_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_default_templates() -> Result<()> {
         let registry = TemplateRegistry::with_defaults()?;
 
@@ -307,11 +349,13 @@ mod template_registry_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod security_audit_template_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_security_audit_template_creation() -> Result<()> {
         let template = SecurityAuditTemplate::new();
 
@@ -321,7 +365,9 @@ mod security_audit_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_vulnerability_analysis_prompt() -> Result<()> {
         let template = SecurityAuditTemplate::new();
 
@@ -337,7 +383,9 @@ mod security_audit_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_dependency_audit_prompt() -> Result<()> {
         let template = SecurityAuditTemplate::new();
 
@@ -350,7 +398,9 @@ mod security_audit_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_severity_assessment_prompt() -> Result<()> {
         let template = SecurityAuditTemplate::new();
 
@@ -363,7 +413,9 @@ mod security_audit_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_remediation_suggestion_prompt() -> Result<()> {
         let template = SecurityAuditTemplate::new();
 
@@ -377,11 +429,13 @@ mod security_audit_template_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod code_analysis_template_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_code_review_prompt() -> Result<()> {
         let template = CodeAnalysisTemplate::new();
 
@@ -394,7 +448,9 @@ mod code_analysis_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_complexity_analysis_prompt() -> Result<()> {
         let template = CodeAnalysisTemplate::new();
 
@@ -406,7 +462,9 @@ mod code_analysis_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_refactoring_suggestion_prompt() -> Result<()> {
         let template = CodeAnalysisTemplate::new();
 
@@ -418,7 +476,9 @@ mod code_analysis_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_performance_optimization_prompt() -> Result<()> {
         let template = CodeAnalysisTemplate::new();
 
@@ -431,11 +491,13 @@ mod code_analysis_template_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod deployment_template_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_deployment_plan_prompt() -> Result<()> {
         let template = DeploymentTemplate::new();
 
@@ -451,7 +513,9 @@ mod deployment_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_rollback_strategy_prompt() -> Result<()> {
         let template = DeploymentTemplate::new();
 
@@ -464,7 +528,9 @@ mod deployment_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_health_check_prompt() -> Result<()> {
         let template = DeploymentTemplate::new();
 
@@ -478,11 +544,13 @@ mod deployment_template_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod error_diagnosis_template_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_error_analysis_prompt() -> Result<()> {
         let template = ErrorDiagnosisTemplate::new();
 
@@ -495,7 +563,9 @@ mod error_diagnosis_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_root_cause_analysis_prompt() -> Result<()> {
         let template = ErrorDiagnosisTemplate::new();
 
@@ -508,7 +578,9 @@ mod error_diagnosis_template_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_solution_suggestion_prompt() -> Result<()> {
         let template = ErrorDiagnosisTemplate::new();
 
@@ -521,11 +593,13 @@ mod error_diagnosis_template_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod template_validator_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_valid_template() -> Result<()> {
         let validator = TemplateValidator::new();
 
@@ -538,7 +612,9 @@ mod template_validator_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_invalid_syntax() -> Result<()> {
         let validator = TemplateValidator::new();
 
@@ -551,7 +627,9 @@ mod template_validator_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_undefined_helper() -> Result<()> {
         let validator = TemplateValidator::new();
 
@@ -567,7 +645,9 @@ mod template_validator_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_security_validation() -> Result<()> {
         let validator = TemplateValidator::with_security_checks();
 
@@ -582,7 +662,9 @@ mod template_validator_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_required_variables_check() -> Result<()> {
         let validator = TemplateValidator::new();
 
@@ -598,11 +680,13 @@ mod template_validator_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod template_performance_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_rendering_performance() -> Result<()> {
         let template = PromptTemplate::new("perf", "{{a}} {{b}} {{c}}");
 
@@ -625,7 +709,9 @@ mod template_performance_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_large_template_rendering() -> Result<()> {
         let large_content = "{{var}}".repeat(100);
         let template = PromptTemplate::new("large", &large_content);
@@ -640,7 +726,9 @@ mod template_performance_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - PromptTemplate API does not exist"]
     fn test_concurrent_rendering() -> Result<()> {
         use std::sync::Arc;
         use std::thread;

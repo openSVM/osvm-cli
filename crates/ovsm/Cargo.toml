@@ -1,0 +1,56 @@
+[package]
+name = "ovsm"
+version = "1.0.0"
+edition = "2021"
+authors = ["OSVM Team"]
+description = "OVSM (Open Versatile Seeker Mind) language interpreter"
+license = "MIT"
+repository = "https://github.com/opensvm/osvm-cli"
+keywords = ["blockchain", "solana", "language", "interpreter"]
+categories = ["parser-implementations", "development-tools"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Solana (matching parent crate version)
+solana-sdk = "3.0"
+solana-client = "3.0"
+solana-transaction-status = "3.0"
+
+# Data structures
+dashmap = "5.5"
+lru = "0.12"
+
+# Time
+chrono = "0.4"
+
+# UUID for agents
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+[dev-dependencies]
+proptest = "1.4"
+criterion = "0.5"
+bolero = "0.10"
+tokio-test = "0.4"
+
+[[bench]]
+name = "execution_bench"
+harness = false
+
+[features]
+default = ["stdlib", "agents"]
+stdlib = []
+agents = []
