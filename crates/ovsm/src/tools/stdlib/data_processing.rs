@@ -406,6 +406,287 @@ impl Tool for AppendTool {
     }
 }
 
+// PREPEND tool
+pub struct PrependTool;
+
+impl Tool for PrependTool {
+    fn name(&self) -> &str {
+        "PREPEND"
+    }
+
+    fn description(&self) -> &str {
+        "Prepend element to array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "PREPEND".to_string(),
+                reason: "Expected array and element".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let mut result = vec![args[1].clone()];
+        result.extend(collection.iter().cloned());
+
+        Ok(Value::array(result))
+    }
+}
+
+// SLICE tool
+pub struct SliceTool;
+
+impl Tool for SliceTool {
+    fn name(&self) -> &str {
+        "SLICE"
+    }
+
+    fn description(&self) -> &str {
+        "Extract slice from array (start, end)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 3 {
+            return Err(Error::InvalidArguments {
+                tool: "SLICE".to_string(),
+                reason: "Expected array, start, and end".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let start = args[1].as_int()? as usize;
+        let end = args[2].as_int()? as usize;
+
+        if start > collection.len() || end > collection.len() || start > end {
+            return Err(Error::InvalidArguments {
+                tool: "SLICE".to_string(),
+                reason: "Invalid slice range".to_string(),
+            });
+        }
+
+        let result = collection[start..end].to_vec();
+        Ok(Value::array(result))
+    }
+}
+
+// TOP_N tool
+pub struct TopNTool;
+
+impl Tool for TopNTool {
+    fn name(&self) -> &str {
+        "TOP_N"
+    }
+
+    fn description(&self) -> &str {
+        "Get top N elements from array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "TOP_N".to_string(),
+                reason: "Expected array and count".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let n = args[1].as_int()? as usize;
+
+        let result: Vec<Value> = collection.iter().take(n).cloned().collect();
+        Ok(Value::array(result))
+    }
+}
+
+// BOTTOM_N tool
+pub struct BottomNTool;
+
+impl Tool for BottomNTool {
+    fn name(&self) -> &str {
+        "BOTTOM_N"
+    }
+
+    fn description(&self) -> &str {
+        "Get bottom N elements from array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "BOTTOM_N".to_string(),
+                reason: "Expected array and count".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let n = args[1].as_int()? as usize;
+
+        let skip = if collection.len() > n {
+            collection.len() - n
+        } else {
+            0
+        };
+
+        let result: Vec<Value> = collection.iter().skip(skip).cloned().collect();
+        Ok(Value::array(result))
+    }
+}
+
+// ANY tool
+pub struct AnyTool;
+
+impl Tool for AnyTool {
+    fn name(&self) -> &str {
+        "ANY"
+    }
+
+    fn description(&self) -> &str {
+        "Check if any element is truthy"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "ANY".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let any_truthy = collection.iter().any(|v| v.is_truthy());
+        Ok(Value::Bool(any_truthy))
+    }
+}
+
+// ALL tool
+pub struct AllTool;
+
+impl Tool for AllTool {
+    fn name(&self) -> &str {
+        "ALL"
+    }
+
+    fn description(&self) -> &str {
+        "Check if all elements are truthy"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "ALL".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let all_truthy = collection.iter().all(|v| v.is_truthy());
+        Ok(Value::Bool(all_truthy))
+    }
+}
+
+// FIND tool
+pub struct FindTool;
+
+impl Tool for FindTool {
+    fn name(&self) -> &str {
+        "FIND"
+    }
+
+    fn description(&self) -> &str {
+        "Find first matching element in array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "FIND".to_string(),
+                reason: "Expected array and value".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let target = &args[1];
+
+        for (index, item) in collection.iter().enumerate() {
+            if item == target {
+                return Ok(Value::Int(index as i64));
+            }
+        }
+
+        Ok(Value::Int(-1)) // Return -1 if not found
+    }
+}
+
+// JOIN tool
+pub struct JoinTool;
+
+impl Tool for JoinTool {
+    fn name(&self) -> &str {
+        "JOIN"
+    }
+
+    fn description(&self) -> &str {
+        "Join array elements into string with separator"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "JOIN".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        let separator = if args.len() > 1 {
+            args[1].to_string_value()
+        } else {
+            ",".to_string()
+        };
+
+        let strings: Vec<String> = collection.iter().map(|v| v.to_string_value()).collect();
+        let result = strings.join(&separator);
+
+        Ok(Value::String(result))
+    }
+}
+
+// SPLIT tool
+pub struct SplitTool;
+
+impl Tool for SplitTool {
+    fn name(&self) -> &str {
+        "SPLIT"
+    }
+
+    fn description(&self) -> &str {
+        "Split string into array by separator"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "SPLIT".to_string(),
+                reason: "Expected string argument".to_string(),
+            });
+        }
+
+        let string = args[0].as_string()?;
+        let separator = if args.len() > 1 {
+            args[1].as_string()?
+        } else {
+            ","
+        };
+
+        let parts: Vec<Value> = string
+            .split(separator)
+            .map(|s| Value::String(s.to_string()))
+            .collect();
+
+        Ok(Value::array(parts))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
