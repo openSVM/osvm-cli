@@ -172,9 +172,53 @@ impl Evaluator {
                 Ok(ExecutionFlow::Continue)
             }
 
-            _ => {
-                // Placeholder for unimplemented statements
-                Ok(ExecutionFlow::Continue)
+            Statement::Try { body, catch_clauses } => {
+                // Try to execute the body
+                match self.execute_block(body) {
+                    Ok(flow) => Ok(flow),
+                    Err(error) => {
+                        // An error occurred, try to find a matching catch clause
+                        for catch_clause in catch_clauses {
+                            // If error_type is specified, check if it matches
+                            // For now, we'll accept any error in any catch clause
+                            // TODO: Implement error type matching
+                            return self.execute_block(&catch_clause.body);
+                        }
+
+                        // No catch clause matched, re-throw the error
+                        Err(error)
+                    }
+                }
+            }
+
+            Statement::Parallel { .. } => {
+                Err(Error::NotImplemented {
+                    tool: "PARALLEL execution".to_string(),
+                })
+            }
+
+            Statement::WaitStrategy(_) => {
+                Err(Error::NotImplemented {
+                    tool: "WAIT strategies (WAIT_ALL/WAIT_ANY/RACE)".to_string(),
+                })
+            }
+
+            Statement::Decision { .. } => {
+                Err(Error::NotImplemented {
+                    tool: "DECISION points".to_string(),
+                })
+            }
+
+            Statement::Guard { condition, else_body } => {
+                let cond_val = self.evaluate_expression(condition)?;
+
+                // If condition is false, execute the else_body (guard failed)
+                if !cond_val.is_truthy() {
+                    self.execute_block(else_body)
+                } else {
+                    // Guard passed, continue
+                    Ok(ExecutionFlow::Continue)
+                }
             }
         }
     }
