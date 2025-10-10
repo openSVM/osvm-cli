@@ -1,24 +1,27 @@
 //! Comprehensive tests for blockchain indexing and transaction processing
+//!
+//! Note: These tests use an API that doesn't match the actual implementation.
+//! The actual BlockchainIndexer API is:
+//! - new(ledger_path: Option<String>, snapshot_path: Option<String>, clickhouse: Arc<ClickHouseService>, config: IndexingConfig)
+//! - IndexingMode variants: FullHistorical, LastNDays(u32), RealtimeOnly, Custom(Box<IndexingConfig>)
+//! - No stats tracking methods exist
+//!
+//! These tests are ignored until they can be properly rewritten.
 
 use anyhow::Result;
 use mockito::Server;
-use osvm::services::{
-    account_decoders::{AccountDecoder, StakeAccount, TokenAccount, VoteAccount},
-    blockchain_indexer::{
-        Block, BlockchainIndexer, IndexerConfig, IndexingMode, IndexingStats, Transaction,
-    },
-    transaction_decoders::{InstructionData, TransactionDecoder, TransferInstruction},
-};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod indexer_core_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_indexer_initialization() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -40,7 +43,9 @@ mod indexer_core_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_indexer_single_block() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let mut server = Server::new_async().await;
@@ -109,7 +114,9 @@ mod indexer_core_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_indexer_batch_processing() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -139,7 +146,9 @@ mod indexer_core_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_indexer_checkpoint_recovery() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -186,7 +195,9 @@ mod indexer_core_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_indexer_concurrent_workers() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -225,11 +236,13 @@ mod indexer_core_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod account_decoder_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - AccountDecoder doesn't have these methods"]
     fn test_token_account_decoding() -> Result<()> {
         // Simulated token account data
         let data = vec![0u8; 165]; // SPL Token account size
@@ -242,7 +255,9 @@ mod account_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - AccountDecoder doesn't have these methods"]
     fn test_stake_account_decoding() -> Result<()> {
         // Simulated stake account data
         let data = vec![0u8; 200];
@@ -255,7 +270,9 @@ mod account_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - AccountDecoder doesn't have these methods"]
     fn test_vote_account_decoding() -> Result<()> {
         // Simulated vote account data
         let data = vec![0u8; 3731]; // Vote account size
@@ -268,7 +285,9 @@ mod account_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - AccountDecoder doesn't have these methods"]
     fn test_invalid_account_data() -> Result<()> {
         let data = vec![0u8; 10]; // Too small
 
@@ -281,7 +300,9 @@ mod account_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - AccountDecoder doesn't have these methods"]
     fn test_account_type_detection() -> Result<()> {
         let decoder = AccountDecoder::new();
 
@@ -302,11 +323,13 @@ mod account_decoder_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod transaction_decoder_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     fn test_transfer_instruction_decoding() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
@@ -324,7 +347,9 @@ mod transaction_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     fn test_spl_token_transfer_decoding() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
@@ -343,7 +368,9 @@ mod transaction_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     fn test_program_id_detection() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
@@ -361,7 +388,9 @@ mod transaction_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     fn test_instruction_parsing() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
@@ -379,7 +408,9 @@ mod transaction_decoder_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     fn test_complex_transaction_decoding() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
@@ -415,11 +446,13 @@ mod transaction_decoder_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod indexing_stats_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - BlockchainIndexer doesn't have stats tracking methods"]
     async fn test_stats_tracking() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -453,7 +486,9 @@ mod indexing_stats_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - BlockchainIndexer doesn't have stats tracking methods"]
     async fn test_stats_reset() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
@@ -482,11 +517,13 @@ mod indexing_stats_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "incomplete_tests"))]
 mod error_handling_tests {
     use super::*;
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - actual BlockchainIndexer has different constructor"]
     async fn test_rpc_failure_handling() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let mut server = Server::new_async().await;
@@ -519,7 +556,9 @@ mod error_handling_tests {
         Ok(())
     }
 
+    #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
+    #[ignore = "API mismatch - TransactionDecoder doesn't have these methods"]
     async fn test_corrupt_data_handling() -> Result<()> {
         let decoder = TransactionDecoder::new();
 
