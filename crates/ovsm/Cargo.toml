@@ -2,12 +2,28 @@
 name = "ovsm"
 version = "1.0.0"
 edition = "2021"
-authors = ["OSVM Team"]
-description = "OVSM (Open Versatile Seeker Mind) language interpreter"
+authors = ["OSVM Team <rin@opensvm.com>"]
+description = "OVSM (Open Versatile Seeker Mind) language interpreter for blockchain automation and scripting"
 license = "MIT"
 repository = "https://github.com/opensvm/osvm-cli"
-keywords = ["blockchain", "solana", "language", "interpreter"]
+homepage = "https://github.com/opensvm/osvm-cli"
+documentation = "https://docs.rs/ovsm"
+readme = "README.md"
+keywords = ["blockchain", "solana", "language", "interpreter", "scripting"]
 categories = ["parser-implementations", "development-tools"]
+include = [
+    "src/**/*",
+    "examples/**/*.rs",
+    "examples/**/*.ovsm",
+    "examples/README.md",
+    "tests/**/*",
+    "benches/**/*",
+    "Cargo.toml",
+    "README.md",
+    "CHANGELOG.md",
+    "USAGE_GUIDE.md",
+    "HOW_TO_USE.md",
+]
 
 [dependencies]
 # Async runtime

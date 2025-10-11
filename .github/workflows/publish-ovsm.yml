@@ -1,0 +1,221 @@
+name: Publish OVSM Crate
+
+on:
+  push:
+    tags:
+      - 'ovsm-v*'  # Trigger on tags like ovsm-v1.0.0
+  workflow_dispatch:  # Allow manual triggering
+    inputs:
+      dry_run:
+        description: 'Dry run (don't actually publish)'
+        required: false
+        default: 'false'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify-and-test:
+    name: Verify and Test OVSM Crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-ovsm-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+        working-directory: crates/ovsm
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: crates/ovsm
+
+      - name: Build OVSM crate
+        run: cargo build --release --locked
+        working-directory: crates/ovsm
+
+      - name: Run unit tests
+        run: cargo test --lib --bins
+        working-directory: crates/ovsm
+
+      - name: Run integration tests
+        run: cargo test
+        working-directory: crates/ovsm
+
+      - name: Test examples
+        run: |
+          cargo run --example run_file examples/hello_world.ovsm
+          cargo run --example run_file examples/factorial.ovsm
+          cargo run --example run_file examples/fibonacci.ovsm
+          cargo run --example run_file examples/array_operations.ovsm
+          cargo run --example run_file examples/conditional_logic.ovsm
+          cargo run --example run_file examples/loop_control.ovsm
+        working-directory: crates/ovsm
+
+      - name: Generate documentation
+        run: cargo doc --no-deps
+        working-directory: crates/ovsm
+
+      - name: Verify package
+        run: cargo package --allow-dirty
+        working-directory: crates/ovsm
+
+  publish:
+    name: Publish OVSM to crates.io
+    needs: verify-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-ovsm-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION=$(echo ${{ github.ref_name }} | sed 's/^ovsm-v//')
+          else
+            VERSION=$(grep '^version' crates/ovsm/Cargo.toml | head -1 | awk '{print $3}' | tr -d '"')
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Verify version matches Cargo.toml
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | awk '{print $3}' | tr -d '"')
+          TAG_VERSION="${{ steps.version.outputs.VERSION }}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: Version mismatch!"
+            echo "Cargo.toml version: $CARGO_VERSION"
+            echo "Git tag version: $TAG_VERSION"
+            exit 1
+          fi
+        working-directory: crates/ovsm
+
+      - name: Dry run publish (check only)
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🧪 Dry run mode - checking package..."
+          cargo publish --dry-run --allow-dirty
+        working-directory: crates/ovsm
+
+      - name: Publish to crates.io
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "📦 Publishing OVSM crate to crates.io..."
+          cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
+        working-directory: crates/ovsm
+        env:
+          CARGO_TERM_COLOR: always
+
+      - name: Create GitHub Release
+        if: github.event.inputs.dry_run != 'true' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: OVSM v${{ steps.version.outputs.VERSION }}
+          body: |
+            # OVSM Interpreter v${{ steps.version.outputs.VERSION }}
+
+            Released on crates.io: https://crates.io/crates/ovsm
+
+            ## Installation
+
+            ```bash
+            cargo install ovsm
+            ```
+
+            Or add to your `Cargo.toml`:
+
+            ```toml
+            [dependencies]
+            ovsm = "${{ steps.version.outputs.VERSION }}"
+            ```
+
+            ## What's New
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/crates/ovsm/CHANGELOG.md) for details.
+
+            ## Documentation
+
+            - [Usage Guide](https://github.com/${{ github.repository }}/blob/main/crates/ovsm/USAGE_GUIDE.md)
+            - [How to Use](https://github.com/${{ github.repository }}/blob/main/crates/ovsm/HOW_TO_USE.md)
+            - [API Docs](https://docs.rs/ovsm/${{ steps.version.outputs.VERSION }})
+
+            ## Examples
+
+            Check out the [examples directory](https://github.com/${{ github.repository }}/tree/main/crates/ovsm/examples) for sample scripts.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-docs:
+    name: Deploy Documentation to docs.rs
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Generate documentation
+        run: cargo doc --no-deps --document-private-items
+        working-directory: crates/ovsm
+
+      - name: Create index.html
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=ovsm/index.html">' > target/doc/index.html
+        working-directory: crates/ovsm
+
+      - name: Deploy to GitHub Pages (ovsm subdirectory)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./crates/ovsm/target/doc
+          destination_dir: ovsm
+          force_orphan: false
+          keep_files: true
+
+  notify:
+    name: Notify on Success
+    needs: [publish, deploy-docs]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Success notification
+        run: |
+          echo "✅ OVSM crate published successfully!"
+          echo "📦 Package: https://crates.io/crates/ovsm"
+          echo "📚 Docs: https://docs.rs/ovsm"
+          echo "🎉 GitHub Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
