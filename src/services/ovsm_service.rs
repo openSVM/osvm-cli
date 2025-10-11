@@ -1,0 +1,304 @@
+//! OVSM Service - Integration layer for the OVSM language interpreter
+//!
+//! This service provides a bridge between the OSVM CLI and the OVSM language interpreter,
+//! enabling users to write and execute automation scripts with full access to OSVM operations.
+
+use anyhow::{Context, Result};
+use ovsm::{Evaluator, Parser, Scanner, Value};
+use std::fs;
+use std::path::Path;
+
+/// OVSM Service for executing scripts and managing the OVSM runtime
+pub struct OvsmService {
+    /// The OVSM evaluator instance
+    evaluator: Evaluator,
+    /// Verbose mode flag
+    verbose: bool,
+    /// Debug mode flag
+    debug: bool,
+}
+
+impl OvsmService {
+    /// Create a new OVSM service instance
+    pub fn new() -> Self {
+        Self {
+            evaluator: Evaluator::new(),
+            verbose: false,
+            debug: false,
+        }
+    }
+
+    /// Create a new OVSM service with verbose output
+    pub fn with_verbose(verbose: bool) -> Self {
+        Self {
+            evaluator: Evaluator::new(),
+            verbose,
+            debug: false,
+        }
+    }
+
+    /// Enable debug mode
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
+    }
+
+    /// Execute OVSM code from a string
+    ///
+    /// # Arguments
+    /// * `code` - The OVSM source code to execute
+    ///
+    /// # Returns
+    /// The result value from the OVSM execution
+    pub fn execute_code(&mut self, code: &str) -> Result<Value> {
+        if self.debug {
+            println!("🔍 Parsing OVSM code:");
+            println!("{}", code);
+        }
+
+        // Tokenize the code
+        let mut scanner = Scanner::new(code);
+        let tokens = scanner
+            .scan_tokens()
+            .context("Failed to tokenize OVSM code")?;
+
+        if self.debug {
+            println!("✅ Tokenization successful ({} tokens)", tokens.len());
+        }
+
+        // Parse the tokens into an AST
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().context("Failed to parse OVSM code")?;
+
+        if self.debug {
+            println!("✅ Parsing successful");
+        }
+
+        // Execute the program
+        let result = self
+            .evaluator
+            .execute(&program)
+            .context("Failed to execute OVSM program")?;
+
+        if self.verbose {
+            println!("✨ Execution completed successfully");
+        }
+
+        Ok(result)
+    }
+
+    /// Execute an OVSM script file
+    ///
+    /// # Arguments
+    /// * `script_path` - Path to the OVSM script file
+    ///
+    /// # Returns
+    /// The result value from the OVSM execution
+    pub fn execute_file<P: AsRef<Path>>(&mut self, script_path: P) -> Result<Value> {
+        let path = script_path.as_ref();
+
+        if self.verbose {
+            println!("📂 Reading script: {}", path.display());
+        }
+
+        // Read the script file
+        let code = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read script file: {}", path.display()))?;
+
+        if self.verbose {
+            println!("📜 Script loaded ({} bytes)", code.len());
+        }
+
+        // Execute the code
+        self.execute_code(&code)
+    }
+
+    /// Check the syntax of OVSM code without executing it
+    ///
+    /// # Arguments
+    /// * `code` - The OVSM source code to check
+    ///
+    /// # Returns
+    /// Ok(()) if the syntax is valid, Err otherwise
+    pub fn check_syntax(&self, code: &str) -> Result<()> {
+        // Tokenize
+        let mut scanner = Scanner::new(code);
+        let tokens = scanner
+            .scan_tokens()
+            .context("Syntax error during tokenization")?;
+
+        // Parse
+        let mut parser = Parser::new(tokens);
+        parser.parse().context("Syntax error during parsing")?;
+
+        if self.verbose {
+            println!("✅ Syntax check passed");
+        }
+
+        Ok(())
+    }
+
+    /// Check the syntax of an OVSM script file
+    ///
+    /// # Arguments
+    /// * `script_path` - Path to the OVSM script file
+    ///
+    /// # Returns
+    /// Ok(()) if the syntax is valid, Err otherwise
+    pub fn check_file_syntax<P: AsRef<Path>>(&self, script_path: P) -> Result<()> {
+        let path = script_path.as_ref();
+
+        if self.verbose {
+            println!("📂 Checking script: {}", path.display());
+        }
+
+        let code = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read script file: {}", path.display()))?;
+
+        self.check_syntax(&code)
+    }
+
+    /// Format a value for display
+    pub fn format_value(&self, value: &Value) -> String {
+        match value {
+            Value::Int(i) => format!("{}", i),
+            Value::Float(f) => format!("{}", f),
+            Value::String(s) => format!("\"{}\"", s),
+            Value::Bool(b) => format!("{}", b),
+            Value::Null => "null".to_string(),
+            Value::Array(arr) => {
+                let items: Vec<String> = arr.iter().map(|v| self.format_value(v)).collect();
+                format!("[{}]", items.join(", "))
+            }
+            Value::Object(obj) => {
+                let pairs: Vec<String> = obj
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, self.format_value(v)))
+                    .collect();
+                format!("{{{}}}", pairs.join(", "))
+            }
+            Value::Range { start, end } => {
+                format!("[{}..{}]", start, end)
+            }
+        }
+    }
+
+    /// Format a value as JSON
+    pub fn format_value_json(&self, value: &Value) -> Result<String> {
+        // Convert OVSM Value to serde_json::Value
+        let json_value = self.value_to_json(value)?;
+        serde_json::to_string_pretty(&json_value).context("Failed to serialize value to JSON")
+    }
+
+    /// Convert OVSM Value to serde_json::Value
+    fn value_to_json(&self, value: &Value) -> Result<serde_json::Value> {
+        match value {
+            Value::Int(i) => Ok(serde_json::json!(i)),
+            Value::Float(f) => Ok(serde_json::json!(f)),
+            Value::String(s) => Ok(serde_json::json!(s)),
+            Value::Bool(b) => Ok(serde_json::json!(b)),
+            Value::Null => Ok(serde_json::Value::Null),
+            Value::Array(arr) => {
+                let json_arr: Result<Vec<_>> =
+                    arr.iter().map(|v| self.value_to_json(v)).collect();
+                Ok(serde_json::Value::Array(json_arr?))
+            }
+            Value::Object(obj) => {
+                let mut json_obj = serde_json::Map::new();
+                for (k, v) in obj.iter() {
+                    json_obj.insert(k.clone(), self.value_to_json(v)?);
+                }
+                Ok(serde_json::Value::Object(json_obj))
+            }
+            Value::Range { start, end } => {
+                // Represent range as an object with start and end
+                Ok(serde_json::json!({
+                    "type": "range",
+                    "start": start,
+                    "end": end
+                }))
+            }
+        }
+    }
+}
+
+impl Default for OvsmService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execute_simple_code() {
+        let mut service = OvsmService::new();
+        let result = service.execute_code("$x = 42\nRETURN $x").unwrap();
+
+        match result {
+            Value::Int(i) => assert_eq!(i, 42),
+            _ => panic!("Expected Int value"),
+        }
+    }
+
+    #[test]
+    fn test_execute_arithmetic() {
+        let mut service = OvsmService::new();
+        let result = service
+            .execute_code("$a = 10\n$b = 20\nRETURN $a + $b")
+            .unwrap();
+
+        match result {
+            Value::Int(i) => assert_eq!(i, 30),
+            _ => panic!("Expected Int value"),
+        }
+    }
+
+    #[test]
+    fn test_execute_loop() {
+        let mut service = OvsmService::new();
+        let result = service
+            .execute_code("$sum = 0\nFOR $i IN [1..6]:\n    $sum = $sum + $i\nRETURN $sum")
+            .unwrap();
+
+        match result {
+            Value::Int(i) => assert_eq!(i, 15), // 1+2+3+4+5 = 15
+            _ => panic!("Expected Int value"),
+        }
+    }
+
+    #[test]
+    fn test_check_syntax_valid() {
+        let service = OvsmService::new();
+        let result = service.check_syntax("$x = 10\nRETURN $x");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_syntax_invalid() {
+        let service = OvsmService::new();
+        let result = service.check_syntax("$x = \nRETURN $x");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_format_value() {
+        let service = OvsmService::new();
+
+        assert_eq!(service.format_value(&Value::Int(42)), "42");
+        assert_eq!(service.format_value(&Value::Float(3.14)), "3.14");
+        assert_eq!(service.format_value(&Value::String("hello".into())), "\"hello\"");
+        assert_eq!(service.format_value(&Value::Bool(true)), "true");
+        assert_eq!(service.format_value(&Value::Null), "null");
+    }
+
+    #[test]
+    fn test_format_value_json() {
+        let service = OvsmService::new();
+        let value = Value::Int(42);
+        let json = service.format_value_json(&value).unwrap();
+        assert!(json.contains("42"));
+    }
+}

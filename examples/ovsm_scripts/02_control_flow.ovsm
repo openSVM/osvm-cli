@@ -1,0 +1,7 @@
+// Control Flow Examples - FOR loop
+$sum = 0
+
+FOR $i IN [1..6]:
+    $sum = $sum + $i
+
+RETURN $sum

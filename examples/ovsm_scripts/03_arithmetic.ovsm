@@ -1,0 +1,18 @@
+// Arithmetic Operations
+// Demonstrates basic math in OVSM
+
+$a = 10
+$b = 3
+
+// Basic operations
+$add = $a + $b       // 13
+$sub = $a - $b       // 7
+$mul = $a * $b       // 30
+$div = $a / $b       // 3 (integer division)
+$mod = $a % $b       // 1 (remainder)
+$pow = $a ** 2       // 100 (exponentiation)
+
+// Return the sum of all results
+$total = $add + $sub + $mul + $div + $mod + $pow
+
+RETURN $total  // Should be 154
