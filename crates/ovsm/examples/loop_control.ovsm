@@ -1,0 +1,16 @@
+// Loop control with BREAK and CONTINUE
+$sum = 0
+
+FOR $i IN [1..20]:
+    // Skip even numbers
+    IF $i % 2 == 0 THEN
+        CONTINUE
+    ELSE
+        // Stop at 15
+        IF $i > 15 THEN
+            BREAK
+        ELSE
+            $sum = $sum + $i
+
+// Should sum: 1 + 3 + 5 + 7 + 9 + 11 + 13 + 15 = 64
+RETURN $sum

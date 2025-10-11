@@ -1,0 +1,12 @@
+// Array iteration and operations
+$numbers = [1, 2, 3, 4, 5]
+$sum = 0
+$count = 0
+$average = 0
+
+FOR $num IN $numbers:
+    $sum = $sum + $num
+    $count = $count + 1
+    $average = $sum / $count
+
+RETURN $average
