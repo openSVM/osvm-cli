@@ -7,7 +7,8 @@ $x = 1
 $y = 5
 IF $x > $y THEN
     RETURN "x is bigger"
-RETURN "x is smaller"
+ELSE
+    RETURN "x is smaller"
 ```
 
 Expected: x is smaller
@@ -17,7 +18,8 @@ Expected: x is smaller
 ```ovsm
 IF 1 > 5 THEN
     RETURN "1 is bigger"
-RETURN "1 is smaller"
+ELSE
+    RETURN "1 is smaller"
 ```
 
 Expected: 1 is smaller
@@ -25,10 +27,11 @@ Expected: 1 is smaller
 ## Test 3: Loop variable comparison
 
 ```ovsm
+$result = "all small"
 FOR $i IN [1..3]:
     IF $i > 2 THEN
-        RETURN "found big"
-RETURN "all small"
+        $result = "found big"
+RETURN $result
 ```
 
 Expected: all small

@@ -150,9 +150,12 @@ impl Parser {
         self.skip_newlines();
 
         let mut body = Vec::new();
-        while !self.is_end_of_block() && !self.is_at_end() {
+        while !self.is_at_end() {
+            self.skip_newlines(); // Skip newlines before checking end condition
+            if self.is_end_of_loop_block() {
+                break;
+            }
             body.push(self.statement()?);
-            self.skip_newlines();
         }
 
         Ok(Statement::While { condition, body })
@@ -175,9 +178,12 @@ impl Parser {
         self.skip_newlines();
 
         let mut body = Vec::new();
-        while !self.is_end_of_block() && !self.is_at_end() {
+        while !self.is_at_end() {
+            self.skip_newlines(); // Skip newlines before checking end condition
+            if self.is_end_of_loop_block() {
+                break;
+            }
             body.push(self.statement()?);
-            self.skip_newlines();
         }
 
         Ok(Statement::For {
@@ -834,12 +840,12 @@ impl Parser {
     }
 
     fn is_end_of_block(&self) -> bool {
-        // Check if we're at a keyword that ends the current block
-        // These are keywords that belong to a parent construct (ELSE, CATCH, etc.)
-        // or explicitly close blocks (RightBrace, wait strategies, RETURN)
+        // Check if we're at a keyword that ends the current block (for IF/TRY/etc.)
+        // These are keywords that belong to a parent construct (ELSE, CATCH, BRANCH)
+        // or explicitly close blocks (RightBrace, wait strategies)
         //
-        // NOTE: IF, FOR, WHILE are NOT block terminators - they are statements
-        // that can appear within blocks! Only RETURN explicitly exits blocks.
+        // NOTE: IF, FOR, WHILE, RETURN, BREAK, CONTINUE are NOT block terminators!
+        // They are control flow statements that can appear within blocks.
         matches!(
             self.peek().kind,
             TokenKind::Else
@@ -849,8 +855,17 @@ impl Parser {
                 | TokenKind::WaitAll
                 | TokenKind::WaitAny
                 | TokenKind::Race
-                | TokenKind::Return  // RETURN explicitly exits the current function/block
         )
+    }
+
+    fn is_end_of_loop_block(&self) -> bool {
+        // Check if we're at a keyword that ends a loop block (FOR/WHILE)
+        // Loops terminate on the same keywords as other blocks, PLUS:
+        // - RETURN (which exits the function, ending the loop)
+        // This is because OVSM has no explicit block delimiters, so RETURN
+        // serves as a signal that the loop body has ended and we're back
+        // at the top level of the function/script.
+        self.is_end_of_block() || matches!(self.peek().kind, TokenKind::Return)
     }
 }
 

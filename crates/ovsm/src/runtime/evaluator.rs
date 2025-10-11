@@ -600,10 +600,9 @@ mod tests {
             r#"
             $x = 10
             IF $x > 5 THEN
-                $result = "high"
+                RETURN "high"
             ELSE
-                $result = "low"
-            RETURN $result
+                RETURN "low"
         "#,
         )
         .unwrap();
