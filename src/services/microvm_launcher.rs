@@ -1043,9 +1043,8 @@ mod tests {
     #[test]
     fn test_microvm_detection() {
         // This will be false in tests unless actually in microVM
-        let in_vm = is_running_in_microvm();
-        // Just check it doesn't panic
-        assert!(in_vm || !in_vm);
+        let _in_vm = is_running_in_microvm();
+        // Just check it doesn't panic - the function completed successfully
     }
 
     // Phase 3.1 Tests
@@ -1069,9 +1068,9 @@ mod tests {
         let cid3 = launcher.allocate_vsock_cid("filesystem").unwrap();
 
         // All CIDs should be in the 100-199 range
-        assert!(cid1 >= 100 && cid1 < 200);
-        assert!(cid2 >= 100 && cid2 < 200);
-        assert!(cid3 >= 100 && cid3 < 200);
+        assert!((100..200).contains(&cid1));
+        assert!((100..200).contains(&cid2));
+        assert!((100..200).contains(&cid3));
 
         // Same server ID should get same CID (deterministic)
         let cid1_repeat = launcher.allocate_vsock_cid("solana").unwrap();

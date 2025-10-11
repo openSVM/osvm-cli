@@ -7,9 +7,6 @@
 //!
 //! These tests are ignored until they can be properly rewritten.
 
-use anyhow::Result;
-use std::collections::HashMap;
-
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod template_basic_tests {
     use super::*;

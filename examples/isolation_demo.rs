@@ -10,8 +10,8 @@
 //! Run with: cargo run --example isolation_demo
 
 use osvm::utils::isolation::{
-    Component, ComponentId, ComponentStatus, ComponentType, IsolationConfig, IsolationType,
-    ResourceLimits, Runtime, RuntimeManager,
+    Component, ComponentId, ComponentMetadata, ComponentStatus, ComponentType, IsolationConfig,
+    IsolationType, ResourceLimits, Runtime, RuntimeManager,
 };
 use std::collections::HashMap;
 
@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
     println!("   5. Health monitoring begins\n");
 
     // Simulate the lifecycle for demo purposes
-    simulate_component_lifecycle(&runtime, &component).await?;
+    simulate_component_lifecycle(runtime.as_ref(), &component).await?;
 
     // Step 5: Show isolation benefits
     println!("🔒 Step 5: Isolation Security Properties...");
@@ -125,7 +125,10 @@ fn create_test_component(id: ComponentId) -> Component {
         },
         status: ComponentStatus::Stopped,
         isolation_config: IsolationConfig {
-            isolation_type: IsolationType::Process,
+            isolation_type: IsolationType::ProcessSandbox {
+                seccomp_profile: None,
+                apparmor_profile: None,
+            },
             resource_limits: ResourceLimits {
                 max_memory_mb: Some(128),
                 max_cpu_cores: Some(1),
@@ -138,6 +141,12 @@ fn create_test_component(id: ComponentId) -> Component {
             ..Default::default()
         },
         runtime_handle: None,
+        metadata: ComponentMetadata {
+            name: "echo-mcp".to_string(),
+            version: Some("1.0.0".to_string()),
+            description: Some("Echo MCP Server for testing".to_string()),
+            tags,
+        },
     }
 }
 

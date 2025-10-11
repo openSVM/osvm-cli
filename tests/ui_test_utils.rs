@@ -5,8 +5,7 @@
 
 use cursive::backends::puppet::Backend as PuppetBackend;
 use cursive::event::{Event, Key};
-use cursive::{Cursive, CursiveExt, View};
-use std::sync::Arc;
+use cursive::{Cursive, View};
 use uuid::Uuid;
 
 use osvm::utils::agent_chat_v2::{update_ui_displays, AdvancedChatState, AdvancedChatUI};

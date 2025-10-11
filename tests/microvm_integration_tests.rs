@@ -372,7 +372,7 @@ async fn test_cid_allocation_determinism() -> Result<()> {
 
     // Verify CID is in valid range
     assert!(
-        cid1 >= 100 && cid1 < 200,
+        (100..200).contains(&cid1),
         "CID should be in range 100-199, got {}",
         cid1
     );

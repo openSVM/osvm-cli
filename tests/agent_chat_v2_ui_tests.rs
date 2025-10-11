@@ -137,7 +137,7 @@ async fn test_error_handling_in_ui() -> Result<()> {
 
     // Should handle gracefully
     let content = ui.get_chat_content();
-    assert!(content.len() > 0); // Should have some content
+    assert!(!content.is_empty()); // Should have some content
 
     Ok(())
 }
