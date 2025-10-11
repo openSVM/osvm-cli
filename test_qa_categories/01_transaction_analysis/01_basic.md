@@ -1,52 +1,63 @@
-# Transaction Analysis - Basic Queries
+# Transaction Analysis - Basic Level
 
-## Q1001: "Show me the last 10 transactions on Solana"
+## Q1: "I sent SOL to my friend but I'm not sure if it went through. Check transaction 5j7s6NiJS3JAkvgkoc9wGpM8hBvPxYT6k8ezH9XxcV4"
 
 **Expected Plan:**
-[TIME: ~3s] [COST: free] [CONFIDENCE: 100%]
+[TIME: ~2s] [COST: free] [CONFIDENCE: 100%]
 
 **Available Tools:**
 From Standard Library:
-  - getSlot, getBlock (Solana RPC)
-  - SLICE, LAST (Data Processing)
+  - getTransaction (Solana RPC)
+  - parseU64 (Solana Utilities)
 
 **Main Branch:**
 ```ovsm
-$current_slot = getSlot()
+$signature = "5j7s6NiJS3JAkvgkoc9wGpM8hBvPxYT6k8ezH9XxcV4"
 
 TRY:
-  $block = getBlock(slot: $current_slot)
-  $transactions = $block.transactions
-CATCH RECOVERABLE:
-  // Block might be skipped
-  $current_slot = $current_slot - 1
-  $block = getBlock(slot: $current_slot)
-  $transactions = $block.transactions
+  $tx = getTransaction(signature: $signature)
+CATCH FATAL:
+  RETURN ERROR(message: "Transaction not found - it may not have been submitted or confirmed yet")
 
-$recent_txs = SLICE(collection: $transactions, start: 0, end: 10)
+// Check if transaction succeeded
+$success = $tx.meta.err == null
+
+// Extract transfer details
+$pre_balances = $tx.meta.preBalances
+$post_balances = $tx.meta.postBalances
+$accounts = $tx.transaction.message.accountKeys
+
+// Calculate amount transferred (difference in sender's balance)
+$sender_pre = $pre_balances[0]
+$sender_post = $post_balances[0]
+$amount_lamports = $sender_pre - $sender_post - $tx.meta.fee
+
+$amount_sol = $amount_lamports / 1000000000
 ```
 
-**Decision Point:** Check if we have enough transactions
-  BRANCH A (enough txs in one block):
-    $result = $recent_txs
-  BRANCH B (need more blocks):
-    $all_txs = []
-    FOR $i IN 0..5:
-      $block = getBlock(slot: $current_slot - $i)
-      $all_txs = APPEND(array: $all_txs, item: $block.transactions)
-      BREAK IF COUNT(collection: $all_txs) >= 10
-    $result = SLICE(collection: $all_txs, start: 0, end: 10)
+**Decision Point:** Check transaction status
+  BRANCH A ($success == true):
+    $status = "SUCCESS"
+    $message = "Your transfer completed successfully"
+  BRANCH B ($success == false):
+    $status = "FAILED"
+    $message = "Transaction failed: " + $tx.meta.err
+    $amount_sol = 0
 
 **Action:**
 RETURN {
-  transactions: $result,
-  count: COUNT(collection: $result),
+  status: $status,
+  message: $message,
+  amount_sent: $amount_sol,
+  fee_paid: $tx.meta.fee / 1000000000,
+  recipient: $accounts[1],
+  timestamp: $tx.blockTime,
   confidence: 100
 }
 
 ---
 
-## Q1002: "Get details for transaction 5j7s6NiJS3JAkvgkoc9wGpM8hBvPxYT6k8ezH"
+## Q2: "What fee did I pay for my last transaction?"
 
 **Expected Plan:**
 [TIME: ~1s] [COST: free] [CONFIDENCE: 100%]

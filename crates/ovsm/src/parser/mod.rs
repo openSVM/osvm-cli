@@ -243,7 +243,7 @@ impl Parser {
         self.skip_newlines();
 
         let mut body = Vec::new();
-        while !self.check(&TokenKind::Catch) && !self.is_at_end() {
+        while !self.check(&TokenKind::Catch) && !self.is_end_of_try_block() && !self.is_at_end() {
             body.push(self.statement()?);
             self.skip_newlines();
         }
@@ -269,7 +269,7 @@ impl Parser {
             self.skip_newlines();
 
             let mut catch_body = Vec::new();
-            while !self.check(&TokenKind::Catch) && !self.is_end_of_block() && !self.is_at_end()
+            while !self.check(&TokenKind::Catch) && !self.is_end_of_try_block() && !self.is_at_end()
             {
                 catch_body.push(self.statement()?);
                 self.skip_newlines();
@@ -866,6 +866,12 @@ impl Parser {
         // serves as a signal that the loop body has ended and we're back
         // at the top level of the function/script.
         self.is_end_of_block() || matches!(self.peek().kind, TokenKind::Return)
+    }
+
+    fn is_end_of_try_block(&self) -> bool {
+        // TRY/CATCH blocks need special handling like loops
+        // They terminate on the same keywords as loops
+        self.is_end_of_loop_block()
     }
 }
 
