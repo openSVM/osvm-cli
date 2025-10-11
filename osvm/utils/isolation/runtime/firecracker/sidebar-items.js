@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["VmState"],"struct":["FirecrackerConfig","FirecrackerInstance","FirecrackerRuntime","NetworkConfig","VmConfig","VsockConfig"]};

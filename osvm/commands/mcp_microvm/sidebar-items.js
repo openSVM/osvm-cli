@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_mcp_microvm_command","launch_many_mcp_microvms","launch_mcp_microvm","show_microvm_status","stop_mcp_microvm","test_mcp_microvm"]};

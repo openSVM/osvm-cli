@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ScalingDecision"],"fn":["component_type_name"],"struct":["AutoScaler","AutoScalerConfig","ComponentMetrics","ScalingPolicy"]};

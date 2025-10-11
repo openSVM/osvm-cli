@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Hot-Swap System for Zero-Downtime Updates"><title>osvm::utils::isolation::hotswap - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-aa0817cf.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="osvm" data-themes="" data-resource-suffix="" data-rustdoc-version="1.90.0 (1159e78c4 2025-09-14)" data-channel="1.90.0" data-search-js="search-fa3e91e5.js" data-settings-js="settings-5514c975.js" ><script src="../../../../static.files/storage-68b7e25d.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-eebb9057.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../osvm/index.html">osvm</a><span class="version">0.9.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module hotswap</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#rollback-on-failure" title="Rollback on Failure">Rollback on Failure</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#constants" title="Constants">Constants</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In osvm::<wbr>utils::<wbr>isolation</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">osvm</a>::<wbr><a href="../../index.html">utils</a>::<wbr><a href="../index.html">isolation</a></div><h1>Module <span>hotswap</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/osvm/utils/isolation/hotswap.rs.html#1-741">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Hot-Swap System for Zero-Downtime Updates</p>
+<p>This module implements blue-green deployment with automatic rollback for OSVM components.
+It enables updating running components (RPC nodes, validators, MCP servers) without
+service interruption.</p>
+<h2 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h2><div class="example-wrap"><pre class="language-text"><code>Phase 1: Preparation
+┌─────────────┐
+│ Component A │ ← Currently serving traffic
+│ (v1.0.0)    │
+└─────────────┘
+
+Phase 2: Blue-Green Deployment
+┌─────────────┐     ┌─────────────┐
+│ Component A │ ←───│ Component B │ ← New version starting
+│ (v1.0.0)    │     │ (v1.1.0)    │
+└─────────────┘     └─────────────┘
+     ↑ 100%              ↑ 0%
+
+Phase 3: Health Check
+┌─────────────┐     ┌─────────────┐
+│ Component A │     │ Component B │ ← Verify health
+│ (v1.0.0)    │     │ (v1.1.0)    │    ✓ Boot successful
+└─────────────┘     └─────────────┘    ✓ Passes health checks
+     ↑ 100%              ↑ 0%           ✓ Ready for traffic
+
+Phase 4: Traffic Shift
+┌─────────────┐     ┌─────────────┐
+│ Component A │  ───→ Component B │ ← Shift traffic
+│ (v1.0.0)    │     │ (v1.1.0)    │
+└─────────────┘     └─────────────┘
+     ↑ 0%               ↑ 100%
+
+Phase 5: Drain &amp; Cleanup
+┌─────────────┐     ┌─────────────┐
+│ Component A │ ──X  │ Component B │ ← Old version stopped
+│ (v1.0.0)    │     │ (v1.1.0)    │    after connection drain
+└─────────────┘     └─────────────┘
+  (stopped)              ↑ 100%</code></pre></div><h2 id="rollback-on-failure"><a class="doc-anchor" href="#rollback-on-failure">§</a>Rollback on Failure</h2>
+<p>If Component B fails health checks or crashes during traffic shift:</p>
+<ul>
+<li>Immediately revert traffic to Component A</li>
+<li>Stop Component B</li>
+<li>Report failure reason</li>
+<li>No service interruption</li>
+</ul>
+<h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ul>
+<li><strong>RPC Node Updates</strong>: Update to new Solana version without downtime</li>
+<li><strong>MCP Server Updates</strong>: Deploy new tool versions seamlessly</li>
+<li><strong>Security Patches</strong>: Apply critical patches with zero interruption</li>
+<li><strong>Configuration Changes</strong>: Update settings without restart</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.HotSwapConfig.html" title="struct osvm::utils::isolation::hotswap::HotSwapConfig">HotSwap<wbr>Config</a></dt><dd>Configuration for hot-swap operations</dd><dt><a class="struct" href="struct.HotSwapManager.html" title="struct osvm::utils::isolation::hotswap::HotSwapManager">HotSwap<wbr>Manager</a></dt><dd>Hot-swap manager for zero-downtime component updates</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.HotSwapResult.html" title="enum osvm::utils::isolation::hotswap::HotSwapResult">HotSwap<wbr>Result</a></dt><dd>Result of a hot-swap operation</dd><dt><a class="enum" href="enum.HotSwapState.html" title="enum osvm::utils::isolation::hotswap::HotSwapState">HotSwap<wbr>State</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>State of a hot-swap operation</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.DEFAULT_DRAIN_TIMEOUT_SECS.html" title="constant osvm::utils::isolation::hotswap::DEFAULT_DRAIN_TIMEOUT_SECS">DEFAULT_<wbr>DRAIN_<wbr>TIMEOUT_<wbr>SECS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.DEFAULT_HEALTH_CHECK_INTERVAL_SECS.html" title="constant osvm::utils::isolation::hotswap::DEFAULT_HEALTH_CHECK_INTERVAL_SECS">DEFAULT_<wbr>HEALTH_<wbr>CHECK_<wbr>INTERVAL_<wbr>SECS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.DEFAULT_HEALTH_CHECK_TIMEOUT_SECS.html" title="constant osvm::utils::isolation::hotswap::DEFAULT_HEALTH_CHECK_TIMEOUT_SECS">DEFAULT_<wbr>HEALTH_<wbr>CHECK_<wbr>TIMEOUT_<wbr>SECS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="constant" href="constant.DEFAULT_MAX_HEALTH_CHECKS.html" title="constant osvm::utils::isolation::hotswap::DEFAULT_MAX_HEALTH_CHECKS">DEFAULT_<wbr>MAX_<wbr>HEALTH_<wbr>CHECKS</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl></section></div></main></body></html>

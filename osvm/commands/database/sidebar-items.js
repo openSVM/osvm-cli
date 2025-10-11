@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cmd_activity","cmd_init","cmd_query","cmd_start","cmd_status","cmd_stop","cmd_sync","execute_database_command","validate_sql_query"],"struct":["DatabaseArgs"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["format_colored_text","render_without_scroll","truncate_with_ellipsis","wrap_text_smart"],"struct":["ComponentArea","ComponentAreas","TerminalRenderer"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_DRAIN_TIMEOUT_SECS","DEFAULT_HEALTH_CHECK_INTERVAL_SECS","DEFAULT_HEALTH_CHECK_TIMEOUT_SECS","DEFAULT_MAX_HEALTH_CHECKS"],"enum":["HotSwapResult","HotSwapState"],"struct":["HotSwapConfig","HotSwapManager"]};

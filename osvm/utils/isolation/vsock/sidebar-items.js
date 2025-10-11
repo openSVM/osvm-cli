@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CID_ANY","CID_HOST","CID_HYPERVISOR","CID_LOCAL","FIRST_ALLOCATABLE_PORT","FIRST_GUEST_CID"],"struct":["VsockAddr","VsockConnection","VsockListener","VsockManager","VsockStats"],"type":["Cid","Port"]};

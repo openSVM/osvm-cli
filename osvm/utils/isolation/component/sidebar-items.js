@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ComponentStatus","ComponentType"],"struct":["Component","ComponentId","ComponentMetadata","ComponentRegistry","RuntimeHandle"]};

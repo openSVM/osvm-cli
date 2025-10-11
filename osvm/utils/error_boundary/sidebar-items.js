@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CircuitState"],"fn":["global_error_manager"],"struct":["CircuitBreaker","ErrorRecoveryManager","GLOBAL_ERROR_MANAGER","SecureErrorBoundary"]};

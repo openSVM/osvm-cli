@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_mcp_mount","handle_mcp_mounts","handle_mcp_unmount","handle_mount_add","handle_mount_list","handle_mount_remove","validate_mcp_tool_exists"],"struct":["MountInfo","MountManager","MountsConfig"]};

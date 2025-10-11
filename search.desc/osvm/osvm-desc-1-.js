@@ -1,0 +1,1 @@
+searchState.loadedDescShard("osvm", 1, "Create theme preview\nRefresh available themes list\nCreate a reset sequence\nCreate retro/vintage theme\nSave theme to file\nSave theme preference\nSwitch to theme by name\nGet theme file path\nConvert color to ANSI escape sequence\nConvert style to ANSI escape sequence\nConvert color to background ANSI escape sequence")
