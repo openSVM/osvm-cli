@@ -11,13 +11,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. [Core Utilities](#core-utilities)
 7. [SSH Deployment System](#ssh-deployment-system)
 8. [AI Integration](#ai-integration)
-
 9. [MCP Server Integration](#mcp-server-integration)
-10. [Testing Strategy](#testing-strategy)
-11. [Error Handling](#error-handling)
-12. [Configuration Management](#configuration-management)
-13. [Common Development Patterns](#common-development-patterns)
-14. [Debugging and Troubleshooting](#debugging-and-troubleshooting)
+10. [OVSM Script Language Integration](#ovsm-script-language-integration)
+11. [Testing Strategy](#testing-strategy)
+12. [Error Handling](#error-handling)
+13. [Configuration Management](#configuration-management)
+14. [Common Development Patterns](#common-development-patterns)
+15. [Debugging and Troubleshooting](#debugging-and-troubleshooting)
 
 ## Development Environment Setup
 
@@ -154,7 +154,8 @@ osvm-cli/
 │   │   ├── mod.rs           # Service module exports
 │   │   ├── ai_service.rs    # AI query processing, OpenAI/Ollama integration
 │   │   ├── audit_service.rs # Security auditing with AI analysis
-│   │   └── mcp_service.rs   # Model Context Protocol server management
+│   │   ├── mcp_service.rs   # Model Context Protocol server management
+│   │   └── ovsm_service.rs  # OVSM script language integration
 │   └── utils/               # Core utilities and implementations
 │       ├── mod.rs           # Utils module exports
 │       ├── agent_chat.rs    # Basic agent chat UI
@@ -244,6 +245,14 @@ osvm-cli/
 - **call**: Execute tool on server
 - **setup**: Quick setup for Solana MCP
 - **search**: Search servers by query
+
+#### `osvm ovsm <SUBCOMMAND>`
+- **run <SCRIPT>**: Execute OVSM script file
+- **eval <CODE>**: Execute inline OVSM code
+- **check <SCRIPT>**: Syntax check without execution
+- **repl**: Interactive REPL for live coding
+- **examples**: Show example scripts
+- Works independently (no Solana config required)
 
 #### `osvm chat [--advanced] [--test]`
 - Interactive chat interface
@@ -362,6 +371,37 @@ McpServerConfig {
 - Tool discovery and execution
 - GitHub repository integration
 - Configuration persistence in `~/.osvm/mcp_config.json`
+
+### OVSM Service (`services/ovsm_service.rs`)
+
+**Architecture:**
+- Wraps OVSM language interpreter (scanner, parser, evaluator)
+- Script execution from files or inline code
+- Syntax checking without execution
+- Multiple output formats (text, JSON)
+- Works independently of OSVM configuration
+
+**Service Structure:**
+```rust
+OvsmService {
+    evaluator: Evaluator,  // OVSM runtime
+    verbose: bool,
+    debug: bool,
+}
+```
+
+**Key Methods:**
+- `execute_code()`: Run OVSM code from string
+- `execute_file()`: Run OVSM script file
+- `check_syntax()`: Validate syntax without execution
+- `format_value()`: Convert OVSM value to string
+- `format_value_json()`: Convert OVSM value to JSON
+
+**Integration Points:**
+- Main command router for `osvm ovsm` subcommand
+- Early command handling (before config loading)
+- Example scripts in `examples/ovsm_scripts/`
+- Integration tests in `tests/ovsm_integration_tests.rs`
 
 ## Core Utilities
 
@@ -636,6 +676,227 @@ osvm mcp add-github my-server https://github.com/org/mcp-server --enabled
 # Installs dependencies
 # Registers server
 ```
+
+## OVSM Script Language Integration
+
+OVSM (Open Versatile Seeker Mind) is a production-ready scripting language integrated into OSVM-CLI for blockchain automation. It provides a simple yet powerful syntax for writing automation scripts with 97.3% test coverage.
+
+### OVSM Service (`services/ovsm_service.rs`)
+
+**Architecture:**
+- Wraps the OVSM language interpreter (scanner, parser, evaluator)
+- Handles script execution from files or inline code
+- Provides syntax checking without execution
+- Supports multiple output formats (text, JSON)
+- No OSVM configuration required (works independently)
+
+**Service Structure:**
+```rust
+pub struct OvsmService {
+    evaluator: Evaluator,  // OVSM runtime
+    verbose: bool,
+    debug: bool,
+}
+```
+
+**Key Methods:**
+```rust
+// Execute OVSM code from string
+pub fn execute_code(&mut self, code: &str) -> Result<Value>
+
+// Execute OVSM script file
+pub fn execute_file<P: AsRef<Path>>(&mut self, script_path: P) -> Result<Value>
+
+// Check syntax without execution
+pub fn check_syntax(&self, code: &str) -> Result<()>
+
+// Format output
+pub fn format_value(&self, value: &Value) -> String
+pub fn format_value_json(&self, value: &Value) -> Result<String>
+```
+
+### OVSM Commands
+
+#### `osvm ovsm run <SCRIPT>`
+Execute an OVSM script file:
+```bash
+osvm ovsm run script.ovsm
+osvm ovsm run script.ovsm --json
+osvm ovsm run script.ovsm --verbose
+```
+
+#### `osvm ovsm eval <CODE>`
+Execute inline OVSM code:
+```bash
+osvm ovsm eval '$x = 42; RETURN $x'
+osvm ovsm eval 'FOR $i IN [1..6]: $sum = $sum + $i; RETURN $sum'
+osvm ovsm eval --json 'RETURN {"result": 42}'
+```
+
+#### `osvm ovsm check <SCRIPT>`
+Check script syntax without execution:
+```bash
+osvm ovsm check script.ovsm
+```
+
+#### `osvm ovsm repl`
+Interactive REPL for live coding:
+```bash
+osvm ovsm repl
+# ovsm> $x = 10
+# ovsm> RETURN $x * 2
+# 20
+```
+
+#### `osvm ovsm examples`
+Display example scripts and usage:
+```bash
+osvm ovsm examples
+osvm ovsm examples --category basics
+```
+
+### OVSM Language Overview
+
+**Core Syntax:**
+```ovsm
+// Variables
+$variable = "value"
+$number = 42
+
+// Control flow
+IF condition THEN
+    // code
+ELSE
+    // code
+
+FOR $item IN collection:
+    // code
+
+WHILE condition:
+    // code
+
+// Return value
+RETURN result
+```
+
+**Data Types:**
+- Numbers: `42`, `3.14`
+- Strings: `"text"`
+- Booleans: `true`, `false`
+- Arrays: `[1, 2, 3]`
+- Objects: `{"key": "value"}`
+- Ranges: `[1..10]` (exclusive end)
+- Null: `null`
+
+**Operators:**
+- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**` (power)
+- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
+- Logical: `AND`, `OR`, `NOT`
+
+**Example Scripts:**
+Located in `examples/ovsm_scripts/`:
+```bash
+# Hello world
+osvm ovsm run examples/ovsm_scripts/01_hello_world.ovsm
+
+# Control flow
+osvm ovsm run examples/ovsm_scripts/02_control_flow.ovsm
+
+# Arithmetic operations
+osvm ovsm run examples/ovsm_scripts/03_arithmetic.ovsm
+
+# Conditionals
+osvm ovsm run examples/ovsm_scripts/04_conditionals.ovsm
+
+# Factorial calculation
+osvm ovsm run examples/ovsm_scripts/05_factorial.ovsm
+```
+
+### Integration Architecture
+
+**Early Command Handling:**
+OVSM commands are handled early in `main.rs` (before Solana config loading) to ensure they work independently:
+
+```rust
+// In main.rs
+if sub_command == "ovsm" {
+    return handle_ovsm_command(sub_matches).await;
+}
+```
+
+**Handler Implementation:**
+```rust
+async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<()> {
+    match matches.subcommand() {
+        Some(("run", sub_m)) => { /* execute script file */ },
+        Some(("eval", sub_m)) => { /* execute inline code */ },
+        Some(("check", sub_m)) => { /* syntax check */ },
+        Some(("repl", _)) => { /* interactive REPL */ },
+        Some(("examples", _)) => { /* show examples */ },
+        _ => { /* show help */ },
+    }
+}
+```
+
+### Testing OVSM Integration
+
+**Unit Tests:**
+Located in `src/services/ovsm_service.rs`:
+```rust
+#[test]
+fn test_execute_simple_code() {
+    let mut service = OvsmService::new();
+    let result = service.execute_code("$x = 42\nRETURN $x").unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+```
+
+**Integration Tests:**
+Located in `tests/ovsm_integration_tests.rs`:
+```bash
+# Run OVSM integration tests
+cargo test --test ovsm_integration_tests
+
+# Run specific test
+cargo test test_ovsm_eval_simple_arithmetic
+```
+
+**Test Coverage:**
+- 22 integration tests covering all OVSM commands
+- Tests for eval, run, check, syntax errors, JSON output
+- Verification that OVSM works without Solana config
+
+### Important OVSM Notes
+
+1. **Independent Operation**: OVSM commands do NOT require Solana configuration or keypair. They work standalone.
+
+2. **Indentation-Based**: Like Python, OVSM uses indentation for block structure.
+
+3. **Range Syntax**: Ranges are exclusive of the end value: `[1..5]` creates `[1, 2, 3, 4]`
+
+4. **Boolean Literals**: Use lowercase `true` and `false` (not `TRUE`/`FALSE`)
+
+5. **Test Coverage**: The OVSM interpreter has 97.3% test coverage, ensuring production reliability
+
+6. **No PRINT Statement**: Use `RETURN` for output. There's a `LOG` tool for debugging but it's not in the standard examples.
+
+7. **Loop Syntax**: Loops use `:` at the end: `FOR $i IN [1..10]:`
+
+### Future OVSM Enhancements (Phase 2+)
+
+- **Blockchain Operations**: TOOL calls for validator deployment, RPC queries, etc.
+- **MCP Integration**: Access MCP servers from OVSM scripts
+- **AI Code Generation**: Generate OVSM scripts from natural language
+- **MicroVM Isolation**: Run untrusted scripts in isolated microVMs
+- **Script Library**: Shared repository of automation scripts
+
+### OVSM Resources
+
+- Language Specification: `crates/ovsm/README.md`
+- Usage Guide: `crates/ovsm/USAGE_GUIDE.md`
+- How-To Guide: `crates/ovsm/HOW_TO_USE.md`
+- Example Scripts: `examples/ovsm_scripts/README.md`
+- Integration Tests: `tests/ovsm_integration_tests.rs`
 
 ## Testing Strategy
 

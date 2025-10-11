@@ -9,6 +9,7 @@ pub mod isolation_config;
 pub mod ledger_service;
 pub mod mcp_service;
 pub mod microvm_launcher;
+pub mod ovsm_service;
 pub mod rocksdb_parser;
 pub mod snapshot_service;
 pub mod transaction_decoders;

@@ -1,0 +1,8 @@
+// Hello World - Basic OVSM Script
+// This is the simplest OVSM script demonstrating basic syntax
+
+// Variables in OVSM start with $
+$greeting = "Hello from OVSM!"
+
+// RETURN statement sets the exit value and displays output
+RETURN $greeting

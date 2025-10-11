@@ -1,0 +1,12 @@
+// Calculate Factorial
+// This is a more complex example showing loops and conditionals together
+
+$n = 5
+$result = 1
+
+IF $n < 0 THEN
+    RETURN "Error: negative number"
+ELSE
+    FOR $i IN [1..$n+1]:
+        $result = $result * $i
+    RETURN $result
