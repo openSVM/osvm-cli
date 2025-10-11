@@ -53,6 +53,7 @@ COMMAND CATEGORIES:
     audit                Generate security audit reports
     doctor               System health check and repair
     examples             Show usage examples
+    ovsm                 OVSM scripting language for automation
 
 QUICK START:
   osvm                        Launch AI agent (microVM isolated)
