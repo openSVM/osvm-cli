@@ -31,6 +31,7 @@ $result = "all small"
 FOR $i IN [1..3]:
     IF $i > 2 THEN
         $result = "found big"
+        BREAK
 RETURN $result
 ```
 
