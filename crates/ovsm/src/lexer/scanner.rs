@@ -223,14 +223,14 @@ impl Scanner {
                 self.advance();
             }
 
-            let value: f64 = self.get_lexeme().parse().map_err(|_| Error::ParseError(
-                format!("Invalid float literal: {}", self.get_lexeme())
-            ))?;
+            let value: f64 = self.get_lexeme().parse().map_err(|_| {
+                Error::ParseError(format!("Invalid float literal: {}", self.get_lexeme()))
+            })?;
             self.add_token(TokenKind::Float(value));
         } else {
-            let value: i64 = self.get_lexeme().parse().map_err(|_| Error::ParseError(
-                format!("Invalid integer literal: {}", self.get_lexeme())
-            ))?;
+            let value: i64 = self.get_lexeme().parse().map_err(|_| {
+                Error::ParseError(format!("Invalid integer literal: {}", self.get_lexeme()))
+            })?;
             self.add_token(TokenKind::Integer(value));
         }
 
@@ -277,7 +277,10 @@ impl Scanner {
         }
         // Check if it's a constant (all uppercase with underscores)
         // Only if it's not a keyword
-        else if text.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit()) {
+        else if text
+            .chars()
+            .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+        {
             self.add_token(TokenKind::Constant(text));
         } else {
             self.add_token(TokenKind::Identifier(text));
@@ -364,17 +367,20 @@ mod tests {
         let tokens = scanner.scan_tokens().unwrap();
 
         assert_eq!(tokens[0].kind, TokenKind::Variable("x".to_string()));
-        assert_eq!(tokens[1].kind, TokenKind::Variable("variable_name".to_string()));
+        assert_eq!(
+            tokens[1].kind,
+            TokenKind::Variable("variable_name".to_string())
+        );
         assert_eq!(tokens[2].kind, TokenKind::Variable("_test".to_string()));
     }
 
     #[test]
     fn test_numbers() {
-        let mut scanner = Scanner::new("42 3.14 0 100");
+        let mut scanner = Scanner::new("42 3.15 0 100");
         let tokens = scanner.scan_tokens().unwrap();
 
         assert_eq!(tokens[0].kind, TokenKind::Integer(42));
-        assert_eq!(tokens[1].kind, TokenKind::Float(3.14));
+        assert_eq!(tokens[1].kind, TokenKind::Float(3.15));
         assert_eq!(tokens[2].kind, TokenKind::Integer(0));
         assert_eq!(tokens[3].kind, TokenKind::Integer(100));
     }
@@ -386,7 +392,10 @@ mod tests {
 
         assert_eq!(tokens[0].kind, TokenKind::String("hello".to_string()));
         assert_eq!(tokens[1].kind, TokenKind::String("world".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::String("with\nnewline".to_string()));
+        assert_eq!(
+            tokens[2].kind,
+            TokenKind::String("with\nnewline".to_string())
+        );
     }
 
     #[test]

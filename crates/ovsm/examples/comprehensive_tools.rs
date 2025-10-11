@@ -293,14 +293,35 @@ fn main() {
         .filter(|t| {
             matches!(
                 t.as_str(),
-                "APPEND" | "PREPEND" | "SLICE" | "TOP_N" | "BOTTOM_N" | "ANY" | "ALL"
-                | "FIND" | "JOIN" | "SPLIT" | "COUNT" | "FLATTEN" | "UNIQUE"
-                | "SORT" | "REVERSE" | "FIRST" | "LAST" | "MAP" | "FILTER" | "REDUCE"
+                "APPEND"
+                    | "PREPEND"
+                    | "SLICE"
+                    | "TOP_N"
+                    | "BOTTOM_N"
+                    | "ANY"
+                    | "ALL"
+                    | "FIND"
+                    | "JOIN"
+                    | "SPLIT"
+                    | "COUNT"
+                    | "FLATTEN"
+                    | "UNIQUE"
+                    | "SORT"
+                    | "REVERSE"
+                    | "FIRST"
+                    | "LAST"
+                    | "MAP"
+                    | "FILTER"
+                    | "REDUCE"
             )
         })
         .cloned()
         .collect::<Vec<_>>();
-    println!("  Data Processing ({}): {}", data_tools.len(), data_tools.join(", "));
+    println!(
+        "  Data Processing ({}): {}",
+        data_tools.len(),
+        data_tools.join(", ")
+    );
 
     let math_tools: Vec<_> = tools
         .iter()
@@ -324,14 +345,22 @@ fn main() {
         })
         .cloned()
         .collect::<Vec<_>>();
-    println!("  Statistics ({}): {}", stats_tools.len(), stats_tools.join(", "));
+    println!(
+        "  Statistics ({}): {}",
+        stats_tools.len(),
+        stats_tools.join(", ")
+    );
 
     let util_tools: Vec<_> = tools
         .iter()
         .filter(|t| matches!(t.as_str(), "LOG" | "ERROR"))
         .cloned()
         .collect::<Vec<_>>();
-    println!("  Utilities ({}): {}", util_tools.len(), util_tools.join(", "));
+    println!(
+        "  Utilities ({}): {}",
+        util_tools.len(),
+        util_tools.join(", ")
+    );
 }
 
 fn execute_ovsm(source: &str) -> Result<ovsm::Value, ovsm::Error> {

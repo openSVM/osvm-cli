@@ -1,4 +1,4 @@
-use ovsm::{Scanner, Parser, Evaluator};
+use ovsm::{Evaluator, Parser, Scanner};
 
 fn main() {
     let source = "$x = true AND false\nRETURN $x";

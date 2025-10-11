@@ -217,7 +217,10 @@ async fn test_spawn_and_terminate_unikernel() {
             assert!(cid >= 200 && cid < 300, "CID should be in ephemeral range");
 
             // Terminate the unikernel
-            let terminate_result = runtime.unwrap().terminate_unikernel(&handle.server_id).await;
+            let terminate_result = runtime
+                .unwrap()
+                .terminate_unikernel(&handle.server_id)
+                .await;
             assert!(
                 terminate_result.is_ok(),
                 "Failed to terminate unikernel: {:?}",
@@ -272,7 +275,10 @@ async fn test_vsock_connection() {
     .await;
 
     // Cleanup
-    let _ = runtime.unwrap().terminate_unikernel(&handle.server_id).await;
+    let _ = runtime
+        .unwrap()
+        .terminate_unikernel(&handle.server_id)
+        .await;
 
     match result {
         Ok(Ok(response)) => {

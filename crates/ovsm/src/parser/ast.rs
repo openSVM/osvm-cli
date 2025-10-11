@@ -21,16 +21,10 @@ pub struct ProgramMetadata {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
     /// Variable assignment: $x = expr
-    Assignment {
-        name: String,
-        value: Expression,
-    },
+    Assignment { name: String, value: Expression },
 
     /// Constant definition: CONST NAME = value
-    ConstantDef {
-        name: String,
-        value: Expression,
-    },
+    ConstantDef { name: String, value: Expression },
 
     /// If statement
     If {
@@ -53,19 +47,13 @@ pub enum Statement {
     },
 
     /// Break statement
-    Break {
-        condition: Option<Expression>,
-    },
+    Break { condition: Option<Expression> },
 
     /// Continue statement
-    Continue {
-        condition: Option<Expression>,
-    },
+    Continue { condition: Option<Expression> },
 
     /// Return statement
-    Return {
-        value: Option<Expression>,
-    },
+    Return { value: Option<Expression> },
 
     /// Expression statement
     Expression(Expression),
@@ -77,9 +65,7 @@ pub enum Statement {
     },
 
     /// Parallel execution block
-    Parallel {
-        tasks: Vec<Statement>,
-    },
+    Parallel { tasks: Vec<Statement> },
 
     /// Wait strategy
     WaitStrategy(WaitStrategy),
@@ -196,14 +182,14 @@ pub enum BinaryOp {
 /// Unary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOp {
-    Neg,  // -x
-    Not,  // !x
+    Neg, // -x
+    Not, // !x
 }
 
 /// Function/tool call argument
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Argument {
-    pub name: Option<String>,  // None for positional, Some for named
+    pub name: Option<String>, // None for positional, Some for named
     pub value: Expression,
 }
 
@@ -255,16 +241,16 @@ pub enum WaitStrategy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
     None,
-    Assignment,  // =
-    Or,          // OR
-    And,         // AND
-    Equality,    // == !=
-    Comparison,  // < > <= >=
-    Term,        // + -
-    Factor,      // * / %
-    Unary,       // ! -
-    Power,       // **
-    Call,        // . () []
+    Assignment, // =
+    Or,         // OR
+    And,        // AND
+    Equality,   // == !=
+    Comparison, // < > <= >=
+    Term,       // + -
+    Factor,     // * / %
+    Unary,      // ! -
+    Power,      // **
+    Call,       // . () []
     Primary,
 }
 
@@ -274,9 +260,7 @@ impl BinaryOp {
             BinaryOp::Or => Precedence::Or,
             BinaryOp::And => Precedence::And,
             BinaryOp::Eq | BinaryOp::NotEq => Precedence::Equality,
-            BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq => {
-                Precedence::Comparison
-            }
+            BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq => Precedence::Comparison,
             BinaryOp::Add | BinaryOp::Sub => Precedence::Term,
             BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => Precedence::Factor,
             BinaryOp::Pow => Precedence::Power,

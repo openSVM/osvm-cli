@@ -3,10 +3,6 @@
 //! security policies, network isolation, and container/VM configuration
 
 use anyhow::Result;
-use osvm::services::isolation_config::{
-    // FileSystemIsolation, IsolationConfig, IsolationLevel, IsolationValidator, NetworkIsolation,
-    // PolicyEnforcement, ResourceLimits, SecurityPolicy,
-};
 use std::collections::HashMap;
 
 #[cfg(all(test, feature = "incomplete_tests"))]

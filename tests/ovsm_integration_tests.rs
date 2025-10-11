@@ -35,7 +35,9 @@ fn test_ovsm_eval_simple_arithmetic() {
         .arg("eval")
         .arg("$x = 10; $y = 20; RETURN $x + $y");
 
-    cmd.assert().success().stdout(predicate::str::contains("30"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("30"));
 }
 
 #[test]
@@ -126,12 +128,11 @@ RETURN $result
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
     let mut cmd = Command::cargo_bin("osvm").unwrap();
-    cmd.arg("ovsm")
-        .arg("run")
-        .arg(&script_path)
-        .arg("--json");
+    cmd.arg("ovsm").arg("run").arg(&script_path).arg("--json");
 
-    cmd.assert().success().stdout(predicate::str::contains("42"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("42"));
 }
 
 #[test]
@@ -176,7 +177,9 @@ fn test_ovsm_eval_with_variables() {
         .arg("eval")
         .arg("$a = 10; $b = 3; $c = $a * $b; RETURN $c");
 
-    cmd.assert().success().stdout(predicate::str::contains("30"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("30"));
 }
 
 #[test]
@@ -233,7 +236,9 @@ RETURN $total
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     // 13 + 7 + 30 + 3 + 1 = 54
-    cmd.assert().success().stdout(predicate::str::contains("54"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("54"));
 }
 
 #[test]
@@ -296,7 +301,9 @@ RETURN $sum
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     // 0 + 1 + 2 + 3 + 4 = 10
-    cmd.assert().success().stdout(predicate::str::contains("10"));
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("10"));
 }
 
 #[test]
@@ -315,9 +322,9 @@ fn test_ovsm_no_config_required() {
 #[test]
 fn test_ovsm_eval_boolean_logic() {
     let mut cmd = Command::cargo_bin("osvm").unwrap();
-    cmd.arg("ovsm")
-        .arg("eval")
-        .arg("$a = true; $b = false; IF $a AND NOT $b THEN RETURN \"correct\" ELSE RETURN \"wrong\"");
+    cmd.arg("ovsm").arg("eval").arg(
+        "$a = true; $b = false; IF $a AND NOT $b THEN RETURN \"correct\" ELSE RETURN \"wrong\"",
+    );
 
     cmd.assert()
         .success()

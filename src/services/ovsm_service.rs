@@ -199,8 +199,7 @@ impl OvsmService {
             Value::Bool(b) => Ok(serde_json::json!(b)),
             Value::Null => Ok(serde_json::Value::Null),
             Value::Array(arr) => {
-                let json_arr: Result<Vec<_>> =
-                    arr.iter().map(|v| self.value_to_json(v)).collect();
+                let json_arr: Result<Vec<_>> = arr.iter().map(|v| self.value_to_json(v)).collect();
                 Ok(serde_json::Value::Array(json_arr?))
             }
             Value::Object(obj) => {
@@ -289,7 +288,10 @@ mod tests {
 
         assert_eq!(service.format_value(&Value::Int(42)), "42");
         assert_eq!(service.format_value(&Value::Float(3.14)), "3.14");
-        assert_eq!(service.format_value(&Value::String("hello".into())), "\"hello\"");
+        assert_eq!(
+            service.format_value(&Value::String("hello".into())),
+            "\"hello\""
+        );
         assert_eq!(service.format_value(&Value::Bool(true)), "true");
         assert_eq!(service.format_value(&Value::Null), "null");
     }

@@ -1,4 +1,4 @@
-use ovsm::{Scanner, Parser};
+use ovsm::{Parser, Scanner};
 
 fn main() {
     let source = r#"

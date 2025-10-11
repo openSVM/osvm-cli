@@ -201,12 +201,7 @@ mod tests {
         // All scores should be 0-100
         for level in all_levels {
             let score = level.security_score();
-            assert!(
-                score <= 100,
-                "Score {} out of range for {:?}",
-                score,
-                level
-            );
+            assert!(score <= 100, "Score {} out of range for {:?}", score, level);
         }
     }
 

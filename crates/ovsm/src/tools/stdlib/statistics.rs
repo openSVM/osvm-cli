@@ -257,7 +257,12 @@ mod tests {
 
     #[test]
     fn test_min_max() {
-        let arr = Value::array(vec![Value::Int(5), Value::Int(2), Value::Int(8), Value::Int(1)]);
+        let arr = Value::array(vec![
+            Value::Int(5),
+            Value::Int(2),
+            Value::Int(8),
+            Value::Int(1),
+        ]);
 
         let min_tool = MinTool;
         assert_eq!(min_tool.execute(&[arr.clone()]).unwrap(), Value::Float(1.0));

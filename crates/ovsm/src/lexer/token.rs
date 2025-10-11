@@ -33,8 +33,8 @@ pub enum TokenKind {
 
     // Identifiers
     Identifier(String),
-    Variable(String),  // $name
-    Constant(String),  // UPPERCASE
+    Variable(String), // $name
+    Constant(String), // UPPERCASE
 
     // Keywords
     If,

@@ -1086,7 +1086,9 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("generate", gen_matches)) => {
-            let description = gen_matches.get_one::<String>("description").expect("required");
+            let description = gen_matches
+                .get_one::<String>("description")
+                .expect("required");
             let _output = gen_matches.get_one::<String>("output");
             let _interactive = gen_matches.get_flag("interactive");
 
@@ -1095,34 +1097,32 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             println!("\n⚠️  AI script generation coming soon!");
             println!("This feature will use the AI service to generate OVSM scripts.");
         }
-        Some(("library", lib_matches)) => {
-            match lib_matches.subcommand() {
-                Some(("list", _)) => {
-                    println!("📚 OVSM Script Library");
-                    println!("(Library management coming soon)");
-                }
-                Some(("install", _)) => {
-                    println!("📥 Installing script...");
-                    println!("(Library management coming soon)");
-                }
-                Some(("remove", _)) => {
-                    println!("🗑️  Removing script...");
-                    println!("(Library management coming soon)");
-                }
-                Some(("run", _)) => {
-                    println!("🚀 Running library script...");
-                    println!("(Library management coming soon)");
-                }
-                Some(("update", _)) => {
-                    println!("🔄 Updating scripts...");
-                    println!("(Library management coming soon)");
-                }
-                _ => {
-                    eprintln!("❌ Unknown library subcommand");
-                    std::process::exit(1);
-                }
+        Some(("library", lib_matches)) => match lib_matches.subcommand() {
+            Some(("list", _)) => {
+                println!("📚 OVSM Script Library");
+                println!("(Library management coming soon)");
             }
-        }
+            Some(("install", _)) => {
+                println!("📥 Installing script...");
+                println!("(Library management coming soon)");
+            }
+            Some(("remove", _)) => {
+                println!("🗑️  Removing script...");
+                println!("(Library management coming soon)");
+            }
+            Some(("run", _)) => {
+                println!("🚀 Running library script...");
+                println!("(Library management coming soon)");
+            }
+            Some(("update", _)) => {
+                println!("🔄 Updating scripts...");
+                println!("(Library management coming soon)");
+            }
+            _ => {
+                eprintln!("❌ Unknown library subcommand");
+                std::process::exit(1);
+            }
+        },
         _ => {
             eprintln!("❌ Unknown ovsm subcommand");
             eprintln!("   Run 'osvm ovsm --help' for usage");

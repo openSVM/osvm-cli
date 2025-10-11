@@ -271,21 +271,19 @@ impl Tool for SortTool {
         let mut sorted = collection.clone();
 
         // Simple sort for numbers
-        sorted.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                (Value::Float(x), Value::Float(y)) => {
-                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::Int(x), Value::Float(y)) => {
-                    (*x as f64).partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::Float(x), Value::Int(y)) => {
-                    x.partial_cmp(&(*y as f64)).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::String(x), Value::String(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
+        sorted.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Float(x), Value::Float(y)) => {
+                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
             }
+            (Value::Int(x), Value::Float(y)) => (*x as f64)
+                .partial_cmp(y)
+                .unwrap_or(std::cmp::Ordering::Equal),
+            (Value::Float(x), Value::Int(y)) => x
+                .partial_cmp(&(*y as f64))
+                .unwrap_or(std::cmp::Ordering::Equal),
+            (Value::String(x), Value::String(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
 
         Ok(Value::array(sorted))
@@ -341,11 +339,12 @@ impl Tool for FirstTool {
         }
 
         let collection = args[0].as_array()?;
-        collection.first().cloned().ok_or_else(|| {
-            Error::EmptyCollection {
+        collection
+            .first()
+            .cloned()
+            .ok_or_else(|| Error::EmptyCollection {
                 operation: "FIRST".to_string(),
-            }
-        })
+            })
     }
 }
 
@@ -370,11 +369,12 @@ impl Tool for LastTool {
         }
 
         let collection = args[0].as_array()?;
-        collection.last().cloned().ok_or_else(|| {
-            Error::EmptyCollection {
+        collection
+            .last()
+            .cloned()
+            .ok_or_else(|| Error::EmptyCollection {
                 operation: "LAST".to_string(),
-            }
-        })
+            })
     }
 }
 

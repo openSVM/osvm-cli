@@ -172,12 +172,16 @@ impl Evaluator {
                 Ok(ExecutionFlow::Continue)
             }
 
-            Statement::Try { body, catch_clauses } => {
+            Statement::Try {
+                body,
+                catch_clauses,
+            } => {
                 // Try to execute the body
                 match self.execute_block(body) {
                     Ok(flow) => Ok(flow),
                     Err(error) => {
                         // An error occurred, try to find a matching catch clause
+                        #[allow(clippy::never_loop)]
                         for catch_clause in catch_clauses {
                             // If error_type is specified, check if it matches
                             // For now, we'll accept any error in any catch clause
@@ -191,25 +195,22 @@ impl Evaluator {
                 }
             }
 
-            Statement::Parallel { .. } => {
-                Err(Error::NotImplemented {
-                    tool: "PARALLEL execution".to_string(),
-                })
-            }
+            Statement::Parallel { .. } => Err(Error::NotImplemented {
+                tool: "PARALLEL execution".to_string(),
+            }),
 
-            Statement::WaitStrategy(_) => {
-                Err(Error::NotImplemented {
-                    tool: "WAIT strategies (WAIT_ALL/WAIT_ANY/RACE)".to_string(),
-                })
-            }
+            Statement::WaitStrategy(_) => Err(Error::NotImplemented {
+                tool: "WAIT strategies (WAIT_ALL/WAIT_ANY/RACE)".to_string(),
+            }),
 
-            Statement::Decision { .. } => {
-                Err(Error::NotImplemented {
-                    tool: "DECISION points".to_string(),
-                })
-            }
+            Statement::Decision { .. } => Err(Error::NotImplemented {
+                tool: "DECISION points".to_string(),
+            }),
 
-            Statement::Guard { condition, else_body } => {
+            Statement::Guard {
+                condition,
+                else_body,
+            } => {
                 let cond_val = self.evaluate_expression(condition)?;
 
                 // If condition is false, execute the else_body (guard failed)
@@ -541,9 +542,7 @@ impl Evaluator {
             Value::Range { .. } => value.expand_range(),
             Value::String(s) => {
                 // Iterate over characters
-                Ok(s.chars()
-                    .map(|c| Value::String(c.to_string()))
-                    .collect())
+                Ok(s.chars().map(|c| Value::String(c.to_string())).collect())
             }
             _ => Err(Error::TypeError {
                 expected: "iterable (array, range, or string)".to_string(),
@@ -577,9 +576,18 @@ mod tests {
     #[test]
     fn test_arithmetic() {
         assert_eq!(execute_ovsm("$x = 2 + 3").unwrap(), Value::Null);
-        assert_eq!(execute_ovsm("$x = 10 - 3\nRETURN $x").unwrap(), Value::Int(7));
-        assert_eq!(execute_ovsm("$x = 4 * 5\nRETURN $x").unwrap(), Value::Int(20));
-        assert_eq!(execute_ovsm("$x = 15 / 3\nRETURN $x").unwrap(), Value::Int(5));
+        assert_eq!(
+            execute_ovsm("$x = 10 - 3\nRETURN $x").unwrap(),
+            Value::Int(7)
+        );
+        assert_eq!(
+            execute_ovsm("$x = 4 * 5\nRETURN $x").unwrap(),
+            Value::Int(20)
+        );
+        assert_eq!(
+            execute_ovsm("$x = 15 / 3\nRETURN $x").unwrap(),
+            Value::Int(5)
+        );
     }
 
     #[test]

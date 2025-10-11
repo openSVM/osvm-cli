@@ -172,7 +172,10 @@ mod tests {
 
         assert_eq!(plan.osvm_tools_to_use.len(), 2);
         assert_eq!(plan.osvm_tools_to_use[0].tool_name, "deploy_program");
-        assert_eq!(plan.osvm_tools_to_use[1].tool_name, "get_recent_transactions");
+        assert_eq!(
+            plan.osvm_tools_to_use[1].tool_name,
+            "get_recent_transactions"
+        );
 
         mock.assert_async().await;
         Ok(())

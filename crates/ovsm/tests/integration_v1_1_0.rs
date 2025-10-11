@@ -21,7 +21,8 @@ fn execute(code: &str) -> Result<Value, Box<dyn std::error::Error>> {
 
 #[test]
 fn test_guard_with_arithmetic() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $x = 10
         $y = 20
 
@@ -29,14 +30,17 @@ fn test_guard_with_arithmetic() {
             RETURN -1
 
         RETURN $x + $y
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(30));
 }
 
 #[test]
 fn test_guard_with_loops() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $numbers = [1, 2, 3, 4, 5]
         $sum = 0
 
@@ -47,14 +51,17 @@ fn test_guard_with_loops() {
             $sum = $sum + $n
 
         RETURN $sum
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(15));
 }
 
 #[test]
 fn test_multiple_guards_sequential() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $a = 10
         $b = 20
         $c = 30
@@ -69,7 +76,9 @@ fn test_multiple_guards_sequential() {
             RETURN "c invalid"
 
         RETURN "all valid"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::String("all valid".to_string()));
 }
@@ -80,7 +89,8 @@ fn test_multiple_guards_sequential() {
 
 #[test]
 fn test_try_catch_with_tools() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $data = []
 
         TRY:
@@ -89,14 +99,17 @@ fn test_try_catch_with_tools() {
             $max = 0
 
         RETURN $max
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(0));
 }
 
 #[test]
 fn test_try_catch_preserves_variables() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $x = 100
 
         TRY:
@@ -105,14 +118,17 @@ fn test_try_catch_preserves_variables() {
             $y = 0
 
         RETURN $x + $y
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(100));
 }
 
 #[test]
 fn test_nested_try_catch() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         TRY:
             TRY:
                 $inner = 10 / 0
@@ -124,7 +140,9 @@ fn test_nested_try_catch() {
             $outer = -1
 
         RETURN $outer
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(100));
 }
@@ -135,7 +153,8 @@ fn test_nested_try_catch() {
 
 #[test]
 fn test_guard_then_try_catch() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $input = [1, 2, 3, 4, 5]
 
         GUARD COUNT($input) > 0 ELSE
@@ -147,14 +166,17 @@ fn test_guard_then_try_catch() {
             $sum = 0
 
         RETURN $sum
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(15));
 }
 
 #[test]
 fn test_try_catch_with_guard_inside() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         TRY:
             $x = 10
 
@@ -166,14 +188,17 @@ fn test_try_catch_with_guard_inside() {
             $result = 0
 
         RETURN $result
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(20));
 }
 
 #[test]
 fn test_complex_workflow() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $username = "alice"
         $password = "secret"
         $age = 25
@@ -196,7 +221,9 @@ fn test_complex_workflow() {
             $status = "processing_failed"
 
         RETURN $status
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::String("success".to_string()));
 }
@@ -207,7 +234,8 @@ fn test_complex_workflow() {
 
 #[test]
 fn test_fallback_chain() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         // Try multiple sources with fallbacks
         TRY:
             // Primary source (will fail - undefined variable)
@@ -221,14 +249,17 @@ fn test_fallback_chain() {
                 $data = [1, 2, 3]
 
         RETURN COUNT($data)
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(3));
 }
 
 #[test]
 fn test_safe_data_pipeline() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $raw_data = [5, 0, 10, 0, 15]
         $results = []
 
@@ -240,16 +271,18 @@ fn test_safe_data_pipeline() {
                 $results = APPEND($results, 0)
 
         RETURN $results
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     match result {
         Value::Array(arr) => {
             assert_eq!(arr.len(), 5);
-            assert_eq!(arr[0], Value::Int(20));   // 100/5
-            assert_eq!(arr[1], Value::Int(0));    // caught error
-            assert_eq!(arr[2], Value::Int(10));   // 100/10
-            assert_eq!(arr[3], Value::Int(0));    // caught error
-            assert_eq!(arr[4], Value::Int(6));    // 100/15 (integer division)
+            assert_eq!(arr[0], Value::Int(20)); // 100/5
+            assert_eq!(arr[1], Value::Int(0)); // caught error
+            assert_eq!(arr[2], Value::Int(10)); // 100/10
+            assert_eq!(arr[3], Value::Int(0)); // caught error
+            assert_eq!(arr[4], Value::Int(6)); // 100/15 (integer division)
         }
         _ => panic!("Expected array result"),
     }
@@ -261,7 +294,8 @@ fn test_safe_data_pipeline() {
 
 #[test]
 fn test_configuration_validation() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $config = {api_key: "test123", timeout: 30, max_retries: 3}
 
         GUARD $config.api_key != null ELSE
@@ -284,14 +318,17 @@ fn test_configuration_validation() {
             RETURN "timeout_too_large"
 
         RETURN "valid"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::String("valid".to_string()));
 }
 
 #[test]
 fn test_batch_processing_with_error_handling() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $values = [10, 20, 0, 30]
         $processed = 0
 
@@ -303,7 +340,9 @@ fn test_batch_processing_with_error_handling() {
                 $processed = $processed
 
         RETURN $processed
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(3));
 }
@@ -314,7 +353,8 @@ fn test_batch_processing_with_error_handling() {
 
 #[test]
 fn test_deeply_nested_guards() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $a = 1
         $b = 2
         $c = 3
@@ -328,14 +368,17 @@ fn test_deeply_nested_guards() {
         GUARD $e > $d ELSE RETURN 5
 
         RETURN $a + $b + $c + $d + $e
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(15));
 }
 
 #[test]
 fn test_deeply_nested_try_catch() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         TRY:
             TRY:
                 TRY:
@@ -348,7 +391,9 @@ fn test_deeply_nested_try_catch() {
             $x = 3
 
         RETURN $x
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(5));
 }
@@ -359,21 +404,25 @@ fn test_deeply_nested_try_catch() {
 
 #[test]
 fn test_guard_with_complex_expression() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $numbers = [1, 2, 3, 4, 5]
 
         GUARD (COUNT($numbers) > 0) AND (SUM($numbers) > 10) ELSE
             RETURN false
 
         RETURN true
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Bool(true));
 }
 
 #[test]
 fn test_try_catch_with_return_in_catch() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $value = 0
 
         TRY:
@@ -382,14 +431,17 @@ fn test_try_catch_with_return_in_catch() {
             RETURN -1
 
         RETURN $value
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::Int(-1));
 }
 
 #[test]
 fn test_guard_failure_stops_execution() {
-    let result = execute(r#"
+    let result = execute(
+        r#"
         $executed = false
 
         GUARD false ELSE
@@ -397,7 +449,9 @@ fn test_guard_failure_stops_execution() {
 
         $executed = true
         RETURN "should_not_reach"
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 
     assert_eq!(result, Value::String("guard_failed".to_string()));
 }

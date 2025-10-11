@@ -1,4 +1,4 @@
-use ovsm::{Scanner, Parser, Evaluator};
+use ovsm::{Evaluator, Parser, Scanner};
 
 fn main() {
     println!("=== OVSM Interpreter - Complete Demo ===\n");

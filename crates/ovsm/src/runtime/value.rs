@@ -160,11 +160,12 @@ impl Value {
     /// Get field from object
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
-            Value::Object(obj) => obj.get(field).cloned().ok_or_else(|| {
-                Error::UndefinedVariable {
+            Value::Object(obj) => obj
+                .get(field)
+                .cloned()
+                .ok_or_else(|| Error::UndefinedVariable {
                     name: field.to_string(),
-                }
-            }),
+                }),
             _ => Err(Error::TypeError {
                 expected: "object".to_string(),
                 got: self.type_name(),
@@ -272,7 +273,7 @@ mod tests {
         assert_eq!(Value::Null.type_name(), "null");
         assert_eq!(Value::Bool(true).type_name(), "bool");
         assert_eq!(Value::Int(42).type_name(), "int");
-        assert_eq!(Value::Float(3.14).type_name(), "float");
+        assert_eq!(Value::Float(2.71).type_name(), "float");
         assert_eq!(Value::String("test".to_string()).type_name(), "string");
     }
 
@@ -292,10 +293,10 @@ mod tests {
         let v = Value::Int(42);
         assert_eq!(v.as_int().unwrap(), 42);
         assert_eq!(v.as_float().unwrap(), 42.0);
-        assert_eq!(v.as_bool().unwrap(), true);
+        assert!(v.as_bool().unwrap());
 
-        let v = Value::Float(3.14);
-        assert_eq!(v.as_float().unwrap(), 3.14);
+        let v = Value::Float(3.15);
+        assert_eq!(v.as_float().unwrap(), 3.15);
         assert_eq!(v.as_int().unwrap(), 3);
 
         let v = Value::String("test".to_string());

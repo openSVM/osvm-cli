@@ -50,22 +50,22 @@ impl ToolArguments {
 
     /// Get positional argument by index
     pub fn get_positional(&self, index: usize) -> Result<&Value> {
-        self.positional.get(index).ok_or_else(|| {
-            crate::error::Error::InvalidArguments {
+        self.positional
+            .get(index)
+            .ok_or_else(|| crate::error::Error::InvalidArguments {
                 tool: "unknown".to_string(),
                 reason: format!("Missing positional argument at index {}", index),
-            }
-        })
+            })
     }
 
     /// Get named argument
     pub fn get_named(&self, name: &str) -> Result<&Value> {
-        self.named.get(name).ok_or_else(|| {
-            crate::error::Error::InvalidArguments {
+        self.named
+            .get(name)
+            .ok_or_else(|| crate::error::Error::InvalidArguments {
                 tool: "unknown".to_string(),
                 reason: format!("Missing named argument: {}", name),
-            }
-        })
+            })
     }
 
     /// Get named argument with fallback to positional
@@ -122,11 +122,12 @@ impl ToolRegistry {
 
     /// Get tool by name
     pub fn get(&self, name: &str) -> Result<Arc<dyn Tool>> {
-        self.tools.get(name).cloned().ok_or_else(|| {
-            crate::error::Error::UndefinedTool {
+        self.tools
+            .get(name)
+            .cloned()
+            .ok_or_else(|| crate::error::Error::UndefinedTool {
                 name: name.to_string(),
-            }
-        })
+            })
     }
 
     /// Check if tool exists

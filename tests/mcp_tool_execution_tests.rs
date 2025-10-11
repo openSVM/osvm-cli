@@ -2,9 +2,7 @@
 
 use anyhow::Result;
 use mockito::Server;
-use osvm::services::mcp_service::{
-    McpAuthConfig, McpServerConfig, McpService, McpTransportType,
-};
+use osvm::services::mcp_service::{McpAuthConfig, McpServerConfig, McpService, McpTransportType};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -305,7 +303,13 @@ mod tests {
 
         let mut mcp_service = mcp_service;
         for (i, config) in configs.into_iter().enumerate() {
-            let server_id = if i == 0 { "bearer-server" } else if i == 1 { "basic-server" } else { "apikey-server" };
+            let server_id = if i == 0 {
+                "bearer-server"
+            } else if i == 1 {
+                "basic-server"
+            } else {
+                "apikey-server"
+            };
             mcp_service.add_server(server_id.to_string(), config);
         }
 
@@ -328,10 +332,7 @@ mod tests {
             .mock("POST", "/tools/execute")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(
-                json!({"value": 42})
-                .to_string(),
-            )
+            .with_body(json!({"value": 42}).to_string())
             .expect(5)
             .create_async()
             .await;

@@ -691,7 +691,8 @@ mod configuration_chaos_tests {
 
     #[tokio::test]
     async fn test_configuration_hot_reload_race() -> Result<()> {
-        let config: Arc<tokio::sync::RwLock<HashMap<String, String>>> = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
+        let config: Arc<tokio::sync::RwLock<HashMap<String, String>>> =
+            Arc::new(tokio::sync::RwLock::new(HashMap::new()));
 
         // Writer task
         let config_writer: Arc<tokio::sync::RwLock<HashMap<String, String>>> = Arc::clone(&config);
