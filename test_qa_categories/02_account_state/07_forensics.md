@@ -1,445 +1,400 @@
 # Account State - Forensics Level
 
-## Q1: "Detect suspicious account draining pattern"
+## Q1: "My wallet was drained. Reconstruct exactly how the attacker got access and what they stole"
 
 **Expected Plan:**
-
-[TIME: ~12s] [COST: ~0.005 SOL] [CONFIDENCE: 88%]
-
-**Available Tools:**
-From Standard Library:
-  - getAccountInfo, getSignaturesForAddress (Solana RPC)
-  - MAP, FILTER, SORT_BY (Data Processing)
-  - MEAN, STDDEV, DETECT_OUTLIERS (Statistical)
-
-**Main Branch:**
-$account = INPUT(prompt: "Enter account address to investigate")
-
-// Get account current state
-TRY:
-  $account_info = getAccountInfo(pubkey: $account)
-CATCH FATAL:
-  RETURN ERROR(message: "Account not found")
-
-// Get transaction history
-$signatures = getSignaturesForAddress(address: $account, limit: 1000)
-
-// Analyze transaction patterns
-$withdrawals = FILTER(
-  collection: $signatures,
-  predicate: sig => sig.meta.postBalances[0] < sig.meta.preBalances[0]
-)
-
-// Calculate withdrawal statistics
-$withdrawal_amounts = MAP(
-  collection: $withdrawals,
-  fn: tx => tx.meta.preBalances[0] - tx.meta.postBalances[0]
-)
-
-$mean_withdrawal = MEAN(data: $withdrawal_amounts)
-$stddev_withdrawal = STDDEV(data: $withdrawal_amounts)
-
-// Detect outliers (potential draining)
-$outliers = DETECT_OUTLIERS(
-  data: $withdrawal_amounts,
-  threshold: 3  // 3 standard deviations
-)
-
-// Check timing patterns
-$withdrawal_timestamps = MAP(collection: $withdrawals, fn: tx => tx.blockTime)
-$time_intervals = []
-FOR $i IN 1..COUNT(collection: $withdrawal_timestamps):
-  $interval = $withdrawal_timestamps[$i] - $withdrawal_timestamps[$i-1]
-  $time_intervals = APPEND(array: $time_intervals, item: $interval)
-
-$avg_interval = MEAN(data: $time_intervals)
-
-**Decision Point:** Assess drainage risk
-  BRANCH A (COUNT(collection: $outliers) > 5 AND $avg_interval < 300):
-    $risk_level = "critical"
-    $pattern = "automated_draining"
-    $explanation = "Multiple large withdrawals in short time - likely bot attack"
-    
-  BRANCH B (COUNT(collection: $outliers) > 2):
-    $risk_level = "high"
-    $pattern = "suspicious_activity"
-    $explanation = "Unusual withdrawal amounts detected"
-    
-  BRANCH C ($account_info.lamports < 1000000):
-    $risk_level = "medium"
-    $pattern = "nearly_drained"
-    $explanation = "Account has very low balance remaining"
-    
-  BRANCH D (true):
-    $risk_level = "low"
-    $pattern = "normal_activity"
-    $explanation = "No suspicious patterns detected"
-
-**Action:**
-RETURN {
-  account: $account,
-  current_balance: $account_info.lamports,
-  total_withdrawals: COUNT(collection: $withdrawals),
-  mean_withdrawal: $mean_withdrawal,
-  outlier_count: COUNT(collection: $outliers),
-  average_time_between: $avg_interval,
-  risk_level: $risk_level,
-  pattern: $pattern,
-  explanation: $explanation,
-  suspicious_transactions: $outliers,
-  confidence: 88,
-  caveats: ["Requires manual review for confirmation", "May miss sophisticated attacks"]
-}
-
----
-
-## Q2: "Trace account ownership chain and detect suspicious transfers"
-
-**Expected Plan:**
-
-[TIME: ~15s] [COST: ~0.008 SOL] [CONFIDENCE: 85%]
+[TIME: ~60s] [COST: ~0.008 SOL] [CONFIDENCE: 85%]
 
 **Available Tools:**
 From Standard Library:
   - getAccountInfo, getSignaturesForAddress, getTransaction (Solana RPC)
-  - MAP, FILTER, FLATTEN, UNIQUE (Data Processing)
-  - GROUP_BY (Collection operations)
+  - MAP, FILTER, SORT_BY, GROUP_BY (Data Processing)
+  - CONTAINS (String operations)
+  - SUM, MEAN (Statistical)
 
 **Main Branch:**
-$account = INPUT(prompt: "Enter account to trace")
+```ovsm
+$victim_wallet = INPUT(prompt: "Enter your wallet address")
 
-// Build ownership chain
-$ownership_chain = []
-$current_account = $account
-$max_depth = 10
-$depth = 0
+// Get current account state
+TRY:
+  $current_state = getAccountInfo(pubkey: $victim_wallet)
+  $current_balance = $current_state.lamports / 1000000000
+CATCH FATAL:
+  RETURN ERROR(message: "Wallet does not exist on chain")
 
-LOOP WHILE $depth < $max_depth:
+// Get all transaction history
+$all_signatures = []
+$before = null
+
+LOOP WHILE true:
   TRY:
-    $info = getAccountInfo(pubkey: $current_account)
-  CATCH RECOVERABLE:
-    BREAK  // Account doesn't exist or inaccessible
-  
-  // Check if it's a PDA
-  $is_pda = isPDA(account: $current_account)
-  
-  IF $is_pda:
-    $pda_info = derivePDAOwner(account: $current_account)
-    $ownership_chain = APPEND(array: $ownership_chain, item: {
-      account: $current_account,
-      type: "pda",
-      owner: $info.owner,
-      parent: $pda_info.program_id
-    })
-    $current_account = $pda_info.program_id
-  ELSE:
-    $ownership_chain = APPEND(array: $ownership_chain, item: {
-      account: $current_account,
-      type: "regular",
-      owner: $info.owner
-    })
-    BREAK  // Reached regular account
-  
-  $depth += 1
-
-// Analyze recent transfers
-$signatures = getSignaturesForAddress(address: $account, limit: 500)
-
-// Get full transaction details in parallel
-$txs = []
-PARALLEL {
-  FOR $sig IN SLICE(collection: $signatures, start: 0, end: 50):
-    $tx = getTransaction(signature: $sig.signature)
-    $txs = APPEND(array: $txs, item: $tx)
-}
-WAIT_ALL
-
-// Extract unique interacting accounts
-$interacting_accounts = []
-FOR $tx IN $txs:
-  $accounts = $tx.transaction.message.accountKeys
-  FOR $acc IN $accounts:
-    IF $acc != $account:
-      $interacting_accounts = APPEND(array: $interacting_accounts, item: $acc)
-
-$unique_interactions = UNIQUE(collection: $interacting_accounts)
-
-// Group by frequency
-$interaction_counts = {}
-FOR $acc IN $interacting_accounts:
-  IF $interaction_counts[$acc] exists:
-    $interaction_counts[$acc] += 1
-  ELSE:
-    $interaction_counts[$acc] = 1
-
-// Find most frequent interactors
-$frequent_interactors = FILTER(
-  collection: $interaction_counts,
-  predicate: (acc, count) => count > 5
-)
-
-**Decision Point:** Identify suspicious patterns
-  BRANCH A (COUNT(collection: $frequent_interactors) == 1):
-    $suspicion = "centralized_control"
-    $note = "Single account dominates interactions - potential honey pot"
-    
-  BRANCH B (COUNT(collection: $unique_interactions) < 3 AND COUNT(collection: $txs) > 20):
-    $suspicion = "limited_interactions"
-    $note = "Many transactions with few unique accounts - bot activity"
-    
-  BRANCH C ($depth > 5):
-    $suspicion = "deep_pda_nesting"
-    $note = "Unusual PDA depth - potential obfuscation"
-    
-  BRANCH D (true):
-    $suspicion = "normal"
-    $note = "No unusual patterns detected"
-
-**Action:**
-RETURN {
-  account: $account,
-  ownership_chain: $ownership_chain,
-  chain_depth: $depth,
-  total_transactions: COUNT(collection: $signatures),
-  unique_interactors: COUNT(collection: $unique_interactions),
-  frequent_interactors: $frequent_interactors,
-  suspicion_level: $suspicion,
-  note: $note,
-  confidence: 85
-}
-
----
-
-## Q3: "Debug rent-exempt calculation discrepancy"
-
-**Expected Plan:**
-
-[TIME: ~5s] [COST: free] [CONFIDENCE: 95%]
-
-**Available Tools:**
-From Standard Library:
-  - getAccountInfo (Solana RPC)
-  - ABS (Math operations)
-
-**Main Branch:**
-$account = INPUT(prompt: "Enter account with rent issues")
-
-TRY:
-  $info = getAccountInfo(pubkey: $account)
-CATCH FATAL:
-  RETURN ERROR(message: "Account not found")
-
-$current_lamports = $info.lamports
-$data_size = COUNT(collection: $info.data)
-
-// Calculate expected rent-exempt minimum
-// Formula: (128 + data_size) * 6.8 lamports per byte-epoch * 2 years of epochs
-$rent_exempt_minimum = ($data_size + 128) * 6960  // 6960 = 6.8 * 365 * 2 / 0.365
-
-// Check actual vs expected
-$difference = $current_lamports - $rent_exempt_minimum
-$difference_abs = ABS(value: $difference)
-
-**Decision Point:** Diagnose rent status
-  BRANCH A ($difference >= 0 AND $difference < 10000):
-    $status = "rent_exempt"
-    $diagnosis = "Correctly rent-exempt"
-    $action_needed = "None"
-    
-  BRANCH B ($difference < 0):
-    $status = "not_rent_exempt"
-    $diagnosis = "Account does not have enough lamports for rent exemption"
-    $action_needed = "Add " + ABS(value: $difference) + " lamports"
-    
-  BRANCH C ($difference > $rent_exempt_minimum * 0.5):
-    $status = "over_funded"
-    $diagnosis = "Account has significantly more than needed"
-    $action_needed = "Consider withdrawing excess: " + ($difference - 10000) + " lamports"
-    
-  BRANCH D (true):
-    $status = "optimal"
-    $diagnosis = "Account is optimally funded"
-    $action_needed = "None"
-
-**Action:**
-RETURN {
-  account: $account,
-  current_lamports: $current_lamports,
-  data_size: $data_size,
-  required_minimum: $rent_exempt_minimum,
-  difference: $difference,
-  status: $status,
-  diagnosis: $diagnosis,
-  action_needed: $action_needed,
-  confidence: 95
-}
-
----
-
-## Q4: "Detect account cloning or duplication attacks"
-
-**Expected Plan:**
-
-[TIME: ~20s] [COST: ~0.01 SOL] [CONFIDENCE: 80%]
-
-**Available Tools:**
-From Standard Library:
-  - getAccountInfo, getProgramAccounts (Solana RPC)
-  - FILTER, MAP (Data Processing)
-  - CORRELATE (Statistical)
-
-**Main Branch:**
-$target_account = INPUT(prompt: "Enter account to check for clones")
-
-TRY:
-  $target_info = getAccountInfo(pubkey: $target_account)
-CATCH FATAL:
-  RETURN ERROR(message: "Target account not found")
-
-$target_owner = $target_info.owner
-$target_data = $target_info.data
-$target_data_hash = HASH(data: $target_data)
-
-// Find all accounts with same owner
-TRY:
-  $similar_accounts = getProgramAccounts(programId: $target_owner)
-CATCH RECOVERABLE:
-  $similar_accounts = []
-  LOG(level: "warn", message: "Could not fetch program accounts")
-
-// Compare data structures
-$potential_clones = []
-FOR $acc IN $similar_accounts:
-  IF $acc.pubkey != $target_account:
-    $similarity_score = calculateDataSimilarity(
-      data1: $target_data,
-      data2: $acc.account.data
+    $batch = getSignaturesForAddress(
+      address: $victim_wallet,
+      limit: 1000,
+      before: $before
     )
-    
-    IF $similarity_score > 0.9:
-      $potential_clones = APPEND(array: $potential_clones, item: {
-        pubkey: $acc.pubkey,
-        similarity: $similarity_score,
-        lamports: $acc.account.lamports
-      })
+  CATCH:
+    BREAK
+  
+  GUARD COUNT(collection: $batch) > 0 ELSE BREAK
+  
+  $all_signatures = APPEND(array: $all_signatures, item: $batch)
+  $before = LAST(collection: $batch).signature
+  
+  BREAK IF COUNT(collection: $all_signatures) > 5  // Limit to 5000 txs
 
-// Analyze clone characteristics
-$clone_count = COUNT(collection: $potential_clones)
+$flat_signatures = FLATTEN(collection: $all_signatures)
 
-**Decision Point:** Assess cloning risk
-  BRANCH A ($clone_count > 50):
-    $risk = "critical"
-    $assessment = "Mass cloning detected - likely attack"
+// Analyze all transactions for suspicious activity
+$timeline = []
+$total_sol_lost = 0
+$total_tokens_lost = []
+$suspicious_txs = []
+
+FOR $sig_info IN $flat_signatures:
+  TRY:
+    $tx = getTransaction(signature: $sig_info.signature, maxSupportedTransactionVersion: 0)
     
-  BRANCH B ($clone_count > 10):
-    $risk = "high"
-    $assessment = "Multiple clones found - investigate origin"
+    $accounts = $tx.transaction.message.accountKeys
+    $is_signer = $accounts[0] == $victim_wallet
+    $pre_balances = $tx.meta.preBalances
+    $post_balances = $tx.meta.postBalances
     
-  BRANCH C ($clone_count > 0):
-    $risk = "medium"
-    $assessment = "Some similar accounts found - may be legitimate"
+    // Find wallet index
+    $wallet_index = null
+    FOR $i IN 0..COUNT(collection: $accounts):
+      IF $accounts[$i] == $victim_wallet THEN
+        $wallet_index = $i
+        BREAK
     
-  BRANCH D (true):
-    $risk = "none"
-    $assessment = "No clones detected"
+    IF $wallet_index != null THEN
+      // Calculate SOL change
+      $sol_before = $pre_balances[$wallet_index] / 1000000000
+      $sol_after = $post_balances[$wallet_index] / 1000000000
+      $sol_change = $sol_after - $sol_before
+      
+      // Analyze token changes
+      $token_changes = []
+      IF $tx.meta.preTokenBalances != null AND $tx.meta.postTokenBalances != null THEN
+        FOR $pre IN $tx.meta.preTokenBalances:
+          IF $pre.owner == $victim_wallet THEN
+            $post = FIND(
+              collection: $tx.meta.postTokenBalances,
+              predicate: p => p.accountIndex == $pre.accountIndex
+            )
+            
+            IF $post != null THEN
+              $amount_before = $pre.uiTokenAmount.uiAmount
+              $amount_after = $post.uiTokenAmount.uiAmount
+              $token_change = $amount_after - $amount_before
+              
+              IF $token_change < 0 THEN  // Lost tokens
+                $token_changes = APPEND(
+                  array: $token_changes,
+                  item: {
+                    mint: $pre.mint,
+                    amount_lost: ABS($token_change),
+                    decimals: $pre.uiTokenAmount.decimals
+                  }
+                )
+      
+      // Detect suspicious patterns
+      $is_suspicious = false
+      $suspicion_reasons = []
+      
+      // Red flag 1: Large withdrawal not signed by wallet
+      IF $sol_change < -0.1 AND NOT $is_signer THEN
+        $is_suspicious = true
+        $suspicion_reasons = APPEND(
+          array: $suspicion_reasons,
+          item: "Large SOL withdrawal without your signature"
+        )
+      
+      // Red flag 2: Token delegation/approval abuse
+      $logs = $tx.meta.logMessages
+      IF ANY($logs, log => CONTAINS(log, "Approve") OR CONTAINS(log, "SetAuthority")) THEN
+        IF NOT $is_signer THEN
+          $is_suspicious = true
+          $suspicion_reasons = APPEND(
+            array: $suspicion_reasons,
+            item: "Token authority changed without your signature"
+          )
+      
+      // Red flag 3: Multiple token drains
+      IF COUNT(collection: $token_changes) > 3 THEN
+        $is_suspicious = true
+        $suspicion_reasons = APPEND(
+          array: $suspicion_reasons,
+          item: "Multiple tokens drained in single transaction"
+        )
+      
+      // Red flag 4: Unusual programs
+      $programs_used = UNIQUE(MAP(
+        collection: $tx.transaction.message.instructions,
+        fn: ix => $accounts[ix.programIdIndex]
+      ))
+      
+      $known_programs = [
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // SPL Token
+        "11111111111111111111111111111111",  // System
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"  // ATA
+      ]
+      
+      $unknown_programs = FILTER(
+        collection: $programs_used,
+        predicate: p => NOT ANY($known_programs, known => known == p)
+      )
+      
+      IF COUNT(collection: $unknown_programs) > 0 AND $sol_change < -0.01 THEN
+        $is_suspicious = true
+        $suspicion_reasons = APPEND(
+          array: $suspicion_reasons,
+          item: "Interaction with unknown programs during fund loss"
+        )
+      
+      $timeline = APPEND(
+        array: $timeline,
+        item: {
+          timestamp: $sig_info.blockTime,
+          signature: $sig_info.signature,
+          slot: $sig_info.slot,
+          sol_change: $sol_change,
+          token_changes: $token_changes,
+          was_signer: $is_signer,
+          success: $tx.meta.err == null,
+          programs_used: $programs_used,
+          is_suspicious: $is_suspicious,
+          suspicion_reasons: $suspicion_reasons
+        }
+      )
+      
+      IF $is_suspicious THEN
+        $suspicious_txs = APPEND(array: $suspicious_txs, item: $timeline[COUNT(collection: $timeline) - 1])
+      
+      // Accumulate losses
+      IF $sol_change < 0 THEN
+        $total_sol_lost += ABS($sol_change)
+      
+      FOR $token_loss IN $token_changes:
+        $total_tokens_lost = APPEND(array: $total_tokens_lost, item: $token_loss)
+  
+  CATCH:
+    CONTINUE  // Skip failed transaction fetches
+
+// Sort timeline chronologically
+$timeline = SORT_BY(collection: $timeline, key: event => event.timestamp, order: "asc")
+$suspicious_txs = SORT_BY(collection: $suspicious_txs, key: event => event.timestamp, order: "asc")
+
+// Find the likely attack transaction
+$attack_tx = FIND(
+  collection: $suspicious_txs,
+  predicate: tx => tx.is_suspicious AND (tx.sol_change < -0.5 OR COUNT(collection: tx.token_changes) > 2)
+)
+
+// Identify attack vector
+$attack_vector = "unknown"
+$attack_details = ""
+
+IF $attack_tx != null THEN
+  IF NOT $attack_tx.was_signer THEN
+    $attack_vector = "delegate_abuse"
+    $attack_details = "Attacker used previously granted token/account delegation to drain funds"
+  ELSE IF ANY($attack_tx.suspicion_reasons, r => CONTAINS(r, "unknown programs")) THEN
+    $attack_vector = "malicious_program"
+    $attack_details = "You signed a transaction that called a malicious program"
+  ELSE
+    $attack_vector = "compromised_key"
+    $attack_details = "Your private key was compromised - attacker signed transaction as you"
+
+// Group losses by type
+$token_loss_summary = GROUP_BY(
+  collection: $total_tokens_lost,
+  key: loss => loss.mint
+)
+
+$aggregated_token_losses = []
+FOR $mint IN KEYS($token_loss_summary):
+  $losses = $token_loss_summary[$mint]
+  $total = SUM(collection: MAP($losses, l => l.amount_lost))
+  $aggregated_token_losses = APPEND(
+    array: $aggregated_token_losses,
+    item: {
+      mint: $mint,
+      total_lost: $total,
+      decimals: $losses[0].decimals
+    }
+  )
+```
+
+**Decision Point:** Assess recovery possibility
+  BRANCH A ($attack_vector == "delegate_abuse"):
+    $recovery_chance = "low"
+    $action_steps = [
+      "Revoke all token delegations immediately",
+      "Move remaining funds to new wallet",
+      "Check for any remaining approvals on Solscan"
+    ]
+    
+  BRANCH B ($attack_vector == "compromised_key"):
+    $recovery_chance = "very_low"
+    $action_steps = [
+      "URGENT: Move ANY remaining funds to new wallet NOW",
+      "Generate new wallet with secure seed phrase",
+      "Investigate how key was compromised",
+      "Report to exchanges if funds were sent there"
+    ]
+    
+  BRANCH C ($attack_vector == "malicious_program"):
+    $recovery_chance = "very_low"
+    $action_steps = [
+      "Check for any residual program authorities",
+      "Close any PDAs that might still be exploitable",
+      "Report malicious program to Solana ecosystem"
+    ]
 
 **Action:**
 RETURN {
-  target_account: $target_account,
-  owner_program: $target_owner,
-  potential_clones: $potential_clones,
-  clone_count: $clone_count,
-  risk_level: $risk,
-  assessment: $assessment,
-  confidence: 80,
-  caveats: ["Similarity based on data structure only", "May include legitimate duplicates"]
+  victim_wallet: $victim_wallet,
+  current_balance_sol: $current_balance,
+  total_sol_lost: $total_sol_lost,
+  token_losses: $aggregated_token_losses,
+  attack_vector: $attack_vector,
+  attack_details: $attack_details,
+  likely_attack_transaction: $attack_tx,
+  all_suspicious_transactions: $suspicious_txs,
+  full_timeline: $timeline,
+  recovery_chance: $recovery_chance,
+  immediate_actions: $action_steps,
+  total_events_analyzed: COUNT(collection: $timeline),
+  forensic_summary: "Analyzed " + COUNT(collection: $timeline) + " transactions. Found " + 
+    COUNT(collection: $suspicious_txs) + " suspicious events. Total loss: " + 
+    $total_sol_lost + " SOL + " + COUNT(collection: $aggregated_token_losses) + " token types.",
+  confidence: 85,
+  caveats: [
+    "Cannot access private key compromise details",
+    "Off-chain attack vectors not detectable",
+    "Token values not calculated - only quantities",
+    "Historical account state limited to transaction data"
+  ]
 }
 
 ---
 
-## Q5: "Forensic analysis of deleted/closed account"
+## Q2: "Detect accounts with unusual data growth patterns that might indicate spam or exploits"
 
 **Expected Plan:**
-
-[TIME: ~10s] [COST: ~0.003 SOL] [CONFIDENCE: 75%]
+[TIME: ~45s] [COST: ~0.006 SOL] [CONFIDENCE: 75%]
 
 **Available Tools:**
 From Standard Library:
-  - getSignaturesForAddress, getTransaction (Solana RPC)
-  - FILTER, LAST (Data Processing)
+  - getProgramAccounts, getAccountInfo (Solana RPC)
+  - MAP, FILTER, SORT_BY (Data Processing)
+  - DETECT_OUTLIERS, MEAN, STDDEV (Statistical)
 
 **Main Branch:**
-$closed_account = INPUT(prompt: "Enter closed account address")
+```ovsm
+$program_id = INPUT(prompt: "Enter program ID to analyze (or 'system' for all)")
 
-// Get transaction history (may still be available)
-TRY:
-  $signatures = getSignaturesForAddress(address: $closed_account, limit: 100)
-CATCH RECOVERABLE:
-  RETURN ERROR(message: "No transaction history available for closed account")
+// Sample accounts
+$accounts_to_check = []
 
-GUARD COUNT(collection: $signatures) > 0 ELSE
-  RETURN ERROR(message: "Account has no transaction history")
+IF $program_id == "system" THEN
+  // Would need to sample from multiple sources
+  RETURN ERROR(message: "System-wide analysis not implemented - specify a program ID")
+ELSE
+  TRY:
+    // Get all accounts owned by program
+    $program_accounts = getProgramAccounts(
+      programId: $program_id,
+      encoding: "base64",
+      dataSlice: {offset: 0, length: 0}  // Just get metadata
+    )
+  CATCH FATAL:
+    RETURN ERROR(message: "Could not fetch program accounts - invalid program ID?")
 
-// Find the closing transaction
-$last_signature = LAST(collection: $signatures)
-$last_tx = getTransaction(signature: $last_signature.signature)
+$account_data_sizes = []
+$account_growth_rates = []
+$suspicious_accounts = []
 
-// Analyze the closing
-$pre_balances = $last_tx.meta.preBalances
-$post_balances = $last_tx.meta.postBalances
-$account_keys = $last_tx.transaction.message.accountKeys
+FOR $account IN $program_accounts:
+  $pubkey = $account.pubkey
+  $data_size = COUNT(collection: $account.account.data)
+  $lamports = $account.account.lamports
+  
+  $account_data_sizes = APPEND(
+    array: $account_data_sizes,
+    item: {
+      address: $pubkey,
+      size: $data_size,
+      lamports: $lamports,
+      rent_per_byte: $lamports / ($data_size + 128)  // Approximate
+    }
+  )
 
-// Find the account index
-$account_index = FIND_INDEX(
-  collection: $account_keys,
-  predicate: key => key == $closed_account
+// Statistical analysis
+$sizes = MAP($account_data_sizes, acc => acc.size)
+$mean_size = MEAN(data: $sizes)
+$stddev_size = STDDEV(data: $sizes)
+
+// Find outliers (unusual sizes)
+$outliers = DETECT_OUTLIERS(
+  data: $sizes,
+  method: "zscore",
+  threshold: 3.0
 )
 
-$pre_balance = $pre_balances[$account_index]
-$post_balance = $post_balances[$account_index]
-
-// Check if account was truly closed
-$was_closed = $post_balance == 0 AND $pre_balance > 0
-
-IF $was_closed:
-  $closed_at = $last_tx.blockTime
-  $recipient = findLamportRecipient(transaction: $last_tx, source_index: $account_index)
+FOR $i IN 0..COUNT(collection: $account_data_sizes):
+  $acc = $account_data_sizes[$i]
+  $z_score = ($acc.size - $mean_size) / $stddev_size
   
-  // Analyze pre-closing activity
-  $recent_txs = SLICE(collection: $signatures, start: 0, end: 10)
-  $activity_pattern = analyzeActivityPattern(transactions: $recent_txs)
-  
-  **Decision Point:** Determine closure reason
-    BRANCH A (CONTAINS($activity_pattern, "exploit")):
-      $reason = "potential_exploit"
-      $explanation = "Suspicious activity before closure"
-      
-    BRANCH B (CONTAINS($activity_pattern, "normal_cleanup")):
-      $reason = "normal_closure"
-      $explanation = "Standard account cleanup"
-      
-    BRANCH C ($pre_balance > 10000000000):
-      $reason = "high_value_closure"
-      $explanation = "Large account closed - investigate beneficiary"
-      
-    BRANCH D (true):
-      $reason = "unknown"
-      $explanation = "Closure reason unclear"
-ELSE:
-  $reason = "not_closed"
-  $explanation = "Account still has balance - not actually closed"
+  IF ABS($z_score) > 3.0 THEN  // More than 3 standard deviations
+    $suspicious_accounts = APPEND(
+      array: $suspicious_accounts,
+      item: {
+        address: $acc.address,
+        size_bytes: $acc.size,
+        z_score: $z_score,
+        suspicion: $z_score > 0 ? "unusually_large" : "unusually_small",
+        rent_inefficiency: $acc.rent_per_byte < 6900 ? "under_rented" : "normal"
+      }
+    )
+
+// Sort by suspicion level
+$suspicious_accounts = SORT_BY(
+  collection: $suspicious_accounts,
+  key: acc => ABS(acc.z_score),
+  order: "desc"
+)
+```
+
+**Decision Point:** Classify threat level
+  BRANCH A (COUNT(collection: $suspicious_accounts) > 100):
+    $threat = "HIGH"
+    $analysis = "Mass spam or exploit campaign - many outlier accounts"
+    
+  BRANCH B (COUNT(collection: $suspicious_accounts) > 10):
+    $threat = "MEDIUM"
+    $analysis = "Some unusual account growth - investigate further"
+    
+  BRANCH C (COUNT(collection: $suspicious_accounts) <= 10):
+    $threat = "LOW"
+    $analysis = "Normal variation in account sizes"
 
 **Action:**
 RETURN {
-  account: $closed_account,
-  was_closed: $was_closed,
-  pre_close_balance: $pre_balance,
-  post_close_balance: $post_balance,
-  closed_at: $closed_at,
-  recipient: $recipient,
-  closure_reason: $reason,
-  explanation: $explanation,
-  total_lifetime_txs: COUNT(collection: $signatures),
-  confidence: 75,
-  caveats: ["Historical data may be incomplete", "Requires archive node for full history"]
+  program_id: $program_id,
+  total_accounts_analyzed: COUNT(collection: $account_data_sizes),
+  mean_account_size: ROUND($mean_size),
+  stddev_account_size: ROUND($stddev_size),
+  suspicious_accounts_found: COUNT(collection: $suspicious_accounts),
+  threat_level: $threat,
+  analysis: $analysis,
+  top_10_suspicious: SLICE(collection: $suspicious_accounts, start: 0, end: 10),
+  recommendations: [
+    "Investigate accounts with z-score > 5",
+    "Check for data spam attacks",
+    "Verify rent collection is working properly"
+  ],
+  confidence: 75
 }

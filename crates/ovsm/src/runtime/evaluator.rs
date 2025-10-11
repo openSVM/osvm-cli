@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::parser::{BinaryOp, Expression, Program, Statement, UnaryOp, Argument};
+use crate::parser::{BinaryOp, Expression, Program, Statement, UnaryOp};
 use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
 use std::sync::Arc;
