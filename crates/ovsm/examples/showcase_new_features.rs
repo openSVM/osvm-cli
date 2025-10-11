@@ -3,7 +3,7 @@ use ovsm::{Evaluator, Parser, Scanner};
 fn main() {
     println!("🎉 OVSM Interpreter - New Features Showcase\n");
     println!("Demonstrating GUARD clauses and TRY-CATCH error handling\n");
-    println!("=" .repeat(70));
+    println!("{}", "=".repeat(70));
 
     // Example 1: GUARD clauses for input validation
     println!("\n📋 Example 1: Input Validation with GUARD\n");
@@ -153,7 +153,7 @@ fn main() {
 
     execute_and_print("Safe MAX/MIN on empty array", code7);
 
-    println!("\n" + &"=".repeat(70));
+    println!("\n{}", "=".repeat(70));
     println!("\n✅ All examples executed successfully!");
     println!("\n🎓 Key Takeaways:");
     println!("   1. GUARD clauses enable early-exit validation patterns");
