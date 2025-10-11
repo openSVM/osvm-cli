@@ -132,7 +132,7 @@ mod chat_ui_tests {
     #[test]
     fn test_chat_handles_ctrl_c() {
         // Verify chat handles interrupt signals gracefully
-        let mut child = Command::new("cargo")
+        let child = Command::new("cargo")
             .args(["run", "--", "chat"])
             .env("CI", "1")
             .stdin(Stdio::piped())

@@ -120,7 +120,6 @@ mod string_fuzzing_tests {
 
 #[cfg(test)]
 mod number_fuzzing_tests {
-    use super::*;
 
     #[test]
     fn test_integer_overflow() {
@@ -204,7 +203,7 @@ mod number_fuzzing_tests {
 
 #[cfg(test)]
 mod path_traversal_tests {
-    use super::*;
+
     use std::path::Path;
 
     #[test]
@@ -274,7 +273,6 @@ mod path_traversal_tests {
 
 #[cfg(test)]
 mod injection_attack_tests {
-    use super::*;
 
     #[test]
     fn test_sql_injection_patterns() {
@@ -339,7 +337,7 @@ mod injection_attack_tests {
 
     #[test]
     fn test_xml_injection_patterns() {
-        let xml_attacks = vec![
+        let xml_attacks = [
             "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>",
             "<foo>&xxe;</foo>",
         ];
@@ -352,7 +350,6 @@ mod injection_attack_tests {
 
 #[cfg(test)]
 mod buffer_overflow_simulation_tests {
-    use super::*;
 
     #[test]
     fn test_string_capacity_overflow() {
@@ -380,8 +377,9 @@ mod buffer_overflow_simulation_tests {
     }
 
     #[test]
+    #[allow(clippy::out_of_bounds_indexing)]
     fn test_slice_bounds() {
-        let data = vec![1, 2, 3, 4, 5];
+        let data = [1, 2, 3, 4, 5];
 
         // Out of bounds should panic
         let result = std::panic::catch_unwind(|| {
@@ -392,8 +390,9 @@ mod buffer_overflow_simulation_tests {
     }
 
     #[test]
+    #[allow(clippy::out_of_bounds_indexing)]
     fn test_unchecked_indexing() {
-        let data = vec![1, 2, 3];
+        let data = [1, 2, 3];
 
         // Safe: using get()
         assert_eq!(data.get(10), None);
@@ -406,7 +405,6 @@ mod buffer_overflow_simulation_tests {
 
 #[cfg(test)]
 mod format_string_attacks {
-    use super::*;
 
     #[test]
     fn test_format_string_injection() {
@@ -414,7 +412,7 @@ mod format_string_attacks {
         let user_input = "%s%s%s%s%s%s%s%s";
 
         // Should not be used directly in format!
-        let safe = format!("{}", user_input);
+        let safe = user_input.to_string();
         assert_eq!(safe, user_input); // Treated as literal
 
         // Dangerous (commented out):
@@ -427,7 +425,7 @@ mod format_string_attacks {
 
         for attack in attacks {
             // Should treat as literal string
-            let safe = format!("{}", attack);
+            let safe = attack.to_string();
             assert_eq!(safe, attack);
         }
     }
@@ -460,12 +458,12 @@ mod deserialization_attacks {
         // Create deeply nested JSON
         let mut json = String::from("[");
         for _ in 0..1000 {
-            json.push_str("[");
+            json.push('[');
         }
         for _ in 0..1000 {
-            json.push_str("]");
+            json.push(']');
         }
-        json.push_str("]");
+        json.push(']');
 
         // Should handle or reject gracefully
         let result: Result<serde_json::Value, _> = serde_json::from_str(&json);
@@ -476,7 +474,7 @@ mod deserialization_attacks {
     #[test]
     fn test_huge_json_numbers() {
         let huge_number = "9".repeat(10000);
-        let json = format!("{}", huge_number);
+        let json = huge_number.to_string();
 
         let result: Result<serde_json::Value, _> = serde_json::from_str(&json);
         // Should handle large numbers
@@ -503,7 +501,6 @@ mod deserialization_attacks {
 
 #[cfg(test)]
 mod regex_dos_tests {
-    use super::*;
 
     #[test]
     fn test_catastrophic_backtracking() {
@@ -573,7 +570,6 @@ mod resource_exhaustion_attacks {
 
 #[cfg(test)]
 mod timing_attack_tests {
-    use super::*;
 
     #[test]
     fn test_constant_time_comparison_needed() {
@@ -604,7 +600,6 @@ mod timing_attack_tests {
 
 #[cfg(test)]
 mod environment_manipulation_tests {
-    use super::*;
 
     #[test]
     fn test_environment_variable_injection() {

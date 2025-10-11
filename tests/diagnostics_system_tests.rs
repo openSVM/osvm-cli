@@ -5,7 +5,6 @@
 //! The actual API uses DiagnosticCoordinator from src/utils/diagnostics/mod.rs
 
 use anyhow::Result;
-use osvm::utils::diagnostics::{DiagnosticCoordinator, HealthStatus, SystemHealth};
 
 #[allow(unused_imports)]
 use std::time::Duration;
@@ -200,7 +199,6 @@ mod version_checker_tests {
 #[cfg(test)]
 mod rollback_validator_tests {
     use super::*;
-    use tempfile::TempDir;
 
     #[tokio::test]
     #[ignore = "API mismatch - actual diagnostics API is different"]
@@ -287,7 +285,6 @@ mod diagnostics_runner_tests {
 
 #[cfg(test)]
 mod system_info_tests {
-    use super::*;
 
     #[test]
     #[ignore = "API mismatch - actual diagnostics API is different"]

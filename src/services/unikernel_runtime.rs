@@ -408,7 +408,11 @@ mod tests {
         // Test multiple allocations to verify range
         for _ in 0..10 {
             let cid = runtime.allocate_ephemeral_cid().unwrap();
-            assert!(cid >= 200 && cid < 300, "CID {} not in 200-299 range", cid);
+            assert!(
+                (200..300).contains(&cid),
+                "CID {} not in 200-299 range",
+                cid
+            );
         }
     }
 }

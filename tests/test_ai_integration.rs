@@ -64,7 +64,7 @@ async fn test_ai_service_with_mock_query() {
 
     // Test that the service can handle the query format
     // This will either succeed with real AI or fail gracefully
-    match ai_service.query_with_debug(&test_query, true).await {
+    match ai_service.query_with_debug(test_query, true).await {
         Ok(response) => {
             println!(
                 "✓ AI Service SUCCESS: Got response ({} chars)",

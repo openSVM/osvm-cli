@@ -41,7 +41,9 @@ pub mod vsock;
 // Re-exports for convenience
 pub use autoscaler::{AutoScaler, AutoScalerConfig, ComponentMetrics, ScalingPolicy};
 pub use certificate::{CertificateAuthority, CertificateManager};
-pub use component::{Component, ComponentId, ComponentRegistry, ComponentStatus, ComponentType};
+pub use component::{
+    Component, ComponentId, ComponentMetadata, ComponentRegistry, ComponentStatus, ComponentType,
+};
 pub use config::{IsolationConfig, IsolationType, ResourceLimits};
 pub use hotswap::{HotSwapConfig, HotSwapManager, HotSwapResult};
 pub use network::{NetworkManager, ZeroTrustNetwork};

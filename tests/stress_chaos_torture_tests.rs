@@ -433,7 +433,7 @@ mod resource_exhaustion_tests {
         }
 
         // Should open at least some files
-        assert!(files.len() > 0);
+        assert!(!files.is_empty());
 
         Ok(())
     }

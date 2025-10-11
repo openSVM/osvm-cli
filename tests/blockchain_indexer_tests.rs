@@ -8,13 +8,6 @@
 //!
 //! These tests are ignored until they can be properly rewritten.
 
-use anyhow::Result;
-use mockito::Server;
-use serde_json::json;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tempfile::TempDir;
-
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod indexer_core_tests {
     use super::*;

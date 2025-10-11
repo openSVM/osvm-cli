@@ -287,7 +287,7 @@ mod tests {
         let service = OvsmService::new();
 
         assert_eq!(service.format_value(&Value::Int(42)), "42");
-        assert_eq!(service.format_value(&Value::Float(3.14)), "3.14");
+        assert_eq!(service.format_value(&Value::Float(3.15)), "3.15");
         assert_eq!(
             service.format_value(&Value::String("hello".into())),
             "\"hello\""
