@@ -834,9 +834,12 @@ impl Parser {
     }
 
     fn is_end_of_block(&self) -> bool {
-        // Check if we're at a keyword that starts a new block or ends current block
-        // For now, we treat these as block terminators
-        // TODO: Implement proper indentation-based block detection
+        // Check if we're at a keyword that ends the current block
+        // These are keywords that belong to a parent construct (ELSE, CATCH, etc.)
+        // or explicitly close blocks (RightBrace, wait strategies, RETURN)
+        //
+        // NOTE: IF, FOR, WHILE are NOT block terminators - they are statements
+        // that can appear within blocks! Only RETURN explicitly exits blocks.
         matches!(
             self.peek().kind,
             TokenKind::Else
@@ -846,10 +849,7 @@ impl Parser {
                 | TokenKind::WaitAll
                 | TokenKind::WaitAny
                 | TokenKind::Race
-                | TokenKind::Return  // RETURN starts a new top-level statement
-                | TokenKind::If      // IF starts a new block
-                | TokenKind::For     // FOR starts a new block
-                | TokenKind::While   // WHILE starts a new block
+                | TokenKind::Return  // RETURN explicitly exits the current function/block
         )
     }
 }
