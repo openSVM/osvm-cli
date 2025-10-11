@@ -231,7 +231,11 @@ async fn test_high_load_20_unikernels() {
             };
 
             let start = Instant::now();
-            let result = timeout(Duration::from_secs(30), runtime.unwrap().spawn_unikernel(config)).await;
+            let result = timeout(
+                Duration::from_secs(30),
+                runtime.unwrap().spawn_unikernel(config),
+            )
+            .await;
 
             match result {
                 Ok(Ok(handle)) => {

@@ -17,7 +17,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Usage: {} <markdown-file>", args[0]);
-        eprintln!("Example: {} ../../../test_qa_categories/06_token_research/01_basic.md", args[0]);
+        eprintln!(
+            "Example: {} ../../../test_qa_categories/06_token_research/01_basic.md",
+            args[0]
+        );
         std::process::exit(1);
     }
 
@@ -69,7 +72,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Total tests: {}", test_count);
     println!("   ✅ Passed: {}", passed_count);
     println!("   ❌ Failed: {}", failed_count);
-    println!("   📈 Pass rate: {:.1}%", if test_count > 0 { (passed_count as f64 / test_count as f64) * 100.0 } else { 0.0 });
+    println!(
+        "   📈 Pass rate: {:.1}%",
+        if test_count > 0 {
+            (passed_count as f64 / test_count as f64) * 100.0
+        } else {
+            0.0
+        }
+    );
 
     Ok(())
 }
@@ -105,15 +115,18 @@ fn extract_ovsm_blocks(content: &str) -> Vec<String> {
 /// Execute OVSM code and return the result
 fn execute_ovsm(code: &str) -> Result<Value, String> {
     let mut scanner = Scanner::new(code);
-    let tokens = scanner.scan_tokens()
+    let tokens = scanner
+        .scan_tokens()
         .map_err(|e| format!("Scanner error: {:?}", e))?;
 
     let mut parser = Parser::new(tokens);
-    let program = parser.parse()
+    let program = parser
+        .parse()
         .map_err(|e| format!("Parser error: {:?}", e))?;
 
     let mut evaluator = Evaluator::new();
-    evaluator.execute(&program)
+    evaluator
+        .execute(&program)
         .map_err(|e| format!("Runtime error: {:?}", e))
 }
 
@@ -130,7 +143,8 @@ fn format_value(value: &Value) -> String {
             format!("Array([{}])", items.join(", "))
         }
         Value::Object(obj) => {
-            let pairs: Vec<String> = obj.iter()
+            let pairs: Vec<String> = obj
+                .iter()
                 .map(|(k, v)| format!("{}: {}", k, format_value(v)))
                 .collect();
             format!("Object({{{}}})", pairs.join(", "))

@@ -148,7 +148,10 @@ mod extreme_concurrency_tests {
     #[tokio::test]
     async fn test_spawn_bomb() -> Result<()> {
         // Exponentially spawn tasks (fork bomb style)
-        fn spawn_recursive(depth: usize, max_depth: usize) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
+        fn spawn_recursive(
+            depth: usize,
+            max_depth: usize,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> {
             Box::pin(async move {
                 if depth >= max_depth {
                     return;
@@ -566,7 +569,9 @@ mod timeout_and_hang_tests {
     #[tokio::test]
     async fn test_slow_operation_cascade() -> Result<()> {
         // Chain of slow operations
-        fn slow_op(depth: usize) -> std::pin::Pin<Box<dyn std::future::Future<Output = usize> + Send>> {
+        fn slow_op(
+            depth: usize,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = usize> + Send>> {
             Box::pin(async move {
                 if depth == 0 {
                     return 0;

@@ -253,15 +253,15 @@ mod tests {
     #[test]
     fn test_constants() {
         let mut constants = HashMap::new();
-        constants.insert("PI".to_string(), Value::Float(3.14159));
+        constants.insert("PHI".to_string(), Value::Float(1.618034));
 
         let mut env = Environment::with_constants(constants);
 
         // Can read constant
-        assert_eq!(env.get("PI").unwrap(), Value::Float(3.14159));
+        assert_eq!(env.get("PHI").unwrap(), Value::Float(1.618034));
 
         // Cannot reassign constant
-        let result = env.set("PI", Value::Float(3.0));
+        let result = env.set("PHI", Value::Float(1.0));
         assert!(result.is_err());
     }
 
@@ -285,10 +285,7 @@ mod tests {
         env.enter_scope();
         env.define("x".to_string(), Value::String("shadowed".to_string()));
 
-        assert_eq!(
-            env.get("x").unwrap(),
-            Value::String("shadowed".to_string())
-        );
+        assert_eq!(env.get("x").unwrap(), Value::String("shadowed".to_string()));
 
         env.exit_scope();
         assert_eq!(env.get("x").unwrap(), Value::Int(10));

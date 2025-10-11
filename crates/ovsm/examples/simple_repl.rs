@@ -27,7 +27,7 @@ fn main() {
         let mut input = String::new();
         match io::stdin().read_line(&mut input) {
             Ok(0) => break, // EOF
-            Ok(_) => {},
+            Ok(_) => {}
             Err(err) => {
                 eprintln!("Error reading input: {}", err);
                 continue;
@@ -69,7 +69,10 @@ fn main() {
     }
 }
 
-fn execute_line(evaluator: &mut Evaluator, code: &str) -> Result<ovsm::Value, Box<dyn std::error::Error>> {
+fn execute_line(
+    evaluator: &mut Evaluator,
+    code: &str,
+) -> Result<ovsm::Value, Box<dyn std::error::Error>> {
     // Tokenize
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens()?;

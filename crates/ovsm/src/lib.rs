@@ -12,7 +12,7 @@
 //! println!("Tokens: {:?}", tokens);
 //! ```
 
-#![allow(dead_code)]  // Remove after implementation
+#![allow(dead_code)] // Remove after implementation
 #![warn(missing_docs)]
 
 // Module declarations
@@ -25,6 +25,6 @@ pub mod tools;
 // Re-export main types
 pub use error::{Error, Result};
 pub use lexer::{Scanner, Token, TokenKind};
-pub use parser::{Parser, Program, Statement, Expression, BinaryOp, UnaryOp};
-pub use runtime::{Evaluator, Value, Environment};
+pub use parser::{BinaryOp, Expression, Parser, Program, Statement, UnaryOp};
+pub use runtime::{Environment, Evaluator, Value};
 pub use tools::{Tool, ToolRegistry};

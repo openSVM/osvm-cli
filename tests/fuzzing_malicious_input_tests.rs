@@ -136,9 +136,7 @@ mod number_fuzzing_tests {
         let x = std::hint::black_box(10);
         let y = std::hint::black_box(0);
 
-        let result = std::panic::catch_unwind(|| {
-            x / y
-        });
+        let result = std::panic::catch_unwind(|| x / y);
 
         assert!(result.is_err());
     }
@@ -149,9 +147,7 @@ mod number_fuzzing_tests {
         let x = std::hint::black_box(10);
         let y = std::hint::black_box(0);
 
-        let result = std::panic::catch_unwind(|| {
-            x % y
-        });
+        let result = std::panic::catch_unwind(|| x % y);
 
         assert!(result.is_err());
     }

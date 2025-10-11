@@ -176,7 +176,9 @@ fn bench_hashmap_operations(c: &mut Criterion) {
         large_map.insert(format!("key-{}", i), json!(i));
     }
 
-    group.bench_function("lookup", |b| b.iter(|| std::hint::black_box(large_map.get("key-500"))));
+    group.bench_function("lookup", |b| {
+        b.iter(|| std::hint::black_box(large_map.get("key-500")))
+    });
 
     group.finish();
 }
@@ -190,9 +192,13 @@ fn bench_string_operations(c: &mut Criterion) {
 
     let long_string = "a".repeat(10000);
 
-    group.bench_function("clone", |b| b.iter(|| std::hint::black_box(long_string.clone())));
+    group.bench_function("clone", |b| {
+        b.iter(|| std::hint::black_box(long_string.clone()))
+    });
 
-    group.bench_function("substring", |b| b.iter(|| std::hint::black_box(&long_string[0..100])));
+    group.bench_function("substring", |b| {
+        b.iter(|| std::hint::black_box(&long_string[0..100]))
+    });
 
     group.finish();
 }

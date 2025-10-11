@@ -349,8 +349,7 @@ impl Parser {
             self.skip_newlines();
 
             let mut body = Vec::new();
-            while !self.check(&TokenKind::Branch) && !self.is_end_of_block() && !self.is_at_end()
-            {
+            while !self.check(&TokenKind::Branch) && !self.is_end_of_block() && !self.is_at_end() {
                 body.push(self.statement()?);
                 self.skip_newlines();
             }
@@ -587,7 +586,11 @@ impl Parser {
                 self.advance();
                 let field = match &self.peek().kind {
                     TokenKind::Identifier(name) => name.clone(),
-                    _ => return Err(Error::ParseError("Expected field name after '.'".to_string())),
+                    _ => {
+                        return Err(Error::ParseError(
+                            "Expected field name after '.'".to_string(),
+                        ))
+                    }
                 };
                 self.advance();
 
@@ -617,7 +620,11 @@ impl Parser {
 
         let name = match callee {
             Expression::Variable(n) => n,
-            _ => return Err(Error::ParseError("Can only call named functions/tools".to_string())),
+            _ => {
+                return Err(Error::ParseError(
+                    "Can only call named functions/tools".to_string(),
+                ))
+            }
         };
 
         let mut args = Vec::new();

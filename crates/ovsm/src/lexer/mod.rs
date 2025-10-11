@@ -2,8 +2,8 @@
 //!
 //! Converts source text into a stream of tokens.
 
-mod token;
 mod scanner;
+mod token;
 
-pub use token::{Token, TokenKind};
 pub use scanner::Scanner;
+pub use token::{Token, TokenKind};

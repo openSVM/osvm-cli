@@ -1,8 +1,8 @@
 //! Standard library tools for OVSM
 
 pub mod data_processing;
-pub mod statistics;
 pub mod math;
+pub mod statistics;
 pub mod utilities;
 
 use crate::tools::ToolRegistry;
