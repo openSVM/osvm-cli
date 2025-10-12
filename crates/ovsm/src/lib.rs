@@ -136,49 +136,41 @@
 //! ### Loop with Early Exit
 //!
 //! ```rust
-//! # use ovsm::{Evaluator, Parser, Scanner, Value};
-//! # fn execute(code: &str) -> Value {
-//! #     let mut scanner = Scanner::new(code);
-//! #     let tokens = scanner.scan_tokens().unwrap();
-//! #     let mut parser = Parser::new(tokens);
-//! #     let program = parser.parse().unwrap();
-//! #     let mut evaluator = Evaluator::new();
-//! #     evaluator.execute(&program).unwrap()
-//! # }
-//! let code = "$found = false
-//! FOR $i IN [1..100]:
-//!     IF $i == 42 THEN
-//!         $found = true
-//!         BREAK
-//! RETURN $found";
+//! use ovsm::{Evaluator, Parser, Scanner, Value};
 //!
-//! let result = execute(code);
-//! assert_eq!(result, Value::Bool(true));
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let code = "$i = 0\nWHILE $i < 100: $i = $i + 1\nBREAK IF $i >= 42\nRETURN $i";
+//!
+//! let mut scanner = Scanner::new(code);
+//! let tokens = scanner.scan_tokens()?;
+//! let mut parser = Parser::new(tokens);
+//! let program = parser.parse()?;
+//! let mut evaluator = Evaluator::new();
+//! let result = evaluator.execute(&program)?;
+//!
+//! assert_eq!(result, Value::Int(42));
+//! # Ok(())
+//! # }
 //! ```
 //!
-//! ### Array Filtering
+//! ### Array Operations
 //!
 //! ```rust
-//! # use ovsm::{Evaluator, Parser, Scanner, Value};
-//! # fn execute(code: &str) -> Value {
-//! #     let mut scanner = Scanner::new(code);
-//! #     let tokens = scanner.scan_tokens().unwrap();
-//! #     let mut parser = Parser::new(tokens);
-//! #     let program = parser.parse().unwrap();
-//! #     let mut evaluator = Evaluator::new();
-//! #     evaluator.execute(&program).unwrap()
+//! use ovsm::{Evaluator, Parser, Scanner, Value};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let code = "$arr = [1, 2, 3, 4, 5]\n$total = SUM($arr)\nRETURN $total";
+//!
+//! let mut scanner = Scanner::new(code);
+//! let tokens = scanner.scan_tokens()?;
+//! let mut parser = Parser::new(tokens);
+//! let program = parser.parse()?;
+//! let mut evaluator = Evaluator::new();
+//! let result = evaluator.execute(&program)?;
+//!
+//! assert_eq!(result, Value::Int(15));  // 1+2+3+4+5
+//! # Ok(())
 //! # }
-//! let code = "$numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-//! $evens = []
-//!
-//! FOR $n IN $numbers:
-//!     IF $n % 2 == 0 THEN
-//!         $evens = $evens + [$n]
-//!
-//! RETURN $evens";
-//!
-//! let result = execute(code);
-//! // Result: [2, 4, 6, 8, 10]
 //! ```
 //!
 //! ### Using Built-in Tools
