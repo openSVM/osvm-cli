@@ -22,6 +22,9 @@ COPY rust-toolchain.toml ./
 # Copy vendor directory if it exists
 COPY vendor/ ./vendor/
 
+# Copy workspace crates (includes ovsm crate)
+COPY crates/ ./crates/
+
 # Copy source code
 COPY src/ ./src/
 
