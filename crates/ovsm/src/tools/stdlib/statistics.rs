@@ -82,6 +82,8 @@ impl Tool for MedianTool {
             .collect::<Result<Vec<_>>>()?;
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
+        #[allow(unknown_lints)]
+        #[allow(clippy::manual_is_multiple_of)]
         let median = if sorted.len() % 2 == 0 {
             let mid = sorted.len() / 2;
             (sorted[mid - 1] + sorted[mid]) / 2.0
