@@ -33,7 +33,7 @@ struct TuiInteractor {
     process: std::process::Child,
     stdin: std::process::ChildStdin,
     stdout_reader: std::thread::JoinHandle<Result<String>>,
-    config: TuiTestConfig,
+    _config: TuiTestConfig,
 }
 
 impl TuiInteractor {
@@ -43,7 +43,7 @@ impl TuiInteractor {
 
         // Set environment variables for testing
         let mut cmd = StdCommand::new("cargo");
-        cmd.args(&["run", "--", "chat"])
+        cmd.args(["run", "--", "chat"])
             .current_dir(std::env::current_dir()?)
             .env("TERM", "xterm-256color")
             .env("COLUMNS", config.terminal_size.0.to_string())
@@ -76,7 +76,7 @@ impl TuiInteractor {
             process,
             stdin,
             stdout_reader,
-            config,
+            _config: config,
         })
     }
 
@@ -633,7 +633,7 @@ fn test_documentation_examples() {
     "#;
 
     // Validate that our implementation matches the documented behavior
-    assert!(!example_usage.is_empty());
+    assert!(example_usage.contains("osvm chat"));
 }
 
 /// Benchmark test to ensure TUI performance is acceptable
