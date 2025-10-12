@@ -70,8 +70,10 @@ async fn cmd_init(args: &DatabaseArgs) -> Result<()> {
     println!("{}", "Initializing ClickHouse database...".cyan().bold());
 
     let service = if let Some(data_dir) = &args.data_dir {
-        let mut config = crate::services::clickhouse_service::ClickHouseConfig::default();
-        config.data_dir = std::path::PathBuf::from(data_dir);
+        let config = crate::services::clickhouse_service::ClickHouseConfig {
+            data_dir: std::path::PathBuf::from(data_dir),
+            ..Default::default()
+        };
         ClickHouseService::with_config(config)?
     } else {
         ClickHouseService::new()?

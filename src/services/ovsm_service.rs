@@ -159,6 +159,7 @@ impl OvsmService {
     }
 
     /// Format a value for display
+    #[allow(clippy::only_used_in_recursion)]
     pub fn format_value(&self, value: &Value) -> String {
         match value {
             Value::Int(i) => format!("{}", i),
@@ -191,6 +192,7 @@ impl OvsmService {
     }
 
     /// Convert OVSM Value to serde_json::Value
+    #[allow(clippy::only_used_in_recursion)]
     fn value_to_json(&self, value: &Value) -> Result<serde_json::Value> {
         match value {
             Value::Int(i) => Ok(serde_json::json!(i)),

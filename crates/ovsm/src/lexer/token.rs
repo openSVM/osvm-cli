@@ -3,13 +3,18 @@ use serde::{Deserialize, Serialize};
 /// A single token from the source code
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Token {
+    /// The type of token
     pub kind: TokenKind,
+    /// Original text of the token
     pub lexeme: String,
+    /// Line number where token appears (1-indexed)
     pub line: usize,
+    /// Column number where token starts (1-indexed)
     pub column: usize,
 }
 
 impl Token {
+    /// Creates a new token with the given properties
     pub fn new(kind: TokenKind, lexeme: String, line: usize, column: usize) -> Self {
         Token {
             kind,
@@ -24,92 +29,169 @@ impl Token {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenKind {
     // Literals
+    /// Integer literal
     Integer(i64),
+    /// Floating-point literal
     Float(f64),
+    /// String literal
     String(String),
+    /// Boolean true literal
     True,
+    /// Boolean false literal
     False,
+    /// Null literal
     Null,
 
     // Identifiers
+    /// Identifier (lowercase or mixed case)
     Identifier(String),
-    Variable(String), // $name
-    Constant(String), // UPPERCASE
+    /// Variable name (prefixed with $)
+    Variable(String),
+    /// Constant name (all UPPERCASE)
+    Constant(String),
 
     // Keywords
+    /// IF keyword
     If,
+    /// ELSE keyword
     Else,
+    /// THEN keyword
     Then,
+    /// WHILE keyword
     While,
+    /// FOR keyword
     For,
+    /// IN keyword
     In,
+    /// BREAK keyword
     Break,
+    /// CONTINUE keyword
     Continue,
+    /// RETURN keyword
     Return,
+    /// TRY keyword
     Try,
+    /// CATCH keyword
     Catch,
+    /// PARALLEL keyword
     Parallel,
+    /// WAIT_ALL keyword
     WaitAll,
+    /// WAIT_ANY keyword
     WaitAny,
+    /// RACE keyword
     Race,
+    /// DECISION keyword
     Decision,
+    /// BRANCH keyword
     Branch,
+    /// GUARD keyword
     Guard,
+    /// MATCH keyword
     Match,
+    /// DEFINE keyword
     Define,
+    /// DEFINE_TOOL keyword
     DefineTool,
+    /// CONST keyword
     Const,
+    /// TOOL keyword
     Tool,
+    /// FAIL keyword
     Fail,
+    /// LOOP keyword
     Loop,
+    /// EVERY keyword
     Every,
+    /// TIMEOUT keyword
     Timeout,
+    /// RETRY keyword
     Retry,
+    /// CIRCUIT_BREAKER keyword
     CircuitBreaker,
+    /// FATAL keyword
     Fatal,
+    /// RECOVERABLE keyword
     Recoverable,
+    /// WARNING keyword
     Warning,
 
     // Operators
+    /// Plus operator (+)
     Plus,
+    /// Minus operator (-)
     Minus,
+    /// Star operator (*)
     Star,
+    /// Slash operator (/)
     Slash,
+    /// Percent operator (%)
     Percent,
+    /// Power operator (**)
     StarStar,
+    /// Equality operator (==)
     Eq,
+    /// Inequality operator (!=)
     NotEq,
+    /// Less than operator (<)
     Lt,
+    /// Greater than operator (>)
     Gt,
+    /// Less than or equal operator (<=)
     LtEq,
+    /// Greater than or equal operator (>=)
     GtEq,
+    /// Logical AND operator
     And,
+    /// Logical OR operator
     Or,
+    /// Logical NOT operator
     Not,
+    /// Logical XOR operator
     Xor,
+    /// Assignment operator (=)
     Assign,
+    /// Plus-assign operator (+=)
     PlusAssign,
+    /// Question mark operator (?)
     Question,
+    /// Colon operator (:)
     Colon,
+    /// Optional chaining operator (?.)
     QuestionDot,
+    /// Null coalescing operator (??)
     QuestionQuestion,
+    /// Arrow operator (->)
     Arrow,
+    /// Fat arrow operator (=>)
     FatArrow,
 
     // Delimiters
+    /// Left parenthesis (
     LeftParen,
+    /// Right parenthesis )
     RightParen,
+    /// Left brace {
     LeftBrace,
+    /// Right brace }
     RightBrace,
+    /// Left bracket [
     LeftBracket,
+    /// Right bracket ]
     RightBracket,
+    /// Comma delimiter
     Comma,
+    /// Dot operator
     Dot,
+    /// Range operator (..)
     DotDot,
+    /// Semicolon delimiter
     Semicolon,
+    /// Newline delimiter
     Newline,
 
     // Special
+    /// End of file marker
     Eof,
 }
 

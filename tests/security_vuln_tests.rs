@@ -313,8 +313,6 @@ fn test_legitimate_mcp_server_works() {
 
 #[cfg(test)]
 mod validation_tests {
-    use super::*;
-
     /// Test SQL query validation logic (unit test for the fix)
     #[test]
     fn test_sql_query_validation() {

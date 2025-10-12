@@ -1,4 +1,3 @@
-#![cfg(feature = "incomplete_tests")]
 use osvm::services::unikernel_runtime::{UnikernelConfig, UnikernelLauncher, UnikernelRuntime};
 use std::collections::HashMap;
 use std::path::PathBuf;

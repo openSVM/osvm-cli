@@ -170,10 +170,12 @@ impl EphemeralVmManager {
         );
 
         // Create configuration for this VM
-        let mut config = EphemeralVmConfig::default();
-        config.tool_name = tool_name.to_string();
-        config.server_id = server_id.to_string();
-        config.debug = self.debug_mode;
+        let config = EphemeralVmConfig {
+            tool_name: tool_name.to_string(),
+            server_id: server_id.to_string(),
+            debug: self.debug_mode,
+            ..Default::default()
+        };
 
         // Launch the VM
         let handle = self.spawn_ephemeral_vm(&config).await?;
@@ -452,14 +454,16 @@ impl ChatVmOrchestrator {
     pub async fn start_chat_vm(&mut self) -> Result<()> {
         info!("Starting main chat microVM");
 
-        let mut config = EphemeralVmConfig::default();
-        config.id = format!("chat-{}", Uuid::new_v4());
-        config.tool_name = "main-chat".to_string();
-        config.server_id = "osvm-chat".to_string();
-        config.memory_mb = 512; // More memory for chat VM
-        config.cpus = 2; // More CPUs for chat VM
-        config.timeout_secs = 3600; // 1 hour timeout for chat
-        config.debug = self.debug_mode;
+        let config = EphemeralVmConfig {
+            id: format!("chat-{}", Uuid::new_v4()),
+            tool_name: "main-chat".to_string(),
+            server_id: "osvm-chat".to_string(),
+            memory_mb: 512, // More memory for chat VM
+            cpus: 2, // More CPUs for chat VM
+            timeout_secs: 3600, // 1 hour timeout for chat
+            debug: self.debug_mode,
+            ..Default::default()
+        };
 
         let handle = self.ephemeral_manager.spawn_ephemeral_vm(&config).await?;
         self.chat_vm = Some(Arc::new(Mutex::new(handle)));

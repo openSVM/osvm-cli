@@ -14,6 +14,10 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(CeilTool);
 }
 
+/// Tool for calculating absolute value of a number
+///
+/// Usage: `ABS(number) -> number`
+/// Example: `ABS(-5)` returns `5`
 pub struct AbsTool;
 
 impl Tool for AbsTool {
@@ -44,6 +48,10 @@ impl Tool for AbsTool {
     }
 }
 
+/// Tool for calculating square root of a number
+///
+/// Usage: `SQRT(number) -> float`
+/// Example: `SQRT(16)` returns `4.0`
 pub struct SqrtTool;
 
 impl Tool for SqrtTool {
@@ -68,6 +76,10 @@ impl Tool for SqrtTool {
     }
 }
 
+/// Tool for raising a base to an exponent (base^exponent)
+///
+/// Usage: `POW(base, exponent) -> float`
+/// Example: `POW(2, 8)` returns `256.0`
 pub struct PowTool;
 
 impl Tool for PowTool {
@@ -93,6 +105,7 @@ impl Tool for PowTool {
     }
 }
 
+/// Tool for rounding a number to the nearest integer
 pub struct RoundTool;
 
 impl Tool for RoundTool {
@@ -117,6 +130,7 @@ impl Tool for RoundTool {
     }
 }
 
+/// Tool for rounding down to the nearest integer
 pub struct FloorTool;
 
 impl Tool for FloorTool {
@@ -141,6 +155,7 @@ impl Tool for FloorTool {
     }
 }
 
+/// Tool for rounding up to the nearest integer
 pub struct CeilTool;
 
 impl Tool for CeilTool {

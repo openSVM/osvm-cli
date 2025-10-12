@@ -1,7 +1,35 @@
-//! Parser for OVSM
+//! Parser for OVSM language
 //!
-//! Converts token stream into Abstract Syntax Tree (AST).
+//! Converts token stream into Abstract Syntax Tree (AST) using recursive descent parsing.
+//!
+//! # Architecture
+//!
+//! The parser implements a **recursive descent parser** with operator precedence climbing:
+//! - **Top-down**: Starts from high-level constructs (statements) and descends to expressions
+//! - **Precedence levels**: Expression parsing respects operator precedence (ternary > or > and > equality > comparison > term > factor > unary > power > call > primary)
+//! - **Lookahead**: Uses single-token lookahead (`peek()`) for parsing decisions
+//!
+//! # Usage Example
+//!
+//! ```rust
+//! use ovsm::lexer::Scanner;
+//! use ovsm::parser::Parser;
+//!
+//! let code = "$x = 42\nRETURN $x * 2";
+//! let mut scanner = Scanner::new(code);
+//! let tokens = scanner.scan_tokens()?;
+//! let mut parser = Parser::new(tokens);
+//! let program = parser.parse()?;  // Returns AST
+//! ```
+//!
+//! # Parsing Strategy
+//!
+//! - **Statements**: Assignment, control flow (IF/WHILE/FOR), RETURN, BREAK, etc.
+//! - **Expressions**: Binary ops, unary ops, literals, variables, tool calls, arrays, objects
+//! - **Indentation-agnostic**: Uses keywords (THEN, ELSE, colons) for block structure
+//! - **Error recovery**: Fails fast on syntax errors with detailed messages
 
+/// Abstract Syntax Tree (AST) definitions for OVSM
 pub mod ast;
 
 pub use ast::*;
@@ -9,19 +37,55 @@ pub use ast::*;
 use crate::error::{Error, Result};
 use crate::lexer::{Token, TokenKind};
 
-/// Parser for OVSM language
+/// Recursive descent parser for OVSM language
+///
+/// Transforms a token stream into an Abstract Syntax Tree (AST). The parser
+/// maintains a cursor (`current`) that advances through the tokens, using
+/// lookahead and recursive descent to build the AST.
+///
+/// # Key Methods
+///
+/// - `parse()`: Entry point - parses entire program into AST
+/// - `statement()`: Parses individual statements (assignment, control flow, etc.)
+/// - `expression()`: Parses expressions with operator precedence
 pub struct Parser {
+    /// Token stream to parse
     tokens: Vec<Token>,
+    /// Current position in token stream (acts as cursor)
     current: usize,
 }
 
 impl Parser {
     /// Create new parser from token stream
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let mut scanner = Scanner::new("$x = 10");
+    /// let tokens = scanner.scan_tokens()?;
+    /// let parser = Parser::new(tokens);
+    /// ```
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, current: 0 }
     }
 
     /// Parse tokens into a Program AST
+    ///
+    /// This is the main entry point for parsing. It processes all statements
+    /// in the token stream and returns a complete AST representation.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Program)`: Successfully parsed AST with statements and metadata
+    /// - `Err(Error)`: Syntax error with detailed location and context
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let mut parser = Parser::new(tokens);
+    /// let program = parser.parse()?;
+    /// // program.statements contains the AST
+    /// ```
     pub fn parse(&mut self) -> Result<Program> {
         let mut statements = Vec::new();
 

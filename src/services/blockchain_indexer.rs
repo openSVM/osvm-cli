@@ -611,8 +611,10 @@ impl Default for SyncArgs {
 
 /// Parse sync arguments into indexing configuration
 pub fn parse_sync_args(args: &SyncArgs) -> Result<IndexingConfig> {
-    let mut config = IndexingConfig::default();
-    config.mode = args.mode.clone();
+    let mut config = IndexingConfig {
+        mode: args.mode.clone(),
+        ..Default::default()
+    };
 
     // Parse program filters
     for prog_str in &args.programs {

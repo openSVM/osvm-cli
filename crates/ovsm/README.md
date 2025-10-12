@@ -23,7 +23,9 @@ A production-ready interpreter for the OVSM scripting language, designed for blo
 - Comprehensive error messages
 
 📚 **Well Documented**
-- Complete API documentation
+- Complete API documentation with usage examples
+- Enhanced error messages with context and prevention tips
+- Three-tier documentation: structure, purpose, and usage
 - Usage guides and tutorials
 - Example scripts included
 - Interactive REPL for experimentation
@@ -172,10 +174,23 @@ cargo run --example simple_repl
 
 ## Documentation
 
-- [API Documentation](https://docs.rs/ovsm) - Complete API reference
+- [API Documentation](https://docs.rs/ovsm) - Complete API reference with usage examples
 - [Usage Guide](https://github.com/opensvm/osvm-cli/blob/main/crates/ovsm/USAGE_GUIDE.md) - Language syntax and features
 - [How to Use](https://github.com/opensvm/osvm-cli/blob/main/crates/ovsm/HOW_TO_USE.md) - Getting started guide
 - [Examples](https://github.com/opensvm/osvm-cli/tree/main/crates/ovsm/examples) - Sample scripts
+
+### Documentation Quality
+
+All public APIs are thoroughly documented with:
+- **Structure**: What the API is and its components
+- **Purpose**: What it does and when to use it
+- **Usage**: How to use it with practical examples
+
+Error messages include:
+- **Trigger context**: What causes the error
+- **Examples**: Concrete code that triggers it
+- **Prevention**: How to avoid the error
+- **Recovery**: Whether the error is recoverable
 
 ## Test Coverage
 

@@ -143,15 +143,13 @@ impl LedgerService {
         let mut max_slot = 0u64;
         let iter = db.iterator(IteratorMode::Start);
 
-        for item in iter.take(1000) {
-            // Sample first 1000 entries
-            if let Ok((key, _value)) = item {
-                // Try to parse slot numbers from keys
-                // This is simplified - real implementation would decode SlotMeta
-                if let Ok(key_str) = String::from_utf8(key.to_vec()) {
-                    if let Ok(slot_num) = key_str.parse::<u64>() {
-                        max_slot = max_slot.max(slot_num);
-                    }
+        // Sample first 1000 entries
+        for (key, _value) in iter.take(1000).flatten() {
+            // Try to parse slot numbers from keys
+            // This is simplified - real implementation would decode SlotMeta
+            if let Ok(key_str) = String::from_utf8(key.to_vec()) {
+                if let Ok(slot_num) = key_str.parse::<u64>() {
+                    max_slot = max_slot.max(slot_num);
                 }
             }
         }
@@ -292,28 +290,26 @@ impl LedgerService {
         // Key format: (address:32 bytes, slot:8 bytes, signature_index)
         let iter = db.iterator_cf(cf_handle, IteratorMode::Start);
 
-        for item in iter {
-            if let Ok((key, value)) = item {
-                // Check if key starts with our address
-                if key.len() >= 32 && key[0..32] == pubkey_bytes {
-                    // Extract signature from value
-                    if value.len() >= 64 {
-                        // Convert to signature string
-                        let sig_str = bs58::encode(&value[0..64]).into_string();
+        for (key, value) in iter.flatten() {
+            // Check if key starts with our address
+            if key.len() >= 32 && key[0..32] == pubkey_bytes {
+                // Extract signature from value
+                if value.len() >= 64 {
+                    // Convert to signature string
+                    let sig_str = bs58::encode(&value[0..64]).into_string();
 
-                        // Fetch full transaction
-                        match self.get_transaction(&sig_str).await {
-                            Ok(tx) => {
-                                debug!("Found transaction {} for address", sig_str);
-                                transactions.push(tx);
+                    // Fetch full transaction
+                    match self.get_transaction(&sig_str).await {
+                        Ok(tx) => {
+                            debug!("Found transaction {} for address", sig_str);
+                            transactions.push(tx);
 
-                                if transactions.len() >= limit {
-                                    break;
-                                }
+                            if transactions.len() >= limit {
+                                break;
                             }
-                            Err(e) => {
-                                debug!("Failed to fetch transaction {}: {}", sig_str, e);
-                            }
+                        }
+                        Err(e) => {
+                            debug!("Failed to fetch transaction {}: {}", sig_str, e);
                         }
                     }
                 }
@@ -362,68 +358,66 @@ impl LedgerService {
         // Iterate through transaction_status CF
         let iter = db.iterator_cf(cf_handle, IteratorMode::Start);
 
-        for item in iter {
-            if let Ok((key, value)) = item {
-                // The key is the signature (64 bytes)
-                if key.len() >= 64 {
-                    // Parse slot from value to filter by range
-                    // Simplified: just check if data looks reasonable
-                    if value.len() >= 8 {
-                        let slot = u64::from_le_bytes(value[0..8].try_into().unwrap_or([0; 8]));
+        for (key, value) in iter.flatten() {
+            // The key is the signature (64 bytes)
+            if key.len() >= 64 {
+                // Parse slot from value to filter by range
+                // Simplified: just check if data looks reasonable
+                if value.len() >= 8 {
+                    let slot = u64::from_le_bytes(value[0..8].try_into().unwrap_or([0; 8]));
 
-                        // Filter by slot range
-                        if slot >= start_slot && slot <= end_slot {
-                            // Convert key to signature string
-                            let sig_str = bs58::encode(&key[0..64]).into_string();
+                    // Filter by slot range
+                    if slot >= start_slot && slot <= end_slot {
+                        // Convert key to signature string
+                        let sig_str = bs58::encode(&key[0..64]).into_string();
 
-                            // Manual parsing of transaction data (same as get_transaction)
-                            let mut offset = 0;
+                        // Manual parsing of transaction data (same as get_transaction)
+                        let mut offset = 0;
 
-                            // Skip slot since we already have it (8 bytes)
-                            offset += 8;
+                        // Skip slot since we already have it (8 bytes)
+                        offset += 8;
 
-                            // Parse block_time (Option<i64> = 1 byte + 8 bytes if Some)
-                            let block_time = if value.len() > offset {
-                                if value[offset] == 1 && value.len() >= offset + 9 {
-                                    offset += 1;
-                                    let time = i64::from_le_bytes(
-                                        value[offset..offset + 8].try_into().unwrap_or([0; 8]),
-                                    );
-                                    offset += 8;
-                                    Some(time)
-                                } else {
-                                    offset += 1;
-                                    None
-                                }
+                        // Parse block_time (Option<i64> = 1 byte + 8 bytes if Some)
+                        let block_time = if value.len() > offset {
+                            if value[offset] == 1 && value.len() >= offset + 9 {
+                                offset += 1;
+                                let time = i64::from_le_bytes(
+                                    value[offset..offset + 8].try_into().unwrap_or([0; 8]),
+                                );
+                                offset += 8;
+                                Some(time)
                             } else {
+                                offset += 1;
                                 None
-                            };
-
-                            // Use manual parser to extract logs, accounts, fees (same as get_transaction)
-                            let (fee, success, logs, accounts) =
-                                rocksdb_parser::parse_transaction_metadata(&value, offset)
-                                    .unwrap_or((5000, true, Vec::new(), Vec::new()));
-
-                            let inner_ix_count =
-                                rocksdb_parser::parse_inner_instruction_count(&value, offset);
-                            let inner_instructions: Vec<Vec<DecodedInstruction>> =
-                                (0..inner_ix_count).map(|_| Vec::new()).collect();
-
-                            transactions.push(TransactionInfo {
-                                signature: sig_str,
-                                slot,
-                                block_time,
-                                fee,
-                                success,
-                                instructions: Vec::new(),
-                                inner_instructions,
-                                accounts,
-                                logs,
-                            });
-
-                            if transactions.len() >= limit {
-                                break;
                             }
+                        } else {
+                            None
+                        };
+
+                        // Use manual parser to extract logs, accounts, fees (same as get_transaction)
+                        let (fee, success, logs, accounts) =
+                            rocksdb_parser::parse_transaction_metadata(&value, offset)
+                                .unwrap_or((5000, true, Vec::new(), Vec::new()));
+
+                        let inner_ix_count =
+                            rocksdb_parser::parse_inner_instruction_count(&value, offset);
+                        let inner_instructions: Vec<Vec<DecodedInstruction>> =
+                            (0..inner_ix_count).map(|_| Vec::new()).collect();
+
+                        transactions.push(TransactionInfo {
+                            signature: sig_str,
+                            slot,
+                            block_time,
+                            fee,
+                            success,
+                            instructions: Vec::new(),
+                            inner_instructions,
+                            accounts,
+                            logs,
+                        });
+
+                        if transactions.len() >= limit {
+                            break;
                         }
                     }
                 }
