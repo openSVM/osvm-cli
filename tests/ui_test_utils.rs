@@ -213,6 +213,7 @@ impl HeadlessUI {
     }
 
     /// Access cursive instance directly
+    #[allow(dead_code)]
     pub fn cursive(&mut self) -> &mut Cursive {
         &mut self.siv
     }

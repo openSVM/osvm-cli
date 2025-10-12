@@ -164,7 +164,7 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
         });
     }
 
-    while let Some(_) = shutdown_tasks.join_next().await {}
+    while (shutdown_tasks.join_next().await).is_some() {}
 
     let shutdown_duration = shutdown_start.elapsed();
     println!(
