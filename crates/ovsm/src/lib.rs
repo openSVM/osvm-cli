@@ -255,7 +255,6 @@
 //!
 //! Licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
-#![allow(dead_code)] // Remove after implementation
 #![warn(missing_docs)]
 
 // Module declarations
