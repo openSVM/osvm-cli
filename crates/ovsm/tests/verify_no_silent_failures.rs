@@ -3,7 +3,7 @@
 //! This test suite would have FAILED before v1.1.0 and now PASSES.
 //! It verifies that all previously-silent features now either work or error loudly.
 
-use ovsm::{Error, Evaluator, Parser, Scanner, Value};
+use ovsm::{Evaluator, Parser, Scanner, Value};
 
 /// Helper function to execute OVSM code
 fn execute(code: &str) -> Result<Value, Box<dyn std::error::Error>> {
