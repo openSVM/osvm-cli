@@ -4,22 +4,68 @@ use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
 use std::sync::Arc;
 
-/// Evaluator for OVSM programs
+/// Runtime evaluator for OVSM programs
+///
+/// The evaluator walks the Abstract Syntax Tree (AST) and executes it using a
+/// tree-walking interpreter approach. It manages:
+/// - **Variable environment**: Scoped variable storage with shadowing support
+/// - **Tool registry**: Available tools/functions that can be called from scripts
+/// - **Control flow**: RETURN, BREAK, CONTINUE handling
+/// - **Type checking**: Runtime type validation for operations
+///
+/// # Example
+///
+/// ```rust
+/// use ovsm::runtime::Evaluator;
+/// use ovsm::parser::Parser;
+/// use ovsm::lexer::Scanner;
+///
+/// let code = "$x = 10 + 20\nRETURN $x";
+/// let mut scanner = Scanner::new(code);
+/// let tokens = scanner.scan_tokens()?;
+/// let mut parser = Parser::new(tokens);
+/// let program = parser.parse()?;
+///
+/// let mut evaluator = Evaluator::new();
+/// let result = evaluator.execute(&program)?;  // Returns Value::Int(30)
+/// ```
+///
+/// # Architecture
+///
+/// - **Tree-walking**: Directly interprets AST nodes (no bytecode compilation)
+/// - **Eager evaluation**: Arguments evaluated before tool calls
+/// - **Dynamic typing**: Type errors caught at runtime
+/// - **Single-threaded**: No concurrency support (PARALLEL not implemented)
 pub struct Evaluator {
+    /// Variable environment with scoping support
     env: Environment,
+    /// Registry of available tools (built-in functions)
     registry: Arc<ToolRegistry>,
 }
 
-/// Execution flow control
+/// Execution flow control for statement execution
+///
+/// Used internally to handle control flow statements (RETURN, BREAK, CONTINUE)
+/// without exceptions. Each statement returns an ExecutionFlow to signal its intent.
 enum ExecutionFlow {
+    /// Continue to next statement (normal flow)
     Continue,
+    /// Break out of loop (BREAK statement)
     Break,
+    /// Continue to next loop iteration (CONTINUE statement)
     ContinueLoop,
+    /// Return from function with value (RETURN statement)
     Return(Value),
 }
 
 impl Evaluator {
-    /// Create new evaluator with default tool registry
+    /// Creates a new evaluator with default tool registry
+    ///
+    /// The default registry includes all standard library tools:
+    /// - Math: ABS, SQRT, POW
+    /// - Statistics: SUM, MIN, MAX, MEAN
+    /// - Data processing: SORT, FILTER, MAP
+    /// - Utilities: LOG, ERROR, LEN
     pub fn new() -> Self {
         Evaluator {
             env: Environment::new(),
@@ -27,7 +73,17 @@ impl Evaluator {
         }
     }
 
-    /// Create evaluator with custom tool registry
+    /// Creates a new evaluator with a custom tool registry
+    ///
+    /// Use this when you need to add custom tools or limit available tools.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let mut registry = ToolRegistry::new();
+    /// registry.register("MY_TOOL", Box::new(MyCustomTool));
+    /// let evaluator = Evaluator::with_registry(registry);
+    /// ```
     pub fn with_registry(registry: ToolRegistry) -> Self {
         Evaluator {
             env: Environment::new(),
@@ -35,7 +91,28 @@ impl Evaluator {
         }
     }
 
-    /// Execute a program
+    /// Executes an OVSM program and returns the result
+    ///
+    /// Walks through all statements in the program sequentially, executing each one.
+    /// Stops early if a RETURN statement is encountered.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Value)`: Result of execution
+    ///   - Value from RETURN statement if present
+    ///   - `Value::Null` if no RETURN (implicit null return)
+    /// - `Err(Error)`: Runtime error (type error, undefined variable, etc.)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let result = evaluator.execute(&program)?;
+    /// match result {
+    ///     Value::Int(n) => println!("Result: {}", n),
+    ///     Value::Null => println!("No return value"),
+    ///     _ => println!("Other type"),
+    /// }
+    /// ```
     pub fn execute(&mut self, program: &Program) -> Result<Value> {
         for stmt in &program.statements {
             match self.execute_statement(stmt)? {

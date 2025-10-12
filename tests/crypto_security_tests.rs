@@ -7,13 +7,11 @@
 //!
 //! These tests are ignored until they can be properly rewritten.
 
-use anyhow::Result;
-use std::path::PathBuf;
-use tempfile::TempDir;
-
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod key_management_tests {
-    use super::*;
+    use anyhow::Result;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
@@ -205,7 +203,7 @@ mod key_management_tests {
 
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod encryption_tests {
-    use super::*;
+    use anyhow::Result;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
@@ -347,7 +345,7 @@ mod encryption_tests {
 
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod signature_tests {
-    use super::*;
+    use anyhow::Result;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
@@ -484,7 +482,7 @@ mod signature_tests {
 
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod hashing_tests {
-    use super::*;
+    use anyhow::Result;
 
     #[cfg(feature = "incomplete_tests")]
     #[test]
@@ -602,7 +600,7 @@ mod hashing_tests {
 
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod secure_random_tests {
-    use super::*;
+    use anyhow::Result;
 
     #[cfg(feature = "incomplete_tests")]
     #[test]
@@ -697,7 +695,8 @@ mod secure_random_tests {
 
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod integration_tests {
-    use super::*;
+    use anyhow::Result;
+    use tempfile::TempDir;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]

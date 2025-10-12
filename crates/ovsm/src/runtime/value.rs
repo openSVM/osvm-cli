@@ -8,32 +8,45 @@ use crate::error::{Error, Result};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     // Primitives
+    /// Null value
     Null,
+    /// Boolean value
     Bool(bool),
+    /// 64-bit integer value
     Int(i64),
+    /// 64-bit floating-point value
     Float(f64),
+    /// String value
     String(String),
 
     // Collections (use Arc for large values)
+    /// Array of values (reference-counted)
     Array(Arc<Vec<Value>>),
+    /// Object with string keys and value fields (reference-counted)
     Object(Arc<HashMap<String, Value>>),
 
     // Special
-    Range { start: i64, end: i64 },
+    /// Range value with start and end (exclusive)
+    Range {
+        /// Start value of the range (inclusive)
+        start: i64,
+        /// End value of the range (exclusive)
+        end: i64,
+    },
 }
 
 impl Value {
-    /// Create an array value
+    /// Creates an array value from a vector of values
     pub fn array(values: Vec<Value>) -> Self {
         Value::Array(Arc::new(values))
     }
 
-    /// Create an object value
+    /// Creates an object value from a hashmap of fields
     pub fn object(fields: HashMap<String, Value>) -> Self {
         Value::Object(Arc::new(fields))
     }
 
-    /// Get type name as string
+    /// Returns the type name as a string
     pub fn type_name(&self) -> String {
         match self {
             Value::Null => "null".to_string(),
@@ -47,7 +60,7 @@ impl Value {
         }
     }
 
-    /// Check if value is truthy
+    /// Returns true if the value is truthy in a boolean context
     pub fn is_truthy(&self) -> bool {
         match self {
             Value::Null => false,
@@ -63,7 +76,7 @@ impl Value {
 
     // Type conversion methods
 
-    /// Convert to boolean
+    /// Converts value to a boolean
     pub fn as_bool(&self) -> Result<bool> {
         match self {
             Value::Bool(b) => Ok(*b),
@@ -77,7 +90,7 @@ impl Value {
         }
     }
 
-    /// Convert to integer
+    /// Converts value to a 64-bit integer
     pub fn as_int(&self) -> Result<i64> {
         match self {
             Value::Int(n) => Ok(*n),
@@ -94,7 +107,7 @@ impl Value {
         }
     }
 
-    /// Convert to float
+    /// Converts value to a 64-bit floating-point number
     pub fn as_float(&self) -> Result<f64> {
         match self {
             Value::Float(f) => Ok(*f),
@@ -110,7 +123,7 @@ impl Value {
         }
     }
 
-    /// Convert to string
+    /// Returns a reference to the string value
     pub fn as_string(&self) -> Result<&str> {
         match self {
             Value::String(s) => Ok(s),
@@ -121,7 +134,7 @@ impl Value {
         }
     }
 
-    /// Get string owned
+    /// Converts value to an owned string representation
     pub fn to_string_value(&self) -> String {
         match self {
             Value::Null => "null".to_string(),
@@ -135,7 +148,7 @@ impl Value {
         }
     }
 
-    /// Convert to array reference
+    /// Returns a reference to the array value
     pub fn as_array(&self) -> Result<&Vec<Value>> {
         match self {
             Value::Array(arr) => Ok(arr),
@@ -146,7 +159,7 @@ impl Value {
         }
     }
 
-    /// Convert to object reference
+    /// Returns a reference to the object value
     pub fn as_object(&self) -> Result<&HashMap<String, Value>> {
         match self {
             Value::Object(obj) => Ok(obj),
@@ -157,7 +170,7 @@ impl Value {
         }
     }
 
-    /// Get field from object
+    /// Gets a field value from an object by name
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
             Value::Object(obj) => obj
@@ -173,7 +186,7 @@ impl Value {
         }
     }
 
-    /// Get element at index
+    /// Gets an element from an array or string by index
     pub fn get_index(&self, index: &Value) -> Result<Value> {
         match self {
             Value::Array(arr) => {
@@ -203,7 +216,7 @@ impl Value {
         }
     }
 
-    /// Expand range to array
+    /// Expands a range into a vector of integer values
     pub fn expand_range(&self) -> Result<Vec<Value>> {
         match self {
             Value::Range { start, end } => {

@@ -29,11 +29,14 @@ pub trait Tool: Send + Sync {
 /// Tool arguments (positional and named)
 #[derive(Debug, Clone)]
 pub struct ToolArguments {
+    /// Positional arguments passed to the tool
     pub positional: Vec<Value>,
+    /// Named arguments passed to the tool (key-value pairs)
     pub named: HashMap<String, Value>,
 }
 
 impl ToolArguments {
+    /// Creates a new empty ToolArguments
     pub fn new() -> Self {
         ToolArguments {
             positional: Vec::new(),
@@ -41,6 +44,7 @@ impl ToolArguments {
         }
     }
 
+    /// Creates ToolArguments from a vector of positional arguments
     pub fn from_positional(args: Vec<Value>) -> Self {
         ToolArguments {
             positional: args,

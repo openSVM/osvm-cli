@@ -29,7 +29,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(SplitTool);
 }
 
-// MAP tool
+/// Tool for applying a function to each element of a collection
 pub struct MapTool;
 
 impl Tool for MapTool {
@@ -49,8 +49,8 @@ impl Tool for MapTool {
             });
         }
 
-        let collection = args[0].as_array()?;
-        let func = &args[1];
+        let _collection = args[0].as_array()?;
+        let _func = &args[1];
 
         // For now, func should be a lambda or tool reference
         // Since we don't have lambda support yet, we'll return an error
@@ -60,7 +60,7 @@ impl Tool for MapTool {
     }
 }
 
-// FILTER tool
+/// Tool for filtering a collection by a predicate function
 pub struct FilterTool;
 
 impl Tool for FilterTool {
@@ -87,7 +87,7 @@ impl Tool for FilterTool {
     }
 }
 
-// REDUCE tool
+/// Tool for reducing a collection to a single value
 pub struct ReduceTool;
 
 impl Tool for ReduceTool {
@@ -99,14 +99,14 @@ impl Tool for ReduceTool {
         "Reduce collection to single value"
     }
 
-    fn execute(&self, args: &[Value]) -> Result<Value> {
+    fn execute(&self, _args: &[Value]) -> Result<Value> {
         Err(Error::NotImplemented {
             tool: "REDUCE (lambda support pending)".to_string(),
         })
     }
 }
 
-// SUM tool
+/// Tool for summing all numbers in a collection
 pub struct SumTool;
 
 impl Tool for SumTool {
@@ -142,7 +142,7 @@ impl Tool for SumTool {
     }
 }
 
-// COUNT tool
+/// Tool for counting elements in a collection
 pub struct CountTool;
 
 impl Tool for CountTool {
@@ -178,7 +178,7 @@ impl Tool for CountTool {
     }
 }
 
-// FLATTEN tool
+/// Tool for flattening nested arrays into a single array
 pub struct FlattenTool;
 
 impl Tool for FlattenTool {
@@ -214,7 +214,7 @@ impl Tool for FlattenTool {
     }
 }
 
-// UNIQUE tool
+/// Tool for getting unique elements from a collection
 pub struct UniqueTool;
 
 impl Tool for UniqueTool {
@@ -247,7 +247,7 @@ impl Tool for UniqueTool {
     }
 }
 
-// SORT tool
+/// Tool for sorting a collection in ascending order
 pub struct SortTool;
 
 impl Tool for SortTool {
@@ -290,7 +290,7 @@ impl Tool for SortTool {
     }
 }
 
-// REVERSE tool
+/// Tool for reversing the order of elements in a collection
 pub struct ReverseTool;
 
 impl Tool for ReverseTool {
@@ -318,7 +318,7 @@ impl Tool for ReverseTool {
     }
 }
 
-// FIRST tool
+/// Tool for getting the first element of a collection
 pub struct FirstTool;
 
 impl Tool for FirstTool {
@@ -348,7 +348,7 @@ impl Tool for FirstTool {
     }
 }
 
-// LAST tool
+/// Tool for getting the last element of a collection
 pub struct LastTool;
 
 impl Tool for LastTool {
@@ -378,7 +378,7 @@ impl Tool for LastTool {
     }
 }
 
-// APPEND tool
+/// Tool for appending an element to the end of an array
 pub struct AppendTool;
 
 impl Tool for AppendTool {
@@ -406,7 +406,7 @@ impl Tool for AppendTool {
     }
 }
 
-// PREPEND tool
+/// Tool for prepending an element to the beginning of an array
 pub struct PrependTool;
 
 impl Tool for PrependTool {
@@ -434,7 +434,7 @@ impl Tool for PrependTool {
     }
 }
 
-// SLICE tool
+/// Tool for extracting a slice from an array
 pub struct SliceTool;
 
 impl Tool for SliceTool {
@@ -470,7 +470,7 @@ impl Tool for SliceTool {
     }
 }
 
-// TOP_N tool
+/// Tool for getting the first N elements from an array
 pub struct TopNTool;
 
 impl Tool for TopNTool {
@@ -498,7 +498,7 @@ impl Tool for TopNTool {
     }
 }
 
-// BOTTOM_N tool
+/// Tool for getting the last N elements from an array
 pub struct BottomNTool;
 
 impl Tool for BottomNTool {
@@ -532,7 +532,7 @@ impl Tool for BottomNTool {
     }
 }
 
-// ANY tool
+/// Tool for checking if any element in a collection is truthy
 pub struct AnyTool;
 
 impl Tool for AnyTool {
@@ -558,7 +558,7 @@ impl Tool for AnyTool {
     }
 }
 
-// ALL tool
+/// Tool for checking if all elements in a collection are truthy
 pub struct AllTool;
 
 impl Tool for AllTool {
@@ -584,7 +584,7 @@ impl Tool for AllTool {
     }
 }
 
-// FIND tool
+/// Tool for finding the index of the first matching element in an array
 pub struct FindTool;
 
 impl Tool for FindTool {
@@ -617,7 +617,7 @@ impl Tool for FindTool {
     }
 }
 
-// JOIN tool
+/// Tool for joining array elements into a string with a separator
 pub struct JoinTool;
 
 impl Tool for JoinTool {
@@ -651,7 +651,7 @@ impl Tool for JoinTool {
     }
 }
 
-// SPLIT tool
+/// Tool for splitting a string into an array by a separator
 pub struct SplitTool;
 
 impl Tool for SplitTool {
@@ -747,7 +747,7 @@ mod tests {
         let arr = Value::array(vec![Value::Int(10), Value::Int(20), Value::Int(30)]);
 
         let first_tool = FirstTool;
-        assert_eq!(first_tool.execute(&[arr.clone()]).unwrap(), Value::Int(10));
+        assert_eq!(first_tool.execute(std::slice::from_ref(&arr)).unwrap(), Value::Int(10));
 
         let last_tool = LastTool;
         assert_eq!(last_tool.execute(&[arr]).unwrap(), Value::Int(30));

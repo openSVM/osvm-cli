@@ -4,16 +4,22 @@ use std::fmt;
 /// Complete OVSM program
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Program {
+    /// Program metadata from header comments
     pub metadata: ProgramMetadata,
+    /// Top-level statements in the program
     pub statements: Vec<Statement>,
 }
 
 /// Program metadata (from header comments)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ProgramMetadata {
+    /// Estimated execution time
     pub time_estimate: Option<String>,
+    /// Estimated cost
     pub cost_estimate: Option<String>,
+    /// Confidence level (0-100)
     pub confidence: Option<u8>,
+    /// List of available tools
     pub available_tools: Vec<String>,
 }
 
@@ -21,64 +27,100 @@ pub struct ProgramMetadata {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
     /// Variable assignment: $x = expr
-    Assignment { name: String, value: Expression },
+    Assignment {
+        /// Name of the variable to assign to
+        name: String,
+        /// Expression value to assign
+        value: Expression,
+    },
 
     /// Constant definition: CONST NAME = value
-    ConstantDef { name: String, value: Expression },
+    ConstantDef {
+        /// Name of the constant (uppercase)
+        name: String,
+        /// Constant value expression
+        value: Expression,
+    },
 
     /// If statement
     If {
+        /// Condition expression to evaluate
         condition: Expression,
+        /// Statements to execute if condition is true
         then_branch: Vec<Statement>,
+        /// Optional statements to execute if condition is false
         else_branch: Option<Vec<Statement>>,
     },
 
     /// While loop
     While {
+        /// Loop condition expression
         condition: Expression,
+        /// Statements to execute in loop body
         body: Vec<Statement>,
     },
 
     /// For loop: FOR $item IN collection
     For {
+        /// Loop variable name
         variable: String,
+        /// Expression to iterate over
         iterable: Expression,
+        /// Statements to execute in loop body
         body: Vec<Statement>,
     },
 
     /// Break statement
-    Break { condition: Option<Expression> },
+    Break {
+        /// Optional condition for conditional break
+        condition: Option<Expression>,
+    },
 
     /// Continue statement
-    Continue { condition: Option<Expression> },
+    Continue {
+        /// Optional condition for conditional continue
+        condition: Option<Expression>,
+    },
 
     /// Return statement
-    Return { value: Option<Expression> },
+    Return {
+        /// Optional value to return
+        value: Option<Expression>,
+    },
 
     /// Expression statement
     Expression(Expression),
 
     /// Try-catch block
     Try {
+        /// Statements to execute in try block
         body: Vec<Statement>,
+        /// Catch clauses to handle errors
         catch_clauses: Vec<CatchClause>,
     },
 
     /// Parallel execution block
-    Parallel { tasks: Vec<Statement> },
+    Parallel {
+        /// Tasks to execute in parallel
+        tasks: Vec<Statement>,
+    },
 
     /// Wait strategy
     WaitStrategy(WaitStrategy),
 
     /// Decision point
     Decision {
+        /// Description of the decision being made
         description: String,
+        /// Branches representing different decision paths
         branches: Vec<DecisionBranch>,
     },
 
     /// Guard clause
     Guard {
+        /// Guard condition expression
         condition: Expression,
+        /// Statements to execute if guard fails
         else_body: Vec<Statement>,
     },
 }
@@ -87,68 +129,98 @@ pub enum Statement {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expression {
     // Literals
+    /// Integer literal expression
     IntLiteral(i64),
+    /// Floating-point literal expression
     FloatLiteral(f64),
+    /// String literal expression
     StringLiteral(String),
+    /// Boolean literal expression
     BoolLiteral(bool),
+    /// Null literal expression
     NullLiteral,
 
     // Collections
+    /// Array literal expression
     ArrayLiteral(Vec<Expression>),
+    /// Object literal expression with key-value pairs
     ObjectLiteral(Vec<(String, Expression)>),
+    /// Range expression [start..end]
     Range {
+        /// Start expression of the range
         start: Box<Expression>,
+        /// End expression of the range (exclusive)
         end: Box<Expression>,
     },
 
     // Variables
+    /// Variable reference expression
     Variable(String),
 
     // Binary operations
+    /// Binary operation expression
     Binary {
+        /// Binary operator to apply
         op: BinaryOp,
+        /// Left operand expression
         left: Box<Expression>,
+        /// Right operand expression
         right: Box<Expression>,
     },
 
     // Unary operations
+    /// Unary operation expression
     Unary {
+        /// Unary operator to apply
         op: UnaryOp,
+        /// Operand expression
         operand: Box<Expression>,
     },
 
     // Ternary operator: condition ? then : else
+    /// Ternary conditional expression
     Ternary {
+        /// Condition expression to evaluate
         condition: Box<Expression>,
+        /// Expression to evaluate if condition is true
         then_expr: Box<Expression>,
+        /// Expression to evaluate if condition is false
         else_expr: Box<Expression>,
     },
 
-    // Tool/function call
+    /// Tool or function call
     ToolCall {
+        /// Name of the tool/function to call
         name: String,
+        /// Arguments to pass to the tool
         args: Vec<Argument>,
     },
 
-    // Lambda function: x => x * 2
+    /// Lambda function expression (x => x * 2)
     Lambda {
+        /// Parameter names for the lambda
         params: Vec<String>,
+        /// Body expression of the lambda
         body: Box<Expression>,
     },
 
-    // Field access: object.field
+    /// Field access expression (object.field)
     FieldAccess {
+        /// Object being accessed
         object: Box<Expression>,
+        /// Name of the field to access
         field: String,
     },
 
-    // Index access: array[index]
+    /// Index access expression (array\[index\])
     IndexAccess {
+        /// Array or collection being indexed
         array: Box<Expression>,
+        /// Index expression
         index: Box<Expression>,
     },
 
-    // Grouping: (expr)
+    /// Grouping expression with parentheses (expr)
     Grouping(Box<Expression>),
 }
 
@@ -156,48 +228,69 @@ pub enum Expression {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BinaryOp {
     // Arithmetic
+    /// Addition operator (+)
     Add,
+    /// Subtraction operator (-)
     Sub,
+    /// Multiplication operator (*)
     Mul,
+    /// Division operator (/)
     Div,
+    /// Modulo operator (%)
     Mod,
+    /// Power operator (**)
     Pow,
 
     // Comparison
+    /// Equality operator (==)
     Eq,
+    /// Inequality operator (!=)
     NotEq,
+    /// Less than operator (<)
     Lt,
+    /// Greater than operator (>)
     Gt,
+    /// Less than or equal operator (<=)
     LtEq,
+    /// Greater than or equal operator (>=)
     GtEq,
 
     // Logical
+    /// Logical AND operator
     And,
+    /// Logical OR operator
     Or,
 
     // Special
+    /// Membership test operator (IN)
     In,
 }
 
 /// Unary operators
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnaryOp {
-    Neg, // -x
-    Not, // !x
+    /// Negation operator (-x)
+    Neg,
+    /// Logical NOT operator (!x)
+    Not,
 }
 
 /// Function/tool call argument
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Argument {
-    pub name: Option<String>, // None for positional, Some for named
+    /// Argument name (None for positional, Some for named)
+    pub name: Option<String>,
+    /// Argument value expression
     pub value: Expression,
 }
 
 impl Argument {
+    /// Creates a positional argument
     pub fn positional(value: Expression) -> Self {
         Argument { name: None, value }
     }
 
+    /// Creates a named argument
     pub fn named(name: String, value: Expression) -> Self {
         Argument {
             name: Some(name),
@@ -209,52 +302,76 @@ impl Argument {
 /// Decision branch
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DecisionBranch {
+    /// Branch name
     pub name: String,
+    /// Branch condition expression
     pub condition: Expression,
+    /// Statements to execute if condition is true
     pub body: Vec<Statement>,
 }
 
 /// Catch clause
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CatchClause {
+    /// Type of error to catch (None catches all)
     pub error_type: Option<ErrorType>,
+    /// Statements to execute when error is caught
     pub body: Vec<Statement>,
 }
 
 /// Error types for catch
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorType {
+    /// Fatal error that cannot be recovered
     Fatal,
+    /// Recoverable error
     Recoverable,
+    /// Warning level error
     Warning,
 }
 
 /// Wait strategies for parallel execution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WaitStrategy {
+    /// Wait for all tasks to complete
     WaitAll,
+    /// Wait for any task to complete
     WaitAny,
+    /// Race tasks against each other
     Race,
 }
 
 /// Operator precedence levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Precedence {
+    /// No precedence
     None,
-    Assignment, // =
-    Or,         // OR
-    And,        // AND
-    Equality,   // == !=
-    Comparison, // < > <= >=
-    Term,       // + -
-    Factor,     // * / %
-    Unary,      // ! -
-    Power,      // **
-    Call,       // . () []
+    /// Assignment operators (=)
+    Assignment,
+    /// Logical OR operator
+    Or,
+    /// Logical AND operator
+    And,
+    /// Equality operators (==, !=)
+    Equality,
+    /// Comparison operators (<, >, <=, >=)
+    Comparison,
+    /// Addition and subtraction (+, -)
+    Term,
+    /// Multiplication, division, modulo (*, /, %)
+    Factor,
+    /// Unary operators (!, -)
+    Unary,
+    /// Power operator (**)
+    Power,
+    /// Call operators (., (), [])
+    Call,
+    /// Primary expressions (literals, identifiers)
     Primary,
 }
 
 impl BinaryOp {
+    /// Returns the precedence level of this binary operator
     pub fn precedence(&self) -> Precedence {
         match self {
             BinaryOp::Or => Precedence::Or,

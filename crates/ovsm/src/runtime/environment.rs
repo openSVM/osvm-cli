@@ -7,18 +7,23 @@ use crate::runtime::Value;
 /// Environment for variable scoping
 #[derive(Debug, Clone)]
 pub struct Environment {
+    /// Stack of nested scopes
     scopes: Vec<Scope>,
+    /// Immutable constants shared across all scopes
     constants: Arc<HashMap<String, Value>>,
 }
 
+/// Single scope in the environment
 #[derive(Debug, Clone)]
 struct Scope {
+    /// Variables defined in this scope
     variables: HashMap<String, Value>,
+    /// Index of parent scope (None for global scope)
     parent: Option<usize>,
 }
 
 impl Environment {
-    /// Create new environment
+    /// Creates a new environment with a global scope
     pub fn new() -> Self {
         Environment {
             scopes: vec![Scope {
@@ -29,7 +34,7 @@ impl Environment {
         }
     }
 
-    /// Create environment with constants
+    /// Creates a new environment with predefined constants
     pub fn with_constants(constants: HashMap<String, Value>) -> Self {
         Environment {
             scopes: vec![Scope {
@@ -40,7 +45,7 @@ impl Environment {
         }
     }
 
-    /// Enter a new scope
+    /// Enters a new nested scope
     pub fn enter_scope(&mut self) {
         let parent_idx = self.scopes.len() - 1;
         self.scopes.push(Scope {
@@ -49,20 +54,20 @@ impl Environment {
         });
     }
 
-    /// Exit current scope
+    /// Exits the current scope and returns to parent scope
     pub fn exit_scope(&mut self) {
         if self.scopes.len() > 1 {
             self.scopes.pop();
         }
     }
 
-    /// Define variable in current scope
+    /// Defines a new variable in the current scope
     pub fn define(&mut self, name: String, value: Value) {
         let current_scope = self.scopes.last_mut().unwrap();
         current_scope.variables.insert(name, value);
     }
 
-    /// Define constant (immutable)
+    /// Defines an immutable constant (cannot be reassigned)
     pub fn define_constant(&mut self, name: String, value: Value) -> Result<()> {
         // Constants can only be defined once
         if self.constants.contains_key(&name) {
@@ -76,7 +81,7 @@ impl Environment {
         Ok(())
     }
 
-    /// Get variable value
+    /// Gets the value of a variable or constant by name
     pub fn get(&self, name: &str) -> Result<Value> {
         // Check constants first
         if let Some(val) = self.constants.get(name) {
@@ -101,7 +106,7 @@ impl Environment {
         }
     }
 
-    /// Set variable value (updates existing or creates in current scope)
+    /// Sets a variable value (updates existing or creates new in current scope)
     pub fn set(&mut self, name: &str, value: Value) -> Result<()> {
         // Constants cannot be reassigned
         if self.constants.contains_key(name) {
@@ -130,7 +135,7 @@ impl Environment {
         }
     }
 
-    /// Get snapshot of all variables
+    /// Returns a snapshot of all variables and constants in all scopes
     pub fn snapshot(&self) -> HashMap<String, Value> {
         let mut result = HashMap::new();
 
@@ -149,7 +154,7 @@ impl Environment {
         result
     }
 
-    /// Check if variable exists
+    /// Checks if a variable or constant exists in any scope
     pub fn exists(&self, name: &str) -> bool {
         // Check constants
         if self.constants.contains_key(name) {
@@ -170,7 +175,7 @@ impl Environment {
         }
     }
 
-    /// Get current scope depth
+    /// Returns the current scope depth (1 for global scope)
     pub fn scope_depth(&self) -> usize {
         self.scopes.len()
     }

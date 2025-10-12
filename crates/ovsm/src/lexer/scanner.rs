@@ -3,15 +3,22 @@ use crate::error::{Error, Result};
 
 /// Scanner for tokenizing OVSM source code
 pub struct Scanner {
+    /// Source code as character vector
     source: Vec<char>,
+    /// Accumulated tokens
     tokens: Vec<Token>,
+    /// Start position of current token
     start: usize,
+    /// Current position in source
     current: usize,
+    /// Current line number (1-indexed)
     line: usize,
+    /// Current column number (1-indexed)
     column: usize,
 }
 
 impl Scanner {
+    /// Creates a new scanner from source code
     pub fn new(source: &str) -> Self {
         Scanner {
             source: source.chars().collect(),
@@ -23,6 +30,7 @@ impl Scanner {
         }
     }
 
+    /// Scans all tokens from source code and returns them as a vector
     pub fn scan_tokens(&mut self) -> Result<Vec<Token>> {
         while !self.is_at_end() {
             self.start = self.current;

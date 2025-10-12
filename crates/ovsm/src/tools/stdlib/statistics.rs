@@ -13,7 +13,7 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(StdDevTool);
 }
 
-// MEAN tool
+/// Tool for calculating arithmetic mean of a collection
 pub struct MeanTool;
 
 impl Tool for MeanTool {
@@ -49,7 +49,7 @@ impl Tool for MeanTool {
     }
 }
 
-// MEDIAN tool
+/// Tool for calculating median value of a collection
 pub struct MedianTool;
 
 impl Tool for MedianTool {
@@ -94,6 +94,10 @@ impl Tool for MedianTool {
 }
 
 // MIN tool
+/// Tool for finding the minimum value in a collection
+///
+/// Usage: `MIN(array) -> number`
+/// Example: `MIN([5, 2, 8, 1])` returns `1.0`
 pub struct MinTool;
 
 impl Tool for MinTool {
@@ -133,6 +137,10 @@ impl Tool for MinTool {
 }
 
 // MAX tool
+/// Tool for finding the maximum value in a collection
+///
+/// Usage: `MAX(array) -> number`
+/// Example: `MAX([5, 2, 8, 1])` returns `8.0`
 pub struct MaxTool;
 
 impl Tool for MaxTool {
@@ -172,6 +180,7 @@ impl Tool for MaxTool {
 }
 
 // STDDEV tool (standard deviation)
+/// Tool for calculating the standard deviation of a collection
 pub struct StdDevTool;
 
 impl Tool for StdDevTool {
@@ -265,7 +274,7 @@ mod tests {
         ]);
 
         let min_tool = MinTool;
-        assert_eq!(min_tool.execute(&[arr.clone()]).unwrap(), Value::Float(1.0));
+        assert_eq!(min_tool.execute(std::slice::from_ref(&arr)).unwrap(), Value::Float(1.0));
 
         let max_tool = MaxTool;
         assert_eq!(max_tool.execute(&[arr]).unwrap(), Value::Float(8.0));
