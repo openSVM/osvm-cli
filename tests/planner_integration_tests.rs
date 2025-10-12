@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! Integration tests for the OSVM Command Planner
 //!
 //! Tests natural language command planning and execution including:

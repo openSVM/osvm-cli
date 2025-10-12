@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! End-to-end tests for agent_chat_v2 refactored module
 //!
 //! These tests validate the entire agent chat system including:

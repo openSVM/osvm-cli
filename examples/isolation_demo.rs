@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     println!("🔧 Step 2: Creating Test Component (MCP Server)...");
 
     let component_id = ComponentId::new();
-    let mut component = create_test_component(component_id);
+    let component = create_test_component(component_id);
 
     println!("   Component ID: {}", component_id);
     println!("   Type: MCP Server (echo-service)");

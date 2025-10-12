@@ -2,9 +2,9 @@
 //! Comprehensive tests for AI planning and tool calling functionality
 
 use anyhow::Result;
-use mockito::{Mock, Server};
-use osvm::services::ai_service::{AiService, PlannedTool, ToolPlan};
-use osvm::services::mcp_service::{McpService, McpTool};
+use mockito::Server;
+use osvm::services::ai_service::AiService;
+use osvm::services::mcp_service::McpTool;
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -82,7 +82,6 @@ fn create_sample_tools() -> HashMap<String, Vec<McpTool>> {
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod tests {
     use super::*;
-    use tokio;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]
@@ -332,39 +331,39 @@ mod tests {
     }
 }
 
-#[cfg(all(test, feature = "incomplete_tests"))]
-#[cfg(feature = "proptest")] // Disabled: proptest not in dependencies
-mod property_tests {
-    use super::*;
-    // use proptest::prelude::*;
-
-    // proptest! {
-    //     #[test]
-    //     fn test_tool_plan_serialization_roundtrip(
-    //         reasoning in "[a-zA-Z ]{10,100}",
-    //         outcome in "[a-zA-Z ]{10,100}",
-    //         num_tools in 0usize..5
-    //     ) {
-    //         let tools: Vec<PlannedTool> = (0..num_tools)
-    //             .map(|i| PlannedTool {
-    //                 server_id: format!("server-{}", i),
-    //                 tool_name: format!("tool-{}", i),
-    //                 args: json!({}),
-    //             })
-    //             .collect();
-
-    //         let plan = ToolPlan {
-    //             reasoning: reasoning.clone(),
-    //             osvm_tools_to_use: tools,
-    //             expected_outcome: outcome.clone(),
-    //         };
-
-    //         let serialized = serde_json::to_string(&plan).unwrap();
-    //         let deserialized: ToolPlan = serde_json::from_str(&serialized).unwrap();
-
-    //         assert_eq!(plan.reasoning, deserialized.reasoning);
-    //         assert_eq!(plan.expected_outcome, deserialized.expected_outcome);
-    //         assert_eq!(plan.osvm_tools_to_use.len(), deserialized.osvm_tools_to_use.len());
-    //     }
-    // }
-}
+// Disabled: proptest not in dependencies
+// #[cfg(all(test, feature = "incomplete_tests"))]
+// mod property_tests {
+//     use super::*;
+//     // use proptest::prelude::*;
+//
+//     // proptest! {
+//     //     #[test]
+//     //     fn test_tool_plan_serialization_roundtrip(
+//     //         reasoning in "[a-zA-Z ]{10,100}",
+//     //         outcome in "[a-zA-Z ]{10,100}",
+//     //         num_tools in 0usize..5
+//     //     ) {
+//     //         let tools: Vec<PlannedTool> = (0..num_tools)
+//     //             .map(|i| PlannedTool {
+//     //                 server_id: format!("server-{}", i),
+//     //                 tool_name: format!("tool-{}", i),
+//     //                 args: json!({}),
+//     //             })
+//     //             .collect();
+//
+//     //         let plan = ToolPlan {
+//     //             reasoning: reasoning.clone(),
+//     //             osvm_tools_to_use: tools,
+//     //             expected_outcome: outcome.clone(),
+//     //         };
+//
+//     //         let serialized = serde_json::to_string(&plan).unwrap();
+//     //         let deserialized: ToolPlan = serde_json::from_str(&serialized).unwrap();
+//
+//     //         assert_eq!(plan.reasoning, deserialized.reasoning);
+//     //         assert_eq!(plan.expected_outcome, deserialized.expected_outcome);
+//     //         assert_eq!(plan.osvm_tools_to_use.len(), deserialized.osvm_tools_to_use.len());
+//     //     }
+//     // }
+// }

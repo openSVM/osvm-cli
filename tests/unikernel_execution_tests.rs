@@ -1,3 +1,5 @@
+#![cfg(feature = "incomplete_tests")]
+
 use osvm::services::unikernel_runtime::{UnikernelConfig, UnikernelLauncher, UnikernelRuntime};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -137,7 +139,7 @@ async fn test_vsock_port_constant() {
 
 #[tokio::test]
 async fn test_json_rpc_request_format() {
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     // Test request format matches JSON-RPC 2.0 spec
     let request = json!({

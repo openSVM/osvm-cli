@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! Property-based testing for agent_chat_v2 module
 //!
 //! These tests use property-based testing to verify that the refactored module

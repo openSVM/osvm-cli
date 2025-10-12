@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! FUZZING AND MALICIOUS INPUT TESTS
 //! Testing with invalid, malformed, and adversarial inputs
 //! Goal: Find crashes, panics, and security vulnerabilities

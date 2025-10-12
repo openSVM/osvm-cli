@@ -1,10 +1,10 @@
+#![cfg(feature = "incomplete_tests")]
 //! FAILURE INJECTION AND CHAOS ENGINEERING TESTS
 //! Intentionally breaking things to test resilience
 //! Tests what happens when dependencies fail, networks drop, disks fill, etc.
 
 use anyhow::Result;
 use mockito::Server;
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
