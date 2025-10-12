@@ -747,7 +747,10 @@ mod tests {
         let arr = Value::array(vec![Value::Int(10), Value::Int(20), Value::Int(30)]);
 
         let first_tool = FirstTool;
-        assert_eq!(first_tool.execute(std::slice::from_ref(&arr)).unwrap(), Value::Int(10));
+        assert_eq!(
+            first_tool.execute(std::slice::from_ref(&arr)).unwrap(),
+            Value::Int(10)
+        );
 
         let last_tool = LastTool;
         assert_eq!(last_tool.execute(&[arr]).unwrap(), Value::Int(30));
