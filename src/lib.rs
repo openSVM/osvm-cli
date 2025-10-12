@@ -21,7 +21,6 @@
 // Allow clippy warnings for this codebase since it's under active development
 #![allow(clippy::all)]
 #![allow(unused)]
-#![allow(unexpected_cfgs)]
 
 pub mod clparse;
 pub mod commands;
