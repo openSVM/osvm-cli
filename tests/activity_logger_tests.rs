@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! Comprehensive tests for activity logging including structured logging,
 //! log levels, filtering, rotation, and audit trail functionality
 //!

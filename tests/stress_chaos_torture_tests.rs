@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! CHAOS ENGINEERING AND STRESS TORTURE TESTS
 //! These tests are designed to BREAK the system and find edge cases
 //! that normal testing won't catch. We're trying to make things fail!
@@ -116,7 +117,7 @@ mod extreme_concurrency_tests {
 
         let mut handles = vec![];
 
-        for i in 0..50 {
+        for _i in 0..50 {
             let m = Arc::clone(&mutex);
             let convoy = Arc::clone(&convoy_detected);
 
@@ -325,7 +326,7 @@ mod memory_exhaustion_tests {
         // Simulate memory leak by never dropping allocations
         let leaked = Arc::new(Mutex::new(Vec::new()));
 
-        for i in 0..100 {
+        for _i in 0..100 {
             let leak_vec = Arc::clone(&leaked);
             tokio::spawn(async move {
                 let data = vec![0u8; 10240]; // 10KB

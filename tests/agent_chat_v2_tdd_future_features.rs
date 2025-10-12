@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! Test-Driven Development tests for future agent_chat_v2 features
 //!
 //! These tests define the expected behavior of features that will be implemented

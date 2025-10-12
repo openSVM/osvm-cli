@@ -158,7 +158,7 @@ async fn main() -> Result<()> {
     std::fs::write(&cert_path, "# Demo certificate\n").context("Failed to write cert")?;
     std::fs::write(&key_path, "# Demo private key\n").context("Failed to write key")?;
 
-    let cert_manager = CertificateManager::new(cert_path.clone(), key_path.clone());
+    let _cert_manager = CertificateManager::new(cert_path.clone(), key_path.clone());
 
     println!("   ✓ Certificate issued: {}", cert_path.display());
     println!("   ✓ Private key stored: {}", key_path.display());
@@ -230,7 +230,7 @@ async fn main() -> Result<()> {
     println!("🔒 Step 7: Establishing mTLS connection");
 
     let network_manager_arc = std::sync::Arc::new(network_manager);
-    let zero_trust = ZeroTrustNetwork::new(network_manager_arc.clone());
+    let _zero_trust = ZeroTrustNetwork::new(network_manager_arc.clone());
 
     // Check if connection is allowed by policy
     let is_allowed = network_manager_arc

@@ -105,7 +105,7 @@ fn test_chat_with_message_env() {
         .output()
         .expect("Failed to run chat with test message");
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Should process the message without panicking
@@ -119,7 +119,7 @@ trait CommandExt {
 }
 
 impl CommandExt for Command {
-    fn timeout(&mut self, duration: Duration) -> &mut Self {
+    fn timeout(&mut self, _duration: Duration) -> &mut Self {
         // Note: This is a simplified timeout - in production use a proper timeout mechanism
         self
     }
@@ -178,7 +178,7 @@ mod chat_ui_tests {
         let _ = child.kill();
 
         let output = child.wait_with_output().expect("Failed to wait");
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        let _stdout = String::from_utf8_lossy(&output.stdout);
 
         // In a real implementation, this would check for help text
         // For now, just verify it doesn't crash

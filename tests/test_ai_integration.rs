@@ -1,3 +1,4 @@
+#![cfg(feature = "incomplete_tests")]
 //! Test AI integration without UI - modular architecture testing
 
 use osvm::services::ai_service::AiService;

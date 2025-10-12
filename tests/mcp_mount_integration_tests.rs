@@ -89,7 +89,7 @@ fn test_mcp_unmount_nonexistent() {
         .expect("Failed to run unmount");
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let _stdout = String::from_utf8_lossy(&output.stdout);
 
     // Should handle gracefully - either succeed (no-op) or report not found
     assert!(

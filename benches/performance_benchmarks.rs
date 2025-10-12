@@ -80,7 +80,7 @@ fn bench_tool_plan_serialization(c: &mut Criterion) {
 fn bench_secure_logger_sanitization(c: &mut Criterion) {
     let logger = SecureLogger::new(false);
 
-    let test_inputs = vec![
+    let test_inputs = [
         "Simple message without sensitive data",
         "API_KEY=sk-1234567890abcdef with sensitive data",
         "User /home/alice/.ssh/id_rsa accessed the file",
