@@ -145,14 +145,12 @@
 //! #     let mut evaluator = Evaluator::new();
 //! #     evaluator.execute(&program).unwrap()
 //! # }
-//! let code = r#"
-//!     $found = false
-//!     FOR $i IN [1..100]:
-//!         IF $i == 42 THEN
-//!             $found = true
-//!             BREAK
-//!     RETURN $found
-//! "#;
+//! let code = "$found = false
+//! FOR $i IN [1..100]:
+//!     IF $i == 42 THEN
+//!         $found = true
+//!         BREAK
+//! RETURN $found";
 //!
 //! let result = execute(code);
 //! assert_eq!(result, Value::Bool(true));
@@ -170,16 +168,14 @@
 //! #     let mut evaluator = Evaluator::new();
 //! #     evaluator.execute(&program).unwrap()
 //! # }
-//! let code = r#"
-//!     $numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-//!     $evens = []
+//! let code = "$numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+//! $evens = []
 //!
-//!     FOR $n IN $numbers:
-//!         IF $n % 2 == 0 THEN
-//!             $evens = $evens + [$n]
+//! FOR $n IN $numbers:
+//!     IF $n % 2 == 0 THEN
+//!         $evens = $evens + [$n]
 //!
-//!     RETURN $evens
-//! "#;
+//! RETURN $evens";
 //!
 //! let result = execute(code);
 //! // Result: [2, 4, 6, 8, 10]
@@ -198,14 +194,15 @@
 //! #     evaluator.execute(&program).unwrap()
 //! # }
 //! let code = r#"
-//!     $numbers = [10, 25, 5, 30, 15]
+//! $numbers = [10, 25, 5, 30, 15]
 //!
-//!     $total = SUM($numbers)
-//!     $max = MAX($numbers)
-//!     $min = MIN($numbers)
-//!     $avg = $total / LEN($numbers)
+//! $total = SUM($numbers)
+//! $max = MAX($numbers)
+//! $min = MIN($numbers)
+//! $count = COUNT($numbers)
+//! $avg = $total / $count
 //!
-//!     RETURN {total: $total, max: $max, min: $min, avg: $avg}
+//! RETURN {total: $total, max: $max, min: $min, avg: $avg}
 //! "#;
 //!
 //! let result = execute(code);

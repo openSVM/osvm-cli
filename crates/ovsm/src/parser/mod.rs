@@ -15,11 +15,14 @@
 //! use ovsm::lexer::Scanner;
 //! use ovsm::parser::Parser;
 //!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let code = "$x = 42\nRETURN $x * 2";
 //! let mut scanner = Scanner::new(code);
 //! let tokens = scanner.scan_tokens()?;
 //! let mut parser = Parser::new(tokens);
 //! let program = parser.parse()?;  // Returns AST
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Parsing Strategy
@@ -61,9 +64,15 @@ impl Parser {
     /// # Example
     ///
     /// ```rust
+    /// use ovsm::lexer::Scanner;
+    /// use ovsm::parser::Parser;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let mut scanner = Scanner::new("$x = 10");
     /// let tokens = scanner.scan_tokens()?;
     /// let parser = Parser::new(tokens);
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, current: 0 }
@@ -82,9 +91,17 @@ impl Parser {
     /// # Example
     ///
     /// ```rust
+    /// use ovsm::lexer::Scanner;
+    /// use ovsm::parser::Parser;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut scanner = Scanner::new("$x = 10");
+    /// let tokens = scanner.scan_tokens()?;
     /// let mut parser = Parser::new(tokens);
     /// let program = parser.parse()?;
     /// // program.statements contains the AST
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn parse(&mut self) -> Result<Program> {
         let mut statements = Vec::new();

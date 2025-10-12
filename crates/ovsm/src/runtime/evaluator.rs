@@ -20,6 +20,7 @@ use std::sync::Arc;
 /// use ovsm::parser::Parser;
 /// use ovsm::lexer::Scanner;
 ///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let code = "$x = 10 + 20\nRETURN $x";
 /// let mut scanner = Scanner::new(code);
 /// let tokens = scanner.scan_tokens()?;
@@ -28,6 +29,8 @@ use std::sync::Arc;
 ///
 /// let mut evaluator = Evaluator::new();
 /// let result = evaluator.execute(&program)?;  // Returns Value::Int(30)
+/// # Ok(())
+/// # }
 /// ```
 ///
 /// # Architecture
@@ -80,8 +83,11 @@ impl Evaluator {
     /// # Example
     ///
     /// ```rust
-    /// let mut registry = ToolRegistry::new();
-    /// registry.register("MY_TOOL", Box::new(MyCustomTool));
+    /// use ovsm::runtime::Evaluator;
+    /// use ovsm::tools::ToolRegistry;
+    ///
+    /// let registry = ToolRegistry::new();
+    /// // registry.register("MY_TOOL", Box::new(MyCustomTool));
     /// let evaluator = Evaluator::with_registry(registry);
     /// ```
     pub fn with_registry(registry: ToolRegistry) -> Self {
@@ -106,12 +112,26 @@ impl Evaluator {
     /// # Example
     ///
     /// ```rust
+    /// use ovsm::runtime::{Evaluator, Value};
+    /// use ovsm::parser::Parser;
+    /// use ovsm::lexer::Scanner;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let code = "RETURN 42";
+    /// let mut scanner = Scanner::new(code);
+    /// let tokens = scanner.scan_tokens()?;
+    /// let mut parser = Parser::new(tokens);
+    /// let program = parser.parse()?;
+    ///
+    /// let mut evaluator = Evaluator::new();
     /// let result = evaluator.execute(&program)?;
     /// match result {
     ///     Value::Int(n) => println!("Result: {}", n),
     ///     Value::Null => println!("No return value"),
     ///     _ => println!("Other type"),
     /// }
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn execute(&mut self, program: &Program) -> Result<Value> {
         for stmt in &program.statements {
