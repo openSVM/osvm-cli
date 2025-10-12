@@ -107,6 +107,7 @@ proptest = "1.5.0"
 [features]
 default = []
 remote-wallet = ["solana-remote-wallet"]
+incomplete_tests = []  # Feature flag for incomplete/experimental test files
 
 [[bin]]
 name = "osvm-bootstrap"
