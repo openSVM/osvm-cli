@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y \
     make \
     g++ \
     build-essential \
+    clang \
+    libclang-dev \
+    cmake \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
