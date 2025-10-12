@@ -274,7 +274,10 @@ mod tests {
         ]);
 
         let min_tool = MinTool;
-        assert_eq!(min_tool.execute(std::slice::from_ref(&arr)).unwrap(), Value::Float(1.0));
+        assert_eq!(
+            min_tool.execute(std::slice::from_ref(&arr)).unwrap(),
+            Value::Float(1.0)
+        );
 
         let max_tool = MaxTool;
         assert_eq!(max_tool.execute(&[arr]).unwrap(), Value::Float(8.0));

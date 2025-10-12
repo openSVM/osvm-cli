@@ -458,8 +458,8 @@ impl ChatVmOrchestrator {
             id: format!("chat-{}", Uuid::new_v4()),
             tool_name: "main-chat".to_string(),
             server_id: "osvm-chat".to_string(),
-            memory_mb: 512, // More memory for chat VM
-            cpus: 2, // More CPUs for chat VM
+            memory_mb: 512,     // More memory for chat VM
+            cpus: 2,            // More CPUs for chat VM
             timeout_secs: 3600, // 1 hour timeout for chat
             debug: self.debug_mode,
             ..Default::default()

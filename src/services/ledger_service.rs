@@ -396,8 +396,12 @@ impl LedgerService {
 
                         // Use manual parser to extract logs, accounts, fees (same as get_transaction)
                         let (fee, success, logs, accounts) =
-                            rocksdb_parser::parse_transaction_metadata(&value, offset)
-                                .unwrap_or((5000, true, Vec::new(), Vec::new()));
+                            rocksdb_parser::parse_transaction_metadata(&value, offset).unwrap_or((
+                                5000,
+                                true,
+                                Vec::new(),
+                                Vec::new(),
+                            ));
 
                         let inner_ix_count =
                             rocksdb_parser::parse_inner_instruction_count(&value, offset);
