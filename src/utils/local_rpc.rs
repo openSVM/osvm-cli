@@ -203,8 +203,8 @@ pub async fn start_local_rpc(config: LocalRpcConfig) -> Result<LocalRpcInfo> {
         println!("✅ Local RPC node started in background");
         println!("🆔 Process ID: {}", pid);
         println!("🔗 RPC URL: http://localhost:{}", config.port);
-        println!("📊 Use 'osvm rpc-manager local --status' to check sync progress");
-        println!("🛑 Use 'osvm rpc-manager local --stop' to stop the node");
+        println!("📊 Use 'osvm rpc local --status' to check sync progress");
+        println!("🛑 Use 'osvm rpc local --stop' to stop the node");
 
         Ok(LocalRpcInfo {
             svm: config.svm,

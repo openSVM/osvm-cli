@@ -23,14 +23,14 @@ solana-keygen new --no-bip39-passphrase --outfile /tmp/test-keypair.json
 
 # Use explicit keypair path
 osvm --keypair /tmp/test-keypair.json balance
-osvm rpc-manager devnet --keypair /tmp/test-keypair.json
+osvm rpc devnet --keypair /tmp/test-keypair.json
 ```
 
 **Example - WRONG usage:**
 ```bash
 # ❌ NEVER DO THIS
 solana-keygen new --force --outfile ~/.config/solana/id.json
-osvm rpc-manager devnet  # Without explicit --keypair flag
+osvm rpc devnet  # Without explicit --keypair flag
 ```
 
 ## General Development Rules

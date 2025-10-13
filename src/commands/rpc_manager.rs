@@ -11,7 +11,7 @@ use crate::utils::ssh_deploy;
 use anyhow::Result;
 use std::process::exit;
 
-/// Handle all rpc-manager commands
+/// Handle all rpc commands
 pub async fn handle_rpc_manager(matches: &clap::ArgMatches) -> Result<()> {
     let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
         eprintln!("No RPC subcommand provided");

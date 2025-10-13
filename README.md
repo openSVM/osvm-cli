@@ -196,7 +196,7 @@ osvm --version
 
 ```bash
 # Deploy a local RPC node (development)
-osvm rpc-manager local
+osvm rpc local
 
 # Your RPC node is now running on http://localhost:8899
 ```
@@ -213,7 +213,7 @@ cargo run --example firecracker_demo  # See MicroVM deployment
 cargo run --example mcp_integration_demo  # See unikernel deployment
 
 # Traditional deployment (available now):
-osvm rpc-manager devnet  # Start real devnet validator
+osvm rpc devnet  # Start real devnet validator
 ```
 
 **Coming in Phase 4**: `osvm deploy-rpc` and `osvm update-rpc` commands with full hot-swap integration.

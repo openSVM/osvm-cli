@@ -195,8 +195,8 @@ Available OSVM commands:
 - nodes status <ID> - Check node status
 - nodes get <ID> - Get node details
 - nodes logs <ID> - View node logs
-- rpc-manager query-solana --network <NETWORK> - Query Solana RPC
-- rpc-manager test - Start test validator
+- rpc query-solana --network <NETWORK> - Query Solana RPC
+- rpc test - Start test validator
 - mcp list - List MCP servers
 - mcp tools <ID> - List tools from MCP server
 - doctor - Check system health

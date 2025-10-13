@@ -35,7 +35,7 @@ solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
 
 # ✅ CORRECT - Always use explicit --keypair flag
 osvm --keypair "$TMP_KEYPAIR" balance
-osvm rpc-manager devnet --keypair "$TMP_KEYPAIR" --background
+osvm rpc devnet --keypair "$TMP_KEYPAIR" --background
 cargo run -- --keypair "$TMP_KEYPAIR" <command>
 
 # ✅ CORRECT - Clean up when done
@@ -48,7 +48,7 @@ rm -f "$TMP_KEYPAIR"
 solana-keygen new --force --outfile ~/.config/solana/id.json
 
 # ❌ DANGEROUS - May tempt overwriting if missing
-osvm rpc-manager devnet  # Without --keypair flag
+osvm rpc devnet  # Without --keypair flag
 
 # ❌ WRONG - Don't assume default paths are safe
 cargo run -- balance  # Uses default keypair
@@ -276,7 +276,7 @@ osvm-cli/
 - **logs <NODE-ID>**: View node logs (with --follow option)
 - **deploy**: Deploy new node to remote host
 
-#### `osvm rpc-manager <SUBCOMMAND>`
+#### `osvm rpc <SUBCOMMAND>`
 - **sonic <CONNECTION>**: Deploy Sonic RPC via SSH
 - **query-solana**: Query Solana network (info, health, monitor)
 - **local**: Start local development RPC

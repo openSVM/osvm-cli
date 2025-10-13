@@ -411,6 +411,6 @@ netstat -tlnp | grep solana
 ## Related Documentation
 
 - [SSH Deployment](ssh-deployment.md) - Deploy nodes to remote servers
-- [RPC Manager](rpc-manager.md) - Specialized RPC node management
+- [RPC Manager](rpc.md) - Specialized RPC node management
 - [Log Monitoring](log-monitoring.md) - Advanced log analysis
 - [Self-Repair System](self-repair-system.md) - Automated maintenance

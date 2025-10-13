@@ -188,9 +188,9 @@ pub async fn start_mainnet_rpc(config: MainnetRpcConfig) -> Result<MainnetRpcInf
         println!("📝 Log file: {}", log_file_path);
         println!();
         println!("⏳ Initial snapshot download may take several hours...");
-        println!("🔧 Use 'osvm rpc-manager mainnet --status' to check sync progress");
-        println!("📋 Use 'osvm rpc-manager mainnet --logs --follow' to watch logs");
-        println!("🛑 Use 'osvm rpc-manager mainnet --stop' to stop the node");
+        println!("🔧 Use 'osvm rpc mainnet --status' to check sync progress");
+        println!("📋 Use 'osvm rpc mainnet --logs --follow' to watch logs");
+        println!("🛑 Use 'osvm rpc mainnet --stop' to stop the node");
 
         // Start log monitoring in background
         let log_monitor_config = LogMonitorConfig {
