@@ -189,28 +189,73 @@ impl Parser {
 
         let condition = self.expression()?;
 
-        self.consume(TokenKind::Then, "Expected THEN after IF condition")?;
-        self.skip_newlines();
-
-        let mut then_branch = Vec::new();
-        while !self.check(&TokenKind::Else)
-            && !self.check(&TokenKind::Eof)
-            && !self.is_end_of_block()
-        {
-            then_branch.push(self.statement()?);
+        // Support both Python-style (THEN) and C-style (braces) syntax
+        let then_branch = if self.match_token(&TokenKind::LeftBrace) {
+            // C-style: IF condition { statements; }
+            self.advance(); // consume {
             self.skip_newlines();
-        }
+
+            let mut statements = Vec::new();
+            while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                self.skip_newlines();
+                if self.check(&TokenKind::RightBrace) {
+                    break;
+                }
+                statements.push(self.statement()?);
+                self.skip_newlines();
+            }
+
+            self.consume(TokenKind::RightBrace, "Expected '}' after IF block")?;
+            self.skip_newlines();
+            statements
+        } else {
+            // Python-style: IF condition THEN statements
+            self.consume(TokenKind::Then, "Expected THEN or '{' after IF condition")?;
+            self.skip_newlines();
+
+            let mut statements = Vec::new();
+            while !self.check(&TokenKind::Else)
+                && !self.check(&TokenKind::Eof)
+                && !self.is_end_of_block()
+            {
+                statements.push(self.statement()?);
+                self.skip_newlines();
+            }
+            statements
+        };
 
         let else_branch = if self.match_token(&TokenKind::Else) {
             self.advance();
             self.skip_newlines();
 
-            let mut else_stmts = Vec::new();
-            while !self.is_end_of_block() && !self.is_at_end() {
-                else_stmts.push(self.statement()?);
+            // ELSE can also use braces
+            if self.match_token(&TokenKind::LeftBrace) {
+                // C-style: ELSE { statements; }
+                self.advance(); // consume {
                 self.skip_newlines();
+
+                let mut statements = Vec::new();
+                while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                    self.skip_newlines();
+                    if self.check(&TokenKind::RightBrace) {
+                        break;
+                    }
+                    statements.push(self.statement()?);
+                    self.skip_newlines();
+                }
+
+                self.consume(TokenKind::RightBrace, "Expected '}' after ELSE block")?;
+                self.skip_newlines();
+                Some(statements)
+            } else {
+                // Python-style: ELSE statements
+                let mut statements = Vec::new();
+                while !self.is_end_of_block() && !self.is_at_end() {
+                    statements.push(self.statement()?);
+                    self.skip_newlines();
+                }
+                Some(statements)
             }
-            Some(else_stmts)
         } else {
             None
         };
@@ -227,17 +272,40 @@ impl Parser {
 
         let condition = self.expression()?;
 
-        self.consume(TokenKind::Colon, "Expected ':' after WHILE condition")?;
-        self.skip_newlines();
+        // Support both Python-style (colon) and C-style (braces) syntax
+        let body = if self.match_token(&TokenKind::LeftBrace) {
+            // C-style: WHILE condition { statements; }
+            self.advance(); // consume {
+            self.skip_newlines();
 
-        let mut body = Vec::new();
-        while !self.is_at_end() {
-            self.skip_newlines(); // Skip newlines before checking end condition
-            if self.is_end_of_loop_block() {
-                break;
+            let mut statements = Vec::new();
+            while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                self.skip_newlines();
+                if self.check(&TokenKind::RightBrace) {
+                    break;
+                }
+                statements.push(self.statement()?);
+                self.skip_newlines();
             }
-            body.push(self.statement()?);
-        }
+
+            self.consume(TokenKind::RightBrace, "Expected '}' after WHILE block")?;
+            self.skip_newlines();
+            statements
+        } else {
+            // Python-style: WHILE condition: statements
+            self.consume(TokenKind::Colon, "Expected ':' or '{' after WHILE condition")?;
+            self.skip_newlines();
+
+            let mut statements = Vec::new();
+            while !self.is_at_end() {
+                self.skip_newlines();
+                if self.is_end_of_loop_block() {
+                    break;
+                }
+                statements.push(self.statement()?);
+            }
+            statements
+        };
 
         Ok(Statement::While { condition, body })
     }
@@ -255,17 +323,40 @@ impl Parser {
 
         let iterable = self.expression()?;
 
-        self.consume(TokenKind::Colon, "Expected ':' after FOR iterable")?;
-        self.skip_newlines();
+        // Support both Python-style (colon) and C-style (braces) syntax
+        let body = if self.match_token(&TokenKind::LeftBrace) {
+            // C-style: FOR $i IN [1..10] { statements; }
+            self.advance(); // consume {
+            self.skip_newlines();
 
-        let mut body = Vec::new();
-        while !self.is_at_end() {
-            self.skip_newlines(); // Skip newlines before checking end condition
-            if self.is_end_of_loop_block() {
-                break;
+            let mut statements = Vec::new();
+            while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                self.skip_newlines();
+                if self.check(&TokenKind::RightBrace) {
+                    break;
+                }
+                statements.push(self.statement()?);
+                self.skip_newlines();
             }
-            body.push(self.statement()?);
-        }
+
+            self.consume(TokenKind::RightBrace, "Expected '}' after FOR block")?;
+            self.skip_newlines();
+            statements
+        } else {
+            // Python-style: FOR $i IN [1..10]: statements
+            self.consume(TokenKind::Colon, "Expected ':' or '{' after FOR iterable")?;
+            self.skip_newlines();
+
+            let mut statements = Vec::new();
+            while !self.is_at_end() {
+                self.skip_newlines();
+                if self.is_end_of_loop_block() {
+                    break;
+                }
+                statements.push(self.statement()?);
+            }
+            statements
+        };
 
         Ok(Statement::For {
             variable,
