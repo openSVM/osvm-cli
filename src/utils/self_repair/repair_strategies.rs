@@ -19,13 +19,13 @@ use super::{RepairError, RepairResult};
 /// Repair operation types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RepairOperation {
-    // System-level operations
+    // System-level operations (non-critical - may require sudo)
     UpdateSystemPackages,
     UpdateRustToolchain,
     InstallSystemDependencies(Vec<String>),
     TuneSystemParameters,
 
-    // User-level operations
+    // User-level operations (critical - must succeed)
     InstallSolanaCli,
     CreateConfigDirectory,
     GenerateKeypair(String),
@@ -34,6 +34,18 @@ pub enum RepairOperation {
     // Validation operations
     ValidateSystemHealth,
     ValidateUserConfig,
+}
+
+impl RepairOperation {
+    /// Check if this operation is critical (must succeed)
+    pub fn is_critical(&self) -> bool {
+        matches!(self,
+            RepairOperation::InstallSolanaCli |
+            RepairOperation::CreateConfigDirectory |
+            RepairOperation::GenerateKeypair(_) |
+            RepairOperation::ConfigureNetwork(_)
+        )
+    }
 }
 
 /// Checkpoint information for rollback
@@ -236,15 +248,24 @@ impl RepairTransaction {
 
                     // Validate operation success
                     if let Err(e) = self.validate_operation(operation).await {
-                        println!("❌ Operation validation failed: {}", e);
-                        return self.rollback_transaction().await;
+                        if operation.is_critical() {
+                            println!("❌ Critical operation validation failed: {}", e);
+                            return self.rollback_transaction().await;
+                        } else {
+                            println!("⚠️  Non-critical operation validation failed (continuing): {}", e);
+                        }
                     }
 
                     completed_operations += 1;
                 }
                 Err(e) => {
-                    println!("❌ Operation failed: {}", e);
-                    return self.rollback_transaction().await;
+                    if operation.is_critical() {
+                        println!("❌ Critical operation failed: {}", e);
+                        return self.rollback_transaction().await;
+                    } else {
+                        println!("⚠️  Non-critical operation failed (continuing): {}", e);
+                        // Continue with next operation instead of rolling back
+                    }
                 }
             }
         }

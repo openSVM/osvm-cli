@@ -1,0 +1,43 @@
+# Cline Rules for OSVM-CLI
+
+## 🚨 CRITICAL: NEVER MODIFY SOLANA CONFIGURATION 🚨
+
+**ABSOLUTE PROHIBITION:**
+DO NOT create, modify, overwrite, or delete:
+- `~/.config/solana/id.json` - Solana keypair (IRREVERSIBLE IF LOST!)
+- `~/.config/solana/cli/config.yml` - Solana CLI configuration
+- Any wallet/keypair files in `~/.config/solana/` directory
+
+**These files contain cryptographic private keys that CANNOT be recovered if lost!**
+
+**REQUIRED PROCEDURE for testing:**
+1. Create temporary keypair: `/tmp/test-keypair-$(date +%s).json`
+2. Always use explicit `--keypair /tmp/test-keypair.json` flag
+3. NEVER rely on default keypair location
+4. ASK user before creating any keypair files
+
+**Example - CORRECT usage:**
+```bash
+# Create test keypair in /tmp
+solana-keygen new --no-bip39-passphrase --outfile /tmp/test-keypair.json
+
+# Use explicit keypair path
+osvm --keypair /tmp/test-keypair.json balance
+osvm rpc-manager devnet --keypair /tmp/test-keypair.json
+```
+
+**Example - WRONG usage:**
+```bash
+# ❌ NEVER DO THIS
+solana-keygen new --force --outfile ~/.config/solana/id.json
+osvm rpc-manager devnet  # Without explicit --keypair flag
+```
+
+## General Development Rules
+
+- Follow CLAUDE.md for project structure and patterns
+- Run tests before committing
+- Never force push to main/master
+- Always create feature branches
+- Document new features and breaking changes
+- Use conventional commit messages

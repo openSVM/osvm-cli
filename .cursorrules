@@ -1,0 +1,75 @@
+# Cursor Rules for OSVM-CLI
+
+## ⚠️ CRITICAL SECURITY RULE - READ FIRST ⚠️
+
+### NEVER MODIFY SOLANA CONFIGURATION FILES
+
+**FORBIDDEN OPERATIONS:**
+- ❌ Creating, modifying, or deleting `~/.config/solana/id.json`
+- ❌ Creating, modifying, or deleting `~/.config/solana/cli/config.yml`
+- ❌ Any operations on files in `~/.config/solana/` directory
+- ❌ Using `solana-keygen` with `--force` flag on user's keypair
+- ❌ Using `--force` or `--overwrite` flags on wallet files
+
+**WHY THIS IS CRITICAL:**
+These files contain private cryptographic keys that:
+- Cannot be recovered if overwritten or deleted
+- May not have backups or seed phrases saved
+- Control access to funds and blockchain identity
+- Are unique and irreplaceable
+
+**REQUIRED TESTING PROCEDURE:**
+
+When testing requires a keypair:
+
+```bash
+# Step 1: Create temporary test keypair (ALWAYS in /tmp)
+TMP_KEYPAIR="/tmp/test-keypair-$(date +%s).json"
+solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
+
+# Step 2: Use explicit --keypair flag in ALL commands
+osvm --keypair "$TMP_KEYPAIR" balance
+osvm rpc-manager devnet --keypair "$TMP_KEYPAIR"
+cargo run -- --keypair "$TMP_KEYPAIR" <command>
+
+# Step 3: Clean up when done
+rm -f "$TMP_KEYPAIR"
+```
+
+**If command fails due to missing keypair:**
+1. ASK user for permission first
+2. Create test keypair in `/tmp/` directory only
+3. Use explicit `--keypair` path in every command
+4. Never assume default keypair location is safe to modify
+
+## Development Guidelines
+
+### Code Style
+- Follow Rust conventions and clippy recommendations
+- Use meaningful variable names
+- Add documentation comments for public APIs
+- Keep functions focused and single-purpose
+
+### Testing
+- Write unit tests for new functionality
+- Run `cargo test` before committing
+- Update integration tests when changing public APIs
+- Use `cargo test --test <name>` for specific tests
+
+### Git Workflow
+- Create feature branches from `main`
+- Write descriptive commit messages
+- Never force push to `main` or `master`
+- Run pre-commit hooks before committing
+
+### Documentation
+- Keep CLAUDE.md updated with architectural changes
+- Update README.md for user-facing features
+- Document breaking changes clearly
+- Add examples for new commands
+
+### Security
+- Never log private keys or sensitive data
+- Validate all user inputs
+- Use secure random number generation
+- Follow principle of least privilege

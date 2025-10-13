@@ -1,0 +1,68 @@
+# Claude Code Rules for OSVM-CLI
+
+## CRITICAL SECURITY RULES - NEVER VIOLATE
+
+### 🚨 NEVER MODIFY SOLANA CONFIGURATION FILES 🚨
+
+**ABSOLUTE RULE: DO NOT CREATE, MODIFY, OR DELETE THESE FILES:**
+- `~/.config/solana/id.json` (Solana keypair)
+- `~/.config/solana/cli/config.yml` (Solana CLI config)
+- Any `.json` files in `~/.config/solana/` directory
+- Any wallet/keypair files anywhere on the system
+
+**Why this is critical:**
+- These files contain private keys that cannot be recovered if lost
+- Overwriting them causes permanent, irreversible loss of funds and access
+- There are NO backups unless the user explicitly created them
+- The seed phrase may not be saved anywhere
+
+**ALWAYS use explicit keypair paths:**
+```bash
+# CORRECT - Use temporary test keypair
+solana-keygen new --no-bip39-passphrase --outfile /tmp/test-keypair.json
+osvm --keypair /tmp/test-keypair.json <command>
+
+# CORRECT - Use explicit test keypair
+osvm rpc-manager devnet --keypair /tmp/test-keypair.json
+
+# WRONG - Never do this
+solana-keygen new --force --outfile ~/.config/solana/id.json  # ❌ NEVER!
+```
+
+**If a command requires a keypair and fails:**
+1. ASK the user first before creating any keypair
+2. Use `/tmp/` directory for temporary test keypairs
+3. Always use explicit `--keypair` flag to specify the test keypair path
+4. NEVER use `--force` flag with user's actual keypair location
+
+**Testing procedures:**
+- Always create test keypairs in `/tmp/test-keypair-$(date +%s).json`
+- Always pass explicit `--keypair /tmp/test-keypair-*.json` to commands
+- Document the temporary keypair location in output
+- Clean up test keypairs when done
+
+## Other Important Rules
+
+### Configuration Files
+- Never modify user configuration without explicit permission
+- Always ask before changing `.gitconfig`, SSH configs, etc.
+- Back up configuration files before any modifications
+- Show diffs before applying changes
+
+### Development Workflow
+- Follow the coding standards in CLAUDE.md
+- Run tests before committing changes
+- Use the pre-commit hooks
+- Document all new features
+
+### Git Operations
+- Never force push to main/master
+- Never amend commits by other authors
+- Always create feature branches for new work
+- Follow conventional commit message format
+
+### Security
+- Never log or display private keys
+- Use secure credential storage
+- Validate all user inputs
+- Follow principle of least privilege

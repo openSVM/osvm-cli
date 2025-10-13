@@ -1,5 +1,73 @@
 # OSVM CLI - AI Coding Assistant Instructions
 
+## 🚨 CRITICAL SECURITY RULE - READ FIRST 🚨
+
+### ⚠️ NEVER MODIFY SOLANA CONFIGURATION FILES ⚠️
+
+**ABSOLUTE PROHIBITION - MOST IMPORTANT RULE:**
+
+**FORBIDDEN OPERATIONS:**
+1. ❌ **NEVER** create, modify, or delete `~/.config/solana/id.json`
+2. ❌ **NEVER** create, modify, or delete `~/.config/solana/cli/config.yml`
+3. ❌ **NEVER** run `solana-keygen` with `--force` flag on user's keypair location
+4. ❌ **NEVER** use default keypair paths without explicit `--keypair` flag
+5. ❌ **NEVER** overwrite any wallet/keypair files anywhere
+
+**WHY THIS IS CRITICAL:**
+- These files contain **irreplaceable cryptographic private keys**
+- Overwriting them causes **permanent, irreversible loss** of funds and blockchain identity
+- **NO RECOVERY** is possible without the seed phrase
+- The seed phrase may **NOT be saved anywhere**
+- Violating this rule causes **catastrophic user data loss**
+
+**REQUIRED SAFE TESTING PROCEDURE:**
+
+When testing requires a Solana keypair:
+
+```bash
+# ✅ CORRECT - Always create temporary test keypair in /tmp
+TMP_KEYPAIR="/tmp/test-keypair-$(date +%s).json"
+solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
+
+# ✅ CORRECT - Always use explicit --keypair flag
+osvm --keypair "$TMP_KEYPAIR" balance
+osvm rpc-manager devnet --keypair "$TMP_KEYPAIR" --background
+cargo run -- --keypair "$TMP_KEYPAIR" <command>
+
+# ✅ CORRECT - Clean up temporary keypair when done
+rm -f "$TMP_KEYPAIR"
+```
+
+```rust
+// ✅ CORRECT - Use explicit temporary keypair path
+let test_keypair = "/tmp/test-keypair.json";
+let config = Config {
+    keypair_path: Some(test_keypair.to_string()),
+    ..Default::default()
+};
+```
+
+❌ **NEVER DO THIS:**
+```bash
+# ❌ CATASTROPHIC - Overwrites user's actual keypair
+solana-keygen new --force --outfile ~/.config/solana/id.json
+
+# ❌ DANGEROUS - Uses default keypair location (may fail and tempt overwriting)
+osvm rpc-manager devnet
+
+# ❌ WRONG - Relies on default configuration
+cargo run -- balance
+```
+
+**If Command Fails Due to Missing Keypair:**
+
+1. **ASK** the user for permission first
+2. **CREATE** temporary test keypair in `/tmp/` directory only
+3. **USE** explicit `--keypair /tmp/test-keypair.json` flag in ALL commands
+4. **NEVER** assume it's safe to create/modify files in `~/.config/solana/`
+
+---
+
 ## Project Overview
 OSVM (Open Solana Virtual Machine) is a revolutionary blockchain infrastructure CLI tool providing zero-downtime updates, hardware-isolated execution with Firecracker MicroVMs/unikernels, and AI-powered Solana blockchain analysis. **Everything must be implemented in Rust** - no standalone scripts allowed.
 

@@ -156,11 +156,18 @@ impl SelfRepairSystem {
             if let Some(requested_path) = extract_keypair_path(error) {
                 // Determine purpose from requested path
                 let purpose = if requested_path.contains("validator") {
-                    "validator"
+                    "key-validator"
                 } else if requested_path.contains("rpc") {
-                    "rpc"
+                    "key-rpc"
+                } else if requested_path.contains("key-") {
+                    // Extract existing key- prefix purpose
+                    requested_path
+                        .split("key-")
+                        .nth(1)
+                        .and_then(|s| s.split('.').next())
+                        .unwrap_or("key-default")
                 } else {
-                    "default"
+                    "key-default"  // Default to "key-default" to match get_default_keypair_path()
                 };
 
                 // ALWAYS use OSVM-specific path: ~/.config/osvm/{purpose}.json

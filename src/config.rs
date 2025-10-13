@@ -44,10 +44,18 @@ impl Config {
 
         let cli_config = solana_cli_config::Config::load(cli_config_path).unwrap_or_default();
 
+        // OSVM uses its own keypair directory, NOT ~/.config/solana/
+        // This prevents accidentally touching user's main Solana keypairs
+        let default_osvm_keypair = dirs::home_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join(".config/osvm/keypair.json")
+            .to_string_lossy()
+            .to_string();
+
         let keypair_path = sub_matches
             .get_one::<String>("keypair")
             .map(|s| s.to_string())
-            .unwrap_or_else(|| cli_config.keypair_path.clone());
+            .unwrap_or(default_osvm_keypair);
 
         let signer = match read_keypair_with_repair(&keypair_path).await {
             Ok(signer) => signer,
