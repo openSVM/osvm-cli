@@ -78,7 +78,7 @@ impl OvsmService {
         let result = self
             .evaluator
             .execute(&program)
-            .context("Failed to execute OVSM program")?;
+            .context("Failed to execute OVSM program. Note: OVSM requires proper indentation (like Python). Single-line colon syntax is not supported for loops.")?;
 
         if self.verbose {
             println!("✨ Execution completed successfully");
