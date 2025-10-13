@@ -44,7 +44,7 @@ COMMAND CATEGORIES:
     realtime             Real-time blockchain data sync daemon
     
   Infrastructure:
-    rpc-manager          Manage RPC nodes (local/remote)
+    rpc                  Manage RPC nodes (local/remote)
     deploy               Deploy eBPF programs to SVM networks
     mount                Manage folder mounts for microVMs
     
