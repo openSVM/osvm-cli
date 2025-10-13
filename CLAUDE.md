@@ -2,6 +2,67 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 CRITICAL SECURITY RULE - MUST READ FIRST 🚨
+
+### ⚠️ NEVER MODIFY SOLANA CONFIGURATION FILES ⚠️
+
+**THIS IS THE MOST IMPORTANT RULE - VIOLATING IT CAUSES IRREVERSIBLE DATA LOSS**
+
+**ABSOLUTE PROHIBITION:**
+1. ❌ **NEVER** create, modify, or delete `~/.config/solana/id.json` (Solana keypair)
+2. ❌ **NEVER** create, modify, or delete `~/.config/solana/cli/config.yml` (Solana config)
+3. ❌ **NEVER** run `solana-keygen` with `--force` flag on user's keypair location
+4. ❌ **NEVER** use default keypair paths without explicit `--keypair` flag
+5. ❌ **NEVER** overwrite any wallet/keypair files
+
+**WHY THIS IS CRITICAL:**
+- These files contain **cryptographic private keys that CANNOT be recovered if lost**
+- Overwriting them causes **permanent, irreversible loss** of:
+  - Blockchain identity
+  - Access to funds (potentially millions of dollars)
+  - All associated on-chain data and permissions
+- The seed phrase may **NOT** be saved anywhere
+- **NO RECOVERY** is possible - the data is lost forever
+
+**REQUIRED SAFE TESTING PROCEDURE:**
+
+Always create temporary test keypairs in `/tmp/`:
+
+```bash
+# ✅ CORRECT - Temporary test keypair
+TMP_KEYPAIR="/tmp/test-keypair-$(date +%s).json"
+solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
+
+# ✅ CORRECT - Always use explicit --keypair flag
+osvm --keypair "$TMP_KEYPAIR" balance
+osvm rpc-manager devnet --keypair "$TMP_KEYPAIR" --background
+cargo run -- --keypair "$TMP_KEYPAIR" <command>
+
+# ✅ CORRECT - Clean up when done
+rm -f "$TMP_KEYPAIR"
+```
+
+❌ **CATASTROPHIC MISTAKES TO AVOID:**
+```bash
+# ❌ NEVER DO THIS - Overwrites user's keypair permanently!
+solana-keygen new --force --outfile ~/.config/solana/id.json
+
+# ❌ DANGEROUS - May tempt overwriting if missing
+osvm rpc-manager devnet  # Without --keypair flag
+
+# ❌ WRONG - Don't assume default paths are safe
+cargo run -- balance  # Uses default keypair
+```
+
+**If Command Fails Due to Missing Keypair:**
+1. **STOP** immediately
+2. **ASK** user for permission
+3. **CREATE** temporary keypair in `/tmp/` ONLY
+4. **USE** explicit `--keypair /tmp/test-keypair.json` in ALL commands
+5. **NEVER** assume you can modify files in `~/.config/solana/`
+
+---
+
 ## Table of Contents
 1. [Development Environment Setup](#development-environment-setup)
 2. [Development Commands](#development-commands)

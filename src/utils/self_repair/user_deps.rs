@@ -197,8 +197,24 @@ impl UserDependencyManager {
             pb
         } else {
             // Default to OSVM config directory, NOT Solana's
-            self.get_osvm_config_dir().join("default.json")
+            // Use key-default.json to match get_default_keypair_path()
+            self.get_osvm_config_dir().join("key-default.json")
         };
+
+        // CHECK: If keypair already exists, skip generation
+        if keypair_path.exists() {
+            // Get the public key from existing keypair
+            let pubkey = self
+                .get_pubkey_from_keypair(&keypair_path)
+                .await
+                .unwrap_or_else(|_| "unknown".to_string());
+
+            return Ok(format!(
+                "Keypair already exists at {} (pubkey: {}) - skipping generation",
+                keypair_path.display(),
+                pubkey
+            ));
+        }
 
         // Ensure the parent directory exists
         if let Some(parent) = keypair_path.parent() {
@@ -542,10 +558,11 @@ pub async fn check_config_directory() -> Result<bool, UserDepsError> {
     Ok(config_dir.exists())
 }
 
-/// Get the default keypair path
+/// Get the default OSVM keypair path (NOT Solana's path!)
+/// OSVM uses ~/.config/osvm/key-default.json to keep its keys separate from user's main Solana keypairs
 pub fn get_default_keypair_path() -> Result<String, UserDepsError> {
     let manager = UserDependencyManager::new();
-    let keypair_path = manager.get_solana_config_dir().join("id.json");
+    let keypair_path = manager.get_osvm_config_dir().join("key-default.json");
     Ok(keypair_path.to_string_lossy().to_string())
 }
 
@@ -574,7 +591,9 @@ mod tests {
     #[test]
     fn test_default_keypair_path() {
         let path = get_default_keypair_path().expect("Failed to get default keypair path");
-        assert!(path.contains("id.json"));
+        // OSVM now uses ~/.config/osvm/key-default.json, not Solana's id.json
+        assert!(path.contains("osvm"));
+        assert!(path.contains("key-default.json"));
     }
 
     #[tokio::test]

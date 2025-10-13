@@ -98,8 +98,13 @@ pub async fn start_mainnet_rpc(config: MainnetRpcConfig) -> Result<MainnetRpcInf
     let mut cmd = Command::new("agave-validator");
 
     // Basic mainnet configuration
+    // OSVM uses ~/.config/osvm/keypair.json, not ~/.config/solana/id.json
+    let osvm_keypair = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".config/osvm/keypair.json");
+
     cmd.arg("--identity")
-        .arg("/home/larp/.config/solana/id.json")
+        .arg(osvm_keypair.to_string_lossy().to_string())
         .arg("--ledger")
         .arg(&config.ledger_path)
         .arg("--rpc-port")
@@ -107,7 +112,7 @@ pub async fn start_mainnet_rpc(config: MainnetRpcConfig) -> Result<MainnetRpcInf
         .arg("--gossip-port")
         .arg(config.gossip_port.to_string())
         .arg("--dynamic-port-range")
-        .arg("8002-8020")
+        .arg("8000-8020") // Anza recommended range
         .arg("--log")
         .arg("-"); // Log to stdout
 
@@ -150,6 +155,8 @@ pub async fn start_mainnet_rpc(config: MainnetRpcConfig) -> Result<MainnetRpcInf
         .arg("10000") // 10GB accounts cache
         .arg("--max-genesis-archive-unpacked-size")
         .arg("10737418240") // 10GB max genesis
+        .arg("--wal-recovery-mode")
+        .arg("skip_any_corrupted_record") // Anza recommended WAL recovery
         .arg("--no-port-check"); // Skip port reachability check for non-voting nodes
 
     println!("📋 Command: {:?}", cmd);

@@ -255,7 +255,7 @@ async fn start_devnet_rpc_internal(
     cmd.arg("--ledger").arg(&config.ledger_path);
     cmd.arg("--rpc-port").arg(config.rpc_port.to_string());
     cmd.arg("--gossip-port").arg(config.gossip_port.to_string());
-    cmd.arg("--dynamic-port-range").arg("8002-8020");
+    cmd.arg("--dynamic-port-range").arg("8000-8020"); // Anza recommended range
 
     // Devnet specific configuration
     cmd.arg("--entrypoint")
@@ -286,6 +286,17 @@ async fn start_devnet_rpc_internal(
 
     // RPC-only mode (no voting)
     cmd.arg("--no-voting");
+
+    // Skip port reachability check for non-voting RPC nodes (Anza recommendation)
+    // This is critical for NAT'd environments where UDP ports aren't publicly accessible
+    cmd.arg("--no-port-check");
+
+    // Use RPC from known validators only (downloads snapshots via HTTP, not gossip)
+    // This allows RPC nodes to work behind NAT without requiring public UDP ports
+    cmd.arg("--only-known-rpc");
+
+    // Don't publish RPC port publicly (reduces network requirements)
+    cmd.arg("--private-rpc");
 
     // Clear any environment variables that might interfere
     cmd.env_clear();
