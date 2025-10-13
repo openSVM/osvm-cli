@@ -763,15 +763,13 @@ async fn handle_mcp_command(
         }
 
         "search" => {
-            let query = mcp_sub_matches
-                .get_one::<String>("query")
-                .expect("query is required by clap");
-            let transport = mcp_sub_matches.get_one::<String>("transport");
-            let enabled_only = mcp_sub_matches.get_flag("enabled_only");
-            let json_output = mcp_sub_matches.get_flag("json");
+            let query = arg_helpers::get_required_str(mcp_sub_matches, "query")?;
+            let transport = arg_helpers::get_optional_str(mcp_sub_matches, "transport");
+            let enabled_only = arg_helpers::get_flag(mcp_sub_matches, "enabled_only");
+            let json_output = arg_helpers::get_flag(mcp_sub_matches, "json");
 
             let transport_filter =
-                transport.and_then(|t| if t == "any" { None } else { Some(t.as_str()) });
+                transport.and_then(|t| if t == "any" { None } else { Some(t) });
             let results = mcp_service.search_servers(query, transport_filter, enabled_only);
 
             if results.is_empty() {
@@ -840,13 +838,9 @@ async fn handle_mcp_command(
         }
 
         "mount" => {
-            let tool_name = mcp_sub_matches
-                .get_one::<String>("tool_name")
-                .expect("tool_name is required by clap");
-            let host_path = mcp_sub_matches
-                .get_one::<String>("host_path")
-                .expect("host_path is required by clap");
-            let readonly = mcp_sub_matches.get_flag("readonly");
+            let tool_name = arg_helpers::get_required_str(mcp_sub_matches, "tool_name")?;
+            let host_path = arg_helpers::get_required_str(mcp_sub_matches, "host_path")?;
+            let readonly = arg_helpers::get_flag(mcp_sub_matches, "readonly");
 
             match crate::commands::mount::handle_mcp_mount(tool_name, host_path, readonly) {
                 Ok(_) => {}
@@ -858,12 +852,8 @@ async fn handle_mcp_command(
         }
 
         "unmount" => {
-            let tool_name = mcp_sub_matches
-                .get_one::<String>("tool_name")
-                .expect("tool_name is required by clap");
-            let host_path = mcp_sub_matches
-                .get_one::<String>("host_path")
-                .expect("host_path is required by clap");
+            let tool_name = arg_helpers::get_required_str(mcp_sub_matches, "tool_name")?;
+            let host_path = arg_helpers::get_required_str(mcp_sub_matches, "host_path")?;
 
             match crate::commands::mount::handle_mcp_unmount(tool_name, host_path) {
                 Ok(_) => {}
@@ -907,13 +897,14 @@ async fn handle_mcp_command(
 /// Handle OVSM command execution
 async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::ovsm_service::OvsmService;
+    use crate::utils::arg_helpers;
 
     match matches.subcommand() {
         Some(("run", run_matches)) => {
-            let script = run_matches.get_one::<String>("script").expect("required");
-            let verbose = run_matches.get_count("verbose") > 0;
-            let debug = run_matches.get_flag("debug");
-            let json = run_matches.get_flag("json");
+            let script = arg_helpers::get_required_str(run_matches, "script")?;
+            let verbose = arg_helpers::get_count(run_matches, "verbose") > 0;
+            let debug = arg_helpers::get_flag(run_matches, "debug");
+            let json = arg_helpers::get_flag(run_matches, "json");
 
             let mut service = OvsmService::with_verbose(verbose).with_debug(debug);
 
@@ -981,8 +972,8 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("eval", eval_matches)) => {
-            let code = eval_matches.get_one::<String>("code").expect("required");
-            let json = eval_matches.get_flag("json");
+            let code = arg_helpers::get_required_str(eval_matches, "code")?;
+            let json = arg_helpers::get_flag(eval_matches, "json");
 
             let mut service = OvsmService::new();
 
@@ -1001,7 +992,7 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("check", check_matches)) => {
-            let script = check_matches.get_one::<String>("script").expect("required");
+            let script = arg_helpers::get_required_str(check_matches, "script")?;
 
             let service = OvsmService::with_verbose(true);
 
@@ -1018,9 +1009,9 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("examples", examples_matches)) => {
-            let category = examples_matches.get_one::<String>("category");
-            let list = examples_matches.get_flag("list");
-            let show = examples_matches.get_one::<String>("show");
+            let category = arg_helpers::get_optional_str(examples_matches, "category");
+            let list = arg_helpers::get_flag(examples_matches, "list");
+            let show = arg_helpers::get_optional_str(examples_matches, "show");
 
             if list {
                 println!("📚 OVSM Example Categories:");
@@ -1041,7 +1032,7 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
 
             if let Some(cat) = category {
                 println!("📚 OVSM Examples - Category: {}", cat);
-                match cat.as_str() {
+                match cat {
                     "basics" => {
                         println!("\n## Basic Variables and Arithmetic");
                         println!("```ovsm");
