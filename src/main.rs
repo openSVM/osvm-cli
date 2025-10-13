@@ -270,9 +270,10 @@ async fn handle_audit_command(
     matches: &clap::ArgMatches,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::audit_service::{AuditRequest, AuditService};
+    use crate::utils::arg_helpers;
 
-    let no_commit = matches.get_flag("no-commit");
-    let default_output_dir = matches.get_one::<String>("output").unwrap().to_string();
+    let no_commit = arg_helpers::get_flag(matches, "no-commit");
+    let default_output_dir = arg_helpers::get_str_with_default(matches, "output", "audit_reports").to_string();
 
     // If --no-commit is used and output directory is the default, use current directory
     let output_dir = if no_commit && default_output_dir == "audit_reports" {
@@ -281,15 +282,15 @@ async fn handle_audit_command(
         default_output_dir
     };
 
-    let format = matches.get_one::<String>("format").unwrap().to_string();
-    let verbose = matches.get_count("verbose");
-    let test_mode = matches.get_flag("test");
+    let format = arg_helpers::get_str_with_default(matches, "format", "markdown").to_string();
+    let verbose = arg_helpers::get_count(matches, "verbose");
+    let test_mode = arg_helpers::get_flag(matches, "test");
 
     // AI analysis is enabled by default, disabled only if --noai is provided
-    let ai_analysis = !matches.get_flag("noai");
+    let ai_analysis = !arg_helpers::get_flag(matches, "noai");
 
     // Handle repository parsing - check positional argument first, then --gh flag
-    let gh_repo = if let Some(repo) = matches.get_one::<String>("repository") {
+    let gh_repo = if let Some(repo) = arg_helpers::get_optional_str(matches, "repository") {
         // Parse positional argument as GitHub repo
         if repo.contains('/') {
             // Looks like owner/repo format
@@ -304,11 +305,11 @@ async fn handle_audit_command(
             None
         }
     } else {
-        matches.get_one::<String>("gh").map(|s| s.to_string())
+        arg_helpers::get_optional_str(matches, "gh").map(|s| s.to_string())
     };
 
-    let template_path = matches.get_one::<String>("template").map(|s| s.to_string());
-    let api_url = matches.get_one::<String>("api-url").map(|s| s.to_string());
+    let template_path = arg_helpers::get_optional_str(matches, "template").map(|s| s.to_string());
+    let api_url = arg_helpers::get_optional_str(matches, "api-url").map(|s| s.to_string());
 
     let request = AuditRequest {
         output_dir,
@@ -358,8 +359,10 @@ async fn handle_mcp_command(
     use crate::services::mcp_service::{
         McpAuthConfig, McpServerConfig, McpService, McpTransportType,
     };
+    use crate::utils::arg_helpers;
+    use crate::utils::cli_error::CliError;
 
-    let debug_mode = app_matches.get_flag("debug");
+    let debug_mode = arg_helpers::get_flag(app_matches, "debug");
     let mut mcp_service = McpService::new_with_debug(debug_mode);
 
     // Load existing configurations
@@ -370,57 +373,44 @@ async fn handle_mcp_command(
     }
 
     let Some((mcp_sub_command, mcp_sub_matches)) = matches.subcommand() else {
-        eprintln!("No MCP subcommand provided");
-        std::process::exit(1);
+        return Err(Box::new(CliError::MissingSubcommand {
+            command: "mcp".to_string(),
+        }));
     };
 
     match mcp_sub_command {
         "add" => {
-            let server_id = mcp_sub_matches
-                .get_one::<String>("server_id")
-                .expect("server_id is required by clap");
-            let url = mcp_sub_matches
-                .get_one::<String>("server_url")
-                .expect("server_url is required by clap");
-            let name = mcp_sub_matches
-                .get_one::<String>("name")
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
+            let url = arg_helpers::get_required_str(mcp_sub_matches, "server_url")?;
+            let name = arg_helpers::get_optional_str(mcp_sub_matches, "name")
                 .map(|s| s.to_string())
-                .unwrap_or_else(|| server_id.clone());
+                .unwrap_or_else(|| server_id.to_string());
 
-            let transport_str = mcp_sub_matches
-                .get_one::<String>("transport")
-                .expect("transport has a default value");
-            let transport_type = match transport_str.as_str() {
+            let transport_str = arg_helpers::get_str_with_default(mcp_sub_matches, "transport", "http");
+            let transport_type = match transport_str {
                 "http" => McpTransportType::Http,
                 "websocket" => McpTransportType::Websocket,
                 "stdio" => McpTransportType::Stdio,
                 _ => McpTransportType::Http,
             };
 
-            let auth = if mcp_sub_matches
-                .get_one::<String>("auth_type")
-                .expect("auth_type has a default value")
-                != "none"
-            {
-                let auth_type = mcp_sub_matches
-                    .get_one::<String>("auth_type")
-                    .expect("auth_type checked above")
-                    .clone();
+            let auth_type_str = arg_helpers::get_str_with_default(mcp_sub_matches, "auth_type", "none");
+            let auth = if auth_type_str != "none" {
                 Some(McpAuthConfig {
-                    auth_type,
-                    token: mcp_sub_matches.get_one::<String>("auth_token").cloned(),
-                    username: mcp_sub_matches.get_one::<String>("username").cloned(),
-                    password: mcp_sub_matches.get_one::<String>("password").cloned(),
+                    auth_type: auth_type_str.to_string(),
+                    token: arg_helpers::get_optional_str(mcp_sub_matches, "auth_token").map(|s| s.to_string()),
+                    username: arg_helpers::get_optional_str(mcp_sub_matches, "username").map(|s| s.to_string()),
+                    password: arg_helpers::get_optional_str(mcp_sub_matches, "password").map(|s| s.to_string()),
                 })
             } else {
                 None
             };
 
-            let enabled = mcp_sub_matches.get_flag("enabled");
+            let enabled = arg_helpers::get_flag(mcp_sub_matches, "enabled");
 
             let config = McpServerConfig {
                 name,
-                url: url.clone(),
+                url: url.to_string(),
                 transport_type,
                 auth,
                 enabled,
@@ -429,7 +419,7 @@ async fn handle_mcp_command(
                 local_path: None,
             };
 
-            mcp_service.add_server(server_id.clone(), config);
+            mcp_service.add_server(server_id.to_string(), config);
             println!("✅ Added MCP server '{}' at {}", server_id, url);
 
             if enabled {
@@ -444,22 +434,18 @@ async fn handle_mcp_command(
         }
 
         "add-github" => {
-            let server_id = mcp_sub_matches
-                .get_one::<String>("server_id")
-                .expect("server_id is required by clap");
-            let github_url = mcp_sub_matches
-                .get_one::<String>("github_url")
-                .expect("github_url is required by clap");
-            let name = mcp_sub_matches.get_one::<String>("name").cloned();
-            let enabled = mcp_sub_matches.get_flag("enabled");
-            let skip_confirmation = mcp_sub_matches.get_flag("yes");
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
+            let github_url = arg_helpers::get_required_str(mcp_sub_matches, "github_url")?;
+            let name = arg_helpers::get_optional_str(mcp_sub_matches, "name").map(|s| s.to_string());
+            let enabled = arg_helpers::get_flag(mcp_sub_matches, "enabled");
+            let skip_confirmation = arg_helpers::get_flag(mcp_sub_matches, "yes");
 
             println!("🔄 Cloning MCP server from GitHub: {}", github_url);
 
             match mcp_service
                 .add_server_from_github(
-                    server_id.clone(),
-                    github_url.clone(),
+                    server_id.to_string(),
+                    github_url.to_string(),
                     name,
                     skip_confirmation,
                 )
@@ -492,7 +478,7 @@ async fn handle_mcp_command(
         }
 
         "remove" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
             if let Some(removed_config) = mcp_service.remove_server(server_id) {
                 println!(
                     "✅ Removed MCP server '{}' ({})",
@@ -506,8 +492,8 @@ async fn handle_mcp_command(
 
         "list" => {
             let servers = mcp_service.list_servers();
-            let json_output = mcp_sub_matches.get_flag("json");
-            let enabled_only = mcp_sub_matches.get_flag("enabled_only");
+            let json_output = arg_helpers::get_flag(mcp_sub_matches, "json");
+            let enabled_only = arg_helpers::get_flag(mcp_sub_matches, "enabled_only");
 
             if json_output {
                 let filtered_servers: std::collections::HashMap<&String, &McpServerConfig> =
@@ -555,19 +541,19 @@ async fn handle_mcp_command(
         }
 
         "enable" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
             mcp_service.toggle_server(server_id, true)?;
             println!("✅ Enabled MCP server '{}'", server_id);
         }
 
         "disable" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
             mcp_service.toggle_server(server_id, false)?;
             println!("🔴 Disabled MCP server '{}'", server_id);
         }
 
         "test" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
 
             println!("🔄 Testing MCP server '{}'...", server_id);
 
@@ -583,7 +569,7 @@ async fn handle_mcp_command(
         }
 
         "init" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
 
             println!("🔄 Initializing MCP server '{}'...", server_id);
 
@@ -599,8 +585,8 @@ async fn handle_mcp_command(
         }
 
         "tools" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            let json_output = mcp_sub_matches.get_flag("json");
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
+            let json_output = arg_helpers::get_flag(mcp_sub_matches, "json");
 
             println!("🔄 Fetching tools from MCP server '{}'...", server_id);
 
@@ -661,11 +647,11 @@ async fn handle_mcp_command(
         }
 
         "call" => {
-            let server_id = mcp_sub_matches.get_one::<String>("server_id").unwrap();
-            let tool_name = mcp_sub_matches.get_one::<String>("tool_name").unwrap();
-            let json_output = mcp_sub_matches.get_flag("json");
+            let server_id = arg_helpers::get_required_str(mcp_sub_matches, "server_id")?;
+            let tool_name = arg_helpers::get_required_str(mcp_sub_matches, "tool_name")?;
+            let json_output = arg_helpers::get_flag(mcp_sub_matches, "json");
 
-            let arguments = if let Some(args_str) = mcp_sub_matches.get_one::<String>("arguments") {
+            let arguments = if let Some(args_str) = arg_helpers::get_optional_str(mcp_sub_matches, "arguments") {
                 // Validate JSON with size limit (max 1MB for arguments)
                 Some(
                     input_sanitization::validate_json(args_str, 1024 * 1024)
@@ -724,15 +710,15 @@ async fn handle_mcp_command(
         }
 
         "setup" => {
-            let url = mcp_sub_matches.get_one::<String>("mcp_url").unwrap();
-            let auto_enable = mcp_sub_matches.get_flag("auto_enable");
+            let url = arg_helpers::get_required_str(mcp_sub_matches, "mcp_url")?;
+            let auto_enable = arg_helpers::get_flag(mcp_sub_matches, "auto_enable");
 
             println!("🚀 Setting up Solana MCP Server integration...");
             println!("   URL: {}", url);
 
             let config = McpServerConfig {
                 name: "Solana MCP Server".to_string(),
-                url: url.clone(),
+                url: url.to_string(),
                 transport_type: McpTransportType::Http,
                 auth: None,
                 enabled: auto_enable,
@@ -777,15 +763,13 @@ async fn handle_mcp_command(
         }
 
         "search" => {
-            let query = mcp_sub_matches
-                .get_one::<String>("query")
-                .expect("query is required by clap");
-            let transport = mcp_sub_matches.get_one::<String>("transport");
-            let enabled_only = mcp_sub_matches.get_flag("enabled_only");
-            let json_output = mcp_sub_matches.get_flag("json");
+            let query = arg_helpers::get_required_str(mcp_sub_matches, "query")?;
+            let transport = arg_helpers::get_optional_str(mcp_sub_matches, "transport");
+            let enabled_only = arg_helpers::get_flag(mcp_sub_matches, "enabled_only");
+            let json_output = arg_helpers::get_flag(mcp_sub_matches, "json");
 
             let transport_filter =
-                transport.and_then(|t| if t == "any" { None } else { Some(t.as_str()) });
+                transport.and_then(|t| if t == "any" { None } else { Some(t) });
             let results = mcp_service.search_servers(query, transport_filter, enabled_only);
 
             if results.is_empty() {
@@ -854,13 +838,9 @@ async fn handle_mcp_command(
         }
 
         "mount" => {
-            let tool_name = mcp_sub_matches
-                .get_one::<String>("tool_name")
-                .expect("tool_name is required by clap");
-            let host_path = mcp_sub_matches
-                .get_one::<String>("host_path")
-                .expect("host_path is required by clap");
-            let readonly = mcp_sub_matches.get_flag("readonly");
+            let tool_name = arg_helpers::get_required_str(mcp_sub_matches, "tool_name")?;
+            let host_path = arg_helpers::get_required_str(mcp_sub_matches, "host_path")?;
+            let readonly = arg_helpers::get_flag(mcp_sub_matches, "readonly");
 
             match crate::commands::mount::handle_mcp_mount(tool_name, host_path, readonly) {
                 Ok(_) => {}
@@ -872,12 +852,8 @@ async fn handle_mcp_command(
         }
 
         "unmount" => {
-            let tool_name = mcp_sub_matches
-                .get_one::<String>("tool_name")
-                .expect("tool_name is required by clap");
-            let host_path = mcp_sub_matches
-                .get_one::<String>("host_path")
-                .expect("host_path is required by clap");
+            let tool_name = arg_helpers::get_required_str(mcp_sub_matches, "tool_name")?;
+            let host_path = arg_helpers::get_required_str(mcp_sub_matches, "host_path")?;
 
             match crate::commands::mount::handle_mcp_unmount(tool_name, host_path) {
                 Ok(_) => {}
@@ -921,13 +897,14 @@ async fn handle_mcp_command(
 /// Handle OVSM command execution
 async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn std::error::Error>> {
     use crate::services::ovsm_service::OvsmService;
+    use crate::utils::arg_helpers;
 
     match matches.subcommand() {
         Some(("run", run_matches)) => {
-            let script = run_matches.get_one::<String>("script").expect("required");
-            let verbose = run_matches.get_count("verbose") > 0;
-            let debug = run_matches.get_flag("debug");
-            let json = run_matches.get_flag("json");
+            let script = arg_helpers::get_required_str(run_matches, "script")?;
+            let verbose = arg_helpers::get_count(run_matches, "verbose") > 0;
+            let debug = arg_helpers::get_flag(run_matches, "debug");
+            let json = arg_helpers::get_flag(run_matches, "json");
 
             let mut service = OvsmService::with_verbose(verbose).with_debug(debug);
 
@@ -995,8 +972,8 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("eval", eval_matches)) => {
-            let code = eval_matches.get_one::<String>("code").expect("required");
-            let json = eval_matches.get_flag("json");
+            let code = arg_helpers::get_required_str(eval_matches, "code")?;
+            let json = arg_helpers::get_flag(eval_matches, "json");
 
             let mut service = OvsmService::new();
 
@@ -1015,7 +992,7 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("check", check_matches)) => {
-            let script = check_matches.get_one::<String>("script").expect("required");
+            let script = arg_helpers::get_required_str(check_matches, "script")?;
 
             let service = OvsmService::with_verbose(true);
 
@@ -1032,9 +1009,9 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
             }
         }
         Some(("examples", examples_matches)) => {
-            let category = examples_matches.get_one::<String>("category");
-            let list = examples_matches.get_flag("list");
-            let show = examples_matches.get_one::<String>("show");
+            let category = arg_helpers::get_optional_str(examples_matches, "category");
+            let list = arg_helpers::get_flag(examples_matches, "list");
+            let show = arg_helpers::get_optional_str(examples_matches, "show");
 
             if list {
                 println!("📚 OVSM Example Categories:");
@@ -1055,7 +1032,7 @@ async fn handle_ovsm_command(matches: &clap::ArgMatches) -> Result<(), Box<dyn s
 
             if let Some(cat) = category {
                 println!("📚 OVSM Examples - Category: {}", cat);
-                match cat.as_str() {
+                match cat {
                     "basics" => {
                         println!("\n## Basic Variables and Arithmetic");
                         println!("```ovsm");
@@ -1422,16 +1399,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match sub_command {
         "balance" => {
-            let address = pubkey_of_checked(matches, "address")
-                .unwrap_or_else(|| config.default_signer.pubkey());
-
-            println!(
-                "{} has a balance of {}",
-                address,
-                Sol(rpc_client
-                    .get_balance_with_commitment(&address, config.commitment_config)?
-                    .value)
-            );
+            // Use the new balance command module
+            if let Err(e) = crate::commands::balance::execute(matches, &config, &rpc_client).await {
+                eprintln!("❌ Balance command failed: {}", e);
+                exit(1);
+            }
         }
         "svm" => {
             let Some((svm_sub_command, svm_sub_matches)) = matches.subcommand() else {
@@ -1726,23 +1698,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         "examples" => {
-            // Handle the examples command
-            if matches.get_flag("list_categories") {
-                // List all available example categories
-                println!("Available example categories:");
-                println!("  basic       - Basic Commands");
-                println!("  svm         - SVM Management");
-                println!("  node        - Node Deployment");
-                println!("  monitoring  - Node Monitoring and Management");
-                println!("  workflow    - Common Workflows");
-                println!("\nUse 'osvm examples --category <name>' to show examples for a specific category.");
-            } else if let Some(category) = matches.get_one::<String>("category").map(|s| s.as_str())
-            {
-                // Display examples for a specific category
-                examples::display_category_by_name(category);
-            } else {
-                // Display all examples
-                examples::display_all_examples();
+            // Use the new examples command module
+            if let Err(e) = crate::commands::examples::execute(matches).await {
+                eprintln!("❌ Examples command failed: {}", e);
+                exit(1);
             }
         }
         "rpc-manager" => {
