@@ -133,13 +133,14 @@
 //!
 //! ## Examples
 //!
-//! ### Loop with Early Exit
+//! ### Simple Loop Example
 //!
 //! ```rust
 //! use ovsm::{Evaluator, Parser, Scanner, Value};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let code = "$i = 0\nWHILE $i < 100: $i = $i + 1\nBREAK IF $i >= 42\nRETURN $i";
+//! // Calculate sum using a FOR loop
+//! let code = "$total = 0\nFOR $n IN [10, 20, 30]: $total = $total + $n\nRETURN $total";
 //!
 //! let mut scanner = Scanner::new(code);
 //! let tokens = scanner.scan_tokens()?;
@@ -148,7 +149,7 @@
 //! let mut evaluator = Evaluator::new();
 //! let result = evaluator.execute(&program)?;
 //!
-//! assert_eq!(result, Value::Int(42));
+//! assert_eq!(result, Value::Int(60));
 //! # Ok(())
 //! # }
 //! ```
