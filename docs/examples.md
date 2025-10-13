@@ -153,19 +153,19 @@ Examples for different RPC node types and configurations.
 
 ```bash
 # Deploy single Sonic RPC instance
-osvm rpc-manager sonic \
+osvm rpc sonic \
   --host rpc@example.com \
   --network mainnet
 
 # Deploy Sonic RPC cluster
-osvm rpc-manager sonic \
+osvm rpc sonic \
   --host rpc@example.com \
   --network mainnet \
   --replicas 3 \
   --monitoring
 
 # Deploy with custom configuration
-osvm rpc-manager sonic \
+osvm rpc sonic \
   --host rpc@example.com \
   --network mainnet \
   --config sonic-config.yaml
@@ -175,15 +175,15 @@ osvm rpc-manager sonic \
 
 ```bash
 # Start local test validator
-osvm rpc-manager test
+osvm rpc test
 
 # Start with custom settings
-osvm rpc-manager test \
+osvm rpc test \
   --faucet-sol 1000 \
   --reset
 
 # Start local RPC server
-osvm rpc-manager local \
+osvm rpc local \
   --port 8899 \
   --websocket-port 8900
 ```
@@ -192,15 +192,15 @@ osvm rpc-manager local \
 
 ```bash
 # Query network information
-osvm rpc-manager query-solana --network mainnet
+osvm rpc query-solana --network mainnet
 
 # Continuous monitoring
-osvm rpc-manager query-solana \
+osvm rpc query-solana \
   --network mainnet \
   --continuous
 
 # Save query results
-osvm rpc-manager query-solana \
+osvm rpc query-solana \
   --network mainnet \
   --save-to network-info.json
 ```
@@ -461,7 +461,7 @@ flowchart LR
 
 ```bash
 # 1. Setup local development environment
-osvm rpc-manager test --reset
+osvm rpc test --reset
 osvm config set --url http://localhost:8899
 
 # 2. Build and test program
@@ -531,7 +531,7 @@ osvm hotswap status --node validator-001
 
 ```bash
 # 1. Deploy RPC cluster
-osvm rpc-manager sonic \
+osvm rpc sonic \
   --host rpc@example.com \
   --network mainnet \
   --replicas 3 \
@@ -751,5 +751,5 @@ osvm system-update --schedule weekly --maintenance-window "02:00-04:00"
 - [SVM Management](svm-management.md) - SVM management details
 - [Node Management](node-management.md) - Node management features
 - [SSH Deployment](ssh-deployment.md) - Remote deployment guide
-- [RPC Manager](rpc-manager.md) - RPC node management
+- [RPC Manager](rpc.md) - RPC node management
 - [Configuration](configuration.md) - Configuration options

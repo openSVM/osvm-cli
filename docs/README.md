@@ -44,7 +44,7 @@ Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Sola
 - [**SVM Management**](svm-management.md) - Deploy and manage Solana Virtual Machines
 - [**Node Management**](node-management.md) - Validator and RPC node operations
 - [**SSH Deployment**](ssh-deployment.md) - Remote deployment capabilities
-- [**RPC Manager**](rpc-manager.md) - Comprehensive RPC node management
+- [**RPC Manager**](rpc.md) - Comprehensive RPC node management
 
 ### 🤖 AI Integration
 - [**AI Endpoint Configuration**](ai-endpoint-configuration.md) - Configure AI providers and endpoints

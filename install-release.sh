@@ -100,7 +100,7 @@ fi
 echo ""
 echo "📚 Additional Commands:"
 echo "   osvm --help                    # Show help"
-echo "   osvm rpc-manager test --status # Check test RPC status"
-echo "   osvm rpc-manager devnet --help # Devnet RPC options"
+echo "   osvm rpc test --status # Check test RPC status"
+echo "   osvm rpc devnet --help # Devnet RPC options"
 echo "   osvm diagnostics              # Run system diagnostics"
 tt

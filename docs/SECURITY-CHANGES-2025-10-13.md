@@ -211,7 +211,7 @@ From https://docs.anza.xyz/clusters/available:
 cargo build --release
 
 # Test devnet RPC with --no-port-check
-./target/release/osvm rpc-manager devnet
+./target/release/osvm rpc devnet
 
 # Verify it connects and doesn't fail on port checks
 # Expected: Should successfully start syncing without UDP port errors

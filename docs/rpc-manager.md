@@ -10,16 +10,16 @@ OSVM CLI's RPC Manager supports multiple RPC node types optimized for different 
 
 ```bash
 # Deploy Sonic RPC node
-osvm rpc-manager sonic --host user@example.com --network mainnet
+osvm rpc sonic --host user@example.com --network mainnet
 
 # Start local test validator
-osvm rpc-manager test
+osvm rpc test
 
 # Query Solana network information
-osvm rpc-manager query-solana --network mainnet
+osvm rpc query-solana --network mainnet
 
 # Start local RPC development environment
-osvm rpc-manager local --port 8899
+osvm rpc local --port 8899
 ```
 
 ## Architecture
@@ -92,7 +92,7 @@ flowchart TD
 High-performance RPC nodes using Docker containers with optimized configurations.
 
 ```bash
-osvm rpc-manager sonic [OPTIONS]
+osvm rpc sonic [OPTIONS]
 ```
 
 **Features:**
@@ -112,7 +112,7 @@ osvm rpc-manager sonic [OPTIONS]
 **Example:**
 ```bash
 # Deploy Sonic RPC cluster
-osvm rpc-manager sonic \
+osvm rpc sonic \
   --host rpc@example.com \
   --network mainnet \
   --replicas 3 \
@@ -124,7 +124,7 @@ osvm rpc-manager sonic \
 Network query service for retrieving Solana network information and statistics.
 
 ```bash
-osvm rpc-manager query-solana [OPTIONS]
+osvm rpc query-solana [OPTIONS]
 ```
 
 **Features:**
@@ -145,7 +145,7 @@ osvm rpc-manager query-solana [OPTIONS]
 Local development RPC server for testing and development.
 
 ```bash
-osvm rpc-manager local [OPTIONS]
+osvm rpc local [OPTIONS]
 ```
 
 **Features:**
@@ -166,7 +166,7 @@ osvm rpc-manager local [OPTIONS]
 Local test validator with built-in RPC functionality.
 
 ```bash
-osvm rpc-manager test [OPTIONS]
+osvm rpc test [OPTIONS]
 ```
 
 **Features:**
@@ -187,7 +187,7 @@ osvm rpc-manager test [OPTIONS]
 Production devnet RPC node with auto-repair capabilities.
 
 ```bash
-osvm rpc-manager devnet [OPTIONS]
+osvm rpc devnet [OPTIONS]
 ```
 
 **Features:**
@@ -208,7 +208,7 @@ sequenceDiagram
     participant MON as Monitoring
     participant NET as Solana Network
     
-    U->>CLI: rpc-manager sonic --network mainnet
+    U->>CLI: rpc sonic --network mainnet
     CLI->>DEPLOY: Prepare deployment
     DEPLOY->>SERVICE: Configure RPC service
     SERVICE->>NET: Connect to network
@@ -396,7 +396,7 @@ Development network capabilities:
 **API Key Authentication:**
 ```bash
 # Generate API key for RPC access
-osvm rpc-manager generate-key --service sonic-rpc
+osvm rpc generate-key --service sonic-rpc
 
 # Use API key in requests
 curl -H "Authorization: Bearer <API_KEY>" \

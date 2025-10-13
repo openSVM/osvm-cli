@@ -52,7 +52,7 @@ osvm --version
 ### Quick Deploy RPC Node (Process Runtime)
 ```bash
 # Start local RPC node (development)
-osvm rpc-manager local
+osvm rpc local
 
 # Your RPC node is now running on http://localhost:8899
 ```

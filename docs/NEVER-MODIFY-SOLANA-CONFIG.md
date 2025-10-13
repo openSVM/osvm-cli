@@ -51,7 +51,7 @@ solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
 
 # Step 2: Use explicit --keypair flag in ALL commands
 osvm --keypair "$TMP_KEYPAIR" balance
-osvm rpc-manager devnet --keypair "$TMP_KEYPAIR" --background
+osvm rpc devnet --keypair "$TMP_KEYPAIR" --background
 cargo run -- --keypair "$TMP_KEYPAIR" <command>
 
 # Step 3: Clean up when done
@@ -91,7 +91,7 @@ fn test_with_keypair() {
 solana-keygen new --force --outfile ~/.config/solana/id.json
 
 # ❌ DANGEROUS - Uses default location (may fail and tempt overwriting)
-osvm rpc-manager devnet
+osvm rpc devnet
 
 # ❌ WRONG - Modifying config without explicit permission
 solana config set --keypair ~/.config/solana/id.json

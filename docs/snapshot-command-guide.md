@@ -513,6 +513,6 @@ For issues or feature requests:
 ## See Also
 
 - `osvm doctor` - System health check
-- `osvm rpc-manager` - RPC node management
+- `osvm rpc` - RPC node management
 - `osvm audit` - Security auditing
 - `osvm mcp` - MCP server integration

@@ -91,7 +91,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "svm"
             | "nodes"
             | "examples"
-            | "rpc-manager"
+            | "rpc"
             | "deploy"
             | "doctor"
             | "audit"
@@ -1750,7 +1750,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 examples::display_all_examples();
             }
         }
-        "rpc-manager" => {
+        "rpc" => {
             // Renamed from "rpc"
             let Some((rpc_sub_command, rpc_sub_matches)) = matches.subcommand() else {
                 eprintln!("No RPC subcommand provided");
@@ -2227,7 +2227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!(
                             "💡 Check the terminal where the validator was started for output."
                         );
-                        println!("🔧 Use 'osvm rpc-manager test --status' to check health.");
+                        println!("🔧 Use 'osvm rpc test --status' to check health.");
                     } else {
                         // Start test validator
                         println!("🚀 Starting local test validator");
@@ -2281,9 +2281,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 faucet_port
                                             );
                                             println!();
-                                            println!("🔧 Use 'osvm rpc-manager test --status' to check status");
+                                            println!("🔧 Use 'osvm rpc test --status' to check status");
                                             println!(
-                                                "🛑 Use 'osvm rpc-manager test --stop' to stop"
+                                                "🛑 Use 'osvm rpc test --stop' to stop"
                                             );
 
                                             // Test RPC after a moment

@@ -31,7 +31,7 @@ solana-keygen new --no-bip39-passphrase --outfile "$TMP_KEYPAIR"
 
 # ✅ CORRECT - Always use explicit --keypair flag
 osvm --keypair "$TMP_KEYPAIR" balance
-osvm rpc-manager devnet --keypair "$TMP_KEYPAIR" --background
+osvm rpc devnet --keypair "$TMP_KEYPAIR" --background
 cargo run -- --keypair "$TMP_KEYPAIR" <command>
 
 # ✅ CORRECT - Clean up temporary keypair when done
@@ -53,7 +53,7 @@ let config = Config {
 solana-keygen new --force --outfile ~/.config/solana/id.json
 
 # ❌ DANGEROUS - Uses default keypair location (may fail and tempt overwriting)
-osvm rpc-manager devnet
+osvm rpc devnet
 
 # ❌ WRONG - Relies on default configuration
 cargo run -- balance

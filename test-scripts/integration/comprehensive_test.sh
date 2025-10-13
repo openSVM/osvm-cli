@@ -507,7 +507,7 @@ run_test 48 "Multiple output formats" \
     "true"
 
 run_test 49 "RPC manager help" \
-    "./target/release/osvm rpc-manager --help" \
+    "./target/release/osvm rpc --help" \
     "help" \
     "false"
 

@@ -23,7 +23,7 @@ solana-keygen new --no-bip39-passphrase --outfile /tmp/test-keypair.json
 osvm --keypair /tmp/test-keypair.json <command>
 
 # CORRECT - Use explicit test keypair
-osvm rpc-manager devnet --keypair /tmp/test-keypair.json
+osvm rpc devnet --keypair /tmp/test-keypair.json
 
 # WRONG - Never do this
 solana-keygen new --force --outfile ~/.config/solana/id.json  # ❌ NEVER!
