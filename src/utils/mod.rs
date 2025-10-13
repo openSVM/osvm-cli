@@ -11,6 +11,8 @@ use serde::de::DeserializeOwned;
 use std::{fs::File, io, path::Path};
 
 // UI and display utilities
+/// Safe argument extraction helpers for CLI parsing
+pub mod arg_helpers;
 /// Agent chat interface using cursive-multiplex with MCP tools
 pub mod agent_chat;
 /// MicroVM-enabled agent chat with ephemeral tool execution
@@ -20,6 +22,8 @@ pub mod agent_chat_tests;
 pub mod agent_chat_v2;
 /// CLI-based agent execution without UI
 pub mod agent_cli;
+/// Centralized CLI error type for consistent error handling
+pub mod cli_error;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage
