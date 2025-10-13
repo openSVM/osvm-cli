@@ -569,7 +569,10 @@ osvm chat
 osvm examples --list-categories
 ```
 
-**📚 For more examples, see [docs/examples.md](docs/examples.md)**
+**📚 For more information:**
+- **[Quick Start Guide](docs/QUICK_START_GUIDE.md)** - Complete beginner tutorial
+- **[Examples](docs/examples.md)** - Comprehensive command examples
+- **[Documentation](docs/README.md)** - Full documentation index
 
 ---
 
@@ -753,9 +756,10 @@ Traditional Stack          OSVM Unikernel         OSVM MicroVM
 <td>
 
 ### 🚀 **Getting Started**
-- [Quick Start](#-quick-start) - 5 minute setup
-- [Production Guide](PRODUCTION_DEPLOYMENT_GUIDE.md)
-- [Examples](examples/) - Working demos
+- [Quick Start Guide](docs/QUICK_START_GUIDE.md) - **NEW!** 15-minute tutorial
+- [Common Workflows](#-common-workflows) - Practical examples
+- [Full Examples](docs/examples.md) - Comprehensive command reference
+- [Production Guide](PRODUCTION_DEPLOYMENT_GUIDE.md) - Production deployment
 
 </td>
 </tr>

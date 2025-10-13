@@ -5,8 +5,9 @@ Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Sola
 ## 🚀 Quick Access
 
 - [**🏗️ REVOLUTIONARY ARCHITECTURE**](../Architecture.md) - **Must-read 2,150-line deep dive into microVM/unikernel security**
+- [**⚡ Quick Start Guide**](QUICK_START_GUIDE.md) - **NEW! Get started in 15 minutes**
 - [**📖 Main Documentation Website**](index.html) - Interactive terminal-style documentation
-- [**⚡ Getting Started**](#quick-start) - Begin your OSVM journey
+- [**📚 Examples**](examples.md) - Comprehensive command examples and workflows
 - [**📚 API Reference**](#api-reference) - Complete command reference
 - [**🧩 Plugin Development**](#plugin-development) - Extend OSVM functionality
 
@@ -41,6 +42,8 @@ Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Sola
 - ✅ Hardware-enforced isolation (KVM, SEV, SGX)
 
 ### 🏗️ Core Features
+- [**Quick Start Guide**](QUICK_START_GUIDE.md) - **NEW! Complete beginner-friendly guide**
+- [**Examples**](examples.md) - Comprehensive command examples and workflows
 - [**SVM Management**](svm-management.md) - Deploy and manage Solana Virtual Machines
 - [**Node Management**](node-management.md) - Validator and RPC node operations
 - [**SSH Deployment**](ssh-deployment.md) - Remote deployment capabilities
