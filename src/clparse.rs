@@ -221,7 +221,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
         )
         // RPC management commands
         .subcommand(
-            Command::new("rpc-manager") // Renamed from "rpc" to "rpc-manager"
+            Command::new("rpc")
                 .about("Manage RPC nodes (local/remote)")
                 .arg_required_else_help(true)
                 .subcommand( // Moved sonic to be first
