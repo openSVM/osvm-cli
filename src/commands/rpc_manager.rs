@@ -1,6 +1,6 @@
-//! RPC Manager command handlers
+//! RPC command handlers
 //!
-//! This module handles all rpc-manager subcommands including:
+//! This module handles all rpc subcommands including:
 //! - sonic: Deploy Sonic RPC via SSH
 //! - query-solana: Query Solana network
 //! - local: Start local RPC

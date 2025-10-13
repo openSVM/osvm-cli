@@ -1271,8 +1271,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return handle_ovsm_command(sub_matches).await;
     }
 
-    // Handle RPC manager early - it generates its own keypairs and doesn't need default config
-    if sub_command == "rpc-manager" {
+    // Handle RPC early - it generates its own keypairs and doesn't need default config
+    if sub_command == "rpc" {
         return commands::rpc_manager::handle_rpc_manager(sub_matches).await.map_err(|e| e.into());
     }
 
