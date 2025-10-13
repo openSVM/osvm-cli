@@ -1000,7 +1000,7 @@ osvm snapshot export \
 osvm snapshot export \
   --snapshot-dir /path/to/snapshot \
   --output whales.json \
-  --min-balance 1000
+  --filter-min-balance 1000
 ```
 
 #### Snapshot Statistics
@@ -1057,9 +1057,8 @@ osvm snapshot stats \
 # Find high-value accounts
 osvm snapshot read \
   --snapshot-dir /path/to/snapshot \
-  --min-balance 1000 \
-  --limit 100 \
-  --sort balance
+  --filter-min-balance 1000 \
+  --limit 100
 
 # Expected output:
 # 🐋 Top 100 Accounts by Balance
@@ -1089,13 +1088,13 @@ osvm snapshot read \
 
 # Find whales with data (smart contracts)
 osvm snapshot read \
-  --min-balance 1000 \
-  --min-data-size 100
+  --filter-min-balance 1000 \
+  --filter-min-size 100
 
 # Find token whales
 osvm snapshot read \
   --filter-owner TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA \
-  --min-balance 1000
+  --filter-min-balance 1000
 ```
 
 #### Account Search
@@ -1103,8 +1102,8 @@ osvm snapshot read \
 ```bash
 # Find specific account
 osvm snapshot find \
-  --snapshot-dir /path/to/snapshot \
-  --pubkey DezXAZ...
+  DezXAZ... \
+  --snapshot-dir /path/to/snapshot
 
 # Expected output:
 # 🔍 Account Found
@@ -1131,7 +1130,7 @@ osvm snapshot read \
 
 # Search by data size
 osvm snapshot read \
-  --min-data-size 1000000 \
+  --filter-min-size 1000000 \
   --limit 50
 ```
 
@@ -1140,8 +1139,8 @@ osvm snapshot read \
 ```bash
 # Compare two snapshots
 osvm snapshot compare \
-  --snapshot-dir /path/to/snapshot1 \
-  --other /path/to/snapshot2
+  /path/to/snapshot1 \
+  /path/to/snapshot2
 
 # Expected output:
 # 📊 Snapshot Comparison
@@ -1171,12 +1170,11 @@ osvm snapshot compare \
 # 1. 2aB3c...xyz789: -15,000 SOL
 # 2. 4dE5f...uvw456: -12,000 SOL
 
-# Compare with detailed diff
+# Compare with JSON output
 osvm snapshot compare \
-  --snapshot-dir /path/to/snapshot1 \
-  --other /path/to/snapshot2 \
-  --detailed \
-  --output comparison.json
+  /path/to/snapshot1 \
+  /path/to/snapshot2 \
+  --json > comparison.json
 ```
 
 #### Snapshot Validation
@@ -1184,37 +1182,6 @@ osvm snapshot compare \
 ```bash
 # Validate snapshot integrity
 osvm snapshot validate --snapshot-dir /path/to/snapshot
-
-# Expected output:
-# ✅ Snapshot Validation
-# =====================
-# 
-# Structure Check:
-# ✅ Directory exists
-# ✅ Metadata file present
-# ✅ Account files readable
-# 
-# Content Validation:
-# ✅ Successfully parsed: 1,234,567/1,234,567 accounts (100%)
-# ⚠️  Zero-balance with data: 1,234 accounts
-# ✅ Balance validation: All accounts valid
-# ✅ Owner validation: All owners valid
-# 
-# Integrity Check:
-# ✅ No corruption detected
-# ✅ All checksums valid
-# 
-# Warnings:
-# - Found 1,234 zero-balance accounts with non-zero data
-#   (This is normal for rent-exempt accounts)
-# 
-# Summary:
-# ✅ Snapshot is valid and healthy
-
-# Validate with auto-repair
-osvm snapshot validate \
-  --snapshot-dir /path/to/snapshot \
-  --auto-repair
 ```
 
 ### CI/CD Integration Examples

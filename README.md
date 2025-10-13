@@ -491,7 +491,7 @@ osvm snapshot export \
 # 2. Find high-value accounts (whale hunting)
 osvm snapshot read \
   --snapshot-dir /path/to/snapshot \
-  --min-balance 1000 \
+  --filter-min-balance 1000 \
   --limit 100
 
 # Expected output:
