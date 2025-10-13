@@ -196,6 +196,7 @@ jobs:
 
       - name: Create index.html
         run: |
+          mkdir -p target/doc
           echo '<meta http-equiv="refresh" content="0; url=ovsm/index.html">' > target/doc/index.html
         working-directory: crates/ovsm
 
