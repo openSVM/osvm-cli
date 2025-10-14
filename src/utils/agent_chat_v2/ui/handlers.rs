@@ -92,26 +92,55 @@ pub fn copy_last_message(siv: &mut Cursive, state: AdvancedChatState) {
 }
 
 pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
-    if let Some(session) = state.get_active_session() {
-        let session_id = session.id;
+    // Show confirmation dialog before deleting
+    siv.add_layer(
+        Dialog::text("Are you sure you want to delete the last message?\nThis action cannot be undone.")
+            .title("⚠ Confirm Delete")
+            .button("Yes, Delete", move |s| {
+                s.pop_layer(); // Close confirmation dialog
 
-        // First, clear any processing messages that might be stuck
-        if let Err(e) = state.remove_last_processing_message(session_id) {
-            error!("Failed to remove processing message: {}", e);
-        }
+                if let Some(session) = state.get_active_session() {
+                    let session_id = session.id;
 
-        // Then delete the last actual message
-        if let Ok(mut sessions) = state.sessions.write() {
-            if let Some(session) = sessions.get_mut(&session_id) {
-                if !session.messages.is_empty() {
-                    session.messages.pop();
+                    // First, clear any processing messages that might be stuck
+                    if let Err(e) = state.remove_last_processing_message(session_id) {
+                        error!("Failed to remove processing message: {}", e);
+                    }
+
+                    // Then delete the last actual message
+                    if let Ok(mut sessions) = state.sessions.write() {
+                        if let Some(session) = sessions.get_mut(&session_id) {
+                            if !session.messages.is_empty() {
+                                session.messages.pop();
+
+                                // Show success feedback
+                                s.add_layer(
+                                    Dialog::info("✓ Message deleted successfully")
+                                        .title("Deleted")
+                                        .button("OK", |s| {
+                                            s.pop_layer();
+                                        })
+                                );
+                            } else {
+                                s.add_layer(
+                                    Dialog::info("No messages to delete")
+                                        .title("Info")
+                                        .button("OK", |s| {
+                                            s.pop_layer();
+                                        })
+                                );
+                            }
+                        }
+                    }
+
+                    // Update UI after all changes
+                    update_ui_displays(s);
                 }
-            }
-        }
-
-        // Update UI after all changes
-        update_ui_displays(siv);
-    }
+            })
+            .button("Cancel", |s| {
+                s.pop_layer();
+            })
+    );
 }
 
 pub fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
@@ -251,11 +280,91 @@ pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: Advan
 }
 
 pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState) {
-    if text.trim().is_empty() {
-        return;
-    }
+    use super::input_validation::{validate_input, ValidationResult, contains_sensitive_pattern, get_sensitive_warning};
 
+    // Validate input first
+    match validate_input(text) {
+        ValidationResult::Empty | ValidationResult::OnlyWhitespace => {
+            // Silently ignore empty input
+            return;
+        }
+        ValidationResult::TooLong { text: truncated, max_length } => {
+            siv.add_layer(
+                Dialog::text(format!(
+                    "⚠️ Message Too Long\n\n\
+                    Your message is too long ({} characters).\n\
+                    Maximum allowed: {} characters.\n\n\
+                    The message has been truncated. Please shorten it.",
+                    text.len(),
+                    max_length
+                ))
+                .title("Input Validation")
+                .button("OK", |s| {
+                    s.pop_layer();
+                })
+            );
+            return;
+        }
+        ValidationResult::TooManyNewlines { max_lines, .. } => {
+            siv.add_layer(
+                Dialog::text(format!(
+                    "⚠️ Too Many Line Breaks\n\n\
+                    Your message has too many line breaks.\n\
+                    Maximum allowed: {} lines.\n\n\
+                    Please reduce the number of line breaks.",
+                    max_lines
+                ))
+                .title("Input Validation")
+                .button("OK", |s| {
+                    s.pop_layer();
+                })
+            );
+            return;
+        }
+        ValidationResult::ContainsBinaryData => {
+            siv.add_layer(
+                Dialog::text(
+                    "⚠️ Invalid Characters\n\n\
+                    Your message contains invalid or binary characters.\n\
+                    Please use only text characters."
+                )
+                .title("Input Validation")
+                .button("OK", |s| {
+                    s.pop_layer();
+                })
+            );
+            return;
+        }
+        ValidationResult::Valid(validated_text) => {
+            // Check for sensitive data
+            if contains_sensitive_pattern(&validated_text) {
+                let text_clone = validated_text.clone();
+                let state_clone = state.clone();
+                siv.add_layer(
+                    Dialog::text(get_sensitive_warning())
+                        .title("⚠️ Sensitive Data Warning")
+                        .button("Cancel", |s| {
+                            s.pop_layer();
+                        })
+                        .button("Send Anyway", move |s| {
+                            s.pop_layer();
+                            process_validated_input(s, &text_clone, state_clone.clone());
+                        })
+                );
+                return;
+            }
+
+            // Process validated input
+            process_validated_input(siv, &validated_text, state);
+        }
+    }
+}
+
+fn process_validated_input(siv: &mut Cursive, text: &str, state: AdvancedChatState) {
     let user_message = text.to_string();
+
+    // Add to history before processing
+    state.add_to_history(user_message.clone());
 
     // Hide suggestions when sending a message
     if let Ok(mut vis) = state.suggestions_visible.write() {
@@ -410,18 +519,51 @@ pub fn stop_recording(siv: &mut Cursive) {
 }
 
 pub fn clear_current_chat(siv: &mut Cursive) {
-    siv.with_user_data(|state: &mut AdvancedChatState| {
-        if let Some(session_id) = state.active_session_id.read().ok().and_then(|id| *id) {
-            if let Ok(mut sessions) = state.sessions.write() {
-                if let Some(session) = sessions.get_mut(&session_id) {
-                    session.messages.clear();
-                    session.add_message(ChatMessage::System("Chat cleared".to_string()));
-                }
-            }
-        }
-    });
+    // Show confirmation dialog before clearing
+    siv.add_layer(
+        Dialog::text(
+            "Are you sure you want to clear all messages in this chat?\n\
+            This action cannot be undone.\n\n\
+            💡 Tip: Use 'Export Chat' first if you want to save the conversation."
+        )
+        .title("⚠ Confirm Clear Chat")
+        .button("Yes, Clear All", |s| {
+            s.pop_layer(); // Close confirmation dialog
 
-    update_ui_displays(siv);
+            let cleared = s.with_user_data(|state: &mut AdvancedChatState| {
+                if let Some(session_id) = state.active_session_id.read().ok().and_then(|id| *id) {
+                    if let Ok(mut sessions) = state.sessions.write() {
+                        if let Some(session) = sessions.get_mut(&session_id) {
+                            let message_count = session.messages.len();
+                            session.messages.clear();
+                            session.add_message(ChatMessage::System(format!(
+                                "Chat cleared ({} messages removed)",
+                                message_count
+                            )));
+                            return Some(message_count);
+                        }
+                    }
+                }
+                None
+            });
+
+            update_ui_displays(s);
+
+            // Show success feedback
+            if let Some(Some(count)) = cleared {
+                s.add_layer(
+                    Dialog::info(format!("✓ Chat cleared successfully\n{} messages removed", count))
+                        .title("Cleared")
+                        .button("OK", |s| {
+                            s.pop_layer();
+                        })
+                );
+            }
+        })
+        .button("Cancel", |s| {
+            s.pop_layer();
+        })
+    );
 }
 
 pub fn show_settings(siv: &mut Cursive) {
@@ -552,52 +694,124 @@ pub fn export_chat(siv: &mut Cursive) {
 }
 
 pub fn show_advanced_help(siv: &mut Cursive) {
-    let help_text = "OSVM Advanced Agent Chat Help\n\n\
-        Keyboard Shortcuts:\n\
-        • Tab - Switch between chat list and input\n\
-        • Shift+Tab - Reverse navigation\n\
-        • F10 - Context menu (Copy, Retry, Clear)\n\
-        • F12 - Take screenshot of current window\n\
-        • Ctrl+1-5 - Insert suggestions (when visible)\n\
-        • Alt+1-5 - Alternative suggestion insertion\n\
-        • Alt+R - Retry last message\n\
-        • Alt+C - Copy last message\n\
-        • Alt+D - Delete last message\n\
-        • Alt+F - Fork conversation\n\
-        • Alt+X - Emergency clear processing\n\
-        • Alt+M - Switch to standard mode\n\
-        • Esc - Hide suggestions\n\n\
-        Agent Controls:\n\
-        • Run - Resume agent processing\n\
-        • Pause - Pause agent operations\n\
-        • Stop - Current agent task\n\n\
-        Recording:\n\
-        • Record - Start session recording\n\
-        • Stop Rec - Stop recording\n\n\
-        Status Icons:\n\
-        • * Idle  ~ Thinking  ~ Planning\n\
-        • > Executing  . Waiting  || Paused  ! Error\n\n\
-        Features:\n\
-        • AI-powered tool planning and execution\n\
-        • Background agent processing\n\
-        • Multi-chat session support\n\
-        • Session recording and export\n\
-        • MCP server integration for blockchain tools";
+    let help_text = "🚀 OSVM Advanced Agent Chat - Complete Guide\n\n\
+        ═══════════════════════════════════════════════════\n\
+        📋 KEYBOARD SHORTCUTS QUICK REFERENCE\n\
+        ═══════════════════════════════════════════════════\n\n\
+        🔤 Navigation:\n\
+        • Tab             → Switch between chat list and input\n\
+        • Shift+Tab       → Reverse navigation\n\
+        • ↑/↓ (planned)   → Navigate message history\n\n\
+        🎯 Actions:\n\
+        • Alt+R           → Retry last message\n\
+        • Alt+C           → Copy last message to clipboard\n\
+        • Alt+D           → Delete last message (with confirmation)\n\
+        • Alt+F           → Fork/branch current conversation\n\
+        • Alt+X           → Emergency clear stuck processing\n\
+        • Alt+M           → Switch to standard mode info\n\n\
+        💡 Suggestions:\n\
+        • Ctrl+1-5        → Insert suggestion at cursor (primary)\n\
+        • Alt+1-5         → Insert suggestion at cursor (alternate)\n\
+        • Esc             → Hide suggestions panel\n\n\
+        📸 Utilities:\n\
+        • F10             → Open context menu (Copy, Retry, Clear)\n\
+        • F12             → Take screenshot of chat window\n\
+        • Ctrl+Q          → Quit application\n\n\
+        ═══════════════════════════════════════════════════\n\
+        🤖 AGENT CONTROLS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Run Button      → Resume/start agent processing\n\
+        • Pause Button    → Temporarily pause agent\n\
+        • Stop Button     → Stop current agent task\n\n\
+        ═══════════════════════════════════════════════════\n\
+        ⏺ SESSION RECORDING\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Record Button   → Start recording session to file\n\
+        • Stop Rec Button → Stop recording and save\n\
+        • Export Chat     → Save current chat as JSON\n\n\
+        ═══════════════════════════════════════════════════\n\
+        🎨 STATUS ICONS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        Agent States:\n\
+        • ◉ Idle          → Ready for new tasks\n\
+        • ◐ Thinking      → Analyzing your request\n\
+        • ◑ Planning      → Creating execution plan\n\
+        • ▶ Executing     → Running tools/commands\n\
+        • ◯ Waiting       → Awaiting response\n\
+        • ⏸ Paused        → Operations suspended\n\
+        • ⚠ Error         → Something went wrong\n\n\
+        ═══════════════════════════════════════════════════\n\
+        ✨ ADVANCED FEATURES\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • 🧠 AI-powered tool planning and execution\n\
+        • 🔄 Background agent processing\n\
+        • 💬 Multi-session chat support\n\
+        • 📦 MCP server integration (blockchain tools)\n\
+        • 🎨 Multiple theme support (/theme commands)\n\
+        • 🔧 Direct tool testing from MCP panel\n\
+        • 📊 Real-time system status monitoring\n\n\
+        ═══════════════════════════════════════════════════\n\
+        💬 MESSAGE ACTIONS (shown under each message)\n\
+        ═══════════════════════════════════════════════════\n\n\
+        User Messages:\n\
+        • [R]etry  → Send message again\n\
+        • [C]opy   → Copy to clipboard\n\
+        • [D]elete → Remove message (with confirmation)\n\n\
+        Agent Messages:\n\
+        • [F]ork   → Branch conversation from this point\n\
+        • [C]opy   → Copy to clipboard\n\
+        • [R]etry  → Request new response\n\
+        • [D]elete → Remove message (with confirmation)\n\n\
+        ═══════════════════════════════════════════════════\n\
+        🆘 TROUBLESHOOTING\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Agent stuck? → Use Alt+X to emergency clear\n\
+        • UI frozen? → Terminal may be too small (min 60x15)\n\
+        • No MCP tools? → Run 'osvm mcp setup' first\n\
+        • Missing features? → Check 'osvm chat --help'\n\n\
+        Press F1 or '?' key to show this help anytime!";
+
+    let mut help_layout = LinearLayout::vertical();
+    help_layout.add_child(
+        ScrollView::new(TextView::new(help_text))
+            .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToBottom)
+    );
 
     siv.add_layer(
-        Dialog::text(help_text)
-            .title("Advanced Help")
+        Dialog::around(help_layout)
+            .title("📖 Complete Help & Keyboard Shortcuts")
             .button("Got it!", |s| {
                 s.pop_layer();
             })
-            .button("Print Shortcuts", |s| {
-                // Print shortcuts to console for reference
-                println!("\n=== OSVM Advanced Chat Keyboard Shortcuts ===");
-                println!("Tab/Shift+Tab: Navigate UI  |  F10: Context Menu  |  F12: Screenshot");
-                println!("Ctrl/Alt+1-5: Suggestions  |  Alt+R/C/D/F: Actions");
-                println!("Alt+X: Emergency Clear  |  Esc: Hide Suggestions");
-                println!("================================================\n");
-            }),
+            .button("📋 Print to Console", |s| {
+                // Print concise shortcuts to console for quick reference
+                println!("\n╔════════════════════════════════════════════════════════════╗");
+                println!("║  🚀 OSVM Advanced Chat - Quick Keyboard Reference        ║");
+                println!("╠════════════════════════════════════════════════════════════╣");
+                println!("║  Navigation:  Tab/Shift+Tab  |  Actions: Alt+R/C/D/F     ║");
+                println!("║  Suggestions: Ctrl/Alt+1-5   |  Utils: F10 (menu) F12 📸 ║");
+                println!("║  Emergency:   Alt+X (clear)  |  Help: F1 or ? key        ║");
+                println!("╚════════════════════════════════════════════════════════════╝\n");
+            })
+            .max_width(90)
+            .max_height(40),
+    );
+}
+
+/// Show quick keyboard shortcuts hint panel (called on startup or F1)
+pub fn show_keyboard_shortcuts_hint(siv: &mut Cursive) {
+    let hint_text = "💡 Quick Shortcuts: Tab/Shift+Tab=Navigate | Alt+R/C/D/F=Actions | Ctrl+1-5=Suggestions | F10=Menu | F12=Screenshot | Alt+X=Clear | ?=Help";
+
+    siv.add_layer(
+        Dialog::info(hint_text)
+            .title("⌨️ Keyboard Shortcuts")
+            .button("Show Full Help", |s| {
+                s.pop_layer();
+                show_advanced_help(s);
+            })
+            .button("OK", |s| {
+                s.pop_layer();
+            })
     );
 }
 
@@ -1076,25 +1290,20 @@ pub fn start_live_processing(
             "Completing the process...",
             "Preparing the final response...",
             "Finishing up...",
-            "Loading...",
-            "Thinking...",
-            "Working...",
-            "Processing...",
-            "Calculating...",
-            "Reviewing...",
-            "It's gone...",
-            "It's gone...",
-            "It's gone...",
-            "It's gone...",
-            "It's gone...",
-            "It's gone...",
-            "It's gone...",
+            "Polishing response...",
+            "Nearly complete...",
+            "Final touches...",
+            "Quality check...",
+            "Optimizing results...",
+            "Validating response...",
+            "Last steps...",
+            "Wrapping up processing...",
         ];
 
         let mut stage_index = 0;
         let mut update_counter = 0;
         let start_time = std::time::Instant::now();
-        const MAX_SPINNER_DURATION: std::time::Duration = std::time::Duration::from_secs(30);
+        const MAX_SPINNER_DURATION: std::time::Duration = std::time::Duration::from_secs(45);
 
         loop {
             // Check if processing message still exists in session BEFORE updating

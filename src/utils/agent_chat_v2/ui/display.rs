@@ -19,29 +19,30 @@ use super::theme::{Icons, ProgressBar, Spinners, StyledText};
 impl AdvancedChatUI {
     /// Apply theme styling to a message based on its type
     fn format_message_with_theme(&self, message: &ChatMessage) -> String {
+        let timestamp = ChatMessage::get_display_timestamp();
         match message {
             ChatMessage::User(text) => {
                 let sanitized = self.sanitize_text(text);
                 format!(
-                    "You: {}\n   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n",
-                    sanitized
+                    "You [{}]: {}\n   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n",
+                    timestamp, sanitized
                 )
             }
             ChatMessage::Agent(text) => {
                 let rendered = self.render_markdown(text);
                 let sanitized = self.sanitize_text(&rendered);
                 format!(
-                    "Agent:\n{}\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n",
-                    sanitized
+                    "Agent [{}]:\n{}\n   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n",
+                    timestamp, sanitized
                 )
             }
             ChatMessage::System(text) => {
                 let sanitized = self.sanitize_text(text);
-                format!("System: {}\n\n", sanitized)
+                format!("System [{}]: {}\n\n", timestamp, sanitized)
             }
             ChatMessage::Error(text) => {
                 let sanitized = self.sanitize_text(text);
-                format!("Error: {}\n\n", sanitized)
+                format!("Error [{}]: {}\n\n", timestamp, sanitized)
             }
             ChatMessage::ToolCall {
                 tool_name,
@@ -51,10 +52,11 @@ impl AdvancedChatUI {
             } => {
                 let sanitized_tool_name = self.sanitize_text(tool_name);
                 let sanitized_description = self.sanitize_text(description);
+                let timestamp = ChatMessage::get_display_timestamp();
 
                 let mut result = format!(
-                    "Calling tool: {} - {}\n",
-                    sanitized_tool_name, sanitized_description
+                    "Calling tool [{}]: {} - {}\n",
+                    timestamp, sanitized_tool_name, sanitized_description
                 );
 
                 if let Some(args) = args {
@@ -71,17 +73,20 @@ impl AdvancedChatUI {
             } => {
                 let sanitized_tool_name = self.sanitize_text(tool_name);
                 let sanitized_result = self.sanitize_json(result);
+                let timestamp = ChatMessage::get_display_timestamp();
                 format!(
-                    "Tool {} result (ID: {}):\n{}\n\n",
-                    sanitized_tool_name, execution_id, sanitized_result
+                    "Tool {} result [{}] (ID: {}):\n{}\n\n",
+                    sanitized_tool_name, timestamp, execution_id, sanitized_result
                 )
             }
             ChatMessage::AgentThinking(text) => {
                 let sanitized = self.sanitize_text(text);
-                format!("Agent (thinking): {}\n\n", sanitized)
+                let timestamp = ChatMessage::get_display_timestamp();
+                format!("Agent (thinking) [{}]: {}\n\n", timestamp, sanitized)
             }
             ChatMessage::AgentPlan(plan) => {
-                let mut result = String::from("Agent Plan:\n");
+                let timestamp = ChatMessage::get_display_timestamp();
+                let mut result = format!("Agent Plan [{}]:\n", timestamp);
                 for (i, step) in plan.iter().enumerate() {
                     let step_text = format!("{}: {}", step.tool_name, step.reason);
                     let sanitized = self.sanitize_text(&step_text);
@@ -347,10 +352,26 @@ impl AdvancedChatUI {
 
         // Only fetch new status if the cache is stale
         if should_refresh {
-            // Spawn status fetch in background to avoid blocking UI thread
-            // For now, we still need to block briefly, but we do it less frequently
-            let status_text = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
+            // Mark that we're updating to prevent concurrent updates
+            if let Ok(mut last_update) = self.state.last_status_update.write() {
+                *last_update = Some(Instant::now());
+            }
+
+            // Spawn truly async background update to avoid blocking UI thread
+            let state_clone = self.state.clone();
+            let cb_sink = siv.cb_sink().clone();
+
+            std::thread::spawn(move || {
+                // Create a new runtime for this background thread
+                let rt = match tokio::runtime::Runtime::new() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        eprintln!("Failed to create runtime for status update: {}", e);
+                        return;
+                    }
+                };
+
+                let status_text = rt.block_on(async {
                     let status =
                         crate::utils::agent_chat::system_status_bar::get_system_status().await;
 
@@ -396,37 +417,32 @@ impl AdvancedChatUI {
                         status.current_network,
                         status.uptime_seconds % 3600
                     )
-                })
-            });
+                });
 
-            // Update the cache
-            if let Ok(mut cached_status) = self.state.cached_status_text.write() {
-                *cached_status = Some(status_text.clone());
-            }
-            if let Ok(mut last_update) = self.state.last_status_update.write() {
-                *last_update = Some(Instant::now());
-            }
-
-            // Update the view
-            if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
-                let content_ref = status_bar_view.get_content();
-                let current_content = content_ref.source().to_string();
-                if current_content != status_text {
-                    status_bar_view.set_content(status_text);
+                // Update cache in background thread
+                if let Ok(mut cached_status) = state_clone.cached_status_text.write() {
+                    *cached_status = Some(status_text.clone());
                 }
-            }
-        } else {
-            // Use cached status to avoid blocking
-            if let Ok(cached_status) = self.state.cached_status_text.read() {
-                if let Some(status_text) = cached_status.as_ref() {
-                    if let Some(mut status_bar_view) =
-                        siv.find_name::<TextView>("system_status_bar")
-                    {
-                        let content_ref = status_bar_view.get_content();
-                        let current_content = content_ref.source().to_string();
-                        if &current_content != status_text {
-                            status_bar_view.set_content(status_text.clone());
-                        }
+
+                // Send UI update callback to main thread
+                let _ = cb_sink.send(Box::new(move |siv| {
+                    if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
+                        status_bar_view.set_content(status_text);
+                    }
+                }));
+            });
+        }
+
+        // Always show cached status immediately (non-blocking)
+        if let Ok(cached_status) = self.state.cached_status_text.read() {
+            if let Some(status_text) = cached_status.as_ref() {
+                if let Some(mut status_bar_view) =
+                    siv.find_name::<TextView>("system_status_bar")
+                {
+                    let content_ref = status_bar_view.get_content();
+                    let current_content = content_ref.source().to_string();
+                    if &current_content != status_text {
+                        status_bar_view.set_content(status_text.clone());
                     }
                 }
             }
