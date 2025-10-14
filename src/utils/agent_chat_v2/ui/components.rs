@@ -127,7 +127,7 @@ impl AdvancedChatUI {
                     .full_width(),
             );
 
-        chat_layout.add_child(Panel::new(input_layout).title("Input"));
+        chat_layout.add_child(Panel::new(input_layout).title("Input").with_name("input_panel"));
 
         // Agent status bar with live updates and icon
         let agent_status = TextView::new(format!("{} Agent: Initializing...", Icons::LIGHTNING))
@@ -141,15 +141,24 @@ impl AdvancedChatUI {
         chat_layout
             .add_child(Panel::new(system_status).title(format!("{} System Status", Icons::INFO)));
 
-        // Control buttons
+        // Control buttons with keyboard shortcuts hints
         let button_layout = LinearLayout::horizontal()
             .child(Button::new("Clear Chat", |siv| clear_current_chat(siv)))
             .child(Button::new("Export Chat", |siv| export_chat(siv)))
             .child(Button::new("Settings", |siv| show_settings(siv)))
-            .child(Button::new("Help", show_advanced_help))
-            .child(Button::new("Quit", |siv| siv.quit()));
+            .child(Button::new("Help [F1/?]", show_advanced_help))
+            .child(Button::new("Quit [Ctrl+Q]", |siv| siv.quit()));
 
         chat_layout.add_child(button_layout);
+
+        // Add keyboard shortcuts hint footer
+        let footer_hint = TextView::new(
+            "💡 Quick: Tab=Nav | Alt+R/C/D/F=Actions | Ctrl+1-5=Suggest | F1=Help | F10=Menu | F12=📸"
+        );
+        chat_layout.add_child(
+            Panel::new(footer_hint)
+                .title("⌨️ Shortcuts")
+        );
 
         chat_layout
     }

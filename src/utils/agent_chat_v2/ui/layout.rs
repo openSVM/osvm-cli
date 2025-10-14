@@ -17,6 +17,21 @@ use super::handlers::show_context_menu;
 use super::handlers::*;
 use super::theme::{Decorations, Icons, ModernTheme};
 
+/// Update input panel title to show history indicator
+fn update_input_title(siv: &mut Cursive, state: &AdvancedChatState) {
+    let indicator = state.get_history_indicator();
+    let title = if indicator.is_empty() {
+        "Input".to_string()
+    } else {
+        format!("Input{}", indicator)
+    };
+
+    // Update the input panel title if it exists
+    if let Some(mut panel) = siv.find_name::<Panel<LinearLayout>>("input_panel") {
+        panel.set_title(title);
+    }
+}
+
 /// FAR-style/Borland UI implementation
 pub struct AdvancedChatUI {
     pub state: AdvancedChatState,
@@ -206,6 +221,53 @@ impl AdvancedChatUI {
                 show_context_menu(s, cursive::Vec2::new(0, 0));
             },
         );
+
+        // Add F1 for help (universal help key)
+        siv.add_global_callback(cursive::event::Key::F1, |s| {
+            show_advanced_help(s);
+        });
+
+        // Add '?' for help (alternative)
+        siv.add_global_callback(cursive::event::Event::Char('?'), |s| {
+            show_keyboard_shortcuts_hint(s);
+        });
+
+        // Add up/down arrow handlers for input history navigation
+        let state_clone = self.state.clone();
+        siv.add_global_callback(cursive::event::Key::Up, move |s| {
+            // Only handle if input field has focus
+            if s.find_name::<EditView>("input").is_some() {
+                if let Some(prev_input) = state_clone.history_previous() {
+                    if let Some(mut input) = s.find_name::<EditView>("input") {
+                        input.set_content(prev_input);
+                        // Move cursor to end
+                        let len = input.get_content().len();
+                        input.set_cursor(len);
+                    }
+
+                    // Update input panel title to show history indicator
+                    update_input_title(s, &state_clone);
+                }
+            }
+        });
+
+        let state_clone = self.state.clone();
+        siv.add_global_callback(cursive::event::Key::Down, move |s| {
+            // Only handle if input field has focus
+            if s.find_name::<EditView>("input").is_some() {
+                if let Some(next_input) = state_clone.history_next() {
+                    if let Some(mut input) = s.find_name::<EditView>("input") {
+                        input.set_content(next_input);
+                        // Move cursor to end
+                        let len = input.get_content().len();
+                        input.set_cursor(len);
+                    }
+
+                    // Update input panel title to show history indicator
+                    update_input_title(s, &state_clone);
+                }
+            }
+        });
 
         // Add resize handling with error protection
         siv.add_global_callback(cursive::event::Event::WindowResize, |s| {

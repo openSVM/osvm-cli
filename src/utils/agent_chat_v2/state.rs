@@ -39,6 +39,12 @@ pub struct AdvancedChatState {
 
     /// Last time the status was updated
     pub last_status_update: Arc<RwLock<Option<std::time::Instant>>>,
+
+    /// Input history buffer (like bash history)
+    pub input_history: Arc<RwLock<Vec<String>>>,
+
+    /// Current position in input history (None = at prompt, Some(idx) = in history)
+    pub history_position: Arc<RwLock<Option<usize>>>,
 }
 
 impl AdvancedChatState {
@@ -60,6 +66,8 @@ impl AdvancedChatState {
             status_bar_manager: Arc::new(RwLock::new(status_bar_manager)),
             cached_status_text: Arc::new(RwLock::new(None)),
             last_status_update: Arc::new(RwLock::new(None)),
+            input_history: Arc::new(RwLock::new(Vec::new())),
+            history_position: Arc::new(RwLock::new(None)),
         };
 
         // Load theme from saved configuration
@@ -527,6 +535,118 @@ impl AdvancedChatState {
             .join(".config")
             .join("osvm")
             .join("theme_config.json"))
+    }
+
+    // Input history management methods
+
+    /// Add a message to input history (like bash history)
+    pub fn add_to_history(&self, input: String) {
+        if input.trim().is_empty() {
+            return; // Don't add empty messages
+        }
+
+        if let Ok(mut history) = self.input_history.write() {
+            // Don't add if it's the same as the last entry (avoid duplicates)
+            if let Some(last) = history.last() {
+                if last == &input {
+                    return;
+                }
+            }
+
+            history.push(input);
+
+            // Limit history to 100 entries (like bash HISTSIZE)
+            if history.len() > 100 {
+                history.remove(0);
+            }
+        }
+
+        // Reset position when adding new entry
+        if let Ok(mut pos) = self.history_position.write() {
+            *pos = None;
+        }
+    }
+
+    /// Navigate to previous entry in history (up arrow)
+    pub fn history_previous(&self) -> Option<String> {
+        let history = self.input_history.read().ok()?;
+
+        if history.is_empty() {
+            return None;
+        }
+
+        let mut pos = self.history_position.write().ok()?;
+
+        let new_pos = match *pos {
+            None => {
+                // First time pressing up, go to most recent entry
+                history.len() - 1
+            }
+            Some(current) => {
+                // Already in history, go further back if possible
+                if current > 0 {
+                    current - 1
+                } else {
+                    return Some(history[current].clone()); // Already at oldest
+                }
+            }
+        };
+
+        *pos = Some(new_pos);
+        Some(history[new_pos].clone())
+    }
+
+    /// Navigate to next entry in history (down arrow)
+    pub fn history_next(&self) -> Option<String> {
+        let history = self.input_history.read().ok()?;
+
+        if history.is_empty() {
+            return None;
+        }
+
+        let mut pos = self.history_position.write().ok()?;
+
+        let new_pos = match *pos {
+            None => {
+                // Not in history, stay at prompt
+                return Some(String::new());
+            }
+            Some(current) => {
+                // In history, move forward
+                if current < history.len() - 1 {
+                    current + 1
+                } else {
+                    // Reached the end, go back to empty prompt
+                    *pos = None;
+                    return Some(String::new());
+                }
+            }
+        };
+
+        *pos = Some(new_pos);
+        Some(history[new_pos].clone())
+    }
+
+    /// Check if currently navigating history
+    pub fn is_in_history(&self) -> bool {
+        self.history_position
+            .read()
+            .ok()
+            .and_then(|pos| *pos)
+            .is_some()
+    }
+
+    /// Get current history position for display
+    pub fn get_history_indicator(&self) -> String {
+        if let Ok(pos) = self.history_position.read() {
+            if let Some(idx) = *pos {
+                if let Ok(history) = self.input_history.read() {
+                    let total = history.len();
+                    return format!(" (history {}/{})", idx + 1, total);
+                }
+            }
+        }
+        String::new()
     }
 }
 

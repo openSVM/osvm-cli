@@ -197,6 +197,9 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // Update displays
     update_ui_displays(&mut siv);
 
+    // Show welcome dialog for first-time users
+    ui::onboarding::show_welcome_dialog_if_first_time(&mut siv);
+
     // Run the TUI
     siv.run();
 
