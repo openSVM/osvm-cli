@@ -6,7 +6,7 @@ use cursive::direction::Orientation;
 use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
     Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView,
-    TextView,
+    TextArea, TextView,
 };
 use cursive::Cursive;
 use log::{error, info, warn};
@@ -95,7 +95,7 @@ pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
     // Show confirmation dialog before deleting
     siv.add_layer(
         Dialog::text("Are you sure you want to delete the last message?\nThis action cannot be undone.")
-            .title("⚠ Confirm Delete")
+            .title("Confirm Delete")
             .button("Yes, Delete", move |s| {
                 s.pop_layer(); // Close confirmation dialog
 
@@ -115,7 +115,7 @@ pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
 
                                 // Show success feedback
                                 s.add_layer(
-                                    Dialog::info("✓ Message deleted successfully")
+                                    Dialog::info("Message deleted successfully")
                                         .title("Deleted")
                                         .button("OK", |s| {
                                             s.pop_layer();
@@ -166,7 +166,7 @@ pub fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
 pub fn take_screenshot(siv: &mut Cursive) {
     // Show taking screenshot message
     siv.add_layer(
-        Dialog::text("📸 Taking screenshot...\nPlease wait...")
+        Dialog::text("Taking screenshot...\nPlease wait...")
             .title("Screenshot")
             .with_name("screenshot_dialog"),
     );
@@ -188,7 +188,7 @@ pub fn take_screenshot(siv: &mut Cursive) {
 
         match result {
             Ok(path) => {
-                let success_msg = format!("✅ Screenshot saved successfully!\n\nMode: TUI Content Export\nLocation:\n{}", path.display());
+                let success_msg = format!("Screenshot saved successfully!\n\nMode: TUI Content Export\nLocation:\n{}", path.display());
                 cb_sink
                     .send(Box::new(move |s| {
                         s.pop_layer(); // Remove "taking screenshot" dialog
@@ -203,7 +203,7 @@ pub fn take_screenshot(siv: &mut Cursive) {
                     .ok();
             }
             Err(e) => {
-                let error_msg = format!("❌ Screenshot failed:\n\n{}", e);
+                let error_msg = format!("Screenshot failed:\n\n{}", e);
                 cb_sink
                     .send(Box::new(move |s| {
                         s.pop_layer(); // Remove "taking screenshot" dialog
@@ -256,21 +256,18 @@ pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: Advan
     };
 
     // Insert into the input field at cursor position
-    if let Some(mut input) = siv.find_name::<EditView>("input") {
-        let current_content = input.get_content();
-        let cursor_pos = input.get_cursor();
+    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+        let current_content = input.get_content().to_string();
 
-        // Insert suggestion at cursor position
-        let mut new_content = String::new();
-        new_content.push_str(&current_content[..cursor_pos]);
-        new_content.push_str(&suggestion);
-        if cursor_pos < current_content.len() {
-            new_content.push_str(&current_content[cursor_pos..]);
+        // For TextArea, append suggestion at the end for now
+        // TODO: Implement proper cursor position insertion for TextArea
+        let mut new_content = current_content;
+        if !new_content.is_empty() && !new_content.ends_with('\n') {
+            new_content.push(' ');
         }
+        new_content.push_str(&suggestion);
 
         input.set_content(new_content);
-        // Move cursor to end of inserted text
-        input.set_cursor(cursor_pos + suggestion.len());
     }
 
     // Hide suggestions after insertion
@@ -291,7 +288,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         ValidationResult::TooLong { text: truncated, max_length } => {
             siv.add_layer(
                 Dialog::text(format!(
-                    "⚠️ Message Too Long\n\n\
+                    "Message Too Long\n\n\
                     Your message is too long ({} characters).\n\
                     Maximum allowed: {} characters.\n\n\
                     The message has been truncated. Please shorten it.",
@@ -308,7 +305,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         ValidationResult::TooManyNewlines { max_lines, .. } => {
             siv.add_layer(
                 Dialog::text(format!(
-                    "⚠️ Too Many Line Breaks\n\n\
+                    "Too Many Line Breaks\n\n\
                     Your message has too many line breaks.\n\
                     Maximum allowed: {} lines.\n\n\
                     Please reduce the number of line breaks.",
@@ -324,7 +321,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
         ValidationResult::ContainsBinaryData => {
             siv.add_layer(
                 Dialog::text(
-                    "⚠️ Invalid Characters\n\n\
+                    "Invalid Characters\n\n\
                     Your message contains invalid or binary characters.\n\
                     Please use only text characters."
                 )
@@ -342,7 +339,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
                 let state_clone = state.clone();
                 siv.add_layer(
                     Dialog::text(get_sensitive_warning())
-                        .title("⚠️ Sensitive Data Warning")
+                        .title("Sensitive Data Warning")
                         .button("Cancel", |s| {
                             s.pop_layer();
                         })
@@ -372,7 +369,7 @@ fn process_validated_input(siv: &mut Cursive, text: &str, state: AdvancedChatSta
     }
 
     // Clear input
-    if let Some(mut input) = siv.find_name::<EditView>("input") {
+    if let Some(mut input) = siv.find_name::<TextArea>("input") {
         input.set_content("");
     }
 
@@ -524,9 +521,9 @@ pub fn clear_current_chat(siv: &mut Cursive) {
         Dialog::text(
             "Are you sure you want to clear all messages in this chat?\n\
             This action cannot be undone.\n\n\
-            💡 Tip: Use 'Export Chat' first if you want to save the conversation."
+            Tip: Use 'Export Chat' first if you want to save the conversation."
         )
-        .title("⚠ Confirm Clear Chat")
+        .title("Confirm Clear Chat")
         .button("Yes, Clear All", |s| {
             s.pop_layer(); // Close confirmation dialog
 
@@ -552,7 +549,7 @@ pub fn clear_current_chat(siv: &mut Cursive) {
             // Show success feedback
             if let Some(Some(count)) = cleared {
                 s.add_layer(
-                    Dialog::info(format!("✓ Chat cleared successfully\n{} messages removed", count))
+                    Dialog::info(format!("Chat cleared successfully\n{} messages removed", count))
                         .title("Cleared")
                         .button("OK", |s| {
                             s.pop_layer();
@@ -655,17 +652,24 @@ pub fn export_chat(siv: &mut Cursive) {
 
     match export_result {
         Some(Ok((filename, None))) => {
+            let filename_clone = filename.clone();
             siv.add_layer(
-                Dialog::info(format!("✅ Chat exported successfully to:\n{}", filename))
+                Dialog::text(format!("Chat exported successfully to:\n{}", filename))
                     .title("Export Complete")
-                    .button("OK", |s| {
+                    .button("Back", |s| {
+                        s.pop_layer();
+                    })
+                    .button("Copy", move |s| {
+                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                            let _ = clipboard.set_text(&filename_clone);
+                        }
                         s.pop_layer();
                     }),
             );
         }
         Some(Ok((_, Some(e)))) => {
             siv.add_layer(
-                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                Dialog::info(format!("Failed to export chat:\n{}", e))
                     .title("Export Failed")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -674,7 +678,7 @@ pub fn export_chat(siv: &mut Cursive) {
         }
         Some(Err(e)) => {
             siv.add_layer(
-                Dialog::info(format!("❌ Failed to export chat:\n{}", e))
+                Dialog::info(format!("Failed to export chat:\n{}", e))
                     .title("Export Failed")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -683,7 +687,7 @@ pub fn export_chat(siv: &mut Cursive) {
         }
         None => {
             siv.add_layer(
-                Dialog::info("❌ No active session found")
+                Dialog::info("No active session found")
                     .title("Export Failed")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -694,43 +698,50 @@ pub fn export_chat(siv: &mut Cursive) {
 }
 
 pub fn show_advanced_help(siv: &mut Cursive) {
-    let help_text = "🚀 OSVM Advanced Agent Chat - Complete Guide\n\n\
+    let help_text = "OSVM Advanced Agent Chat - Complete Guide\n\n\
         ═══════════════════════════════════════════════════\n\
-        📋 KEYBOARD SHORTCUTS QUICK REFERENCE\n\
+        KEYBOARD SHORTCUTS QUICK REFERENCE\n\
         ═══════════════════════════════════════════════════\n\n\
-        🔤 Navigation:\n\
+        Text Editor (Microsoft Edit Style):\n\
+        • Ctrl+Enter      → Send message\n\
+        • Enter           → New line (multi-line input)\n\
+        • Ctrl+K          → Clear input field\n\
+        • Alt+P           → Previous message in history\n\
+        • Alt+N           → Next message in history\n\
+        • Arrows          → Navigate within text\n\n\
+        Navigation:\n\
         • Tab             → Switch between chat list and input\n\
-        • Shift+Tab       → Reverse navigation\n\
-        • ↑/↓ (planned)   → Navigate message history\n\n\
-        🎯 Actions:\n\
+        • Shift+Tab       → Reverse navigation\n\n\
+        Actions:\n\
         • Alt+R           → Retry last message\n\
         • Alt+C           → Copy last message to clipboard\n\
         • Alt+D           → Delete last message (with confirmation)\n\
         • Alt+F           → Fork/branch current conversation\n\
         • Alt+X           → Emergency clear stuck processing\n\
-        • Alt+M           → Switch to standard mode info\n\n\
-        💡 Suggestions:\n\
+        • Alt+M           → Switch to standard mode info\n\
+        • Alt+T           → Theme switcher\n\n\
+        Suggestions:\n\
         • Ctrl+1-5        → Insert suggestion at cursor (primary)\n\
         • Alt+1-5         → Insert suggestion at cursor (alternate)\n\
         • Esc             → Hide suggestions panel\n\n\
-        📸 Utilities:\n\
+        Utilities:\n\
         • F10             → Open context menu (Copy, Retry, Clear)\n\
         • F12             → Take screenshot of chat window\n\
         • Ctrl+Q          → Quit application\n\n\
         ═══════════════════════════════════════════════════\n\
-        🤖 AGENT CONTROLS\n\
+        AGENT CONTROLS\n\
         ═══════════════════════════════════════════════════\n\n\
         • Run Button      → Resume/start agent processing\n\
         • Pause Button    → Temporarily pause agent\n\
         • Stop Button     → Stop current agent task\n\n\
         ═══════════════════════════════════════════════════\n\
-        ⏺ SESSION RECORDING\n\
+        SESSION RECORDING\n\
         ═══════════════════════════════════════════════════\n\n\
         • Record Button   → Start recording session to file\n\
         • Stop Rec Button → Stop recording and save\n\
         • Export Chat     → Save current chat as JSON\n\n\
         ═══════════════════════════════════════════════════\n\
-        🎨 STATUS ICONS\n\
+        STATUS ICONS\n\
         ═══════════════════════════════════════════════════\n\n\
         Agent States:\n\
         • ◉ Idle          → Ready for new tasks\n\
@@ -739,19 +750,19 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         • ▶ Executing     → Running tools/commands\n\
         • ◯ Waiting       → Awaiting response\n\
         • ⏸ Paused        → Operations suspended\n\
-        • ⚠ Error         → Something went wrong\n\n\
+        • Error         → Something went wrong\n\n\
         ═══════════════════════════════════════════════════\n\
-        ✨ ADVANCED FEATURES\n\
+        ADVANCED FEATURES\n\
         ═══════════════════════════════════════════════════\n\n\
-        • 🧠 AI-powered tool planning and execution\n\
-        • 🔄 Background agent processing\n\
-        • 💬 Multi-session chat support\n\
-        • 📦 MCP server integration (blockchain tools)\n\
-        • 🎨 Multiple theme support (/theme commands)\n\
-        • 🔧 Direct tool testing from MCP panel\n\
-        • 📊 Real-time system status monitoring\n\n\
+        • AI-powered tool planning and execution\n\
+        • Background agent processing\n\
+        • Multi-session chat support\n\
+        • MCP server integration (blockchain tools)\n\
+        • Multiple theme support (/theme commands)\n\
+        • Direct tool testing from MCP panel\n\
+        • Real-time system status monitoring\n\n\
         ═══════════════════════════════════════════════════\n\
-        💬 MESSAGE ACTIONS (shown under each message)\n\
+        MESSAGE ACTIONS (shown under each message)\n\
         ═══════════════════════════════════════════════════\n\n\
         User Messages:\n\
         • [R]etry  → Send message again\n\
@@ -763,7 +774,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         • [R]etry  → Request new response\n\
         • [D]elete → Remove message (with confirmation)\n\n\
         ═══════════════════════════════════════════════════\n\
-        🆘 TROUBLESHOOTING\n\
+        TROUBLESHOOTING\n\
         ═══════════════════════════════════════════════════\n\n\
         • Agent stuck? → Use Alt+X to emergency clear\n\
         • UI frozen? → Terminal may be too small (min 60x15)\n\
@@ -779,17 +790,17 @@ pub fn show_advanced_help(siv: &mut Cursive) {
 
     siv.add_layer(
         Dialog::around(help_layout)
-            .title("📖 Complete Help & Keyboard Shortcuts")
+            .title("Complete Help & Keyboard Shortcuts")
             .button("Got it!", |s| {
                 s.pop_layer();
             })
-            .button("📋 Print to Console", |s| {
+            .button("Print to Console", |s| {
                 // Print concise shortcuts to console for quick reference
                 println!("\n╔════════════════════════════════════════════════════════════╗");
-                println!("║  🚀 OSVM Advanced Chat - Quick Keyboard Reference        ║");
+                println!("║  OSVM Advanced Chat - Quick Keyboard Reference        ║");
                 println!("╠════════════════════════════════════════════════════════════╣");
                 println!("║  Navigation:  Tab/Shift+Tab  |  Actions: Alt+R/C/D/F     ║");
-                println!("║  Suggestions: Ctrl/Alt+1-5   |  Utils: F10 (menu) F12 📸 ║");
+                println!("║  Suggestions: Ctrl/Alt+1-5   |  Utils: F10 (menu) F12 ║");
                 println!("║  Emergency:   Alt+X (clear)  |  Help: F1 or ? key        ║");
                 println!("╚════════════════════════════════════════════════════════════╝\n");
             })
@@ -800,11 +811,14 @@ pub fn show_advanced_help(siv: &mut Cursive) {
 
 /// Show quick keyboard shortcuts hint panel (called on startup or F1)
 pub fn show_keyboard_shortcuts_hint(siv: &mut Cursive) {
-    let hint_text = "💡 Quick Shortcuts: Tab/Shift+Tab=Navigate | Alt+R/C/D/F=Actions | Ctrl+1-5=Suggestions | F10=Menu | F12=Screenshot | Alt+X=Clear | ?=Help";
+    let hint_text = "Quick Shortcuts:\n\n\
+        Text Input: Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear\n\
+        Navigation: Tab/Shift+Tab | Alt+P/N=History\n\
+        Actions: Alt+R/C/D/F | F10=Menu | F12=Screenshot | ?=Help";
 
     siv.add_layer(
-        Dialog::info(hint_text)
-            .title("⌨️ Keyboard Shortcuts")
+        Dialog::text(hint_text)
+            .title("Keyboard Shortcuts")
             .button("Show Full Help", |s| {
                 s.pop_layer();
                 show_advanced_help(s);
@@ -967,9 +981,9 @@ pub fn update_mcp_server_status_in_settings(siv: &mut Cursive) {
             if let Ok(mcp_service) = state.mcp_service.try_lock() {
                 for (server_id, config) in mcp_service.list_servers() {
                     let status = if config.enabled {
-                        "✓ Enabled"
+                        "Enabled"
                     } else {
-                        "✗ Disabled"
+                        "Disabled"
                     };
                     status_text.push_str(&format!(
                         "• {} ({:?}): {}\n",
@@ -1057,7 +1071,7 @@ fn add_mcp_server_from_form(siv: &mut Cursive) {
         Some(Ok(_)) => {
             siv.add_layer(
                 Dialog::text(&format!(
-                    "✅ Server '{}' added successfully!\nURL: {}\nType: {}",
+                    "Server '{}' added successfully!\nURL: {}\nType: {}",
                     name, url, server_type
                 ))
                 .title("Server Added")
@@ -1068,7 +1082,7 @@ fn add_mcp_server_from_form(siv: &mut Cursive) {
         }
         Some(Err(e)) => {
             siv.add_layer(
-                Dialog::text(&format!("❌ Failed to add server: {}", e))
+                Dialog::text(&format!("Failed to add server: {}", e))
                     .title("Error")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -1077,7 +1091,7 @@ fn add_mcp_server_from_form(siv: &mut Cursive) {
         }
         None => {
             siv.add_layer(
-                Dialog::text("❌ Failed to access application state")
+                Dialog::text("Failed to access application state")
                     .title("Error")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -1109,7 +1123,7 @@ fn toggle_mcp_server(siv: &mut Cursive) {
                 Some(Ok(_)) => {
                     siv.add_layer(
                         Dialog::text(&format!(
-                            "✅ Server '{}' status toggled successfully!",
+                            "Server '{}' status toggled successfully!",
                             server_id
                         ))
                         .title("Server Updated")
@@ -1122,7 +1136,7 @@ fn toggle_mcp_server(siv: &mut Cursive) {
                 }
                 Some(Err(e)) => {
                     siv.add_layer(
-                        Dialog::text(&format!("❌ Failed to toggle server: {}", e))
+                        Dialog::text(&format!("Failed to toggle server: {}", e))
                             .title("Error")
                             .button("OK", |s| {
                                 s.pop_layer();
@@ -1131,7 +1145,7 @@ fn toggle_mcp_server(siv: &mut Cursive) {
                 }
                 None => {
                     siv.add_layer(
-                        Dialog::text("❌ Failed to access application state")
+                        Dialog::text("Failed to access application state")
                             .title("Error")
                             .button("OK", |s| {
                                 s.pop_layer();
@@ -1170,7 +1184,7 @@ fn remove_mcp_server(siv: &mut Cursive) {
                             Some(Ok(_)) => {
                                 s.add_layer(
                                     Dialog::text(&format!(
-                                        "✅ Server '{}' removed successfully!",
+                                        "Server '{}' removed successfully!",
                                         server_id
                                     ))
                                     .title("Server Removed")
@@ -1184,7 +1198,7 @@ fn remove_mcp_server(siv: &mut Cursive) {
                             }
                             Some(Err(e)) => {
                                 s.add_layer(
-                                    Dialog::text(&format!("❌ Failed to remove server: {}", e))
+                                    Dialog::text(&format!("Failed to remove server: {}", e))
                                         .title("Error")
                                         .button("OK", |s| {
                                             s.pop_layer();
@@ -1193,7 +1207,7 @@ fn remove_mcp_server(siv: &mut Cursive) {
                             }
                             None => {
                                 s.add_layer(
-                                    Dialog::text("❌ Failed to access application state")
+                                    Dialog::text("Failed to access application state")
                                         .title("Error")
                                         .button("OK", |s| {
                                             s.pop_layer();
@@ -1444,26 +1458,9 @@ fn generate_context_suggestions(input: &str) -> Vec<String> {
 
 // Auto-suggestions as user types - now with AI assistance
 pub fn setup_input_suggestions(siv: &mut Cursive, state: AdvancedChatState) {
-    // Add input change callback to show suggestions as user types
-    if let Some(mut input) = siv.find_name::<EditView>("input") {
-        let state_clone = state.clone();
-        input.set_on_edit(move |_siv, content, _cursor| {
-            if content.len() >= 3 {
-                // Start suggesting after 3 characters
-                let suggestions = generate_smart_input_suggestions(content, state_clone.clone());
-                if let Ok(mut current_suggestions) = state_clone.current_suggestions.write() {
-                    *current_suggestions = suggestions;
-                }
-                if let Ok(mut vis) = state_clone.suggestions_visible.write() {
-                    *vis = !content.is_empty();
-                }
-            } else {
-                if let Ok(mut vis) = state_clone.suggestions_visible.write() {
-                    *vis = false;
-                }
-            }
-        });
-    }
+    // TextArea doesn't have set_on_edit like EditView
+    // For now, suggestions will be triggered manually or via other mechanisms
+    // TODO: Implement on-change callback for TextArea when typing
 }
 
 // Generate suggestions based on partial input
@@ -1751,25 +1748,25 @@ fn execute_theme_command(cmd: ThemeCommandType, state: &AdvancedChatState) -> St
             Err(e) => format!("Error listing themes: {}", e),
         },
         ThemeCommandType::SwitchTheme(theme_name) => match state.switch_theme(&theme_name) {
-            Ok(_) => format!("✅ Switched to theme: {}", theme_name),
-            Err(e) => format!("❌ Failed to switch theme: {}", e),
+            Ok(_) => format!("Switched to theme: {}", theme_name),
+            Err(e) => format!("Failed to switch theme: {}", e),
         },
         ThemeCommandType::PreviewTheme(theme_name) => match theme_name {
             Some(name) => match state.preview_theme(&name) {
                 Ok(preview) => format!("Preview of theme '{}':\n{}", name, preview),
-                Err(e) => format!("❌ Failed to preview theme '{}': {}", name, e),
+                Err(e) => format!("Failed to preview theme '{}': {}", name, e),
             },
             None => match state.get_current_theme_name() {
                 Ok(current_name) => match state.preview_theme(&current_name) {
                     Ok(preview) => format!("Current theme '{}':\n{}", current_name, preview),
-                    Err(e) => format!("❌ Failed to preview current theme: {}", e),
+                    Err(e) => format!("Failed to preview current theme: {}", e),
                 },
-                Err(e) => format!("❌ Failed to get current theme: {}", e),
+                Err(e) => format!("Failed to get current theme: {}", e),
             },
         },
         ThemeCommandType::ShowCurrentTheme => match state.get_current_theme_name() {
             Ok(name) => format!("Current theme: {}", name),
-            Err(e) => format!("❌ Failed to get current theme: {}", e),
+            Err(e) => format!("Failed to get current theme: {}", e),
         },
     }
 }
@@ -1825,7 +1822,7 @@ pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: St
 
         siv.add_layer(
             Dialog::around(test_layout)
-                .title(format!("🧪 Test Tool: {}", tool_name))
+                .title(format!("Test Tool: {}", tool_name))
                 .button("Execute", move |s| {
                     execute_test_tool(s, server_clone.clone(), tool_clone.clone());
                 })
@@ -1850,7 +1847,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
         Ok(val) => val,
         Err(e) => {
             siv.add_layer(
-                Dialog::text(format!("❌ Invalid JSON: {}", e))
+                Dialog::text(format!("Invalid JSON: {}", e))
                     .title("Parse Error")
                     .button("OK", |s| {
                         s.pop_layer();
@@ -1885,7 +1882,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
                     cb_sink
                         .send(Box::new(move |s| {
                             s.pop_layer(); // Remove loading dialog
-                            s.add_layer(Dialog::text(error_msg).title("❌ Test Failed").button(
+                            s.add_layer(Dialog::text(error_msg).title("Test Failed").button(
                                 "OK",
                                 |s| {
                                     s.pop_layer();
@@ -1918,17 +1915,17 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
                             let mut result_layout = LinearLayout::vertical();
 
                             result_layout
-                                .add_child(TextView::new(format!("✅ Execution Successful")));
+                                .add_child(TextView::new(format!("Execution Successful")));
                             result_layout.add_child(DummyView.fixed_height(1));
 
                             result_layout.add_child(TextView::new(format!(
-                                "⏱️  Execution Time: {}ms",
+                                "Execution Time: {}ms",
                                 execution_time_ms
                             )));
                             result_layout
-                                .add_child(TextView::new(format!("📦 Server: {}", server_id)));
+                                .add_child(TextView::new(format!("Server: {}", server_id)));
                             result_layout
-                                .add_child(TextView::new(format!("🔧 Tool: {}", tool_name)));
+                                .add_child(TextView::new(format!("Tool: {}", tool_name)));
                             result_layout.add_child(DummyView.fixed_height(1));
 
                             result_layout.add_child(TextView::new("Response:"));
@@ -1938,7 +1935,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
 
                             s.add_layer(
                                 Dialog::around(result_layout)
-                                    .title("🧪 Test Results")
+                                    .title("Test Results")
                                     .button("Close", |s| {
                                         s.pop_layer();
                                     })
@@ -1958,7 +1955,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
                         }
                         Err(e) => {
                             let error_msg = format!(
-                                "❌ Tool execution failed:\n\n{}\n\n⏱️ Time: {}ms",
+                                "Tool execution failed:\n\n{}\n\nTime: {}ms",
                                 e, execution_time_ms
                             );
                             s.add_layer(Dialog::text(error_msg).title("Test Failed").button(
@@ -2030,7 +2027,7 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
 
         siv.add_layer(
             Dialog::around(details_layout)
-                .title(format!("📦 Tool Details: {}", name))
+                .title(format!("Tool Details: {}", name))
                 .button("Test Tool", move |s| {
                     show_test_tool_dialog(s, server_id_clone.clone(), tool_name_clone.clone());
                 })
@@ -2052,4 +2049,333 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
             }),
         );
     }
+}
+/// Show theme switcher dialog
+pub fn show_theme_switcher(siv: &mut Cursive) {
+    use super::theme::ModernTheme;
+    use cursive::views::RadioGroup;
+    use std::sync::{Arc, Mutex};
+
+    let theme_group = Arc::new(Mutex::new(RadioGroup::new()));
+    let current_theme = "dark"; // TODO: Get from state
+
+    let mut theme_list = LinearLayout::vertical();
+    theme_list.add_child(TextView::new("Select Theme:"));
+    theme_list.add_child(DummyView.fixed_height(1));
+
+    // Add theme options
+    for theme_name in ModernTheme::available_themes() {
+        let mut button = theme_group.lock().unwrap().button_str(theme_name);
+        if theme_name == current_theme {
+            button.select();
+        }
+        theme_list.add_child(button);
+    }
+
+    theme_list.add_child(DummyView.fixed_height(1));
+
+    // Add descriptions
+    theme_list.add_child(TextView::new("Descriptions:"));
+    theme_list.add_child(TextView::new("  dark         - VS Code Dark+ (default)"));
+    theme_list.add_child(TextView::new("  light        - Clean light theme"));
+    theme_list.add_child(TextView::new("  high_contrast- Maximum contrast (accessibility)"));
+
+    let theme_group_apply = theme_group.clone();
+    let theme_group_preview = theme_group.clone();
+
+    siv.add_layer(
+        Dialog::around(theme_list)
+            .title("Theme Switcher")
+            .button("Apply", move |s| {
+                let selected = theme_group_apply.lock().unwrap().selection();
+                let theme_name = selected.as_ref();
+
+                // Apply the theme
+                let new_theme = ModernTheme::by_name(theme_name);
+                s.set_theme(new_theme);
+
+                s.pop_layer();
+
+                // Show confirmation with Back and OK buttons
+                s.add_layer(
+                    Dialog::text(format!("Theme changed to: {}", theme_name))
+                        .title("Theme Applied")
+                        .button("Back", |s| {
+                            s.pop_layer();
+                            show_theme_switcher(s);
+                        })
+                        .button("OK", |s| { s.pop_layer(); })
+                );
+            })
+            .button("Preview", move |s| {
+                let selected = theme_group_preview.lock().unwrap().selection();
+                let theme_name = selected.as_ref();
+
+                // Temporarily apply theme
+                let preview_theme = ModernTheme::by_name(theme_name);
+                s.set_theme(preview_theme);
+            })
+            .button("Cancel", |s| {
+                s.pop_layer();
+            })
+            .max_width(60)
+    );
+}
+
+// ============================================================================
+// Top Menu Bar Handlers (Microsoft Edit style)
+// ============================================================================
+
+/// File menu handler
+pub fn show_file_menu(s: &mut Cursive) {
+    s.add_layer(
+        Dialog::new()
+            .title("File")
+            .button("Export Chat", |s| {
+                s.pop_layer();
+                export_chat(s);
+            })
+            .button("Export All", |s| {
+                s.pop_layer();
+                export_all_chats(s);
+            })
+            .button("Settings", |s| {
+                s.pop_layer();
+                show_settings(s);
+            })
+            .button("Quit", |s| { s.quit(); })
+            .button("Cancel", |s| { s.pop_layer(); })
+    );
+}
+
+/// Edit menu handler
+pub fn show_edit_menu(s: &mut Cursive) {
+    let state_opt = s.user_data::<AdvancedChatState>().cloned();
+    
+    let mut menu = Dialog::new().title("Edit");
+    
+    if let Some(state) = state_opt.clone() {
+        menu = menu.button("Copy Last Message", move |s| {
+            s.pop_layer();
+            copy_last_message(s, state.clone());
+        });
+    }
+    
+    if let Some(state) = state_opt.clone() {
+        menu = menu.button("Delete Last Message", move |s| {
+            s.pop_layer();
+            delete_last_message(s, state.clone());
+        });
+    }
+    
+    menu = menu.button("Clear Chat", |s| {
+        s.pop_layer();
+        clear_current_chat(s);
+    });
+    
+    menu = menu.button("Cancel", |s| { s.pop_layer(); });
+
+    s.add_layer(menu);
+}
+
+/// Session menu handler
+pub fn show_session_menu(s: &mut Cursive) {
+    let state_opt = s.user_data::<AdvancedChatState>().cloned();
+    
+    let mut menu = Dialog::new().title("Session");
+    
+    menu = menu.button("New Session", |s| {
+        s.pop_layer();
+        create_new_chat_dialog(s);
+    });
+    
+    if let Some(state) = state_opt.clone() {
+        menu = menu.button("Fork Session", move |s| {
+            s.pop_layer();
+            fork_conversation(s, state.clone());
+        });
+    }
+    
+    menu = menu.button("Start Recording", |s| {
+        s.pop_layer();
+        start_recording(s);
+    });
+    
+    menu = menu.button("Stop Recording", |s| {
+        s.pop_layer();
+        stop_recording(s);
+    });
+    
+    menu = menu.button("Cancel", |s| { s.pop_layer(); });
+
+    s.add_layer(menu);
+}
+
+/// Tools menu handler
+pub fn show_tools_menu(s: &mut Cursive) {
+    s.add_layer(
+        Dialog::new()
+            .title("Tools")
+            .button("Refresh MCP Tools", |s| {
+                s.pop_layer();
+                refresh_mcp_tools(s);
+            })
+            .button("Add MCP Server", |s| {
+                s.pop_layer();
+                show_add_mcp_server_dialog(s);
+            })
+            .button("Manage Servers", |s| {
+                s.pop_layer();
+                show_mcp_server_list(s);
+            })
+            .button("Theme Switcher", |s| {
+                s.pop_layer();
+                show_theme_switcher(s);
+            })
+            .button("Cancel", |s| { s.pop_layer(); })
+    );
+}
+
+/// Help menu handler
+pub fn show_help_menu(s: &mut Cursive) {
+    s.add_layer(
+        Dialog::new()
+            .title("Help")
+            .button("Keyboard Shortcuts", |s| {
+                s.pop_layer();
+                show_keyboard_shortcuts_hint(s);
+            })
+            .button("Full Help", |s| {
+                s.pop_layer();
+                show_advanced_help(s);
+            })
+            .button("About", |s| {
+                s.pop_layer();
+                s.add_layer(
+                    Dialog::text("OSVM Advanced Agent Chat\n\nVersion: 0.9.0\n\nAI-powered blockchain agent with\nMCP server integration")
+                        .title("About")
+                        .button("OK", |s| { s.pop_layer(); })
+                );
+            })
+            .button("Cancel", |s| { s.pop_layer(); })
+    );
+}
+
+/// Toggle MCP server collapsed/expanded state
+pub fn toggle_mcp_server_collapsed(_s: &mut Cursive, _server_id: String) {
+    // TODO: Implement collapsible state tracking
+    // For now, this is a placeholder - full implementation would track
+    // collapsed state in AdvancedChatState and hide/show tools accordingly
+}
+
+// ============================================================================
+// Input Enhancement Functions
+// ============================================================================
+
+/// Send message from button click
+pub fn send_message_from_button(siv: &mut Cursive, state: AdvancedChatState) {
+    if let Some(input) = siv.find_name::<TextArea>("input") {
+        let content = input.get_content().to_string();
+        if !content.trim().is_empty() {
+            handle_user_input(siv, &content, state);
+        }
+    }
+}
+
+/// Enhance message with AI before sending
+pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
+    let current_content = if let Some(input) = siv.find_name::<TextArea>("input") {
+        input.get_content().to_string()
+    } else {
+        return;
+    };
+
+    if current_content.trim().is_empty() {
+        siv.add_layer(
+            Dialog::text("Please enter a message first before enhancing.")
+                .title("Empty Input")
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
+        );
+        return;
+    }
+
+    // Show processing dialog
+    siv.add_layer(
+        Dialog::text("🤖 Enhancing your message with AI...\nPlease wait...")
+            .title("AI Enhancement")
+            .with_name("enhance_dialog"),
+    );
+
+    let cb_sink = siv.cb_sink().clone();
+    let ai_service = state.ai_service.clone();
+
+    std::thread::spawn(move || {
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(rt) => rt,
+            Err(_) => return,
+        };
+
+        let enhanced = rt.block_on(async {
+            let prompt = format!(
+                "Enhance and improve this message for clarity, professionalism, and effectiveness. \
+                Keep the core intent but make it better. Return only the enhanced message without explanation:\n\n{}",
+                current_content
+            );
+
+            ai_service
+                .query_with_debug(&prompt, false)
+                .await
+                .unwrap_or_else(|_| current_content.clone())
+        });
+
+        cb_sink
+            .send(Box::new(move |s| {
+                s.pop_layer(); // Remove processing dialog
+
+                // Show preview dialog with original and enhanced versions
+                let mut preview_layout = LinearLayout::vertical();
+                preview_layout.add_child(TextView::new("Original:"));
+                preview_layout.add_child(Panel::new(
+                    ScrollView::new(TextView::new(current_content.clone())).max_height(5),
+                ));
+                preview_layout.add_child(DummyView.fixed_height(1));
+                preview_layout.add_child(TextView::new("Enhanced:"));
+                preview_layout.add_child(Panel::new(
+                    ScrollView::new(TextView::new(enhanced.clone())).max_height(5),
+                ));
+
+                let enhanced_clone = enhanced.clone();
+                s.add_layer(
+                    Dialog::around(preview_layout)
+                        .title("AI Enhancement Preview")
+                        .button("Use Enhanced", move |s| {
+                            s.pop_layer();
+                            if let Some(mut input) = s.find_name::<TextArea>("input") {
+                                input.set_content(enhanced_clone.clone());
+                            }
+                        })
+                        .button("Keep Original", |s| {
+                            s.pop_layer();
+                        })
+                        .max_width(80),
+                );
+            }))
+            .ok();
+    });
+}
+
+/// Show drafts dialog
+pub fn show_drafts_dialog(siv: &mut Cursive, _state: AdvancedChatState) {
+    // TODO: Implement draft storage and retrieval
+    // For now, show a placeholder dialog
+
+    siv.add_layer(
+        Dialog::text("Draft management coming soon!\n\nThis will allow you to:\n• Save current message as draft\n• Load previously saved drafts\n• Manage multiple drafts\n• Quick access to templates")
+            .title("Drafts")
+            .button("OK", |s| {
+                s.pop_layer();
+            }),
+    );
 }
