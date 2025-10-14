@@ -258,19 +258,16 @@ impl AdvancedChatUI {
 
     pub fn update_chat_display(&self, siv: &mut Cursive) {
         if let Some(session) = self.state.get_active_session() {
-            let mut display_text = String::new();
+            let mut styled_content = StyledString::new();
 
             for message in &session.messages {
-                display_text.push_str(&self.format_message_with_theme(message));
+                let styled_message = self.format_message_styled(message);
+                styled_content.append(styled_message);
             }
 
-            // Stable content update - only set if content actually changed
+            // Update with styled content
             if let Some(mut chat_display) = siv.find_name::<TextView>("chat_display") {
-                let content_ref = chat_display.get_content();
-                let current_content = content_ref.source().to_string();
-                if current_content != display_text {
-                    chat_display.set_content(display_text);
-                }
+                chat_display.set_content(styled_content);
             }
         } else {
             let no_session_text =
@@ -283,6 +280,180 @@ impl AdvancedChatUI {
                 }
             }
         }
+    }
+
+    /// Format message with color styling
+    fn format_message_styled(&self, message: &ChatMessage) -> StyledString {
+        let mut styled = StyledString::new();
+        let timestamp = ChatMessage::get_display_timestamp();
+
+        // Define colors for different message types
+        let user_color = Color::Rgb(86, 156, 214); // VS Code blue
+        let agent_color = Color::Rgb(106, 153, 85); // VS Code green
+        let system_color = Color::Rgb(156, 163, 175); // Gray
+        let error_color = Color::Rgb(244, 71, 71); // VS Code red
+        let tool_color = Color::Rgb(206, 145, 120); // VS Code orange
+        let result_color = Color::Rgb(78, 201, 176); // Cyan
+        let bg_color = Color::Rgb(30, 30, 30); // VS Code background
+
+        match message {
+            ChatMessage::User(text) => {
+                let sanitized = self.sanitize_text(text);
+                // "You" label in blue
+                styled.append_styled(
+                    format!("You [{}]: ", timestamp),
+                    ColorStyle::new(user_color, bg_color),
+                );
+                // Message text in lighter blue
+                styled.append_styled(
+                    format!("{}\n", sanitized),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+                // Actions in gray
+                styled.append_styled(
+                    "   [R]etry [C]opy [D]elete   (Alt+R/C/D)\n\n",
+                    ColorStyle::new(system_color, bg_color),
+                );
+            }
+            ChatMessage::Agent(text) => {
+                let rendered = self.render_markdown(text);
+                let sanitized = self.sanitize_text(&rendered);
+                // "Agent" label in green
+                styled.append_styled(
+                    format!("Agent [{}]:\n", timestamp),
+                    ColorStyle::new(agent_color, bg_color),
+                );
+                // Message text in white
+                styled.append_styled(
+                    format!("{}\n", sanitized),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+                // Actions in gray
+                styled.append_styled(
+                    "   [F]ork [C]opy [R]etry [D]elete   (Alt+F/C/R/D)\n\n",
+                    ColorStyle::new(system_color, bg_color),
+                );
+            }
+            ChatMessage::System(text) => {
+                let sanitized = self.sanitize_text(text);
+                styled.append_styled(
+                    format!("System [{}]: {}\n\n", timestamp, sanitized),
+                    ColorStyle::new(system_color, bg_color),
+                );
+            }
+            ChatMessage::Error(text) => {
+                let sanitized = self.sanitize_text(text);
+                styled.append_styled(
+                    format!("[ERROR] ", ),
+                    ColorStyle::new(error_color, bg_color),
+                );
+                styled.append_styled(
+                    format!("[{}]: {}\n\n", timestamp, sanitized),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+            }
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                args,
+                execution_id,
+            } => {
+                let sanitized_tool_name = self.sanitize_text(tool_name);
+                let sanitized_description = self.sanitize_text(description);
+
+                styled.append_styled(
+                    format!("[TOOL] ", ),
+                    ColorStyle::new(tool_color, bg_color),
+                );
+                styled.append_styled(
+                    format!("[{}]: {} - {}\n", timestamp, sanitized_tool_name, sanitized_description),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+
+                if let Some(args) = args {
+                    let sanitized_args = self.sanitize_json(args);
+                    styled.append_styled(
+                        format!("   Args: {}\n", sanitized_args),
+                        ColorStyle::new(system_color, bg_color),
+                    );
+                }
+                styled.append_styled(
+                    format!("   ID: {}\n\n", execution_id),
+                    ColorStyle::new(system_color, bg_color),
+                );
+            }
+            ChatMessage::ToolResult {
+                tool_name,
+                result,
+                execution_id,
+            } => {
+                let sanitized_tool_name = self.sanitize_text(tool_name);
+                let sanitized_result = self.sanitize_json(result);
+
+                styled.append_styled(
+                    format!("[RESULT] ", ),
+                    ColorStyle::new(result_color, bg_color),
+                );
+                styled.append_styled(
+                    format!("{} [{}] (ID: {}):\n", sanitized_tool_name, timestamp, execution_id),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+                styled.append_styled(
+                    format!("{}\n\n", sanitized_result),
+                    ColorStyle::new(system_color, bg_color),
+                );
+            }
+            ChatMessage::AgentThinking(text) => {
+                let sanitized = self.sanitize_text(text);
+                styled.append_styled(
+                    format!("[...] ", ),
+                    ColorStyle::new(Color::Rgb(206, 145, 120), bg_color),
+                );
+                styled.append_styled(
+                    format!("[{}]: {}\n\n", timestamp, sanitized),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+            }
+            ChatMessage::AgentPlan(plan) => {
+                styled.append_styled(
+                    format!("[PLAN] ", ),
+                    ColorStyle::new(Color::Rgb(86, 156, 214), bg_color),
+                );
+                styled.append_styled(
+                    format!("[{}]:\n", timestamp),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+
+                for (i, step) in plan.iter().enumerate() {
+                    let step_text = format!("{}: {}", step.tool_name, step.reason);
+                    let sanitized = self.sanitize_text(&step_text);
+                    styled.append_styled(
+                        format!("  {}. {}\n", i + 1, sanitized),
+                        ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                    );
+                }
+                styled.append_plain("\n");
+            }
+            ChatMessage::Processing {
+                message,
+                spinner_index,
+            } => {
+                let spinner_chars = vec!["|", "/", "-", "\\", "|", "/", "-", "\\"];
+                let spinner_char = spinner_chars[spinner_index % spinner_chars.len()];
+                let sanitized = self.sanitize_text(message);
+
+                styled.append_styled(
+                    format!("{} ", spinner_char),
+                    ColorStyle::new(Color::Rgb(206, 145, 120), bg_color),
+                );
+                styled.append_styled(
+                    format!("{}\n\n", sanitized),
+                    ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
+                );
+            }
+        }
+
+        styled
     }
 
     pub fn update_agent_status(&self, siv: &mut Cursive) {

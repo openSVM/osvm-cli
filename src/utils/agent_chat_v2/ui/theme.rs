@@ -8,28 +8,42 @@ use cursive::utils::markup::StyledString;
 pub struct ModernTheme;
 
 impl ModernTheme {
-    /// Create a modern dark theme with vibrant accents
+    /// Get list of available theme names
+    pub fn available_themes() -> Vec<&'static str> {
+        vec!["dark", "light", "high_contrast"]
+    }
+
+    /// Get theme by name
+    pub fn by_name(name: &str) -> Theme {
+        match name {
+            "light" => Self::light(),
+            "high_contrast" => Self::high_contrast(),
+            _ => Self::dark(), // Default to dark
+        }
+    }
+
+    /// VS Code inspired dark theme with professional colors
     pub fn dark() -> Theme {
         let mut theme = Theme::default();
 
-        // Modern color palette
+        // VS Code color palette
         let mut palette = Palette::default();
 
-        // Background colors - dark with subtle gradients
-        palette[PaletteColor::Background] = Color::Rgb(15, 15, 23); // Deep dark blue-black
-        palette[PaletteColor::View] = Color::Rgb(24, 24, 36); // Slightly lighter surface
-        palette[PaletteColor::Primary] = Color::Rgb(139, 92, 246); // Purple accent
-        palette[PaletteColor::Secondary] = Color::Rgb(59, 130, 246); // Blue accent
-        palette[PaletteColor::Tertiary] = Color::Rgb(34, 197, 94); // Success green
-        palette[PaletteColor::TitlePrimary] = Color::Rgb(167, 139, 250); // Light purple
-        palette[PaletteColor::TitleSecondary] = Color::Rgb(96, 165, 250); // Light blue
-        palette[PaletteColor::Highlight] = Color::Rgb(236, 72, 153); // Pink highlight
-        palette[PaletteColor::HighlightInactive] = Color::Rgb(75, 85, 99); // Muted gray
-        palette[PaletteColor::HighlightText] = Color::Rgb(243, 244, 246); // Bright text
+        // Background colors - VS Code dark theme
+        palette[PaletteColor::Background] = Color::Rgb(30, 30, 30); // #1e1e1e - VS Code background
+        palette[PaletteColor::View] = Color::Rgb(37, 37, 38); // #252526 - VS Code sidebar
+        palette[PaletteColor::Primary] = Color::Rgb(0, 122, 204); // #007acc - VS Code blue
+        palette[PaletteColor::Secondary] = Color::Rgb(86, 156, 214); // #569cd6 - VS Code keyword blue
+        palette[PaletteColor::Tertiary] = Color::Rgb(106, 153, 85); // #6a9955 - VS Code green
+        palette[PaletteColor::TitlePrimary] = Color::Rgb(212, 212, 212); // #d4d4d4 - VS Code text
+        palette[PaletteColor::TitleSecondary] = Color::Rgb(86, 156, 214); // #569cd6 - VS Code blue
+        palette[PaletteColor::Highlight] = Color::Rgb(38, 79, 120); // #264f78 - VS Code selection
+        palette[PaletteColor::HighlightInactive] = Color::Rgb(42, 45, 46); // #2a2d2e - VS Code line highlight
+        palette[PaletteColor::HighlightText] = Color::Rgb(212, 212, 212); // #d4d4d4 - VS Code text
 
         theme.palette = palette;
 
-        // Use simple borders (cursive doesn't have Rounded in older versions)
+        // Use simple borders for clean VS Code look
         theme.borders = BorderStyle::Simple;
 
         // Enable shadows for depth
@@ -89,107 +103,107 @@ impl ModernTheme {
     }
 }
 
-/// UI status icons
+/// UI status icons (text-based, no emojis)
 pub struct Icons;
 
 impl Icons {
-    pub const IDLE: &'static str = "◉";
-    pub const THINKING: &'static str = "◐";
-    pub const PLANNING: &'static str = "◑";
-    pub const EXECUTING: &'static str = "▶";
-    pub const WAITING: &'static str = "◯";
-    pub const PAUSED: &'static str = "⏸";
-    pub const ERROR: &'static str = "⚠";
-    pub const SUCCESS: &'static str = "✓";
-    pub const CHAT: &'static str = "💬";
-    pub const NEW: &'static str = "✨";
-    pub const RECORD: &'static str = "⏺";
-    pub const STOP: &'static str = "⏹";
-    pub const TOOL: &'static str = "🔧";
-    pub const FOLDER: &'static str = "📁";
-    pub const FILE: &'static str = "📄";
-    pub const ROCKET: &'static str = "🚀";
-    pub const SPARKLES: &'static str = "✨";
-    pub const LIGHTNING: &'static str = "⚡";
-    pub const FIRE: &'static str = "🔥";
-    pub const STAR: &'static str = "⭐";
-    pub const HEART: &'static str = "❤";
-    pub const INFO: &'static str = "ℹ";
-    pub const ARROW_RIGHT: &'static str = "→";
-    pub const ARROW_LEFT: &'static str = "←";
-    pub const CHECK_HEAVY: &'static str = "✔";
-    pub const CROSS: &'static str = "✖";
+    pub const IDLE: &'static str = "[IDLE]";
+    pub const THINKING: &'static str = "[...]";
+    pub const PLANNING: &'static str = "[PLAN]";
+    pub const EXECUTING: &'static str = "[EXEC]";
+    pub const WAITING: &'static str = "[WAIT]";
+    pub const PAUSED: &'static str = "[PAUSE]";
+    pub const ERROR: &'static str = "[ERROR]";
+    pub const SUCCESS: &'static str = "[OK]";
+    pub const CHAT: &'static str = "";
+    pub const NEW: &'static str = "";
+    pub const RECORD: &'static str = "[REC]";
+    pub const STOP: &'static str = "[STOP]";
+    pub const TOOL: &'static str = "";
+    pub const FOLDER: &'static str = "";
+    pub const FILE: &'static str = "";
+    pub const ROCKET: &'static str = "";
+    pub const SPARKLES: &'static str = "";
+    pub const LIGHTNING: &'static str = "";
+    pub const FIRE: &'static str = "";
+    pub const STAR: &'static str = "";
+    pub const HEART: &'static str = "";
+    pub const INFO: &'static str = "[INFO]";
+    pub const ARROW_RIGHT: &'static str = ">";
+    pub const ARROW_LEFT: &'static str = "<";
+    pub const CHECK_HEAVY: &'static str = "[OK]";
+    pub const CROSS: &'static str = "[X]";
 }
 
-/// Styled text builders for consistent formatting
+/// Styled text builders for consistent formatting (VS Code colors)
 pub struct StyledText;
 
 impl StyledText {
-    /// Create gradient-like text (simulated with alternating colors)
+    /// Create gradient-like text (VS Code style)
     pub fn gradient(text: &str) -> StyledString {
         let mut styled = StyledString::new();
         let colors = vec![
-            Color::Rgb(139, 92, 246), // Purple
-            Color::Rgb(96, 130, 246), // Blue-purple
-            Color::Rgb(59, 130, 246), // Blue
+            Color::Rgb(86, 156, 214),  // #569cd6 - VS Code keyword blue
+            Color::Rgb(0, 122, 204),   // #007acc - VS Code bright blue
+            Color::Rgb(78, 201, 176),  // #4ec9b0 - VS Code cyan
         ];
 
         for (i, ch) in text.chars().enumerate() {
             let color_idx = i % colors.len();
             styled.append_styled(
                 ch.to_string(),
-                ColorStyle::new(colors[color_idx], Color::Rgb(24, 24, 36)),
+                ColorStyle::new(colors[color_idx], Color::Rgb(30, 30, 30)),
             );
         }
 
         styled
     }
 
-    /// Create success text (green)
+    /// Create success text (VS Code green)
     pub fn success(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(34, 197, 94), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(106, 153, 85), Color::Rgb(30, 30, 30)), // #6a9955
         )
     }
 
-    /// Create error text (red)
+    /// Create error text (VS Code red)
     pub fn error(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(239, 68, 68), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(244, 71, 71), Color::Rgb(30, 30, 30)), // #f44747
         )
     }
 
-    /// Create warning text (yellow)
+    /// Create warning text (VS Code orange)
     pub fn warning(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(251, 146, 60), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(206, 145, 120), Color::Rgb(30, 30, 30)), // #ce9178
         )
     }
 
-    /// Create info text (blue)
+    /// Create info text (VS Code blue)
     pub fn info(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(59, 130, 246), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(86, 156, 214), Color::Rgb(30, 30, 30)), // #569cd6
         )
     }
 
-    /// Create accent text (purple)
+    /// Create accent text (VS Code bright blue)
     pub fn accent(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(139, 92, 246), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(0, 122, 204), Color::Rgb(30, 30, 30)), // #007acc
         )
     }
 
-    /// Create highlighted text
+    /// Create highlighted text (VS Code selection)
     pub fn highlight(text: &str) -> StyledString {
         StyledString::styled(
             text,
-            ColorStyle::new(Color::Rgb(236, 72, 153), Color::Rgb(24, 24, 36)),
+            ColorStyle::new(Color::Rgb(212, 212, 212), Color::Rgb(38, 79, 120)), // #d4d4d4 on #264f78
         )
     }
 }

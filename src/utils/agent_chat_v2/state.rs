@@ -75,13 +75,23 @@ impl AdvancedChatState {
             warn!("Failed to load theme from config: {}", e);
         }
 
-        // Create default sessions so the UI has content to navigate
-        let main_session_id = state.create_session("Main Chat".to_string())?;
-        let analysis_session_id = state.create_session("Analysis".to_string())?;
-        let work_session_id = state.create_session("Work Chat".to_string())?;
-
-        if let Ok(mut active_id) = state.active_session_id.write() {
-            *active_id = Some(main_session_id);
+        // Load sessions from disk or create defaults
+        if let Ok(Some(persisted)) = super::persistence::PersistedState::load() {
+            // Restore saved sessions
+            let session_count = persisted.sessions.len();
+            if let Ok(mut sessions) = state.sessions.write() {
+                *sessions = persisted.sessions;
+            }
+            if let Ok(mut active_id) = state.active_session_id.write() {
+                *active_id = persisted.active_session_id;
+            }
+            info!("Loaded {} saved sessions", session_count);
+        } else {
+            // First run - create default session
+            let main_session_id = state.create_session("Main Chat".to_string())?;
+            if let Ok(mut active_id) = state.active_session_id.write() {
+                *active_id = Some(main_session_id);
+            }
         }
 
         // Don't block on tool refresh during creation - it will be done asynchronously
@@ -120,6 +130,11 @@ impl AdvancedChatState {
             .write()
             .map_err(|e| anyhow!("Failed to lock active session: {}", e))?;
         *active_id = Some(session_id);
+        drop(active_id); // Release lock
+
+        // Auto-save after session change
+        self.save_state_async();
+
         Ok(())
     }
 
@@ -158,6 +173,10 @@ impl AdvancedChatState {
         } else {
             warn!("Session {} not found when adding message", session_id);
         }
+
+        // Auto-save after message change
+        drop(sessions); // Release lock before save
+        self.save_state_async();
 
         Ok(())
     }
@@ -283,6 +302,9 @@ impl AdvancedChatState {
 
         if is_first_session {
             self.set_active_session(session_id)?;
+        } else {
+            // Still save state if not first session
+            self.save_state_async();
         }
 
         Ok(session_id)
@@ -647,6 +669,34 @@ impl AdvancedChatState {
             }
         }
         String::new()
+    }
+
+    /// Save state to disk asynchronously (non-blocking)
+    fn save_state_async(&self) {
+        // Clone the data we need to save (quick operation)
+        let sessions = match self.sessions.try_read() {
+            Ok(s) => s.clone(),
+            Err(_) => {
+                warn!("Could not acquire lock to save state");
+                return;
+            }
+        };
+
+        let active_id = match self.active_session_id.try_read() {
+            Ok(id) => *id,
+            Err(_) => {
+                warn!("Could not acquire lock for active session ID");
+                return;
+            }
+        };
+
+        // Spawn thread to do the actual save (don't block UI)
+        std::thread::spawn(move || {
+            if let Err(e) = super::persistence::PersistedState::save(&sessions, active_id) {
+                // Log error but don't crash - save is nice-to-have
+                debug!("Failed to persist state: {}", e);
+            }
+        });
     }
 }
 

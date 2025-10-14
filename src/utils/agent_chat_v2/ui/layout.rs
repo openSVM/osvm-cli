@@ -5,7 +5,7 @@ use cursive::direction::Orientation;
 use cursive::traits::*;
 use cursive::views::{
     Button, Dialog, DummyView, EditView, LinearLayout, ListView, NamedView, Panel, ResizedView,
-    ScrollView, SelectView, TextView,
+    ScrollView, SelectView, TextArea, TextView,
 };
 use cursive::{Cursive, CursiveExt, View};
 use cursive_multiplex::{Id, Mux};
@@ -124,62 +124,41 @@ impl AdvancedChatUI {
     pub fn setup_far_ui(&self, siv: &mut Cursive) {
         let state = self.state.clone();
 
-        // Apply modern dark theme instead of default
+        // Apply VS Code dark theme ONLY - no custom theme loading
         siv.set_theme(ModernTheme::dark());
 
-        // Or try to apply current theme if available
-        if let Err(e) = self.apply_theme_to_cursive(siv) {
-            log::warn!("Failed to apply custom theme, using modern dark theme");
-        }
+        // NEW LAYOUT: Vertical layout with menu bar at top
+        let mut root_layout = LinearLayout::vertical();
 
-        // Main horizontal layout: Chat List | Chat History
-        let mut main_layout = LinearLayout::horizontal();
+        // Add top menu bar (Microsoft Edit style)
+        root_layout.add_child(self.create_top_menu_bar());
 
-        // Left panel: Chat sessions list - responsive width based on terminal size
+        // Main content: Horizontal layout with sidebar | chat area
+        let mut content_layout = LinearLayout::horizontal();
+
+        // Left sidebar: Unified sessions + MCP tools - responsive width
         let terminal_size = siv.screen_size();
         let left_width = if terminal_size.x > 120 {
-            35 // Wide terminal - more space for session list
+            30 // Wide terminal
         } else if terminal_size.x > 80 {
-            30 // Medium terminal
+            28 // Medium terminal
         } else {
-            25 // Narrow terminal - minimal session list width
+            25 // Narrow terminal
         };
 
-        let chat_list_panel = self.create_chat_list_panel();
-        main_layout.add_child(ResizedView::with_fixed_width(left_width, chat_list_panel));
+        content_layout.add_child(ResizedView::with_fixed_width(
+            left_width,
+            self.create_unified_sidebar(),
+        ));
 
-        // Right panel: Active chat and controls - takes remaining space
-        let chat_panel = self.create_chat_panel();
-        main_layout.add_child(chat_panel.full_width());
+        // Right panel: Simplified chat area (no duplicate buttons)
+        content_layout.add_child(self.create_simplified_chat_panel().full_width());
 
-        // Wrap in main dialog with dynamic title showing agent status with icons
-        let title = if let Some(session) = self.state.get_active_session() {
-            match session.agent_state {
-                AgentState::Idle => format!("{} OSVM Agent - Idle", Icons::IDLE),
-                AgentState::Thinking => format!("{} OSVM Agent - Thinking...", Icons::THINKING),
-                AgentState::Planning => format!("{} OSVM Agent - Planning...", Icons::PLANNING),
-                AgentState::ExecutingTool(ref tool) => {
-                    format!("{} OSVM Agent - Executing {}", Icons::EXECUTING, tool)
-                }
-                AgentState::Waiting => format!("{} OSVM Agent - Waiting", Icons::WAITING),
-                AgentState::Paused => format!("{} OSVM Agent - Paused", Icons::PAUSED),
-                AgentState::Error(ref err) => {
-                    format!("{} OSVM Agent - Error: {}", Icons::ERROR, err)
-                }
-            }
-        } else {
-            format!(
-                "{} {} OSVM Agent Chat {}",
-                Icons::ROCKET,
-                Icons::SPARKLES,
-                Icons::SPARKLES
-            )
-        };
-        let dialog = Dialog::around(main_layout)
-            .title(Decorations::fancy_header(&title))
-            .title_position(cursive::align::HAlign::Center);
+        // Add content to root
+        root_layout.add_child(content_layout.full_height());
 
-        siv.add_fullscreen_layer(dialog);
+        // Add fullscreen layer WITHOUT Dialog wrapper (menu bar is the title)
+        siv.add_fullscreen_layer(root_layout);
 
         // Set focus to input field initially
         siv.focus_name("input").ok();
@@ -232,40 +211,47 @@ impl AdvancedChatUI {
             show_keyboard_shortcuts_hint(s);
         });
 
-        // Add up/down arrow handlers for input history navigation
+        // Add Ctrl+Enter to send message (Microsoft Edit style)
         let state_clone = self.state.clone();
-        siv.add_global_callback(cursive::event::Key::Up, move |s| {
-            // Only handle if input field has focus
-            if s.find_name::<EditView>("input").is_some() {
-                if let Some(prev_input) = state_clone.history_previous() {
-                    if let Some(mut input) = s.find_name::<EditView>("input") {
-                        input.set_content(prev_input);
-                        // Move cursor to end
-                        let len = input.get_content().len();
-                        input.set_cursor(len);
+        siv.add_global_callback(
+            cursive::event::Event::Ctrl(cursive::event::Key::Enter),
+            move |s| {
+                if let Some(input) = s.find_name::<TextArea>("input") {
+                    let content = input.get_content().to_string();
+                    if !content.trim().is_empty() {
+                        handle_user_input(s, &content, state_clone.clone());
                     }
-
-                    // Update input panel title to show history indicator
-                    update_input_title(s, &state_clone);
                 }
+            },
+        );
+
+        // Add Ctrl+K to clear input (Microsoft Edit / VS Code style)
+        siv.add_global_callback(cursive::event::Event::CtrlChar('k'), |s| {
+            if let Some(mut input) = s.find_name::<TextArea>("input") {
+                input.set_content("");
+            }
+        });
+
+        // Add Alt+Up/Down for history navigation (avoid conflict with TextArea cursor movement)
+        let state_clone = self.state.clone();
+        siv.add_global_callback(cursive::event::Event::AltChar('p'), move |s| {
+            // Alt+P for Previous in history
+            if let Some(prev_input) = state_clone.history_previous() {
+                if let Some(mut input) = s.find_name::<TextArea>("input") {
+                    input.set_content(prev_input);
+                }
+                update_input_title(s, &state_clone);
             }
         });
 
         let state_clone = self.state.clone();
-        siv.add_global_callback(cursive::event::Key::Down, move |s| {
-            // Only handle if input field has focus
-            if s.find_name::<EditView>("input").is_some() {
-                if let Some(next_input) = state_clone.history_next() {
-                    if let Some(mut input) = s.find_name::<EditView>("input") {
-                        input.set_content(next_input);
-                        // Move cursor to end
-                        let len = input.get_content().len();
-                        input.set_cursor(len);
-                    }
-
-                    // Update input panel title to show history indicator
-                    update_input_title(s, &state_clone);
+        siv.add_global_callback(cursive::event::Event::AltChar('n'), move |s| {
+            // Alt+N for Next in history
+            if let Some(next_input) = state_clone.history_next() {
+                if let Some(mut input) = s.find_name::<TextArea>("input") {
+                    input.set_content(next_input);
                 }
+                update_input_title(s, &state_clone);
             }
         });
 
@@ -304,6 +290,11 @@ impl AdvancedChatUI {
                     .title("Switch Mode")
                     .button("OK", |s| { s.pop_layer(); })
             );
+        });
+
+        // Alt+T: Theme switcher
+        siv.add_global_callback(cursive::event::Event::AltChar('t'), |s| {
+            show_theme_switcher(s);
         });
 
         let state = self.state.clone();
@@ -345,7 +336,7 @@ impl AdvancedChatUI {
                     .map(|v| *v)
                     .unwrap_or(false);
 
-                if suggestions_visible && s.find_name::<EditView>("input").is_some() {
+                if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
                     insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
                 }
             });
@@ -365,7 +356,7 @@ impl AdvancedChatUI {
                         .map(|v| *v)
                         .unwrap_or(false);
 
-                    if suggestions_visible && s.find_name::<EditView>("input").is_some() {
+                    if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
                         insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
                     }
                 },

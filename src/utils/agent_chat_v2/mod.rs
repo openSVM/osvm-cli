@@ -9,6 +9,7 @@ use log::{error, info, warn};
 
 // Public module exports
 pub mod agent;
+pub mod persistence;
 pub mod session;
 pub mod state;
 pub mod types;
