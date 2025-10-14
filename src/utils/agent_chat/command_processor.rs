@@ -18,6 +18,22 @@ fn exit_command(_args: &[&str]) -> Result<CommandResult> {
     Ok(CommandResult::Exit)
 }
 
+fn screenshot_command(args: &[&str]) -> Result<CommandResult> {
+    // Parse arguments for --terminal-only or --fullscreen
+    let terminal_only = args.contains(&"--terminal-only");
+    let fullscreen = args.contains(&"--fullscreen");
+
+    // Default to terminal-only if no flag specified
+    let mode = if fullscreen {
+        false
+    } else {
+        // Default or explicitly specified
+        true
+    };
+
+    Ok(CommandResult::Screenshot(mode))
+}
+
 fn get_help_text() -> String {
     format!(
         r#"
@@ -26,12 +42,14 @@ fn get_help_text() -> String {
 ╚════════════════════════════════════════════════╝{}
 
 {}Commands:{}
-  /help         - Show this help menu
-  /clear        - Clear chat history
-  /tools        - List available MCP tools
-  /context      - Show conversation context
-  /status       - Show system status
-  /exit, /quit  - Exit application
+  /help                     - Show this help menu
+  /clear                    - Clear chat history
+  /tools                    - List available MCP tools
+  /context                  - Show conversation context
+  /status                   - Show system status
+  /screenshot               - Take screenshot (terminal-only, default)
+  /screenshot --fullscreen  - Take full-screen screenshot
+  /exit, /quit              - Exit application
 
 {}Tool Invocation:{}
   @server/tool  - Execute specific MCP tool
@@ -46,6 +64,8 @@ fn get_help_text() -> String {
 {}Examples:{}
   @solana/get_balance
   @solana/get_recent_transactions
+  /screenshot --terminal-only
+  /screenshot --fullscreen
   /tools
   /status
 "#,
@@ -79,6 +99,7 @@ pub enum CommandResult {
     Exit,
     Clear,
     Continue,
+    Screenshot(bool), // bool = terminal_only (true) or fullscreen (false)
 }
 
 impl CommandProcessor {
@@ -91,6 +112,7 @@ impl CommandProcessor {
         commands.insert("/clear".to_string(), clear_command as CommandHandler);
         commands.insert("/exit".to_string(), exit_command as CommandHandler);
         commands.insert("/quit".to_string(), exit_command as CommandHandler);
+        commands.insert("/screenshot".to_string(), screenshot_command as CommandHandler);
 
         Self { commands }
     }
