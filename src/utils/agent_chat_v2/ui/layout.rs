@@ -230,6 +230,11 @@ impl AdvancedChatUI {
     }
 
     pub fn setup_action_hotkeys(&self, siv: &mut Cursive) {
+        // F12: Take screenshot
+        siv.add_global_callback(cursive::event::Key::F12, |siv| {
+            take_screenshot(siv);
+        });
+
         // Alt+M: Switch back to standard mode
         siv.add_global_callback(cursive::event::Event::AltChar('m'), |siv| {
             siv.add_layer(

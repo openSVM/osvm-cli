@@ -22,9 +22,9 @@ pub async fn handle_qa_command(
                 TestCategory::Chat
             };
 
-            let create_issues = sub_m.get_flag("create-issues");
+            let create_issues = sub_m.get_flag("create_issues");
             let github_repo = sub_m
-                .get_one::<String>("github-repo")
+                .get_one::<String>("github_repo")
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "opensvm/osvm-cli".to_string());
 
