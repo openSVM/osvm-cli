@@ -96,6 +96,11 @@ impl App {
 
 /// Dynamic terminal interface with enhanced status bar and task management
 pub async fn run_agent_chat_ui() -> Result<()> {
+    run_agent_chat_ui_with_mode(false).await
+}
+
+/// Dynamic terminal interface with test mode support
+pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
     // Initialize services
     let mut mcp_service = McpService::new_with_debug(false);
     let ai_service = Arc::new(AiService::new_with_debug(false));
@@ -190,7 +195,7 @@ pub async fn run_agent_chat_ui() -> Result<()> {
         show_enhanced_status_bar(&task_state);
 
         // Real-time input with suggestions - positioned immediately after status bar
-        let input = match get_enhanced_input_with_status(&suggestion_tx, &mut task_state).await {
+        let input = match get_enhanced_input_with_status(&suggestion_tx, &mut task_state, test_mode).await {
             Ok(input) => input,
             Err(e) => {
                 println!("{}✗ Input error: {}{}", Colors::RED, e, Colors::RESET);
@@ -244,6 +249,38 @@ pub async fn run_agent_chat_ui() -> Result<()> {
                         e,
                         Colors::RESET
                     );
+                }
+                continue;
+            }
+            cmd if cmd == "screenshot" || cmd == "/screenshot" || cmd.starts_with("/screenshot ") => {
+                // Parse arguments for --terminal-only or --fullscreen
+                let terminal_only = if input.contains("--fullscreen") {
+                    false
+                } else {
+                    true  // Default to terminal-only
+                };
+
+                let mode_str = if terminal_only { "terminal-only" } else { "full-screen" };
+                println!("{}• Taking {} screenshot...{}", Colors::CYAN, mode_str, Colors::RESET);
+
+                match crate::utils::screenshot::take_terminal_screenshot(terminal_only) {
+                    Ok(path) => {
+                        println!(
+                            "{}✓ Screenshot saved: {}{}{}",
+                            Colors::GREEN,
+                            Colors::BOLD,
+                            path.display(),
+                            Colors::RESET
+                        );
+                    }
+                    Err(e) => {
+                        println!(
+                            "{}✗ Screenshot failed: {}{}",
+                            Colors::RED,
+                            e,
+                            Colors::RESET
+                        );
+                    }
                 }
                 continue;
             }
@@ -318,6 +355,7 @@ async fn redraw_input_box_at_bottom() -> Result<()> {
 async fn get_enhanced_input_with_status(
     suggestion_tx: &mpsc::UnboundedSender<String>,
     task_state: &mut TaskState,
+    test_mode: bool,
 ) -> Result<String> {
     let mut input_state = InputState::new();
     input_state.history_index = input_state.command_history.len();
@@ -359,7 +397,12 @@ async fn get_enhanced_input_with_status(
         .flush()
         .map_err(|e| anyhow!("Failed to flush stdout: {}", e))?;
 
-    // Enable raw mode for character-by-character input
+    // Enable raw mode for character-by-character input (unless in test mode)
+    if test_mode {
+        // Test mode: Use line-buffered input for programmatic access
+        return read_line_buffered_input().await;
+    }
+
     super::input_handler::enable_raw_mode()?;
 
     loop {
@@ -588,6 +631,22 @@ async fn get_enhanced_input_with_status(
             }
         }
     }
+}
+
+/// Read line-buffered input for test mode (programmatic access)
+async fn read_line_buffered_input() -> Result<String> {
+    let mut input = String::new();
+    std::io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| anyhow!("Failed to read line: {}", e))?;
+
+    // Remove trailing newline
+    let input = input.trim_end().to_string();
+
+    // Print the input back (for visual feedback)
+    println!("{}", input);
+
+    Ok(input)
 }
 
 /// Input character classification
@@ -1102,6 +1161,11 @@ pub async fn get_instant_suggestions(partial_input: &str) -> Vec<RealtimeSuggest
         (
             "/status".to_string(),
             "Show current system status".to_string(),
+            "command".to_string(),
+        ),
+        (
+            "/screenshot".to_string(),
+            "Take a screenshot of the current window".to_string(),
             "command".to_string(),
         ),
         (
@@ -1822,6 +1886,11 @@ fn show_help_commands() {
         Colors::RESET
     );
     println!(
+        "  {}/screenshot{}   - Take a screenshot",
+        Colors::BLUE,
+        Colors::RESET
+    );
+    println!(
         "  {}/exit, /quit{}  - Exit application",
         Colors::BLUE,
         Colors::RESET
@@ -2196,11 +2265,16 @@ async fn show_status_overview(
     servers: &Vec<(&String, &McpServerConfig)>,
     chat_history: &[String],
 ) -> Result<()> {
+    let working_dir = std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "Unknown".to_string());
+
     println!("{}Current System Status:{}", Colors::CYAN, Colors::RESET);
     println!(
-        "{}  • Working Directory: {}/home/larp/larpdevs/osvm-cli{}",
+        "{}  • Working Directory: {}{}{}",
         Colors::CYAN,
         Colors::DIM,
+        working_dir,
         Colors::RESET
     );
     println!(

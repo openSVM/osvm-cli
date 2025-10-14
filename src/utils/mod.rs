@@ -55,6 +55,8 @@ pub mod osvm_command_planner;
 pub mod path_security;
 /// Plugin system for extending functionality
 pub mod plugins;
+/// Screenshot capture utilities for terminal windows
+pub mod screenshot;
 /// Secure logging utilities to prevent information disclosure
 pub mod secure_logger;
 /// Secure system operations without privilege escalation

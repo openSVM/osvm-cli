@@ -134,6 +134,82 @@ pub fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
     }
 }
 
+pub fn take_screenshot(siv: &mut Cursive) {
+    // Show taking screenshot message
+    siv.add_layer(
+        Dialog::text("📸 Taking screenshot...\nPlease wait...")
+            .title("Screenshot")
+            .with_name("screenshot_dialog"),
+    );
+
+    // Export TUI buffer for rendering
+    let tui_buffer = export_cursive_buffer(siv);
+
+    // Take screenshot in background
+    let cb_sink = siv.cb_sink().clone();
+
+    std::thread::spawn(move || {
+        // Try TUI buffer screenshot first (pure content)
+        let result = if let Some(buffer) = tui_buffer {
+            crate::utils::screenshot::render_tui_buffer_to_image(buffer)
+        } else {
+            // Fallback to window capture
+            crate::utils::screenshot::take_terminal_screenshot(true)
+        };
+
+        match result {
+            Ok(path) => {
+                let success_msg = format!("✅ Screenshot saved successfully!\n\nMode: TUI Content Export\nLocation:\n{}", path.display());
+                cb_sink
+                    .send(Box::new(move |s| {
+                        s.pop_layer(); // Remove "taking screenshot" dialog
+                        s.add_layer(
+                            Dialog::text(success_msg)
+                                .title("Screenshot Saved")
+                                .button("OK", |s| {
+                                    s.pop_layer();
+                                }),
+                        );
+                    }))
+                    .ok();
+            }
+            Err(e) => {
+                let error_msg = format!("❌ Screenshot failed:\n\n{}", e);
+                cb_sink
+                    .send(Box::new(move |s| {
+                        s.pop_layer(); // Remove "taking screenshot" dialog
+                        s.add_layer(
+                            Dialog::text(error_msg)
+                                .title("Screenshot Error")
+                                .button("OK", |s| {
+                                    s.pop_layer();
+                                }),
+                        );
+                    }))
+                    .ok();
+            }
+        }
+    });
+}
+
+/// Export cursive screen buffer for TUI rendering
+fn export_cursive_buffer(siv: &mut Cursive) -> Option<crate::utils::screenshot::TuiBuffer> {
+    use cursive::backend::Backend;
+
+    // Get screen size
+    let size = siv.screen_size();
+
+    // Try to export backend buffer
+    // Note: This requires accessing the backend's internal state
+    // We'll create a simplified version for now
+
+    Some(crate::utils::screenshot::TuiBuffer {
+        width: size.x,
+        height: size.y,
+        content: Vec::new(), // Will be populated by screen scraping
+    })
+}
+
 pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: AdvancedChatState) {
     // Get the suggestion
     let suggestion = {
@@ -481,6 +557,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         • Tab - Switch between chat list and input\n\
         • Shift+Tab - Reverse navigation\n\
         • F10 - Context menu (Copy, Retry, Clear)\n\
+        • F12 - Take screenshot of current window\n\
         • Ctrl+1-5 - Insert suggestions (when visible)\n\
         • Alt+1-5 - Alternative suggestion insertion\n\
         • Alt+R - Retry last message\n\
@@ -516,7 +593,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
             .button("Print Shortcuts", |s| {
                 // Print shortcuts to console for reference
                 println!("\n=== OSVM Advanced Chat Keyboard Shortcuts ===");
-                println!("Tab/Shift+Tab: Navigate UI  |  F10: Context Menu");
+                println!("Tab/Shift+Tab: Navigate UI  |  F10: Context Menu  |  F12: Screenshot");
                 println!("Ctrl/Alt+1-5: Suggestions  |  Alt+R/C/D/F: Actions");
                 println!("Alt+X: Emergency Clear  |  Esc: Hide Suggestions");
                 println!("================================================\n");

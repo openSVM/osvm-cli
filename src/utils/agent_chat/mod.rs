@@ -9,6 +9,7 @@ mod colors;
 mod command_processor;
 mod fuzzy_matcher;
 mod input_handler;
+mod programmatic_chat;
 mod responsive_layout;
 mod suggestions;
 pub mod system_status_bar;
@@ -19,9 +20,10 @@ mod ui_components;
 // Re-export public API
 pub use chat_application::App;
 pub use chat_application::{
-    get_instant_suggestions, handle_regular_character, run_agent_chat_ui, run_chat_ui_tests,
+    get_instant_suggestions, handle_regular_character, run_agent_chat_ui, run_agent_chat_ui_with_mode, run_chat_ui_tests,
 };
 pub use input_handler::{disable_raw_mode, enable_raw_mode, InputState};
+pub use programmatic_chat::{AgentState as BasicAgentState, ChatMessage as BasicChatMessage, ProgrammaticChatState};
 pub use task_state::TaskState;
 
 // Internal re-exports for module communication

@@ -90,6 +90,12 @@ solana-system-interface = "2.0.0"
 solana-loader-v3-interface = { version = "6.1.0", features = ["bincode"] }
 # Terminal markdown rendering
 termimad = "0.30"
+# PNG screenshot generation for TUI testing
+image = "0.25"
+imageproc = "0.25"
+ab_glyph = "0.2"
+# Terminal emulation for capturing alternate screen buffer
+vt100 = "0.15"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
