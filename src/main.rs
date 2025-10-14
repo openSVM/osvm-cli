@@ -319,7 +319,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 .map_err(|e| e.into());
         } else {
-            return crate::utils::agent_chat::run_agent_chat_ui()
+            // Check for test mode
+            let test_mode = sub_matches.get_flag("test_mode");
+            return crate::utils::agent_chat::run_agent_chat_ui_with_mode(test_mode)
                 .await
                 .map_err(|e| e.into());
         }
