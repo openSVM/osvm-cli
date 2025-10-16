@@ -247,23 +247,28 @@ impl QueryParser {
     pub fn parse(query: &str) -> QueryIntent {
         // Check for special prefixes
         if query.starts_with('>') {
-            return QueryIntent::ActionOnly(query[1..].to_string());
+            let rest: String = query.chars().skip(1).collect();
+            return QueryIntent::ActionOnly(rest);
         }
 
         if query.starts_with('@') {
-            return QueryIntent::SessionOnly(query[1..].to_string());
+            let rest: String = query.chars().skip(1).collect();
+            return QueryIntent::SessionOnly(rest);
         }
 
         if query.starts_with('#') {
-            return QueryIntent::ThemeOnly(query[1..].to_string());
+            let rest: String = query.chars().skip(1).collect();
+            return QueryIntent::ThemeOnly(rest);
         }
 
         if query.starts_with('?') {
-            return QueryIntent::HelpOnly(query[1..].to_string());
+            let rest: String = query.chars().skip(1).collect();
+            return QueryIntent::HelpOnly(rest);
         }
 
         if query.starts_with('/') {
-            return QueryIntent::FileOnly(query[1..].to_string());
+            let rest: String = query.chars().skip(1).collect();
+            return QueryIntent::FileOnly(rest);
         }
 
         // Check for natural language patterns
