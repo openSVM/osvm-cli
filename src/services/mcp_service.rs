@@ -1054,17 +1054,44 @@ impl McpService {
             .context("Invalid command path or file does not exist")?;
 
         // Whitelist of allowed executable directories
-        let allowed_dirs = [
+        let mut allowed_dirs = vec![
             PathBuf::from("/usr/bin"),
             PathBuf::from("/usr/local/bin"),
             PathBuf::from("/bin"),
         ];
 
+        // Add common user binary directories for development environments
+        if let Ok(home) = std::env::var("HOME") {
+            let home_path = PathBuf::from(home);
+
+            // Add ~/.local/bin (standard user binaries)
+            allowed_dirs.push(home_path.join(".local/bin"));
+
+            // Add ~/bin (another common location)
+            allowed_dirs.push(home_path.join("bin"));
+
+            // Add ~/.nvm/versions/node/*/bin (nvm installation)
+            if let Ok(entries) = std::fs::read_dir(home_path.join(".nvm/versions/node")) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        allowed_dirs.push(entry.path().join("bin"));
+                    }
+                }
+            }
+
+            // Add ~/.deno/bin (deno installation)
+            allowed_dirs.push(home_path.join(".deno/bin"));
+
+            // Add ~/.cargo/bin (rust binaries)
+            allowed_dirs.push(home_path.join(".cargo/bin"));
+        }
+
         let is_in_allowed_dir = allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
 
         if !is_in_allowed_dir {
             anyhow::bail!(
-                "Command must be in an allowed directory: /usr/bin, /usr/local/bin, or /bin. \
+                "Command must be in an allowed directory: /usr/bin, /usr/local/bin, /bin, \
+                ~/.local/bin, ~/bin, ~/.nvm/versions/node/*/bin, ~/.deno/bin, or ~/.cargo/bin. \
                 Found: {:?}",
                 canonical
             );
