@@ -199,23 +199,32 @@ impl AdvancedChatUI {
         menu_bar.add_child(DummyView.full_width());
 
         // Agent status on right
-        let status = if let Some(session) = self.state.get_active_session() {
-            format!("[Agent: {}]", match session.agent_state {
-                super::super::types::AgentState::Idle => "Idle",
-                super::super::types::AgentState::Thinking => "Thinking",
-                super::super::types::AgentState::Planning => "Planning",
-                super::super::types::AgentState::ExecutingTool(_) => "Executing",
-                super::super::types::AgentState::Waiting => "Waiting",
-                super::super::types::AgentState::Paused => "Paused",
-                super::super::types::AgentState::Error(_) => "Error",
-            })
-        } else {
-            "[Agent: Idle]".to_string()
+        // BUG-2022 fix: Add error logging when session missing
+        let status = match self.state.get_active_session() {
+            Some(session) => {
+                format!("[Agent: {}]", match session.agent_state {
+                    super::super::types::AgentState::Idle => "Idle",
+                    super::super::types::AgentState::Thinking => "Thinking",
+                    super::super::types::AgentState::Planning => "Planning",
+                    super::super::types::AgentState::ExecutingTool(_) => "Executing",
+                    super::super::types::AgentState::Waiting => "Waiting",
+                    super::super::types::AgentState::Paused => "Paused",
+                    super::super::types::AgentState::Error(_) => "Error",
+                })
+            },
+            None => {
+                log::warn!("No active session found for menu bar status");
+                "[Agent: No Session]".to_string()
+            }
         };
         menu_bar.add_child(TextView::new(status).with_name("menu_status"));
         menu_bar.add_child(TextView::new("  F1=Help  "));
 
-        Panel::new(menu_bar).title("").full_width()
+        // BUG-2020 fix: Add proper title and title position to menu bar
+        Panel::new(menu_bar)
+            .title("Menu")
+            .title_position(cursive::align::HAlign::Left)
+            .full_width()
     }
 
     /// Create unified sidebar with sessions and collapsible MCP tools
