@@ -112,8 +112,9 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
         info!("✅ Agent worker started successfully");
     }
 
-    // Create default session
-    let _default_session_id = state.create_session("Main Chat".to_string())?;
+    // BUG-2002 fix: Do NOT create duplicate "Main Chat" session here!
+    // AdvancedChatState::new() already creates it during initialization
+    // Creating it again would overwrite the first session and cause data loss
 
     // Run the UI in a blocking task to avoid runtime conflicts
     let result = tokio::task::spawn_blocking(move || run_advanced_ui_sync(state)).await;
@@ -133,9 +134,16 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
 /// Synchronous UI runner to avoid async runtime conflicts
 fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
-    // Create Cursive - it will panic if no terminal is available
-    // This is handled by the caller which falls back to demo mode
-    let mut siv = Cursive::default();
+    // Create Cursive with panic protection - fallback to demo mode if no TTY
+    let mut siv = match std::panic::catch_unwind(|| Cursive::default()) {
+        Ok(siv) => siv,
+        Err(e) => {
+            eprintln!("Failed to initialize terminal UI: {:?}", e);
+            eprintln!("This usually means no interactive terminal is available.");
+            eprintln!("Falling back to demo mode...");
+            return Err(anyhow::anyhow!("Terminal initialization failed"));
+        }
+    };
 
     // Check terminal size - but allow 0x0 for automated environments
     let term_size = siv.screen_size();
@@ -154,7 +162,8 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     }
 
     if term_size.x == 0 || term_size.y == 0 {
-        println!("Unknown terminal size, attempting to initialize anyway...");
+        println!("Unknown terminal size - likely running in non-interactive environment");
+        println!("Will attempt to run UI - if terminal is unavailable, will fallback to demo mode");
     }
 
     // Enable mouse support for better interaction
@@ -201,10 +210,22 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
     // Show welcome dialog for first-time users
     ui::onboarding::show_welcome_dialog_if_first_time(&mut siv);
 
-    // Run the TUI
-    siv.run();
-
-    Ok(())
+    // Run the TUI with panic protection for internal cursive operations
+    // This catches panics in cursive's event loop and worker threads
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        siv.run();
+    })) {
+        Ok(_) => {
+            println!("✅ UI closed gracefully");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("⚠️  UI event loop panicked: {:?}", e);
+            eprintln!("This can happen when terminal device is unavailable.");
+            eprintln!("The UI will fall back to demo mode.");
+            Err(anyhow::anyhow!("UI event loop panic - terminal device unavailable"))
+        }
+    }
 }
 
 /// Demo mode for advanced chat interface

@@ -45,6 +45,9 @@ pub struct AdvancedChatState {
 
     /// Current position in input history (None = at prompt, Some(idx) = in history)
     pub history_position: Arc<RwLock<Option<usize>>>,
+
+    /// MCP tools panel visibility (progressive disclosure - hidden by default)
+    pub mcp_tools_visible: Arc<RwLock<bool>>,
 }
 
 impl AdvancedChatState {
@@ -68,6 +71,7 @@ impl AdvancedChatState {
             last_status_update: Arc::new(RwLock::new(None)),
             input_history: Arc::new(RwLock::new(Vec::new())),
             history_position: Arc::new(RwLock::new(None)),
+            mcp_tools_visible: Arc::new(RwLock::new(false)), // Hidden by default - progressive disclosure
         };
 
         // Load theme from saved configuration
@@ -80,18 +84,51 @@ impl AdvancedChatState {
             // Restore saved sessions
             let session_count = persisted.sessions.len();
             if let Ok(mut sessions) = state.sessions.write() {
-                *sessions = persisted.sessions;
+                *sessions = persisted.sessions.clone();
             }
+            // BUG-2006 fix: Validate that the persisted active_session_id actually exists
+            // If the state file is corrupted or the session was deleted, validate before setting
             if let Ok(mut active_id) = state.active_session_id.write() {
-                *active_id = persisted.active_session_id;
+                if let Some(sess_id) = persisted.active_session_id {
+                    // Verify the session exists in the loaded sessions
+                    if let Ok(sessions) = state.sessions.read() {
+                        if sessions.contains_key(&sess_id) {
+                            *active_id = Some(sess_id);
+                        } else {
+                            // Session doesn't exist, set to first session or None
+                            warn!("Persisted active session {} not found in loaded sessions", sess_id);
+                            if let Some(&first_session_id) = sessions.keys().next() {
+                                *active_id = Some(first_session_id);
+                                info!("Set active session to first available session");
+                            }
+                        }
+                    }
+                }
             }
             info!("Loaded {} saved sessions", session_count);
         } else {
-            // First run - create default session
+            // First run - create default session with welcome message
             let main_session_id = state.create_session("Main Chat".to_string())?;
             if let Ok(mut active_id) = state.active_session_id.write() {
                 *active_id = Some(main_session_id);
             }
+
+            // Add welcome message for first-time users
+            let welcome_msg = "👋 Welcome to OSVM Advanced Agent Chat!\n\n\
+                ✨ Quick Start:\n\
+                • Ctrl+Enter to send messages\n\
+                • Enter for new lines (multi-line support!)\n\
+                • Ctrl+K to clear input\n\
+                • ? or F1 for full help\n\
+                • 🤖 AI Enhance button to improve your messages\n\n\
+                💡 Tip: Try asking me about Solana, blockchain operations, or just say hello!\n\n\
+                🎯 AI Service: Using OSVM.ai (free, no setup needed)\n\
+                📚 Press F1 or type '?' to see all keyboard shortcuts";
+
+            state.add_message_to_session(
+                main_session_id,
+                ChatMessage::System(welcome_msg.to_string())
+            )?;
         }
 
         // Don't block on tool refresh during creation - it will be done asynchronously
@@ -131,6 +168,12 @@ impl AdvancedChatState {
             .map_err(|e| anyhow!("Failed to lock active session: {}", e))?;
         *active_id = Some(session_id);
         drop(active_id); // Release lock
+
+        // BUG-2008 fix: Reset history position when switching sessions
+        // Otherwise, up arrow navigates through the PREVIOUS session's history
+        if let Ok(mut pos) = self.history_position.write() {
+            *pos = None;  // Back to prompt, not in history
+        }
 
         // Auto-save after session change
         self.save_state_async();
@@ -290,19 +333,23 @@ impl AdvancedChatState {
             recording_file: None,
         };
 
+        // BUG-2005 fix: Make session creation and activation atomic to prevent race conditions
+        // Previously, the lock was released and another thread could create a session between
+        // the drop() and set_active_session() calls, causing wrong session to become active
         let mut sessions = self
             .sessions
             .write()
             .map_err(|e| anyhow!("Failed to lock sessions: {}", e))?;
         sessions.insert(session_id, session);
 
-        // Set as active session if it's the first one
+        // Check if this is the first session and set as active WHILE HOLDING THE LOCK
         let is_first_session = sessions.len() == 1;
-        drop(sessions); // Release the write lock before calling set_active_session
 
         if is_first_session {
+            drop(sessions); // Release lock before set_active_session
             self.set_active_session(session_id)?;
         } else {
+            drop(sessions); // Release lock
             // Still save state if not first session
             self.save_state_async();
         }

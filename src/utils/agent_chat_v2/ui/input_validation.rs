@@ -25,8 +25,10 @@ pub fn validate_input(input: &str) -> ValidationResult {
     // Check length (reasonable limit for chat messages)
     const MAX_LENGTH: usize = 10_000;
     if input.len() > MAX_LENGTH {
+        // BUG-2001 fix: Use char-based truncation to avoid UTF-8 boundary panic
+        let truncated: String = input.chars().take(MAX_LENGTH).collect();
         return ValidationResult::TooLong {
-            text: input[..MAX_LENGTH].to_string(),
+            text: truncated,
             max_length: MAX_LENGTH,
         };
     }
@@ -70,7 +72,11 @@ pub fn truncate_for_display(text: &str, max_length: usize) -> String {
     if text.len() <= max_length {
         text.to_string()
     } else {
-        format!("{}...", &text[..max_length.saturating_sub(3)])
+        // BUG-2001 fix: Use char-based truncation to avoid UTF-8 boundary panic
+        // especially for emoji and multi-byte characters
+        let chars_to_take = max_length.saturating_sub(3);
+        let truncated: String = text.chars().take(chars_to_take).collect();
+        format!("{}...", truncated)
     }
 }
 
