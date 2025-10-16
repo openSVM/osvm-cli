@@ -162,9 +162,13 @@ impl AutocompleteEngine {
         }
         // Check for tool mention (starts with @)
         else if current_word.starts_with('@') {
-            let search = &current_word[1..].to_lowercase();
+            let search = if current_word.len() > 1 {
+                current_word[1..].to_lowercase()
+            } else {
+                String::new()
+            };
             for tool in &self.mcp_tools {
-                if tool.name.to_lowercase().contains(search) {
+                if tool.name.to_lowercase().contains(&search) {
                     self.suggestions.push(format!("@{} ({})", tool.name, tool.server));
                 }
             }

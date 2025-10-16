@@ -75,8 +75,14 @@ impl AdvancedChatState {
         };
 
         // Load theme from saved configuration
+        // BUG-2015 fix: Clarify theme loading fallback behavior
+        // If theme loading fails (e.g., config file missing, corrupted, or theme not found),
+        // this is NOT a fatal error. The application will use the default theme (VS Code dark)
+        // and continue normally. This is intentional graceful degradation.
         if let Err(e) = state.load_theme_from_config() {
-            warn!("Failed to load theme from config: {}", e);
+            warn!("Failed to load theme from config, using default theme: {}", e);
+            // Note: The default theme is already initialized during ThemeManager::new()
+            // so this is just a fallback for user preferences, not critical for functionality
         }
 
         // Load sessions from disk or create defaults
@@ -355,6 +361,43 @@ impl AdvancedChatState {
         }
 
         Ok(session_id)
+    }
+
+    /// Delete a chat session by ID
+    pub fn delete_session(&self, session_id: Uuid) -> Result<()> {
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|e| anyhow!("Failed to lock sessions for deletion: {}", e))?;
+
+        if sessions.remove(&session_id).is_none() {
+            warn!("Session {} not found for deletion", session_id);
+            return Ok(()); // Not an error if already deleted
+        }
+
+        debug!("Deleted session {}", session_id);
+        drop(sessions); // Release lock
+
+        // Ensure active_session_id doesn't point to deleted session
+        if let Ok(mut active_id) = self.active_session_id.write() {
+            if *active_id == Some(session_id) {
+                // Set to first available session or None
+                if let Ok(sessions) = self.sessions.read() {
+                    *active_id = sessions.keys().next().copied();
+                    if *active_id == Some(session_id) {
+                        // Shouldn't happen but be safe
+                        *active_id = None;
+                    }
+                } else {
+                    *active_id = None;
+                }
+                info!("Reset active session after deletion");
+            }
+        }
+
+        // Auto-save after session deletion
+        self.save_state_async();
+        Ok(())
     }
 
     /// Start spinner animation for processing states

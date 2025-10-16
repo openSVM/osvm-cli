@@ -13,9 +13,15 @@ impl AdvancedChatState {
         let (sender, mut receiver) = mpsc::unbounded_channel::<AgentCommand>();
 
         // Store sender for use by UI
+        // BUG-2014 fix: This initialization must complete before UI starts sending commands
+        // The race window is minimal because:
+        // 1. start_agent_worker() is awaited in main
+        // 2. UI setup happens after this returns Ok(())
+        // 3. send_agent_command_sync() gracefully handles None case (logs error, doesn't crash)
         {
             let mut sender_guard = self.agent_command_sender.lock().await;
             *sender_guard = Some(sender);
+            debug!("Agent command sender initialized");
         }
 
         let state = self.clone();

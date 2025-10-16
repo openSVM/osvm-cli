@@ -92,13 +92,15 @@ pub fn parse_command(input: &str) -> Option<(String, Vec<String>)> {
         return None;
     }
 
-    let parts: Vec<&str> = trimmed[1..].split_whitespace().collect();
+    // Skip the '/' character safely using chars().skip() instead of unchecked slicing
+    let remaining: String = trimmed.chars().skip(1).collect();
+    let parts: Vec<&str> = remaining.split_whitespace().collect();
     if parts.is_empty() {
         return None;
     }
 
     let command = parts[0].to_string();
-    let args = parts[1..].iter().map(|s| s.to_string()).collect();
+    let args = parts.iter().skip(1).map(|s| s.to_string()).collect();
 
     Some((command, args))
 }

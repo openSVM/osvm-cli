@@ -146,7 +146,9 @@ pub fn fork_conversation(siv: &mut Cursive, state: AdvancedChatState) {
             }
 
             // Switch to the forked session
-            let _ = state.set_active_session(new_session_id);
+            if let Err(e) = state.set_active_session(new_session_id) {
+                error!("Failed to set active session after fork: {}", e);
+            }
             update_ui_displays(siv);
         }
     }
@@ -386,16 +388,20 @@ fn process_validated_input(siv: &mut Cursive, text: &str, state: AdvancedChatSta
         }
 
         // Add user message to the session
-        let _ = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()));
+        if let Err(e) = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone())) {
+            error!("Failed to add user message to session: {}", e);
+        }
 
         // Add processing indicator with animated spinner
-        let _ = state.add_message_to_session(
+        if let Err(e) = state.add_message_to_session(
             session.id,
             ChatMessage::Processing {
                 message: "Processing your request...".to_string(),
                 spinner_index: 0,
             },
-        );
+        ) {
+            error!("Failed to add processing message to session: {}", e);
+        }
 
         // Update the display immediately
         update_ui_displays(siv);
@@ -1597,7 +1603,9 @@ pub fn start_live_processing(
             // Safety timeout: force exit after 30 seconds
             if start_time.elapsed() > MAX_SPINNER_DURATION {
                 // Force remove processing message and exit
-                let _ = state_clone.remove_last_processing_message(session_id);
+                if let Err(e) = state_clone.remove_last_processing_message(session_id) {
+                    error!("Failed to remove processing message after timeout: {}", e);
+                }
                 break;
             }
 
@@ -1626,11 +1634,13 @@ pub fn start_live_processing(
                     .unwrap_or(false);
 
                 if still_processing_after_check {
-                    let _ = state_clone.update_processing_message(
+                    if let Err(e) = state_clone.update_processing_message(
                         session_id,
                         message.clone(),
                         spinner_index % 10,
-                    );
+                    ) {
+                        error!("Failed to update processing message: {}", e);
+                    }
                 }
             }
 
@@ -1996,7 +2006,7 @@ async fn execute_ai_plan(
         let execution_id = uuid::Uuid::new_v4().to_string();
 
         // Add tool execution message
-        let _ = state.add_message_to_session(
+        if let Err(e) = state.add_message_to_session(
             session_id,
             ChatMessage::ToolCall {
                 tool_name: tool_name.to_string(),
@@ -2006,20 +2016,24 @@ async fn execute_ai_plan(
                 )),
                 execution_id: execution_id.clone(),
             },
-        );
+        ) {
+            error!("Failed to add tool call message to session: {}", e);
+        }
 
         // Execute the tool
         let tool_result = execute_mcp_tool(server_id, tool_name, params, state.clone()).await;
 
         // Add tool result message
-        let _ = state.add_message_to_session(
+        if let Err(e) = state.add_message_to_session(
             session_id,
             ChatMessage::ToolResult {
                 tool_name: tool_name.to_string(),
                 result: serde_json::Value::String(tool_result.clone()),
                 execution_id,
             },
-        );
+        ) {
+            error!("Failed to add tool result message to session: {}", e);
+        }
 
         execution_results.push(format!("{}: {}", tool_name, tool_result));
     }
@@ -2066,7 +2080,9 @@ pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedCha
 
     if let Some(session) = state.get_active_session() {
         // Add user command to chat
-        let _ = state.add_message_to_session(session.id, ChatMessage::User(command.to_string()));
+        if let Err(e) = state.add_message_to_session(session.id, ChatMessage::User(command.to_string())) {
+            error!("Failed to add command message to session: {}", e);
+        }
 
         let parts: Vec<&str> = command.trim().split_whitespace().collect();
         let theme_cmd = match parts.as_slice() {
@@ -2088,8 +2104,10 @@ pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedCha
                     /theme switch <theme_name> - Switch to a theme\n\
                     /theme preview [theme_name] - Preview a theme\n\
                     /theme current - Show current theme name";
-                let _ = state
-                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string()));
+                if let Err(e) = state
+                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string())) {
+                    error!("Failed to add help message to session: {}", e);
+                }
                 update_ui_displays(siv);
                 return;
             }
@@ -2097,7 +2115,9 @@ pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedCha
 
         // Execute theme command synchronously
         let response = execute_theme_command(theme_cmd, &state);
-        let _ = state.add_message_to_session(session.id, ChatMessage::System(response));
+        if let Err(e) = state.add_message_to_session(session.id, ChatMessage::System(response)) {
+            error!("Failed to add theme response message to session: {}", e);
+        }
 
         // Update UI to reflect changes
         update_ui_displays(siv);
@@ -2323,13 +2343,16 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
                                     })
                                     .button("Copy Response", move |s| {
                                         if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                                            let _ = clipboard.set_text(&response_str);
-                                            s.add_layer(
-                                                Dialog::info("Response copied to clipboard!")
-                                                    .button("OK", |s| {
-                                                        s.pop_layer();
-                                                    }),
-                                            );
+                                            if let Err(e) = clipboard.set_text(&response_str) {
+                                                error!("Failed to copy to clipboard: {}", e);
+                                            } else {
+                                                s.add_layer(
+                                                    Dialog::info("Response copied to clipboard!")
+                                                        .button("OK", |s| {
+                                                            s.pop_layer();
+                                                        }),
+                                                );
+                                            }
                                         }
                                     })
                                     .max_width(100),
