@@ -133,6 +133,8 @@ impl Icons {
     pub const ARROW_LEFT: &'static str = "<";
     pub const CHECK_HEAVY: &'static str = "[OK]";
     pub const CROSS: &'static str = "[X]";
+    pub const SEPARATOR: &'static str = "│";
+    pub const KEYBOARD: &'static str = "⌨";
 }
 
 /// Styled text builders for consistent formatting (VS Code colors)

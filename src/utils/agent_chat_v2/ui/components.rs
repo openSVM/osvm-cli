@@ -112,22 +112,31 @@ impl AdvancedChatUI {
         let suggestions_view = LinearLayout::vertical().with_name("suggestions_container");
         chat_layout.add_child(suggestions_view);
 
-        // Input area
-        let input_layout = LinearLayout::horizontal()
-            .child(TextView::new("You: "))
+        // Input area - Standardized multi-line TextArea
+        let state_for_send = self.state.clone();
+        let input_layout = LinearLayout::vertical()
             .child(
-                EditView::new()
-                    .on_submit({
-                        let state = self.state.clone();
-                        move |siv, text| {
-                            handle_user_input(siv, text, state.clone());
-                        }
-                    })
-                    .with_name("input")
-                    .full_width(),
+                LinearLayout::horizontal()
+                    .child(TextView::new("💬 "))
+                    .child(
+                        TextArea::new()
+                            .content("")
+                            .with_name("input")
+                            .min_height(2)
+                            .max_height(8)  // Auto-expand up to 8 lines
+                            .full_width(),
+                    )
+            )
+            .child(
+                TextView::new("📝 Ctrl+Enter to send | Enter for new line | Tab to navigate")
+                    .with_name("input_hint")
             );
 
-        chat_layout.add_child(Panel::new(input_layout).title("Input").with_name("input_panel"));
+        chat_layout.add_child(
+            Panel::new(input_layout)
+                .title("Message (Multi-line)")
+                .with_name("input_panel")
+        );
 
         // Agent status bar with live updates and icon
         let agent_status = TextView::new(format!("{} Agent: Initializing...", Icons::LIGHTNING))
@@ -244,15 +253,10 @@ impl AdvancedChatUI {
         sidebar.add_child(TextView::new("─".repeat(25)));
         sidebar.add_child(DummyView.fixed_height(1));
 
-        // MCP Tools section with collapsible servers
-        sidebar.add_child(
-            Panel::new(TextView::new(format!("{} MCP Tools", Icons::TOOL)))
-                .title("")
-                .full_width(),
-        );
-
-        let mcp_tools = self.create_collapsible_mcp_tools();
-        sidebar.add_child(mcp_tools.min_height(5).max_height(12));
+        // MCP Tools - Progressive Disclosure (toggle with Alt+T)
+        // Container will be dynamically updated based on visibility state
+        let mcp_container = LinearLayout::vertical().with_name("mcp_tools_container");
+        sidebar.add_child(mcp_container);
 
         // Agent controls at bottom
         sidebar.add_child(DummyView.fixed_height(1));
@@ -275,7 +279,7 @@ impl AdvancedChatUI {
     }
 
     /// Create collapsible MCP tools view
-    fn create_collapsible_mcp_tools(&self) -> impl View {
+    pub fn create_collapsible_mcp_tools(&self) -> impl View {
         let mut tools_list = ListView::new();
 
         // Get available tools grouped by server
@@ -350,47 +354,58 @@ impl AdvancedChatUI {
 
         let input_layout = LinearLayout::vertical()
             .child(
-                TextArea::new()
-                    .content("")
-                    .with_name("input")
-                    .min_height(3)
-                    .max_height(10)  // Auto-expand up to 10 lines
-                    .full_width(),
+                // Multi-line input with helpful placeholder text
+                LinearLayout::horizontal()
+                    .child(TextView::new("💬 "))
+                    .child(
+                        TextArea::new()
+                            .content("")
+                            .with_name("input")
+                            .min_height(3)
+                            .max_height(10)  // Auto-expand up to 10 lines
+                            .full_width(),
+                    )
             )
             .child(
                 LinearLayout::horizontal()
-                    .child(Button::new("🤖 Enhance with AI", move |s| {
+                    .child(Button::new("🤖 AI Enhance", move |s| {
                         enhance_message_with_ai(s, state_clone_enhance.clone());
                     }))
                     .child(DummyView.min_width(1))
                     .child(Button::new("📝 Drafts", move |s| {
                         show_drafts_dialog(s, state_clone_drafts.clone());
                     }))
-                    .child(DummyView.min_width(1))
-                    .child(Button::new("📤 Send (Ctrl+Enter)", move |s| {
+                    .child(DummyView.fixed_width(2))
+                    .child(Button::new("✅ SEND (Ctrl+Enter)", move |s| {
                         send_message_from_button(s, state_clone_send.clone());
                     }))
             )
-            .child(TextView::new("Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | Tab=Navigate").with_name("input_hint"));
+            .child(
+                TextView::new("💡 Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help")
+                    .with_name("input_hint")
+            );
 
         chat_layout.add_child(
             Panel::new(input_layout)
-                .title("Input (Multi-line Editor)")
+                .title("✍️  Input Editor (Multi-line)")
                 .with_name("input_panel"),
         );
 
-        // Single status bar showing both agent and system status
+        // UNIFIED status bar combining agent state, system info, and shortcuts
+        // Format: [Agent Status] | [System Status] | [Shortcuts]
         let status_text = format!(
-            "{} Agent: Idle  {}  {} System: Initializing...",
+            "{} Agent: Idle  {}  {} OSVM: Initializing...  {}  {} F1/F2/F3=Help | F10=Menu | F12=Screenshot",
             Icons::LIGHTNING,
-            Icons::SPARKLES,
-            Icons::STAR
+            Icons::SEPARATOR,
+            Icons::STAR,
+            Icons::SEPARATOR,
+            Icons::KEYBOARD
         );
         let status_bar = TextView::new(status_text)
             .with_name("combined_status_bar")
             .full_width();
 
-        chat_layout.add_child(Panel::new(status_bar).title("Status"));
+        chat_layout.add_child(Panel::new(status_bar).title(""));
 
         chat_layout
     }

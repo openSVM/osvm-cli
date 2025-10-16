@@ -142,7 +142,11 @@ impl AdvancedChatUI {
         self.update_chat_display(siv);
         self.update_agent_status(siv);
         self.update_mcp_tools_list(siv);
+        self.update_mcp_tools_visibility(siv); // Progressive disclosure
         self.update_status_bar(siv);
+
+        // Update character counter (real-time input validation feedback)
+        super::handlers::update_character_counter(siv);
     }
 
     pub fn update_chat_list(&self, siv: &mut Cursive) {
@@ -170,11 +174,25 @@ impl AdvancedChatUI {
                         AgentState::Error(_) => Icons::ERROR,
                     };
 
+                    // Get session metadata
+                    let (msg_count, last_activity) = if let Some(session) = self.state.get_session_by_id(*id) {
+                        let count = session.messages.len();
+                        let last = if count > 0 {
+                            "recent"
+                        } else {
+                            "empty"
+                        };
+                        (count, last)
+                    } else {
+                        (0, "empty")
+                    };
+
                     let text_name = format!("");
-                    let display_name = format!("{} {}", status_icon, name);
+                    // Include message count in display
+                    let display_name = format!("{} {} ({})", status_icon, name, msg_count);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("{} {}", Icons::ARROW_RIGHT, display_name)
+                        format!("→ {}", display_name)
                     } else {
                         format!("  {}", display_name)
                     };
@@ -202,10 +220,24 @@ impl AdvancedChatUI {
                         AgentState::Error(_) => Icons::ERROR,
                     };
 
-                    let display_name = format!("{} {}", status_icon, name);
+                    // Get session metadata
+                    let (msg_count, _last_activity) = if let Some(session) = self.state.get_session_by_id(*id) {
+                        let count = session.messages.len();
+                        let last = if count > 0 {
+                            "recent"
+                        } else {
+                            "empty"
+                        };
+                        (count, last)
+                    } else {
+                        (0, "empty")
+                    };
+
+                    // Include message count in display
+                    let display_name = format!("{} {} ({})", status_icon, name, msg_count);
                     let is_active = Some(*id) == active_id;
                     let button_text = if is_active {
-                        format!("{} {}", Icons::ARROW_RIGHT, display_name)
+                        format!("→ {}", display_name)
                     } else {
                         format!("  {}", display_name)
                     };
@@ -222,18 +254,32 @@ impl AdvancedChatUI {
     }
 
     pub fn update_mcp_tools_list(&self, siv: &mut Cursive) {
-        let tools = self.state.available_tools.read().unwrap();
+        // BUG-1008 fix: Add proper error handling and clone data to release lock
+        let tools = match self.state.available_tools.read() {
+            Ok(t) => t,
+            Err(e) => {
+                log::error!("Failed to read available tools: {}", e);
+                return;
+            }
+        };
+
+        // Clone tools to release the lock immediately
+        let tools_data: Vec<(String, Vec<_>)> = tools
+            .iter()
+            .map(|(id, list)| (id.clone(), list.clone()))
+            .collect();
+        drop(tools); // Explicitly release lock
 
         if let Some(mut mcp_tools_view) =
             siv.find_name::<SelectView<(String, String)>>("mcp_tools_list")
         {
             mcp_tools_view.clear();
 
-            if tools.is_empty() {
+            if tools_data.is_empty() {
                 mcp_tools_view.add_item("No tools available", ("".to_string(), "".to_string()));
             } else {
-                // Add each tool individually
-                for (server_id, tool_list) in tools.iter() {
+                // Add each tool individually (lock already released)
+                for (server_id, tool_list) in tools_data.iter() {
                     // Add server header with icon
                     mcp_tools_view.add_item(
                         format!(
@@ -252,6 +298,55 @@ impl AdvancedChatUI {
                             .add_item(display_name, (server_id.clone(), tool.name.clone()));
                     }
                 }
+            }
+        }
+    }
+
+    /// Update MCP tools visibility (Progressive Disclosure - Alt+T to toggle)
+    pub fn update_mcp_tools_visibility(&self, siv: &mut Cursive) {
+        use cursive::views::DummyView;
+
+        let is_visible = self.state.mcp_tools_visible
+            .read()
+            .map(|v| *v)
+            .unwrap_or(false);
+
+        if let Some(mut container) = siv.find_name::<LinearLayout>("mcp_tools_container") {
+            container.clear();
+
+            if is_visible {
+                // Show MCP tools with "Hide" button
+                container.add_child(Button::new(
+                    format!("{} MCP Tools [Alt+T to hide]", Icons::TOOL),
+                    |s| {
+                        // Toggle visibility
+                        if let Some(state) = s.user_data::<AdvancedChatState>() {
+                            if let Ok(mut visible) = state.mcp_tools_visible.write() {
+                                *visible = false;
+                            }
+                            super::super::ui::update_ui_displays(s);
+                        }
+                    }
+                ).full_width());
+
+                // Add the actual tools list
+                let tools_list = super::layout::AdvancedChatUI { state: self.state.clone() }
+                    .create_collapsible_mcp_tools();
+                container.add_child(tools_list.min_height(5).max_height(12));
+            } else {
+                // Show compact "Show Tools" button
+                container.add_child(Button::new(
+                    format!("{} Show MCP Tools [Alt+T]", Icons::TOOL),
+                    |s| {
+                        // Toggle visibility
+                        if let Some(state) = s.user_data::<AdvancedChatState>() {
+                            if let Ok(mut visible) = state.mcp_tools_visible.write() {
+                                *visible = true;
+                            }
+                            super::super::ui::update_ui_displays(s);
+                        }
+                    }
+                ).full_width());
             }
         }
     }

@@ -13,7 +13,7 @@ pub fn show_loading_dialog(siv: &mut Cursive, title: &str, message: &str) {
 
     let mut layout = LinearLayout::vertical();
     layout.add_child(TextView::new(message));
-    layout.add_child(cursive::views::DummyView.fixed_height(1));
+    layout.add_child(cursive::views::DummyView);
 
     // Add animated spinner text
     layout.add_child(
@@ -66,7 +66,7 @@ pub fn show_progress_dialog(
 
     let mut layout = LinearLayout::vertical();
     layout.add_child(TextView::new(message));
-    layout.add_child(cursive::views::DummyView.fixed_height(1));
+    layout.add_child(cursive::views::DummyView);
 
     // Progress bar using text characters
     let bar_width = 40;
@@ -80,7 +80,7 @@ pub fn show_progress_dialog(
     );
 
     layout.add_child(TextView::new(progress_bar).with_name("progress_bar"));
-    layout.add_child(cursive::views::DummyView.fixed_height(1));
+    layout.add_child(cursive::views::DummyView);
     layout.add_child(TextView::new(format!("{} / {}", current, total)).with_name("progress_text"));
 
     siv.add_layer(
@@ -126,7 +126,7 @@ pub fn close_progress_dialog(siv: &mut Cursive) {
     siv.pop_layer();
 }
 
-/// Start animated spinner in a loading dialog
+/// Start animated spinner in a loading dialog with elapsed time tracking (P2 UX improvement)
 fn start_spinner_animation(siv: &mut Cursive, dialog_name: &str) {
     let spinner_name = format!("{}_spinner", dialog_name);
     let cb_sink = siv.cb_sink().clone();
@@ -138,10 +138,18 @@ fn start_spinner_animation(siv: &mut Cursive, dialog_name: &str) {
     std::thread::spawn(move || {
         let spinner_frames = vec!["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         let mut frame_index = 0;
+        let start_time = std::time::Instant::now();
 
         while running_clone.load(Ordering::Relaxed) {
             let spinner_char = spinner_frames[frame_index % spinner_frames.len()];
-            let spinner_text = format!("{} Processing...", spinner_char);
+            let elapsed = start_time.elapsed().as_secs();
+
+            // Show elapsed time for operations > 3 seconds (P2 UX improvement)
+            let spinner_text = if elapsed >= 3 {
+                format!("{} Processing... ({}s elapsed)", spinner_char, elapsed)
+            } else {
+                format!("{} Processing...", spinner_char)
+            };
 
             let spinner_name_clone = spinner_name.clone();
             let _ = cb_sink.send(Box::new(move |s| {
@@ -173,10 +181,10 @@ pub fn clear_inline_loading(siv: &mut Cursive, target_view_name: &str, final_mes
 /// Show loading overlay with semi-transparent effect (simulated with borders)
 pub fn show_loading_overlay(siv: &mut Cursive, message: &str) {
     let mut layout = LinearLayout::vertical();
-    layout.add_child(cursive::views::DummyView.fixed_height(5));
+    layout.add_child(cursive::views::DummyView);
 
     let mut center_layout = LinearLayout::horizontal();
-    center_layout.add_child(cursive::views::DummyView.fixed_width(10));
+    center_layout.add_child(cursive::views::DummyView);
 
     let mut content = LinearLayout::vertical();
     content.add_child(TextView::new(format!("╔═══════════════════════════╗")));
@@ -186,10 +194,10 @@ pub fn show_loading_overlay(siv: &mut Cursive, message: &str) {
     content.add_child(TextView::new(format!("╚═══════════════════════════╝")));
 
     center_layout.add_child(content);
-    center_layout.add_child(cursive::views::DummyView.fixed_width(10));
+    center_layout.add_child(cursive::views::DummyView);
 
     layout.add_child(center_layout);
-    layout.add_child(cursive::views::DummyView.fixed_height(5));
+    layout.add_child(cursive::views::DummyView);
 
     siv.add_layer(Dialog::around(layout).with_name("loading_overlay"));
 }
