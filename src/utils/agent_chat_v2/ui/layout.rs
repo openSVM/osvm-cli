@@ -201,9 +201,17 @@ impl AdvancedChatUI {
             },
         );
 
-        // Add F1 for help (universal help key)
+        // Add F1/F2/F3 for tiered help system (progressive learning)
         siv.add_global_callback(cursive::event::Key::F1, |s| {
-            show_advanced_help(s);
+            show_essential_shortcuts(s); // Level 1: New users
+        });
+
+        siv.add_global_callback(cursive::event::Key::F2, |s| {
+            show_common_shortcuts(s); // Level 2: Regular users
+        });
+
+        siv.add_global_callback(cursive::event::Key::F3, |s| {
+            show_advanced_shortcuts(s); // Level 3: Power users
         });
 
         // Add '?' for help (alternative)
@@ -230,6 +238,21 @@ impl AdvancedChatUI {
             if let Some(mut input) = s.find_name::<TextArea>("input") {
                 input.set_content("");
             }
+        });
+
+        // Add Ctrl+F for session search (P1 UX improvement)
+        siv.add_global_callback(cursive::event::Event::CtrlChar('f'), |s| {
+            super::search::show_session_search(s);
+        });
+
+        // Add Ctrl+T for MCP tool search (Phase 2 improvement)
+        siv.add_global_callback(cursive::event::Event::CtrlChar('t'), |s| {
+            super::search::show_mcp_tool_search(s);
+        });
+
+        // Add Ctrl+R for input history search (P3 UX improvement, bash-style)
+        siv.add_global_callback(cursive::event::Event::CtrlChar('r'), |s| {
+            show_input_history_search(s);
         });
 
         // Add Alt+Up/Down for history navigation (avoid conflict with TextArea cursor movement)
@@ -292,9 +315,27 @@ impl AdvancedChatUI {
             );
         });
 
-        // Alt+T: Theme switcher
+        // Alt+T: Toggle MCP Tools (Progressive Disclosure)
         siv.add_global_callback(cursive::event::Event::AltChar('t'), |s| {
-            show_theme_switcher(s);
+            if let Some(state) = s.user_data::<AdvancedChatState>() {
+                // BUG-1010 fix: Clone state to release borrow, then handle race condition
+                let state_clone = state.clone();
+
+                // Handle race condition with proper error handling
+                // and atomic operation (read-modify-write in one lock session)
+                match state_clone.mcp_tools_visible.write() {
+                    Ok(mut visible) => {
+                        // Atomic toggle within lock
+                        *visible = !*visible;
+                    }
+                    Err(e) => {
+                        log::error!("Failed to toggle MCP tools visibility: {}", e);
+                    }
+                }
+
+                // Update UI after lock is released and borrow is dropped
+                super::display::update_ui_displays(s);
+            }
         });
 
         let state = self.state.clone();

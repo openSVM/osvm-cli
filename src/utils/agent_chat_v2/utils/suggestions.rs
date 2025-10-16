@@ -62,26 +62,36 @@ impl AdvancedChatState {
         match self.ai_service.query_with_debug(&prompt, false).await {
             Ok(response) => {
                 // Parse suggestions from response (expecting numbered list)
+                // BUG-2010 fix: Use char-safe string operations for UTF-8 safety
+                // Previously used byte-based indexing which could panic on emoji/multibyte chars
                 let suggestions: Vec<String> = response
                     .lines()
                     .filter_map(|line| {
                         let line = line.trim();
                         // Match lines like "1. suggestion" or "1) suggestion" or just starting with a number
                         if let Some(dot_pos) = line.find('.') {
-                            if line[..dot_pos].trim().parse::<u32>().is_ok() {
-                                return Some(line[dot_pos + 1..].trim().to_string());
+                            // Use char-safe slicing instead of byte-based
+                            let prefix: String = line.chars().take(dot_pos).collect();
+                            if prefix.trim().parse::<u32>().is_ok() {
+                                // Get everything after the dot using char-safe operations
+                                let suffix: String = line.chars().skip(dot_pos + 1).collect();
+                                return Some(suffix.trim().to_string());
                             }
                         }
                         if let Some(paren_pos) = line.find(')') {
-                            if line[..paren_pos].trim().parse::<u32>().is_ok() {
-                                return Some(line[paren_pos + 1..].trim().to_string());
+                            // Use char-safe slicing instead of byte-based
+                            let prefix: String = line.chars().take(paren_pos).collect();
+                            if prefix.trim().parse::<u32>().is_ok() {
+                                // Get everything after the paren using char-safe operations
+                                let suffix: String = line.chars().skip(paren_pos + 1).collect();
+                                return Some(suffix.trim().to_string());
                             }
                         }
                         // Also accept lines starting with digits
                         if line.len() > 2 && line.chars().next()?.is_ascii_digit() {
-                            if let Some(rest) = line.get(2..) {
-                                return Some(rest.trim().to_string());
-                            }
+                            // Skip first 2 chars safely
+                            let rest: String = line.chars().skip(2).collect();
+                            return Some(rest.trim().to_string());
                         }
                         None
                     })
