@@ -113,11 +113,37 @@ impl AdvancedChatUI {
     }
 
     /// Parse hex color string to RGB tuple
-    fn parse_hex_color(&self, hex: &str) -> Result<(u8, u8, u8), std::num::ParseIntError> {
-        let hex = hex.trim_start_matches('#');
-        let r = u8::from_str_radix(&hex[0..2], 16)?;
-        let g = u8::from_str_radix(&hex[2..4], 16)?;
-        let b = u8::from_str_radix(&hex[4..6], 16)?;
+    /// BUG-2019 fix: Validate length and characters before indexing to prevent panics
+    fn parse_hex_color(&self, hex: &str) -> Result<(u8, u8, u8), Box<dyn std::error::Error>> {
+        let hex_trimmed = hex.trim_start_matches('#').to_string();
+
+        // Validate length FIRST - prevent index out of bounds panic
+        if hex_trimmed.len() != 6 {
+            return Err(format!(
+                "Hex color must be exactly 6 characters, got {} from '{}'",
+                hex_trimmed.len(),
+                hex
+            ).into());
+        }
+
+        // Use character iteration for UTF-8 safety (though hex should be ASCII)
+        let hex_chars: Vec<char> = hex_trimmed.chars().collect();
+
+        // Validate all characters are valid hex digits
+        for (i, ch) in hex_chars.iter().enumerate() {
+            if !ch.is_ascii_hexdigit() {
+                return Err(format!(
+                    "Invalid hex digit '{}' at position {} in color '{}'",
+                    ch, i, hex
+                ).into());
+            }
+        }
+
+        // Now safe to parse - length and characters are validated
+        let r = u8::from_str_radix(&hex_trimmed[0..2], 16)?;
+        let g = u8::from_str_radix(&hex_trimmed[2..4], 16)?;
+        let b = u8::from_str_radix(&hex_trimmed[4..6], 16)?;
+
         Ok((r, g, b))
     }
 
@@ -160,16 +186,26 @@ impl AdvancedChatUI {
         // Add fullscreen layer WITHOUT Dialog wrapper (menu bar is the title)
         siv.add_fullscreen_layer(root_layout);
 
-        // Set focus to input field initially
-        siv.focus_name("input").ok();
+        // BUG-2017 fix: Defer focus to after render event
+        // Setting focus immediately after add_fullscreen_layer causes race condition
+        // because named views aren't registered yet. Use refresh event to defer.
+        siv.add_global_callback(cursive::event::Event::Refresh, |s| {
+            // This callback fires after initial render, so named views are ready
+            if let Err(e) = s.focus_name("input") {
+                log::warn!("Failed to focus input field on initial render: {}", e);
+            }
+        });
 
         // Add Tab navigation between key UI elements - but don't interfere with other keys
+        // BUG-2018 fix: Replace silent error drops with proper logging (from Phase 3 BUG-2011 pattern)
         siv.add_global_callback(cursive::event::Key::Tab, |s| {
             // Try to focus the chat list first, then input as fallback
             if s.focus_name("chat_list").is_ok() {
                 // Successfully focused chat list
             } else {
-                let _ = s.focus_name("input");
+                if let Err(e) = s.focus_name("input") {
+                    log::warn!("Failed to focus input field on Tab key: {}", e);
+                }
             }
         });
 
@@ -181,7 +217,9 @@ impl AdvancedChatUI {
                 if s.focus_name("input").is_ok() {
                     // Successfully focused input
                 } else {
-                    let _ = s.focus_name("chat_list");
+                    if let Err(e) = s.focus_name("chat_list") {
+                        log::warn!("Failed to focus chat list on Shift+Tab key: {}", e);
+                    }
                 }
             },
         );
@@ -224,10 +262,13 @@ impl AdvancedChatUI {
         siv.add_global_callback(
             cursive::event::Event::Ctrl(cursive::event::Key::Enter),
             move |s| {
-                if let Some(input) = s.find_name::<TextArea>("input") {
+                if let Some(mut input) = s.find_name::<TextArea>("input") {
                     let content = input.get_content().to_string();
                     if !content.trim().is_empty() {
                         handle_user_input(s, &content, state_clone.clone());
+                        // BUG-2023 fix: Clear input field after successful send
+                        // Prevents user from accidentally sending duplicate messages
+                        input.set_content("");
                     }
                 }
             },
