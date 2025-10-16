@@ -5,9 +5,10 @@ use anyhow::{anyhow, Context, Result};
 use cursive::direction::Orientation;
 use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, ListView, Panel, ScrollView, SelectView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, OnEventView, Panel, ScrollView, SelectView,
     TextArea, TextView,
 };
+use cursive::event::Key;
 use cursive::Cursive;
 use log::{error, info, warn};
 use uuid::Uuid;
@@ -113,22 +114,10 @@ pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
                             if !session.messages.is_empty() {
                                 session.messages.pop();
 
-                                // Show success feedback
-                                s.add_layer(
-                                    Dialog::info("Message deleted successfully")
-                                        .title("Deleted")
-                                        .button("OK", |s| {
-                                            s.pop_layer();
-                                        })
-                                );
+                                // Show success feedback with toast
+                                super::toast::show_success_toast(s, "Message deleted successfully");
                             } else {
-                                s.add_layer(
-                                    Dialog::info("No messages to delete")
-                                        .title("Info")
-                                        .button("OK", |s| {
-                                            s.pop_layer();
-                                        })
-                                );
+                                super::toast::show_info_toast(s, "No messages to delete");
                             }
                         }
                     }
@@ -630,10 +619,11 @@ pub fn export_chat(siv: &mut Cursive) {
             );
 
             match serde_json::to_string_pretty(&session) {
-                Ok(json_content) => match std::fs::write(&filename, json_content) {
+                Ok(json_content) => match std::fs::write(&filename, &json_content) {
                     Ok(_) => {
                         info!("Chat exported to {}", filename);
-                        Ok((filename, None::<String>))
+                        // Return both filename AND json_content for clipboard
+                        Ok((filename, json_content))
                     }
                     Err(e) => {
                         error!("Failed to write export file: {}", e);
@@ -651,28 +641,56 @@ pub fn export_chat(siv: &mut Cursive) {
     });
 
     match export_result {
-        Some(Ok((filename, None))) => {
-            let filename_clone = filename.clone();
+        Some(Ok((filename, json_content))) => {
+            let json_clone = json_content.clone();
             siv.add_layer(
-                Dialog::text(format!("Chat exported successfully to:\n{}", filename))
+                Dialog::text(format!(
+                    "Chat exported successfully!\n\nFile: {}\nSize: {} characters\n\nClick 'Copy' to copy the full chat history to clipboard.",
+                    filename,
+                    json_content.len()
+                ))
                     .title("Export Complete")
                     .button("Back", |s| {
                         s.pop_layer();
                     })
                     .button("Copy", move |s| {
-                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                            let _ = clipboard.set_text(&filename_clone);
+                        match arboard::Clipboard::new() {
+                            Ok(mut clipboard) => {
+                                match clipboard.set_text(&json_clone) {
+                                    Ok(_) => {
+                                        s.add_layer(
+                                            Dialog::info(format!(
+                                                "Full chat history copied to clipboard!\n\n{} characters copied",
+                                                json_clone.len()
+                                            ))
+                                            .title("Copied")
+                                            .button("OK", |s| {
+                                                s.pop_layer();
+                                                s.pop_layer(); // Close the export dialog too
+                                            })
+                                        );
+                                    }
+                                    Err(e) => {
+                                        s.add_layer(
+                                            Dialog::info(format!("Failed to copy to clipboard: {}", e))
+                                            .title("Error")
+                                            .button("OK", |s| {
+                                                s.pop_layer();
+                                            })
+                                        );
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                s.add_layer(
+                                    Dialog::info(format!("Clipboard not available: {}", e))
+                                    .title("Error")
+                                    .button("OK", |s| {
+                                        s.pop_layer();
+                                    })
+                                );
+                            }
                         }
-                        s.pop_layer();
-                    }),
-            );
-        }
-        Some(Ok((_, Some(e)))) => {
-            siv.add_layer(
-                Dialog::info(format!("Failed to export chat:\n{}", e))
-                    .title("Export Failed")
-                    .button("OK", |s| {
-                        s.pop_layer();
                     }),
             );
         }
@@ -809,6 +827,239 @@ pub fn show_advanced_help(siv: &mut Cursive) {
     );
 }
 
+/// F1 - Essential shortcuts for new users (progressive learning tier 1)
+pub fn show_essential_shortcuts(siv: &mut Cursive) {
+    let help_text = "OSVM Advanced Chat - Essential Shortcuts (New Users)\n\n\
+        ═══════════════════════════════════════════════════\n\
+        GETTING STARTED - THE BASICS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        💬 Sending Messages:\n\
+        • Ctrl+Enter      → Send your message to the agent\n\
+        • Enter           → Add new line (multi-line messages)\n\
+        • Ctrl+K          → Clear input field and start over\n\n\
+        🧭 Navigation:\n\
+        • Tab             → Switch between chat list and input\n\
+        • Shift+Tab       → Go back to previous element\n\
+        • Esc             → Close dialogs and cancel actions\n\n\
+        ℹ️  Help System (Tiered Learning):\n\
+        • F1              → Essential shortcuts (YOU ARE HERE)\n\
+        • F2              → Common shortcuts (regular users)\n\
+        • F3              → Advanced shortcuts (power users)\n\
+        • ?               → Quick shortcuts hint\n\n\
+        🚪 Exit:\n\
+        • Ctrl+Q          → Quit the application\n\n\
+        ═══════════════════════════════════════════════════\n\
+        NEXT STEPS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        Ready for more? Press F2 to see common shortcuts!\n\
+        Or just start chatting - type your question and\n\
+        press Ctrl+Enter to send.\n\n\
+        💡 Tip: You can press F1 anytime to return to this help.";
+
+    siv.add_layer(
+        Dialog::around(
+            ScrollView::new(TextView::new(help_text))
+                .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
+                .max_width(80)
+                .max_height(30)
+        )
+        .title("📚 Level 1: Essential Shortcuts")
+        .button("Got it!", |s| {
+            s.pop_layer();
+        })
+        .button("Next: F2 Common →", |s| {
+            s.pop_layer();
+            show_common_shortcuts(s);
+        })
+        .max_width(90)
+        .max_height(35),
+    );
+}
+
+/// F2 - Common shortcuts for regular users (progressive learning tier 2)
+pub fn show_common_shortcuts(siv: &mut Cursive) {
+    let help_text = "OSVM Advanced Chat - Common Shortcuts (Regular Users)\n\n\
+        ═══════════════════════════════════════════════════\n\
+        PRODUCTIVITY FEATURES\n\
+        ═══════════════════════════════════════════════════\n\n\
+        ✏️  Input Editing:\n\
+        • Alt+P           → Previous message in history\n\
+        • Alt+N           → Next message in history\n\
+        • Ctrl+K          → Clear input field\n\
+        • Arrows          → Navigate within text\n\n\
+        🔄 Message Actions:\n\
+        • Alt+R           → Retry last message\n\
+        • Alt+C           → Copy last message to clipboard\n\
+        • Alt+D           → Delete last message (with confirmation)\n\
+        • Alt+F           → Fork conversation from this point\n\n\
+        🛠️  Utilities:\n\
+        • F10             → Open context menu (Copy, Retry, Clear)\n\
+        • F12             → Take screenshot of current chat\n\
+        • Alt+T           → Toggle MCP tools panel (show/hide)\n\n\
+        💡 Smart Suggestions:\n\
+        • Ctrl+1-5        → Insert suggestion at cursor\n\
+        • Alt+1-5         → Insert suggestion (alternate)\n\
+        • Esc             → Hide suggestions panel\n\n\
+        ═══════════════════════════════════════════════════\n\
+        AGENT CONTROLS (Sidebar Buttons)\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • ▶ Run Button    → Resume/start agent processing\n\
+        • ⏸ Pause Button  → Temporarily pause agent\n\
+        • ⏹ Stop Button   → Stop current agent task\n\
+        • ⏺ Record Button → Start recording session to file\n\n\
+        ═══════════════════════════════════════════════════\n\
+        NEED MORE?\n\
+        ═══════════════════════════════════════════════════\n\n\
+        Press F3 for advanced features and troubleshooting!\n\
+        Press F1 to return to essential shortcuts.";
+
+    siv.add_layer(
+        Dialog::around(
+            ScrollView::new(TextView::new(help_text))
+                .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
+                .max_width(80)
+                .max_height(35)
+        )
+        .title("📚 Level 2: Common Shortcuts")
+        .button("← Back: F1 Essential", |s| {
+            s.pop_layer();
+            show_essential_shortcuts(s);
+        })
+        .button("Got it!", |s| {
+            s.pop_layer();
+        })
+        .button("Next: F3 Advanced →", |s| {
+            s.pop_layer();
+            show_advanced_shortcuts(s);
+        })
+        .max_width(90)
+        .max_height(40),
+    );
+}
+
+/// F3 - Advanced shortcuts and features (progressive learning tier 3)
+pub fn show_advanced_shortcuts(siv: &mut Cursive) {
+    // This is the comprehensive help (renamed from show_advanced_help)
+    let help_text = "OSVM Advanced Agent Chat - Complete Reference (Power Users)\n\n\
+        ═══════════════════════════════════════════════════\n\
+        ALL KEYBOARD SHORTCUTS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        Text Editor (Microsoft Edit Style):\n\
+        • Ctrl+Enter      → Send message\n\
+        • Enter           → New line (multi-line input)\n\
+        • Ctrl+K          → Clear input field\n\
+        • Alt+P           → Previous message in history\n\
+        • Alt+N           → Next message in history\n\
+        • Arrows          → Navigate within text\n\n\
+        Navigation:\n\
+        • Tab             → Switch between chat list and input\n\
+        • Shift+Tab       → Reverse navigation\n\n\
+        Actions:\n\
+        • Alt+R           → Retry last message\n\
+        • Alt+C           → Copy last message to clipboard\n\
+        • Alt+D           → Delete last message (with confirmation)\n\
+        • Alt+F           → Fork/branch current conversation\n\
+        • Alt+X           → Emergency clear stuck processing\n\
+        • Alt+M           → Switch to standard mode info\n\
+        • Alt+T           → Toggle MCP tools panel (progressive disclosure)\n\n\
+        Suggestions:\n\
+        • Ctrl+1-5        → Insert suggestion at cursor (primary)\n\
+        • Alt+1-5         → Insert suggestion at cursor (alternate)\n\
+        • Esc             → Hide suggestions panel\n\n\
+        Utilities:\n\
+        • F10             → Open context menu (Copy, Retry, Clear)\n\
+        • F12             → Take screenshot of chat window\n\
+        • Ctrl+Q          → Quit application\n\n\
+        Help System (Tiered Learning):\n\
+        • F1              → Essential shortcuts (new users)\n\
+        • F2              → Common shortcuts (regular users)\n\
+        • F3              → Advanced shortcuts (YOU ARE HERE)\n\
+        • ?               → Quick shortcuts hint\n\n\
+        ═══════════════════════════════════════════════════\n\
+        AGENT CONTROLS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Run Button      → Resume/start agent processing\n\
+        • Pause Button    → Temporarily pause agent\n\
+        • Stop Button     → Stop current agent task\n\n\
+        ═══════════════════════════════════════════════════\n\
+        SESSION RECORDING\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Record Button   → Start recording session to file\n\
+        • Stop Rec Button → Stop recording and save\n\
+        • Export Chat     → Save current chat as JSON\n\n\
+        ═══════════════════════════════════════════════════\n\
+        STATUS ICONS\n\
+        ═══════════════════════════════════════════════════\n\n\
+        Agent States:\n\
+        • ◉ Idle          → Ready for new tasks\n\
+        • ◐ Thinking      → Analyzing your request\n\
+        • ◑ Planning      → Creating execution plan\n\
+        • ▶ Executing     → Running tools/commands\n\
+        • ◯ Waiting       → Awaiting response\n\
+        • ⏸ Paused        → Operations suspended\n\
+        • ❌ Error        → Something went wrong\n\n\
+        ═══════════════════════════════════════════════════\n\
+        ADVANCED FEATURES\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • AI-powered tool planning and execution\n\
+        • Background agent processing\n\
+        • Multi-session chat support\n\
+        • MCP server integration (blockchain tools)\n\
+        • Progressive disclosure (Alt+T to toggle tools)\n\
+        • Direct tool testing from MCP panel\n\
+        • Real-time system status monitoring\n\
+        • Session recording and replay\n\n\
+        ═══════════════════════════════════════════════════\n\
+        MESSAGE ACTIONS (shown under each message)\n\
+        ═══════════════════════════════════════════════════\n\n\
+        User Messages:\n\
+        • [R]etry  → Send message again\n\
+        • [C]opy   → Copy to clipboard\n\
+        • [D]elete → Remove message (with confirmation)\n\n\
+        Agent Messages:\n\
+        • [F]ork   → Branch conversation from this point\n\
+        • [C]opy   → Copy to clipboard\n\
+        • [R]etry  → Request new response\n\
+        • [D]elete → Remove message (with confirmation)\n\n\
+        ═══════════════════════════════════════════════════\n\
+        TROUBLESHOOTING\n\
+        ═══════════════════════════════════════════════════\n\n\
+        • Agent stuck? → Use Alt+X to emergency clear\n\
+        • UI frozen? → Terminal may be too small (min 60x15)\n\
+        • No MCP tools? → Run 'osvm mcp setup' first\n\
+        • Missing features? → Check 'osvm chat --help'\n\
+        • Lost? → Press F1 for essential shortcuts\n\n\
+        Press F1/F2/F3 or '?' key to show help anytime!";
+
+    siv.add_layer(
+        Dialog::around(
+            ScrollView::new(TextView::new(help_text))
+                .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
+        )
+        .title("📚 Level 3: Advanced Reference (Complete Guide)")
+        .button("← Back: F2 Common", |s| {
+            s.pop_layer();
+            show_common_shortcuts(s);
+        })
+        .button("Got it!", |s| {
+            s.pop_layer();
+        })
+        .button("Print to Console", |s| {
+            // Print concise shortcuts to console for quick reference
+            println!("\n╔════════════════════════════════════════════════════════════╗");
+            println!("║  OSVM Advanced Chat - Quick Keyboard Reference           ║");
+            println!("╠════════════════════════════════════════════════════════════╣");
+            println!("║  Help Tiers:  F1 (Essential) | F2 (Common) | F3 (Advanced)║");
+            println!("║  Navigation:  Tab/Shift+Tab  |  Actions: Alt+R/C/D/F      ║");
+            println!("║  Suggestions: Ctrl/Alt+1-5   |  Utils: F10 (menu) F12 📸  ║");
+            println!("║  Emergency:   Alt+X (clear)  |  Quick: ? key              ║");
+            println!("╚════════════════════════════════════════════════════════════╝\n");
+        })
+        .max_width(90)
+        .max_height(45),
+    );
+}
+
 /// Show quick keyboard shortcuts hint panel (called on startup or F1)
 pub fn show_keyboard_shortcuts_hint(siv: &mut Cursive) {
     let hint_text = "Quick Shortcuts:\n\n\
@@ -924,7 +1175,15 @@ pub fn export_all_chats(siv: &mut Cursive) {
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = format!("osvm_all_chats_export_{}.json", timestamp);
 
-        let sessions = state.sessions.read().unwrap();
+        // BUG-2003 fix: Handle lock poisoning gracefully instead of panicking
+        let sessions = match state.sessions.read() {
+            Ok(s) => s,
+            Err(e) => {
+                log::error!("Failed to read sessions for export: {}", e);
+                eprintln!("Failed to export: Could not access sessions.");
+                return;
+            }
+        };
         match serde_json::to_string_pretty(&*sessions) {
             Ok(json_content) => match std::fs::write(&filename, json_content) {
                 Ok(_) => {
@@ -1425,33 +1684,75 @@ fn generate_mock_response(input: &str) -> String {
     }
 }
 
-// Generate contextual suggestions based on user input
+// Generate contextual suggestions based on user input (P4 UX: context-aware with MCP tools)
 fn generate_context_suggestions(input: &str) -> Vec<String> {
     let input_lower = input.to_lowercase();
 
-    if input_lower.contains("balance") {
+    // Context-aware suggestions with MCP tool integration
+    if input_lower.contains("balance") || input_lower.contains("wallet") {
         vec![
+            "🔧 get_balance - Check current SOL balance".to_string(),
             "Show recent transactions".to_string(),
-            "Check staking rewards".to_string(),
+            "🔧 get_staking_info - Check staking rewards".to_string(),
             "Get current SOL price".to_string(),
-            "Show wallet addresses".to_string(),
             "Export transaction history".to_string(),
         ]
-    } else if input_lower.contains("transaction") {
+    } else if input_lower.contains("transaction") || input_lower.contains("tx") {
         vec![
-            "Filter by amount".to_string(),
-            "Show transaction details".to_string(),
+            "🔧 get_transaction - Get transaction details".to_string(),
+            "🔧 batch_transactions - Fetch multiple transactions".to_string(),
+            "🔧 analyze_transaction - AI-powered analysis".to_string(),
             "Check transaction status".to_string(),
             "Export as CSV".to_string(),
-            "Analyze spending patterns".to_string(),
+        ]
+    } else if input_lower.contains("stake") || input_lower.contains("staking") {
+        vec![
+            "🔧 get_staking_info - View staking details".to_string(),
+            "🔧 get_validator_info - Check validator performance".to_string(),
+            "How to stake SOL?".to_string(),
+            "Check staking rewards".to_string(),
+            "Compare validators".to_string(),
+        ]
+    } else if input_lower.contains("validator") {
+        vec![
+            "🔧 get_validator_info - Get validator details".to_string(),
+            "🔧 list_validators - View all validators".to_string(),
+            "Check validator performance".to_string(),
+            "Find best validators".to_string(),
+            "Monitor validator uptime".to_string(),
+        ]
+    } else if input_lower.contains("account") || input_lower.contains("address") {
+        vec![
+            "🔧 get_account_info - View account details".to_string(),
+            "🔧 get_balance - Check account balance".to_string(),
+            "Show wallet addresses".to_string(),
+            "Export account data".to_string(),
+            "Analyze account activity".to_string(),
+        ]
+    } else if input_lower.contains("block") || input_lower.contains("slot") {
+        vec![
+            "🔧 get_block - Fetch block details".to_string(),
+            "🔧 get_slot - Get current slot".to_string(),
+            "Check block height".to_string(),
+            "View recent blocks".to_string(),
+            "Monitor block production".to_string(),
+        ]
+    } else if input_lower.contains("program") || input_lower.contains("contract") {
+        vec![
+            "🔧 get_program_accounts - List program accounts".to_string(),
+            "🔧 analyze_program - Analyze smart contract".to_string(),
+            "Deploy program".to_string(),
+            "Test program locally".to_string(),
+            "Audit program security".to_string(),
         ]
     } else {
+        // Default suggestions with popular MCP tools
         vec![
-            "What's my wallet balance?".to_string(),
-            "Show recent transactions".to_string(),
+            "🔧 get_balance - What's my wallet balance?".to_string(),
+            "🔧 get_transaction - Show recent transactions".to_string(),
             "Current SOL price".to_string(),
+            "🔧 get_validator_info - Check validator performance".to_string(),
             "How to stake SOL?".to_string(),
-            "Check validator performance".to_string(),
         ]
     }
 }
@@ -1460,7 +1761,45 @@ fn generate_context_suggestions(input: &str) -> Vec<String> {
 pub fn setup_input_suggestions(siv: &mut Cursive, state: AdvancedChatState) {
     // TextArea doesn't have set_on_edit like EditView
     // For now, suggestions will be triggered manually or via other mechanisms
-    // TODO: Implement on-change callback for TextArea when typing
+    // Character counter is updated via periodic UI refresh
+}
+
+/// Update character counter display based on current input content
+pub fn update_character_counter(siv: &mut Cursive) {
+    const MAX_LENGTH: usize = 10000; // From input_validation.rs
+    const WARNING_THRESHOLD: f32 = 0.9; // Warn at 90% capacity
+
+    if let Some(input) = siv.find_name::<TextArea>("input") {
+        let content = input.get_content();
+        let len = content.len();
+        let lines = content.lines().count();
+
+        // Calculate warning level
+        let usage_ratio = len as f32 / MAX_LENGTH as f32;
+
+        // Build hint text with character count
+        let hint_text = if usage_ratio >= WARNING_THRESHOLD {
+            // Warning state - approaching limit
+            format!(
+                "⚠️  {}/{} chars ({} lines) - Approaching limit! | Ctrl+Enter=Send | Ctrl+K=Clear",
+                len, MAX_LENGTH, lines
+            )
+        } else if len > 100 {
+            // Show count for non-trivial messages
+            format!(
+                "💡 {}/{} chars ({} lines) | Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear",
+                len, MAX_LENGTH, lines
+            )
+        } else {
+            // Default hint for short messages
+            "💡 Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help".to_string()
+        };
+
+        // Update the hint display
+        if let Some(mut hint) = siv.find_name::<TextView>("input_hint") {
+            hint.set_content(hint_text);
+        }
+    }
 }
 
 // Generate suggestions based on partial input
@@ -1603,15 +1942,51 @@ async fn execute_ai_plan(
     let tool_matches: Vec<_> = tool_regex.captures_iter(&plan_content).collect();
 
     for captures in tool_matches {
-        let tool_name = captures.get(1).unwrap().as_str();
-        let server_id = captures.get(2).unwrap().as_str();
-        let params_section = captures.get(3).unwrap().as_str();
+        // BUG-2004 fix: Handle regex capture group extraction gracefully instead of panicking
+        let tool_name = match captures.get(1) {
+            Some(m) => m.as_str(),
+            None => {
+                log::warn!("Malformed tool call: missing tool name in XML response");
+                continue;
+            }
+        };
+
+        let server_id = match captures.get(2) {
+            Some(m) => m.as_str(),
+            None => {
+                log::warn!("Malformed tool call: missing server ID in XML response");
+                continue;
+            }
+        };
+
+        let params_section = match captures.get(3) {
+            Some(m) => m.as_str(),
+            None => {
+                log::warn!("Malformed tool call: missing parameters section in XML response");
+                continue;
+            }
+        };
 
         // Extract parameters
         let mut params = std::collections::HashMap::new();
         for param_match in param_regex.captures_iter(params_section) {
-            let param_name = param_match.get(1).unwrap().as_str();
-            let param_value = param_match.get(2).unwrap().as_str();
+            // BUG-2004 fix: Handle parameter extraction gracefully
+            let param_name = match param_match.get(1) {
+                Some(m) => m.as_str(),
+                None => {
+                    log::warn!("Malformed parameter: missing parameter name");
+                    continue;
+                }
+            };
+
+            let param_value = match param_match.get(2) {
+                Some(m) => m.as_str(),
+                None => {
+                    log::warn!("Malformed parameter: missing value for parameter '{}'", param_name);
+                    continue;
+                }
+            };
+
             params.insert(
                 param_name.to_string(),
                 serde_json::Value::String(param_value.to_string()),
@@ -1775,7 +2150,14 @@ fn execute_theme_command(cmd: ThemeCommandType, state: &AdvancedChatState) -> St
 pub fn show_test_tool_dialog(siv: &mut Cursive, server_id: String, tool_name: String) {
     // Get tool schema to build input form
     let schema_info = siv.with_user_data(|state: &mut AdvancedChatState| {
-        let tools = state.available_tools.read().unwrap();
+        // BUG-2003 fix: Handle lock poisoning gracefully
+        let tools = match state.available_tools.read() {
+            Ok(t) => t,
+            Err(e) => {
+                log::error!("Failed to read available tools: {}", e);
+                return None;
+            }
+        };
 
         if let Some(tool_list) = tools.get(&server_id) {
             if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
@@ -1980,7 +2362,14 @@ pub fn show_tool_details(siv: &mut Cursive, server_id: String, tool_name: String
     }
 
     let tool_info = siv.with_user_data(|state: &mut AdvancedChatState| {
-        let tools = state.available_tools.read().unwrap();
+        // BUG-2003 fix: Handle lock poisoning gracefully
+        let tools = match state.available_tools.read() {
+            Ok(t) => t,
+            Err(e) => {
+                log::error!("Failed to read available tools: {}", e);
+                return None;
+            }
+        };
 
         if let Some(tool_list) = tools.get(&server_id) {
             if let Some(tool) = tool_list.iter().find(|t| t.name == tool_name) {
@@ -2065,7 +2454,14 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
 
     // Add theme options
     for theme_name in ModernTheme::available_themes() {
-        let mut button = theme_group.lock().unwrap().button_str(theme_name);
+        // BUG-2003 fix: Handle lock poisoning in theme selection
+        let mut button = match theme_group.lock() {
+            Ok(mut group) => group.button_str(theme_name),
+            Err(e) => {
+                log::error!("Failed to lock theme group: {}", e);
+                continue; // Skip this theme if lock fails
+            }
+        };
         if theme_name == current_theme {
             button.select();
         }
@@ -2087,7 +2483,14 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
         Dialog::around(theme_list)
             .title("Theme Switcher")
             .button("Apply", move |s| {
-                let selected = theme_group_apply.lock().unwrap().selection();
+                // BUG-2003 fix: Handle lock poisoning gracefully
+                let selected = match theme_group_apply.lock() {
+                    Ok(mut group) => group.selection(),
+                    Err(e) => {
+                        log::error!("Failed to lock theme group: {}", e);
+                        return; // Exit if lock fails
+                    }
+                };
                 let theme_name = selected.as_ref();
 
                 // Apply the theme
@@ -2108,7 +2511,14 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
                 );
             })
             .button("Preview", move |s| {
-                let selected = theme_group_preview.lock().unwrap().selection();
+                // BUG-2003 fix: Handle lock poisoning gracefully
+                let selected = match theme_group_preview.lock() {
+                    Ok(mut group) => group.selection(),
+                    Err(e) => {
+                        log::error!("Failed to lock theme group: {}", e);
+                        return; // Exit if lock fails
+                    }
+                };
                 let theme_name = selected.as_ref();
 
                 // Temporarily apply theme
@@ -2126,139 +2536,366 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
 // Top Menu Bar Handlers (Microsoft Edit style)
 // ============================================================================
 
-/// File menu handler
+/// File menu handler - dropdown style with visual mnemonics
 pub fn show_file_menu(s: &mut Cursive) {
-    s.add_layer(
-        Dialog::new()
+    let mut menu_list = ListView::new();
+
+    // Visual mnemonics: use brackets [E] to highlight the hotkey letter
+    menu_list.add_child("export_chat", Button::new_raw("  [E]xport Chat      ", |s| {
+        s.pop_layer();
+        export_chat(s);
+    }).full_width());
+
+    menu_list.add_child("export_all", Button::new_raw("  Export [A]ll       ", |s| {
+        s.pop_layer();
+        export_all_chats(s);
+    }).full_width());
+
+    menu_list.add_child("div1", TextView::new("  ───────────────────  "));
+
+    menu_list.add_child("settings", Button::new_raw("  [S]ettings         ", |s| {
+        s.pop_layer();
+        show_settings(s);
+    }).full_width());
+
+    menu_list.add_child("div2", TextView::new("  ───────────────────  "));
+
+    menu_list.add_child("quit", Button::new_raw("  [Q]uit        Esc  ", |s| {
+        s.quit();
+    }).full_width());
+
+    // ListView already supports arrow key navigation by default
+
+    // Wrap in OnEventView for keyboard shortcuts
+    let dropdown = OnEventView::new(
+        Panel::new(menu_list)
             .title("File")
-            .button("Export Chat", |s| {
-                s.pop_layer();
-                export_chat(s);
-            })
-            .button("Export All", |s| {
-                s.pop_layer();
-                export_all_chats(s);
-            })
-            .button("Settings", |s| {
-                s.pop_layer();
-                show_settings(s);
-            })
-            .button("Quit", |s| { s.quit(); })
-            .button("Cancel", |s| { s.pop_layer(); })
-    );
+            .fixed_width(24)
+    )
+    .on_event('e', |s| {
+        s.pop_layer();
+        export_chat(s);
+    })
+    .on_event('E', |s| {
+        s.pop_layer();
+        export_chat(s);
+    })
+    .on_event('a', |s| {
+        s.pop_layer();
+        export_all_chats(s);
+    })
+    .on_event('A', |s| {
+        s.pop_layer();
+        export_all_chats(s);
+    })
+    .on_event('s', |s| {
+        s.pop_layer();
+        show_settings(s);
+    })
+    .on_event('S', |s| {
+        s.pop_layer();
+        show_settings(s);
+    })
+    .on_event('q', |s| {
+        s.quit();
+    })
+    .on_event('Q', |s| {
+        s.quit();
+    })
+    .on_event(Key::Esc, |s| {
+        s.pop_layer();
+    });
+    // Note: Enter key is handled by ListView's default behavior
+    // Arrow keys automatically work with ListView for navigation
+
+    s.add_layer(dropdown);
 }
 
-/// Edit menu handler
+/// Edit menu handler - dropdown style with visual mnemonics
 pub fn show_edit_menu(s: &mut Cursive) {
     let state_opt = s.user_data::<AdvancedChatState>().cloned();
-    
-    let mut menu = Dialog::new().title("Edit");
-    
+    let mut menu_list = ListView::new();
+
     if let Some(state) = state_opt.clone() {
-        menu = menu.button("Copy Last Message", move |s| {
+        menu_list.add_child("copy", Button::new_raw("  [C]opy Message     ", move |s| {
             s.pop_layer();
             copy_last_message(s, state.clone());
-        });
+        }).full_width());
     }
-    
+
     if let Some(state) = state_opt.clone() {
-        menu = menu.button("Delete Last Message", move |s| {
+        menu_list.add_child("delete", Button::new_raw("  [D]elete Message   ", move |s| {
             s.pop_layer();
             delete_last_message(s, state.clone());
-        });
+        }).full_width());
     }
-    
-    menu = menu.button("Clear Chat", |s| {
+
+    menu_list.add_child("div1", TextView::new("  ───────────────────  "));
+
+    menu_list.add_child("clear", Button::new_raw("  C[l]ear Chat       ", |s| {
         s.pop_layer();
         clear_current_chat(s);
-    });
-    
-    menu = menu.button("Cancel", |s| { s.pop_layer(); });
+    }).full_width());
 
-    s.add_layer(menu);
+    let dropdown = OnEventView::new(
+        Panel::new(menu_list)
+            .title("Edit")
+            .fixed_width(24)
+    )
+    .on_event('c', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            copy_last_message(s, state);
+        }
+    })
+    .on_event('C', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            copy_last_message(s, state);
+        }
+    })
+    .on_event('d', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            delete_last_message(s, state);
+        }
+    })
+    .on_event('D', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            delete_last_message(s, state);
+        }
+    })
+    .on_event('l', |s| {
+        s.pop_layer();
+        clear_current_chat(s);
+    })
+    .on_event('L', |s| {
+        s.pop_layer();
+        clear_current_chat(s);
+    })
+    .on_event(Key::Esc, |s| {
+        s.pop_layer();
+    });
+
+    s.add_layer(dropdown);
 }
 
-/// Session menu handler
+/// Session menu handler - dropdown style with visual mnemonics
 pub fn show_session_menu(s: &mut Cursive) {
     let state_opt = s.user_data::<AdvancedChatState>().cloned();
-    
-    let mut menu = Dialog::new().title("Session");
-    
-    menu = menu.button("New Session", |s| {
+    let mut menu_list = ListView::new();
+
+    menu_list.add_child("new", Button::new_raw("  [N]ew Session      ", |s| {
         s.pop_layer();
         create_new_chat_dialog(s);
-    });
-    
+    }).full_width());
+
     if let Some(state) = state_opt.clone() {
-        menu = menu.button("Fork Session", move |s| {
+        menu_list.add_child("fork", Button::new_raw("  [F]ork Session     ", move |s| {
             s.pop_layer();
             fork_conversation(s, state.clone());
-        });
+        }).full_width());
     }
-    
-    menu = menu.button("Start Recording", |s| {
+
+    menu_list.add_child("div1", TextView::new("  ───────────────────  "));
+
+    menu_list.add_child("start_rec", Button::new_raw("  Start [R]ecording  ", |s| {
         s.pop_layer();
         start_recording(s);
-    });
-    
-    menu = menu.button("Stop Recording", |s| {
+    }).full_width());
+
+    menu_list.add_child("stop_rec", Button::new_raw("  S[t]op Recording   ", |s| {
         s.pop_layer();
         stop_recording(s);
+    }).full_width());
+
+    let dropdown = OnEventView::new(
+        Panel::new(menu_list)
+            .title("Session")
+            .fixed_width(24)
+    )
+    .on_event('n', |s| {
+        s.pop_layer();
+        create_new_chat_dialog(s);
+    })
+    .on_event('N', |s| {
+        s.pop_layer();
+        create_new_chat_dialog(s);
+    })
+    .on_event('f', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            fork_conversation(s, state);
+        }
+    })
+    .on_event('F', |s| {
+        s.pop_layer();
+        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+            fork_conversation(s, state);
+        }
+    })
+    .on_event('r', |s| {
+        s.pop_layer();
+        start_recording(s);
+    })
+    .on_event('R', |s| {
+        s.pop_layer();
+        start_recording(s);
+    })
+    .on_event('t', |s| {
+        s.pop_layer();
+        stop_recording(s);
+    })
+    .on_event('T', |s| {
+        s.pop_layer();
+        stop_recording(s);
+    })
+    .on_event(Key::Esc, |s| {
+        s.pop_layer();
     });
-    
-    menu = menu.button("Cancel", |s| { s.pop_layer(); });
 
-    s.add_layer(menu);
+    s.add_layer(dropdown);
 }
 
-/// Tools menu handler
+/// Tools menu handler - dropdown style with visual mnemonics
 pub fn show_tools_menu(s: &mut Cursive) {
-    s.add_layer(
-        Dialog::new()
+    let mut menu_list = ListView::new();
+
+    menu_list.add_child("refresh", Button::new_raw("  [R]efresh MCP      ", |s| {
+        s.pop_layer();
+        refresh_mcp_tools(s);
+    }).full_width());
+
+    menu_list.add_child("add", Button::new_raw("  [A]dd Server       ", |s| {
+        s.pop_layer();
+        show_add_mcp_server_dialog(s);
+    }).full_width());
+
+    menu_list.add_child("manage", Button::new_raw("  [M]anage Servers   ", |s| {
+        s.pop_layer();
+        show_mcp_server_list(s);
+    }).full_width());
+
+    menu_list.add_child("div1", TextView::new("  ───────────────────  "));
+
+    menu_list.add_child("theme", Button::new_raw("  [T]heme Switcher   ", |s| {
+        s.pop_layer();
+        show_theme_switcher(s);
+    }).full_width());
+
+    let dropdown = OnEventView::new(
+        Panel::new(menu_list)
             .title("Tools")
-            .button("Refresh MCP Tools", |s| {
-                s.pop_layer();
-                refresh_mcp_tools(s);
-            })
-            .button("Add MCP Server", |s| {
-                s.pop_layer();
-                show_add_mcp_server_dialog(s);
-            })
-            .button("Manage Servers", |s| {
-                s.pop_layer();
-                show_mcp_server_list(s);
-            })
-            .button("Theme Switcher", |s| {
-                s.pop_layer();
-                show_theme_switcher(s);
-            })
-            .button("Cancel", |s| { s.pop_layer(); })
-    );
+            .fixed_width(24)
+    )
+    .on_event('r', |s| {
+        s.pop_layer();
+        refresh_mcp_tools(s);
+    })
+    .on_event('R', |s| {
+        s.pop_layer();
+        refresh_mcp_tools(s);
+    })
+    .on_event('a', |s| {
+        s.pop_layer();
+        show_add_mcp_server_dialog(s);
+    })
+    .on_event('A', |s| {
+        s.pop_layer();
+        show_add_mcp_server_dialog(s);
+    })
+    .on_event('m', |s| {
+        s.pop_layer();
+        show_mcp_server_list(s);
+    })
+    .on_event('M', |s| {
+        s.pop_layer();
+        show_mcp_server_list(s);
+    })
+    .on_event('t', |s| {
+        s.pop_layer();
+        show_theme_switcher(s);
+    })
+    .on_event('T', |s| {
+        s.pop_layer();
+        show_theme_switcher(s);
+    })
+    .on_event(Key::Esc, |s| {
+        s.pop_layer();
+    });
+
+    s.add_layer(dropdown);
 }
 
-/// Help menu handler
+/// Help menu handler - dropdown style with visual mnemonics
 pub fn show_help_menu(s: &mut Cursive) {
-    s.add_layer(
-        Dialog::new()
+    let mut menu_list = ListView::new();
+
+    menu_list.add_child("essential", Button::new_raw("  F1: Essential Shortcuts  ", |s| {
+        s.pop_layer();
+        show_essential_shortcuts(s);
+    }).full_width());
+
+    menu_list.add_child("common", Button::new_raw("  F2: Common Shortcuts     ", |s| {
+        s.pop_layer();
+        show_common_shortcuts(s);
+    }).full_width());
+
+    menu_list.add_child("advanced", Button::new_raw("  F3: Advanced Shortcuts   ", |s| {
+        s.pop_layer();
+        show_advanced_shortcuts(s);
+    }).full_width());
+
+    menu_list.add_child("div1", TextView::new("  ─────────────────────────  "));
+
+    menu_list.add_child("about", Button::new_raw("  [A]bout                  ", |s| {
+        s.pop_layer();
+        s.add_layer(
+            Dialog::text("OSVM Advanced Agent Chat\n\nVersion: 0.9.0\n\nAI-powered blockchain agent with\nMCP server integration and tiered help")
+                .title("About")
+                .button("OK", |s| { s.pop_layer(); })
+        );
+    }).full_width());
+
+    let dropdown = OnEventView::new(
+        Panel::new(menu_list)
             .title("Help")
-            .button("Keyboard Shortcuts", |s| {
-                s.pop_layer();
-                show_keyboard_shortcuts_hint(s);
-            })
-            .button("Full Help", |s| {
-                s.pop_layer();
-                show_advanced_help(s);
-            })
-            .button("About", |s| {
-                s.pop_layer();
-                s.add_layer(
-                    Dialog::text("OSVM Advanced Agent Chat\n\nVersion: 0.9.0\n\nAI-powered blockchain agent with\nMCP server integration")
-                        .title("About")
-                        .button("OK", |s| { s.pop_layer(); })
-                );
-            })
-            .button("Cancel", |s| { s.pop_layer(); })
-    );
+            .fixed_width(30)
+    )
+    .on_event(Key::F1, |s| {
+        s.pop_layer();
+        show_essential_shortcuts(s);
+    })
+    .on_event(Key::F2, |s| {
+        s.pop_layer();
+        show_common_shortcuts(s);
+    })
+    .on_event(Key::F3, |s| {
+        s.pop_layer();
+        show_advanced_shortcuts(s);
+    })
+    .on_event('a', |s| {
+        s.pop_layer();
+        s.add_layer(
+            Dialog::text("OSVM Advanced Agent Chat\n\nVersion: 0.9.0\n\nAI-powered blockchain agent with\nMCP server integration and tiered help")
+                .title("About")
+                .button("OK", |s| { s.pop_layer(); })
+        );
+    })
+    .on_event('A', |s| {
+        s.pop_layer();
+        s.add_layer(
+            Dialog::text("OSVM Advanced Agent Chat\n\nVersion: 0.9.0\n\nAI-powered blockchain agent with\nMCP server integration and tiered help")
+                .title("About")
+                .button("OK", |s| { s.pop_layer(); })
+        );
+    })
+    .on_event(Key::Esc, |s| {
+        s.pop_layer();
+    });
+
+    s.add_layer(dropdown);
 }
 
 /// Toggle MCP server collapsed/expanded state
@@ -2274,12 +2911,25 @@ pub fn toggle_mcp_server_collapsed(_s: &mut Cursive, _server_id: String) {
 
 /// Send message from button click
 pub fn send_message_from_button(siv: &mut Cursive, state: AdvancedChatState) {
-    if let Some(input) = siv.find_name::<TextArea>("input") {
+    // Step 1: Get content and validate
+    let content = if let Some(input) = siv.find_name::<TextArea>("input") {
         let content = input.get_content().to_string();
-        if !content.trim().is_empty() {
-            handle_user_input(siv, &content, state);
+        if content.trim().is_empty() {
+            return; // Early return if empty
         }
+        content
+    } else {
+        return;
+    };
+
+    // Step 2: Clear the input field BEFORE processing
+    // This is CRITICAL to prevent UI hang - provides immediate visual feedback
+    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+        input.set_content("");
     }
+
+    // Step 3: Now process the message (may block, but input is already cleared)
+    handle_user_input(siv, &content, state);
 }
 
 /// Enhance message with AI before sending
@@ -2301,6 +2951,42 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
         return;
     }
 
+    // AI service configuration check
+    // Note: osvm.ai is the default and requires no configuration!
+    // Only show configuration dialog if explicitly using OpenAI and missing credentials
+    let using_openai = std::env::var("OPENAI_URL").is_ok();
+    let has_openai_key = std::env::var("OPENAI_KEY").is_ok();
+
+    if using_openai && !has_openai_key {
+        siv.add_layer(
+            Dialog::text(
+                "AI Enhancement Configuration Issue\n\n\
+                You have OPENAI_URL set but OPENAI_KEY is missing.\n\n\
+                Options:\n\
+                1. Use default OSVM.ai (free, no key needed):\n\
+                   unset OPENAI_URL\n\
+                   unset OPENAI_KEY\n\n\
+                2. Configure OpenAI:\n\
+                   export OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n\
+                   export OPENAI_KEY=\"sk-your-key-here\"\n\n\
+                3. Use local Ollama:\n\
+                   export OPENAI_URL=\"http://localhost:11434/v1/chat/completions\"\n\
+                   export OPENAI_KEY=\"ollama-key\""
+            )
+            .title("Configuration Issue")
+            .button("Use OSVM.ai (Default)", |s| {
+                s.pop_layer();
+                // Clear OpenAI env vars to use default
+                std::env::remove_var("OPENAI_URL");
+                std::env::remove_var("OPENAI_KEY");
+            })
+            .button("Cancel", |s| {
+                s.pop_layer();
+            }),
+        );
+        return;
+    }
+
     // Show processing dialog
     siv.add_layer(
         Dialog::text("🤖 Enhancing your message with AI...\nPlease wait...")
@@ -2314,7 +3000,22 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
     std::thread::spawn(move || {
         let rt = match tokio::runtime::Runtime::new() {
             Ok(rt) => rt,
-            Err(_) => return,
+            Err(e) => {
+                let error_msg = format!("Failed to create async runtime: {}", e);
+                cb_sink
+                    .send(Box::new(move |s| {
+                        s.pop_layer(); // Remove processing dialog
+                        s.add_layer(
+                            Dialog::text(error_msg)
+                                .title("AI Enhancement Failed")
+                                .button("OK", |s| {
+                                    s.pop_layer();
+                                }),
+                        );
+                    }))
+                    .ok();
+                return;
+            }
         };
 
         let enhanced = rt.block_on(async {
@@ -2324,10 +3025,13 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
                 current_content
             );
 
-            ai_service
-                .query_with_debug(&prompt, false)
-                .await
-                .unwrap_or_else(|_| current_content.clone())
+            match ai_service.query_with_debug(&prompt, false).await {
+                Ok(result) => result,
+                Err(e) => {
+                    log::error!("AI enhancement failed: {}", e);
+                    current_content.clone() // Return original on error
+                }
+            }
         });
 
         cb_sink
@@ -2378,4 +3082,370 @@ pub fn show_drafts_dialog(siv: &mut Cursive, _state: AdvancedChatState) {
                 s.pop_layer();
             }),
     );
+}
+
+// ============================================================================
+// Session Search (Ctrl+F) - P1 UX Improvement
+// ============================================================================
+
+/// Show session search dialog with fuzzy matching
+pub fn show_session_search(siv: &mut Cursive) {
+    let state = match siv.user_data::<AdvancedChatState>() {
+        Some(state) => state.clone(),
+        None => {
+            eprintln!("⚠️ No state available for session search");
+            return;
+        }
+    };
+
+    // Get all sessions for filtering
+    let sessions = match state.sessions.read() {
+        Ok(sessions) => sessions.clone(),
+        Err(e) => {
+            eprintln!("⚠️ Failed to read sessions: {}", e);
+            return;
+        }
+    };
+
+    if sessions.is_empty() {
+        siv.add_layer(
+            Dialog::info("No chat sessions available to search.")
+                .title("Session Search")
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
+        );
+        return;
+    }
+
+    let session_count = sessions.len();
+    let state_clone = state.clone();
+
+    // Create search input with live filtering
+    let search_input = EditView::new()
+        .on_edit(move |siv, query, _cursor| {
+            filter_sessions(siv, query, state_clone.clone());
+        })
+        .on_submit(move |siv, _query| {
+            // Enter key jumps to selected session
+            jump_to_filtered_session(siv, state.clone());
+        })
+        .with_name("session_search_input");
+
+    // Create results list
+    let results_list = ListView::new().with_name("session_search_results");
+
+    let mut layout = LinearLayout::vertical();
+    layout.add_child(TextView::new(format!(
+        "Search {} sessions (fuzzy match on names)",
+        session_count
+    )));
+    layout.add_child(DummyView.fixed_height(1));
+    layout.add_child(
+        Panel::new(search_input)
+            .title("🔍 Type to search")
+            .full_width(),
+    );
+    layout.add_child(DummyView.fixed_height(1));
+    layout.add_child(
+        Panel::new(ScrollView::new(results_list).max_height(10))
+            .title("📋 Matching Sessions")
+            .full_width(),
+    );
+
+    // Populate initial results (all sessions)
+    let state_for_initial = match siv.user_data::<AdvancedChatState>() {
+        Some(s) => s.clone(),
+        None => return,
+    };
+    filter_sessions(siv, "", state_for_initial);
+
+    siv.add_layer(
+        Dialog::around(layout)
+            .title("Session Search (Ctrl+F)")
+            .button("Cancel", |s| {
+                s.pop_layer();
+            })
+            .button("Clear", |s| {
+                if let Some(mut input) = s.find_name::<EditView>("session_search_input") {
+                    input.set_content("");
+                }
+            })
+            .max_width(70)
+            .max_height(25),
+    );
+
+    // Focus the search input
+    siv.focus_name("session_search_input").ok();
+}
+
+/// Filter sessions based on fuzzy query
+fn filter_sessions(siv: &mut Cursive, query: &str, state: AdvancedChatState) {
+    let sessions = match state.sessions.read() {
+        Ok(sessions) => sessions.clone(),
+        Err(_) => return,
+    };
+
+    let query_lower = query.to_lowercase();
+
+    // Fuzzy match: check if all characters in query appear in order in session name
+    let matches: Vec<_> = sessions
+        .iter()
+        .filter(|(_id, session)| {
+            if query.is_empty() {
+                true // Show all when no query
+            } else {
+                fuzzy_match(&session.name.to_lowercase(), &query_lower)
+            }
+        })
+        .collect();
+
+    // Update results list
+    if let Some(mut results) = siv.find_name::<ListView>("session_search_results") {
+        results.clear();
+
+        if matches.is_empty() {
+            results.add_child(
+                "no_matches",
+                TextView::new(format!("No sessions match '{}'", query)),
+            );
+        } else {
+            for (idx, (session_id, session)) in matches.iter().enumerate() {
+                let session_id = **session_id;
+                let state_clone = state.clone();
+                let is_active = state
+                    .active_session_id
+                    .read()
+                    .ok()
+                    .and_then(|id| *id)
+                    == Some(session_id);
+
+                let display_name = if is_active {
+                    format!("▶ {} (active)", session.name)
+                } else {
+                    session.name.clone()
+                };
+
+                results.add_child(
+                    &format!("result_{}", idx),
+                    Button::new_raw(display_name, move |s| {
+                        switch_to_session(s, session_id, state_clone.clone());
+                        s.pop_layer(); // Close search dialog
+                    })
+                    .full_width(),
+                );
+            }
+        }
+    }
+}
+
+/// Simple fuzzy match: check if all chars in needle appear in haystack in order
+fn fuzzy_match(haystack: &str, needle: &str) -> bool {
+    let mut haystack_chars = haystack.chars();
+
+    for needle_char in needle.chars() {
+        loop {
+            match haystack_chars.next() {
+                Some(h_char) if h_char == needle_char => break,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+    }
+    true
+}
+
+/// Jump to the first filtered session when Enter is pressed
+fn jump_to_filtered_session(siv: &mut Cursive, state: AdvancedChatState) {
+    // Get the first button from results and trigger it
+    if let Some(results) = siv.find_name::<ListView>("session_search_results") {
+        // Check if we have results
+        if results.len() > 0 {
+            // Get the first child which should be a button
+            // For now, just close the dialog - the user can click the result
+            siv.pop_layer();
+        }
+    }
+}
+
+/// Switch to a specific session
+fn switch_to_session(siv: &mut Cursive, session_id: uuid::Uuid, state: AdvancedChatState) {
+    // Set active session
+    if let Ok(mut active) = state.active_session_id.write() {
+        *active = Some(session_id);
+    }
+
+    // Update UI displays
+    super::super::update_ui_displays(siv);
+
+    // Focus input field
+    siv.focus_name("input").ok();
+}
+
+// ============================================================================
+// Input History Search (Ctrl+R) - P3 UX Improvement (bash-style)
+// ============================================================================
+
+/// Show input history search dialog (bash-style Ctrl+R)
+pub fn show_input_history_search(siv: &mut Cursive) {
+    let state = match siv.user_data::<AdvancedChatState>() {
+        Some(state) => state.clone(),
+        None => {
+            eprintln!("⚠️ No state available for history search");
+            return;
+        }
+    };
+
+    // Get history
+    let history = match state.input_history.read() {
+        Ok(history) => history.clone(),
+        Err(e) => {
+            eprintln!("⚠️ Failed to read history: {}", e);
+            return;
+        }
+    };
+
+    if history.is_empty() {
+        siv.add_layer(
+            Dialog::info("No input history available.")
+                .title("History Search")
+                .button("OK", |s| {
+                    s.pop_layer();
+                }),
+        );
+        return;
+    }
+
+    let history_count = history.len();
+    let state_clone = state.clone();
+
+    // Create search input with live filtering
+    let search_input = EditView::new()
+        .on_edit(move |siv, query, _cursor| {
+            filter_history(siv, query, state_clone.clone());
+        })
+        .on_submit(move |siv, _query| {
+            // Enter key inserts selected history item
+            insert_selected_history(siv, state.clone());
+        })
+        .with_name("history_search_input");
+
+    // Create results list
+    let results_list = ListView::new().with_name("history_search_results");
+
+    let mut layout = LinearLayout::vertical();
+    layout.add_child(TextView::new(format!(
+        "Search {} history items (fuzzy match, bash-style reverse search)",
+        history_count
+    )));
+    layout.add_child(DummyView.fixed_height(1));
+    layout.add_child(
+        Panel::new(search_input)
+            .title("🔍 Type to search history (Ctrl+R)")
+            .full_width(),
+    );
+    layout.add_child(DummyView.fixed_height(1));
+    layout.add_child(
+        Panel::new(ScrollView::new(results_list).max_height(12))
+            .title("📜 Matching History")
+            .full_width(),
+    );
+
+    // Populate initial results (most recent items)
+    let state_for_initial = match siv.user_data::<AdvancedChatState>() {
+        Some(s) => s.clone(),
+        None => return,
+    };
+    filter_history(siv, "", state_for_initial);
+
+    siv.add_layer(
+        Dialog::around(layout)
+            .title("Input History Search (Ctrl+R)")
+            .button("Cancel", |s| {
+                s.pop_layer();
+            })
+            .button("Clear Search", |s| {
+                if let Some(mut input) = s.find_name::<EditView>("history_search_input") {
+                    input.set_content("");
+                }
+            })
+            .max_width(80)
+            .max_height(28),
+    );
+
+    // Focus the search input
+    siv.focus_name("history_search_input").ok();
+}
+
+/// Filter history based on fuzzy query
+fn filter_history(siv: &mut Cursive, query: &str, state: AdvancedChatState) {
+    let history = match state.input_history.read() {
+        Ok(history) => history.clone(),
+        Err(_) => return,
+    };
+
+    let query_lower = query.to_lowercase();
+
+    // Fuzzy match on history entries (most recent first)
+    let mut matches: Vec<_> = history
+        .iter()
+        .rev() // Most recent first
+        .filter(|item| {
+            if query.is_empty() {
+                true // Show recent when no query
+            } else {
+                fuzzy_match(&item.to_lowercase(), &query_lower)
+            }
+        })
+        .take(20) // Limit to 20 results
+        .collect();
+
+    // Update results list
+    if let Some(mut results) = siv.find_name::<ListView>("history_search_results") {
+        results.clear();
+
+        if matches.is_empty() {
+            results.add_child(
+                "no_matches",
+                TextView::new(format!("No history matches '{}'", query)),
+            );
+        } else {
+            for (idx, item) in matches.iter().enumerate() {
+                let item_text = item.to_string();
+                let state_clone = state.clone();
+
+                // Truncate long items for display
+                let display_text = if item.len() > 70 {
+                    format!("{}...", &item[..67])
+                } else {
+                    item.to_string()
+                };
+
+                results.add_child(
+                    &format!("history_{}", idx),
+                    Button::new_raw(display_text, move |s| {
+                        insert_history_item(s, &item_text, state_clone.clone());
+                        s.pop_layer(); // Close search dialog
+                    })
+                    .full_width(),
+                );
+            }
+        }
+    }
+}
+
+/// Insert selected history item into input
+fn insert_selected_history(siv: &mut Cursive, _state: AdvancedChatState) {
+    // For now, just close the dialog - user can click a result
+    // In a more advanced version, we could track the selected index
+    siv.pop_layer();
+}
+
+/// Insert a specific history item into the input field
+fn insert_history_item(siv: &mut Cursive, item: &str, _state: AdvancedChatState) {
+    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+        input.set_content(item);
+    }
+    // Focus input field
+    siv.focus_name("input").ok();
 }
