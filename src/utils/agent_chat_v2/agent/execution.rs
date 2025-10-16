@@ -195,96 +195,15 @@ impl AdvancedChatState {
                         let _ = self.simple_response(session_id, &input).await;
                     }
                 } else {
-                    // Execute tools iteratively with potential for follow-up actions
-                    let mut executed_tools = Vec::new();
-                    let mut iteration_count = 0;
-                    let max_iterations = 3; // Reduced to prevent excessive loops
-
-                    let mut current_tools = tool_plan.osvm_tools_to_use;
-                    let mut executed_tool_signatures = std::collections::HashSet::new();
-
-                    while !current_tools.is_empty() && iteration_count < max_iterations {
-                        iteration_count += 1;
-
-                        // Filter out duplicate tools to prevent infinite loops
-                        current_tools.retain(|tool| {
-                            let signature = format!("{}:{:?}", tool.tool_name, tool.args);
-                            !executed_tool_signatures.contains(&signature)
-                        });
-
-                        if current_tools.is_empty() {
-                            warn!("All remaining tools are duplicates, breaking execution loop");
-                            break;
-                        }
-
-                        // Execute current batch of tools
-                        for planned_tool in &current_tools {
-                            let signature =
-                                format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
-                            executed_tool_signatures.insert(signature);
-
-                            let _ = self
-                                .execute_planned_tool(session_id, planned_tool.clone())
-                                .await;
-                            executed_tools.push(planned_tool.clone());
-                        }
-
-                        // Check if we need follow-up actions based on results
-                        let session = match self.get_session_by_id(session_id) {
-                            Some(s) => s,
-                            None => break, // Session not found, exit loop
-                        };
-
-                        let recent_results: Vec<(String, Value)> = session
-                            .messages
-                            .iter()
-                            .rev()
-                            .filter_map(|msg| match msg {
-                                ChatMessage::ToolResult {
-                                    tool_name, result, ..
-                                } => Some((tool_name.clone(), result.clone())),
-                                _ => None,
-                            })
-                            .take(current_tools.len()) // Get results for current batch of tools
-                            .collect();
-
-                        // Ask AI if we need follow-up tools based on results
-                        if iteration_count < max_iterations && !recent_results.is_empty() {
-                            match self
-                                .check_for_follow_up_actions(
-                                    &input,
-                                    &recent_results,
-                                    &available_tools,
-                                )
-                                .await
-                            {
-                                Ok(mut follow_up_tools) if !follow_up_tools.is_empty() => {
-                                    // Filter follow-up tools to remove duplicates
-                                    follow_up_tools.retain(|tool| {
-                                        let signature =
-                                            format!("{}:{:?}", tool.tool_name, tool.args);
-                                        !executed_tool_signatures.contains(&signature)
-                                    });
-
-                                    if !follow_up_tools.is_empty() {
-                                        let _ = self.add_message_to_session(
-                                            session_id,
-                                            ChatMessage::AgentThinking(format!(
-                                                "Executing {} follow-up actions...",
-                                                follow_up_tools.len()
-                                            )),
-                                        );
-                                        current_tools = follow_up_tools;
-                                    } else {
-                                        warn!("All follow-up tools are duplicates, breaking execution loop");
-                                        break;
-                                    }
-                                }
-                                _ => break, // No more tools needed
-                            }
-                        } else {
-                            break;
-                        }
+                    // Phase 2: Check if we have raw OVSM plan for execution engine
+                    if let Some(ref raw_ovsm) = tool_plan.raw_ovsm_plan {
+                        // Execute using OVSM engine with runtime branching
+                        debug!("Phase 2: Executing plan using OVSM execution engine");
+                        let _ = self.execute_ovsm_plan(session_id, raw_ovsm, &input).await;
+                    } else {
+                        // Fallback: Execute tools iteratively (Phase 1 behavior)
+                        debug!("No raw OVSM plan available, using iterative execution");
+                        let _ = self.execute_tools_iteratively(session_id, tool_plan.osvm_tools_to_use, &input, &available_tools).await;
                     }
 
                     // Generate final response with all executed tools
@@ -818,6 +737,283 @@ impl AdvancedChatState {
         {
             Ok(Ok(plan)) if !plan.osvm_tools_to_use.is_empty() => Ok(plan.osvm_tools_to_use),
             _ => Ok(Vec::new()), // No follow-up needed or error occurred
+        }
+    }
+
+    /// Phase 2: Execute OVSM plan using the execution engine with runtime branching
+    async fn execute_ovsm_plan(
+        &self,
+        session_id: Uuid,
+        raw_ovsm_plan: &str,
+        _original_input: &str,
+    ) -> Result<()> {
+        info!("Phase 2: Executing OVSM plan with execution engine");
+
+        // Get all available tools to register them with the executor
+        let available_tools = match self.available_tools.read() {
+            Ok(tools) => tools.clone(),
+            Err(e) => {
+                error!("Failed to read available tools: {}", e);
+                return Err(anyhow!("Failed to read available tools: {}", e));
+            }
+        };
+
+        // Register all available tools with OVSM executor
+        let executor = self.ovsm_executor.lock().await;
+        for (server_id, tool_list) in available_tools.iter() {
+            for tool in tool_list {
+                let tool_wrapper = McpToolWrapper {
+                    state: self.clone(),
+                    session_id,
+                    server_id: server_id.clone(),
+                    tool_name: tool.name.clone(),
+                };
+                executor
+                    .register_tool(tool.name.clone(), Box::new(tool_wrapper))
+                    .await?;
+            }
+        }
+
+        // Execute the plan
+        match executor.execute_plan(raw_ovsm_plan).await {
+            Ok(result) => {
+                info!(
+                    "Phase 2: OVSM execution completed successfully (confidence: {:.2})",
+                    result.confidence
+                );
+                debug!(
+                    "OVSM execution metadata: {} tools called, {} branches taken, {} warnings, execution time: {}ms",
+                    result.tools_called.len(),
+                    result.branches_taken.len(),
+                    result.warnings.len(),
+                    result.execution_time_ms
+                );
+
+                // Log execution details
+                if !result.branches_taken.is_empty() {
+                    debug!("Branch decisions: {:?}", result.branches_taken);
+                }
+                if !result.warnings.is_empty() {
+                    warn!("OVSM execution warnings: {:?}", result.warnings);
+                }
+
+                // Add execution metadata as a chat message (optional - for debugging)
+                if log::log_enabled!(log::Level::Debug) {
+                    let metadata_msg = format!(
+                        "📊 Execution Stats: {} tools, {} branches, {}ms",
+                        result.tools_called.len(),
+                        result.branches_taken.len(),
+                        result.execution_time_ms
+                    );
+                    let _ = self.add_message_to_session(
+                        session_id,
+                        ChatMessage::AgentThinking(metadata_msg),
+                    );
+                }
+
+                Ok(())
+            }
+            Err(e) => {
+                error!("Phase 2: OVSM execution failed: {}", e);
+                let _ = self.add_message_to_session(
+                    session_id,
+                    ChatMessage::Error(format!("Plan execution failed: {}", e)),
+                );
+                Err(e)
+            }
+        }
+    }
+
+    /// Phase 1 fallback: Execute tools iteratively without OVSM engine
+    async fn execute_tools_iteratively(
+        &self,
+        session_id: Uuid,
+        tools: Vec<PlannedTool>,
+        input: &str,
+        available_tools: &HashMap<String, Vec<McpTool>>,
+    ) -> Result<()> {
+        let mut executed_tools = Vec::new();
+        let mut iteration_count = 0;
+        let max_iterations = 3; // Reduced to prevent excessive loops
+
+        let mut current_tools = tools;
+        let mut executed_tool_signatures = std::collections::HashSet::new();
+
+        while !current_tools.is_empty() && iteration_count < max_iterations {
+            iteration_count += 1;
+
+            // Filter out duplicate tools to prevent infinite loops
+            current_tools.retain(|tool| {
+                let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                !executed_tool_signatures.contains(&signature)
+            });
+
+            if current_tools.is_empty() {
+                warn!("All remaining tools are duplicates, breaking execution loop");
+                break;
+            }
+
+            // Execute current batch of tools
+            for planned_tool in &current_tools {
+                let signature = format!("{}:{:?}", planned_tool.tool_name, planned_tool.args);
+                executed_tool_signatures.insert(signature);
+
+                let _ = self
+                    .execute_planned_tool(session_id, planned_tool.clone())
+                    .await;
+                executed_tools.push(planned_tool.clone());
+            }
+
+            // Check if we need follow-up actions based on results
+            let session = match self.get_session_by_id(session_id) {
+                Some(s) => s,
+                None => break, // Session not found, exit loop
+            };
+
+            let recent_results: Vec<(String, Value)> = session
+                .messages
+                .iter()
+                .rev()
+                .filter_map(|msg| match msg {
+                    ChatMessage::ToolResult {
+                        tool_name, result, ..
+                    } => Some((tool_name.clone(), result.clone())),
+                    _ => None,
+                })
+                .take(current_tools.len()) // Get results for current batch of tools
+                .collect();
+
+            // Ask AI if we need follow-up tools based on results
+            if iteration_count < max_iterations && !recent_results.is_empty() {
+                match self
+                    .check_for_follow_up_actions(input, &recent_results, available_tools)
+                    .await
+                {
+                    Ok(mut follow_up_tools) if !follow_up_tools.is_empty() => {
+                        // Filter follow-up tools to remove duplicates
+                        follow_up_tools.retain(|tool| {
+                            let signature = format!("{}:{:?}", tool.tool_name, tool.args);
+                            !executed_tool_signatures.contains(&signature)
+                        });
+
+                        if !follow_up_tools.is_empty() {
+                            let _ = self.add_message_to_session(
+                                session_id,
+                                ChatMessage::AgentThinking(format!(
+                                    "Executing {} follow-up actions...",
+                                    follow_up_tools.len()
+                                )),
+                            );
+                            current_tools = follow_up_tools;
+                        } else {
+                            warn!("All follow-up tools are duplicates, breaking execution loop");
+                            break;
+                        }
+                    }
+                    _ => break, // No more tools needed
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Phase 2: Wrapper that implements McpToolExecutor for OVSM executor
+struct McpToolWrapper {
+    state: AdvancedChatState,
+    session_id: Uuid,
+    server_id: String,
+    tool_name: String,
+}
+
+impl crate::services::ovsm_executor::McpToolExecutor for McpToolWrapper {
+    fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        // We need to run async code in a sync context
+        // Use tokio's block_on from a new runtime
+        let state = self.state.clone();
+        let session_id = self.session_id;
+        let server_id = self.server_id.clone();
+        let tool_name = self.tool_name.clone();
+        let args = args.clone();
+
+        // Create PlannedTool from OVSM execution context
+        let planned_tool = PlannedTool {
+            server_id: server_id.clone(),
+            tool_name: tool_name.clone(),
+            args: args.clone(),
+            reason: format!("OVSM plan execution: {}", tool_name),
+        };
+
+        // We need to use a runtime to execute async code
+        // Try to get the current runtime, otherwise create one
+        let result = match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                // We're already in a tokio runtime
+                handle.block_on(async {
+                    execute_tool_async(&state, session_id, &planned_tool, &tool_name).await
+                })
+            }
+            Err(_) => {
+                // No runtime, create a new one
+                tokio::runtime::Runtime::new()
+                    .context("Failed to create Tokio runtime")?
+                    .block_on(async {
+                        execute_tool_async(&state, session_id, &planned_tool, &tool_name).await
+                    })
+            }
+        };
+
+        result
+    }
+}
+
+// Helper function to keep async logic separate
+async fn execute_tool_async(
+    state: &AdvancedChatState,
+    session_id: Uuid,
+    planned_tool: &PlannedTool,
+    tool_name: &str,
+) -> Result<serde_json::Value> {
+    // Add tool call message to chat
+    let execution_id = Uuid::new_v4().to_string();
+    state.set_agent_state(
+        session_id,
+        AgentState::ExecutingTool(tool_name.to_string()),
+    );
+    let _ = state.add_message_to_session(
+        session_id,
+        ChatMessage::ToolCall {
+            tool_name: tool_name.to_string(),
+            description: format!("Executing: {}", tool_name),
+            args: Some(planned_tool.args.clone()),
+            execution_id: execution_id.clone(),
+        },
+    );
+
+    // Execute the tool
+    match state.call_mcp_tool(planned_tool).await {
+        Ok(result) => {
+            // Add result message to chat
+            let _ = state.add_message_to_session(
+                session_id,
+                ChatMessage::ToolResult {
+                    tool_name: tool_name.to_string(),
+                    result: result.clone(),
+                    execution_id,
+                },
+            );
+            Ok(result)
+        }
+        Err(e) => {
+            error!("MCP tool execution failed: {}", e);
+            let _ = state.add_message_to_session(
+                session_id,
+                ChatMessage::Error(format!("Tool {} failed: {}", tool_name, e)),
+            );
+            Err(e)
         }
     }
 }
