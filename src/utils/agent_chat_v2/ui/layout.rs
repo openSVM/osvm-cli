@@ -196,15 +196,15 @@ impl AdvancedChatUI {
             }
         });
 
-        // Add Tab navigation between key UI elements - but don't interfere with other keys
+        // Add Tab navigation between key UI elements - circular navigation
+        // BUG-2024 fix: Implement better Tab navigation with cycling
         // BUG-2018 fix: Replace silent error drops with proper logging (from Phase 3 BUG-2011 pattern)
         siv.add_global_callback(cursive::event::Key::Tab, |s| {
-            // Try to focus the chat list first, then input as fallback
-            if s.focus_name("chat_list").is_ok() {
-                // Successfully focused chat list
-            } else {
+            // Try to focus chat_list first, if it fails or is already focused, try input
+            // This creates a simple cycle: between chat_list and input
+            if s.focus_name("chat_list").is_err() {
                 if let Err(e) = s.focus_name("input") {
-                    log::warn!("Failed to focus input field on Tab key: {}", e);
+                    log::warn!("Failed to focus either chat_list or input on Tab: {}", e);
                 }
             }
         });
@@ -213,12 +213,11 @@ impl AdvancedChatUI {
         siv.add_global_callback(
             cursive::event::Event::Shift(cursive::event::Key::Tab),
             |s| {
-                // Try to focus input first, then chat list as fallback
-                if s.focus_name("input").is_ok() {
-                    // Successfully focused input
-                } else {
+                // Try to focus input first, if it fails or is already focused, try chat_list
+                // This creates reverse cycle: between input and chat_list
+                if s.focus_name("input").is_err() {
                     if let Err(e) = s.focus_name("chat_list") {
-                        log::warn!("Failed to focus chat list on Shift+Tab key: {}", e);
+                        log::warn!("Failed to focus either input or chat_list on Shift+Tab: {}", e);
                     }
                 }
             },
@@ -258,14 +257,18 @@ impl AdvancedChatUI {
         });
 
         // Add Ctrl+Enter to send message (Microsoft Edit style)
-        let state_clone = self.state.clone();
+        // BUG-2021 fix: Use user_data instead of Arc cloning in callback
         siv.add_global_callback(
             cursive::event::Event::Ctrl(cursive::event::Key::Enter),
-            move |s| {
+            |s| {
                 if let Some(mut input) = s.find_name::<TextArea>("input") {
                     let content = input.get_content().to_string();
                     if !content.trim().is_empty() {
-                        handle_user_input(s, &content, state_clone.clone());
+                        // Get and clone state outside of mutable borrow
+                        let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+                        if let Some(state) = state_opt {
+                            handle_user_input(s, &content, state);
+                        }
                         // BUG-2023 fix: Clear input field after successful send
                         // Prevents user from accidentally sending duplicate messages
                         input.set_content("");
@@ -297,25 +300,30 @@ impl AdvancedChatUI {
         });
 
         // Add Alt+Up/Down for history navigation (avoid conflict with TextArea cursor movement)
-        let state_clone = self.state.clone();
-        siv.add_global_callback(cursive::event::Event::AltChar('p'), move |s| {
+        // BUG-2021 fix: Use user_data instead of Arc cloning
+        siv.add_global_callback(cursive::event::Event::AltChar('p'), |s| {
             // Alt+P for Previous in history
-            if let Some(prev_input) = state_clone.history_previous() {
-                if let Some(mut input) = s.find_name::<TextArea>("input") {
-                    input.set_content(prev_input);
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                if let Some(prev_input) = state.history_previous() {
+                    if let Some(mut input) = s.find_name::<TextArea>("input") {
+                        input.set_content(prev_input);
+                    }
+                    update_input_title(s, &state);
                 }
-                update_input_title(s, &state_clone);
             }
         });
 
-        let state_clone = self.state.clone();
-        siv.add_global_callback(cursive::event::Event::AltChar('n'), move |s| {
+        siv.add_global_callback(cursive::event::Event::AltChar('n'), |s| {
             // Alt+N for Next in history
-            if let Some(next_input) = state_clone.history_next() {
-                if let Some(mut input) = s.find_name::<TextArea>("input") {
-                    input.set_content(next_input);
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                if let Some(next_input) = state.history_next() {
+                    if let Some(mut input) = s.find_name::<TextArea>("input") {
+                        input.set_content(next_input);
+                    }
+                    update_input_title(s, &state);
                 }
-                update_input_title(s, &state_clone);
             }
         });
 
@@ -373,58 +381,55 @@ impl AdvancedChatUI {
             }
         });
 
-        let state = self.state.clone();
+        // BUG-2021 fix: Use user_data instead of Arc cloning
         // Alt+R: Retry last message
-        siv.add_global_callback(cursive::event::Event::AltChar('r'), move |s| {
-            retry_last_message(s, state.clone());
+        siv.add_global_callback(cursive::event::Event::AltChar('r'), |s| {
+            // Get and clone state outside of mutable borrow
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                retry_last_message(s, state);
+            }
         });
 
-        let state = self.state.clone();
         // Alt+C: Copy last message
-        siv.add_global_callback(cursive::event::Event::AltChar('c'), move |s| {
-            copy_last_message(s, state.clone());
+        siv.add_global_callback(cursive::event::Event::AltChar('c'), |s| {
+            // Get and clone state outside of mutable borrow
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                copy_last_message(s, state);
+            }
         });
 
-        let state = self.state.clone();
         // Alt+D: Delete last message
-        siv.add_global_callback(cursive::event::Event::AltChar('d'), move |s| {
-            delete_last_message(s, state.clone());
+        siv.add_global_callback(cursive::event::Event::AltChar('d'), |s| {
+            // Get and clone state outside of mutable borrow
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                delete_last_message(s, state);
+            }
         });
 
-        let state = self.state.clone();
         // Alt+F: Fork conversation
-        siv.add_global_callback(cursive::event::Event::AltChar('f'), move |s| {
-            fork_conversation(s, state.clone());
+        siv.add_global_callback(cursive::event::Event::AltChar('f'), |s| {
+            // Get and clone state outside of mutable borrow
+            let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+            if let Some(state) = state_opt {
+                fork_conversation(s, state);
+            }
         });
     }
 
     pub fn setup_suggestion_hotkeys(&self, siv: &mut Cursive) {
+        // BUG-2021 fix: Use user_data instead of Arc cloning
         // Add Ctrl+number key handlers for suggestions - only when input has focus
         for i in 1..=5 {
-            let state = self.state.clone();
             let key_char = char::from_digit(i as u32, 10).unwrap();
 
             siv.add_global_callback(cursive::event::Event::CtrlChar(key_char), move |s| {
-                // Only insert suggestion if suggestions are visible AND input has focus
-                let suggestions_visible = state
-                    .suggestions_visible
-                    .read()
-                    .map(|v| *v)
-                    .unwrap_or(false);
+                // Get and clone state outside of mutable borrow
+                let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
 
-                if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
-                    insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
-                }
-            });
-        }
-
-        // Also add Alt+number for easier access
-        for i in 1..=5 {
-            let state = self.state.clone();
-
-            siv.add_global_callback(
-                cursive::event::Event::AltChar(char::from_digit(i as u32, 10).unwrap()),
-                move |s| {
+                if let Some(state) = state_opt {
                     // Only insert suggestion if suggestions are visible AND input has focus
                     let suggestions_visible = state
                         .suggestions_visible
@@ -433,30 +438,59 @@ impl AdvancedChatUI {
                         .unwrap_or(false);
 
                     if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
-                        insert_suggestion_at_cursor(s, (i - 1) as usize, state.clone());
+                        insert_suggestion_at_cursor(s, (i - 1) as usize, state);
+                    }
+                }
+            });
+        }
+
+        // Also add Alt+number for easier access
+        for i in 1..=5 {
+            siv.add_global_callback(
+                cursive::event::Event::AltChar(char::from_digit(i as u32, 10).unwrap()),
+                move |s| {
+                    // Get and clone state outside of mutable borrow
+                    let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+
+                    if let Some(state) = state_opt {
+                        // Only insert suggestion if suggestions are visible AND input has focus
+                        let suggestions_visible = state
+                            .suggestions_visible
+                            .read()
+                            .map(|v| *v)
+                            .unwrap_or(false);
+
+                        if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
+                            insert_suggestion_at_cursor(s, (i - 1) as usize, state);
+                        }
                     }
                 },
             );
         }
 
         // Hide suggestions on Escape - but don't interfere with other Escape usage
-        let state = self.state.clone();
-        siv.add_global_callback(cursive::event::Key::Esc, move |_s| {
-            if let Ok(mut vis) = state.suggestions_visible.write() {
-                *vis = false;
+        siv.add_global_callback(cursive::event::Key::Esc, |s| {
+            if let Some(state) = s.user_data::<AdvancedChatState>() {
+                if let Ok(mut vis) = state.suggestions_visible.write() {
+                    *vis = false;
+                }
             }
         });
 
         // Emergency clear - Ctrl+Alt+X to clear stuck processing states (safe combination)
-        let state = self.state.clone();
-        siv.add_global_callback(cursive::event::Event::AltChar('x'), move |siv| {
-            // Clear all processing messages from active session
-            if let Some(session) = state.get_active_session() {
-                let session_id = session.id;
-                if let Err(e) = state.remove_last_processing_message(session_id) {
-                    eprintln!("Emergency clear failed: {}", e);
+        siv.add_global_callback(cursive::event::Event::AltChar('x'), |siv| {
+            // Get and clone state outside of mutable borrow
+            let state_opt = siv.user_data::<AdvancedChatState>().map(|st| st.clone());
+
+            if let Some(state) = state_opt {
+                // Clear all processing messages from active session
+                if let Some(session) = state.get_active_session() {
+                    let session_id = session.id;
+                    if let Err(e) = state.remove_last_processing_message(session_id) {
+                        eprintln!("Emergency clear failed: {}", e);
+                    }
+                    super::display::update_ui_displays(siv);
                 }
-                super::display::update_ui_displays(siv);
             }
         });
     }
