@@ -17,6 +17,7 @@ use super::super::agent::AgentCommand;
 use super::super::state::AdvancedChatState;
 use super::super::types::{AgentState, ChatMessage};
 use super::display::update_ui_displays;
+use super::text_area_wrapper::SendableTextArea;
 
 // UI Event Handlers
 pub fn handle_chat_selection(siv: &mut Cursive, session_id: Uuid) {
@@ -247,7 +248,7 @@ pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: Advan
     };
 
     // Insert into the input field at cursor position
-    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+    if let Some(mut input) = siv.find_name::<SendableTextArea>("input") {
         let current_content = input.get_content().to_string();
 
         // For TextArea, append suggestion at the end for now
@@ -360,7 +361,7 @@ fn process_validated_input(siv: &mut Cursive, text: &str, state: AdvancedChatSta
     }
 
     // Clear input
-    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+    if let Some(mut input) = siv.find_name::<SendableTextArea>("input") {
         input.set_content("");
     }
 
@@ -727,7 +728,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
         KEYBOARD SHORTCUTS QUICK REFERENCE\n\
         ═══════════════════════════════════════════════════\n\n\
         Text Editor (Microsoft Edit Style):\n\
-        • Ctrl+Enter      → Send message\n\
+        • Shift/Ctrl+Enter    → Send message\n\
         • Enter           → New line (multi-line input)\n\
         • Ctrl+K          → Clear input field\n\
         • Alt+P           → Previous message in history\n\
@@ -840,7 +841,7 @@ pub fn show_essential_shortcuts(siv: &mut Cursive) {
         GETTING STARTED - THE BASICS\n\
         ═══════════════════════════════════════════════════\n\n\
         💬 Sending Messages:\n\
-        • Ctrl+Enter      → Send your message to the agent\n\
+        • Shift/Ctrl+Enter    → Send your message to the agent\n\
         • Enter           → Add new line (multi-line messages)\n\
         • Ctrl+K          → Clear input field and start over\n\n\
         🧭 Navigation:\n\
@@ -859,7 +860,7 @@ pub fn show_essential_shortcuts(siv: &mut Cursive) {
         ═══════════════════════════════════════════════════\n\n\
         Ready for more? Press F2 to see common shortcuts!\n\
         Or just start chatting - type your question and\n\
-        press Ctrl+Enter to send.\n\n\
+        press Shift+Enter or Ctrl+Enter to send.\n\n\
         💡 Tip: You can press F1 anytime to return to this help.";
 
     siv.add_layer(
@@ -951,7 +952,7 @@ pub fn show_advanced_shortcuts(siv: &mut Cursive) {
         ALL KEYBOARD SHORTCUTS\n\
         ═══════════════════════════════════════════════════\n\n\
         Text Editor (Microsoft Edit Style):\n\
-        • Ctrl+Enter      → Send message\n\
+        • Shift/Ctrl+Enter    → Send message\n\
         • Enter           → New line (multi-line input)\n\
         • Ctrl+K          → Clear input field\n\
         • Alt+P           → Previous message in history\n\
@@ -1069,7 +1070,7 @@ pub fn show_advanced_shortcuts(siv: &mut Cursive) {
 /// Show quick keyboard shortcuts hint panel (called on startup or F1)
 pub fn show_keyboard_shortcuts_hint(siv: &mut Cursive) {
     let hint_text = "Quick Shortcuts:\n\n\
-        Text Input: Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear\n\
+        Text Input: Ctrl+E or Shift/Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear\n\
         Navigation: Tab/Shift+Tab | Alt+P/N=History\n\
         Actions: Alt+R/C/D/F | F10=Menu | F12=Screenshot | ?=Help";
 
@@ -1779,7 +1780,7 @@ pub fn update_character_counter(siv: &mut Cursive) {
     const MAX_LENGTH: usize = 10000; // From input_validation.rs
     const WARNING_THRESHOLD: f32 = 0.9; // Warn at 90% capacity
 
-    if let Some(input) = siv.find_name::<TextArea>("input") {
+    if let Some(input) = siv.find_name::<SendableTextArea>("input") {
         let content = input.get_content();
         let len = content.len();
         let lines = content.lines().count();
@@ -1791,18 +1792,18 @@ pub fn update_character_counter(siv: &mut Cursive) {
         let hint_text = if usage_ratio >= WARNING_THRESHOLD {
             // Warning state - approaching limit
             format!(
-                "⚠️  {}/{} chars ({} lines) - Approaching limit! | Ctrl+Enter=Send | Ctrl+K=Clear",
+                "⚠️  {}/{} chars ({} lines) - Approaching limit! | Shift/Ctrl+Enter=Send | Ctrl+K=Clear",
                 len, MAX_LENGTH, lines
             )
         } else if len > 100 {
             // Show count for non-trivial messages
             format!(
-                "💡 {}/{} chars ({} lines) | Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear",
+                "💡 {}/{} chars ({} lines) | Shift/Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear",
                 len, MAX_LENGTH, lines
             )
         } else {
             // Default hint for short messages
-            "💡 Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help".to_string()
+            "💡 Shift/Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help".to_string()
         };
 
         // Update the hint display
@@ -2935,7 +2936,7 @@ pub fn toggle_mcp_server_collapsed(_s: &mut Cursive, _server_id: String) {
 /// Send message from button click
 pub fn send_message_from_button(siv: &mut Cursive, state: AdvancedChatState) {
     // Step 1: Get content and validate
-    let content = if let Some(input) = siv.find_name::<TextArea>("input") {
+    let content = if let Some(input) = siv.find_name::<SendableTextArea>("input") {
         let content = input.get_content().to_string();
         if content.trim().is_empty() {
             return; // Early return if empty
@@ -2947,7 +2948,7 @@ pub fn send_message_from_button(siv: &mut Cursive, state: AdvancedChatState) {
 
     // Step 2: Clear the input field BEFORE processing
     // This is CRITICAL to prevent UI hang - provides immediate visual feedback
-    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+    if let Some(mut input) = siv.find_name::<SendableTextArea>("input") {
         input.set_content("");
     }
 
@@ -2957,7 +2958,7 @@ pub fn send_message_from_button(siv: &mut Cursive, state: AdvancedChatState) {
 
 /// Enhance message with AI before sending
 pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
-    let current_content = if let Some(input) = siv.find_name::<TextArea>("input") {
+    let current_content = if let Some(input) = siv.find_name::<SendableTextArea>("input") {
         input.get_content().to_string()
     } else {
         return;
@@ -3079,7 +3080,7 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
                         .title("AI Enhancement Preview")
                         .button("Use Enhanced", move |s| {
                             s.pop_layer();
-                            if let Some(mut input) = s.find_name::<TextArea>("input") {
+                            if let Some(mut input) = s.find_name::<SendableTextArea>("input") {
                                 input.set_content(enhanced_clone.clone());
                             }
                         })
@@ -3466,7 +3467,7 @@ fn insert_selected_history(siv: &mut Cursive, _state: AdvancedChatState) {
 
 /// Insert a specific history item into the input field
 fn insert_history_item(siv: &mut Cursive, item: &str, _state: AdvancedChatState) {
-    if let Some(mut input) = siv.find_name::<TextArea>("input") {
+    if let Some(mut input) = siv.find_name::<SendableTextArea>("input") {
         input.set_content(item);
     }
     // Focus input field

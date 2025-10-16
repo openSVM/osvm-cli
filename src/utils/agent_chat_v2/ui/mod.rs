@@ -24,6 +24,8 @@ pub mod ux_orchestrator;
 pub mod toast;
 pub mod search;
 pub mod autocomplete;
+pub mod key_diagnostics;
+pub mod text_area_wrapper;
 
 // Re-exports for convenience
 pub use accessibility::*;

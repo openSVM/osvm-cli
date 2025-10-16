@@ -11,6 +11,7 @@ use uuid::Uuid;
 use super::super::state::AdvancedChatState;
 use super::handlers::*;
 use super::layout::AdvancedChatUI;
+use super::text_area_wrapper::SendableTextArea;
 
 use super::theme::{Decorations, Icons, ProgressBar, StyledText};
 
@@ -119,8 +120,7 @@ impl AdvancedChatUI {
                 LinearLayout::horizontal()
                     .child(TextView::new("💬 "))
                     .child(
-                        TextArea::new()
-                            .content("")
+                        SendableTextArea::new()
                             .with_name("input")
                             .min_height(2)
                             .max_height(8)  // Auto-expand up to 8 lines
@@ -128,7 +128,7 @@ impl AdvancedChatUI {
                     )
             )
             .child(
-                TextView::new("📝 Ctrl+Enter to send | Enter for new line | Tab to navigate")
+                TextView::new("📝 Shift+Enter or Ctrl+Enter to send | Enter for new line | Tab to navigate")
                     .with_name("input_hint")
             );
 
@@ -367,8 +367,7 @@ impl AdvancedChatUI {
                 LinearLayout::horizontal()
                     .child(TextView::new("💬 "))
                     .child(
-                        TextArea::new()
-                            .content("")
+                        SendableTextArea::new()
                             .with_name("input")
                             .min_height(3)
                             .max_height(10)  // Auto-expand up to 10 lines
@@ -385,12 +384,12 @@ impl AdvancedChatUI {
                         show_drafts_dialog(s, state_clone_drafts.clone());
                     }))
                     .child(DummyView.fixed_width(2))
-                    .child(Button::new("✅ SEND (Ctrl+Enter)", move |s| {
+                    .child(Button::new("✅ SEND (Shift/Ctrl+Enter)", move |s| {
                         send_message_from_button(s, state_clone_send.clone());
                     }))
             )
             .child(
-                TextView::new("💡 Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help")
+                TextView::new("💡 Shift+Enter or Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help")
                     .with_name("input_hint")
             );
 

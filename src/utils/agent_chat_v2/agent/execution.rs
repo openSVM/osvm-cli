@@ -66,7 +66,52 @@ impl AdvancedChatState {
         let build_heuristic_plan = |text: &str| -> Vec<PlannedTool> {
             let mut tools = Vec::new();
             let lc = text.to_lowercase();
-            if lc.contains("balance") {
+
+            // Batch validator analysis
+            if (lc.contains("validator") || lc.contains("validators"))
+                && (lc.contains("100") || lc.contains("top") || lc.contains("analyze")) {
+                tools.push(PlannedTool {
+                    server_id: "local_sim".into(),
+                    tool_name: "analyze_batch_validators".into(),
+                    args: serde_json::json!({
+                        "count": 100,
+                        "metrics": ["stake", "commission", "uptime", "vote_credits", "delinquency"]
+                    }),
+                    reason: "Batch analyze validators with simulated data".into(),
+                });
+            }
+
+            // Batch token analysis
+            if (lc.contains("token") || lc.contains("tokens"))
+                && (lc.contains("50") || lc.contains("top") || lc.contains("portfolio")) {
+                tools.push(PlannedTool {
+                    server_id: "local_sim".into(),
+                    tool_name: "analyze_batch_tokens".into(),
+                    args: serde_json::json!({
+                        "count": 50,
+                        "timeframe": "30d",
+                        "metrics": ["price", "volume", "market_cap"]
+                    }),
+                    reason: "Batch analyze tokens with market data".into(),
+                });
+            }
+
+            // Batch account analysis
+            if (lc.contains("account") || lc.contains("accounts"))
+                && (lc.contains("transaction") || lc.contains("pattern")) {
+                tools.push(PlannedTool {
+                    server_id: "local_sim".into(),
+                    tool_name: "analyze_batch_accounts".into(),
+                    args: serde_json::json!({
+                        "account_count": 50,
+                        "transaction_limit": 100
+                    }),
+                    reason: "Batch analyze account transaction patterns".into(),
+                });
+            }
+
+            // Single balance query
+            if lc.contains("balance") && !lc.contains("validator") && !lc.contains("token") {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "get_balance".into(),
@@ -74,7 +119,10 @@ impl AdvancedChatState {
                     reason: "Heuristic: user asked about balance".into(),
                 });
             }
-            if lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx") {
+
+            // Single transaction query
+            if (lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx"))
+                && !lc.contains("account") && !lc.contains("validator") {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "get_transactions".into(),
@@ -82,6 +130,7 @@ impl AdvancedChatState {
                     reason: "Heuristic: user asked about transactions".into(),
                 });
             }
+
             tools
         };
 
@@ -464,6 +513,127 @@ impl AdvancedChatState {
 
     /// Direct MCP tool execution without unikernel isolation
     async fn call_mcp_tool_direct(&self, planned_tool: &PlannedTool) -> Result<Value> {
+        // Handle local_sim batch tools with mock data
+        if planned_tool.server_id == "local_sim" {
+            return match planned_tool.tool_name.as_str() {
+                "analyze_batch_validators" => {
+                    let count = planned_tool.args["count"].as_u64().unwrap_or(10);
+                    info!("Simulating batch analysis of {} validators", count);
+
+                    // Simulate processing time
+                    tokio::time::sleep(Duration::from_millis(800)).await;
+
+                    Ok(serde_json::json!({
+                        "status": "success",
+                        "validators_analyzed": count,
+                        "execution_time_ms": 1500,
+                        "data": {
+                            "top_performers": [
+                                {"name": "Validator Alpha", "stake_sol": 2_500_000, "commission": 5.0, "uptime": 99.8},
+                                {"name": "Validator Beta", "stake_sol": 2_200_000, "commission": 4.5, "uptime": 99.6},
+                                {"name": "Validator Gamma", "stake_sol": 1_900_000, "commission": 5.5, "uptime": 99.4},
+                                {"name": "Validator Delta", "stake_sol": 1_700_000, "commission": 6.0, "uptime": 99.2},
+                                {"name": "Validator Epsilon", "stake_sol": 1_500_000, "commission": 5.0, "uptime": 99.0}
+                            ],
+                            "average_metrics": {
+                                "stake_sol": 1_250_000,
+                                "commission_percent": 5.2,
+                                "uptime_percent": 96.4,
+                                "vote_credits_avg": 458_230
+                            },
+                            "total_stake": count * 1_250_000,
+                            "anomalies_detected": 3,
+                            "anomalies": [
+                                {"validator": "Validator-42", "issue": "High commission (12%)", "severity": "medium"},
+                                {"validator": "Validator-78", "issue": "Low uptime (87%)", "severity": "high"},
+                                {"validator": "Validator-91", "issue": "Recent delinquency", "severity": "medium"}
+                            ]
+                        }
+                    }))
+                },
+                "analyze_batch_tokens" => {
+                    let count = planned_tool.args["count"].as_u64().unwrap_or(10);
+                    info!("Simulating batch analysis of {} tokens", count);
+
+                    tokio::time::sleep(Duration::from_millis(600)).await;
+
+                    Ok(serde_json::json!({
+                        "status": "success",
+                        "tokens_analyzed": count,
+                        "execution_time_ms": 1200,
+                        "data": {
+                            "top_gainers": [
+                                {"symbol": "BONK", "price_change_30d": 45.2, "volume_24h": 15_000_000},
+                                {"symbol": "JUP", "price_change_30d": 32.8, "volume_24h": 22_000_000},
+                                {"symbol": "WIF", "price_change_30d": 28.5, "volume_24h": 8_500_000}
+                            ],
+                            "average_metrics": {
+                                "price_change_30d": 5.4,
+                                "volume_24h_usd": 2_500_000,
+                                "market_cap_avg": 125_000_000
+                            },
+                            "volatility_index": 3.2,
+                            "correlation_matrix": "Available in detailed view"
+                        }
+                    }))
+                },
+                "analyze_batch_accounts" => {
+                    let account_count = planned_tool.args["account_count"].as_u64().unwrap_or(10);
+                    let tx_limit = planned_tool.args["transaction_limit"].as_u64().unwrap_or(100);
+                    info!("Simulating batch analysis of {} accounts ({} tx each)", account_count, tx_limit);
+
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+                    Ok(serde_json::json!({
+                        "status": "success",
+                        "accounts_analyzed": account_count,
+                        "total_transactions": account_count * tx_limit,
+                        "execution_time_ms": 2500,
+                        "data": {
+                            "transaction_patterns": {
+                                "high_frequency_traders": 12,
+                                "holders": 25,
+                                "mixed_activity": 13
+                            },
+                            "anomalies": [
+                                {"account": "7x...abc", "pattern": "Wash trading suspected", "confidence": 0.78},
+                                {"account": "9w...def", "pattern": "Bot activity detected", "confidence": 0.91}
+                            ],
+                            "network_analysis": {
+                                "clusters_detected": 5,
+                                "interconnected_accounts": 18
+                            },
+                            "average_tx_per_account": tx_limit,
+                            "total_volume_sol": account_count * tx_limit * 10
+                        }
+                    }))
+                },
+                "get_balance" => {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Ok(serde_json::json!({
+                        "balance_sol": 42.5,
+                        "balance_lamports": 42_500_000_000u64,
+                        "status": "success"
+                    }))
+                },
+                "get_transactions" => {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    Ok(serde_json::json!({
+                        "transactions": [
+                            {"signature": "3x...abc", "type": "transfer", "amount": 1.5},
+                            {"signature": "5y...def", "type": "swap", "amount": 10.0}
+                        ],
+                        "count": 2,
+                        "status": "success"
+                    }))
+                },
+                _ => Ok(serde_json::json!({
+                    "error": format!("Unknown local_sim tool: {}", planned_tool.tool_name),
+                    "status": "unknown_tool"
+                }))
+            };
+        }
+
         // Try to call real MCP tool first
         let mut mcp_service = self.mcp_service.lock().await;
 
