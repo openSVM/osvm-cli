@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::services::{
     ai_service::AiService,
     mcp_service::{McpServerConfig, McpService, McpTool},
+    ovsm_executor::OvsmExecutor,
 };
 use crate::utils::agent_chat::system_status_bar::SystemStatusBarManager;
 use crate::utils::themes::ThemeManager;
@@ -48,6 +49,9 @@ pub struct AdvancedChatState {
 
     /// MCP tools panel visibility (progressive disclosure - hidden by default)
     pub mcp_tools_visible: Arc<RwLock<bool>>,
+
+    /// Phase 2: OVSM execution engine for plan-based tool execution
+    pub ovsm_executor: Arc<Mutex<OvsmExecutor>>,
 }
 
 impl AdvancedChatState {
@@ -72,6 +76,7 @@ impl AdvancedChatState {
             input_history: Arc::new(RwLock::new(Vec::new())),
             history_position: Arc::new(RwLock::new(None)),
             mcp_tools_visible: Arc::new(RwLock::new(false)), // Hidden by default - progressive disclosure
+            ovsm_executor: Arc::new(Mutex::new(OvsmExecutor::new(false))), // Phase 2: Initialize OVSM executor (debug=false)
         };
 
         // Load theme from saved configuration

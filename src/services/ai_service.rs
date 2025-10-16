@@ -497,106 +497,298 @@ impl AiService {
         }
     }
 
-    /// Plan which tools to use for a given user request
+    /// Plan which tools to use for a given user request using OVSM language
     pub async fn create_tool_plan(
         &self,
         user_request: &str,
         available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
     ) -> Result<ToolPlan> {
-        // For OSVM AI with ownPlan, use JSON format
-        if !self.use_openai {
-            let (planning_prompt, xml_system_prompt) =
-                self.build_planning_prompt(user_request, available_tools)?;
-            let ai_response = self
-                .query_osvm_ai_with_options(
-                    &planning_prompt,
-                    Some(xml_system_prompt),
-                    Some(true),
-                    false,
-                )
-                .await?;
+        // Build OVSM planning prompt with system prompt
+        let (planning_prompt, ovsm_system_prompt) =
+            self.build_ovsm_planning_prompt(user_request, available_tools)?;
 
-            // Try to parse as JSON first
-            if let Ok(json_plan) = self.parse_json_tool_plan(&ai_response) {
-                return Ok(json_plan);
-            }
-            // If JSON parsing failed, try salvaging
-            if let Some(salvaged) = self.salvage_tool_plan_from_response(&ai_response) {
-                debug_success!("Salvaged tool plan from non-standard response");
-                return Ok(salvaged);
-            }
-        }
-
-        // For OpenAI or fallback, use XML format
-        let (planning_prompt, system_prompt) =
-            self.build_planning_prompt(user_request, available_tools)?;
-
+        // For OSVM AI, use ownPlan parameter to get plan directly
         let ai_response = if self.use_openai {
+            // OpenAI: send system prompt in messages
             self.query_with_debug(&planning_prompt, false).await?
         } else {
+            // OSVM AI: use ownPlan=true to get structured plan
             self.query_osvm_ai_with_options(
                 &planning_prompt,
-                Some(system_prompt.clone()),
-                Some(true),
+                Some(ovsm_system_prompt.clone()),
+                Some(true), // ownPlan=true
                 false,
             )
             .await?
         };
 
-        match self.parse_tool_plan_response(&ai_response) {
-            Ok(plan) => Ok(plan),
-            Err(parse_err) => {
-                debug_warn!("Initial tool plan parse failed: {}", parse_err);
+        // Try to parse as OVSM plan first
+        if let Ok(ovsm_plan) = self.parse_ovsm_plan(&ai_response) {
+            debug_success!("Successfully parsed OVSM plan");
+            return Ok(ovsm_plan);
+        }
 
-                // Attempt salvage from alternative formats (JSON or partial XML)
-                if let Some(salvaged) = self.salvage_tool_plan_from_response(&ai_response) {
-                    debug_success!("Salvaged tool plan from non-standard response format");
-                    return Ok(salvaged);
-                }
-
-                // As a last resort, issue a focused retry instructing STRICT format
-                let retry_prompt = format!(
-                    "Respond ONLY with the OSVM plan XML. No prose. Re-plan for: {}",
-                    user_request
-                );
-
-                // Retry only if not OpenAI (to avoid extra token usage unexpectedly) or if first attempt was OpenAI but user wants reliability.
-                let retry_response = if self.use_openai {
-                    // Still perform retry – reliability prioritized
-                    self.query_with_debug(&retry_prompt, false).await.ok()
-                } else {
-                    self.query_osvm_ai_with_options(
-                        &retry_prompt,
-                        Some(system_prompt),
-                        Some(true),
-                        false,
-                    )
-                    .await
-                    .ok()
-                };
-
-                if let Some(rr) = retry_response {
-                    if let Ok(plan) = self.parse_tool_plan_response(&rr) {
-                        debug_success!("Recovered tool plan on retry");
-                        return Ok(plan);
-                    }
-                    if let Some(salvaged_retry) = self.salvage_tool_plan_from_response(&rr) {
-                        debug_success!("Salvaged tool plan on retry");
-                        return Ok(salvaged_retry);
-                    }
-                }
-
-                // Final fallback: return an empty plan instead of error so UI can proceed without showing a planning failure error
-                debug_warn!("Falling back to empty tool plan after parse failures");
-                Ok(ToolPlan {
-                    reasoning: "I couldn't create a structured plan, but I'll help you directly."
-                        .to_string(),
-                    osvm_tools_to_use: vec![],
-                    expected_outcome: "Provide a helpful direct answer based on the request."
-                        .to_string(),
-                })
+        // Try to parse as legacy XML format
+        if ai_response.contains("<osvm_plan>") {
+            if let Ok(xml_plan) = self.parse_osvm_plan_xml(&ai_response) {
+                debug_success!("Parsed legacy XML plan format");
+                return Ok(xml_plan);
             }
         }
+
+        // Try to parse as JSON
+        if let Ok(json_plan) = self.parse_json_tool_plan(&ai_response) {
+            debug_success!("Parsed JSON plan format");
+            return Ok(json_plan);
+        }
+
+        // Try salvaging from non-standard format
+        if let Some(salvaged) = self.salvage_tool_plan_from_response(&ai_response) {
+            debug_success!("Salvaged tool plan from non-standard response");
+            return Ok(salvaged);
+        }
+
+        // Retry with explicit OVSM format request
+        let retry_prompt = format!(
+            "Please respond with ONLY the OVSM plan structure. Re-plan for: {}",
+            user_request
+        );
+
+        let retry_response = if self.use_openai {
+            self.query_with_debug(&retry_prompt, false).await.ok()
+        } else {
+            self.query_osvm_ai_with_options(
+                &retry_prompt,
+                Some(ovsm_system_prompt),
+                Some(true),
+                false,
+            )
+            .await
+            .ok()
+        };
+
+        if let Some(rr) = retry_response {
+            if let Ok(plan) = self.parse_ovsm_plan(&rr) {
+                debug_success!("Recovered OVSM plan on retry");
+                return Ok(plan);
+            }
+            if let Some(salvaged_retry) = self.salvage_tool_plan_from_response(&rr) {
+                debug_success!("Salvaged plan on retry");
+                return Ok(salvaged_retry);
+            }
+        }
+
+        // Final fallback: return an empty plan
+        debug_warn!("Falling back to empty tool plan after all parse attempts");
+        Ok(ToolPlan {
+            reasoning: "I'll help you directly with your request.".to_string(),
+            osvm_tools_to_use: vec![],
+            expected_outcome: "Provide a helpful answer based on the request.".to_string(),
+            raw_ovsm_plan: None,  // No OVSM plan for empty fallback
+        })
+    }
+
+    /// Get the OVSM system prompt for plan generation
+    fn get_ovsm_system_prompt() -> &'static str {
+        r#"You are an AI research agent using OVSM (Open Versatile Seeker Mind) language to plan investigations.
+
+# Plan Structure
+
+**Expected Plan:**
+[TIME: estimate] [COST: estimate] [CONFIDENCE: %]
+
+**Available Tools:**
+[list tools you'll use]
+
+**Main Branch:**
+[execution steps with tool calls]
+
+**Decision Point:** [what you're deciding]
+  BRANCH A (condition): [actions]
+  BRANCH B (condition): [actions]
+
+**Action:** [final output description]
+
+# Syntax
+
+Variables: $name = value
+Constants: CONST NAME = value
+Tools: toolName(param: $value) or toolName($value)
+Loops: FOR $item IN $collection: ... BREAK IF condition
+Conditionals: IF condition THEN ... ELSE ...
+Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
+Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
+Guards: GUARD condition ELSE RETURN ERROR(message: "...")
+
+# Essential Tools
+
+**Solana**: getSlot, getBlock, getTransaction, getAccountInfo, getBalance
+**Data**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND
+**Stats**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE
+**Utils**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64
+
+# Rules
+
+1. List tools in "Available Tools" section
+2. Use DECISION/BRANCH for multi-way choices
+3. Handle errors with TRY/CATCH
+4. Run independent ops in PARALLEL
+5. Always provide confidence score
+6. Use $ for variables, UPPERCASE for constants
+7. NO .method() syntax - use functions only
+
+# Example
+
+**Expected Plan:**
+[TIME: ~30s] [CONFIDENCE: 90%]
+
+**Available Tools:**
+getSlot, getBlock, MAP, MEAN
+
+**Main Branch:**
+$slot = getSlot()
+$block = getBlock(slot: $slot)
+$txs = $block.transactions
+$fees = MAP($txs, tx => tx.meta.fee)
+$avg = MEAN(data: $fees)
+
+DECISION: Check sample size
+  BRANCH A (COUNT($fees) >= 100):
+    $confidence = 95
+  BRANCH B (COUNT($fees) < 100):
+    $confidence = 75
+
+**Action:**
+RETURN {average_fee: $avg, confidence: $confidence}"#
+    }
+
+    /// Build OVSM planning prompt with tools context
+    fn build_ovsm_planning_prompt(
+        &self,
+        user_request: &str,
+        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
+    ) -> Result<(String, String)> {
+        let mut tools_context = String::new();
+
+        if available_tools.is_empty() {
+            tools_context.push_str("No MCP tools are currently available.\n");
+        } else {
+            tools_context.push_str("Available MCP Tools:\n");
+            for (server_id, tools) in available_tools {
+                tools_context.push_str(&format!("\nServer: {}\n", server_id));
+                for tool in tools {
+                    let description = tool
+                        .description
+                        .as_deref()
+                        .unwrap_or("No description available");
+                    tools_context.push_str(&format!("  - {}: {}\n", tool.name, description));
+                }
+            }
+        }
+
+        // Create system prompt with OVSM instructions and available tools
+        let system_prompt = format!(
+            "{}\n\n# Your Available MCP Tools\n\n{}\n\nRemember: Use OVSM syntax and structure your plan with **Expected Plan**, **Available Tools**, **Main Branch**, **Decision Point** (if needed), and **Action** sections.",
+            Self::get_ovsm_system_prompt(),
+            tools_context
+        );
+
+        // Create user prompt
+        let user_prompt = format!(
+            "Create an OVSM execution plan for this request: {}\n\nRespond ONLY with the OVSM plan structure. No additional prose before or after.",
+            user_request
+        );
+
+        Ok((user_prompt, system_prompt))
+    }
+
+    /// Parse OVSM-formatted plan
+    fn parse_ovsm_plan(&self, plan_text: &str) -> Result<ToolPlan> {
+        // Look for the Expected Plan marker
+        if !plan_text.contains("**Expected Plan:**") && !plan_text.contains("Expected Plan:") {
+            anyhow::bail!("No OVSM plan structure found");
+        }
+
+        // Extract reasoning from Main Branch or overview
+        let reasoning = if let Some(main_start) = plan_text.find("**Main Branch:**") {
+            let main_end = plan_text[main_start..]
+                .find("**Decision Point:**")
+                .or_else(|| plan_text[main_start..].find("**Action:**"))
+                .unwrap_or(plan_text.len() - main_start);
+
+            let main_section = &plan_text[main_start..main_start + main_end];
+            // Take first few lines as reasoning
+            main_section
+                .lines()
+                .skip(1)
+                .take(3)
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string()
+        } else {
+            "Analyzing request and creating execution plan".to_string()
+        };
+
+        // Extract available tools section to identify tool calls
+        let mut tools = Vec::new();
+        if let Some(tools_start) = plan_text.find("**Available Tools:**") {
+            let tools_end = plan_text[tools_start..]
+                .find("**Main Branch:**")
+                .unwrap_or(plan_text.len() - tools_start);
+
+            let tools_section = &plan_text[tools_start..tools_start + tools_end];
+
+            // Parse tool names from the Available Tools section
+            for line in tools_section.lines().skip(1) {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with("From") || line.starts_with("Custom") {
+                    continue;
+                }
+
+                // Extract tool names (comma or space separated)
+                for word in line.split(|c: char| c == ',' || c == ' ' || c == '-') {
+                    let tool_name = word.trim();
+                    if !tool_name.is_empty() && tool_name.len() > 2 {
+                        tools.push(PlannedTool {
+                            server_id: "osvm-mcp".to_string(),
+                            tool_name: tool_name.to_string(),
+                            args: serde_json::json!({}),
+                            reason: format!("Tool from OVSM plan: {}", tool_name),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Extract expected outcome from Action section
+        let expected_outcome = if let Some(action_start) = plan_text.find("**Action:**") {
+            let action_section = &plan_text[action_start + 11..];
+            action_section
+                .lines()
+                .take(3)
+                .collect::<Vec<_>>()
+                .join(" ")
+                .trim()
+                .to_string()
+        } else {
+            "Execute the planned operations".to_string()
+        };
+
+        // Extract confidence if present
+        let confidence_regex = regex::Regex::new(r"\[CONFIDENCE:\s*(\d+)%\]").ok();
+        let _confidence = confidence_regex
+            .and_then(|re| re.captures(plan_text))
+            .and_then(|caps| caps.get(1))
+            .and_then(|m| m.as_str().parse::<u8>().ok())
+            .unwrap_or(80);
+
+        Ok(ToolPlan {
+            reasoning,
+            osvm_tools_to_use: tools,
+            expected_outcome,
+            raw_ovsm_plan: Some(plan_text.to_string()),  // Store raw OVSM plan for Phase 2 executor
+        })
     }
 
     fn build_planning_prompt(
@@ -768,6 +960,7 @@ impl AiService {
             reasoning: overview,
             osvm_tools_to_use: tools,
             expected_outcome,
+            raw_ovsm_plan: None,  // XML plans don't have full OVSM text
         })
     }
 
@@ -889,6 +1082,7 @@ impl AiService {
             reasoning,
             osvm_tools_to_use: tools,
             expected_outcome,
+            raw_ovsm_plan: None,  // XML plans don't have full OVSM text
         })
     }
 
@@ -946,6 +1140,7 @@ impl AiService {
                 osvm_tools_to_use: tools,
                 expected_outcome: expected
                     .unwrap_or_else(|| "Provide helpful assistance".to_string()),
+                raw_ovsm_plan: None,  // Salvaged plans don't have full OVSM text
             });
         }
 
@@ -1014,6 +1209,7 @@ impl AiService {
                 } else {
                     expected
                 },
+                raw_ovsm_plan: None,  // Salvaged JSON doesn't have full OVSM text
             });
         }
         None
@@ -1163,6 +1359,7 @@ pub struct ToolPlan {
     pub reasoning: String,
     pub osvm_tools_to_use: Vec<PlannedTool>,
     pub expected_outcome: String,
+    pub raw_ovsm_plan: Option<String>,  // Phase 2: Store raw OVSM plan for executor
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
