@@ -16,6 +16,7 @@ use super::super::types::AgentState;
 use super::handlers::show_context_menu;
 use super::handlers::*;
 use super::theme::{Decorations, Icons, ModernTheme};
+use super::text_area_wrapper::SendableTextArea;
 
 /// Update input panel title to show history indicator
 fn update_input_title(siv: &mut Cursive, state: &AdvancedChatState) {
@@ -153,6 +154,9 @@ impl AdvancedChatUI {
         // Apply VS Code dark theme ONLY - no custom theme loading
         siv.set_theme(ModernTheme::dark());
 
+        // Install key diagnostics logger for debugging key events
+        super::key_diagnostics::install_key_logger(siv);
+
         // NEW LAYOUT: Vertical layout with menu bar at top
         let mut root_layout = LinearLayout::vertical();
 
@@ -196,16 +200,21 @@ impl AdvancedChatUI {
             }
         });
 
-        // Add Tab navigation between key UI elements - circular navigation
+        // Add Tab navigation between key UI elements - proper cycling without fallback trap
         // BUG-2024 fix: Implement better Tab navigation with cycling
         // BUG-2018 fix: Replace silent error drops with proper logging (from Phase 3 BUG-2011 pattern)
+        // Fixed: Try chat_list first, if already focused move to input. Try only once per press.
         siv.add_global_callback(cursive::event::Key::Tab, |s| {
-            // Try to focus chat_list first, if it fails or is already focused, try input
-            // This creates a simple cycle: between chat_list and input
-            if s.focus_name("chat_list").is_err() {
-                if let Err(e) = s.focus_name("input") {
-                    log::warn!("Failed to focus either chat_list or input on Tab: {}", e);
-                }
+            // Try to cycle: input -> chat_list -> input
+            // First attempt: focus chat_list
+            if s.focus_name("chat_list").is_ok() {
+                // Successfully moved to chat_list
+                return;
+            }
+
+            // If chat_list focus failed (already focused or doesn't exist), try input
+            if let Err(e) = s.focus_name("input") {
+                log::warn!("Failed to navigate on Tab - both chat_list and input unavailable: {}", e);
             }
         });
 
@@ -213,12 +222,16 @@ impl AdvancedChatUI {
         siv.add_global_callback(
             cursive::event::Event::Shift(cursive::event::Key::Tab),
             |s| {
-                // Try to focus input first, if it fails or is already focused, try chat_list
-                // This creates reverse cycle: between input and chat_list
-                if s.focus_name("input").is_err() {
-                    if let Err(e) = s.focus_name("chat_list") {
-                        log::warn!("Failed to focus either input or chat_list on Shift+Tab: {}", e);
-                    }
+                // Reverse cycle: input -> chat_list -> input (but reverse order)
+                // First attempt: focus input
+                if s.focus_name("input").is_ok() {
+                    // Successfully moved to input
+                    return;
+                }
+
+                // If input focus failed (already focused or doesn't exist), try chat_list
+                if let Err(e) = s.focus_name("chat_list") {
+                    log::warn!("Failed to navigate on Shift+Tab - both input and chat_list unavailable: {}", e);
                 }
             },
         );
@@ -256,30 +269,74 @@ impl AdvancedChatUI {
             show_keyboard_shortcuts_hint(s);
         });
 
+        // Add Ctrl+\ for key diagnostics (debug mode - not advertised)
+        // Using Ctrl+\ (Ctrl+Backslash) as a hidden debug trigger since Ctrl+Shift isn't well supported
+        siv.add_global_callback(cursive::event::Event::CtrlChar('\\'), |s| {
+            super::key_diagnostics::show_key_diagnostics(s);
+            log::info!("Key diagnostics panel opened. Press test keys to see events in logs.");
+        });
+
         // Add Ctrl+Enter to send message (Microsoft Edit style)
-        // BUG-2021 fix: Use user_data instead of Arc cloning in callback
-        siv.add_global_callback(
-            cursive::event::Event::Ctrl(cursive::event::Key::Enter),
-            |s| {
-                if let Some(mut input) = s.find_name::<TextArea>("input") {
-                    let content = input.get_content().to_string();
-                    if !content.trim().is_empty() {
-                        // Get and clone state outside of mutable borrow
-                        let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
-                        if let Some(state) = state_opt {
-                            handle_user_input(s, &content, state);
-                        }
-                        // BUG-2023 fix: Clear input field after successful send
-                        // Prevents user from accidentally sending duplicate messages
-                        input.set_content("");
-                    }
+        // Strategy: Since TextArea consumes Enter keys before global callbacks,
+        // we intercept specific Ctrl+Enter mappings that ARE caught by global callbacks.
+        // In most terminals, Ctrl+Enter maps to one of: CtrlChar('m'), CtrlChar('j'), or special sequences.
+        // We handle each possible mapping.
+
+        // Ctrl+M: Send message (Ctrl+Enter is transmitted as Ctrl+M in most terminals)
+        // Our SendableTextArea wrapper now allows this to pass through
+        siv.add_global_callback(cursive::event::Event::CtrlChar('m'), |s| {
+            // Get content first (immutable access)
+            let content = s.call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            }).unwrap_or_default();
+
+            if !content.trim().is_empty() {
+                let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+                if let Some(state) = state_opt {
+                    handle_user_input(s, &content, state);
+                    // Clear input after successful send (mutable access)
+                    s.call_on_name("input", |view: &mut SendableTextArea| {
+                        view.set_content("");
+                    });
                 }
-            },
-        );
+            }
+        });
+
+        log::info!("✅ Ctrl+M (Ctrl+Enter) callback registered for sending messages");
+
+        // Add Shift+Enter to send message (alternative shortcut for sending)
+        // Note: Ctrl+E conflicts with cursive's default "end of line" binding
+        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::Enter), |s| {
+            log::info!("🔴 GLOBAL Shift+Enter handler triggered!");
+            // Get content first (immutable access)
+            let content = s.call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            }).unwrap_or_default();
+
+            log::info!("🔴 Found input field with content: '{}'", content);
+            if !content.trim().is_empty() {
+                log::info!("🔴 Content not empty, attempting to send...");
+                let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+                if let Some(state) = state_opt {
+                    log::info!("🔴 Calling handle_user_input with content");
+                    handle_user_input(s, &content, state);
+                    // Clear input after successful send (mutable access)
+                    s.call_on_name("input", |view: &mut SendableTextArea| {
+                        view.set_content("");
+                    });
+                } else {
+                    log::error!("🔴 Failed to get state from user_data!");
+                }
+            } else {
+                log::info!("🔴 Content is empty, not sending");
+            }
+        });
+
+        log::info!("✅ Shift+Enter callback registered for sending messages");
 
         // Add Ctrl+K to clear input (Microsoft Edit / VS Code style)
         siv.add_global_callback(cursive::event::Event::CtrlChar('k'), |s| {
-            if let Some(mut input) = s.find_name::<TextArea>("input") {
+            if let Some(mut input) = s.find_name::<SendableTextArea>("input") {
                 input.set_content("");
             }
         });
@@ -306,7 +363,7 @@ impl AdvancedChatUI {
             let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
             if let Some(state) = state_opt {
                 if let Some(prev_input) = state.history_previous() {
-                    if let Some(mut input) = s.find_name::<TextArea>("input") {
+                    if let Some(mut input) = s.find_name::<SendableTextArea>("input") {
                         input.set_content(prev_input);
                     }
                     update_input_title(s, &state);
@@ -319,7 +376,7 @@ impl AdvancedChatUI {
             let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
             if let Some(state) = state_opt {
                 if let Some(next_input) = state.history_next() {
-                    if let Some(mut input) = s.find_name::<TextArea>("input") {
+                    if let Some(mut input) = s.find_name::<SendableTextArea>("input") {
                         input.set_content(next_input);
                     }
                     update_input_title(s, &state);
@@ -437,7 +494,7 @@ impl AdvancedChatUI {
                         .map(|v| *v)
                         .unwrap_or(false);
 
-                    if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
+                    if suggestions_visible && s.find_name::<SendableTextArea>("input").is_some() {
                         insert_suggestion_at_cursor(s, (i - 1) as usize, state);
                     }
                 }
@@ -460,7 +517,7 @@ impl AdvancedChatUI {
                             .map(|v| *v)
                             .unwrap_or(false);
 
-                        if suggestions_visible && s.find_name::<TextArea>("input").is_some() {
+                        if suggestions_visible && s.find_name::<SendableTextArea>("input").is_some() {
                             insert_suggestion_at_cursor(s, (i - 1) as usize, state);
                         }
                     }

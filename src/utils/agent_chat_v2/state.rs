@@ -122,7 +122,7 @@ impl AdvancedChatState {
             // Add welcome message for first-time users
             let welcome_msg = "👋 Welcome to OSVM Advanced Agent Chat!\n\n\
                 ✨ Quick Start:\n\
-                • Ctrl+Enter to send messages\n\
+                • Shift+Enter or Ctrl+Enter to send messages\n\
                 • Enter for new lines (multi-line support!)\n\
                 • Ctrl+K to clear input\n\
                 • ? or F1 for full help\n\
