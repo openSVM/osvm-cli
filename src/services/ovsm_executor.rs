@@ -134,7 +134,13 @@ impl OvsmExecutor {
 
         // Build execution result
         let state = self.state.lock().await;
-        let execution_time = state.start_time.elapsed().as_millis() as u64;
+        let elapsed = state.start_time.elapsed();
+        // Use microseconds for more precision, then convert to ms (minimum 1ms if any time elapsed)
+        let execution_time = if elapsed.as_micros() > 0 {
+            std::cmp::max(1, elapsed.as_millis() as u64)
+        } else {
+            0
+        };
 
         Ok(ExecutionResult {
             value: result_value,
@@ -153,11 +159,42 @@ impl OvsmExecutor {
         let mut current_section: Option<PlanSection> = None;
         let mut content_lines = Vec::new();
 
+        // Top-level section keywords (case-insensitive)
+        let top_level_sections = vec![
+            "Expected Plan", "Main Branch", "Action",
+            "Decision Point", "Alternative", "Context"
+        ];
+
         for line in plan_text.lines() {
             let trimmed = line.trim();
 
-            // Check for section headers
-            if trimmed.starts_with("**") && trimmed.ends_with(":**") {
+            // Check if this is a top-level section header
+            // Top-level sections:
+            // - Start at beginning of line (no indentation for numbered items)
+            // - Match known section names
+            // - End with ':'
+            let is_top_level_section = if trimmed.ends_with(':') {
+                let section_candidate = if trimmed.starts_with("**") && trimmed.ends_with(":**") {
+                    trimmed.trim_start_matches("**").trim_end_matches(":**").trim()
+                } else {
+                    trimmed.trim_end_matches(':').trim()
+                };
+
+                // Check if it matches a known top-level section
+                // Or if it's at the start of a line (not indented) and doesn't have a number prefix
+                let is_known_section = top_level_sections.iter()
+                    .any(|s| section_candidate.eq_ignore_ascii_case(s));
+
+                // Also check if line has no indentation (except for numbered items in content)
+                let line_indent = line.len() - line.trim_start().len();
+                let is_unindented = line_indent == 0;
+
+                is_known_section || (is_unindented && !trimmed.starts_with(|c: char| c.is_ascii_digit()))
+            } else {
+                false
+            };
+
+            if is_top_level_section {
                 // Save previous section
                 if let Some(section) = current_section.take() {
                     sections.push(PlanSection {
@@ -167,11 +204,13 @@ impl OvsmExecutor {
                     content_lines.clear();
                 }
 
-                // Start new section
-                let section_name = trimmed
-                    .trim_start_matches("**")
-                    .trim_end_matches(":**")
-                    .trim();
+                // Extract section name
+                let section_name = if trimmed.starts_with("**") && trimmed.ends_with(":**") {
+                    trimmed.trim_start_matches("**").trim_end_matches(":**").trim()
+                } else {
+                    trimmed.trim_end_matches(':').trim()
+                };
+
                 current_section = Some(PlanSection {
                     section_type: section_name.to_string(),
                     content: String::new(),
@@ -189,6 +228,10 @@ impl OvsmExecutor {
             });
         }
 
+        if self.debug {
+            println!("  Parsed sections: {:?}", sections.iter().map(|s| &s.section_type).collect::<Vec<_>>());
+        }
+
         Ok(ParsedPlan { sections })
     }
 
@@ -199,36 +242,100 @@ impl OvsmExecutor {
         }
 
         // Parse and execute OVSM code
-        // For Phase 2, we'll implement a simplified executor
-        // that handles the most common patterns
+        // Supports both OVSM-style and function-call style syntax
 
-        let lines: Vec<&str> = content.lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty() && !l.starts_with("//"))
-            .collect();
-
+        let all_lines: Vec<&str> = content.lines().collect();
         let mut last_value = serde_json::Value::Null;
+        let mut i = 0;
 
-        for line in lines {
-            // Variable assignment: $name = value
+        while i < all_lines.len() {
+            let raw_line = all_lines[i];
+            let trimmed = raw_line.trim();
+
+            // Skip empty lines and comments
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                i += 1;
+                continue;
+            }
+
+            // Strip numbered list items (e.g., "1.", "2.")
+            let line = if let Some(pos) = trimmed.find(|c: char| c.is_ascii_digit()) {
+                if trimmed[pos..].starts_with(|c: char| c.is_ascii_digit()) {
+                    let after_number = &trimmed[pos..];
+                    if let Some(dot_pos) = after_number.find('.') {
+                        after_number[dot_pos + 1..].trim()
+                    } else {
+                        trimmed
+                    }
+                } else {
+                    trimmed
+                }
+            } else {
+                trimmed
+            };
+
+            // DECISION statement - handle inline decision block
+            if line.starts_with("DECISION ") {
+                // Parse the decision block from current position
+                let mut decision_lines = Vec::new();
+                let indent_level = raw_line.len() - raw_line.trim_start().len();
+
+                // Collect all lines belonging to this decision
+                for j in i..all_lines.len() {
+                    let l = all_lines[j];
+                    let l_indent = l.len() - l.trim_start().len();
+
+                    // Include this line if:
+                    // - It's the DECISION line itself
+                    // - It's indented more than the DECISION line
+                    // - It starts with IF, THEN, BRANCH, ELSE at appropriate indentation
+                    if j == i || l_indent > indent_level ||
+                       l.trim().starts_with("IF ") ||
+                       l.trim().starts_with("THEN") ||
+                       l.trim().starts_with("BRANCH ") ||
+                       l.trim().starts_with("ELSE") {
+                        decision_lines.push(l);
+                    } else if !l.trim().is_empty() {
+                        // Stop at next non-empty line at same or less indentation
+                        break;
+                    }
+                }
+
+                let decision_content = decision_lines.join("\n");
+                let decision_result = self.execute_decision_point(&decision_content).await?;
+                if decision_result != serde_json::Value::Null {
+                    last_value = decision_result;
+                }
+
+                i += decision_lines.len();
+                continue;
+            }
+
+            // Variable assignment: $name = CALL tool or $name = value
             if line.starts_with('$') && line.contains('=') {
                 let parts: Vec<&str> = line.splitn(2, '=').collect();
                 if parts.len() == 2 {
                     let var_name = parts[0].trim().trim_start_matches('$');
                     let value_expr = parts[1].trim();
 
-                    // Evaluate expression (simplified)
+                    // Evaluate expression (handles CALL statements)
                     let value = self.evaluate_expression(value_expr).await?;
 
                     let mut state = self.state.lock().await;
                     state.variables.insert(var_name.to_string(), value.clone());
 
                     if self.debug {
-                        println!("  📝 {} = {:?}", var_name, value);
+                        println!("  📝 ${} = {:?}", var_name, value);
                     }
 
                     last_value = value;
                 }
+            }
+            // Direct CALL statement: CALL tool_name
+            else if line.starts_with("CALL ") {
+                let tool_name = line[5..].trim();
+                let tool_result = self.execute_call_statement(tool_name).await?;
+                last_value = tool_result;
             }
             // Tool call: toolName() or toolName(args)
             else if line.contains('(') && line.contains(')') {
@@ -241,6 +348,8 @@ impl OvsmExecutor {
                 last_value = self.evaluate_expression(return_expr).await?;
                 break;
             }
+
+            i += 1;
         }
 
         Ok(last_value)
@@ -252,74 +361,222 @@ impl OvsmExecutor {
             println!("🔀 Executing Decision Point");
         }
 
-        // Parse DECISION structure
-        // DECISION: description
-        //   BRANCH A (condition):
-        //     actions
-        //   BRANCH B (condition):
+        // Parse DECISION structure - supports two formats:
+        // Format 1: IF/THEN/ELSE with BRANCH blocks
+        //   IF condition THEN
+        //     BRANCH name:
+        //       actions
+        //   ELSE
+        //     BRANCH name:
+        //       actions
+        //
+        // Format 2: Direct BRANCH with conditions
+        //   BRANCH name (condition):
         //     actions
 
         let lines: Vec<&str> = content.lines().collect();
-        let mut current_branch: Option<(String, String, Vec<String>)> = None;
-        let mut branches = Vec::new();
 
-        for line in lines {
+        // First, try to parse IF/THEN/ELSE structure
+        let mut if_blocks = Vec::new();
+        let mut current_if_block: Option<(String, Vec<(String, Vec<String>)>)> = None;
+        let mut current_branch: Option<(String, Vec<String>)> = None;
+
+        let mut i = 0;
+        while i < lines.len() {
+            let line = lines[i];
             let trimmed = line.trim();
 
-            if trimmed.starts_with("BRANCH") {
-                // Save previous branch
-                if let Some((name, condition, actions)) = current_branch.take() {
-                    branches.push((name, condition, actions));
+            // IF statement
+            if trimmed.starts_with("IF ") {
+                // Save any previous IF block
+                if let Some((condition, branches)) = current_if_block.take() {
+                    if_blocks.push((condition, branches, false)); // false = IF block
                 }
 
-                // Parse new branch: BRANCH A (condition):
-                if let Some(paren_start) = trimmed.find('(') {
-                    if let Some(paren_end) = trimmed.find("):") {
-                        let branch_name = trimmed[6..paren_start].trim().to_string();
-                        let condition = trimmed[paren_start + 1..paren_end].to_string();
-                        current_branch = Some((branch_name, condition, Vec::new()));
+                // Extract condition from "IF condition THEN"
+                let condition = if let Some(then_pos) = trimmed.find(" THEN") {
+                    trimmed[3..then_pos].trim().to_string()
+                } else {
+                    trimmed[3..].trim().to_string()
+                };
+
+                current_if_block = Some((condition, Vec::new()));
+            }
+            // ELSE statement
+            else if trimmed == "ELSE" || trimmed.starts_with("ELSE ") {
+                // Save the IF block and start ELSE block
+                if let Some((condition, branches)) = current_if_block.take() {
+                    if_blocks.push((condition, branches, false)); // IF block
+                }
+                // ELSE is treated as a block with "true" condition
+                current_if_block = Some(("true".to_string(), Vec::new()));
+            }
+            // BRANCH statement
+            else if trimmed.starts_with("BRANCH ") {
+                // Save previous branch
+                if let Some((name, actions)) = current_branch.take() {
+                    if let Some((_, ref mut branches)) = current_if_block {
+                        branches.push((name, actions));
                     }
                 }
-            } else if let Some((_, _, actions)) = &mut current_branch {
-                if !trimmed.is_empty() {
-                    actions.push(trimmed.to_string());
+
+                // Parse branch name: "BRANCH name:" or "BRANCH name (condition):"
+                let branch_line = if trimmed.ends_with(':') {
+                    &trimmed[7..trimmed.len()-1]
+                } else {
+                    &trimmed[7..]
+                };
+
+                let branch_name = branch_line.trim().to_string();
+                current_branch = Some((branch_name, Vec::new()));
+            }
+            // Action lines (indented under BRANCH)
+            else if !trimmed.is_empty() && current_branch.is_some() {
+                // Check if this is an action line (indented)
+                let indent = line.len() - line.trim_start().len();
+                if indent > 0 {
+                    if let Some((_, ref mut actions)) = current_branch {
+                        actions.push(trimmed.to_string());
+                    }
                 }
             }
+
+            i += 1;
         }
 
-        // Save last branch
-        if let Some((name, condition, actions)) = current_branch {
-            branches.push((name, condition, actions));
+        // Save last branch and IF block
+        if let Some((name, actions)) = current_branch {
+            if let Some((_, ref mut branches)) = current_if_block {
+                branches.push((name, actions));
+            }
+        }
+        if let Some((condition, branches)) = current_if_block {
+            if_blocks.push((condition, branches, true)); // true = ELSE block
         }
 
-        // Evaluate branches and execute first matching one
-        for (branch_name, condition, actions) in branches {
-            let condition_result = self.evaluate_condition(&condition).await?;
+        if self.debug {
+            println!("  Parsed {} IF/ELSE blocks", if_blocks.len());
+        }
 
-            if condition_result {
-                if self.debug {
-                    println!("  ✅ Taking branch: {}", branch_name);
-                }
+        // Evaluate and execute blocks
+        for (condition, branches, _is_else) in if_blocks {
+            let condition_met = self.evaluate_condition(&condition).await?;
 
-                // Record branch taken
-                {
-                    let mut state = self.state.lock().await;
-                    state.branches_taken.push(branch_name);
-                }
+            if self.debug {
+                println!("  Condition '{}' = {}", condition, condition_met);
+            }
 
-                // Execute branch actions
-                let mut result = serde_json::Value::Null;
-                for action in actions {
-                    if let Ok(val) = self.execute_tool_call(&action).await {
-                        result = val;
+            if condition_met {
+                // Execute the first branch in this block
+                for (branch_name, actions) in branches {
+                    if self.debug {
+                        println!("  ✅ Taking branch: {}", branch_name);
                     }
-                }
 
-                return Ok(result);
+                    // Record branch taken
+                    {
+                        let mut state = self.state.lock().await;
+                        state.branches_taken.push(branch_name.clone());
+                    }
+
+                    // Execute branch actions
+                    let result = self.execute_branch_actions(&actions).await?;
+
+                    // Return after executing first matching branch
+                    return Ok(result);
+                }
             }
         }
 
         Ok(serde_json::Value::Null)
+    }
+
+    /// Execute a list of branch actions, handling nested DECISION blocks
+    async fn execute_branch_actions(&self, actions: &[String]) -> Result<serde_json::Value> {
+        let mut result = serde_json::Value::Null;
+        let mut i = 0;
+
+        while i < actions.len() {
+            let action = &actions[i];
+
+            // Check if action is a CALL statement
+            if action.starts_with("CALL ") {
+                let tool_name = action[5..].trim();
+                if let Ok(val) = self.execute_call_statement(tool_name).await {
+                    result = val;
+                }
+            }
+            // Check for variable assignment with CALL
+            else if action.starts_with('$') && action.contains('=') {
+                let parts: Vec<&str> = action.splitn(2, '=').collect();
+                if parts.len() == 2 {
+                    let var_name = parts[0].trim().trim_start_matches('$');
+                    let expr = parts[1].trim();
+
+                    if let Ok(value) = self.evaluate_expression(expr).await {
+                        let mut state = self.state.lock().await;
+                        state.variables.insert(var_name.to_string(), value.clone());
+                        result = value;
+                    }
+                }
+            }
+            // Check for nested DECISION
+            else if action.starts_with("DECISION ") {
+                // Note: Nested DECISION blocks are currently limited due to parsing constraints.
+                // The current implementation flattens nested structures during branch parsing,
+                // losing the hierarchical IF/THEN/BRANCH information needed for full nested execution.
+                //
+                // To fully support nested DECISION blocks, the parser would need to preserve
+                // the complete structure with indentation when collecting branch actions.
+                //
+                // Current workaround: Log and continue (skips nested decision)
+                if self.debug {
+                    println!("  ⚠️ Skipping nested DECISION (requires structure-preserving parser)");
+                }
+            }
+            // Try as tool call (function syntax)
+            else if action.contains('(') && action.contains(')') {
+                if let Ok(val) = self.execute_tool_call(action).await {
+                    result = val;
+                }
+            }
+
+            i += 1;
+        }
+
+        Ok(result)
+    }
+
+    /// Execute a CALL statement (OVSM-style: CALL tool_name)
+    async fn execute_call_statement(&self, tool_name: &str) -> Result<serde_json::Value> {
+        let tool_name = tool_name.trim();
+
+        if self.debug {
+            println!("  🔧 Executing CALL: {}", tool_name);
+        }
+
+        // Record tool execution
+        {
+            let mut state = self.state.lock().await;
+            state.tools_executed.push(tool_name.to_string());
+        }
+
+        // Try to execute via MCP
+        let tools = self.mcp_tools.lock().await;
+        if let Some(tool) = tools.get(tool_name) {
+            let args = serde_json::json!({});
+            let result = tool.execute(&args)
+                .with_context(|| format!("Failed to execute tool '{}'", tool_name))?;
+
+            if self.debug {
+                println!("  ✅ Tool '{}' returned: {:?}", tool_name, result);
+            }
+
+            return Ok(result);
+        }
+
+        // Tool not found - return error
+        anyhow::bail!("Tool '{}' not found in registered tools", tool_name)
     }
 
     /// Execute a tool call (MCP tool or OVSM built-in)
@@ -344,15 +601,12 @@ impl OvsmExecutor {
             let tools = self.mcp_tools.lock().await;
             if let Some(tool) = tools.get(tool_name) {
                 let args = serde_json::json!({});
-                return tool.execute(&args);
+                return tool.execute(&args)
+                    .with_context(|| format!("Failed to execute tool '{}'", tool_name));
             }
 
-            // Fallback: return mock data for now
-            Ok(serde_json::json!({
-                "tool": tool_name,
-                "result": "mock_result",
-                "executed": true
-            }))
+            // Tool not found - return error
+            anyhow::bail!("Tool '{}' not found in registered tools", tool_name)
         } else {
             Ok(serde_json::Value::Null)
         }
@@ -361,6 +615,12 @@ impl OvsmExecutor {
     /// Evaluate a simple expression
     async fn evaluate_expression(&self, expr: &str) -> Result<serde_json::Value> {
         let expr = expr.trim();
+
+        // CALL statement: CALL tool_name
+        if expr.starts_with("CALL ") {
+            let tool_name = expr[5..].trim();
+            return self.execute_call_statement(tool_name).await;
+        }
 
         // Variable reference: $name
         if expr.starts_with('$') {
@@ -376,13 +636,18 @@ impl OvsmExecutor {
             return Ok(serde_json::json!(n));
         }
 
+        // Float literal
+        if let Ok(f) = expr.parse::<f64>() {
+            return Ok(serde_json::json!(f));
+        }
+
         // String literal
         if expr.starts_with('"') && expr.ends_with('"') {
             let s = expr.trim_matches('"');
             return Ok(serde_json::json!(s));
         }
 
-        // Tool call
+        // Tool call (function syntax)
         if expr.contains('(') {
             return self.execute_tool_call(expr).await;
         }
@@ -392,28 +657,102 @@ impl OvsmExecutor {
 
     /// Evaluate a boolean condition
     async fn evaluate_condition(&self, condition: &str) -> Result<bool> {
-        // Simplified condition evaluation
-        // For Phase 2, we handle basic comparisons
-
         let condition = condition.trim();
 
-        // COUNT($var) >= 100
-        if condition.contains("COUNT") {
-            // Extract variable and compare
-            if let Some(threshold) = condition.split(">=").nth(1) {
-                let threshold: i64 = threshold.trim().parse().unwrap_or(0);
-                return Ok(threshold <= 100); // Mock: assume medium size
+        if self.debug {
+            println!("  🔍 Evaluating condition: {}", condition);
+        }
+
+        // Extract variable value if present
+        let state = self.state.lock().await;
+
+        // Handle comparisons: $var > value, $var < value, etc.
+        if condition.contains('>') {
+            let parts: Vec<&str> = condition.split('>').collect();
+            if parts.len() == 2 {
+                let left = self.extract_value(parts[0].trim(), &state).await?;
+                let right = self.extract_value(parts[1].trim(), &state).await?;
+
+                if let (Some(l), Some(r)) = (left.as_f64(), right.as_f64()) {
+                    let result = l > r;
+                    if self.debug {
+                        println!("    {} > {} = {}", l, r, result);
+                    }
+                    return Ok(result);
+                }
             }
         }
 
-        // $var > value
-        if condition.contains('>') || condition.contains('<') {
-            // For now, randomly select branch for demonstration
-            return Ok(true);
+        if condition.contains('<') {
+            let parts: Vec<&str> = condition.split('<').collect();
+            if parts.len() == 2 {
+                let left = self.extract_value(parts[0].trim(), &state).await?;
+                let right = self.extract_value(parts[1].trim(), &state).await?;
+
+                if let (Some(l), Some(r)) = (left.as_f64(), right.as_f64()) {
+                    let result = l < r;
+                    if self.debug {
+                        println!("    {} < {} = {}", l, r, result);
+                    }
+                    return Ok(result);
+                }
+            }
+        }
+
+        if condition.contains("==") {
+            let parts: Vec<&str> = condition.split("==").collect();
+            if parts.len() == 2 {
+                let left = self.extract_value(parts[0].trim(), &state).await?;
+                let right = self.extract_value(parts[1].trim(), &state).await?;
+
+                let result = left == right;
+                if self.debug {
+                    println!("    {:?} == {:?} = {}", left, right, result);
+                }
+                return Ok(result);
+            }
         }
 
         // Default: condition is true
+        if self.debug {
+            println!("    (defaulting to true)");
+        }
         Ok(true)
+    }
+
+    /// Extract a value from expression or variable
+    async fn extract_value(&self, expr: &str, state: &tokio::sync::MutexGuard<'_, ExecutionState>) -> Result<serde_json::Value> {
+        let expr = expr.trim();
+
+        // Variable reference
+        if expr.starts_with('$') {
+            let var_name = expr.trim_start_matches('$');
+            if let Some(value) = state.variables.get(var_name) {
+                // If it's a JSON object with fields, try to extract numeric values
+                if let Some(obj) = value.as_object() {
+                    // Try common field names
+                    for field in &["size", "count", "value", "quality", "data"] {
+                        if let Some(field_value) = obj.get(*field) {
+                            return Ok(field_value.clone());
+                        }
+                    }
+                }
+                return Ok(value.clone());
+            }
+            return Ok(serde_json::Value::Null);
+        }
+
+        // Number literal
+        if let Ok(n) = expr.parse::<i64>() {
+            return Ok(serde_json::json!(n));
+        }
+
+        // Float literal
+        if let Ok(f) = expr.parse::<f64>() {
+            return Ok(serde_json::json!(f));
+        }
+
+        Ok(serde_json::Value::Null)
     }
 
     /// Calculate confidence based on execution state
