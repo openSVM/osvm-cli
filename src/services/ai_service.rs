@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct AiRequest {
     question: String,
     #[serde(skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
@@ -378,15 +378,16 @@ impl AiService {
     ) -> Result<String> {
         let request_body = AiRequest {
             question: question.to_string(),
-            system_prompt,
+            system_prompt: system_prompt.clone(),
             own_plan: only_plan,
         };
 
         if debug_mode {
-            println!(
-                "📤 OSVM AI Request: {}",
-                serde_json::to_string_pretty(&request_body)?
-            );
+            println!("📤 OSVM AI Request:");
+            println!("  question: {} chars", question.len());
+            println!("  systemPrompt: {} chars", system_prompt.as_ref().map(|s| s.len()).unwrap_or(0));
+            println!("  ownPlan: {:?}", only_plan);
+            println!("  Full JSON: {}", serde_json::to_string_pretty(&request_body)?);
         }
 
         let response = self
@@ -513,11 +514,12 @@ impl AiService {
             self.query_with_debug(&planning_prompt, false).await?
         } else {
             // OSVM AI: use ownPlan=true to get structured plan
+            debug_print!(VerbosityLevel::Basic, "Sending OVSM plan request with custom system prompt");
             self.query_osvm_ai_with_options(
                 &planning_prompt,
                 Some(ovsm_system_prompt.clone()),
                 Some(true), // ownPlan=true
-                false,
+                true, // DEBUG MODE ON
             )
             .await?
         };
@@ -589,7 +591,14 @@ impl AiService {
     }
 
     /// Get the OVSM system prompt for plan generation
+    ///
+    /// This is the production system prompt that instructs AI models how to generate
+    /// executable OVSM plans with proper control flow (WHILE loops, FOR loops,
+    /// IF/THEN/ELSE branching, DECISION/BRANCH structures) and tool calls.
+    ///
+    /// The prompt is synced with docs/ovsm/OVSM_SYSTEM_PROMPT_COMPACT.md
     fn get_ovsm_system_prompt() -> &'static str {
+        // Production OVSM system prompt - synced with docs/ovsm/OVSM_SYSTEM_PROMPT_COMPACT.md
         r#"You are an AI research agent using OVSM (Open Versatile Seeker Mind) language to plan investigations.
 
 # Plan Structure
@@ -601,7 +610,7 @@ impl AiService {
 [list tools you'll use]
 
 **Main Branch:**
-[execution steps with tool calls]
+[execution steps with tool calls - may include WHILE loops, FOR loops, IF/THEN/ELSE]
 
 **Decision Point:** [what you're deciding]
   BRANCH A (condition): [actions]
@@ -614,7 +623,9 @@ impl AiService {
 Variables: $name = value
 Constants: CONST NAME = value
 Tools: toolName(param: $value) or toolName($value)
-Loops: FOR $item IN $collection: ... BREAK IF condition
+Loops:
+  - FOR $item IN $collection: ... BREAK IF condition
+  - WHILE condition: ... body ...
 Conditionals: IF condition THEN ... ELSE ...
 Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
 Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
@@ -622,34 +633,52 @@ Guards: GUARD condition ELSE RETURN ERROR(message: "...")
 
 # Essential Tools
 
-**Solana**: getSlot, getBlock, getTransaction, getAccountInfo, getBalance
-**Data**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND
-**Stats**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE
-**Utils**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64
+**Solana**: getSlot, getBlock, getTransaction, getAccountInfo, getBalance, getSignaturesForAddress
+**Data**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND, SORT
+**Stats**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE, PERCENTILE
+**Math**: ABS, SQRT, POW, ROUND, MAX, MIN
+**Utils**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64, SLEEP
 
 # Rules
 
 1. List tools in "Available Tools" section
 2. Use DECISION/BRANCH for multi-way choices
-3. Handle errors with TRY/CATCH
-4. Run independent ops in PARALLEL
-5. Always provide confidence score
-6. Use $ for variables, UPPERCASE for constants
-7. NO .method() syntax - use functions only
+3. Use WHILE loops for continuous monitoring/iteration
+4. Use FOR loops for iterating over collections
+5. Use IF/THEN/ELSE for conditional logic within branches
+6. Handle errors with TRY/CATCH
+7. Run independent ops in PARALLEL
+8. Always provide confidence score
+9. Use $ for variables, UPPERCASE for constants
+10. NO .method() syntax - use functions only
 
-# Example
+# Example with Control Flow
 
 **Expected Plan:**
-[TIME: ~30s] [CONFIDENCE: 90%]
+[TIME: ~45s] [CONFIDENCE: 85%]
 
 **Available Tools:**
-getSlot, getBlock, MAP, MEAN
+getSlot, getBlock, getTransaction, MAP, FILTER, MEAN, COUNT
 
 **Main Branch:**
 $slot = getSlot()
-$block = getBlock(slot: $slot)
-$txs = $block.transactions
-$fees = MAP($txs, tx => tx.meta.fee)
+$all_txs = []
+$iterations = 0
+$max_iterations = 100
+
+WHILE $iterations < $max_iterations:
+  $block = getBlock(slot: $slot - $iterations)
+  $txs = $block.transactions
+
+  FOR $tx IN $txs:
+    IF $tx.meta.err == null THEN
+      $all_txs = APPEND(array: $all_txs, item: $tx)
+
+  $iterations = $iterations + 1
+
+  BREAK IF COUNT($all_txs) >= 1000
+
+$fees = MAP($all_txs, tx => tx.meta.fee)
 $avg = MEAN(data: $fees)
 
 DECISION: Check sample size
@@ -659,7 +688,16 @@ DECISION: Check sample size
     $confidence = 75
 
 **Action:**
-RETURN {average_fee: $avg, confidence: $confidence}"#
+RETURN {average_fee: $avg, sample_size: COUNT($fees), confidence: $confidence}
+
+# Important Notes
+
+- Use WHILE loops for continuous monitoring (e.g., "monitor for 1 hour")
+- Use FOR loops with BREAK IF for conditional iteration
+- Nest IF/THEN/ELSE inside loops for conditional logic
+- Use DECISION/BRANCH for multi-way strategy selection
+- Always include time estimates and confidence scores
+- Handle edge cases with GUARD statements"#
     }
 
     /// Build OVSM planning prompt with tools context

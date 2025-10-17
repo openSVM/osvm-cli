@@ -24,7 +24,7 @@ pub struct AdaptiveContainer {
     current_layout: AdaptiveLayout,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum AdaptiveLayout {
     Stacked,    // All elements vertical
     TwoColumn,  // Side by side
