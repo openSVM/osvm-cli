@@ -298,6 +298,7 @@ async fn execute_with_plan(
                 .to_string(),
             osvm_tools_to_use: Vec::new(),
             expected_outcome: "Direct AI response to the query".to_string(),
+            raw_ovsm_plan: None,  // No OVSM plan when tools are disabled
         }
     } else {
         // Try to get OSVM plan from AI

@@ -205,16 +205,23 @@ RETURN $sum
 - **Constants:** `CONST NAME = value`
 - **Scoping:** Proper scope chain with shadowing
 
-### Not Yet Implemented ❌
+### Implemented in OVSM Executor (osvm-cli) ✅
+
+When used through `osvm` CLI, additional features are available:
+- `DECISION/BRANCH` - Multi-way conditional execution
+- `CALL` statements - MCP tool integration
+- Monitoring loops - WHILE loops for continuous operations
+- Advanced data processing with registered tools
+
+### Not Yet Implemented in Core Interpreter ❌
 
 - `TRY/CATCH` - Error handling (parsed but has bugs)
-- `DECISION/BRANCH` - Advanced decision structures
 - Lambda functions (`fn:` syntax)
 - `PARALLEL` execution
 - `WAIT_ALL`, `WAIT_ANY`, `RACE` strategies
 - `GUARD` statements
 - `MATCH` expressions
-- Advanced tools: `MAP`, `FILTER`, `REDUCE`, `SUM`, `MEAN`, etc.
+- Built-in tools: `MAP`, `FILTER`, `REDUCE`, `SUM`, `MEAN` (available via MCP)
 
 ---
 

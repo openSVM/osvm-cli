@@ -172,16 +172,26 @@ impl OvsmExecutor {
             // Top-level sections:
             // - Start at beginning of line (no indentation for numbered items)
             // - Match known section names
-            // - End with ':'
-            let is_top_level_section = if trimmed.ends_with(':') {
-                let section_candidate = if trimmed.starts_with("**") && trimmed.ends_with(":**") {
-                    trimmed.trim_start_matches("**").trim_end_matches(":**").trim()
+            // - Contain ':' (may have text after it)
+            let is_top_level_section = if trimmed.contains(':') {
+                let section_candidate = if trimmed.starts_with("**") {
+                    // Extract section name from **Section:** or **Section:** Text
+                    let without_stars = trimmed.trim_start_matches("**");
+                    if let Some(colon_pos) = without_stars.find(':') {
+                        without_stars[..colon_pos].trim_end_matches("**").trim()
+                    } else {
+                        without_stars.trim_end_matches("**").trim()
+                    }
                 } else {
-                    trimmed.trim_end_matches(':').trim()
+                    // Extract section name from "Section:" or "Section: Text"
+                    if let Some(colon_pos) = trimmed.find(':') {
+                        trimmed[..colon_pos].trim()
+                    } else {
+                        trimmed.trim()
+                    }
                 };
 
                 // Check if it matches a known top-level section
-                // Or if it's at the start of a line (not indented) and doesn't have a number prefix
                 let is_known_section = top_level_sections.iter()
                     .any(|s| section_candidate.eq_ignore_ascii_case(s));
 
@@ -189,7 +199,7 @@ impl OvsmExecutor {
                 let line_indent = line.len() - line.trim_start().len();
                 let is_unindented = line_indent == 0;
 
-                is_known_section || (is_unindented && !trimmed.starts_with(|c: char| c.is_ascii_digit()))
+                is_known_section && is_unindented
             } else {
                 false
             };
@@ -204,11 +214,18 @@ impl OvsmExecutor {
                     content_lines.clear();
                 }
 
-                // Extract section name
-                let section_name = if trimmed.starts_with("**") && trimmed.ends_with(":**") {
-                    trimmed.trim_start_matches("**").trim_end_matches(":**").trim()
+                // Extract section name (same logic as detection above)
+                let section_name = if trimmed.starts_with("**") {
+                    let without_stars = trimmed.trim_start_matches("**");
+                    if let Some(colon_pos) = without_stars.find(':') {
+                        without_stars[..colon_pos].trim_end_matches("**").trim()
+                    } else {
+                        without_stars.trim_end_matches("**").trim()
+                    }
+                } else if let Some(colon_pos) = trimmed.find(':') {
+                    trimmed[..colon_pos].trim()
                 } else {
-                    trimmed.trim_end_matches(':').trim()
+                    trimmed.trim()
                 };
 
                 current_section = Some(PlanSection {
@@ -308,6 +325,129 @@ impl OvsmExecutor {
                 }
 
                 i += decision_lines.len();
+                continue;
+            }
+
+            // FOR loop: FOR $var IN range/array:
+            if line.starts_with("FOR ") {
+                // Parse: FOR $item IN $collection:
+                let for_expr = if line.ends_with(':') {
+                    &line[4..line.len()-1]
+                } else {
+                    &line[4..]
+                }.trim();
+
+                let parts: Vec<&str> = for_expr.split(" IN ").collect();
+                if parts.len() != 2 {
+                    anyhow::bail!("Invalid FOR syntax: {}", line);
+                }
+
+                let loop_var = parts[0].trim().trim_start_matches('$');
+                let collection_expr = parts[1].trim();
+
+                // Evaluate collection
+                let collection = self.evaluate_expression(collection_expr).await?;
+
+                // Collect loop body
+                let mut loop_body = Vec::new();
+                let loop_indent = raw_line.len() - raw_line.trim_start().len();
+
+                for j in (i+1)..all_lines.len() {
+                    let body_line = all_lines[j];
+                    let body_indent = body_line.len() - body_line.trim_start().len();
+
+                    if body_line.trim().is_empty() {
+                        continue;
+                    }
+
+                    if body_indent > loop_indent {
+                        loop_body.push(body_line);
+                    } else {
+                        break;
+                    }
+                }
+
+                // Iterate over collection
+                if let Some(arr) = collection.as_array() {
+                    for item in arr {
+                        // Set loop variable
+                        {
+                            let mut state = self.state.lock().await;
+                            state.variables.insert(loop_var.to_string(), item.clone());
+                        }
+
+                        // Execute loop body
+                        let body_content = loop_body.join("\n");
+                        let loop_result = Box::pin(self.execute_main_branch(&body_content)).await?;
+
+                        if loop_result != serde_json::Value::Null {
+                            last_value = loop_result;
+                        }
+                    }
+                }
+
+                i += loop_body.len() + 1;
+                continue;
+            }
+
+            // WHILE loop: WHILE condition:
+            if line.starts_with("WHILE ") {
+                let condition_part = if line.ends_with(':') {
+                    &line[6..line.len()-1]
+                } else {
+                    &line[6..]
+                }.trim();
+
+                // Collect loop body (indented lines after WHILE)
+                let mut loop_body = Vec::new();
+                let loop_indent = raw_line.len() - raw_line.trim_start().len();
+
+                for j in (i+1)..all_lines.len() {
+                    let body_line = all_lines[j];
+                    let body_indent = body_line.len() - body_line.trim_start().len();
+
+                    if body_line.trim().is_empty() {
+                        continue;
+                    }
+
+                    if body_indent > loop_indent {
+                        loop_body.push(body_line);
+                    } else {
+                        break;
+                    }
+                }
+
+                // Execute loop with max iteration limit for safety
+                const MAX_ITERATIONS: usize = 10000;
+                let mut iterations = 0;
+
+                while iterations < MAX_ITERATIONS {
+                    let condition_met = self.evaluate_condition(condition_part).await?;
+
+                    if !condition_met {
+                        break;
+                    }
+
+                    // Execute loop body
+                    let body_content = loop_body.join("\n");
+                    let loop_result = Box::pin(self.execute_main_branch(&body_content)).await?;
+
+                    if loop_result != serde_json::Value::Null {
+                        last_value = loop_result;
+                    }
+
+                    iterations += 1;
+
+                    if self.debug {
+                        println!("  🔄 WHILE iteration {}", iterations);
+                    }
+                }
+
+                if iterations >= MAX_ITERATIONS {
+                    anyhow::bail!("WHILE loop exceeded maximum iterations ({})", MAX_ITERATIONS);
+                }
+
+                i += loop_body.len() + 1;
                 continue;
             }
 
@@ -622,6 +762,11 @@ impl OvsmExecutor {
             return self.execute_call_statement(tool_name).await;
         }
 
+        // Arithmetic operations: $var + value, $var - value
+        if expr.contains('+') || expr.contains('-') || expr.contains('*') || expr.contains('/') {
+            return self.evaluate_arithmetic(expr).await;
+        }
+
         // Variable reference: $name
         if expr.starts_with('$') {
             let var_name = expr.trim_start_matches('$');
@@ -641,6 +786,27 @@ impl OvsmExecutor {
             return Ok(serde_json::json!(f));
         }
 
+        // Array literal: [1, 2, 3]
+        if expr.starts_with('[') && expr.ends_with(']') {
+            let inner = &expr[1..expr.len()-1];
+            let items: Vec<serde_json::Value> = inner.split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| {
+                    if let Ok(n) = s.parse::<i64>() {
+                        serde_json::json!(n)
+                    } else if let Ok(f) = s.parse::<f64>() {
+                        serde_json::json!(f)
+                    } else if s.starts_with('"') && s.ends_with('"') {
+                        serde_json::json!(s.trim_matches('"'))
+                    } else {
+                        serde_json::json!(s)
+                    }
+                })
+                .collect();
+            return Ok(serde_json::Value::Array(items));
+        }
+
         // String literal
         if expr.starts_with('"') && expr.ends_with('"') {
             let s = expr.trim_matches('"');
@@ -653,6 +819,59 @@ impl OvsmExecutor {
         }
 
         Ok(serde_json::Value::Null)
+    }
+
+    /// Evaluate arithmetic expressions
+    async fn evaluate_arithmetic(&self, expr: &str) -> Result<serde_json::Value> {
+        // Simple arithmetic: left op right
+        let (left, op, right) = if expr.contains('+') {
+            let parts: Vec<&str> = expr.splitn(2, '+').collect();
+            (parts[0].trim(), "+", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+        } else if expr.contains('-') {
+            let parts: Vec<&str> = expr.splitn(2, '-').collect();
+            (parts[0].trim(), "-", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+        } else if expr.contains('*') {
+            let parts: Vec<&str> = expr.splitn(2, '*').collect();
+            (parts[0].trim(), "*", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+        } else if expr.contains('/') {
+            let parts: Vec<&str> = expr.splitn(2, '/').collect();
+            (parts[0].trim(), "/", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+        } else {
+            return Ok(serde_json::Value::Null);
+        };
+
+        // Evaluate left side
+        let left_val = if left.starts_with('$') {
+            let var_name = left.trim_start_matches('$');
+            let state = self.state.lock().await;
+            state.variables.get(var_name)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+        } else {
+            left.parse::<i64>().unwrap_or(0)
+        };
+
+        // Evaluate right side
+        let right_val = if right.starts_with('$') {
+            let var_name = right.trim_start_matches('$');
+            let state = self.state.lock().await;
+            state.variables.get(var_name)
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+        } else {
+            right.parse::<i64>().unwrap_or(0)
+        };
+
+        // Compute result
+        let result = match op {
+            "+" => left_val + right_val,
+            "-" => left_val - right_val,
+            "*" => left_val * right_val,
+            "/" => if right_val != 0 { left_val / right_val } else { 0 },
+            _ => 0,
+        };
+
+        Ok(serde_json::json!(result))
     }
 
     /// Evaluate a boolean condition

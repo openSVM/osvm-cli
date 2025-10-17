@@ -287,5 +287,5 @@ How we did it 🧵👇
 
 ---
 
-## Key Message
+## End Message
 **"World-class UX is possible in open source CLI tools. We proved it."**

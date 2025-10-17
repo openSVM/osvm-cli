@@ -216,7 +216,13 @@ impl Parser {
             let mut statements = Vec::new();
             while !self.check(&TokenKind::Else)
                 && !self.check(&TokenKind::Eof)
-                && !self.is_end_of_block()
+                && !self.check(&TokenKind::RightBrace)
+                && !self.check(&TokenKind::Branch)
+                && !self.check(&TokenKind::Catch)
+                && !self.check(&TokenKind::WaitAll)
+                && !self.check(&TokenKind::WaitAny)
+                && !self.check(&TokenKind::Race)
+                && !self.check(&TokenKind::Return)
             {
                 statements.push(self.statement()?);
                 self.skip_newlines();
@@ -249,8 +255,19 @@ impl Parser {
                 Some(statements)
             } else {
                 // Python-style: ELSE statements
+                // Note: ELSE blocks should NOT include RETURN as a block terminator
+                // because RETURN statements may legitimately appear at the end of a FOR/WHILE loop
                 let mut statements = Vec::new();
-                while !self.is_end_of_block() && !self.is_at_end() {
+                while !self.check(&TokenKind::RightBrace)
+                    && !self.check(&TokenKind::Else)
+                    && !self.check(&TokenKind::Branch)
+                    && !self.check(&TokenKind::Catch)
+                    && !self.check(&TokenKind::WaitAll)
+                    && !self.check(&TokenKind::WaitAny)
+                    && !self.check(&TokenKind::Race)
+                    && !self.check(&TokenKind::Return)
+                    && !self.is_at_end()
+                {
                     statements.push(self.statement()?);
                     self.skip_newlines();
                 }
