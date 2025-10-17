@@ -431,8 +431,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Handle AI queries early to avoid config loading
+    // Check if this is a streaming agent query (osvm {anything} where {anything} is not a known command)
     if !is_known_command(sub_command) {
-        return commands::ai_query::handle_ai_query(sub_command, sub_matches, &app_matches).await;
+        // Check if verbose flag is set
+        let verbose = app_matches.get_count("verbose");
+
+        // Use streaming agent for direct queries
+        return crate::utils::streaming_agent::execute_streaming_agent(sub_command, verbose)
+            .await
+            .map_err(|e| format!("Streaming agent failed: {}", e).into());
     }
 
     // Load configuration using the new Config module
