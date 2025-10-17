@@ -227,6 +227,13 @@ impl Parser {
                 statements.push(self.statement()?);
                 self.skip_newlines();
             }
+
+            // Validate: THEN block must have at least one statement
+            // Exception: if there's an ELSE block, empty THEN is allowed (though unusual)
+            if statements.is_empty() && !self.check(&TokenKind::Else) {
+                return Err(Error::ParseError("Expected at least one statement after THEN".to_string()));
+            }
+
             statements
         };
 
