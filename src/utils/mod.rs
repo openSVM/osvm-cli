@@ -20,6 +20,8 @@ pub mod agent_chat_tests;
 pub mod agent_chat_v2;
 /// CLI-based agent execution without UI
 pub mod agent_cli;
+/// Streaming agent with real-time terminal output (for `osvm {query}`)
+pub mod streaming_agent;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage
