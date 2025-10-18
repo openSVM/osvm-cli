@@ -115,6 +115,14 @@ pub enum TokenKind {
     Recoverable,
     /// WARNING keyword
     Warning,
+    /// ENDIF keyword (optional block terminator)
+    EndIf,
+    /// ENDWHILE keyword (optional block terminator)
+    EndWhile,
+    /// ENDFOR keyword (optional block terminator)
+    EndFor,
+    /// END keyword (generic optional block terminator)
+    End,
 
     // Operators
     /// Plus operator (+)
@@ -232,6 +240,10 @@ impl TokenKind {
                 | TokenKind::Fatal
                 | TokenKind::Recoverable
                 | TokenKind::Warning
+                | TokenKind::EndIf
+                | TokenKind::EndWhile
+                | TokenKind::EndFor
+                | TokenKind::End
         )
     }
 
@@ -270,6 +282,10 @@ impl TokenKind {
             "FATAL" => Some(TokenKind::Fatal),
             "RECOVERABLE" => Some(TokenKind::Recoverable),
             "WARNING" => Some(TokenKind::Warning),
+            "ENDIF" => Some(TokenKind::EndIf),
+            "ENDWHILE" => Some(TokenKind::EndWhile),
+            "ENDFOR" => Some(TokenKind::EndFor),
+            "END" => Some(TokenKind::End),
             // Logical operators as keywords
             "AND" => Some(TokenKind::And),
             "OR" => Some(TokenKind::Or),
