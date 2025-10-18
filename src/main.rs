@@ -339,7 +339,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let timeout = sub_matches
             .get_one::<String>("timeout")
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(30);
+            .unwrap_or(90);  // Increased from 30s to 90s for complex agent queries with parallel tool execution
 
         return crate::utils::agent_cli::execute_agent_command(
             prompt,
