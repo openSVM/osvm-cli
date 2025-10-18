@@ -928,6 +928,7 @@ impl Parser {
             }
             TokenKind::LeftBracket => self.array_literal(),
             TokenKind::LeftBrace => self.object_literal(),
+            TokenKind::Lambda => self.lambda_expression(),
             _ => Err(Error::UnexpectedToken {
                 expected: "expression".to_string(),
                 got: format!("{:?}", token.kind),
@@ -1001,6 +1002,58 @@ impl Parser {
 
         self.consume(TokenKind::RightBrace, "Expected '}'")?;
         Ok(Expression::ObjectLiteral(fields))
+    }
+
+    fn lambda_expression(&mut self) -> Result<Expression> {
+        // Consume 'lambda' keyword
+        self.consume(TokenKind::Lambda, "Expected 'lambda'")?;
+
+        // Parse parameter(s): $param or ($param1, $param2, ...)
+        let mut params = Vec::new();
+
+        // Check for parenthesized parameter list
+        if self.check(&TokenKind::LeftParen) {
+            self.advance(); // consume '('
+
+            if !self.check(&TokenKind::RightParen) {
+                loop {
+                    // Expect variable parameter
+                    if let TokenKind::Variable(param_name) = &self.peek().kind {
+                        params.push(param_name.clone());
+                        self.advance();
+                    } else {
+                        return Err(Error::ParseError(
+                            "Expected variable parameter in lambda".to_string(),
+                        ));
+                    }
+
+                    if !self.match_token(&TokenKind::Comma) {
+                        break;
+                    }
+                    self.advance(); // consume ','
+                }
+            }
+
+            self.consume(TokenKind::RightParen, "Expected ')' after lambda parameters")?;
+        } else {
+            // Single parameter without parentheses: lambda $x: ...
+            if let TokenKind::Variable(param_name) = &self.peek().kind {
+                params.push(param_name.clone());
+                self.advance();
+            } else {
+                return Err(Error::ParseError(
+                    "Expected variable parameter in lambda".to_string(),
+                ));
+            }
+        }
+
+        // Expect colon
+        self.consume(TokenKind::Colon, "Expected ':' after lambda parameters")?;
+
+        // Parse body expression
+        let body = Box::new(self.expression()?);
+
+        Ok(Expression::Lambda { params, body })
     }
 
     // Helper methods
