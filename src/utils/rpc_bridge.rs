@@ -34,27 +34,40 @@ impl Tool for RpcBridgeTool {
     fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
         let mut rpc_params = Vec::new();
 
+        // Handle single object argument (named parameters)
         if args.len() == 1 {
             if let OvsmValue::Object(obj) = &args[0] {
-                if let Some(address) = obj.get("address") {
-                    rpc_params.push(ovsm_value_to_json(address));
+                // Extract primary parameter (address, signature, etc.)
+                let primary_param = obj.get("address")
+                    .or_else(|| obj.get("signature"))
+                    .or_else(|| obj.get("slot"))
+                    .or_else(|| obj.get("pubkey"));
 
-                    let mut options = serde_json::Map::new();
+                if let Some(primary) = primary_param {
+                    rpc_params.push(ovsm_value_to_json(primary));
+
+                    // Build config object from remaining named parameters
+                    let mut config = serde_json::Map::new();
                     for (key, val) in obj.iter() {
-                        if key != "address" {
-                            options.insert(key.clone(), ovsm_value_to_json(val));
+                        if !matches!(key.as_str(), "address" | "signature" | "slot" | "pubkey") {
+                            config.insert(key.clone(), ovsm_value_to_json(val));
                         }
                     }
-                    if !options.is_empty() {
-                        rpc_params.push(Value::Object(options));
+
+                    // Only add config object if it has fields
+                    if !config.is_empty() {
+                        rpc_params.push(Value::Object(config));
                     }
                 } else {
+                    // No primary param found, use the whole object
                     rpc_params.push(ovsm_value_to_json(&args[0]));
                 }
             } else {
+                // Single non-object argument
                 rpc_params.push(ovsm_value_to_json(&args[0]));
             }
         } else {
+            // Multiple arguments - use as positional
             for arg in args {
                 rpc_params.push(ovsm_value_to_json(arg));
             }
@@ -84,6 +97,9 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Val
         "method": method,
         "params": params
     });
+
+    // Debug: print RPC request
+    eprintln!("[RPC DEBUG] Method: {}, Params: {}", method, serde_json::to_string_pretty(&params).unwrap_or_else(|_| "invalid".to_string()));
 
     let response = client
         .post(SOLANA_RPC_URL)

@@ -90,7 +90,7 @@ impl OvsmService {
         let result = self
             .evaluator
             .execute(&program)
-            .context("Failed to execute OVSM program. Note: OVSM supports both Python-style (colon + indentation) and C-style (braces) syntax for control flow.")?;
+            .map_err(|e| anyhow::anyhow!("Execution error: {}.\n\nNote: OVSM supports both Python-style (colon + indentation) and C-style (braces) syntax for control flow.", e))?;
 
         if self.verbose {
             println!("✨ Execution completed successfully");
