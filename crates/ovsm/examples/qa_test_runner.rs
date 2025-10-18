@@ -150,5 +150,6 @@ fn format_value(value: &Value) -> String {
             format!("Object({{{}}})", pairs.join(", "))
         }
         Value::Range { start, end } => format!("Range({}..{})", start, end),
+        Value::Function { params, .. } => format!("Function({} params)", params.len()),
     }
 }

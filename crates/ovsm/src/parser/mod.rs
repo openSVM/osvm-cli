@@ -1038,14 +1038,22 @@ impl Parser {
 
             self.consume(TokenKind::RightParen, "Expected ')' after lambda parameters")?;
         } else {
-            // Single parameter without parentheses: lambda $x: ...
-            if let TokenKind::Variable(param_name) = &self.peek().kind {
-                params.push(param_name.clone());
-                self.advance();
-            } else {
-                return Err(Error::ParseError(
-                    "Expected variable parameter in lambda".to_string(),
-                ));
+            // Parameters without parentheses: lambda $x: ... or lambda $x, $y: ...
+            loop {
+                if let TokenKind::Variable(param_name) = &self.peek().kind {
+                    params.push(param_name.clone());
+                    self.advance();
+                } else {
+                    return Err(Error::ParseError(
+                        "Expected variable parameter in lambda".to_string(),
+                    ));
+                }
+
+                // Check for comma (multi-parameter lambda)
+                if !self.check(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance(); // consume ','
             }
         }
 
