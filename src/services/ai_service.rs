@@ -738,7 +738,7 @@ When planning, choose tools based on:
 8. Always provide confidence score
 9. Use $ for variables, UPPERCASE for constants
 10. NO .method() syntax - use functions only
-11. For RPC methods, use solana_rpc_call(method_name, params) when high-level tools aren't available
+11. For RPC methods, use solana_rpc_call(method: "method_name", params: [param_array]) when high-level tools aren't available
 12. Batch related queries using PARALLEL for better performance
 
 # Example with RPC Tool Usage
@@ -755,7 +755,7 @@ $nodes = getClusterNodes()
 $node_count = COUNT($nodes)
 
 PARALLEL {
-  $block_time = solana_rpc_call(method: "getBlockTime", params: {slot: $slot})
+  $block_time = solana_rpc_call(method: "getBlockTime", params: [$slot])
   $health = getHealth()
 }
 WAIT_ALL
@@ -776,7 +776,9 @@ RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence
 - Use DECISION/BRANCH for multi-way strategy selection
 - Always include time estimates and confidence scores
 - Handle edge cases with GUARD statements
-- For any RPC method not listed above, use solana_rpc_call directly"#
+- For any RPC method not listed above, use solana_rpc_call(method: "method_name", params: [array_of_params])
+- RPC proxy is case-sensitive: method names must match exactly (e.g., "getBlockTime", not "getblocktime")
+- Params must be passed as an array, even for single parameters"#
     }
 
     /// Build OVSM planning prompt with tools context
