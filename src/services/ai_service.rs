@@ -726,6 +726,27 @@ When planning, choose tools based on:
 7. **Batch operations:** Use getMultipleAccounts, getConfirmedBlocks with PARALLEL
 8. **Complex logic:** Combine tools with FOR/WHILE loops for iteration
 
+## CRITICAL: Program Address Handling
+
+NEVER fabricate or guess program addresses. When a user mentions a program by name:
+
+**Use these verified addresses from ~/.osvm/addressbook.json:**
+- **pumpfun / pump.fun**: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+- **magic_eden**: MEisE1HzV7x8qSJDtSfGkzFmUu9cgPM5EMcarebnMMc
+- **raydium**: 675kPX9MHTjS2zt1qrXjVVxt2Y8Qa2NWJJDrai4A2TS
+- **jupiter**: JUP6LkbZbjS1jKKwapdHNR8UV6gWZJrMmupMHHfHvWU
+- **marinade**: MarBmsSgKXdrQyA87d9KLU2VqQq6j81yh8zVskQcMAq
+
+If a program address is NOT in the address book and NOT explicitly provided by the user:
+```
+LOG(message: "I need the program address to query. Could you provide the Solana program ID?")
+```
+
+**Do NOT assume or make up addresses.** This includes:
+- ❌ Using placeholder patterns like "pumpfun111..." or "program111111..."
+- ❌ Using all-ones addresses (111111...)
+- ❌ Guessing addresses you don't have verified knowledge of
+
 # Rules
 
 1. List tools in "Available Tools" section
