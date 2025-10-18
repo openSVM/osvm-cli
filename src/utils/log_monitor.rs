@@ -6,6 +6,7 @@
 use crate::utils::osvm_logger::{LogCategory, OSVM_LOGGER};
 use crate::{osvm_debug, osvm_error, osvm_info, osvm_warn};
 use anyhow::{Context, Result};
+use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -97,12 +98,31 @@ struct MonitorState {
     last_restart: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+// Cached regex patterns compiled once at startup (Bug #11: Regex optimization)
+// Using lazy_static to avoid recompiling these patterns on every function call
+lazy_static! {
+    static ref REGEX_SYSTEM_TUNING: Regex = Regex::new(r"(\S+):\s*recommended=(\d+),\s*current=(\d+)\s*too small")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_PORT_CONFLICT: Regex = Regex::new(r"bind\(\):\s*Address already in use.*:(\d+)")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_DISK_SPACE: Regex = Regex::new(r"No space left on device|disk.*full|insufficient.*space")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_MEMORY_PRESSURE: Regex = Regex::new(r"Out of memory|OOM|memory exhausted|Cannot allocate memory")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_TOO_MANY_OPEN_FILES: Regex = Regex::new(r"Too many open files|EMFILE|ulimit.*reached")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_NETWORK_CONNECTIVITY: Regex = Regex::new(r"Connection refused|Network unreachable|No route to host|Connection timed out")
+        .expect("hardcoded regex must compile");
+    static ref REGEX_EXTERNAL_REACHABILITY: Regex = Regex::new(r"Received no response at tcp/(\d+).*check your port configuration.*timed out.*receive operation")
+        .expect("hardcoded regex must compile");
+}
+
 /// Initialize log patterns for issue detection
 fn init_log_patterns() -> Vec<LogPattern> {
     vec![
-        // System tuning issues
+        // System tuning issues (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"(\S+):\s*recommended=(\d+),\s*current=(\d+)\s*too small").unwrap(),
+            regex: REGEX_SYSTEM_TUNING.clone(),
             issue_type: IssueType::SystemTuning("".to_string()),
             severity: Severity::Warning,
             extractor: Box::new(|caps| {
@@ -113,9 +133,9 @@ fn init_log_patterns() -> Vec<LogPattern> {
                 ctx
             }),
         },
-        // Port conflict
+        // Port conflict (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"bind\(\):\s*Address already in use.*:(\d+)").unwrap(),
+            regex: REGEX_PORT_CONFLICT.clone(),
             issue_type: IssueType::PortConflict(0),
             severity: Severity::Error,
             extractor: Box::new(|caps| {
@@ -124,37 +144,37 @@ fn init_log_patterns() -> Vec<LogPattern> {
                 ctx
             }),
         },
-        // Disk space
+        // Disk space (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"No space left on device|disk.*full|insufficient.*space").unwrap(),
+            regex: REGEX_DISK_SPACE.clone(),
             issue_type: IssueType::DiskSpace,
             severity: Severity::Critical,
             extractor: Box::new(|_| HashMap::new()),
         },
-        // Memory pressure
+        // Memory pressure (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"Out of memory|OOM|memory exhausted|Cannot allocate memory").unwrap(),
+            regex: REGEX_MEMORY_PRESSURE.clone(),
             issue_type: IssueType::MemoryPressure,
             severity: Severity::Critical,
             extractor: Box::new(|_| HashMap::new()),
         },
-        // Too many open files
+        // Too many open files (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"Too many open files|EMFILE|ulimit.*reached").unwrap(),
+            regex: REGEX_TOO_MANY_OPEN_FILES.clone(),
             issue_type: IssueType::TooManyOpenFiles,
             severity: Severity::Error,
             extractor: Box::new(|_| HashMap::new()),
         },
-        // Local network connectivity
+        // Local network connectivity (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"Connection refused|Network unreachable|No route to host|Connection timed out").unwrap(),
+            regex: REGEX_NETWORK_CONNECTIVITY.clone(),
             issue_type: IssueType::NetworkConnectivity,
             severity: Severity::Critical,
             extractor: Box::new(|_| HashMap::new()),
         },
-        // External reachability (needs ngrok)
+        // External reachability (using cached regex from lazy_static)
         LogPattern {
-            regex: Regex::new(r"Received no response at tcp/(\d+).*check your port configuration.*timed out.*receive operation").unwrap(),
+            regex: REGEX_EXTERNAL_REACHABILITY.clone(),
             issue_type: IssueType::ExternalReachability,
             severity: Severity::Critical,
             extractor: Box::new(|caps| {
@@ -795,6 +815,30 @@ pub async fn monitor_logs_continuous(
 }
 
 /// Create a log file monitor that tails the file (like tail -f)
+///
+/// # Signal Handling
+/// This function runs an infinite loop monitoring log files. To ensure graceful shutdown
+/// on Ctrl+C (SIGINT) or termination signals, wrap the call in signal handling:
+///
+/// ```ignore
+/// use tokio::select;
+/// use tokio::signal;
+///
+/// // Usage example:
+/// tokio::select! {
+///     result = monitor_log_file(path, config, callback) => {
+///         // Monitoring ended naturally
+///         result?;
+///     }
+///     _ = signal::ctrl_c() => {
+///         eprintln!("Log monitoring interrupted by user");
+///         // Cleanup happens automatically via Drop trait
+///     }
+/// }
+/// ```
+///
+/// Or use a signal handler for graceful termination of any child processes spawned
+/// during the monitoring process.
 pub async fn monitor_log_file(
     log_path: &str,
     config: LogMonitorConfig,

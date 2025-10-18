@@ -19,6 +19,48 @@ pub struct Config {
 }
 
 impl Config {
+    /// Validate configuration values to ensure they are reasonable and safe
+    ///
+    /// # Validation Checks (Bug #12)
+    /// - RPC URL must be a valid HTTP/HTTPS URL
+    /// - Verbose level must be 0-4 (reasonable debug levels)
+    /// - Theme name if provided must match known themes
+    ///
+    /// # Returns
+    /// * `Ok(())` if all validation passes
+    /// * `Err()` if any validation fails
+    fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // Validate RPC URL format
+        if !self.json_rpc_url.starts_with("http://") && !self.json_rpc_url.starts_with("https://") {
+            return Err(format!(
+                "Invalid RPC URL: must start with http:// or https://, got: {}",
+                self.json_rpc_url
+            ).into());
+        }
+
+        // Validate verbose level (0-4 is reasonable)
+        if self.verbose > 4 {
+            return Err(format!(
+                "Verbose level {} is too high (max 4). Using default.",
+                self.verbose
+            ).into());
+        }
+
+        // Validate theme name if provided
+        if let Some(ref theme) = self.theme_name {
+            let valid_themes = vec!["light", "dark", "nord", "dracula", "monokai", "solarized"];
+            if !valid_themes.contains(&theme.as_str()) {
+                eprintln!(
+                    "Warning: Unknown theme '{}'. Valid themes: {:?}",
+                    theme, valid_themes
+                );
+                // Don't fail, just warn - use default theme
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn load(
         app_matches: &clap::ArgMatches, // For global flags like no_color, verbose
         sub_matches: &clap::ArgMatches, // For command-specific or overridable flags
@@ -72,7 +114,7 @@ impl Config {
         // get_flag() returns bool, not Option<bool>, so no need for or_else/unwrap
         let auto_theme_switching = sub_matches.get_flag("auto_theme");
 
-        Ok(Self {
+        let config = Self {
             json_rpc_url: normalize_to_url_if_moniker(
                 sub_matches
                     .get_one::<String>("json_rpc_url")
@@ -85,7 +127,12 @@ impl Config {
             commitment_config: CommitmentConfig::confirmed(),
             theme_name,
             auto_theme_switching,
-        })
+        };
+
+        // Validate configuration values (Bug #12)
+        config.validate()?;
+
+        Ok(config)
     }
 
     pub fn setup_logging_and_display_info(&self) -> Result<(), Box<dyn std::error::Error>> {
