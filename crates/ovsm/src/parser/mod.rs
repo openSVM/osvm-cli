@@ -284,6 +284,12 @@ impl Parser {
             None
         };
 
+        // Optionally consume ENDIF or END token (support for explicit block terminators)
+        if self.check(&TokenKind::EndIf) || self.check(&TokenKind::End) {
+            self.advance();
+            self.skip_newlines();
+        }
+
         Ok(Statement::If {
             condition,
             then_branch,
@@ -330,6 +336,12 @@ impl Parser {
             }
             statements
         };
+
+        // Optionally consume ENDWHILE or END token (support for explicit block terminators)
+        if self.check(&TokenKind::EndWhile) || self.check(&TokenKind::End) {
+            self.advance();
+            self.skip_newlines();
+        }
 
         Ok(Statement::While { condition, body })
     }
@@ -381,6 +393,12 @@ impl Parser {
             }
             statements
         };
+
+        // Optionally consume ENDFOR or END token (support for explicit block terminators)
+        if self.check(&TokenKind::EndFor) || self.check(&TokenKind::End) {
+            self.advance();
+            self.skip_newlines();
+        }
 
         Ok(Statement::For {
             variable,
@@ -1045,10 +1063,14 @@ impl Parser {
     fn is_end_of_block(&self) -> bool {
         // Check if we're at a keyword that ends the current block (for IF/TRY/etc.)
         // These are keywords that belong to a parent construct (ELSE, CATCH, BRANCH)
-        // or explicitly close blocks (RightBrace, wait strategies)
+        // or explicitly close blocks (RightBrace, wait strategies, END* markers)
         //
         // NOTE: IF, FOR, WHILE, RETURN, BREAK, CONTINUE are NOT block terminators!
         // They are control flow statements that can appear within blocks.
+        //
+        // Support for explicit END markers (ENDIF, ENDWHILE, ENDFOR, END):
+        // These provide C-style/Shell-style block termination as an alternative
+        // to indentation-based (Python-style) or brace-based (C-style) blocks.
         matches!(
             self.peek().kind,
             TokenKind::Else
@@ -1058,6 +1080,10 @@ impl Parser {
                 | TokenKind::WaitAll
                 | TokenKind::WaitAny
                 | TokenKind::Race
+                | TokenKind::EndIf
+                | TokenKind::EndWhile
+                | TokenKind::EndFor
+                | TokenKind::End
         )
     }
 
