@@ -857,6 +857,7 @@ RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence
 - ✅ CORRECT: IF condition THEN (indented body)
 - ❌ WRONG: GUARD condition: $x != null
 - ✅ CORRECT: GUARD $x != null
+- ℹ️ NOTE: OVSM is flexible - ENDIF/ENDWHILE/ENDFOR/END markers are supported but OPTIONAL
 
 **Null Values:**
 - ❌ WRONG: NULL, NIL, None
@@ -864,7 +865,25 @@ RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence
 
 **Array Indexing:**
 - Last element: $array[$last_idx] where $last_idx = COUNT($array) - 1
-- No negative indexing support (no $array[-1])"#
+- No negative indexing support (no $array[-1])
+
+**NO Lambda Functions:**
+- ❌ WRONG: MAP($array, lambda $x: $x * 2)
+- ✅ CORRECT: Use FOR loops instead:
+  ```
+  $result = []
+  FOR $x IN $array:
+      $doubled = $x * 2
+      $result = APPEND($result, $doubled)
+  ```
+- ❌ WRONG: FILTER($array, lambda $x: $x > 5)
+- ✅ CORRECT: Use FOR loops with IF:
+  ```
+  $filtered = []
+  FOR $x IN $array:
+      IF $x > 5 THEN
+          $filtered = APPEND($filtered, $x)
+  ```"#
     }
 
     /// Build OVSM planning prompt with tools context
