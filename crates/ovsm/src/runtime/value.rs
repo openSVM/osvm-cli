@@ -33,6 +33,16 @@ pub enum Value {
         /// End value of the range (exclusive)
         end: i64,
     },
+
+    /// Lambda function value (closure)
+    Function {
+        /// Parameter names for the lambda
+        params: Vec<String>,
+        /// Body expression of the lambda
+        body: Arc<crate::parser::ast::Expression>,
+        /// Captured environment (closure)
+        closure: Arc<HashMap<String, Value>>,
+    },
 }
 
 impl Value {
@@ -57,6 +67,7 @@ impl Value {
             Value::Array(_) => "array".to_string(),
             Value::Object(_) => "object".to_string(),
             Value::Range { .. } => "range".to_string(),
+            Value::Function { .. } => "function".to_string(),
         }
     }
 
@@ -71,6 +82,7 @@ impl Value {
             Value::Array(arr) => !arr.is_empty(),
             Value::Object(obj) => !obj.is_empty(),
             Value::Range { .. } => true,
+            Value::Function { .. } => true, // Functions are always truthy
         }
     }
 
@@ -145,6 +157,7 @@ impl Value {
             Value::Array(arr) => format!("[{} items]", arr.len()),
             Value::Object(obj) => format!("{{{}  fields}}", obj.len()),
             Value::Range { start, end } => format!("[{}..{}]", start, end),
+            Value::Function { params, .. } => format!("<function({} params)>", params.len()),
         }
     }
 
@@ -263,6 +276,7 @@ impl fmt::Display for Value {
                 write!(f, "}}")
             }
             Value::Range { start, end } => write!(f, "[{}..{}]", start, end),
+            Value::Function { params, .. } => write!(f, "<function({} params)>", params.len()),
         }
     }
 }
