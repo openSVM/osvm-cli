@@ -79,6 +79,30 @@ pub struct ServerConfig {
     pub auth: AuthMethod,
     /// Installation directory
     pub install_dir: String,
+    /// Connection timeout in seconds (default: 30)
+    #[serde(default = "default_connection_timeout")]
+    pub connection_timeout_secs: u64,
+}
+
+/// Default connection timeout (30 seconds)
+fn default_connection_timeout() -> u64 {
+    30
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        ServerConfig {
+            host: "localhost".to_string(),
+            port: 22,
+            auth: AuthMethod::Key {
+                username: "ubuntu".to_string(),
+                key_path: "~/.ssh/id_rsa".to_string(),
+                passphrase: None,
+            },
+            install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: default_connection_timeout(),
+        }
+    }
 }
 
 impl ServerConfig {
@@ -140,6 +164,7 @@ impl ServerConfig {
                 passphrase: None,
             },
             install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: default_connection_timeout(),
         })
     }
 

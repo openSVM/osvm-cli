@@ -111,6 +111,7 @@ mod tests {
                 password: "password".to_string(),
             },
             install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: 30,
         };
 
         // Create SSH client
@@ -151,6 +152,7 @@ mod tests {
                 password: "password".to_string(),
             },
             install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: 30,
         };
 
         // Create SSH client
@@ -197,6 +199,7 @@ mod tests {
                 password: "password".to_string(),
             },
             install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: 30,
         };
 
         // Create SSH client
@@ -252,6 +255,7 @@ mod tests {
                 password: "password".to_string(),
             },
             install_dir: "/opt/osvm".to_string(),
+            connection_timeout_secs: 30,
         };
 
         // Create deployment config
