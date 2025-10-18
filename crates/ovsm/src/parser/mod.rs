@@ -215,6 +215,7 @@ impl Parser {
 
             let mut statements = Vec::new();
             while !self.check(&TokenKind::Else)
+                && !self.check(&TokenKind::Elif)
                 && !self.check(&TokenKind::EndIf)
                 && !self.check(&TokenKind::End)
                 && !self.check(&TokenKind::Eof)
@@ -231,15 +232,18 @@ impl Parser {
             }
 
             // Validate: THEN block must have at least one statement
-            // Exception: if there's an ELSE block, empty THEN is allowed (though unusual)
-            if statements.is_empty() && !self.check(&TokenKind::Else) {
+            // Exception: if there's an ELSE/ELIF block, empty THEN is allowed (though unusual)
+            if statements.is_empty() && !self.check(&TokenKind::Else) && !self.check(&TokenKind::Elif) {
                 return Err(Error::ParseError("Expected at least one statement after THEN".to_string()));
             }
 
             statements
         };
 
-        let else_branch = if self.match_token(&TokenKind::Else) {
+        let else_branch = if self.match_token(&TokenKind::Elif) {
+            // ELIF is syntactic sugar for ELSE IF - parse it recursively
+            Some(vec![self.parse_elif_chain()?])
+        } else if self.match_token(&TokenKind::Else) {
             self.advance();
             self.skip_newlines();
 
@@ -292,6 +296,117 @@ impl Parser {
             self.skip_newlines();
         }
 
+        Ok(Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
+    /// Helper to parse ELIF chain recursively
+    /// ELIF is syntactic sugar for ELSE IF, so we create nested IF statements
+    fn parse_elif_chain(&mut self) -> Result<Statement> {
+        // We're currently at ELIF keyword
+        self.advance();  // consume ELIF
+        self.skip_newlines();
+
+        // Parse ELIF condition
+        let condition = self.expression()?;
+        self.skip_newlines();
+
+        // Expect THEN
+        self.consume(TokenKind::Then, "Expected THEN after ELIF condition")?;
+        self.skip_newlines();
+
+        // Parse THEN block
+        let then_branch = if self.match_token(&TokenKind::LeftBrace) {
+            // C-style braced block
+            self.advance();
+            self.skip_newlines();
+
+            let mut stmts = Vec::new();
+            while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                self.skip_newlines();
+                if self.check(&TokenKind::RightBrace) {
+                    break;
+                }
+                stmts.push(self.statement()?);
+                self.skip_newlines();
+            }
+
+            self.consume(TokenKind::RightBrace, "Expected '}' after THEN block")?;
+            self.skip_newlines();
+            stmts
+        } else {
+            // Python-style indented block
+            let mut stmts = Vec::new();
+            while !self.check(&TokenKind::Else)
+                && !self.check(&TokenKind::Elif)
+                && !self.check(&TokenKind::EndIf)
+                && !self.check(&TokenKind::RightBrace)
+                && !self.is_at_end()
+            {
+                self.skip_newlines();
+                if self.check(&TokenKind::Else) || self.check(&TokenKind::Elif) || self.check(&TokenKind::EndIf) {
+                    break;
+                }
+                stmts.push(self.statement()?);
+                self.skip_newlines();
+            }
+
+            if stmts.is_empty() && !self.check(&TokenKind::Else) && !self.check(&TokenKind::Elif) {
+                return Err(Error::ParseError("Expected at least one statement after THEN".to_string()));
+            }
+
+            stmts
+        };
+
+        // Parse optional ELIF/ELSE continuation
+        let else_branch = if self.match_token(&TokenKind::Elif) {
+            // Recursively parse another ELIF
+            Some(vec![self.parse_elif_chain()?])
+        } else if self.match_token(&TokenKind::Else) {
+            self.advance();
+            self.skip_newlines();
+
+            // Parse ELSE block
+            if self.match_token(&TokenKind::LeftBrace) {
+                self.advance();
+                self.skip_newlines();
+
+                let mut stmts = Vec::new();
+                while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+                    self.skip_newlines();
+                    if self.check(&TokenKind::RightBrace) {
+                        break;
+                    }
+                    stmts.push(self.statement()?);
+                    self.skip_newlines();
+                }
+
+                self.consume(TokenKind::RightBrace, "Expected '}' after ELSE block")?;
+                self.skip_newlines();
+                Some(stmts)
+            } else {
+                let mut stmts = Vec::new();
+                while !self.check(&TokenKind::EndIf)
+                    && !self.check(&TokenKind::RightBrace)
+                    && !self.is_at_end()
+                {
+                    self.skip_newlines();
+                    if self.check(&TokenKind::EndIf) {
+                        break;
+                    }
+                    stmts.push(self.statement()?);
+                    self.skip_newlines();
+                }
+                Some(stmts)
+            }
+        } else {
+            None
+        };
+
+        // Return the ELIF as an IF statement
         Ok(Statement::If {
             condition,
             then_branch,

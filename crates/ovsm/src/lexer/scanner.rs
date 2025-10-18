@@ -70,9 +70,15 @@ impl Scanner {
             ']' => self.add_token(TokenKind::RightBracket),
             ',' => self.add_token(TokenKind::Comma),
             ';' => self.add_token(TokenKind::Semicolon),
-            '%' => self.add_token(TokenKind::Percent),
 
             // Operators that might be multi-character
+            '%' => {
+                if self.match_char('=') {
+                    self.add_token(TokenKind::PercentAssign);
+                } else {
+                    self.add_token(TokenKind::Percent);
+                }
+            }
             '+' => {
                 if self.match_char('=') {
                     self.add_token(TokenKind::PlusAssign);
@@ -83,6 +89,8 @@ impl Scanner {
             '-' => {
                 if self.match_char('>') {
                     self.add_token(TokenKind::Arrow);
+                } else if self.match_char('=') {
+                    self.add_token(TokenKind::MinusAssign);
                 } else {
                     self.add_token(TokenKind::Minus);
                 }
@@ -90,6 +98,8 @@ impl Scanner {
             '*' => {
                 if self.match_char('*') {
                     self.add_token(TokenKind::StarStar);
+                } else if self.match_char('=') {
+                    self.add_token(TokenKind::StarAssign);
                 } else {
                     self.add_token(TokenKind::Star);
                 }
@@ -106,6 +116,8 @@ impl Scanner {
                     while self.peek() != '\n' && !self.is_at_end() {
                         self.advance();
                     }
+                } else if self.match_char('=') {
+                    self.add_token(TokenKind::SlashAssign);
                 } else {
                     self.add_token(TokenKind::Slash);
                 }
@@ -124,6 +136,31 @@ impl Scanner {
                     self.add_token(TokenKind::NotEq);
                 } else {
                     self.add_token(TokenKind::Not);
+                }
+            }
+            '&' => {
+                if self.match_char('&') {
+                    // && is an alias for AND
+                    self.add_token(TokenKind::And);
+                } else {
+                    return Err(Error::SyntaxError {
+                        line: self.line,
+                        col: self.column,
+                        message: "Unexpected character: '&' (use '&&' for logical AND)"
+                            .to_string(),
+                    });
+                }
+            }
+            '|' => {
+                if self.match_char('|') {
+                    // || is an alias for OR
+                    self.add_token(TokenKind::Or);
+                } else {
+                    return Err(Error::SyntaxError {
+                        line: self.line,
+                        col: self.column,
+                        message: "Unexpected character: '|' (use '||' for logical OR)".to_string(),
+                    });
                 }
             }
             '<' => {
@@ -454,5 +491,113 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::Integer(42));
         assert_eq!(tokens[3].kind, TokenKind::Newline);
         assert_eq!(tokens[4].kind, TokenKind::Variable("y".to_string()));
+    }
+
+    #[test]
+    fn test_logical_operators_symbolic() {
+        let mut scanner = Scanner::new("true && false || true");
+        let tokens = scanner.scan_tokens().unwrap();
+
+        assert_eq!(tokens[0].kind, TokenKind::True);
+        assert_eq!(tokens[1].kind, TokenKind::And);
+        assert_eq!(tokens[2].kind, TokenKind::False);
+        assert_eq!(tokens[3].kind, TokenKind::Or);
+        assert_eq!(tokens[4].kind, TokenKind::True);
+    }
+
+    #[test]
+    fn test_logical_operators_keyword() {
+        let mut scanner = Scanner::new("true AND false OR true");
+        let tokens = scanner.scan_tokens().unwrap();
+
+        assert_eq!(tokens[0].kind, TokenKind::True);
+        assert_eq!(tokens[1].kind, TokenKind::And);
+        assert_eq!(tokens[2].kind, TokenKind::False);
+        assert_eq!(tokens[3].kind, TokenKind::Or);
+        assert_eq!(tokens[4].kind, TokenKind::True);
+    }
+
+    #[test]
+    fn test_mixed_logical_operators() {
+        let mut scanner = Scanner::new("$x > 5 && $y < 10 OR $z == 0");
+        let tokens = scanner.scan_tokens().unwrap();
+
+        assert_eq!(tokens[0].kind, TokenKind::Variable("x".to_string()));
+        assert_eq!(tokens[1].kind, TokenKind::Gt);
+        assert_eq!(tokens[2].kind, TokenKind::Integer(5));
+        assert_eq!(tokens[3].kind, TokenKind::And);
+        assert_eq!(tokens[4].kind, TokenKind::Variable("y".to_string()));
+        assert_eq!(tokens[5].kind, TokenKind::Lt);
+        assert_eq!(tokens[6].kind, TokenKind::Integer(10));
+        assert_eq!(tokens[7].kind, TokenKind::Or);
+        assert_eq!(tokens[8].kind, TokenKind::Variable("z".to_string()));
+        assert_eq!(tokens[9].kind, TokenKind::Eq);
+        assert_eq!(tokens[10].kind, TokenKind::Integer(0));
+    }
+
+    #[test]
+    fn test_single_ampersand_error() {
+        let mut scanner = Scanner::new("$x & $y");
+        let result = scanner.scan_tokens();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("use '&&' for logical AND"));
+    }
+
+    #[test]
+    fn test_single_pipe_error() {
+        let mut scanner = Scanner::new("$x | $y");
+        let result = scanner.scan_tokens();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("use '||' for logical OR"));
+    }
+
+    #[test]
+    fn test_compound_assignment_operators() {
+        let mut scanner = Scanner::new("$x += 5 $y -= 3 $z *= 2 $a /= 4 $b %= 3");
+        let tokens = scanner.scan_tokens().unwrap();
+
+        assert_eq!(tokens[0].kind, TokenKind::Variable("x".to_string()));
+        assert_eq!(tokens[1].kind, TokenKind::PlusAssign);
+        assert_eq!(tokens[2].kind, TokenKind::Integer(5));
+
+        assert_eq!(tokens[3].kind, TokenKind::Variable("y".to_string()));
+        assert_eq!(tokens[4].kind, TokenKind::MinusAssign);
+        assert_eq!(tokens[5].kind, TokenKind::Integer(3));
+
+        assert_eq!(tokens[6].kind, TokenKind::Variable("z".to_string()));
+        assert_eq!(tokens[7].kind, TokenKind::StarAssign);
+        assert_eq!(tokens[8].kind, TokenKind::Integer(2));
+
+        assert_eq!(tokens[9].kind, TokenKind::Variable("a".to_string()));
+        assert_eq!(tokens[10].kind, TokenKind::SlashAssign);
+        assert_eq!(tokens[11].kind, TokenKind::Integer(4));
+
+        assert_eq!(tokens[12].kind, TokenKind::Variable("b".to_string()));
+        assert_eq!(tokens[13].kind, TokenKind::PercentAssign);
+        assert_eq!(tokens[14].kind, TokenKind::Integer(3));
+    }
+
+    #[test]
+    fn test_compound_vs_regular_operators() {
+        let mut scanner = Scanner::new("$x = $x - 5; $y -= 5");
+        let tokens = scanner.scan_tokens().unwrap();
+
+        // First statement: $x = $x - 5
+        assert_eq!(tokens[0].kind, TokenKind::Variable("x".to_string()));
+        assert_eq!(tokens[1].kind, TokenKind::Assign);
+        assert_eq!(tokens[2].kind, TokenKind::Variable("x".to_string()));
+        assert_eq!(tokens[3].kind, TokenKind::Minus);
+        assert_eq!(tokens[4].kind, TokenKind::Integer(5));
+
+        // Second statement: $y -= 5
+        assert_eq!(tokens[6].kind, TokenKind::Variable("y".to_string()));
+        assert_eq!(tokens[7].kind, TokenKind::MinusAssign);
+        assert_eq!(tokens[8].kind, TokenKind::Integer(5));
     }
 }
