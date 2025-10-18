@@ -8,6 +8,7 @@ use crate::tools::{Tool, ToolRegistry};
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(LogTool);
     registry.register(ErrorTool);
+    registry.register(NowTool);
 }
 
 /// Tool for logging messages to stdout (debugging purposes)
@@ -58,5 +59,33 @@ impl Tool for ErrorTool {
         };
 
         Err(Error::UserError(message))
+    }
+}
+
+/// Tool for getting current Unix timestamp
+///
+/// Usage: `NOW()` - returns current Unix timestamp in seconds
+/// Example: `$timestamp = NOW()` returns 1697123456
+/// Note: Returns integer value representing seconds since Unix epoch
+pub struct NowTool;
+
+impl Tool for NowTool {
+    fn name(&self) -> &str {
+        "NOW"
+    }
+
+    fn description(&self) -> &str {
+        "Get current Unix timestamp in seconds"
+    }
+
+    fn execute(&self, _args: &[Value]) -> Result<Value> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| Error::ToolExecutionError {
+                tool: "NOW".to_string(),
+                reason: format!("Failed to get system time: {}", e),
+            })?;
+        Ok(Value::Int(now.as_secs() as i64))
     }
 }
