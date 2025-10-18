@@ -229,46 +229,25 @@ impl UserDependencyManager {
             }
         }
 
-        // CRITICAL SECURITY FIX: Use O_EXCL to atomically create file or fail (prevents TOCTOU attacks)
-        #[cfg(unix)]
-        use std::os::unix::fs::OpenOptionsExt;
-
-        let mut keypair_file = {
-            let mut opts = OpenOptions::new();
-            opts.write(true).create_new(true);  // Atomically fails if file exists (prevents TOCTOU race)
-
-            #[cfg(unix)]
-            opts.mode(0o600);  // Secure permissions: owner read/write only
-
-            opts.open(&keypair_path)
+        // SECURITY FIX: Check if file already exists (prevent accidental overwrites)
+        if keypair_path.exists() {
+            return Err(UserDepsError::KeypairError(format!(
+                "Keypair already exists at {} - OSVM will never overwrite existing keypairs for security!",
+                keypair_path.display()
+            )));
         }
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::AlreadyExists {
-                    UserDepsError::KeypairError(format!(
-                        "Keypair already exists at {} - OSVM will never overwrite existing keypairs for security!",
-                        keypair_path.display()
-                    ))
-                } else {
-                    UserDepsError::FileSystemError(format!(
-                        "Failed to create keypair file: {}",
-                        e
-                    ))
-                }
-            })?;
 
-        // Generate the keypair to stdout, then write to our securely-created file
         let output = Command::new("solana-keygen")
             .arg("new")
             .arg("--outfile")
-            .arg("/dev/stdout") // Generate to stdout instead of directly to file
+            .arg(&keypair_path)  // Generate directly to target file
             .arg("--no-passphrase")
             .output();
 
         let output = match output {
             Ok(output) => output,
             Err(e) => {
-                // Clean up the file on failure
-                drop(keypair_file);
+                // Clean up on failure
                 let _ = fs::remove_file(&keypair_path);
                 return Err(UserDepsError::CommandFailed(format!(
                     "Failed to execute solana-keygen: {}",
@@ -278,30 +257,20 @@ impl UserDependencyManager {
         };
 
         if output.status.success() {
-            // Write the generated keypair to our securely-created file
-            use std::io::Write;
-            if let Err(e) = keypair_file.write_all(&output.stdout) {
-                // Clean up on write failure
-                drop(keypair_file);
-                let _ = fs::remove_file(&keypair_path);
-                return Err(UserDepsError::FileSystemError(format!(
-                    "Failed to write keypair: {}",
-                    e
-                )));
+            // Keypair was written directly to file by solana-keygen
+            // Now verify it has secure permissions (only on Unix)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Err(e) = fs::set_permissions(&keypair_path, fs::Permissions::from_mode(0o600)) {
+                    // Clean up on permission failure
+                    let _ = fs::remove_file(&keypair_path);
+                    return Err(UserDepsError::PermissionError(format!(
+                        "Failed to set secure permissions on keypair: {}",
+                        e
+                    )));
+                }
             }
-
-            // Force to disk
-            if let Err(e) = keypair_file.sync_all() {
-                drop(keypair_file);
-                let _ = fs::remove_file(&keypair_path);
-                return Err(UserDepsError::FileSystemError(format!(
-                    "Failed to sync keypair: {}",
-                    e
-                )));
-            }
-
-            // Explicitly drop to close file before reading it back
-            drop(keypair_file);
 
             let pubkey = self
                 .get_pubkey_from_keypair(&keypair_path)
@@ -314,8 +283,7 @@ impl UserDependencyManager {
                 pubkey
             ))
         } else {
-            // Clean up the empty file on solana-keygen failure
-            drop(keypair_file);
+            // Clean up on solana-keygen failure
             let _ = fs::remove_file(&keypair_path);
 
             let error_msg = String::from_utf8_lossy(&output.stderr);
