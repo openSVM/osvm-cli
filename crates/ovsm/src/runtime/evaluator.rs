@@ -2,6 +2,7 @@ use crate::error::{Error, Result};
 use crate::parser::{BinaryOp, Expression, Program, Statement, UnaryOp};
 use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Runtime evaluator for OVSM programs
@@ -421,10 +422,16 @@ impl Evaluator {
                 tool.execute(&evaluated_args)
             }
 
-            Expression::Lambda { .. } => {
-                // Placeholder - will implement lambda support
-                Err(Error::NotImplemented {
-                    tool: "lambdas".to_string(),
+            Expression::Lambda { params, body } => {
+                // Create a lambda closure by capturing the current environment
+                // For now, we use an empty closure - full closure capture can be added later
+                // when we implement lambda invocation in MAP/FILTER tools
+                let closure = Arc::new(HashMap::new());
+
+                Ok(Value::Function {
+                    params: params.clone(),
+                    body: Arc::new((**body).clone()),
+                    closure,
                 })
             }
         }

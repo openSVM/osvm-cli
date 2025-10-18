@@ -121,6 +121,11 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             }
             Value::Object(map)
         }
+        OvsmValue::Function { .. } => {
+            // Functions cannot be serialized to JSON for RPC calls
+            // This is an error - lambdas should not be passed to RPC
+            json!({"error": "Cannot serialize function to JSON for RPC call"})
+        }
         OvsmValue::Range { start, end } => {
             json!({"start": start, "end": end, "type": "range"})
         }

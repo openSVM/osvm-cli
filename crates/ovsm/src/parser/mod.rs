@@ -1027,7 +1027,7 @@ impl Parser {
                         ));
                     }
 
-                    if !self.match_token(&TokenKind::Comma) {
+                    if !self.check(&TokenKind::Comma) {
                         break;
                     }
                     self.advance(); // consume ','

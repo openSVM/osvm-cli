@@ -190,6 +190,9 @@ impl OvsmService {
                     .collect();
                 format!("{{{}}}", pairs.join(", "))
             }
+            Value::Function { params, .. } => {
+                format!("<function({} params)>", params.len())
+            }
             Value::Range { start, end } => {
                 format!("[{}..{}]", start, end)
             }
@@ -222,6 +225,13 @@ impl OvsmService {
                     json_obj.insert(k.clone(), self.value_to_json(v)?);
                 }
                 Ok(serde_json::Value::Object(json_obj))
+            }
+            Value::Function { params, .. } => {
+                // Represent function as JSON object
+                Ok(serde_json::json!({
+                    "type": "function",
+                    "params": params.len()
+                }))
             }
             Value::Range { start, end } => {
                 // Represent range as an object with start and end
