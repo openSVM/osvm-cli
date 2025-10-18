@@ -215,6 +215,8 @@ impl Parser {
 
             let mut statements = Vec::new();
             while !self.check(&TokenKind::Else)
+                && !self.check(&TokenKind::EndIf)
+                && !self.check(&TokenKind::End)
                 && !self.check(&TokenKind::Eof)
                 && !self.check(&TokenKind::RightBrace)
                 && !self.check(&TokenKind::Branch)
