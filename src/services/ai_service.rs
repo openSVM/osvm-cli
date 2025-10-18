@@ -626,10 +626,13 @@ Tools: toolName(param: $value) or toolName($value)
 Loops:
   - FOR $item IN $collection: ... BREAK IF condition
   - WHILE condition: ... body ...
+  - ❌ NO ENDWHILE or ENDIF - OVSM uses indentation like Python
 Conditionals: IF condition THEN ... ELSE ...
+  - ❌ NO ENDIF - use indentation to close IF blocks
 Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
 Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
-Guards: GUARD condition ELSE RETURN ERROR(message: "...")
+Guards: GUARD $condition
+  - ❌ NO "GUARD condition:" - just "GUARD $condition"
 
 # Essential Built-in Tools
 
@@ -747,6 +750,50 @@ LOG(message: "I need the program address to query. Could you provide the Solana 
 - ❌ Using all-ones addresses (111111...)
 - ❌ Guessing addresses you don't have verified knowledge of
 
+## CRITICAL: RPC API Pagination (Solana Standard)
+
+The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `getSignaturesForAddress`:
+- ❌ **WRONG**: `limit: 10000` → RPC error "Invalid limit; max 1000"
+- ✅ **CORRECT**: `limit: 1000` → Returns 1000 results
+
+**For large data queries, ALWAYS implement pagination:**
+
+```
+CONST MAX_RESULTS_PER_CALL = 1000
+
+$all_signatures = []
+$before = null
+$continue = 1
+
+WHILE $continue == 1:
+    IF $before == null THEN
+        $batch = getSignaturesForAddress(address: $address, limit: MAX_RESULTS_PER_CALL)
+    ELSE
+        $batch = getSignaturesForAddress(address: $address, limit: MAX_RESULTS_PER_CALL, before: $before)
+
+    $batch_size = COUNT($batch)
+
+    IF $batch_size == 0 THEN
+        $continue = 0
+    ELSE
+        $all_signatures = APPEND($all_signatures, $batch)
+
+        IF $batch_size < MAX_RESULTS_PER_CALL THEN
+            $continue = 0
+        ELSE
+            $last_idx = $batch_size - 1
+            $last_item = $batch[$last_idx]
+            $before = $last_item.signature
+
+$total = COUNT($all_signatures)
+```
+
+**Why this matters:**
+- Solana RPC enforces 1000-result limit to prevent server overload
+- Without pagination, you only get 10 results (old default)
+- With pagination, you can fetch MILLIONS of results by looping
+- Each page takes ~1-2 seconds, so 20,000 results ≈ 20-40 seconds
+
 # Rules
 
 1. List tools in "Available Tools" section
@@ -799,7 +846,25 @@ RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence
 - Handle edge cases with GUARD statements
 - For any RPC method not listed above, use solana_rpc_call(method: "method_name", params: [array_of_params])
 - RPC proxy is case-sensitive: method names must match exactly (e.g., "getBlockTime", not "getblocktime")
-- Params must be passed as an array, even for single parameters"#
+- Params must be passed as an array, even for single parameters
+
+# CRITICAL SYNTAX REMINDERS
+
+**Indentation-Based Blocks (Like Python):**
+- ❌ WRONG: WHILE ... DO ... ENDWHILE
+- ✅ CORRECT: WHILE condition: (colon, then indented body)
+- ❌ WRONG: IF ... THEN ... ENDIF
+- ✅ CORRECT: IF condition THEN (indented body)
+- ❌ WRONG: GUARD condition: $x != null
+- ✅ CORRECT: GUARD $x != null
+
+**Null Values:**
+- ❌ WRONG: NULL, NIL, None
+- ✅ CORRECT: null (lowercase only)
+
+**Array Indexing:**
+- Last element: $array[$last_idx] where $last_idx = COUNT($array) - 1
+- No negative indexing support (no $array[-1])"#
     }
 
     /// Build OVSM planning prompt with tools context

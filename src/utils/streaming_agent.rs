@@ -14,10 +14,269 @@ use std::io::Write;
 use crate::services::{
     ai_service::{AiService, PlannedTool, ToolPlan},
     mcp_service::{McpService, McpTool},
+    ovsm_service::OvsmService,
 };
+use ovsm::runtime::Value as OvsmValue;
+use ovsm::tools::{Tool, ToolRegistry};
+use ovsm::error::Result as OvsmResult;
+use std::sync::Arc;
 
 // Real Solana RPC endpoint
 const SOLANA_RPC_URL: &str = "https://opensvm.com/api/proxy/rpc";
+
+/// Generic RPC Bridge Tool - Dynamically calls ANY Solana RPC method
+/// The tool name becomes the RPC method name automatically
+struct RpcBridgeTool {
+    name: String,
+}
+
+impl RpcBridgeTool {
+    fn new(name: &str) -> Self {
+        RpcBridgeTool {
+            name: name.to_string(),
+        }
+    }
+}
+
+impl Tool for RpcBridgeTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        "Dynamic RPC bridge - calls Solana RPC methods"
+    }
+
+    fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
+        // Extract parameters from OVSM function call
+        // OVSM calls like: getSignaturesForAddress(address: "xxx", limit: 100)
+        // Need to build JSON-RPC params array
+
+        let mut rpc_params = Vec::new();
+
+        // If first arg is an object with named parameters, extract them
+        if args.len() == 1 {
+            if let OvsmValue::Object(obj) = &args[0] {
+                // Named parameters - convert to positional for RPC
+                // Common patterns:
+                // getSignaturesForAddress(address: "...", limit: 100)
+                // -> ["address", {"limit": 100}]
+
+                if let Some(address) = obj.get("address") {
+                    rpc_params.push(ovsm_value_to_json(address));
+
+                    // Build options object for remaining params
+                    let mut options = serde_json::Map::new();
+                    for (key, val) in obj.iter() {
+                        if key != "address" {
+                            options.insert(key.clone(), ovsm_value_to_json(val));
+                        }
+                    }
+                    if !options.is_empty() {
+                        rpc_params.push(Value::Object(options));
+                    }
+                } else {
+                    // No address param, just pass the whole object as single param
+                    rpc_params.push(ovsm_value_to_json(&args[0]));
+                }
+            } else {
+                // Single non-object argument
+                rpc_params.push(ovsm_value_to_json(&args[0]));
+            }
+        } else {
+            // Multiple positional arguments - convert each
+            for arg in args {
+                rpc_params.push(ovsm_value_to_json(arg));
+            }
+        }
+
+        // Call RPC with the method name matching the tool name
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                call_solana_rpc(&self.name, rpc_params).await
+            })
+        });
+
+        match result {
+            Ok(json_val) => Ok(json_to_ovsm_value(&json_val)),
+            Err(e) => Err(ovsm::error::Error::RpcError {
+                message: format!("{} failed: {}", self.name, e),
+            }),
+        }
+    }
+}
+
+/// Convert OVSM Value to JSON Value
+fn ovsm_value_to_json(val: &OvsmValue) -> Value {
+    match val {
+        OvsmValue::Int(n) => json!(n),
+        OvsmValue::Float(f) => json!(f),
+        OvsmValue::String(s) => json!(s),
+        OvsmValue::Bool(b) => json!(b),
+        OvsmValue::Null => Value::Null,
+        OvsmValue::Array(arr) => {
+            let items: Vec<Value> = arr.iter().map(ovsm_value_to_json).collect();
+            json!(items)
+        }
+        OvsmValue::Object(obj) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in obj.iter() {
+                map.insert(k.clone(), ovsm_value_to_json(v));
+            }
+            Value::Object(map)
+        }
+        OvsmValue::Range { start, end } => {
+            // Convert range to array for JSON
+            json!({"start": start, "end": end, "type": "range"})
+        }
+    }
+}
+
+/// Convert JSON Value to OVSM Value
+fn json_to_ovsm_value(val: &Value) -> OvsmValue {
+    match val {
+        Value::Null => OvsmValue::Null,
+        Value::Bool(b) => OvsmValue::Bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                OvsmValue::Int(i)
+            } else if let Some(f) = n.as_f64() {
+                OvsmValue::Float(f)
+            } else {
+                OvsmValue::Null
+            }
+        }
+        Value::String(s) => OvsmValue::String(s.clone()),
+        Value::Array(arr) => {
+            let items: Vec<OvsmValue> = arr.iter().map(json_to_ovsm_value).collect();
+            OvsmValue::Array(Arc::new(items))
+        }
+        Value::Object(obj) => {
+            let mut map = std::collections::HashMap::new();
+            for (k, v) in obj.iter() {
+                map.insert(k.clone(), json_to_ovsm_value(v));
+            }
+            OvsmValue::Object(Arc::new(map))
+        }
+    }
+}
+
+/// Fix AI-generated OVSM syntax to match actual OVSM language spec
+/// Transforms common AI syntax mistakes to valid OVSM
+fn fix_ovsm_syntax(code: &str) -> String {
+    let mut fixed = code.to_string();
+
+    // Fix: WHILE ... DO -> WHILE ...:
+    // Match "WHILE <condition> DO" and replace with "WHILE <condition>:"
+    let while_do_re = regex::Regex::new(r"WHILE\s+([^\n]+?)\s+DO\s*\n").unwrap();
+    fixed = while_do_re.replace_all(&fixed, "WHILE $1:\n").to_string();
+
+    // Fix: Remove ENDWHILE / END WHILE (OVSM uses indentation)
+    let endwhile_re = regex::Regex::new(r"(?m)^\s*END\s*WHILE\s*$").unwrap();
+    fixed = endwhile_re.replace_all(&fixed, "").to_string();
+
+    // Fix: Remove ENDIF / END IF (OVSM uses indentation)
+    let endif_re = regex::Regex::new(r"(?m)^\s*END\s*IF\s*$").unwrap();
+    fixed = endif_re.replace_all(&fixed, "").to_string();
+
+    // Fix: Remove ENDFOR / END FOR
+    let endfor_re = regex::Regex::new(r"(?m)^\s*END\s*FOR\s*$").unwrap();
+    fixed = endfor_re.replace_all(&fixed, "").to_string();
+
+    // Fix: NULL -> null
+    fixed = fixed.replace(" NULL", " null");
+    fixed = fixed.replace("=NULL", "=null");
+    fixed = fixed.replace("= NULL", "= null");
+
+    // Fix: TRUE -> true, FALSE -> false
+    fixed = fixed.replace(" TRUE", " true");
+    fixed = fixed.replace(" FALSE", " false");
+
+    // Fix: GUARD condition: -> GUARD (remove the 'condition:' keyword)
+    let guard_re = regex::Regex::new(r"GUARD\s+condition:\s+").unwrap();
+    fixed = guard_re.replace_all(&fixed, "GUARD ").to_string();
+
+    // Fix: Remove comments (OVSM doesn't support # comments yet)
+    let comment_re = regex::Regex::new(r"(?m)^\s*#.*$").unwrap();
+    fixed = comment_re.replace_all(&fixed, "").to_string();
+
+    // Fix: Clean up multiple blank lines
+    let blank_re = regex::Regex::new(r"\n\n\n+").unwrap();
+    fixed = blank_re.replace_all(&fixed, "\n\n").to_string();
+
+    fixed
+}
+
+/// Extract OVSM code from markdown-formatted AI response
+/// Looks for code blocks and extracts the actual OVSM code
+fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
+    // Strategy 1: Find code blocks with triple backticks
+    let mut code_blocks = Vec::new();
+
+    let mut search_start = 0;
+    while let Some(code_start) = raw_plan[search_start..].find("```") {
+        let absolute_start = search_start + code_start;
+        let after_start = &raw_plan[absolute_start + 3..];
+
+        // Skip the language identifier if present
+        let code_content = if let Some(newline) = after_start.find('\n') {
+            &after_start[newline + 1..]
+        } else {
+            after_start
+        };
+
+        // Find the closing ```
+        if let Some(code_end) = code_content.find("```") {
+            let extracted = code_content[..code_end].trim();
+
+            // Only consider blocks that look like OVSM code (have variables, loops, or constants)
+            if extracted.contains("CONST ") ||
+               extracted.contains("$") ||
+               extracted.contains("WHILE ") ||
+               extracted.contains("FOR ") {
+                code_blocks.push(extracted.to_string());
+            }
+
+            search_start = absolute_start + code_end + 3;
+        } else {
+            break;
+        }
+    }
+
+    // If we found code blocks, return the largest one
+    if let Some(largest) = code_blocks.iter().max_by_key(|s| s.len()) {
+        return Some(fix_ovsm_syntax(largest));
+    }
+
+    // Strategy 2: Extract from **Main Branch:** section (plain text OVSM)
+    // This handles cases where AI returns OVSM without code blocks
+    if let Some(main_branch_start) = raw_plan.find("**Main Branch:**") {
+        let after_main = &raw_plan[main_branch_start + 16..]; // Skip "**Main Branch:**"
+
+        // Find the start of actual code (skip whitespace and newlines)
+        let code_start = after_main.trim_start();
+
+        // Find the end of Main Branch section (next ** marker or **Action:** or **Decision**)
+        let end_markers = ["**Action:**", "**Decision", "**Available Tools"];
+        let mut min_end = code_start.len();
+
+        for marker in &end_markers {
+            if let Some(pos) = code_start.find(marker) {
+                min_end = min_end.min(pos);
+            }
+        }
+
+        let ovsm_code = code_start[..min_end].trim();
+
+        // Validate it looks like OVSM code
+        if ovsm_code.contains("CONST ") || ovsm_code.contains("$") ||
+           ovsm_code.contains("WHILE ") || ovsm_code.contains("FOR ") {
+            return Some(fix_ovsm_syntax(ovsm_code));
+        }
+    }
+
+    None
+}
 
 /// Make a JSON-RPC call to the Solana RPC endpoint
 async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
@@ -315,34 +574,110 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
 
     println!();
 
-    // Step 2: Execute Tools
+    // Step 2: Execute OVSM Plan or Individual Tools
     let mut tool_results = Vec::new();
+    let mut ovsm_result: Option<String>;
 
-    for (i, planned_tool) in tool_plan.osvm_tools_to_use.iter().enumerate() {
-        print!("⚙️  Executing tool [{}/{}]: {}",
-               i + 1,
-               tool_plan.osvm_tools_to_use.len(),
-               planned_tool.tool_name);
-        std::io::stdout().flush()?;
+    // Check if we have a raw OVSM plan to execute
+    if let Some(ref raw_plan) = tool_plan.raw_ovsm_plan {
+        println!("🔧 Executing OVSM Plan...\n");
 
-        let tool_start = std::time::Instant::now();
-
-        // Execute tool (mock for now)
-        let (result, error) = execute_tool(&planned_tool).await;
-        let elapsed = tool_start.elapsed().as_millis();
-
-        if error.is_some() {
-            println!(" ❌ ({}ms)", elapsed);
-            println!("   Error: {}", error.as_ref().unwrap());
-        } else {
-            println!(" ✅ ({}ms)", elapsed);
-            if let Some(ref result_value) = result {
-                // Show key results
-                print_tool_result(&planned_tool.tool_name, result_value);
+        // Extract clean OVSM code from the markdown-formatted response
+        if let Some(ovsm_code) = extract_ovsm_code(raw_plan) {
+            if verbose > 1 {
+                println!("📝 Extracted OVSM code:");
+                println!("{}\n", ovsm_code);
             }
+
+            // Create custom tool registry with ALL standard library tools + RPC bridges
+            // ToolRegistry::new() already includes all built-in tools (COUNT, APPEND, LOG, etc.)
+            let mut registry = ToolRegistry::new();
+
+            // Dynamically register RPC tools by scanning the OVSM code
+            // Look for function calls like getSignaturesForAddress(...), getSlot(), etc.
+            let rpc_methods = vec![
+                "getSignaturesForAddress", "getSlot", "getBlock", "getTransaction",
+                "getAccountInfo", "getBalance", "getBlockTime", "getHealth",
+                "getVersion", "getBlockHeight", "getEpochInfo", "getSupply",
+                "getProgramAccounts", "getTokenAccountsByOwner", "getMultipleAccounts",
+            ];
+
+            for method in rpc_methods {
+                if ovsm_code.contains(method) {
+                    registry.register(RpcBridgeTool::new(method));
+                    if verbose > 1 {
+                        println!("   Registered RPC bridge: {}", method);
+                    }
+                }
+            }
+
+            // Initialize OVSM service with registry (already has stdlib + RPC tools)
+            let mut ovsm_service = OvsmService::with_registry(registry, verbose > 0, verbose > 1);
+
+            let execution_start = std::time::Instant::now();
+
+            // Execute the OVSM code
+            match ovsm_service.execute_code(&ovsm_code) {
+                Ok(result) => {
+                    let elapsed = execution_start.elapsed().as_millis();
+                    println!("✅ OVSM execution completed in {}ms\n", elapsed);
+
+                    // Format the result as a string
+                    let formatted_result = ovsm_service.format_value(&result);
+
+                    if verbose > 0 {
+                        println!("📊 OVSM Result:");
+                        println!("{}\n", formatted_result);
+                    }
+
+                    ovsm_result = Some(formatted_result);
+                }
+                Err(e) => {
+                    println!("❌ OVSM execution failed: {}\n", e);
+                    eprintln!("Error details: {}", e);
+                    ovsm_result = None;
+                }
+            }
+        } else {
+            println!("❌ Could not extract OVSM code from plan\n");
+            if verbose > 1 {
+                eprintln!("Raw plan: {}", raw_plan);
+            }
+            ovsm_result = None;
+        }
+    } else {
+        // Fallback: Execute individual tools (old behavior)
+        println!("⚠️  No OVSM plan available, falling back to individual tool execution\n");
+        ovsm_result = None;
+
+        for (i, planned_tool) in tool_plan.osvm_tools_to_use.iter().enumerate() {
+            print!("⚙️  Executing tool [{}/{}]: {}",
+                   i + 1,
+                   tool_plan.osvm_tools_to_use.len(),
+                   planned_tool.tool_name);
+            std::io::stdout().flush()?;
+
+            let tool_start = std::time::Instant::now();
+
+            // Execute tool
+            let (result, error) = execute_tool(&planned_tool).await;
+            let elapsed = tool_start.elapsed().as_millis();
+
+            if error.is_some() {
+                println!(" ❌ ({}ms)", elapsed);
+                println!("   Error: {}", error.as_ref().unwrap());
+            } else {
+                println!(" ✅ ({}ms)", elapsed);
+                if let Some(ref result_value) = result {
+                    // Show key results
+                    print_tool_result(&planned_tool.tool_name, result_value);
+                }
+            }
+
+            tool_results.push((planned_tool.clone(), result, error));
         }
 
-        tool_results.push((planned_tool.clone(), result, error));
+        ovsm_result = None;
     }
 
     println!();
@@ -351,32 +686,39 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
     print!("💬 Generating Final Response");
     std::io::stdout().flush()?;
 
-    let tool_results_for_ai: Vec<(String, Value)> = tool_results
-        .iter()
-        .filter_map(|(tool, result, _error)| {
-            result
-                .as_ref()
-                .map(|r| (tool.tool_name.clone(), r.clone()))
-        })
-        .collect();
-
-    let final_response = if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
-        // No tools - direct response
-        match ai_service.query_with_debug(query, verbose > 1).await {
-            Ok(resp) => {
-                println!(" ✅");
-                resp
-            }
-            Err(e) => {
-                println!(" ❌");
-                eprintln!("❌ Failed to generate response: {}", e);
-                format!("Error: {}", e)
-            }
-        }
-    } else {
-        // Format results from tool execution instead of calling AI again
+    let final_response = if let Some(ref ovsm_res) = ovsm_result {
+        // Use OVSM execution result
         println!(" ✅");
-        format_plan_execution_results(&tool_plan, &tool_results_for_ai)
+        format!("✅ OVSM Plan Executed Successfully\n\n{}", ovsm_res)
+    } else {
+        // Fallback to tool results
+        let tool_results_for_ai: Vec<(String, Value)> = tool_results
+            .iter()
+            .filter_map(|(tool, result, _error)| {
+                result
+                    .as_ref()
+                    .map(|r| (tool.tool_name.clone(), r.clone()))
+            })
+            .collect();
+
+        if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
+            // No tools - direct response
+            match ai_service.query_with_debug(query, verbose > 1).await {
+                Ok(resp) => {
+                    println!(" ✅");
+                    resp
+                }
+                Err(e) => {
+                    println!(" ❌");
+                    eprintln!("❌ Failed to generate response: {}", e);
+                    format!("Error: {}", e)
+                }
+            }
+        } else {
+            // Format results from tool execution
+            println!(" ✅");
+            format_plan_execution_results(&tool_plan, &tool_results_for_ai)
+        }
     };
 
     println!();

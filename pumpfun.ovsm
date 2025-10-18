@@ -1,0 +1,7 @@
+CONST PUMPFUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
+$options = {"address": PUMPFUN, "limit": 1000}
+$batch = getSignaturesForAddress($options)
+$count = COUNT($batch)
+
+RETURN $count

@@ -273,7 +273,7 @@ struct MatrixColumn {
 impl MatrixRainEffect {
     pub fn new(width: usize, height: usize) -> Self {
         use rand::prelude::*;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let columns: Vec<MatrixColumn> = (0..width)
             .map(|_| MatrixColumn {
@@ -292,7 +292,7 @@ impl MatrixRainEffect {
 
     fn random_chars(count: usize) -> Vec<char> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*";
 
         // BUG-1005 fix: Add empty check and fallback
@@ -309,7 +309,7 @@ impl MatrixRainEffect {
 impl Animation for MatrixRainEffect {
     fn update(&mut self, delta: f32, _quality: QualityLevel) {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for col in &mut self.columns {
             col.position += col.speed * delta;

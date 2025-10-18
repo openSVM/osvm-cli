@@ -55,6 +55,8 @@ pub mod nodes_dashboard;
 pub mod osvm_command_planner;
 /// Path security validation and utilities
 pub mod path_security;
+/// RPC bridge for OVSM scripts to call Solana RPC
+pub mod rpc_bridge;
 /// Plugin system for extending functionality
 pub mod plugins;
 /// Screenshot capture utilities for terminal windows
