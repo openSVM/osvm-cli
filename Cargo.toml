@@ -34,6 +34,7 @@ tokio-vsock = "0.4"
 vsock = "0.3"
 thiserror = "2.0.16"
 ssh2 = { version = "0.9.5", features = ["vendored-openssl"] }
+shell-escape = "0.1"
 tabular = "0.2.0"
 prettytable-rs = "0.10.0"
 ratatui = "0.29.0"

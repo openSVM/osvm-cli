@@ -5,6 +5,7 @@ use {
         errors::DeploymentError,
         types::{AuthMethod, ServerConfig},
     },
+    shell_escape::unix,
     ssh2::Session,
     std::{
         fs,
@@ -24,6 +25,17 @@ pub struct SshClient {
 }
 
 impl SshClient {
+    /// Escape a shell argument to prevent command injection
+    ///
+    /// # Arguments
+    /// * `arg` - Argument to escape
+    ///
+    /// # Returns
+    /// * Properly escaped argument safe for shell execution
+    fn escape_arg(arg: &str) -> String {
+        unix::escape(arg.into()).to_string()
+    }
+
     /// Create a new SSH client
     ///
     /// # Arguments
@@ -36,14 +48,14 @@ impl SshClient {
         Self::validate_host(&config.host)?;
         Self::validate_port(config.port)?;
 
-        // Set connection timeout to prevent hanging
+        // Set connection timeout to prevent hanging (configurable, defaults to 30 seconds)
         let tcp = std::net::TcpStream::connect_timeout(
             &format!("{}:{}", config.host, config.port)
                 .parse()
                 .map_err(|e| {
                     DeploymentError::ValidationError(format!("Invalid address format: {}", e))
                 })?,
-            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(config.connection_timeout_secs),
         )
         .map_err(|e| DeploymentError::ConnectionError(format!("Failed to connect: {}", e)))?;
 
@@ -269,7 +281,8 @@ impl SshClient {
     /// # Returns
     /// * `Result<(), DeploymentError>` - Success/failure
     pub fn create_directory(&mut self, path: &str) -> Result<(), DeploymentError> {
-        self.execute_command(&format!("mkdir -p {}", path))?;
+        let escaped_path = Self::escape_arg(path);
+        self.execute_command(&format!("mkdir -p {}", escaped_path))?;
         Ok(())
     }
 
@@ -280,10 +293,20 @@ impl SshClient {
     ///
     /// # Returns
     /// * `Result<bool, DeploymentError>` - Whether the file exists
+    ///
+    /// # Note: Race Condition
+    /// This function performs a Time-of-Check-Time-of-Use (TOCTOU) race condition check:
+    /// - Between the time `file_exists()` returns true and the caller uses the file,
+    ///   another process could delete it
+    /// - Similarly, if `file_exists()` returns false, the file could be created before use
+    ///
+    /// For safety-critical operations, always handle ENOENT errors when reading/writing
+    /// files after calling this function, or use atomic operations (e.g., O_CREAT|O_EXCL).
     pub fn file_exists(&mut self, path: &str) -> Result<bool, DeploymentError> {
+        let escaped_path = Self::escape_arg(path);
         let output = self.execute_command(&format!(
             "test -f {} && echo 'EXISTS' || echo 'NOT_EXISTS'",
-            path
+            escaped_path
         ))?;
         Ok(output.trim() == "EXISTS")
     }
@@ -295,10 +318,20 @@ impl SshClient {
     ///
     /// # Returns
     /// * `Result<bool, DeploymentError>` - Whether the directory exists
+    ///
+    /// # Note: Race Condition
+    /// This function performs a Time-of-Check-Time-of-Use (TOCTOU) race condition check:
+    /// - Between the time `directory_exists()` returns true and the caller uses it,
+    ///   another process could remove the directory
+    /// - Similarly, if `directory_exists()` returns false, the directory could be created before use
+    ///
+    /// For safety-critical operations, handle errors (ENOENT/EACCES) when accessing
+    /// the directory after calling this function, or use atomic mkdir operations.
     pub fn directory_exists(&mut self, path: &str) -> Result<bool, DeploymentError> {
+        let escaped_path = Self::escape_arg(path);
         let output = self.execute_command(&format!(
             "test -d {} && echo 'EXISTS' || echo 'NOT_EXISTS'",
-            path
+            escaped_path
         ))?;
         Ok(output.trim() == "EXISTS")
     }
@@ -311,14 +344,15 @@ impl SshClient {
     /// # Returns
     /// * `Result<bool, DeploymentError>` - Whether the package is installed
     pub fn is_package_installed(&mut self, package: &str) -> Result<bool, DeploymentError> {
+        let escaped_package = Self::escape_arg(package);
         let cmd = format!(
             "if command -v dpkg >/dev/null 2>&1; then \
-             dpkg -l | grep -q '{}' && echo 'INSTALLED' || echo 'NOT_INSTALLED'; \
+             dpkg -l | grep -q {} && echo 'INSTALLED' || echo 'NOT_INSTALLED'; \
              elif command -v rpm >/dev/null 2>&1; then \
-             rpm -q '{}' >/dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'; \
-             else command -v '{}' >/dev/null 2>&1 && \
+             rpm -q {} >/dev/null 2>&1 && echo 'INSTALLED' || echo 'NOT_INSTALLED'; \
+             else command -v {} >/dev/null 2>&1 && \
              echo 'INSTALLED' || echo 'NOT_INSTALLED'; fi",
-            package, package, package
+            escaped_package, escaped_package, escaped_package
         );
 
         let output = self.execute_command(&cmd)?;
