@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use ovsm::{Evaluator, Parser, Scanner, Value};
+use ovsm::tools::ToolRegistry;
 use std::fs;
 use std::path::Path;
 
@@ -41,6 +42,17 @@ impl OvsmService {
     pub fn with_debug(mut self, debug: bool) -> Self {
         self.debug = debug;
         self
+    }
+
+    /// Create a new OVSM service with a custom tool registry
+    ///
+    /// This allows external tools to be registered for use in OVSM scripts
+    pub fn with_registry(registry: ToolRegistry, verbose: bool, debug: bool) -> Self {
+        Self {
+            evaluator: Evaluator::with_registry(registry),
+            verbose,
+            debug,
+        }
     }
 
     /// Execute OVSM code from a string

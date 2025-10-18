@@ -10,12 +10,14 @@ use serial_test::serial;
 use std::process::Command;
 
 /// Example test that demonstrates how to test a simple command
+/// NOTE: Updated - Now tests --help since app starts chat agent by default
 #[test]
 #[serial]
 fn example_test_simple_command() {
     setup_test_environment();
 
     let output = Command::new(env!("CARGO_BIN_EXE_osvm"))
+        .arg("--help")
         .output()
         .expect("Failed to execute command");
 

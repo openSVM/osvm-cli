@@ -230,13 +230,13 @@ impl AchievementPopup {
 
         // Create sparkles
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         for _ in 0..10 {
             self.sparkles.push((
-                rng.gen_range(-10.0..10.0),
-                rng.gen_range(-5.0..5.0),
-                ['✨', '⭐', '✦', '･'][rng.gen_range(0..4)],
+                rng.random_range(-10.0..10.0),
+                rng.random_range(-5.0..5.0),
+                ['✨', '⭐', '✦', '･'][rng.random_range(0..4)],
             ));
         }
     }

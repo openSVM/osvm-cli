@@ -12,8 +12,11 @@ pub async fn handle_ovsm_command(
             let verbose = run_matches.get_count("verbose") > 0;
             let debug = run_matches.get_flag("debug");
             let json = run_matches.get_flag("json");
+            // Always enable RPC tools for ovsm run
+            use crate::utils::rpc_bridge::create_rpc_registry;
 
-            let mut service = OvsmService::with_verbose(verbose).with_debug(debug);
+            let registry = create_rpc_registry();
+            let mut service = OvsmService::with_registry(registry, verbose, debug);
 
             println!("🚀 Executing OVSM script: {}", script);
 

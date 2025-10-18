@@ -1,0 +1,89 @@
+CONST PUMPFUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
+// Batch 1
+$opts1 = {"address": PUMPFUN, "limit": 1000}
+$batch1 = getSignaturesForAddress($opts1)
+$count1 = COUNT($batch1)
+
+// Get last signature for pagination
+$last_idx1 = $count1 - 1
+$last1 = $batch1[$last_idx1]
+
+// Batch 2
+$opts2 = {"address": PUMPFUN, "limit": 1000, "before": $last1.signature}
+$batch2 = getSignaturesForAddress($opts2)
+$count2 = COUNT($batch2)
+
+// Get last signature for batch 3
+$last_idx2 = $count2 - 1
+$last2 = $batch2[$last_idx2]
+
+// Batch 3
+$opts3 = {"address": PUMPFUN, "limit": 1000, "before": $last2.signature}
+$batch3 = getSignaturesForAddress($opts3)
+$count3 = COUNT($batch3)
+
+// Get last signature for batch 4
+$last_idx3 = $count3 - 1
+$last3 = $batch3[$last_idx3]
+
+// Batch 4
+$opts4 = {"address": PUMPFUN, "limit": 1000, "before": $last3.signature}
+$batch4 = getSignaturesForAddress($opts4)
+$count4 = COUNT($batch4)
+
+// Get last signature for batch 5
+$last_idx4 = $count4 - 1
+$last4 = $batch4[$last_idx4]
+
+// Batch 5
+$opts5 = {"address": PUMPFUN, "limit": 1000, "before": $last4.signature}
+$batch5 = getSignaturesForAddress($opts5)
+$count5 = COUNT($batch5)
+
+// Get last signature for batch 6
+$last_idx5 = $count5 - 1
+$last5 = $batch5[$last_idx5]
+
+// Batch 6
+$opts6 = {"address": PUMPFUN, "limit": 1000, "before": $last5.signature}
+$batch6 = getSignaturesForAddress($opts6)
+$count6 = COUNT($batch6)
+
+// Get last signature for batch 7
+$last_idx6 = $count6 - 1
+$last6 = $batch6[$last_idx6]
+
+// Batch 7
+$opts7 = {"address": PUMPFUN, "limit": 1000, "before": $last6.signature}
+$batch7 = getSignaturesForAddress($opts7)
+$count7 = COUNT($batch7)
+
+// Get last signature for batch 8
+$last_idx7 = $count7 - 1
+$last7 = $batch7[$last_idx7]
+
+// Batch 8
+$opts8 = {"address": PUMPFUN, "limit": 1000, "before": $last7.signature}
+$batch8 = getSignaturesForAddress($opts8)
+$count8 = COUNT($batch8)
+
+// Get last signature for batch 9
+$last_idx8 = $count8 - 1
+$last8 = $batch8[$last_idx8]
+
+// Batch 9
+$opts9 = {"address": PUMPFUN, "limit": 1000, "before": $last8.signature}
+$batch9 = getSignaturesForAddress($opts9)
+$count9 = COUNT($batch9)
+
+// Total count
+$total = $count1 + $count2 + $count3 + $count4 + $count5 + $count6 + $count7 + $count8 + $count9
+
+// Show time span
+$newest = $batch1[0]
+$last_idx9 = $count9 - 1
+$oldest = $batch9[$last_idx9]
+$time_span = $newest.blockTime - $oldest.blockTime
+
+RETURN {"total_txs": $total, "time_span_seconds": $time_span, "batches_fetched": 9}

@@ -1,0 +1,180 @@
+//! RPC Bridge for OVSM - allows OVSM scripts to call Solana RPC methods
+
+use ovsm::runtime::Value as OvsmValue;
+use ovsm::tools::{Tool, ToolRegistry};
+use ovsm::error::Result as OvsmResult;
+use serde_json::{json, Value};
+use std::sync::Arc;
+
+// Real Solana RPC endpoint  
+const SOLANA_RPC_URL: &str = "https://opensvm.com/api/proxy/rpc";
+
+/// Generic RPC Bridge Tool - Dynamically calls ANY Solana RPC method
+pub struct RpcBridgeTool {
+    name: String,
+}
+
+impl RpcBridgeTool {
+    pub fn new(name: &str) -> Self {
+        RpcBridgeTool {
+            name: name.to_string(),
+        }
+    }
+}
+
+impl Tool for RpcBridgeTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn description(&self) -> &str {
+        "Dynamic RPC bridge - calls Solana RPC methods"
+    }
+
+    fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
+        let mut rpc_params = Vec::new();
+
+        if args.len() == 1 {
+            if let OvsmValue::Object(obj) = &args[0] {
+                if let Some(address) = obj.get("address") {
+                    rpc_params.push(ovsm_value_to_json(address));
+
+                    let mut options = serde_json::Map::new();
+                    for (key, val) in obj.iter() {
+                        if key != "address" {
+                            options.insert(key.clone(), ovsm_value_to_json(val));
+                        }
+                    }
+                    if !options.is_empty() {
+                        rpc_params.push(Value::Object(options));
+                    }
+                } else {
+                    rpc_params.push(ovsm_value_to_json(&args[0]));
+                }
+            } else {
+                rpc_params.push(ovsm_value_to_json(&args[0]));
+            }
+        } else {
+            for arg in args {
+                rpc_params.push(ovsm_value_to_json(arg));
+            }
+        }
+
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                call_solana_rpc(&self.name, rpc_params).await
+            })
+        });
+
+        match result {
+            Ok(json_val) => Ok(json_to_ovsm_value(&json_val)),
+            Err(e) => Err(ovsm::error::Error::RpcError {
+                message: format!("{} failed: {}", self.name, e),
+            }),
+        }
+    }
+}
+
+async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Value> {
+    let client = reqwest::Client::new();
+
+    let request_body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": method,
+        "params": params
+    });
+
+    let response = client
+        .post(SOLANA_RPC_URL)
+        .json(&request_body)
+        .send()
+        .await?;
+
+    let response_text = response.text().await?;
+    let response_json: Value = serde_json::from_str(&response_text)?;
+
+    if let Some(result) = response_json.get("result") {
+        Ok(result.clone())
+    } else if let Some(error) = response_json.get("error") {
+        Err(anyhow::anyhow!("RPC error: {}", error))
+    } else {
+        Err(anyhow::anyhow!("Invalid RPC response: {}", response_text))
+    }
+}
+
+fn ovsm_value_to_json(val: &OvsmValue) -> Value {
+    match val {
+        OvsmValue::Int(n) => json!(n),
+        OvsmValue::Float(f) => json!(f),
+        OvsmValue::String(s) => json!(s),
+        OvsmValue::Bool(b) => json!(b),
+        OvsmValue::Null => Value::Null,
+        OvsmValue::Array(arr) => {
+            let items: Vec<Value> = arr.iter().map(ovsm_value_to_json).collect();
+            json!(items)
+        }
+        OvsmValue::Object(obj) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in obj.iter() {
+                map.insert(k.clone(), ovsm_value_to_json(v));
+            }
+            Value::Object(map)
+        }
+        OvsmValue::Range { start, end } => {
+            json!({"start": start, "end": end, "type": "range"})
+        }
+    }
+}
+
+fn json_to_ovsm_value(val: &Value) -> OvsmValue {
+    match val {
+        Value::Null => OvsmValue::Null,
+        Value::Bool(b) => OvsmValue::Bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                OvsmValue::Int(i)
+            } else if let Some(f) = n.as_f64() {
+                OvsmValue::Float(f)
+            } else {
+                OvsmValue::Null
+            }
+        }
+        Value::String(s) => OvsmValue::String(s.clone()),
+        Value::Array(arr) => {
+            let items: Vec<OvsmValue> = arr.iter().map(json_to_ovsm_value).collect();
+            OvsmValue::Array(Arc::new(items))
+        }
+        Value::Object(obj) => {
+            let mut map = std::collections::HashMap::new();
+            for (k, v) in obj.iter() {
+                map.insert(k.clone(), json_to_ovsm_value(v));
+            }
+            OvsmValue::Object(Arc::new(map))
+        }
+    }
+}
+
+/// Create a tool registry with RPC bridge tools
+pub fn create_rpc_registry() -> ToolRegistry {
+    let mut registry = ToolRegistry::new();
+
+    // Register common RPC methods
+    let methods = vec![
+        "getSignaturesForAddress",
+        "getSlot",
+        "getBlock",
+        "getTransaction",
+        "getAccountInfo",
+        "getBalance",
+        "getBlockTime",
+        "getHealth",
+        "getVersion",
+    ];
+
+    for method in methods {
+        registry.register(RpcBridgeTool::new(method));
+    }
+
+    registry
+}

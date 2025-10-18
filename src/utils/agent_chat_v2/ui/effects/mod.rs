@@ -318,15 +318,15 @@ impl SparkleEffect {
         }
 
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let chars = ['✨', '⭐', '✦', '✧', '⋆', '･', '◦'];
 
         self.particles.push(Sparkle {
-            x: rng.gen_range(-5.0..5.0),
-            y: rng.gen_range(-3.0..3.0),
+            x: rng.random_range(-5.0..5.0),
+            y: rng.random_range(-3.0..3.0),
             life: 1.0,
-            char: chars[rng.gen_range(0..chars.len())],
+            char: chars[rng.random_range(0..chars.len())],
         });
     }
 }

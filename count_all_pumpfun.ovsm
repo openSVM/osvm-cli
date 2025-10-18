@@ -1,0 +1,48 @@
+CONST PUMPFUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
+// Get current time
+$now_timestamp = 1760811400
+$five_min_ago = $now_timestamp - 300
+
+// Fetch first batch to check time window
+$opts1 = {"address": PUMPFUN, "limit": 1000}
+$batch1 = getSignaturesForAddress($opts1)
+$count1 = COUNT($batch1)
+
+// Check oldest transaction in first batch
+$last_idx = $count1 - 1
+$oldest = $batch1[$last_idx]
+$oldest_time = $oldest.blockTime
+
+// Count transactions in time window
+$total = 0
+FOR $sig IN $batch1:
+    IF $sig.blockTime >= $five_min_ago:
+        $total = $total + 1
+
+// If oldest tx is still within 5 minutes, we need to fetch more
+IF $oldest_time >= $five_min_ago:
+    // Get second batch
+    $opts2 = {"address": PUMPFUN, "limit": 1000, "before": $oldest.signature}
+    $batch2 = getSignaturesForAddress($opts2)
+    $count2 = COUNT($batch2)
+    
+    FOR $sig IN $batch2:
+        IF $sig.blockTime >= $five_min_ago:
+            $total = $total + 1
+    
+    // Check if we need third batch
+    IF $count2 == 1000:
+        $last_idx2 = $count2 - 1
+        $oldest2 = $batch2[$last_idx2]
+        
+        IF $oldest2.blockTime >= $five_min_ago:
+            // Get third batch
+            $opts3 = {"address": PUMPFUN, "limit": 1000, "before": $oldest2.signature}
+            $batch3 = getSignaturesForAddress($opts3)
+            
+            FOR $sig IN $batch3:
+                IF $sig.blockTime >= $five_min_ago:
+                    $total = $total + 1
+
+RETURN $total

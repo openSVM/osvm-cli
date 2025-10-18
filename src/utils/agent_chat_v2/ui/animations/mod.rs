@@ -288,15 +288,15 @@ pub struct Particle {
 impl Particle {
     pub fn new(x: f32, y: f32) -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         Self {
             x,
             y,
-            vx: rng.gen_range(-1.0..1.0),
-            vy: rng.gen_range(-2.0..-0.5),
+            vx: rng.random_range(-1.0..1.0),
+            vy: rng.random_range(-2.0..-0.5),
             life: 1.0,
-            char: ['✨', '⭐', '💫', '✦', '•', '◦'][rng.gen_range(0..6)],
+            char: ['✨', '⭐', '💫', '✦', '•', '◦'][rng.random_range(0..6)],
         }
     }
 
