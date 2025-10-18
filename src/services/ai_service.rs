@@ -631,13 +631,100 @@ Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
 Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
 Guards: GUARD condition ELSE RETURN ERROR(message: "...")
 
-# Essential Tools
+# Essential Built-in Tools
 
-**Solana**: getSlot, getBlock, getTransaction, getAccountInfo, getBalance, getSignaturesForAddress
-**Data**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND, SORT
-**Stats**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE, PERCENTILE
+**Data Manipulation**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND, SORT
+**Statistics**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE, PERCENTILE
 **Math**: ABS, SQRT, POW, ROUND, MAX, MIN
-**Utils**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64, SLEEP
+**Utilities**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64, SLEEP
+
+# MCP Tools Reference
+
+## Transaction Tools
+- **sendTransaction(transaction_base64: string)** - Send signed transaction to blockchain
+- **sendTransactionWithOptions(transaction_base64, options)** - Send transaction with custom options
+- **getTransaction(signature: string)** - Get transaction details by signature
+- **getTransactions(wallet: string, limit: number)** - Get recent transactions for a wallet
+- **getSignaturesForAddress(address: string, limit: number)** - Get signatures for a wallet
+- **getConfirmedTransaction(signature: string)** - Get confirmed transaction details
+- **getTransactionCount()** - Get total transaction count
+
+## Account Tools
+- **getAccountInfo(address: string)** - Get account details, balance, owner, data
+- **getBalance(address: string)** - Get SOL balance for an address
+- **getTokenAccounts(owner: string)** - Get all token accounts for wallet
+- **getTokenBalance(account: string)** - Get balance of specific token account
+- **getMultipleAccounts(addresses: [])** - Get info for multiple accounts in parallel
+- **getProgramAccounts(program_id: string)** - Get all accounts owned by a program
+- **getTokenSupply(mint: string)** - Get total supply of a token/NFT
+
+## Block & Slot Tools
+- **getSlot()** - Get current slot
+- **getBlock(slot: number)** - Get block data with all transactions
+- **getBlockTime(slot: number)** - Get Unix timestamp for a block
+- **getFirstAvailableBlock()** - Get first available block on chain
+- **getBlockHeight()** - Get current block height
+- **getBlockCommitment(slot: number)** - Get commitment level for a block
+
+## Program Tools
+- **getProgramAccounts(program_id: string)** - Get all accounts for a program
+- **getAccountData(address: string)** - Get raw account data
+- **callProgram(program_id, data, signers)** - Call a program instruction
+- **getInstructionDecoder(program_id: string)** - Get instruction format for a program
+
+## Token & NFT Tools
+- **getTokenMetadata(mint: string)** - Get token/NFT metadata
+- **getTokenHolders(mint: string)** - Get accounts holding a specific token
+- **getNFTsByOwner(owner: string)** - Get all NFTs owned by a wallet
+- **getTokenDecimals(mint: string)** - Get token decimal places
+- **getTokenLargestAccounts(mint: string)** - Get largest token holders
+
+## Cluster & Network Tools
+- **getClusterNodes()** - Get information about all cluster nodes
+- **getHealth()** - Get cluster health status
+- **getVersion()** - Get Solana node/cluster version
+- **getNetworkInflation()** - Get current network inflation rate
+- **getLargestAccounts(filter: string)** - Get largest accounts on network
+- **getStakeActivation(account: string)** - Get stake account activation status
+
+## Commitment & Finality Tools
+- **getConfirmedBlocks(start_slot, end_slot)** - Get confirmed blocks in range
+- **isBlockhashValid(blockhash: string)** - Check if blockhash is still valid
+- **getFeeForMessage(message_base64: string)** - Get fee for a transaction message
+- **getRecentBlockhash()** - Get recent blockhash for transactions
+
+## Monitoring & Analytics Tools
+- **monitorTransaction(signature: string, timeout: number)** - Monitor transaction until confirmed
+- **watchAccountChanges(address: string, callback)** - Get real-time account updates
+- **trackBalance(address: string, interval: number)** - Monitor balance changes over time
+- **analyzeTransactionPattern(address: string, limit: number)** - Analyze transaction patterns
+- **getTransactionStats(start_slot, end_slot)** - Get aggregate transaction statistics
+
+## Validator & Stake Tools
+- **getValidatorInfo()** - Get information about validators
+- **getStakeActivation(account: string)** - Get stake account details
+- **getEpochInfo()** - Get current epoch information
+- **getLeaderSchedule()** - Get current leader schedule
+- **getSlotLeader()** - Get leader for current slot
+
+## Supply & Economics Tools
+- **getSupply()** - Get total SOL supply
+- **getInflationRate()** - Get inflation rate
+- **getEpochInfo()** - Get epoch details including rewards
+- **calculatePriorityFees(recent_transactions: [])** - Calculate recommended priority fees
+
+## Decision Guide for Tool Selection
+
+When planning, choose tools based on:
+
+1. **Need recent data:** Use getBlock, getSlot, getTransaction, getClusterNodes
+2. **Query specific account:** Use getAccountInfo, getBalance, getTokenAccounts
+3. **Analyze transactions:** Use getTransactions, getSignaturesForAddress, analyzeTransactionPattern
+4. **Monitor changes:** Use watchAccountChanges, trackBalance, monitorTransaction
+5. **Get token info:** Use getTokenMetadata, getTokenSupply, getTokenHolders
+6. **Check cluster health:** Use getHealth, getClusterNodes, getVersion
+7. **Batch operations:** Use getMultipleAccounts, getConfirmedBlocks with PARALLEL
+8. **Complex logic:** Combine tools with FOR/WHILE loops for iteration
 
 # Rules
 
@@ -651,44 +738,35 @@ Guards: GUARD condition ELSE RETURN ERROR(message: "...")
 8. Always provide confidence score
 9. Use $ for variables, UPPERCASE for constants
 10. NO .method() syntax - use functions only
+11. For RPC methods, use solana_rpc_call(method_name, params) when high-level tools aren't available
+12. Batch related queries using PARALLEL for better performance
 
-# Example with Control Flow
+# Example with RPC Tool Usage
 
 **Expected Plan:**
-[TIME: ~45s] [CONFIDENCE: 85%]
+[TIME: ~30s] [CONFIDENCE: 90%]
 
 **Available Tools:**
-getSlot, getBlock, getTransaction, MAP, FILTER, MEAN, COUNT
+getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 
 **Main Branch:**
 $slot = getSlot()
-$all_txs = []
-$iterations = 0
-$max_iterations = 100
+$nodes = getClusterNodes()
+$node_count = COUNT($nodes)
 
-WHILE $iterations < $max_iterations:
-  $block = getBlock(slot: $slot - $iterations)
-  $txs = $block.transactions
+PARALLEL {
+  $block_time = solana_rpc_call(method: "getBlockTime", params: {slot: $slot})
+  $health = getHealth()
+}
+WAIT_ALL
 
-  FOR $tx IN $txs:
-    IF $tx.meta.err == null THEN
-      $all_txs = APPEND(array: $all_txs, item: $tx)
-
-  $iterations = $iterations + 1
-
-  BREAK IF COUNT($all_txs) >= 1000
-
-$fees = MAP($all_txs, tx => tx.meta.fee)
-$avg = MEAN(data: $fees)
-
-DECISION: Check sample size
-  BRANCH A (COUNT($fees) >= 100):
-    $confidence = 95
-  BRANCH B (COUNT($fees) < 100):
-    $confidence = 75
+IF $health == "ok" THEN
+  $confidence = 95
+ELSE
+  $confidence = 60
 
 **Action:**
-RETURN {average_fee: $avg, sample_size: COUNT($fees), confidence: $confidence}
+RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence: $confidence}
 
 # Important Notes
 
@@ -697,7 +775,8 @@ RETURN {average_fee: $avg, sample_size: COUNT($fees), confidence: $confidence}
 - Nest IF/THEN/ELSE inside loops for conditional logic
 - Use DECISION/BRANCH for multi-way strategy selection
 - Always include time estimates and confidence scores
-- Handle edge cases with GUARD statements"#
+- Handle edge cases with GUARD statements
+- For any RPC method not listed above, use solana_rpc_call directly"#
     }
 
     /// Build OVSM planning prompt with tools context
