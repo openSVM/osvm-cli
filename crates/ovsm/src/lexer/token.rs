@@ -55,6 +55,8 @@ pub enum TokenKind {
     If,
     /// ELSE keyword
     Else,
+    /// ELIF keyword (else-if)
+    Elif,
     /// THEN keyword
     Then,
     /// WHILE keyword
@@ -163,6 +165,14 @@ pub enum TokenKind {
     Assign,
     /// Plus-assign operator (+=)
     PlusAssign,
+    /// Minus-assign operator (-=)
+    MinusAssign,
+    /// Star-assign operator (*=)
+    StarAssign,
+    /// Slash-assign operator (/=)
+    SlashAssign,
+    /// Percent-assign operator (%=)
+    PercentAssign,
     /// Question mark operator (?)
     Question,
     /// Colon operator (:)
@@ -212,6 +222,7 @@ impl TokenKind {
             self,
             TokenKind::If
                 | TokenKind::Else
+                | TokenKind::Elif
                 | TokenKind::Then
                 | TokenKind::While
                 | TokenKind::For
@@ -255,6 +266,7 @@ impl TokenKind {
         match s {
             "IF" => Some(TokenKind::If),
             "ELSE" => Some(TokenKind::Else),
+            "ELIF" | "ELSEIF" => Some(TokenKind::Elif),
             "THEN" => Some(TokenKind::Then),
             "WHILE" => Some(TokenKind::While),
             "FOR" => Some(TokenKind::For),
