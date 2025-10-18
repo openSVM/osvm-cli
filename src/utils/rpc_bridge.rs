@@ -34,10 +34,17 @@ impl Tool for RpcBridgeTool {
     fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
         let mut rpc_params = Vec::new();
 
-        // Handle single object argument (named parameters)
-        if args.len() == 1 {
+        // OVSM evaluator passes named parameters as positional arguments
+        // For RPC calls like getSignaturesForAddress(address: "...", limit: 5)
+        // We receive: [String("..."), Int(5)]
+        // We need to convert to: ["...", {"limit": 5}]
+
+        if args.is_empty() {
+            // No arguments - just call the method
+        } else if args.len() == 1 {
+            // Single argument - could be just primary param or an object
             if let OvsmValue::Object(obj) = &args[0] {
-                // Extract primary parameter (address, signature, etc.)
+                // If it's an object, check if it's a config or has a primary param
                 let primary_param = obj.get("address")
                     .or_else(|| obj.get("signature"))
                     .or_else(|| obj.get("slot"))
@@ -59,17 +66,48 @@ impl Tool for RpcBridgeTool {
                         rpc_params.push(Value::Object(config));
                     }
                 } else {
-                    // No primary param found, use the whole object
+                    // No primary param found, use the whole object as config
                     rpc_params.push(ovsm_value_to_json(&args[0]));
                 }
             } else {
-                // Single non-object argument
+                // Single non-object argument (primary param only)
                 rpc_params.push(ovsm_value_to_json(&args[0]));
             }
         } else {
-            // Multiple arguments - use as positional
-            for arg in args {
-                rpc_params.push(ovsm_value_to_json(arg));
+            // Multiple arguments - first is primary param, rest form the config object
+            // This handles cases like: getSignaturesForAddress(address: "...", limit: 5, before: "...")
+            rpc_params.push(ovsm_value_to_json(&args[0]));
+
+            // Build config object from remaining arguments
+            // For now, we use generic field names since OVSM doesn't preserve parameter names
+            // The specific RPC method determines how to interpret these
+            let mut config = serde_json::Map::new();
+
+            // Common Solana RPC config fields
+            if args.len() == 2 {
+                // Second arg is typically 'limit' for getSignaturesForAddress
+                if matches!(self.name.as_str(), "getSignaturesForAddress") {
+                    config.insert("limit".to_string(), ovsm_value_to_json(&args[1]));
+                } else {
+                    // For other methods, treat as config object
+                    if let OvsmValue::Object(obj) = &args[1] {
+                        for (k, v) in obj.iter() {
+                            config.insert(k.clone(), ovsm_value_to_json(v));
+                        }
+                    } else {
+                        config.insert("config".to_string(), ovsm_value_to_json(&args[1]));
+                    }
+                }
+            } else if args.len() == 3 {
+                // Third arg could be 'before' for pagination
+                if matches!(self.name.as_str(), "getSignaturesForAddress") {
+                    config.insert("limit".to_string(), ovsm_value_to_json(&args[1]));
+                    config.insert("before".to_string(), ovsm_value_to_json(&args[2]));
+                }
+            }
+
+            if !config.is_empty() {
+                rpc_params.push(Value::Object(config));
             }
         }
 
@@ -98,8 +136,6 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Val
         "params": params
     });
 
-    // Debug: print RPC request
-    eprintln!("[RPC DEBUG] Method: {}, Params: {}", method, serde_json::to_string_pretty(&params).unwrap_or_else(|_| "invalid".to_string()));
 
     let response = client
         .post(SOLANA_RPC_URL)
