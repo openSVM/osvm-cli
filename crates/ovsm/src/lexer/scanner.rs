@@ -94,6 +94,12 @@ impl Scanner {
                     self.add_token(TokenKind::Star);
                 }
             }
+            '#' => {
+                // Python-style comment
+                while self.peek() != '\n' && !self.is_at_end() {
+                    self.advance();
+                }
+            }
             '/' => {
                 if self.match_char('/') {
                     // Line comment
