@@ -125,6 +125,10 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             }
             Value::Object(map)
         }
+        OvsmValue::Function { params, .. } => {
+            // Convert function to JSON representation
+            json!({"type": "function", "params": params.len()})
+        }
         OvsmValue::Range { start, end } => {
             // Convert range to array for JSON
             json!({"start": start, "end": end, "type": "range"})
