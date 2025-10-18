@@ -72,7 +72,7 @@ impl OvsmService {
         let mut scanner = Scanner::new(code);
         let tokens = scanner
             .scan_tokens()
-            .context("Failed to tokenize OVSM code")?;
+            .map_err(|e| anyhow::anyhow!("Tokenization error: {}", e))?;
 
         if self.debug {
             println!("✅ Tokenization successful ({} tokens)", tokens.len());
@@ -80,7 +80,7 @@ impl OvsmService {
 
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens);
-        let program = parser.parse().context("Failed to parse OVSM code")?;
+        let program = parser.parse().map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
 
         if self.debug {
             println!("✅ Parsing successful");
