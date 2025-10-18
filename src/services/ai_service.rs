@@ -626,9 +626,13 @@ Tools: toolName(param: $value) or toolName($value)
 Loops:
   - FOR $item IN $collection: ... BREAK IF condition
   - WHILE condition: ... body ...
-  - ❌ NO ENDWHILE or ENDIF - OVSM uses indentation like Python
+  - ✅ ENDWHILE, ENDFOR, ENDIF are optional (explicit block terminators)
 Conditionals: IF condition THEN ... ELSE ...
-  - ❌ NO ENDIF - use indentation to close IF blocks
+  - ✅ ENDIF is optional (can use indentation or explicit terminator)
+Block Styles (both supported):
+  - Python-style: IF cond THEN (indented body) ELSE (indented body)
+  - Explicit: IF cond THEN ... ELSE ... ENDIF
+  - Same for WHILE/ENDWHILE and FOR/ENDFOR
 Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
 Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
 Guards: GUARD $condition
