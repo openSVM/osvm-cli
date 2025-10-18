@@ -123,6 +123,8 @@ pub enum TokenKind {
     EndFor,
     /// END keyword (generic optional block terminator)
     End,
+    /// LAMBDA keyword (anonymous function)
+    Lambda,
 
     // Operators
     /// Plus operator (+)
@@ -244,6 +246,7 @@ impl TokenKind {
                 | TokenKind::EndWhile
                 | TokenKind::EndFor
                 | TokenKind::End
+                | TokenKind::Lambda
         )
     }
 
@@ -286,6 +289,9 @@ impl TokenKind {
             "ENDWHILE" => Some(TokenKind::EndWhile),
             "ENDFOR" => Some(TokenKind::EndFor),
             "END" => Some(TokenKind::End),
+            "LAMBDA" => Some(TokenKind::Lambda),
+            // Also support lowercase lambda for convenience
+            "lambda" => Some(TokenKind::Lambda),
             // Logical operators as keywords
             "AND" => Some(TokenKind::And),
             "OR" => Some(TokenKind::Or),
