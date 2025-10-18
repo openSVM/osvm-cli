@@ -1,0 +1,32 @@
+CONST MAX_RESULTS_PER_CALL = 1000
+CONST PUMPFUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+
+$cutoff_ts = NOW() - 300
+$all_recent = []
+$before = null
+$continue = 1
+
+WHILE $continue == 1:
+    IF $before == null THEN
+        $batch = getSignaturesForAddress(address: PUMPFUN, limit: MAX_RESULTS_PER_CALL)
+    ELSE
+        $batch = getSignaturesForAddress(address: PUMPFUN, limit: MAX_RESULTS_PER_CALL, before: $before)
+    
+    $batch_size = COUNT($batch)
+    
+    IF $batch_size == 0 THEN
+        $continue = 0
+    ELSE
+        FOR $sig IN $batch:
+            IF $sig.blockTime >= $cutoff_ts THEN
+                $all_recent = APPEND($all_recent, $sig)
+            ELSE
+                $continue = 0
+        
+        $last_idx = $batch_size - 1
+        $last_item = $batch[$last_idx]
+        $before = $last_item.signature
+
+$total = COUNT($all_recent)
+LOG(message: "Pumpfun transactions in last 5 minutes")
+RETURN $total
