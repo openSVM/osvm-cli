@@ -613,20 +613,45 @@ impl AiService {
 
 1. ❌ NO unnecessary variable assignments
 2. ❌ NO calling getTransaction when signature objects already have blockTime
-3. ❌ NO pagination loops unless you NEED more than 1000 results
+3. ✅ USE pagination for time queries > 2 minutes (high-volume programs have >1000 txs)
 4. ❌ NO complex nested structures
 5. ✅ USE signature.blockTime directly (it's already there!)
 6. ✅ USE simple for loops with when
 7. ✅ USE direct field access with (. obj field)
 8. ✅ PREFER counting over building arrays when you only need count
+9. ✅ DEFINE variables OUTSIDE loops, use set! inside (scoping!)
 
-**Example - EFFICIENT PumpFun trade counting:**
+**Example - SHORT time window (< 2 minutes):**
 ```lisp
 (define sigs (getSignaturesForAddress addr {:limit 1000}))
 (define count 0)
 (for (sig sigs)
   (when (>= (. sig blockTime) cutoff)
     (set! count (+ count 1))))
+count
+```
+
+**Example - LONG time window (>= 2 minutes) - REQUIRES PAGINATION:**
+```lisp
+(define cutoff (- (now) 600))  ;; 10 minutes
+(define count 0)
+(define before null)
+(define continue true)
+(define batch [])
+
+(while continue
+  (set! batch (if (== before null)
+                  (getSignaturesForAddress addr {:limit 1000})
+                  (getSignaturesForAddress addr {:limit 1000 :before before})))
+  (for (sig batch)
+    (when (>= (. sig blockTime) cutoff)
+      (set! count (+ count 1))))
+  ;; Stop when no results OR oldest sig is before cutoff
+  (when (or (== (COUNT batch) 0)
+            (< (. ([] batch (- (COUNT batch) 1)) blockTime) cutoff))
+    (set! continue false))
+  (when (and continue (> (COUNT batch) 0))
+    (set! before (. ([] batch (- (COUNT batch) 1)) signature))))
 count
 ```
 
