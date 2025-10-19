@@ -1,0 +1,429 @@
+/**
+ * Enhanced Features Styles
+ * - Expandable commands
+ * - Copy to clipboard
+ * - Toast notifications
+ * - Onboarding
+ */
+
+/* ===== COMMAND WRAPPER ===== */
+
+.command-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(0, 255, 0, 0.05);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 4px;
+    margin: 4px 0;
+    transition: all 0.3s ease;
+    flex-wrap: wrap;
+}
+
+.command-wrapper:hover {
+    background: rgba(0, 255, 0, 0.1);
+    border-color: rgba(0, 255, 0, 0.5);
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.2);
+}
+
+.command-wrapper code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font-family: 'Courier New', Courier, monospace;
+    color: #00ff00;
+}
+
+/* ===== EXPAND BUTTON ===== */
+
+.expand-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0, 255, 0, 0.1);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 3px;
+    color: #00ff00;
+    font-size: 12px;
+    font-family: 'Courier New', Courier, monospace;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.expand-btn:hover {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: rgba(0, 255, 0, 0.6);
+    transform: translateY(-1px);
+}
+
+.expand-btn.expanded .expand-icon {
+    transform: rotate(90deg);
+}
+
+.expand-icon {
+    font-size: 10px;
+    transition: transform 0.3s ease;
+}
+
+.expand-text {
+    font-weight: bold;
+}
+
+/* ===== COPY BUTTON ===== */
+
+.copy-cmd-btn {
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    color: #00ff00;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.copy-cmd-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.copy-cmd-btn.copied {
+    background: rgba(0, 255, 0, 0.3);
+    border-color: rgba(0, 255, 0, 0.6);
+    color: #ffffff;
+}
+
+/* ===== COMMAND TOOLTIP ===== */
+
+.cmd-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: rgba(0, 0, 0, 0.9);
+    color: #00ff00;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    margin-bottom: 8px;
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    z-index: 1000;
+}
+
+.command-wrapper:hover .cmd-tooltip {
+    opacity: 1;
+}
+
+/* ===== COMMAND EXAMPLE ===== */
+
+.command-example {
+    width: 100%;
+    margin-top: 12px;
+    background: #000000;
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 4px;
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+}
+
+.example-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 255, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.example-label {
+    color: #00ff00;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.example-category {
+    display: inline-block;
+    padding: 3px 8px;
+    background: rgba(0, 255, 0, 0.2);
+    border: 1px solid rgba(0, 255, 0, 0.4);
+    border-radius: 3px;
+    color: #00ff00;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.terminal-output {
+    margin: 0;
+    padding: 16px;
+    background: #000000;
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+}
+
+.example-footer {
+    padding: 12px 16px;
+    background: rgba(0, 255, 0, 0.05);
+    border-top: 1px solid rgba(0, 255, 0, 0.3);
+    text-align: center;
+}
+
+.try-btn {
+    padding: 8px 20px;
+    background: rgba(0, 255, 0, 0.2);
+    border: 2px solid rgba(0, 255, 0, 0.5);
+    border-radius: 4px;
+    color: #00ff00;
+    font-weight: bold;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.try-btn:hover {
+    background: rgba(0, 255, 0, 0.3);
+    border-color: rgba(0, 255, 0, 0.8);
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+}
+
+/* ===== CODE BLOCK WRAPPER ===== */
+
+.code-block-wrapper {
+    position: relative;
+    margin: 16px 0;
+}
+
+.code-block-wrapper pre,
+.code-block-wrapper code {
+    margin: 0;
+}
+
+.copy-code-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid rgba(0, 255, 0, 0.3);
+    border-radius: 3px;
+    color: #00ff00;
+    font-size: 14px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.code-block-wrapper:hover .copy-code-btn {
+    opacity: 1;
+}
+
+.copy-code-btn:hover {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: rgba(0, 255, 0, 0.6);
+}
+
+.copy-code-btn.copied {
+    background: rgba(0, 255, 0, 0.3);
+    color: #ffffff;
+}
+
+/* ===== TOAST NOTIFICATIONS ===== */
+
+.toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid rgba(0, 255, 0, 0.5);
+    border-radius: 4px;
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 10000;
+    max-width: 400px;
+}
+
+.toast.show {
+    transform: translateY(0);
+    opacity: 1;
+}
+
+.toast-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.toast-message {
+    flex: 1;
+    word-break: break-word;
+}
+
+.toast-success {
+    border-color: rgba(0, 255, 0, 0.6);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+}
+
+.toast-error {
+    border-color: rgba(255, 0, 0, 0.6);
+    color: #ff4444;
+    box-shadow: 0 0 20px rgba(255, 0, 0, 0.3);
+}
+
+.toast-info {
+    border-color: rgba(0, 150, 255, 0.6);
+    color: #00aaff;
+    box-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
+}
+
+/* ===== ONBOARDING TIP ===== */
+
+.onboarding-tip {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(150px);
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid rgba(0, 255, 0, 0.6);
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 500px;
+    box-shadow: 0 4px 30px rgba(0, 255, 0, 0.3);
+    z-index: 10001;
+    opacity: 0;
+    transition: all 0.4s ease;
+}
+
+.onboarding-tip.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.tip-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.tip-icon {
+    font-size: 32px;
+    flex-shrink: 0;
+}
+
+.tip-text {
+    flex: 1;
+    color: #00ff00;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.tip-text strong {
+    color: #ffffff;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.tip-close {
+    padding: 8px 16px;
+    background: rgba(0, 255, 0, 0.2);
+    border: 1px solid rgba(0, 255, 0, 0.5);
+    border-radius: 4px;
+    color: #00ff00;
+    font-weight: bold;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.tip-close:hover {
+    background: rgba(0, 255, 0, 0.3);
+    border-color: rgba(0, 255, 0, 0.8);
+}
+
+/* ===== RESPONSIVE ===== */
+
+@media (max-width: 768px) {
+    .command-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .expand-btn,
+    .copy-cmd-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .toast {
+        right: 12px;
+        bottom: 12px;
+        max-width: calc(100% - 24px);
+    }
+
+    .onboarding-tip {
+        max-width: calc(100% - 24px);
+        bottom: 12px;
+    }
+
+    .tip-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .terminal-output {
+        font-size: 11px;
+    }
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(0, 255, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.6);
+    }
+}
+
+.command-wrapper.highlight {
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.command-example {
+    animation: slideIn 0.3s ease;
+}
