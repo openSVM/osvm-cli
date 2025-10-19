@@ -3,11 +3,12 @@
 use super::{Colors, RealtimeSuggestion};
 use crate::services::ai_service::{AiService, PlannedTool, ToolPlan};
 use crate::services::mcp_service::{McpServerConfig, McpService};
+use crate::services::ovsm_service::OvsmService;
 use anyhow::Result;
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use std::io::{self, Write};
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, timeout, Duration};
 
 /// Generate real-time suggestions using AI
 pub async fn generate_realtime_suggestions(
@@ -28,6 +29,51 @@ pub async fn generate_realtime_suggestions(
     Ok(suggestions)
 }
 
+/// Extract OVSM code blocks from AI response
+/// Returns a vector of (code, language_hint) tuples
+fn extract_ovsm_code_blocks(text: &str) -> Vec<(String, String)> {
+    let mut code_blocks = Vec::new();
+    let lines: Vec<&str> = text.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        // Look for code block start: ```lisp, ```ovsm, or just ```
+        if line.starts_with("```") {
+            let lang = line.trim_start_matches("```").trim().to_lowercase();
+            let mut code = String::new();
+            i += 1;
+
+            // Collect code until we find closing ```
+            while i < lines.len() {
+                let code_line = lines[i];
+                if code_line.trim().starts_with("```") {
+                    break;
+                }
+                code.push_str(code_line);
+                code.push('\n');
+                i += 1;
+            }
+
+            // Only include if it looks like OVSM/LISP code or has no language specified
+            if lang.is_empty() || lang == "lisp" || lang == "ovsm" || lang == "scheme" {
+                let trimmed_code = code.trim();
+                // Enhanced heuristic: LISP code starts with ( or ; (comment)
+                if !trimmed_code.is_empty() {
+                    let first_char = trimmed_code.chars().next();
+                    if first_char == Some('(') || first_char == Some(';') {
+                        code_blocks.push((trimmed_code.to_string(), lang));
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+
+    code_blocks
+}
+
 /// Process message with AI and update chat history
 pub async fn process_with_realtime_ai(
     message: String,
@@ -42,30 +88,20 @@ pub async fn process_with_realtime_ai(
         Ok(response) => response,
         Err(e) => {
             error!("AI query failed: {}", e);
+            println!(
+                "\n{}✗ AI Service Error: {}{}",
+                Colors::RED,
+                e,
+                Colors::RESET
+            );
+            println!(
+                "{}Tip: Check your AI configuration or try again{}",
+                Colors::DIM,
+                Colors::RESET
+            );
             return Ok(());
         }
     };
-
-    // For now, just display the response (planning API needs to be integrated differently)
-    // The code below is disabled until we have proper plan API integration
-    /*
-    if let Some(ai_plan) = ai_response.plan {
-        println!("\n{}• AI Agent Plan detected!{}", Colors::MAGENTA, Colors::RESET);
-        show_colored_plan_diagram(&ai_plan);
-
-        // Ask user for confirmation
-        println!("\n{}Execute this plan? (y/n): {}", Colors::YELLOW, Colors::RESET);
-
-        match get_user_choice().await {
-            Ok(choice) if choice == 1 => {
-                execute_ai_plan_with_colors(&ai_plan, &message, ai_service).await?;
-            }
-            _ => {
-                println!("{}• Plan execution cancelled{}", Colors::DIM, Colors::RESET);
-            }
-        }
-    }
-    */
 
     // Display AI response
     if !ai_response.is_empty() {
@@ -77,6 +113,157 @@ pub async fn process_with_realtime_ai(
             Colors::RESET
         );
         chat_history.push(format!("Assistant: {}", ai_response));
+
+        // Extract and offer to execute OVSM code blocks
+        let code_blocks = extract_ovsm_code_blocks(&ai_response);
+
+        if !code_blocks.is_empty() {
+            for (i, (code, _lang)) in code_blocks.iter().enumerate() {
+                // Pre-validate syntax before showing to user
+                let validation_result = {
+                    use ovsm::Scanner;
+                    let mut scanner = Scanner::new(code);
+                    scanner.scan_tokens()
+                };
+
+                if let Err(e) = validation_result {
+                    println!(
+                        "\n{}⚠️  Code Block {} has invalid syntax - skipping{}",
+                        Colors::YELLOW,
+                        i + 1,
+                        Colors::RESET
+                    );
+                    println!("{}Error: {}{}", Colors::DIM, e, Colors::RESET);
+                    continue;  // Skip this block
+                }
+
+                println!(
+                    "\n{}╭─ OVSM Code Block {} ─{}",
+                    Colors::MAGENTA,
+                    i + 1,
+                    Colors::RESET
+                );
+
+                // Show code preview (first 3 lines)
+                let preview_lines: Vec<&str> = code.lines().take(3).collect();
+                for line in &preview_lines {
+                    println!("{}│{} {}", Colors::MAGENTA, Colors::RESET, line);
+                }
+                if code.lines().count() > 3 {
+                    println!("{}│{} ...", Colors::MAGENTA, Colors::RESET);
+                }
+                println!("{}╰─{}",  Colors::MAGENTA, Colors::RESET);
+
+                // Ask user with enhanced options
+                print!(
+                    "\n{}Execute? ([y]es/[n]o/[v]iew full): {}",
+                    Colors::YELLOW,
+                    Colors::RESET
+                );
+                io::stdout().flush()?;
+
+                // Get user choice with support for view option
+                let mut buffer = String::new();
+                io::stdin().read_line(&mut buffer)?;
+                let choice = buffer.trim().to_lowercase();
+
+                // Handle view full code
+                if choice == "v" || choice == "view" {
+                    println!(
+                        "\n{}Full Code (Block {}):{}\n",
+                        Colors::CYAN,
+                        i + 1,
+                        Colors::RESET
+                    );
+                    for (line_num, line) in code.lines().enumerate() {
+                        println!("{}{:4}{} │ {}", Colors::DIM, line_num + 1, Colors::RESET, line);
+                    }
+
+                    // Ask again after showing
+                    print!(
+                        "\n{}Execute now? (y/n): {}",
+                        Colors::YELLOW,
+                        Colors::RESET
+                    );
+                    io::stdout().flush()?;
+
+                    buffer.clear();
+                    io::stdin().read_line(&mut buffer)?;
+                }
+
+                // Check if user wants to execute
+                let execute = buffer.trim().to_lowercase();
+                if execute == "y" || execute == "yes" {
+                    info!("User confirmed execution of OVSM code block {}", i + 1);
+
+                    // Execute with timeout wrapper
+                    println!(
+                        "\n{}▶ Executing OVSM code (30s timeout)...{}",
+                        Colors::GREEN,
+                        Colors::RESET
+                    );
+
+                    let code_clone = code.clone();
+                    let execution_timeout = Duration::from_secs(30);
+
+                    match timeout(
+                        execution_timeout,
+                        tokio::task::spawn_blocking(move || {
+                            let mut ovsm_service = OvsmService::with_verbose(true);
+                            ovsm_service.execute_code(&code_clone)
+                        })
+                    ).await {
+                        Ok(Ok(Ok(result))) => {
+                            println!(
+                                "\n{}✓ Execution successful!{}",
+                                Colors::GREEN,
+                                Colors::RESET
+                            );
+                            println!(
+                                "{}Result:{} {:?}",
+                                Colors::CYAN,
+                                Colors::RESET,
+                                result
+                            );
+                            chat_history.push(format!("System: Executed OVSM code, result: {:?}", result));
+                        }
+                        Ok(Ok(Err(e))) => {
+                            println!(
+                                "\n{}✗ Execution failed: {}{}",
+                                Colors::RED,
+                                e,
+                                Colors::RESET
+                            );
+                            chat_history.push(format!("System: OVSM execution failed: {}", e));
+                        }
+                        Ok(Err(e)) => {
+                            println!(
+                                "\n{}✗ Thread panic: {}{}",
+                                Colors::RED,
+                                e,
+                                Colors::RESET
+                            );
+                            chat_history.push("System: OVSM execution panicked".to_string());
+                        }
+                        Err(_) => {
+                            println!(
+                                "\n{}✗ Execution timeout (30 seconds){}",
+                                Colors::RED,
+                                Colors::RESET
+                            );
+                            println!(
+                                "{}The code took too long to execute{}",
+                                Colors::DIM,
+                                Colors::RESET
+                            );
+                            chat_history.push("System: OVSM execution timed out".to_string());
+                        }
+                    }
+                } else {
+                    println!("{}• Execution cancelled{}", Colors::DIM, Colors::RESET);
+                }
+            }
+        }
     }
 
     Ok(())
