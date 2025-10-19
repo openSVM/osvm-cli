@@ -1,0 +1,11 @@
+;; Query: Calculate RSI indicator
+;; Category: Advanced
+;; Expected: RSI value
+;; Demonstrates: variable definition, arrays
+
+(define gains [2 3 1 4])  ;; Create variable 'gains'
+(define losses [1 1 2 1])  ;; Create variable 'losses'
+(define avg-gain (/ (+ 2 3 1 4) 4))
+(define avg-loss (/ (+ 1 1 2 1) 4))
+(define rs (/ avg-gain avg-loss))  ;; Create variable 'rs'
+(- 100 (/ 100 (+ 1 rs)))  ;; Subtraction

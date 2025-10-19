@@ -1,0 +1,10 @@
+;; Query: Calculate Sum of all i*j where i,j in 1-3
+;; Category: Loops
+;; Expected: 36 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define total 0)  ;; Create variable 'total'
+(for (i (range 1 4))  ;; Iterate over collection
+(for (j (range 1 4))  ;; Iterate over collection
+(set! total (+ total (* i j)))))  ;; Update total
+total

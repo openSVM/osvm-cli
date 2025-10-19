@@ -1,0 +1,6 @@
+;; Query: Demonstrate Array with mixed types
+;; Category: Data Structures
+;; Expected: [1, "two", 3.0] (array)
+;; Demonstrates: arrays
+
+[1 "two" 3.0]

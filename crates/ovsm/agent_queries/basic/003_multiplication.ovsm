@@ -1,0 +1,9 @@
+;; Query: Demonstrate Multiply two numbers using the multiplication operator
+;; Category: Basic - Arithmetic Operations
+;; Expected: 180 (integer)
+;; Demonstrates: Binary multiplication operator
+
+(* 12 15)  ;; Multiply 12 by 15
+
+;; Result: 180
+;; Common use: scaling values, area calculations

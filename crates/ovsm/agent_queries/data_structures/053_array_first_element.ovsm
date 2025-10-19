@@ -1,0 +1,7 @@
+;; Query: Get first element
+;; Category: Data Structures
+;; Expected: 10 (integer)
+;; Demonstrates: variable definition, arrays
+
+(define arr [10 20 30])  ;; Create variable 'arr'
+(get arr 0)

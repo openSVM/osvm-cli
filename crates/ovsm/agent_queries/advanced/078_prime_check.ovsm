@@ -1,0 +1,13 @@
+;; Query: Check if 17 is prime
+;; Category: Advanced
+;; Expected: true (boolean)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define n 17)  ;; Create variable 'n'
+(define is-prime true)
+(when (< n 2)
+(set! is-prime false))  ;; Update is
+(for (i (range 2 n))  ;; Iterate over collection
+  (when (== (% n i) 0)
+(set! is-prime false)))  ;; Update is
+is-prime

@@ -1,0 +1,10 @@
+;; Query: Create Setup for binary search
+;; Category: Advanced
+;; Expected: Target index
+;; Demonstrates: variable definition, arrays
+
+(define arr [1 3 5 7 9 11 13])  ;; Create variable 'arr'
+(define target 7)  ;; Create variable 'target'
+(define low 0)  ;; Create variable 'low'
+(define high 6)  ;; Create variable 'high'
+target

@@ -1,0 +1,7 @@
+;; Query: Get last element
+;; Category: Data Structures
+;; Expected: 50 (integer)
+;; Demonstrates: variable definition, arrays
+
+(define arr [10 20 30 40 50])  ;; Create variable 'arr'
+(last arr)

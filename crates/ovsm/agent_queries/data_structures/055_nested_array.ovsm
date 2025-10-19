@@ -1,0 +1,6 @@
+;; Query: Create nested array
+;; Category: Data Structures
+;; Expected: [[1, 2], [3, 4]] (array)
+;; Demonstrates: arrays
+
+[[1 2] [3 4]]

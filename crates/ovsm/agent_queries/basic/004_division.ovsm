@@ -1,0 +1,9 @@
+;; Query: Demonstrate Divide one number by another using the division operator
+;; Category: Basic - Arithmetic Operations
+;; Expected: 12 (integer)
+;; Demonstrates: Binary division operator
+
+(/ 144 12)  ;; Divide 144 by 12
+
+;; Result: 12
+;; Watch for division by zero errors in production code

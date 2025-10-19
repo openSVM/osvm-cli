@@ -1,0 +1,9 @@
+;; Query: Get the number of elements in an array
+;; Category: Basic - Helper Functions
+;; Expected: 5 (integer)
+;; Demonstrates: Array length with length function
+
+(length [1 2 3 4 5])  ;; Count elements in array
+
+;; Result: 5
+;; Use for: loop bounds, validation, array processing

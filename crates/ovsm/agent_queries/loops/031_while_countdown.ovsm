@@ -1,0 +1,9 @@
+;; Query: Create Countdown from 10 to 0
+;; Category: Loops
+;; Expected: 0 (integer)
+;; Demonstrates: variable definition, mutation, while loops
+
+(define count 10)  ;; Create variable 'count'
+(while (> count 0)  ;; Loop while condition is true
+(set! count (- count 1)))  ;; Update count
+count

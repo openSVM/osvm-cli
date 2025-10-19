@@ -1,0 +1,10 @@
+;; Query: Calculate Reverse an array
+;; Category: Loops
+;; Expected: [5, 4, 3, 2, 1] (array)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [1 2 3 4 5])  ;; Create variable 'nums'
+(define rev [])  ;; Create variable 'rev'
+(for (n nums)  ;; Iterate over collection
+(set! rev (+ [n] rev)))  ;; Update rev
+rev

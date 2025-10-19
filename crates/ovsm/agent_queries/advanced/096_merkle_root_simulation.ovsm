@@ -1,0 +1,8 @@
+;; Query: Calculate Simulate merkle root calc
+;; Category: Advanced
+;; Expected: Root hash
+;; Demonstrates: variable definition
+
+(define leaf1 123)  ;; Create variable 'leaf1'
+(define leaf2 456)  ;; Create variable 'leaf2'
+(+ leaf1 leaf2)  ;; Addition

@@ -1,0 +1,10 @@
+;; Query: Calculate average of numbers
+;; Category: Advanced
+;; Expected: 30.0 (float)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [10 20 30 40 50])  ;; Create variable 'nums'
+(define sum 0)  ;; Create variable 'sum'
+(for (n nums)  ;; Iterate over collection
+(set! sum (+ sum n)))  ;; Update sum
+(/ sum (length nums))  ;; Division

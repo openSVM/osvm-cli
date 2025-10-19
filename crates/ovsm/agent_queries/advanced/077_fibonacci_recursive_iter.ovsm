@@ -1,0 +1,9 @@
+;; Query: Calculate Fibonacci with iteration
+;; Category: Advanced
+;; Expected: 55 (integer)
+;; Demonstrates: variable definition, mutation, for loops, variadic operators, arrays
+
+(define fib [0 1])  ;; Create variable 'fib'
+(for (i (range 2 10))  ;; Iterate over collection
+(set! fib (+ fib [(+ (last fib) (last (init fib)))])))  ;; Update fib
+(last fib)

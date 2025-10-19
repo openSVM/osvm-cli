@@ -1,0 +1,9 @@
+;; Query: Test equality using == operator
+;; Category: Basic - Comparisons
+;; Expected: true (boolean)
+;; Demonstrates: Equality comparison
+
+(== 42 42)  ;; Compare two equal values
+
+;; Result: true
+;; Works with numbers, strings, booleans, null

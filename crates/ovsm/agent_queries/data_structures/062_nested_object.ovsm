@@ -1,0 +1,6 @@
+;; Query: Create nested object
+;; Category: Data Structures
+;; Expected: {:person {:name "Eve"}} (object)
+;; Demonstrates: objects
+
+{:person {:name "Eve" :age 28}}

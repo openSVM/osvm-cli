@@ -1,0 +1,6 @@
+;; Query: Check if value in array
+;; Category: Data Structures
+;; Expected: true (boolean)
+;; Demonstrates: arrays
+
+(in? 3 [1 2 3 4 5])

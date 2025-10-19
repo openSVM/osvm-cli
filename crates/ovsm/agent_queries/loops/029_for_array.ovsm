@@ -1,0 +1,10 @@
+;; Query: Calculate Sum array elements with for
+;; Category: Loops
+;; Expected: 15 (integer)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [1 2 3 4 5])  ;; Create variable 'nums'
+(define sum 0)  ;; Create variable 'sum'
+(for (n nums)  ;; Iterate over collection
+(set! sum (+ sum n)))  ;; Update sum
+sum

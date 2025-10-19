@@ -1,0 +1,6 @@
+;; Query: Generate number sequence
+;; Category: Data Structures
+;; Expected: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] (array)
+;; Demonstrates: OVSM syntax
+
+(range 0 10)  ;; Generate number sequence

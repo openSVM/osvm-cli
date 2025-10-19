@@ -1,0 +1,11 @@
+;; Query: Test Nested loop multiplication table
+;; Category: Loops
+;; Expected: 100 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define result 0)  ;; Create variable 'result'
+(for (i (range 1 11))  ;; Iterate over collection
+(for (j (range 1 11))  ;; Iterate over collection
+    (when (== (* i j) 100)
+(set! result (* i j)))))  ;; Update result
+result

@@ -1,0 +1,7 @@
+;; Query: Create Access object property
+;; Category: Data Structures
+;; Expected: "Bob" (string)
+;; Demonstrates: variable definition, objects
+
+(define person {:name "Bob" :age 25})  ;; Create variable 'person'
+(get person :name)

@@ -1,0 +1,11 @@
+;; Query: Create Determine grade for score 85
+;; Category: Basic
+;; Expected: "B" (string)
+;; Demonstrates: variable definition, conditionals
+
+(define score 85)  ;; Create variable 'score'
+(if (>= score 90)  ;; Conditional expression
+    "A"
+(if (>= score 80)  ;; Conditional expression
+        "B"
+        "C"))

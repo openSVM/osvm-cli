@@ -1,0 +1,6 @@
+;; Query: Demonstrate Initialize array with value
+;; Category: Data Structures
+;; Expected: [0, 0, 0, 0, 0] (array)
+;; Demonstrates: OVSM syntax
+
+(repeat 5 0)

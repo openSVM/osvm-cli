@@ -1,0 +1,7 @@
+;; Query: Calculate circumference with PI
+;; Category: Basic
+;; Expected: ~62.8318
+;; Demonstrates: constants
+
+(const PI 3.14159)  ;; Define constant PI
+(* 2 PI 10)  ;; Multiplication

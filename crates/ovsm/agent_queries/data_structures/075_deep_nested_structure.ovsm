@@ -1,0 +1,6 @@
+;; Query: Demonstrate Complex nested structure
+;; Category: Data Structures
+;; Expected: Complex object
+;; Demonstrates: arrays, objects
+
+{:users [{:id 1 :name "Alice"} {:id 2 :name "Bob"}] :count 2}

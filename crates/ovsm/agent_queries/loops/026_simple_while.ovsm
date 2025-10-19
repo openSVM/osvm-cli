@@ -1,0 +1,9 @@
+;; Query: Calculate Count from 0 to 3 with while
+;; Category: Loops
+;; Expected: 3 (integer)
+;; Demonstrates: variable definition, mutation, while loops
+
+(define x 0)  ;; Create variable 'x'
+(while (< x 3)  ;; Loop while condition is true
+(set! x (+ x 1)))  ;; Update x
+x

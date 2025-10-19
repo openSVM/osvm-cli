@@ -1,0 +1,12 @@
+;; Query: Calculate GCD of 48 and 18
+;; Category: Advanced
+;; Expected: 6 (integer)
+;; Demonstrates: variable definition, mutation, while loops
+
+(define a 48)  ;; Create variable 'a'
+(define b 18)  ;; Create variable 'b'
+(while (!= b 0)  ;; Loop while condition is true
+(define temp b)  ;; Create variable 'temp'
+(set! b (% a b))  ;; Update b
+(set! a temp))  ;; Update a
+a

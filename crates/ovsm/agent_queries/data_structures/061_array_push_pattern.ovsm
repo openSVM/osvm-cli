@@ -1,0 +1,7 @@
+;; Query: Calculate Add element to array
+;; Category: Data Structures
+;; Expected: [1, 2, 3, 4] (array)
+;; Demonstrates: variable definition, arrays
+
+(define arr [1 2 3])  ;; Create variable 'arr'
+(+ arr [4])  ;; Addition

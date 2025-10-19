@@ -1,0 +1,10 @@
+;; Query: Calculate LP token value
+;; Category: Advanced
+;; Expected: LP value
+;; Demonstrates: variable definition
+
+(define reserve-a 1000000)
+(define reserve-b 2000000)
+(define total-supply 1000)
+(define user-balance 10)
+(* (/ user-balance total-supply) reserve-a)  ;; Multiplication

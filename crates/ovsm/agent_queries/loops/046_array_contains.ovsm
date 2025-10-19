@@ -1,0 +1,11 @@
+;; Query: Check if array contains value
+;; Category: Loops
+;; Expected: true (boolean)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [1 2 3 4 5])  ;; Create variable 'nums'
+(define has-three false)
+(for (n nums)  ;; Iterate over collection
+  (when (== n 3)
+(set! has-three true)))  ;; Update has
+has-three

@@ -1,0 +1,12 @@
+;; Query: Calculate exponential growth
+;; Category: Advanced
+;; Expected: Growth value
+;; Demonstrates: variable definition, mutation, for loops
+
+(define initial 100)  ;; Create variable 'initial'
+(define rate 1.1)  ;; Create variable 'rate'
+(define periods 5)  ;; Create variable 'periods'
+(define result initial)  ;; Create variable 'result'
+(for (i (range 0 periods))  ;; Iterate over collection
+(set! result (* result rate)))  ;; Update result
+result

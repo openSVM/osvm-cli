@@ -1,0 +1,7 @@
+;; Query: Create Update object property
+;; Category: Data Structures
+;; Expected: {:name "Alice", :age 31} (object)
+;; Demonstrates: variable definition, objects
+
+(define person {:name "Alice" :age 30})  ;; Create variable 'person'
+(assoc person :age 31)

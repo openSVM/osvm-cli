@@ -1,0 +1,11 @@
+;; Query: Demonstrate variable mutation using set!
+;; Category: Basic - Variables
+;; Expected: 11 (integer)
+;; Demonstrates: Mutable state with set!
+
+(define counter 10)  ;; Initialize counter
+(set! counter (+ counter 1))  ;; Increment by 1
+counter  ;; Return updated value
+
+;; Result: 11
+;; Pattern: accumulator/counter variables in loops

@@ -1,0 +1,9 @@
+;; Query: Calculate the sum of two numbers using the addition operator
+;; Category: Basic - Arithmetic Operations
+;; Expected: 100 (integer)
+;; Demonstrates: Binary addition operator
+
+(+ 42 58)  ;; Add 42 and 58
+
+;; Result: 100
+;; Use + for any numeric addition in OVSM

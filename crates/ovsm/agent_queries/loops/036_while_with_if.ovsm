@@ -1,0 +1,13 @@
+;; Query: Test While loop with if-then-else (THE FIX!)
+;; Category: Loops
+;; Expected: 1 (integer)
+;; Demonstrates: variable definition, mutation, conditionals, while loops
+
+(define done false)  ;; Create variable 'done'
+(define count 0)  ;; Create variable 'count'
+(while (not done)  ;; Loop while condition is true
+(if (== count 0)  ;; Conditional expression
+(set! count 1)  ;; Update count
+(set! count 2))  ;; Update count
+(set! done true))  ;; Update done
+count

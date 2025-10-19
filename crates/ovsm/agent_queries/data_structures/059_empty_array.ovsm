@@ -1,0 +1,6 @@
+;; Query: Create empty array
+;; Category: Data Structures
+;; Expected: [] (array)
+;; Demonstrates: arrays
+
+[]

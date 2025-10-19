@@ -1,0 +1,41 @@
+;; Query: Calculate liquidity pool (LP) token value in AMM DEX
+;; Category: Advanced - DeFi/Blockchain
+;; Expected: 10000 (integer representing token value)
+;; Demonstrates: Real-world DeFi calculation, proportion math
+
+;; Automated Market Maker (AMM) Liquidity Pool Mechanics:
+;; - Users deposit token pairs (e.g., SOL/USDC) into a pool
+;; - In return, they receive LP tokens representing their share
+;; - LP token value = (user's share / total supply) * reserve value
+
+;; Pool state
+(define reserve-a 1000000)    ;; Pool has 1M tokens of asset A
+(define reserve-b 2000000)    ;; Pool has 2M tokens of asset B
+(define total-supply 1000)    ;; Total LP tokens minted
+
+;; User position
+(define user-balance 10)      ;; User owns 10 LP tokens
+
+;; Calculate user's share of the pool
+;; Share = user_balance / total_supply = 10 / 1000 = 0.01 (1%)
+
+(define user-share (/ user-balance total-supply))
+
+;; Calculate value in terms of asset A
+;; Value = share * reserve = 0.01 * 1,000,000 = 10,000
+
+(define value-in-a (* user-share reserve-a))
+
+value-in-a  ;; Result: 10000
+
+;; Interpretation:
+;; - User owns 1% of the pool (10/1000 LP tokens)
+;; - They can redeem for 10,000 of asset A
+;; - Or equivalently: 20,000 of asset B
+;; - This is the basis for LP token pricing in protocols like Raydium, Orca
+
+;; Real-world use cases:
+;; - Calculating impermanent loss
+;; - Determining withdrawal amounts
+;; - Pricing LP tokens for lending protocols
+;; - Portfolio value tracking

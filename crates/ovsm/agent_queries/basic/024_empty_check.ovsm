@@ -1,0 +1,9 @@
+;; Query: Check if a collection is empty using empty? predicate
+;; Category: Basic - Helper Functions
+;; Expected: true (boolean)
+;; Demonstrates: Empty collection checking
+
+(empty? [])  ;; Check if empty array is empty
+
+;; Result: true
+;; Use before accessing elements: (when (not (empty? arr)) (first arr))

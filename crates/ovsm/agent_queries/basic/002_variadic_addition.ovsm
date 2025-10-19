@@ -1,0 +1,6 @@
+;; Query: Calculate Sum the numbers 1 through 10
+;; Category: Basic
+;; Expected: 55 (integer)
+;; Demonstrates: OVSM syntax
+
+(+ 1 2 3 4 5 6 7 8 9 10)  ;; Addition

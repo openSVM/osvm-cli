@@ -1,0 +1,10 @@
+;; Query: Create Define and reference a variable using define
+;; Category: Basic - Variables
+;; Expected: 25 (integer)
+;; Demonstrates: Variable definition and reference
+
+(define age 25)  ;; Create variable 'age' with value 25
+age  ;; Reference the variable (returns its value)
+
+;; Result: 25
+;; Variables defined with 'define' are immutable until 'set!' is used

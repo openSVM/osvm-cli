@@ -1,0 +1,6 @@
+;; Query: Get object keys (if supported)
+;; Category: Data Structures
+;; Expected: [:name, :age] (array)
+;; Demonstrates: objects
+
+(keys {:name "Alice" :age 30})

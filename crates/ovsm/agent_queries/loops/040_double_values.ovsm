@@ -1,0 +1,10 @@
+;; Query: Calculate Double each value in array
+;; Category: Loops
+;; Expected: [2, 4, 6, 8, 10] (array)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [1 2 3 4 5])  ;; Create variable 'nums'
+(define doubled [])  ;; Create variable 'doubled'
+(for (n nums)  ;; Iterate over collection
+(set! doubled (+ doubled [(* n 2)])))  ;; Update doubled
+doubled

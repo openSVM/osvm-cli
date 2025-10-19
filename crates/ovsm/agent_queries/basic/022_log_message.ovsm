@@ -1,0 +1,9 @@
+;; Query: Demonstrate Log messages to output
+;; Category: Basic
+;; Expected: null (null type)
+;; Demonstrates: sequential execution
+
+(do  ;; Execute multiple expressions
+  (log :message "Processing started")
+  (log :message "Task completed")
+  null)

@@ -1,0 +1,11 @@
+;; Query: Calculate Count occurrences of value
+;; Category: Loops
+;; Expected: 3 (integer)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [1 2 2 3 2 4])  ;; Create variable 'nums'
+(define count 0)  ;; Create variable 'count'
+(for (n nums)  ;; Iterate over collection
+  (when (== n 2)
+(set! count (+ count 1))))  ;; Update count
+count

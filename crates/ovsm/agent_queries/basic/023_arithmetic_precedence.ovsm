@@ -1,0 +1,6 @@
+;; Query: Calculate 2 + 3 * 4
+;; Category: Basic
+;; Expected: 14 (integer)
+;; Demonstrates: OVSM syntax
+
+(+ 2 (* 3 4))  ;; Addition
