@@ -2,6 +2,52 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚨 CRITICAL OVSM PARSER BUG - MUST READ FIRST 🚨
+
+### ⚠️ IF-THEN-ELSE STATEMENTS DO NOT WORK INSIDE WHILE LOOPS ⚠️
+
+**STATUS: CONFIRMED CRITICAL BUG - REQUIRES LEXER-LEVEL FIX**
+
+**BUG DESCRIPTION:**
+When an `IF-THEN-ELSE` statement is placed inside a `WHILE` loop, the parser incorrectly determines block boundaries, causing infinite loops or incorrect execution. The ELSE/ELIF blocks consume the rest of the WHILE loop body, preventing loop progression.
+
+**SYMPTOMS:**
+```ovsm
+WHILE $done == 0:
+    IF $condition THEN
+        // code here
+    ELSE
+        // THIS ELSE BLOCK INCORRECTLY CONSUMES THE ENTIRE WHILE LOOP BODY!
+
+    $done = 1  # <--- THIS LINE NEVER EXECUTES!
+```
+
+**ROOT CAUSE:**
+The parser uses `is_end_of_block()` to detect where THEN/ELSE blocks end, but this function only checks for specific keywords (ELSE, ELIF, ENDIF, RightBrace, etc.). Since OVSM uses Python-style indentation syntax WITHOUT lexer-level INDENT/DEDENT tokens, the parser has NO WAY to detect when indentation de-dents back to the parent block level.
+
+**ATTEMPTED FIX (FAILED):**
+Modified THEN, ELSE, and ELIF block parsers to use `is_end_of_block()` helper. Result: Infinite loop because `is_end_of_block()` doesn't detect indentation changes.
+
+**PROPER SOLUTION REQUIRED:**
+1. Modify lexer/scanner to track indentation levels
+2. Emit INDENT token when indentation increases
+3. Emit DEDENT token when indentation decreases
+4. Modify parser to treat DEDENT as block-ending token
+5. Test all nested block structures (FOR, WHILE, IF, TRY, etc.)
+
+**WORKAROUND FOR USERS:**
+Until fixed, avoid using IF-THEN-ELSE inside WHILE/FOR loops. Use nested WHILE loops or other control structures instead.
+
+**FILES INVOLVED:**
+- `crates/ovsm/src/scanner/mod.rs` - Needs indentation tracking
+- `crates/ovsm/src/parser/mod.rs` - Needs DEDENT handling
+- `crates/ovsm/src/token.rs` - May need INDENT/DEDENT token types
+
+**REFERENCE:**
+See git commit message "docs: add critical parser bug report for IF-THEN-ELSE in loops" for detailed analysis.
+
+---
+
 ## 🚨 CRITICAL SECURITY RULE - MUST READ FIRST 🚨
 
 ### ⚠️ NEVER MODIFY SOLANA CONFIGURATION FILES ⚠️
