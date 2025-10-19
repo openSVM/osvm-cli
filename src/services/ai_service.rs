@@ -1041,9 +1041,21 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 
     /// Parse OVSM-formatted plan
     fn parse_ovsm_plan(&self, plan_text: &str) -> Result<ToolPlan> {
-        // Look for the Expected Plan marker
-        if !plan_text.contains("**Expected Plan:**") && !plan_text.contains("Expected Plan:") {
+        eprintln!("DEBUG parse_ovsm_plan: called with {} chars", plan_text.len());
+        eprintln!("DEBUG parse_ovsm_plan: first 200 chars: {}", &plan_text[..plan_text.len().min(200)]);
+
+        // NEW: If response starts with [TIME:...] and has Main Branch:, it's valid!
+        let has_time_marker = plan_text.contains("[TIME:") || plan_text.contains("[CONFIDENCE:");
+        let has_main_branch = plan_text.contains("Main Branch:") || plan_text.contains("**Main Branch:**");
+
+        if has_time_marker && has_main_branch {
+            eprintln!("DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!");
+            // This is a valid OVSM plan in simplified format - continue parsing
+        } else if !plan_text.contains("**Expected Plan:**") && !plan_text.contains("Expected Plan:") {
+            eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
             anyhow::bail!("No OVSM plan structure found");
+        } else {
+            eprintln!("DEBUG parse_ovsm_plan: Found Expected Plan marker!");
         }
 
         // Extract reasoning from Main Branch or overview

@@ -189,11 +189,14 @@ fn fix_ovsm_syntax(code: &str) -> String {
 /// Extract OVSM code from markdown-formatted AI response
 /// Looks for code blocks and extracts the actual OVSM code
 fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
+    eprintln!("DEBUG: extract_ovsm_code called with {} chars", raw_plan.len());
+
     // Strategy 1: Find code blocks with triple backticks
     let mut code_blocks = Vec::new();
 
     let mut search_start = 0;
     while let Some(code_start) = raw_plan[search_start..].find("```") {
+        eprintln!("DEBUG: Found ``` at position {}", search_start + code_start);
         let absolute_start = search_start + code_start;
         let after_start = &raw_plan[absolute_start + 3..];
 
@@ -207,15 +210,21 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         // Find the closing ```
         if let Some(code_end) = code_content.find("```") {
             let extracted = code_content[..code_end].trim();
+            eprintln!("DEBUG: Extracted block ({} chars): {}", extracted.len(), &extracted[..extracted.len().min(100)]);
 
             // Only consider blocks that look like LISP code
-            if extracted.contains("(define ") ||
+            let is_lisp = extracted.contains("(define ") ||
                extracted.contains("(const ") ||
                extracted.contains("(while ") ||
                extracted.contains("(for ") ||
                extracted.contains("(if ") ||
                extracted.contains("(do ") ||
-               extracted.contains("(set! ") {
+               extracted.contains("(set! ");
+
+            eprintln!("DEBUG: Is LISP? {}", is_lisp);
+
+            if is_lisp {
+                eprintln!("DEBUG: Adding to code_blocks!");
                 code_blocks.push(extracted.to_string());
             }
 
@@ -225,10 +234,15 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         }
     }
 
+    eprintln!("DEBUG: Found {} code blocks total", code_blocks.len());
+
     // If we found code blocks, return the largest one
     if let Some(largest) = code_blocks.iter().max_by_key(|s| s.len()) {
+        eprintln!("DEBUG: Returning largest block ({} chars)", largest.len());
         return Some(fix_ovsm_syntax(largest));
     }
+
+    eprintln!("DEBUG: No code blocks found in triple-backticks, trying Main Branch extraction...");
 
     // Strategy 2: Extract from Main Branch: section (with or without bold markers)
     // This handles cases where AI returns OVSM without code blocks
