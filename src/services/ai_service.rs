@@ -634,13 +634,12 @@ count
 **Example - LONG time window (>= 2 minutes) - REQUIRES PAGINATION:**
 ```lisp
 ;; Define ALL variables at the TOP!
-(define cutoff (- (now) 600))  ;; 10 minutes
+(define cutoff (- (now) 600))  ;; 10 minutes - IMPORTANT: (now) is LOWERCASE!
 (define count 0)
 (define before null)
 (define continue true)
 (define batch [])
 (define batch_size 0)
-(define last_sig null)
 
 (while continue
   (set! batch (if (== before null)
@@ -653,19 +652,32 @@ count
       (set! count (+ count 1))))
 
   ;; Stop when no results OR oldest sig is before cutoff
+  ;; IMPORTANT: Guard array access to prevent null errors!
   (when (or (== batch_size 0)
-            (< (. ([] batch (- batch_size 1)) blockTime) cutoff))
+            (and (> batch_size 0) (< (. ([] batch (- batch_size 1)) blockTime) cutoff)))
     (set! continue false))
 
+  ;; ❌❌❌ CRITICAL: DO NOT define variables inside when! ❌❌❌
+  ;; WRONG: (when ... (define last_item ...) (set! before ...))
+  ;; RIGHT: Use inline expression like below:
   (when (and continue (> batch_size 0))
-    (set! last_sig ([] batch (- batch_size 1)))  ;; use set! not define!
-    (set! before (. last_sig signature))))
-count
+    (set! before (. ([] batch (- batch_size 1)) signature))))  ;; ✅ CORRECT: inline!
+
+count  ;; Return the final count
 ```
 
 **What NOT to do:**
 ```lisp
-;; ❌ TOO COMPLEX - calling getTransaction unnecessarily!
+;; ❌ WRONG #1: Scoping bug - defining variable inside when block
+(when (and continue (> batch_size 0))
+  (define last_item ([] batch (- batch_size 1)))  ;; ❌ BREAKS! Variable lost!
+  (set! before (. last_item signature)))
+
+;; ✅ CORRECT: Use inline expression instead
+(when (and continue (> batch_size 0))
+  (set! before (. ([] batch (- batch_size 1)) signature)))  ;; ✅ WORKS!
+
+;; ❌ WRONG #2: Calling getTransaction unnecessarily
 (for (sig sigs)
   (define tx (getTransaction (. sig signature)))  ;; WASTEFUL!
   (define bt (. tx blockTime))  ;; sig already has blockTime!
@@ -709,10 +721,13 @@ Tool Calls:
 [list tools you'll use - use LISP syntax in plan]
 
 **Main Branch:**
+```lisp
 ;; Execution steps with tool calls using LISP syntax
 (define data (getTool arg))
 (for (item data)
   (processItem item))
+result  ;; IMPORTANT: Include return value in Main Branch, NOT in Action!
+```
 
 **Decision Point:** [what you're deciding]
   BRANCH A (condition):
@@ -720,7 +735,9 @@ Tool Calls:
   BRANCH B (condition):
     (define result (handleB))
 
-**Action:** [final output description]
+**Action:** [description only - NO code blocks here, code goes in Main Branch!]
+
+**CRITICAL:** The Main Branch code block MUST include the final return value/expression. Do NOT put executable code in the Action section - Action is for description only!
 
 # Common LISP Patterns
 
@@ -750,6 +767,17 @@ Conditional Logic:
 **Arrays**: length, last, range
 **Utilities**: now, log
 **MCP Tools**: See "Your Available MCP Tools" section below for dynamic tools like COUNT, APPEND, etc.
+
+**⚠️ CRITICAL CASING RULES:**
+- **Built-in functions are LOWERCASE**: (now), (log :message "text"), (range 1 10)
+- **MCP tools are UPPERCASE**: (COUNT array), (APPEND arr item), (SUM values)
+- **Control flow is lowercase**: (if ...), (while ...), (for ...)
+- **WRONG**: (NOW) - NOW is an MCP tool name, but use (now) lowercase in code!
+- **WRONG**: (LOG :message ...) - LOG is an MCP tool name, but use (log :message ...) lowercase in code!
+- **CORRECT**: (define cutoff (- (now) 600)) - lowercase now!
+- **CORRECT**: (set! batch_size (COUNT batch)) - uppercase COUNT!
+- **CRITICAL**: Even though MCP tools list shows "NOW", you MUST use (now) in code!
+- **CRITICAL**: Even though MCP tools list shows "LOG", you MUST use (log) in code!
 
 # MCP Tools Reference
 
@@ -1014,15 +1042,31 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
       (set! count (+ count 1))))
   ```
 
-**CRITICAL SCOPING RULES:**
+**🚨🚨🚨 CRITICAL SCOPING RULES - #1 MOST COMMON BUG! 🚨🚨🚨**
+
+**THE RULE:** NEVER use `define` inside `when`, `if`, `while`, or `do` blocks!
+
+**❌ MOST COMMON MISTAKE (causes "undefined variable" errors):**
+```lisp
+(when (and continue (> batch_size 0))
+  (define last_item ([] batch (- batch_size 1)))  ;; ❌❌❌ BREAKS!
+  (set! before (. last_item signature)))
+```
+
+**✅ ALWAYS USE INLINE EXPRESSIONS INSTEAD:**
+```lisp
+(when (and continue (> batch_size 0))
+  (set! before (. ([] batch (- batch_size 1)) signature)))  ;; ✅✅✅ WORKS!
+```
+
+**Additional scoping rules:**
 - ❌ WRONG: Defining variables inside (do ...) blocks
 - ❌ WRONG: Defining variables inside (when ...) blocks
 - ❌ WRONG: Defining variables inside (if ...) branches
 - ❌ WRONG: Defining variables inside (while ...) loops
-- ❌ WRONG: (when continue (define last_sig ...))  ;; NEVER DO THIS!
 - ✅ CORRECT: Define ALL variables at the TOP of your code, BEFORE any loops
 - ✅ CORRECT: Use set! to mutate pre-defined variables inside loops/when/if
-- ✅ CORRECT: Signature objects already have blockTime - no need for getTransaction!
+- ✅ CORRECT: Use inline expressions like `(. ([] batch 0) signature)` instead of temp variables
 
 **CRITICAL: Define variables at the TOP:**
 ```lisp
@@ -1073,6 +1117,12 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
             for (server_id, tools) in available_tools {
                 tools_context.push_str(&format!("\nServer: {}\n", server_id));
                 for tool in tools {
+                    // Skip built-in LISP functions that are incorrectly listed as MCP tools
+                    // These are implemented directly in the LISP evaluator
+                    if matches!(tool.name.as_str(), "NOW" | "LOG" | "now" | "log") {
+                        continue;
+                    }
+
                     let description = tool
                         .description
                         .as_deref()
@@ -1213,6 +1263,12 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
             for (server_id, tools) in available_tools {
                 tools_context.push_str(&format!("\nServer: {}\n", server_id));
                 for tool in tools {
+                    // Skip built-in LISP functions that are incorrectly listed as MCP tools
+                    // These are implemented directly in the LISP evaluator
+                    if matches!(tool.name.as_str(), "NOW" | "LOG" | "now" | "log") {
+                        continue;
+                    }
+
                     let description = tool
                         .description
                         .as_deref()
