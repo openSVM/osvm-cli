@@ -127,7 +127,11 @@ impl Tool for RpcBridgeTool {
 }
 
 async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Value> {
-    let client = reqwest::Client::new();
+    // Configure client with proper timeouts to prevent hanging
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))       // Total request timeout
+        .connect_timeout(std::time::Duration::from_secs(10)) // Connection timeout
+        .build()?;
 
     let request_body = json!({
         "jsonrpc": "2.0",
