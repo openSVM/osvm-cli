@@ -79,35 +79,38 @@ impl Tool for RpcBridgeTool {
             rpc_params.push(ovsm_value_to_json(&args[0]));
 
             // Build config object from remaining arguments
-            // For now, we use generic field names since OVSM doesn't preserve parameter names
-            // The specific RPC method determines how to interpret these
-            let mut config = serde_json::Map::new();
+            // Check if second argument is already an object (named params)
+            if args.len() == 2 && matches!(&args[1], OvsmValue::Object(_)) {
+                // Second arg is a config object, use it directly
+                rpc_params.push(ovsm_value_to_json(&args[1]));
+            } else {
+                // Build config from positional args
+                let mut config = serde_json::Map::new();
 
-            // Common Solana RPC config fields
-            if args.len() == 2 {
-                // Second arg is typically 'limit' for getSignaturesForAddress
+                // For getSignaturesForAddress specifically
                 if matches!(self.name.as_str(), "getSignaturesForAddress") {
-                    config.insert("limit".to_string(), ovsm_value_to_json(&args[1]));
+                    if args.len() >= 2 {
+                        config.insert("limit".to_string(), ovsm_value_to_json(&args[1]));
+                    }
+                    if args.len() >= 3 {
+                        config.insert("before".to_string(), ovsm_value_to_json(&args[2]));
+                    }
                 } else {
-                    // For other methods, treat as config object
-                    if let OvsmValue::Object(obj) = &args[1] {
-                        for (k, v) in obj.iter() {
-                            config.insert(k.clone(), ovsm_value_to_json(v));
+                    // For other methods, try to infer config structure
+                    for (i, arg) in args.iter().enumerate().skip(1) {
+                        if let OvsmValue::Object(obj) = arg {
+                            for (k, v) in obj.iter() {
+                                config.insert(k.clone(), ovsm_value_to_json(v));
+                            }
+                        } else {
+                            config.insert(format!("param{}", i), ovsm_value_to_json(arg));
                         }
-                    } else {
-                        config.insert("config".to_string(), ovsm_value_to_json(&args[1]));
                     }
                 }
-            } else if args.len() == 3 {
-                // Third arg could be 'before' for pagination
-                if matches!(self.name.as_str(), "getSignaturesForAddress") {
-                    config.insert("limit".to_string(), ovsm_value_to_json(&args[1]));
-                    config.insert("before".to_string(), ovsm_value_to_json(&args[2]));
-                }
-            }
 
-            if !config.is_empty() {
-                rpc_params.push(Value::Object(config));
+                if !config.is_empty() {
+                    rpc_params.push(Value::Object(config));
+                }
             }
         }
 

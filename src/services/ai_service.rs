@@ -633,7 +633,7 @@ Data Structures:
 
 Tool Calls:
   (toolName arg1 arg2)
-  (toolName :param1 value1 :param2 value2)
+  (toolName "primary_arg" {:param1 value1 :param2 value2})
 
 # Plan Structure
 
@@ -812,8 +812,8 @@ The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `g
 (while continue
   (define batch
     (if (== before null)
-        (getSignaturesForAddress :address address :limit MAX_RESULTS_PER_CALL)
-        (getSignaturesForAddress :address address :limit MAX_RESULTS_PER_CALL :before before)))
+        (getSignaturesForAddress address {:limit MAX_RESULTS_PER_CALL})
+        (getSignaturesForAddress address {:limit MAX_RESULTS_PER_CALL :before before})))
 
   (define batch_size (COUNT batch))
 
