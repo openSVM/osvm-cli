@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OSVM CLI - Solana Virtual Machine Management</title>
     <link rel="stylesheet" href="assets/dos-terminal.css">
+    <link rel="stylesheet" href="assets/mobile-enhancements.css">
     <!-- <link rel="stylesheet" href="styles.css"> -->
     <!-- <link rel="stylesheet" href="css/multipage.css"> -->
     <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -42,17 +43,24 @@
                     <span class="nav-title">OSVM CLI</span>
                 </div>
 
-                <ul class="nav-menu">
-                    <li><a href="#" data-page="home" class="nav-link active">Home</a></li>
-                    <li><a href="#" data-page="installation" class="nav-link">Install</a></li>
-                    <li><a href="#" data-page="isolation" class="nav-link">🛡️ Isolation</a></li>
-                    <li><a href="#" data-page="plugins" class="nav-link">Plugins</a></li>
-                    <li><a href="#" data-page="themes" class="nav-link">Themes</a></li>
-                    <li><a href="#" data-page="ai-integration" class="nav-link">AI</a></li>
-                    <li><a href="#" data-page="ovsm-language" class="nav-link">🧠 OVSM</a></li>
-                    <li><a href="#" data-page="mcp-servers" class="nav-link">MCP</a></li>
-                    <li><a href="#" data-page="node-deployment" class="nav-link">Deploy</a></li>
-                    <li><a href="#" data-page="api-reference" class="nav-link">API</a></li>
+                <!-- Hamburger Menu Button (Mobile) -->
+                <button class="nav-hamburger" onclick="toggleMobileMenu()" aria-label="Toggle navigation menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+
+                <ul class="nav-menu" id="nav-menu">
+                    <li><a href="#" data-page="home" class="nav-link active" onclick="closeMobileMenu()">Home</a></li>
+                    <li><a href="#" data-page="installation" class="nav-link" onclick="closeMobileMenu()">Install</a></li>
+                    <li><a href="#" data-page="isolation" class="nav-link" onclick="closeMobileMenu()">🛡️ Isolation</a></li>
+                    <li><a href="#" data-page="plugins" class="nav-link" onclick="closeMobileMenu()">Plugins</a></li>
+                    <li><a href="#" data-page="themes" class="nav-link" onclick="closeMobileMenu()">Themes</a></li>
+                    <li><a href="#" data-page="ai-integration" class="nav-link" onclick="closeMobileMenu()">AI</a></li>
+                    <li><a href="#" data-page="ovsm-language" class="nav-link" onclick="closeMobileMenu()">🧠 OVSM</a></li>
+                    <li><a href="#" data-page="mcp-servers" class="nav-link" onclick="closeMobileMenu()">MCP</a></li>
+                    <li><a href="#" data-page="node-deployment" class="nav-link" onclick="closeMobileMenu()">Deploy</a></li>
+                    <li><a href="#" data-page="api-reference" class="nav-link" onclick="closeMobileMenu()">API</a></li>
                 </ul>
 
                 <div class="nav-actions">
@@ -63,6 +71,9 @@
                 </div>
             </div>
         </nav>
+
+        <!-- Mobile Menu Overlay -->
+        <div class="nav-overlay" id="nav-overlay" onclick="closeMobileMenu()"></div>
 
         <!-- Breadcrumb Navigation -->
         <div class="breadcrumb-container">
@@ -162,6 +173,49 @@
     <script src="js/animations.js"></script>
 
     <script>
+        // Mobile Menu Functions
+        function toggleMobileMenu() {
+            const navMenu = document.getElementById('nav-menu');
+            const navOverlay = document.getElementById('nav-overlay');
+            const hamburger = document.querySelector('.nav-hamburger');
+
+            navMenu.classList.toggle('active');
+            navOverlay.classList.toggle('active');
+            hamburger.classList.toggle('active');
+
+            // Prevent body scroll when menu is open
+            if (navMenu.classList.contains('active')) {
+                document.body.style.overflow = 'hidden';
+            } else {
+                document.body.style.overflow = '';
+            }
+        }
+
+        function closeMobileMenu() {
+            const navMenu = document.getElementById('nav-menu');
+            const navOverlay = document.getElementById('nav-overlay');
+            const hamburger = document.querySelector('.nav-hamburger');
+
+            navMenu.classList.remove('active');
+            navOverlay.classList.remove('active');
+            hamburger.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Close mobile menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeMobileMenu();
+            }
+        });
+
+        // Close mobile menu on window resize to desktop
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                closeMobileMenu();
+            }
+        });
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
             console.log('🚀 OSVM CLI Documentation Loading...');

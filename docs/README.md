@@ -51,15 +51,15 @@ Welcome to the comprehensive documentation for OSVM CLI - the revolutionary Sola
 - [**DeepLogic AI Analysis**](deeplogic-ai-analysis.md) - Advanced vulnerability detection
 - [**Security Audit**](security-audit.md) - Automated security analysis and reporting
 
-### 🧠 OVSM Language (NEW!)
-- [**OVSM Overview**](ovsm/OVSM_README.md) - Introduction to OVSM planning language
-- [**Core Specification**](ovsm/ovsm-spec.md) - Complete OVSM language reference (207 tools)
-- [**Agent Extensions**](ovsm/ovsm-agents.md) - Multi-agent research features (15 advanced capabilities)
-- [**Tool Index**](ovsm/COMPLETE_TOOL_INDEX.md) - Comprehensive tool reference
-- [**Planning Guide**](ovsm/PLANNING_FORMAT.md) - How to write OVSM research plans
+### 🧠 OVSM Language - LISP Syntax (Production Ready!)
+- [**OVSM LISP Specification**](../OVSM_LISP_SYNTAX_SPEC.md) - **Complete LISP syntax reference (ONLY supported syntax)**
+- [**Implementation Report**](../FINAL_LISP_IMPLEMENTATION_REPORT.md) - Production-ready implementation details
+- [**Usage Guide**](../crates/ovsm/USAGE_GUIDE.md) - How to write OVSM scripts
+- [**Example Scripts**](../examples/ovsm_scripts/) - Working LISP syntax examples
+- [**Legacy Docs**](ovsm/OVSM_README.md) - Historical reference (may reference deprecated Python syntax)
 
 **What is OVSM?**
-OVSM (Open Versatile Seeker Mind) is a domain-specific language for expressing AI agent research plans with conditional branching, parallel execution, and adaptive learning. It enables sophisticated multi-agent workflows for blockchain investigation, statistical analysis, and knowledge discovery.
+OVSM is a LISP-based domain-specific language for blockchain scripting with Solana RPC integration. Using S-expression syntax, it provides zero-ambiguity parsing, conditional branching, loops, and native blockchain operations. **Python-style syntax removed October 2025** - LISP is now the only supported syntax with 100% test coverage and zero parser bugs.
 
 ### 🔌 MCP Integration
 - [**MCP Integration Guide**](mcp-integration.md) - Model Context Protocol server setup

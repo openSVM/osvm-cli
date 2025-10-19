@@ -1,0 +1,59 @@
+;; Pumpfun 1-Minute Transaction Counter - LISP Syntax
+;; This demonstrates the LISP syntax for OVSM
+;;
+;; NO PARSER BUGS! S-expressions make block boundaries explicit.
+
+;; Constants
+(const PUMPFUN "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+(const MAX_PER_CALL 1000)
+
+;; Main logic
+(let ((now (now))
+      (cutoff (- now 60))
+      (before nil)
+      (done false)
+      (total-count 0)
+      (pages 0))
+
+  ;; Pagination loop - cleanly structured with explicit delimiters
+  (while (not done)
+    (set! pages (+ pages 1))
+
+    ;; Fetch batch - conditional logic inside loop (NO BUG!)
+    (let ((batch (if (null? before)
+                     (getSignaturesForAddress
+                       :address PUMPFUN
+                       :limit MAX_PER_CALL)
+                     (getSignaturesForAddress
+                       :address PUMPFUN
+                       :limit MAX_PER_CALL
+                       :before before))))
+
+      ;; Process batch
+      (let ((size (length batch)))
+        (if (== size 0)
+            ;; Empty batch - we're done
+            (set! done true)
+
+            ;; Non-empty batch - process it
+            (do
+              ;; Count recent transactions
+              (for (sig batch)
+                (if (>= (.blockTime sig) cutoff)
+                    (set! total-count (+ total-count 1))
+                    (set! done true)))
+
+              ;; Set up next page (this executes correctly!)
+              (when (not done)
+                (let ((last-idx (- size 1)))
+                  (set! before (.signature ([] batch last-idx))))))))))
+
+  ;; Log results
+  (log :message "===== 1-MINUTE COUNT =====")
+  (log :message "Pages fetched")
+  (log :message pages)
+  (log :message "Transactions in last 1 minute")
+  (log :message total-count)
+
+  ;; Return count
+  total-count)

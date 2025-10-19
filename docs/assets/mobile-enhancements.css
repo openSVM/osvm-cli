@@ -1,0 +1,828 @@
+/* ========================================
+   MOBILE-FIRST ENHANCEMENTS FOR OSVM DOCS
+   Fixes: horizontal scrolling, tap targets, readability
+   ======================================== */
+
+/* =====================================
+   1. PREVENT HORIZONTAL SCROLL
+   ===================================== */
+
+/* Ensure structural elements don't exceed viewport width */
+div, section, article, main, header, footer, nav, aside,
+pre, code, table, ul, ol, dl, p, blockquote,
+h1, h2, h3, h4, h5, h6,
+.terminal-window, .page-content, .feature-grid, .command-grid {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Images and SVGs should scale but maintain aspect ratio */
+img, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Universal box-sizing for all elements */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Override any fixed widths that might cause overflow */
+body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+}
+
+/* Ensure all full-width containers don't overflow */
+.terminal-window,
+.main-navigation,
+.terminal-header,
+.terminal-footer,
+nav {
+  max-width: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* Fix pre/code blocks that commonly cause horizontal scroll */
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  /* Removed word-break: break-all - too aggressive */
+}
+
+pre code {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Fix ASCII art overflow */
+.ascii-art,
+.ascii-container,
+.ascii-header {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* =====================================
+   2. IMPROVED TAP TARGETS (44x44px minimum)
+   ===================================== */
+
+/* Hide hamburger menu on desktop by default */
+.nav-hamburger {
+  display: none;
+}
+
+.nav-overlay {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Navigation links - larger tap area */
+  nav a,
+  .nav-link {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  /* Buttons - proper touch targets */
+  button,
+  .button,
+  .cta-btn,
+  .copy-btn,
+  .btn-try,
+  .btn-copy {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 20px;
+    font-size: 15px;
+    touch-action: manipulation; /* Prevent double-tap zoom */
+  }
+
+  /* Command examples - clickable area */
+  .command-example,
+  .copyable-command {
+    min-height: 44px;
+    padding: 12px;
+    cursor: pointer;
+  }
+
+  /* Search trigger button */
+  .search-trigger,
+  .search-btn {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px;
+  }
+
+  /* Tab buttons */
+  .tab-btn,
+  .feature-tab {
+    min-height: 44px;
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+
+  /* Feature cards - entire card is tappable */
+  .feature-card,
+  .news-item {
+    padding: 20px;
+  }
+
+  .feature-link,
+  .news-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 10px;
+  }
+}
+
+/* =====================================
+   3. MOBILE NAVIGATION IMPROVEMENTS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Hide complex nav, show hamburger */
+  .nav-menu {
+    position: fixed;
+    top: 0;
+    left: -100%;
+    width: 80%;
+    max-width: 300px;
+    height: 100vh;
+    background: #0a0a0a;
+    border-right: 2px solid var(--dos-white);
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 60px 20px 20px;
+    overflow-y: auto;
+    transition: left 0.3s ease;
+    z-index: 1001;
+    gap: 0;
+  }
+
+  .nav-menu.active {
+    left: 0;
+  }
+
+  .nav-menu li {
+    width: 100%;
+    margin: 0;
+  }
+
+  .nav-menu a {
+    width: 100%;
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--dos-gray);
+    justify-content: flex-start;
+  }
+
+  /* Hamburger menu button */
+  .nav-hamburger {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: transparent;
+    border: 2px solid var(--dos-white);
+    padding: 10px;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .nav-hamburger span {
+    display: block;
+    width: 24px;
+    height: 2px;
+    background: var(--dos-white);
+    transition: all 0.3s;
+  }
+
+  .nav-hamburger.active span:nth-child(1) {
+    transform: rotate(45deg) translateY(7px);
+  }
+
+  .nav-hamburger.active span:nth-child(2) {
+    opacity: 0;
+  }
+
+  .nav-hamburger.active span:nth-child(3) {
+    transform: rotate(-45deg) translateY(-7px);
+  }
+
+  /* Overlay for mobile menu */
+  .nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+  }
+
+  .nav-overlay.active {
+    display: block;
+  }
+
+  /* Simplify navigation container on mobile */
+  .nav-container {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  /* Hide desktop nav items, show hamburger */
+  .nav-actions {
+    display: none;
+  }
+}
+
+/* =====================================
+   4. IMPROVED TYPOGRAPHY FOR MOBILE
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Larger base font for readability */
+  body {
+    font-size: 16px; /* Up from 14px */
+    line-height: 1.6;
+  }
+
+  /* Better heading sizes */
+  h1 {
+    font-size: 24px;
+    padding: 15px 10px;
+    word-wrap: break-word;
+  }
+
+  h2 {
+    font-size: 20px;
+    word-wrap: break-word;
+  }
+
+  h3 {
+    font-size: 18px;
+  }
+
+  /* Remove decorative content that breaks on mobile */
+  h1::before,
+  h1::after {
+    content: none;
+  }
+
+  /* Better paragraph spacing */
+  p {
+    margin: 15px 0;
+    line-height: 1.7;
+  }
+
+  /* Improved list readability */
+  ul, ol {
+    margin: 15px 0 15px 20px;
+    padding-left: 10px;
+  }
+
+  li {
+    margin: 10px 0;
+    line-height: 1.6;
+  }
+}
+
+/* =====================================
+   5. GRID AND LAYOUT FIXES
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Force single column layouts */
+  .feature-grid,
+  .command-grid,
+  .news-grid,
+  .footer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+  }
+
+  .feature-card,
+  .command-example,
+  .news-item {
+    width: 100%;
+    margin: 0;
+  }
+
+  /* Metrics row - 2x2 grid instead of 4 columns */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .metric-card {
+    padding: 15px 10px;
+  }
+
+  .metric-value {
+    font-size: 20px;
+  }
+
+  .metric-label {
+    font-size: 12px;
+  }
+
+  /* CTA buttons - stack vertically */
+  .cta-buttons {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+
+  .cta-btn {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* =====================================
+   6. IMPROVED CODE BLOCKS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Better code block formatting */
+  pre {
+    font-size: 13px;
+    padding: 12px;
+    margin: 15px 0;
+    border-radius: 4px;
+  }
+
+  code {
+    font-size: 13px;
+    padding: 3px 6px;
+    word-break: break-word;
+  }
+
+  /* Command line examples */
+  .command-line {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .command {
+    word-break: break-all;
+    max-width: 100%;
+  }
+
+  /* Install box */
+  .install-box {
+    padding: 15px;
+  }
+
+  .install-input {
+    font-size: 14px;
+    padding: 12px;
+    width: 100%;
+  }
+
+  .install-btn {
+    margin-top: 10px;
+    width: 100%;
+  }
+}
+
+/* =====================================
+   7. TABS AND INTERACTIVE ELEMENTS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Horizontal scrollable tabs */
+  .example-tabs,
+  .feature-tabs {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 10px;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    scrollbar-width: thin;
+  }
+
+  .tab-btn,
+  .feature-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .example-tabs::-webkit-scrollbar,
+  .feature-tabs::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .example-tabs::-webkit-scrollbar-thumb,
+  .feature-tabs::-webkit-scrollbar-thumb {
+    background: var(--dos-gray);
+    border-radius: 2px;
+  }
+}
+
+/* =====================================
+   8. TABLES - MOBILE FRIENDLY
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Stack table rows vertically */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table thead {
+    display: none; /* Hide headers, show labels in cells */
+  }
+
+  table tr {
+    display: block;
+    margin-bottom: 15px;
+    border: 1px solid var(--dos-white);
+  }
+
+  table td {
+    display: block;
+    text-align: right;
+    padding: 10px;
+    border: none;
+    border-bottom: 1px solid var(--dos-gray);
+  }
+
+  table td::before {
+    content: attr(data-label);
+    float: left;
+    font-weight: bold;
+    color: var(--dos-amber);
+  }
+
+  table td:last-child {
+    border-bottom: none;
+  }
+}
+
+/* =====================================
+   9. FOOTER IMPROVEMENTS
+   ===================================== */
+
+@media (max-width: 768px) {
+  .footer-content {
+    padding: 20px 15px;
+  }
+
+  .footer-section {
+    margin-bottom: 25px;
+  }
+
+  .footer-section h4 {
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+
+  .footer-section ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  .footer-section li {
+    margin: 10px 0;
+  }
+
+  .footer-section a {
+    font-size: 15px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* Keyboard shortcuts - show as smaller badges */
+  .footer-section kbd {
+    font-size: 12px;
+    padding: 4px 8px;
+    margin: 2px;
+    display: inline-block;
+  }
+}
+
+/* =====================================
+   10. SEARCH IMPROVEMENTS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Full-screen search overlay */
+  .search-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    padding: 20px;
+  }
+
+  .search-input {
+    width: 100%;
+    font-size: 18px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .search-results {
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+  }
+
+  .search-result-item {
+    padding: 15px;
+    min-height: 44px;
+  }
+}
+
+/* =====================================
+   11. BREADCRUMB IMPROVEMENTS
+   ===================================== */
+
+@media (max-width: 768px) {
+  .breadcrumb-container {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .breadcrumb {
+    display: inline-flex;
+    padding: 10px 15px;
+  }
+
+  .breadcrumb-item {
+    font-size: 14px;
+  }
+}
+
+/* =====================================
+   12. LOADING AND ANIMATIONS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Reduce motion for battery saving */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Simpler loading spinner */
+  .loading-spinner {
+    font-size: 32px;
+  }
+
+  .loading-container {
+    padding: 40px 20px;
+  }
+}
+
+/* =====================================
+   13. ACCESSIBILITY IMPROVEMENTS
+   ===================================== */
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--dos-bright-white);
+  outline-offset: 2px;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: var(--dos-white);
+  color: var(--dos-black);
+  padding: 12px 20px;
+  z-index: 10000;
+  min-height: 44px;
+}
+
+.skip-to-main:focus {
+  top: 0;
+}
+
+/* Improve contrast for better readability */
+@media (max-width: 768px) {
+  body {
+    color: var(--dos-bright-white);
+  }
+
+  a {
+    color: var(--dos-bright-cyan);
+  }
+
+  .command-desc,
+  .news-date {
+    color: var(--dos-white);
+  }
+}
+
+/* =====================================
+   14. PERFORMANCE OPTIMIZATIONS
+   ===================================== */
+
+@media (max-width: 768px) {
+  /* Reduce expensive effects on mobile */
+  body::before,
+  body::after {
+    display: none; /* Disable scanlines and flicker */
+  }
+
+  /* Simpler text shadows */
+  body {
+    text-shadow: none;
+  }
+
+  button,
+  .button {
+    text-shadow: none;
+  }
+
+  /* Disable CRT effects that drain battery */
+  .ascii-art,
+  pre,
+  code {
+    text-shadow: none;
+  }
+}
+
+/* =====================================
+   15. LANDSCAPE ORIENTATION
+   ===================================== */
+
+@media (max-width: 768px) and (orientation: landscape) {
+  /* Reduce vertical padding in landscape */
+  body {
+    padding: 10px 15px;
+  }
+
+  .page-content {
+    padding: 15px !important;
+  }
+
+  /* Shorter hero sections */
+  .hero-section,
+  .intro {
+    padding: 20px 0;
+  }
+
+  /* Compact navigation */
+  .terminal-header {
+    padding: 8px 0;
+  }
+
+  .main-navigation {
+    padding: 8px 0;
+  }
+}
+
+/* =====================================
+   16. VERY SMALL SCREENS (<375px)
+   ===================================== */
+
+@media (max-width: 375px) {
+  body {
+    font-size: 15px;
+    padding: 8px;
+  }
+
+  h1 { font-size: 22px; }
+  h2 { font-size: 18px; }
+  h3 { font-size: 16px; }
+
+  .nav-brand {
+    font-size: 14px;
+  }
+
+  .nav-logo {
+    font-size: 18px;
+  }
+
+  /* Smaller badges */
+  .badge,
+  .news-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  /* Compact metrics */
+  .metrics-row {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-card {
+    padding: 12px;
+  }
+
+  /* Smaller buttons */
+  button,
+  .button {
+    font-size: 14px;
+    padding: 10px 16px;
+  }
+}
+
+/* =====================================
+   17. PRINT STYLES
+   ===================================== */
+
+@media print {
+  /* Remove interactive elements */
+  nav,
+  .nav-hamburger,
+  .nav-overlay,
+  .search-trigger,
+  .copy-btn,
+  footer,
+  .cta-section {
+    display: none;
+  }
+
+  /* Clean print layout */
+  body {
+    background: white;
+    color: black;
+  }
+
+  body::before,
+  body::after {
+    display: none;
+  }
+
+  a {
+    color: black;
+    text-decoration: underline;
+  }
+
+  /* Prevent page breaks inside elements */
+  pre,
+  blockquote,
+  .feature-card {
+    page-break-inside: avoid;
+  }
+}
+
+/* =====================================
+   18. TOUCH-SPECIFIC IMPROVEMENTS
+   ===================================== */
+
+@media (hover: none) and (pointer: coarse) {
+  /* Better touch feedback */
+  button:active,
+  .button:active,
+  .nav-link:active,
+  a:active {
+    transform: scale(0.97);
+    transition: transform 0.1s;
+  }
+
+  /* Larger interactive areas */
+  a {
+    padding: 8px 4px;
+  }
+
+  /* Remove hover-only features */
+  .feature-card:hover,
+  .news-item:hover {
+    transform: none;
+  }
+
+  /* Show controls that are hidden on hover */
+  .copy-indicator {
+    opacity: 0.7;
+    font-size: 12px;
+  }
+}
