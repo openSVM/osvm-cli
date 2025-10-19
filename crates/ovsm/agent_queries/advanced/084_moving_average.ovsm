@@ -1,0 +1,8 @@
+;; Query: Calculate 3-period moving average
+;; Category: Advanced
+;; Expected: Moving avg
+;; Demonstrates: variable definition, arrays
+
+(define prices [10 12 11 13 14])  ;; Create variable 'prices'
+(define ma (/ (+ (get prices 0) (get prices 1) (get prices 2)) 3))  ;; Create variable 'ma'
+ma

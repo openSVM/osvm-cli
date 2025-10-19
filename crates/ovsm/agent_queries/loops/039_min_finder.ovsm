@@ -1,0 +1,11 @@
+;; Query: Create Find minimum in array
+;; Category: Loops
+;; Expected: 5 (integer)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [23 99 15 67 5 42])  ;; Create variable 'nums'
+(define min 999)  ;; Create variable 'min'
+(for (n nums)  ;; Iterate over collection
+  (when (< n min)
+(set! min n)))  ;; Update min
+min

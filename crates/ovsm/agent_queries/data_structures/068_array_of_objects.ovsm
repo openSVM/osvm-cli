@@ -1,0 +1,6 @@
+;; Query: Demonstrate Array of objects
+;; Category: Data Structures
+;; Expected: [{:id 1}, {:id 2}] (array)
+;; Demonstrates: arrays, objects
+
+[{:id 1 :name "A"} {:id 2 :name "B"}]

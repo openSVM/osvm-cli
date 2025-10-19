@@ -1,0 +1,10 @@
+;; Query: Calculate Simulate simple hash
+;; Category: Advanced
+;; Expected: Hash value
+;; Demonstrates: variable definition, mutation, for loops
+
+(define data "block-data")  ;; Create variable 'data'
+(define hash 0)  ;; Create variable 'hash'
+(for (c data)  ;; Iterate over collection
+(set! hash (+ hash (char-code c))))  ;; Update hash
+hash

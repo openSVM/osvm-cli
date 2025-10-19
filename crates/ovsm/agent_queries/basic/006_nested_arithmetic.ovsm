@@ -1,0 +1,9 @@
+;; Query: Demonstrate operator precedence using nested expressions
+;; Category: Basic - Arithmetic Operations
+;; Expected: 64 (integer)
+;; Demonstrates: Nested function calls, explicit precedence
+
+(* (+ 5 3) (- 10 2))  ;; Evaluates to 8
+
+;; Result: 64
+;; No implicit precedence - structure shows evaluation order

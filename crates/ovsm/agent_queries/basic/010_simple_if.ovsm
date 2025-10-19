@@ -1,0 +1,11 @@
+;; Query: Demonstrate Conditional execution using if expression
+;; Category: Basic - Conditionals
+;; Expected: "yes" (string)
+;; Demonstrates: If-then-else conditional
+
+(if (> 10 5)  ;; Condition: is 10 greater than 5?
+"yes"  ;; Returned if condition is true
+"no")  ;; Returned if condition is false
+
+;; Result: "yes"
+;; Unlike imperative if, this is an expression that returns a value

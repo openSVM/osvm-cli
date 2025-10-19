@@ -1,0 +1,11 @@
+;; Query: Calculate Filter positive numbers
+;; Category: Loops
+;; Expected: [5, 12, 7] (array)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [-3 5 -8 12 0 7])  ;; Create variable 'nums'
+(define positives [])  ;; Create variable 'positives'
+(for (n nums)  ;; Iterate over collection
+  (when (> n 0)
+(set! positives (+ positives [n]))))  ;; Update positives
+positives

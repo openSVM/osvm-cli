@@ -1,0 +1,13 @@
+;; Query: Calculate Loop that should terminate early
+;; Category: Loops
+;; Expected: 5 (integer)
+;; Demonstrates: variable definition, mutation, while loops
+
+(define x 0)  ;; Create variable 'x'
+(define found 0)  ;; Create variable 'found'
+(while (< x 100)  ;; Loop while condition is true
+(set! x (+ x 1))  ;; Update x
+  (when (== x 5)
+(set! found x)  ;; Update found
+(set! x 100)))  ;; Update x
+found

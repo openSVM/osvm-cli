@@ -1,0 +1,10 @@
+;; Query: Calculate factorial of 5
+;; Category: Advanced
+;; Expected: 120 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define n 5)  ;; Create variable 'n'
+(define result 1)  ;; Create variable 'result'
+(for (i (range 1 (+ n 1)))  ;; Iterate over collection
+(set! result (* result i)))  ;; Update result
+result

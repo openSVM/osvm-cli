@@ -1,0 +1,6 @@
+;; Query: Demonstrate Merge two objects
+;; Category: Data Structures
+;; Expected: {:a 1, :b 2, :c 3} (object)
+;; Demonstrates: objects
+
+(merge {:a 1 :b 2} {:c 3})

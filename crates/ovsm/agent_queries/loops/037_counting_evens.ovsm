@@ -1,0 +1,10 @@
+;; Query: Calculate Count even numbers in range
+;; Category: Loops
+;; Expected: 5 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define evens 0)  ;; Create variable 'evens'
+(for (i (range 0 10))  ;; Iterate over collection
+  (when (== (% i 2) 0)
+(set! evens (+ evens 1))))  ;; Update evens
+evens

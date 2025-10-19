@@ -1,0 +1,6 @@
+;; Query: Demonstrate Fixed-size tuple-like array
+;; Category: Data Structures
+;; Expected: ["Alice", 30, true] (array)
+;; Demonstrates: arrays
+
+["Alice" 30 true]

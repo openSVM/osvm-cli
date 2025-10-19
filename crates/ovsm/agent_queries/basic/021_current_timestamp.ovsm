@@ -1,0 +1,9 @@
+;; Query: Get the current Unix timestamp in seconds
+;; Category: Basic - Helper Functions
+;; Expected: Unix timestamp (integer, seconds since 1970-01-01)
+;; Demonstrates: Time retrieval with now function
+
+(now)  ;; Get current timestamp
+
+;; Result: Integer timestamp (e.g., 1729335600)
+;; Example: (define start (now)) ... (define elapsed (- (now) start))

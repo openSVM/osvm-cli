@@ -1,0 +1,9 @@
+;; Query: Generate first 7 Fibonacci numbers
+;; Category: Loops
+;; Expected: [0, 1, 1, 2, 3, 5, 8] (array)
+;; Demonstrates: variable definition, mutation, for loops, variadic operators, arrays
+
+(define fib [0 1])  ;; Create variable 'fib'
+(for (i (range 2 7))  ;; Iterate over collection
+(set! fib (+ fib [(+ (last fib) (last (init fib)))])))  ;; Update fib
+fib

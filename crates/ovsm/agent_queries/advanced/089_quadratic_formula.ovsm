@@ -1,0 +1,11 @@
+;; Query: Calculate Solve quadratic equation
+;; Category: Advanced
+;; Expected: Roots
+;; Demonstrates: variable definition
+
+(define a 1)  ;; Create variable 'a'
+(define b -5)  ;; Create variable 'b'
+(define c 6)  ;; Create variable 'c'
+(define disc (- (* b b) (* 4 a c)))  ;; Create variable 'disc'
+(define root1 (/ (+ (- b) (sqrt disc)) (* 2 a)))  ;; Create variable 'root1'
+root1

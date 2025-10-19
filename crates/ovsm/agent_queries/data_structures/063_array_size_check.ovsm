@@ -1,0 +1,6 @@
+;; Query: Check array size
+;; Category: Data Structures
+;; Expected: 7 (integer)
+;; Demonstrates: arrays
+
+(length [10 20 30 40 50 60 70])  ;; Get collection length

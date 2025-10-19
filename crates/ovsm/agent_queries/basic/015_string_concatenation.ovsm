@@ -1,0 +1,6 @@
+;; Query: Calculate Concatenate 'Hello' and 'World'
+;; Category: Basic
+;; Expected: "HelloWorld" (string)
+;; Demonstrates: OVSM syntax
+
+(+ "Hello" "World")  ;; Addition

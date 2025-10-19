@@ -1,0 +1,9 @@
+;; Query: Generate a range of integers using the range function
+;; Category: Basic - Helper Functions
+;; Expected: [1, 2, 3, 4] (array of integers)
+;; Demonstrates: Range generation for loops and sequences
+
+(range 1 5)  ;; Generate integers from 1 to 4 (5 is exclusive)
+
+;; Result: [1, 2, 3, 4]
+;; Common use: (for (i (range 0 10)) ...) to loop 10 times

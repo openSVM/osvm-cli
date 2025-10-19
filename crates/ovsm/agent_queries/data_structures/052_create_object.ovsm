@@ -1,0 +1,6 @@
+;; Query: Create object with properties
+;; Category: Data Structures
+;; Expected: {:name "Alice", :age 30} (object)
+;; Demonstrates: objects
+
+{:name "Alice" :age 30}

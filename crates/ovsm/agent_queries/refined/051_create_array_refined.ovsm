@@ -1,0 +1,28 @@
+;; Query: Create and manipulate arrays in OVSM
+;; Category: Data Structures - Arrays
+;; Expected: [1, 2, 3, 4, 5] (array of integers)
+;; Demonstrates: Array literal syntax, immutability, type flexibility
+
+;; Arrays in OVSM use square bracket syntax [...]
+;; Spaces separate elements (commas are optional and ignored)
+
+(define numbers [1 2 3 4 5])
+
+;; Arrays are immutable by default
+;; To "modify", create new array with + operator
+(define with-six (+ numbers [6]))  ;; [1, 2, 3, 4, 5, 6]
+
+;; Arrays can hold mixed types
+(define mixed [1 "two" 3.0 true null])
+
+;; Empty arrays are valid
+(define empty-array [])
+
+;; Return the original array
+numbers  ;; [1, 2, 3, 4, 5]
+
+;; Key concepts:
+;; - Literal syntax: [elem1 elem2 ...]
+;; - Immutable by default (functional style)
+;; - Mixed types allowed
+;; - Use + for concatenation

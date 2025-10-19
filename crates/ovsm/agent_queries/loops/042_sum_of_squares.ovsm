@@ -1,0 +1,9 @@
+;; Query: Calculate Sum of squares 1-5
+;; Category: Loops
+;; Expected: 55 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define sum 0)  ;; Create variable 'sum'
+(for (i (range 1 6))  ;; Iterate over collection
+(set! sum (+ sum (* i i))))  ;; Update sum
+sum

@@ -1,0 +1,2748 @@
+[
+  {
+    "query_file": "001_simple_addition.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 10,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 100 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate the sum of two numbers using the addition operator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "002_variadic_addition.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 50,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 55 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum the numbers 1 through 10' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "003_multiplication.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 10,
+    "total_score": 55,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 180 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Multiply two numbers using the multiplication operator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "004_division.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 10,
+    "total_score": 55,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 12 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Divide one number by another using the division operator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "005_modulo.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 10,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 2 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate the remainder of division using modulo operator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "006_nested_arithmetic.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 10,
+    "total_score": 55,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 64 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate operator precedence using nested expressions' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "007_variable_definition.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 25,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific"
+    ],
+    "suggestions": [
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 25 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Define and reference a variable using define' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "008_variable_mutation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 25,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific"
+    ],
+    "suggestions": [
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 11 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate variable mutation using set!' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "009_constant_definition.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 50,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: ~62.8318?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate circumference with PI' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "010_simple_if.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Description could be more specific"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"yes\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Conditional execution using if expression' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "011_comparison_equal.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 10,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Test equality using == operator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "012_comparison_not_equal.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 60,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if 10 is not equal to 20' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "013_logical_not.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 10,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Negate a boolean value using logical NOT' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "014_null_check.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 10,
+    "total_score": 70,
+    "issues": [
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if a value is null using null? predicate' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "015_string_concatenation.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 60,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"HelloWorld\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Concatenate 'Hello' and 'World'' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "016_sequential_execution.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 12,
+    "total_score": 62,
+    "issues": [
+      "Expected output not clearly typed",
+      "Use descriptive variable names instead of single letters",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Rename variables: x -> count, n -> number, etc."
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 30 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Execute multiple expressions in sequence using do' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "017_nested_if.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 20,
+    "total_score": 75,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"B\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Determine grade for score 85' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "018_when_true.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 70,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"executed\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Execute when condition is true' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "019_cond_multiple.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"medium\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Multi-way conditional' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "020_range_creation.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Description could be more specific"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [1, 2, 3, 4] (array of integers)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Generate a range of integers using the range function' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "021_current_timestamp.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 25,
+    "educational_score": 15,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Unix timestamp (integer, seconds since 1970-01-01)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get the current Unix timestamp in seconds' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "022_log_message.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 10,
+    "total_score": 55,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: null (null type)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Log messages to output' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "023_arithmetic_precedence.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 50,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 14 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate 2 + 3 * 4' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "024_empty_check.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 10,
+    "total_score": 70,
+    "issues": [
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if a collection is empty using empty? predicate' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "025_array_length.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific"
+    ],
+    "suggestions": [],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get the number of elements in an array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "026_simple_while.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 10,
+    "educational_score": 12,
+    "total_score": 52,
+    "issues": [
+      "Expected output not clearly typed",
+      "Use descriptive variable names instead of single letters",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Rename variables: x -> count, n -> number, etc.",
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 3 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Count from 0 to 3 with while' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "027_while_sum.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 12,
+    "total_score": 57,
+    "issues": [
+      "Expected output not clearly typed",
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 55 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum numbers 1 to 10 with while' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "028_for_range.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 45 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Iterate over range with for' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "029_for_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 80,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 15 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum array elements with for' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "030_nested_for.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 30,
+    "total_score": 75,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 100 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Test Nested loop multiplication table' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "031_while_countdown.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 0 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Countdown from 10 to 0' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "032_for_string_chars.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Iterate over string characters' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "033_accumulator_pattern.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 30,
+    "total_score": 75,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 120 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Accumulate values in loop' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "034_conditional_loop.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 80,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 25 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Loop with conditional logic' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "035_early_termination.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 22,
+    "total_score": 67,
+    "issues": [
+      "Expected output not clearly typed",
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Loop that should terminate early' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "036_while_with_if.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 30,
+    "total_score": 75,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Great! Demonstrates the critical parser fix",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 1 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Test While loop with if-then-else (THE FIX!)' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "037_counting_evens.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Count even numbers in range' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "038_max_finder.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 30,
+    "total_score": 75,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 99 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Find maximum in array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "039_min_finder.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 30,
+    "total_score": 75,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Find minimum in array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "040_double_values.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 90,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [2, 4, 6, 8, 10] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Double each value in array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Excellence": "What makes this query particularly good?"
+    }
+  },
+  {
+    "query_file": "041_filter_positives.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 80,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [5, 12, 7] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Filter positive numbers' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "042_sum_of_squares.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 55 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum of squares 1-5' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "043_fibonacci_sequence.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 20,
+    "total_score": 75,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [0, 1, 1, 2, 3, 5, 8] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Generate first 7 Fibonacci numbers' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "044_reverse_array.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 90,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [5, 4, 3, 2, 1] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Reverse an array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Excellence": "What makes this query particularly good?"
+    }
+  },
+  {
+    "query_file": "045_string_builder.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 90,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"12345\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Build string in loop' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Excellence": "What makes this query particularly good?"
+    }
+  },
+  {
+    "query_file": "046_array_contains.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 90,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if array contains value' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Excellence": "What makes this query particularly good?"
+    }
+  },
+  {
+    "query_file": "047_count_occurrences.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 3 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Count occurrences of value' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "048_alternating_sum.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 3 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Alternating sum: 1-2+3-4+5' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "049_cumulative_product.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 24 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Cumulative product' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "050_nested_sum.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 36 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum of all i*j where i,j in 1-3' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "051_create_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [1, 2, 3, 4, 5] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create array of numbers' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "052_create_object.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: {:name \"Alice\", :age 30} (object)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create object with properties' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "053_array_first_element.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 10 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get first element' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "054_array_last_element.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 50 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get last element' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "055_nested_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [[1, 2], [3, 4]] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create nested array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "056_object_property.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"Bob\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Access object property' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "057_array_concatenation.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 10,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [1, 2, 3, 4, 5, 6] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Concatenate two arrays' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "058_array_with_mixed_types.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [1, \"two\", 3.0] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Array with mixed types' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "059_empty_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create empty array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "060_empty_object.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: {} (object)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create empty object' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "061_array_push_pattern.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 25,
+    "total_score": 85,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [1, 2, 3, 4] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Add element to array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Excellence": "What makes this query particularly good?"
+    }
+  },
+  {
+    "query_file": "062_nested_object.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: {:person {:name \"Eve\"}} (object)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create nested object' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "063_array_size_check.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 10,
+    "educational_score": 20,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 7 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check array size' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "064_object_keys.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [:name, :age] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get object keys (if supported)' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "065_array_membership.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 10,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if value in array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "066_array_slice.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [2, 3, 4] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get array slice' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "067_merge_objects.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: {:a 1, :b 2, :c 3} (object)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Merge two objects' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "068_array_of_objects.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [{:id 1}, {:id 2}] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Array of objects' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "069_multidimensional_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create 2D array access' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "070_array_init.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 65,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [0, 0, 0, 0, 0] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Initialize array with value' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "071_array_range_generation.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 5,
+    "educational_score": 10,
+    "total_score": 55,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Generate number sequence' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "072_tuple_like_array.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 20,
+    "total_score": 55,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [\"Alice\", 30, true] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Fixed-size tuple-like array' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "073_array_prepend.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 10,
+    "educational_score": 10,
+    "total_score": 60,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: [0, 1, 2, 3] (array)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Add element to start' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "074_object_update.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 25,
+    "total_score": 80,
+    "issues": [
+      "Description could be more specific",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: {:name \"Alice\", :age 31} (object)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Update object property' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "075_deep_nested_structure.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 10,
+    "total_score": 45,
+    "issues": [
+      "Missing LISP parentheses",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Complex object?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Demonstrate Complex nested structure' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "076_factorial.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 17,
+    "total_score": 62,
+    "issues": [
+      "Expected output not clearly typed",
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 120 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate factorial of 5' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "077_fibonacci_recursive_iter.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 30,
+    "total_score": 80,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 55 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Fibonacci with iteration' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "078_prime_check.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 15,
+    "educational_score": 17,
+    "total_score": 72,
+    "issues": [
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if 17 is prime' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "079_gcd_calculation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 12,
+    "total_score": 57,
+    "issues": [
+      "Expected output not clearly typed",
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 6 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate GCD of 48 and 18' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "080_bubble_sort_pass.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 80,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Sorted array?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Single bubble sort pass' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "081_binary_search_setup.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Target index?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Setup for binary search' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "082_average_calculator.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 30.0 (float)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate average of numbers' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "083_variance_calculation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Variance value?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate variance' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "084_moving_average.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Moving avg?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate 3-period moving average' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "085_time_difference.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Seconds diff?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate time difference' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "086_percentage_calculator.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 75.0 (float)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate percentage' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "087_compound_interest.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Interest amount?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate compound interest' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "088_distance_formula.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Distance?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate distance between points' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "089_quadratic_formula.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 12,
+    "total_score": 57,
+    "issues": [
+      "Expected output not clearly typed",
+      "Some variable names could be more descriptive",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches",
+      "Found 1 anti-pattern(s)"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Roots?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Solve quadratic equation' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "090_matrix_sum.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 45 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Sum all matrix elements' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "091_string_reversal.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 80,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: \"dlroW olleH\" (string)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Reverse a string' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "092_palindrome_check.ovsm",
+    "correctness_score": 40,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 80,
+    "issues": [
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: true (boolean)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Check if string is palindrome' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "093_word_count.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 15,
+    "educational_score": 15,
+    "total_score": 60,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: 5 (integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Create Count words in sentence' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "094_blockchain_timestamp.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 5,
+    "educational_score": 10,
+    "total_score": 45,
+    "issues": [
+      "Expected output not clearly typed",
+      "Description could be more specific",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Timestamp (Unix timestamp - integer)?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Get blockchain-style timestamp' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "095_hash_simulation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Hash value?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Simulate simple hash' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "096_merkle_root_simulation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Root hash?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate Simulate merkle root calc' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "097_exponential_growth.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 20,
+    "total_score": 70,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow",
+      "\u2705 Shows both immutable and mutable patterns"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Growth value?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate exponential growth' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?"
+    }
+  },
+  {
+    "query_file": "098_amortization_calc.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: Monthly payment?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate loan amortization' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "099_rsi_calculation.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: RSI value?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate RSI indicator' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  },
+  {
+    "query_file": "100_liquidity_pool_calc.ovsm",
+    "correctness_score": 30,
+    "clarity_score": 20,
+    "educational_score": 15,
+    "total_score": 65,
+    "issues": [
+      "Expected output not clearly typed",
+      "Add inline comments to explain complex logic",
+      "Unclear what concept this teaches"
+    ],
+    "suggestions": [
+      "Add comments explaining the logic flow"
+    ],
+    "self_ask_questions": {
+      "Q1_Parse": "Does this query use valid LISP syntax?",
+      "Q2_Execute": "Will this execute without runtime errors?",
+      "Q3_Output": "Does it produce: LP value?",
+      "Q4_EdgeCases": "What edge cases should be tested?",
+      "Q6_Description": "Is 'Calculate LP token value' clear enough?",
+      "Q7_Variables": "Are all variable names descriptive?",
+      "Q9_Comments": "Are there enough inline comments?",
+      "Q21_Teaching": "What core concept does this demonstrate?",
+      "Q22_Prerequisites": "What should learners know before this?",
+      "Q23_NextSteps": "What query should come after this?",
+      "Q_Improvement": "How can we raise the score above 70?"
+    }
+  }
+]

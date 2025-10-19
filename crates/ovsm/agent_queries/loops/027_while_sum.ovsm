@@ -1,0 +1,11 @@
+;; Query: Calculate Sum numbers 1 to 10 with while
+;; Category: Loops
+;; Expected: 55 (integer)
+;; Demonstrates: variable definition, mutation, while loops
+
+(define i 1)  ;; Create variable 'i'
+(define sum 0)  ;; Create variable 'sum'
+(while (<= i 10)  ;; Loop while condition is true
+(set! sum (+ sum i))  ;; Update sum
+(set! i (+ i 1)))  ;; Update i
+sum

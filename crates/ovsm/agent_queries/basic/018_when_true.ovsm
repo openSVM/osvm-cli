@@ -1,0 +1,8 @@
+;; Query: Create Execute when condition is true
+;; Category: Basic
+;; Expected: "executed" (string)
+;; Demonstrates: variable definition
+
+(define flag true)  ;; Create variable 'flag'
+(when flag
+  "executed")

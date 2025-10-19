@@ -1,0 +1,16 @@
+;; Query: Demonstrate variadic addition by summing numbers 1 through 10
+;; Category: Basic - Variadic Operators
+;; Expected: 55 (integer)
+;; Demonstrates: OVSM operators accept multiple arguments, unlike Python-style
+
+;; OVSM's + operator is variadic - it can take any number of arguments
+;; This is more concise than looping or repeated binary operations
+
+(+ 1 2 3 4 5 6 7 8 9 10)  ;; All operands summed in one expression
+
+;; Alternative approaches:
+;; - Loop with accumulator (more verbose)
+;; - Nested additions: (+ (+ (+ 1 2) 3) ...) (less readable)
+;; - Variadic form is idiomatic OVSM
+
+;; Result: 55

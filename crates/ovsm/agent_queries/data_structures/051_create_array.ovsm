@@ -1,0 +1,6 @@
+;; Query: Create array of numbers
+;; Category: Data Structures
+;; Expected: [1, 2, 3, 4, 5] (array)
+;; Demonstrates: arrays
+
+[1 2 3 4 5]

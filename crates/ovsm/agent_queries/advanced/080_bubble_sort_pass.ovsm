@@ -1,0 +1,12 @@
+;; Query: Calculate Single bubble sort pass
+;; Category: Advanced
+;; Expected: Sorted array
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define arr [64 34 25 12 22])  ;; Create variable 'arr'
+(for (i (range 0 4))  ;; Iterate over collection
+  (when (> (get arr i) (get arr (+ i 1)))
+(define temp (get arr i))  ;; Create variable 'temp'
+(set! arr (assoc arr i (get arr (+ i 1))))  ;; Update arr
+(set! arr (assoc arr (+ i 1) temp))))  ;; Update arr
+arr

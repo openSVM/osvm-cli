@@ -1,0 +1,9 @@
+;; Query: Create Cumulative product
+;; Category: Loops
+;; Expected: 24 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define prod 1)  ;; Create variable 'prod'
+(for (i (range 1 5))  ;; Iterate over collection
+(set! prod (* prod i)))  ;; Update prod
+prod

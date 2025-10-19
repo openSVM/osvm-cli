@@ -1,0 +1,8 @@
+;; Query: Calculate time difference
+;; Category: Advanced
+;; Expected: Seconds diff
+;; Demonstrates: variable definition
+
+(define start (now))  ;; Create variable 'start'
+(define end (+ start 100))  ;; Create variable 'end'
+(- end start)  ;; Subtraction

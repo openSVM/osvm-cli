@@ -1,0 +1,9 @@
+;; Query: Check if a value is null using null? predicate
+;; Category: Basic - Type Checking
+;; Expected: true (boolean)
+;; Demonstrates: Null type checking with null?
+
+(null? null)  ;; Check if null is null
+
+;; Result: true
+;; Useful for checking optional values, API responses

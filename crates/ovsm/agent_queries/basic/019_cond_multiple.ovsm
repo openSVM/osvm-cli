@@ -1,0 +1,10 @@
+;; Query: Create Multi-way conditional
+;; Category: Basic
+;; Expected: "medium" (string)
+;; Demonstrates: variable definition
+
+(define size 50)  ;; Create variable 'size'
+(cond
+  ((< size 30) "small")
+  ((< size 70) "medium")
+  (else "large"))

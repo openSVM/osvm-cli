@@ -1,0 +1,9 @@
+;; Query: Calculate Iterate over range with for
+;; Category: Loops
+;; Expected: 45 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define total 0)  ;; Create variable 'total'
+(for (i (range 0 10))  ;; Iterate over collection
+(set! total (+ total i)))  ;; Update total
+total

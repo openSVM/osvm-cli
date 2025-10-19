@@ -1,0 +1,10 @@
+;; Query: Calculate loan amortization
+;; Category: Advanced
+;; Expected: Monthly payment
+;; Demonstrates: variable definition
+
+(define principal 10000)  ;; Create variable 'principal'
+(define rate 0.05)  ;; Create variable 'rate'
+(define months 12)  ;; Create variable 'months'
+(define monthly-rate (/ rate 12))
+(/ (* principal monthly-rate) (- 1 (** (+ 1 monthly-rate) (- months))))  ;; Division

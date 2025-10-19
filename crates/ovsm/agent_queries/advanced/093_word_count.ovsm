@@ -1,0 +1,8 @@
+;; Query: Create Count words in sentence
+;; Category: Advanced
+;; Expected: 5 (integer)
+;; Demonstrates: variable definition
+
+(define sentence "The quick brown fox jumps")  ;; Create variable 'sentence'
+(define words (split sentence " "))  ;; Create variable 'words'
+(length words)  ;; Get collection length

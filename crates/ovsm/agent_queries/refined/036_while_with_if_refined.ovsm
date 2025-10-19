@@ -1,0 +1,33 @@
+;; Query: Demonstrate IF-THEN-ELSE inside WHILE loop (the critical parser fix!)
+;; Category: Loops - The Parser Bug Fix
+;; Expected: 1 (integer)
+;; Demonstrates: Explicit parentheses eliminate parser ambiguity
+
+;; ⭐ THE CRITICAL FIX ⭐
+;; In Python-style OVSM, this pattern caused infinite loops:
+;;   WHILE condition:
+;;       IF x THEN ... ELSE ...
+;;       next_statement  <-- Parser incorrectly consumed this as part of ELSE!
+;;
+;; LISP syntax with explicit parentheses fixes this completely.
+
+(define done false)   ;; Loop control variable
+(define count 0)      ;; Counter to be incremented
+
+(while (not done)
+  ;; IF-THEN-ELSE block is explicitly delimited by parentheses
+  (if (== count 0)
+      (set! count 1)     ;; Then branch: set count to 1
+      (set! count 2))    ;; Else branch: set count to 2
+
+  ;; ✅ This statement executes AFTER the if block!
+  ;; In Python-style OVSM, parser incorrectly included this in ELSE block
+  (set! done true))
+
+;; Result: count is 1 (took the THEN branch, then exited loop)
+count
+
+;; Why this works:
+;; - Parentheses explicitly show where IF expression ends
+;; - (set! done true) is clearly a sibling of the IF, not a child
+;; - No ambiguity about indentation levels

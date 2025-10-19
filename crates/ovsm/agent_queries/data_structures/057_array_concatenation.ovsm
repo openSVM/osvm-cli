@@ -1,0 +1,6 @@
+;; Query: Calculate Concatenate two arrays
+;; Category: Data Structures
+;; Expected: [1, 2, 3, 4, 5, 6] (array)
+;; Demonstrates: arrays
+
+(+ [1 2 3] [4 5 6])  ;; Addition

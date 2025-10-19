@@ -1,0 +1,11 @@
+;; Query: Calculate variance
+;; Category: Advanced
+;; Expected: Variance value
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [2 4 6 8])  ;; Create variable 'nums'
+(define mean 5)  ;; Create variable 'mean'
+(define variance 0)  ;; Create variable 'variance'
+(for (n nums)  ;; Iterate over collection
+(set! variance (+ variance (* (- n mean) (- n mean)))))  ;; Update variance
+(/ variance (length nums))  ;; Division

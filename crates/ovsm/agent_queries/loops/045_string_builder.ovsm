@@ -1,0 +1,9 @@
+;; Query: Calculate Build string in loop
+;; Category: Loops
+;; Expected: "12345" (string)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define str "")  ;; Create variable 'str'
+(for (i (range 1 6))  ;; Iterate over collection
+(set! str (+ str (to-string i))))  ;; Update str
+str

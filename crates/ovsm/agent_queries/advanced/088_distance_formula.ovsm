@@ -1,0 +1,12 @@
+;; Query: Calculate distance between points
+;; Category: Advanced
+;; Expected: Distance
+;; Demonstrates: variable definition
+
+(define x1 0)  ;; Create variable 'x1'
+(define y1 0)  ;; Create variable 'y1'
+(define x2 3)  ;; Create variable 'x2'
+(define y2 4)  ;; Create variable 'y2'
+(define dx (- x2 x1))  ;; Create variable 'dx'
+(define dy (- y2 y1))  ;; Create variable 'dy'
+(sqrt (+ (* dx dx) (* dy dy)))

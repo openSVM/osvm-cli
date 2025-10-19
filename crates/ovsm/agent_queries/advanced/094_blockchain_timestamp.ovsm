@@ -1,0 +1,6 @@
+;; Query: Get blockchain-style timestamp
+;; Category: Advanced
+;; Expected: Timestamp (Unix timestamp - integer)
+;; Demonstrates: OVSM syntax
+
+(now)  ;; Get current timestamp

@@ -1,0 +1,10 @@
+;; Query: Calculate Reverse a string
+;; Category: Advanced
+;; Expected: "dlroW olleH" (string)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define str "Hello World")  ;; Create variable 'str'
+(define reversed "")  ;; Create variable 'reversed'
+(for (i (range (- (length str) 1) -1 -1))  ;; Iterate over collection
+(set! reversed (+ reversed (get str i))))  ;; Update reversed
+reversed

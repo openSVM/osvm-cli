@@ -1,0 +1,11 @@
+;; Query: Check if string is palindrome
+;; Category: Advanced
+;; Expected: true (boolean)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define str "racecar")  ;; Create variable 'str'
+(define is-palin true)
+(for (i (range 0 (/ (length str) 2)))  ;; Iterate over collection
+  (when (!= (get str i) (get str (- (length str) i 1)))
+(set! is-palin false)))  ;; Update is
+is-palin

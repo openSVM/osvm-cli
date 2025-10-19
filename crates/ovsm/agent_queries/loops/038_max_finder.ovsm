@@ -1,0 +1,11 @@
+;; Query: Create Find maximum in array
+;; Category: Loops
+;; Expected: 99 (integer)
+;; Demonstrates: variable definition, mutation, for loops, arrays
+
+(define nums [23 99 15 67 42])  ;; Create variable 'nums'
+(define max 0)  ;; Create variable 'max'
+(for (n nums)  ;; Iterate over collection
+  (when (> n max)
+(set! max n)))  ;; Update max
+max

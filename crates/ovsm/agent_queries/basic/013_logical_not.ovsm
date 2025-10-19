@@ -1,0 +1,9 @@
+;; Query: Demonstrate Negate a boolean value using logical NOT
+;; Category: Basic - Logical Operations
+;; Expected: true (boolean)
+;; Demonstrates: Logical negation with 'not'
+
+(not false)  ;; Negate false
+
+;; Result: true
+;; Commonly used in loop conditions: (while (not done) ...)

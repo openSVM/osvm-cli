@@ -1,0 +1,10 @@
+;; Query: Calculate compound interest
+;; Category: Advanced
+;; Expected: Interest amount
+;; Demonstrates: variable definition, variadic operators
+
+(define principal 1000)  ;; Create variable 'principal'
+(define rate 0.05)  ;; Create variable 'rate'
+(define time 2)  ;; Create variable 'time'
+(define amount (* principal (* (+ 1 rate) (+ 1 rate))))  ;; Create variable 'amount'
+(- amount principal)  ;; Subtraction

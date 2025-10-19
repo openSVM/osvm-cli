@@ -1,0 +1,6 @@
+;; Query: Get array slice
+;; Category: Data Structures
+;; Expected: [2, 3, 4] (array)
+;; Demonstrates: arrays
+
+(slice [1 2 3 4 5] 1 4)

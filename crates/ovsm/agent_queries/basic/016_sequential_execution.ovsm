@@ -1,0 +1,12 @@
+;; Query: Calculate Execute multiple expressions in sequence using do
+;; Category: Basic - Control Flow
+;; Expected: 30 (integer)
+;; Demonstrates: Sequential execution with do block
+
+(do  ;; Execute multiple expressions
+(define x 10)  ;; First expression: define x
+(define y 20)  ;; Second expression: define y
+(+ x y))  ;; Final expression: sum (returned)
+
+;; Result: 30
+;; Pattern: setup variables, perform operations, return result

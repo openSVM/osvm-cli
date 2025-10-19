@@ -1,0 +1,10 @@
+;; Query: Calculate Loop with conditional logic
+;; Category: Loops
+;; Expected: 25 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define sum 0)  ;; Create variable 'sum'
+(for (i (range 1 11))  ;; Iterate over collection
+  (when (== (% i 2) 1)
+(set! sum (+ sum i))))  ;; Update sum
+sum

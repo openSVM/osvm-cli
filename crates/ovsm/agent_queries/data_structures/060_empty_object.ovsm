@@ -1,0 +1,6 @@
+;; Query: Create empty object
+;; Category: Data Structures
+;; Expected: {} (object)
+;; Demonstrates: objects
+
+{}

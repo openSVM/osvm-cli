@@ -1,0 +1,8 @@
+;; Query: Calculate percentage
+;; Category: Advanced
+;; Expected: 75.0 (float)
+;; Demonstrates: variable definition
+
+(define part 75)  ;; Create variable 'part'
+(define whole 100)  ;; Create variable 'whole'
+(* (/ part whole) 100)  ;; Multiplication

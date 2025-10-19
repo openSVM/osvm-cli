@@ -1,0 +1,10 @@
+;; Query: Calculate Iterate over string characters
+;; Category: Loops
+;; Expected: 5 (integer)
+;; Demonstrates: variable definition, mutation, for loops
+
+(define text "Hello")  ;; Create variable 'text'
+(define len 0)  ;; Create variable 'len'
+(for (c text)  ;; Iterate over collection
+(set! len (+ len 1)))  ;; Update len
+len
