@@ -114,6 +114,27 @@ impl Tool for RpcBridgeTool {
             }
         }
 
+        // For getTransaction, ensure we always include maxSupportedTransactionVersion
+        if matches!(self.name.as_str(), "getTransaction") {
+            // If we have no config yet, add one
+            if rpc_params.len() == 1 {
+                let mut config = serde_json::Map::new();
+                config.insert("maxSupportedTransactionVersion".to_string(), json!(0));
+                config.insert("encoding".to_string(), json!("json"));
+                rpc_params.push(Value::Object(config));
+            } else if rpc_params.len() >= 2 {
+                // If we have a config, ensure it has maxSupportedTransactionVersion
+                if let Some(Value::Object(config)) = rpc_params.get_mut(1) {
+                    if !config.contains_key("maxSupportedTransactionVersion") {
+                        config.insert("maxSupportedTransactionVersion".to_string(), json!(0));
+                    }
+                    if !config.contains_key("encoding") {
+                        config.insert("encoding".to_string(), json!("json"));
+                    }
+                }
+            }
+        }
+
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 call_solana_rpc(&self.name, rpc_params).await
