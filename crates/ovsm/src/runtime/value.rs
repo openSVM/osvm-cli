@@ -39,7 +39,7 @@ pub enum Value {
         /// Parameter names for the lambda
         params: Vec<String>,
         /// Body expression of the lambda
-        body: Arc<crate::parser::ast::Expression>,
+        body: Arc<crate::parser::Expression>,
         /// Captured environment (closure)
         closure: Arc<HashMap<String, Value>>,
     },

@@ -209,6 +209,16 @@ pub enum TokenKind {
     Semicolon,
     /// Newline delimiter
     Newline,
+    /// Quote for LISP-style syntax (')
+    Quote,
+    /// Backtick for LISP quasi-quote (`)
+    Backtick,
+    /// At symbol for LISP splice (@)
+    At,
+    /// Indent token (for Python-style syntax)
+    Indent,
+    /// Dedent token (for Python-style syntax)
+    Dedent,
 
     // Special
     /// End of file marker
@@ -261,55 +271,13 @@ impl TokenKind {
         )
     }
 
-    /// Get keyword from string
-    pub fn keyword(s: &str) -> Option<TokenKind> {
-        match s {
-            "IF" => Some(TokenKind::If),
-            "ELSE" => Some(TokenKind::Else),
-            "ELIF" | "ELSEIF" => Some(TokenKind::Elif),
-            "THEN" => Some(TokenKind::Then),
-            "WHILE" => Some(TokenKind::While),
-            "FOR" => Some(TokenKind::For),
-            "IN" => Some(TokenKind::In),
-            "BREAK" => Some(TokenKind::Break),
-            "CONTINUE" => Some(TokenKind::Continue),
-            "RETURN" => Some(TokenKind::Return),
-            "TRY" => Some(TokenKind::Try),
-            "CATCH" => Some(TokenKind::Catch),
-            "PARALLEL" => Some(TokenKind::Parallel),
-            "WAIT_ALL" => Some(TokenKind::WaitAll),
-            "WAIT_ANY" => Some(TokenKind::WaitAny),
-            "RACE" => Some(TokenKind::Race),
-            "DECISION" => Some(TokenKind::Decision),
-            "BRANCH" => Some(TokenKind::Branch),
-            "GUARD" => Some(TokenKind::Guard),
-            "MATCH" => Some(TokenKind::Match),
-            "DEFINE" => Some(TokenKind::Define),
-            "DEFINE_TOOL" => Some(TokenKind::DefineTool),
-            "CONST" => Some(TokenKind::Const),
-            "TOOL" => Some(TokenKind::Tool),
-            "FAIL" => Some(TokenKind::Fail),
-            "LOOP" => Some(TokenKind::Loop),
-            "EVERY" => Some(TokenKind::Every),
-            "TIMEOUT" => Some(TokenKind::Timeout),
-            "RETRY" => Some(TokenKind::Retry),
-            "CIRCUIT_BREAKER" => Some(TokenKind::CircuitBreaker),
-            "FATAL" => Some(TokenKind::Fatal),
-            "RECOVERABLE" => Some(TokenKind::Recoverable),
-            "WARNING" => Some(TokenKind::Warning),
-            "ENDIF" => Some(TokenKind::EndIf),
-            "ENDWHILE" => Some(TokenKind::EndWhile),
-            "ENDFOR" => Some(TokenKind::EndFor),
-            "END" => Some(TokenKind::End),
-            "LAMBDA" => Some(TokenKind::Lambda),
-            // Also support lowercase lambda for convenience
-            "lambda" => Some(TokenKind::Lambda),
-            // Logical operators as keywords
-            "AND" => Some(TokenKind::And),
-            "OR" => Some(TokenKind::Or),
-            "NOT" => Some(TokenKind::Not),
-            _ => None,
-        }
+    /// Get keyword from string - LISP has NO keywords, everything is an identifier
+    /// This function now returns None for everything - Python keywords are DEAD
+    pub fn keyword(_s: &str) -> Option<TokenKind> {
+        // PYTHON IS DEAD. LONG LIVE LISP.
+        // In LISP, there are no reserved keywords - everything is just identifiers
+        // Special forms like 'if', 'define', 'while' are handled by the parser, not the lexer
+        None
     }
 }
 
