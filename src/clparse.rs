@@ -3,7 +3,7 @@ use {
     solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
-// Import all modularized command builders (full refactoring - 18 commands)
+// Import all modularized command builders (full refactoring - 19 commands)
 mod agent;
 mod audit;
 mod balance;
@@ -18,6 +18,7 @@ mod nodes;
 mod ovsm;
 mod plan;
 mod qa;
+mod tutorial;
 mod realtime;
 mod rpc;
 mod snapshot;
@@ -232,6 +233,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
         .subcommand(nodes::build_nodes_command())
         .subcommand(deploy::build_deploy_command())
         .subcommand(doctor::build_doctor_command())
+        .subcommand(tutorial::build_tutorial_command())
         .subcommand(mcp::build_mcp_command())
         .subcommand(mount::build_mount_command())
         .subcommand(snapshot::build_snapshot_command())

@@ -590,16 +590,50 @@ impl AiService {
         })
     }
 
-    /// Get the OVSM system prompt for plan generation
+    /// Get the OVSM system prompt for plan generation (V2 - LISP Syntax)
     ///
     /// This is the production system prompt that instructs AI models how to generate
-    /// executable OVSM plans with proper control flow (WHILE loops, FOR loops,
-    /// IF/THEN/ELSE branching, DECISION/BRANCH structures) and tool calls.
+    /// executable OVSM plans using LISP/S-expression syntax.
     ///
-    /// The prompt is synced with docs/ovsm/OVSM_SYSTEM_PROMPT_COMPACT.md
+    /// **BREAKING CHANGE (Oct 2025):** Python-style syntax has been completely removed.
+    /// All OVSM scripts now use LISP syntax exclusively.
+    ///
+    /// The prompt is synced with docs/ovsm/OVSM_SYSTEM_PROMPT_V2_LISP.md
     fn get_ovsm_system_prompt() -> &'static str {
-        // Production OVSM system prompt - synced with docs/ovsm/OVSM_SYSTEM_PROMPT_COMPACT.md
-        r#"You are an AI research agent using OVSM (Open Versatile Seeker Mind) language to plan investigations.
+        // Production OVSM V2 system prompt - LISP syntax only
+        r#"You are an AI research agent using OVSM (Open Versatile Seeker Mind) language with LISP/S-expression syntax.
+
+# CRITICAL: LISP Syntax Only
+
+**⚠️ Python-style syntax has been removed. Use LISP/S-expressions exclusively.**
+
+# LISP Syntax Quick Reference
+
+Variables:
+  (define name value)          ;; Define variable
+  (set! name new-value)        ;; Mutate variable
+  (const NAME value)           ;; Constant
+
+Control Flow:
+  (if condition then else)     ;; Conditional
+  (while (condition) body...)  ;; While loop
+  (for (item collection) body...) ;; For loop
+  (do expr1 expr2 ...)         ;; Sequential execution
+
+Operators (variadic):
+  (+ 1 2 3 4)    ;; Sum: 10
+  (* 2 3 4)      ;; Product: 24
+  (> x 5)        ;; Greater than
+  (== a b)       ;; Equality
+  (not value)    ;; Logical NOT
+
+Data Structures:
+  [1 2 3]        ;; Array
+  {:key value}   ;; Object
+
+Tool Calls:
+  (toolName arg1 arg2)
+  (toolName :param1 value1 :param2 value2)
 
 # Plan Structure
 
@@ -607,36 +641,42 @@ impl AiService {
 [TIME: estimate] [COST: estimate] [CONFIDENCE: %]
 
 **Available Tools:**
-[list tools you'll use]
+[list tools you'll use - use LISP syntax in plan]
 
 **Main Branch:**
-[execution steps with tool calls - may include WHILE loops, FOR loops, IF/THEN/ELSE]
+;; Execution steps with tool calls using LISP syntax
+(define data (getTool arg))
+(for (item data)
+  (processItem item))
 
 **Decision Point:** [what you're deciding]
-  BRANCH A (condition): [actions]
-  BRANCH B (condition): [actions]
+  BRANCH A (condition):
+    (define result (handleA))
+  BRANCH B (condition):
+    (define result (handleB))
 
 **Action:** [final output description]
 
-# Syntax
+# Common LISP Patterns
 
-Variables: $name = value
-Constants: CONST NAME = value
-Tools: toolName(param: $value) or toolName($value)
-Loops:
-  - FOR $item IN $collection: ... BREAK IF condition
-  - WHILE condition: ... body ...
-  - ✅ ENDWHILE, ENDFOR, ENDIF are optional (explicit block terminators)
-Conditionals: IF condition THEN ... ELSE ...
-  - ✅ ENDIF is optional (can use indentation or explicit terminator)
-Block Styles (both supported):
-  - Python-style: IF cond THEN (indented body) ELSE (indented body)
-  - Explicit: IF cond THEN ... ELSE ... ENDIF
-  - Same for WHILE/ENDWHILE and FOR/ENDFOR
-Parallel: PARALLEL { $a = tool1(); $b = tool2() } WAIT_ALL
-Errors: TRY: ... CATCH FATAL/RECOVERABLE: ...
-Guards: GUARD $condition
-  - ❌ NO "GUARD condition:" - just "GUARD $condition"
+Accumulator Pattern:
+  (define sum 0)
+  (for (item collection)
+    (set! sum (+ sum item)))
+  sum
+
+Filter Pattern:
+  (define filtered [])
+  (for (item items)
+    (when (predicate item)
+      (set! filtered (+ filtered [item]))))
+
+Conditional Logic:
+  (if (>= score 90)
+      "A"
+      (if (>= score 80)
+          "B"
+          "C"))
 
 # Essential Built-in Tools
 
