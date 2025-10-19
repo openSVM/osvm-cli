@@ -90,11 +90,15 @@ impl LispEvaluator {
                     "do" => self.eval_do(args),
                     "when" => self.eval_when(args),
                     "not" => self.eval_not(args),
+                    "and" => self.eval_and(args),
+                    "or" => self.eval_or(args),
                     "null?" => self.eval_null_check(args),
                     "empty?" => self.eval_empty_check(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
+                    "min" => self.eval_min(args),
+                    "max" => self.eval_max(args),
                     "now" => self.eval_now(args),
                     "log" => self.eval_log(args),
                     _ => {
@@ -447,6 +451,28 @@ impl LispEvaluator {
         Ok(Value::Bool(!val.is_truthy()))
     }
 
+    /// (and x y ...) - Logical AND (short-circuiting)
+    fn eval_and(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            if !val.is_truthy() {
+                return Ok(Value::Bool(false));
+            }
+        }
+        Ok(Value::Bool(true))
+    }
+
+    /// (or x y ...) - Logical OR (short-circuiting)
+    fn eval_or(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            if val.is_truthy() {
+                return Ok(Value::Bool(true));
+            }
+        }
+        Ok(Value::Bool(false))
+    }
+
     /// (null? x) - Check if null
     fn eval_null_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 1 {
@@ -553,6 +579,54 @@ impl LispEvaluator {
 
         let values: Vec<Value> = (start..end).map(Value::Int).collect();
         Ok(Value::Array(Arc::new(values)))
+    }
+
+    /// (min x y ...) - Get minimum value
+    fn eval_min(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "min".to_string(),
+                reason: "Expected at least 1 argument".to_string(),
+            });
+        }
+
+        let mut min_val: Option<i64> = None;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(n) => n,
+                _ => return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: val.type_name(),
+                }),
+            };
+            min_val = Some(min_val.map_or(num, |m| m.min(num)));
+        }
+        Ok(Value::Int(min_val.unwrap()))
+    }
+
+    /// (max x y ...) - Get maximum value
+    fn eval_max(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "max".to_string(),
+                reason: "Expected at least 1 argument".to_string(),
+            });
+        }
+
+        let mut max_val: Option<i64> = None;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(n) => n,
+                _ => return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: val.type_name(),
+                }),
+            };
+            max_val = Some(max_val.map_or(num, |m| m.max(num)));
+        }
+        Ok(Value::Int(max_val.unwrap()))
     }
 
     /// (now) - Get current timestamp
