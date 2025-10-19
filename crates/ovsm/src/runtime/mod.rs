@@ -1,9 +1,9 @@
-//! Runtime execution for OVSM programs
+//! Runtime execution for OVSM programs using LISP-style evaluation
 
 mod environment;
-mod evaluator;
+mod lisp_evaluator;
 mod value;
 
 pub use environment::Environment;
-pub use evaluator::Evaluator;
+pub use lisp_evaluator::LispEvaluator;
 pub use value::Value;

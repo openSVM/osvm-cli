@@ -267,7 +267,12 @@ pub mod tools;
 
 // Re-export main types
 pub use error::{Error, Result};
-pub use lexer::{Scanner, Token, TokenKind};
-pub use parser::{BinaryOp, Expression, Parser, Program, Statement, UnaryOp};
-pub use runtime::{Environment, Evaluator, Value};
+pub use lexer::{SExprScanner, Token, TokenKind};
+pub use parser::{BinaryOp, Expression, SExprParser, Program, Statement, UnaryOp};
+pub use runtime::{Environment, LispEvaluator, Value};
 pub use tools::{Tool, ToolRegistry};
+
+// Convenient type aliases for the primary LISP-based interpreter
+pub type Scanner = SExprScanner;
+pub type Parser = SExprParser;
+pub type Evaluator = LispEvaluator;
