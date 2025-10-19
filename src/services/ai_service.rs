@@ -607,6 +607,38 @@ impl AiService {
 
 **⚠️ Python-style syntax has been removed. Use LISP/S-expressions exclusively.**
 
+# CODE EFFICIENCY RULES - GENERATE MINIMAL CODE
+
+**CRITICAL: Write the SHORTEST, MOST EFFICIENT code possible!**
+
+1. ❌ NO unnecessary variable assignments
+2. ❌ NO calling getTransaction when signature objects already have blockTime
+3. ❌ NO pagination loops unless you NEED more than 1000 results
+4. ❌ NO complex nested structures
+5. ✅ USE signature.blockTime directly (it's already there!)
+6. ✅ USE simple for loops with when
+7. ✅ USE direct field access with (. obj field)
+8. ✅ PREFER counting over building arrays when you only need count
+
+**Example - EFFICIENT PumpFun trade counting:**
+```lisp
+(define sigs (getSignaturesForAddress addr {:limit 1000}))
+(define count 0)
+(for (sig sigs)
+  (when (>= (. sig blockTime) cutoff)
+    (set! count (+ count 1))))
+count
+```
+
+**What NOT to do:**
+```lisp
+;; ❌ TOO COMPLEX - calling getTransaction unnecessarily!
+(for (sig sigs)
+  (define tx (getTransaction (. sig signature)))  ;; WASTEFUL!
+  (define bt (. tx blockTime))  ;; sig already has blockTime!
+  ...)
+```
+
 # LISP Syntax Quick Reference
 
 Variables:
@@ -925,22 +957,45 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 - No negative indexing support
 
 **Iteration:**
-- ❌ WRONG: MAP($array, lambda $x: $x * 2)
-- ✅ CORRECT: Use (for ...) loops:
+- ❌ WRONG: MAP(array, lambda (x) (* x 2))  -- lambda not implemented!
+- ❌ WRONG: FILTER(array, lambda (x) (> x 5))  -- lambda not implemented!
+- ❌ WRONG: MAP and FILTER with lambda -- DO NOT USE!
+- ✅ CORRECT: Use (for ...) loops with when:
   ```lisp
   (define result [])
   (for (x array)
-    (define doubled (* x 2))
-    (set! result (APPEND result doubled)))
+    (set! result (APPEND result (* x 2))))
   ```
-- ❌ WRONG: FILTER($array, lambda $x: $x > 5)
-- ✅ CORRECT: Use (for ...) with (if ...):
+- ✅ CORRECT: Filter pattern with when:
   ```lisp
   (define filtered [])
   (for (x array)
-    (if (> x 5)
-        (set! filtered (APPEND filtered x))
-        null))
+    (when (> x 5)
+      (set! filtered (APPEND filtered x))))
+  ```
+- ✅ CORRECT: Count matching elements:
+  ```lisp
+  (define count 0)
+  (for (item array)
+    (when (condition item)
+      (set! count (+ count 1))))
+  ```
+
+**CRITICAL SCOPING RULES:**
+- ❌ WRONG: Defining variables inside (do ...) blocks that are used outside
+- ❌ WRONG: (for (x arr) (do (define temp ...) (use temp outside)))
+- ✅ CORRECT: Define ALL variables BEFORE the loop
+- ✅ CORRECT: Use set! to mutate pre-defined variables inside loops
+- ✅ CORRECT: Signature objects already have blockTime - no need for getTransaction!
+
+**Real-World Example (PumpFun trades):**
+  ```lisp
+  (define sigs (getSignaturesForAddress addr {:limit 1000}))
+  (define count 0)
+  (for (sig sigs)
+    (when (>= (. sig blockTime) cutoff)
+      (set! count (+ count 1))))
+  count  ;; Returns the count
   ```"#
     }
 
