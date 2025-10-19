@@ -633,25 +633,33 @@ count
 
 **Example - LONG time window (>= 2 minutes) - REQUIRES PAGINATION:**
 ```lisp
+;; Define ALL variables at the TOP!
 (define cutoff (- (now) 600))  ;; 10 minutes
 (define count 0)
 (define before null)
 (define continue true)
 (define batch [])
+(define batch_size 0)
+(define last_sig null)
 
 (while continue
   (set! batch (if (== before null)
                   (getSignaturesForAddress addr {:limit 1000})
                   (getSignaturesForAddress addr {:limit 1000 :before before})))
+  (set! batch_size (COUNT batch))
+
   (for (sig batch)
     (when (>= (. sig blockTime) cutoff)
       (set! count (+ count 1))))
+
   ;; Stop when no results OR oldest sig is before cutoff
-  (when (or (== (COUNT batch) 0)
-            (< (. ([] batch (- (COUNT batch) 1)) blockTime) cutoff))
+  (when (or (== batch_size 0)
+            (< (. ([] batch (- batch_size 1)) blockTime) cutoff))
     (set! continue false))
-  (when (and continue (> (COUNT batch) 0))
-    (set! before (. ([] batch (- (COUNT batch) 1)) signature))))
+
+  (when (and continue (> batch_size 0))
+    (set! last_sig ([] batch (- batch_size 1)))  ;; use set! not define!
+    (set! before (. last_sig signature))))
 count
 ```
 
@@ -1007,11 +1015,37 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
   ```
 
 **CRITICAL SCOPING RULES:**
-- ❌ WRONG: Defining variables inside (do ...) blocks that are used outside
-- ❌ WRONG: (for (x arr) (do (define temp ...) (use temp outside)))
-- ✅ CORRECT: Define ALL variables BEFORE the loop
-- ✅ CORRECT: Use set! to mutate pre-defined variables inside loops
+- ❌ WRONG: Defining variables inside (do ...) blocks
+- ❌ WRONG: Defining variables inside (when ...) blocks
+- ❌ WRONG: Defining variables inside (if ...) branches
+- ❌ WRONG: Defining variables inside (while ...) loops
+- ❌ WRONG: (when continue (define last_sig ...))  ;; NEVER DO THIS!
+- ✅ CORRECT: Define ALL variables at the TOP of your code, BEFORE any loops
+- ✅ CORRECT: Use set! to mutate pre-defined variables inside loops/when/if
 - ✅ CORRECT: Signature objects already have blockTime - no need for getTransaction!
+
+**CRITICAL: Define variables at the TOP:**
+```lisp
+;; ✅ CORRECT - all variables defined at top
+(define count 0)
+(define before null)
+(define batch [])
+(define last_sig null)
+
+(while continue
+  (set! batch ...)
+  (when condition
+    (set! last_sig ...)  ;; set! not define!
+    (set! before ...)))
+```
+
+```lisp
+;; ❌ WRONG - define inside when
+(while continue
+  (when condition
+    (define last_sig ...)  ;; BREAKS! Variable lost after when!
+    (set! before ...)))
+```
 
 **Real-World Example (PumpFun trades):**
   ```lisp
