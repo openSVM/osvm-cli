@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GOLDEN_RATIO"],"fn":["create_golden_layout","create_spiral_layout"],"struct":["GoldenRatioCalculator"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["crop_to_chat_ui","render_tui_buffer_to_image","take_terminal_screenshot","take_terminal_screenshot_with_crop","take_tui_screenshot","try_gnome_screenshot","try_imagemagick_import","try_scrot","try_spectacle","try_text_fallback","which_command_exists"],"struct":["TuiBuffer","TuiCell"]};

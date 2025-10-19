@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["MatrixColumn","MatrixRainEffect","TypewriterEffect","WaveTextEffect"]};

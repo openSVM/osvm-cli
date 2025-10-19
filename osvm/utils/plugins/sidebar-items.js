@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Permission","PluginType"],"struct":["EchoPlugin","ExternalPlugin","PluginContext","PluginInstaller","PluginManager","PluginManifest","PluginResult","TimePlugin"],"trait":["Plugin"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_snapshot_command"]};
