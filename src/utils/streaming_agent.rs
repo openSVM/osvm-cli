@@ -166,47 +166,22 @@ fn json_to_ovsm_value(val: &Value) -> OvsmValue {
 }
 
 /// Fix AI-generated OVSM syntax to match actual OVSM language spec
-/// Transforms common AI syntax mistakes to valid OVSM
+/// For LISP/S-expression syntax, we only fix casing inconsistencies
 fn fix_ovsm_syntax(code: &str) -> String {
+    // LISP/S-expression syntax doesn't need transformation
+    // Just fix casing inconsistencies
     let mut fixed = code.to_string();
 
-    // Fix: WHILE ... DO -> WHILE ...:
-    // Match "WHILE <condition> DO" and replace with "WHILE <condition>:"
-    let while_do_re = regex::Regex::new(r"WHILE\s+([^\n]+?)\s+DO\s*\n").unwrap();
-    fixed = while_do_re.replace_all(&fixed, "WHILE $1:\n").to_string();
-
-    // Fix: Remove ENDWHILE / END WHILE (OVSM uses indentation)
-    let endwhile_re = regex::Regex::new(r"(?m)^\s*END\s*WHILE\s*$").unwrap();
-    fixed = endwhile_re.replace_all(&fixed, "").to_string();
-
-    // Fix: Remove ENDIF / END IF (OVSM uses indentation)
-    let endif_re = regex::Regex::new(r"(?m)^\s*END\s*IF\s*$").unwrap();
-    fixed = endif_re.replace_all(&fixed, "").to_string();
-
-    // Fix: Remove ENDFOR / END FOR
-    let endfor_re = regex::Regex::new(r"(?m)^\s*END\s*FOR\s*$").unwrap();
-    fixed = endfor_re.replace_all(&fixed, "").to_string();
-
-    // Fix: NULL -> null
+    // Fix: NULL -> null (lowercase)
     fixed = fixed.replace(" NULL", " null");
-    fixed = fixed.replace("=NULL", "=null");
-    fixed = fixed.replace("= NULL", "= null");
+    fixed = fixed.replace("(NULL", "(null");
+    fixed = fixed.replace(" NULL)", " null)");
 
-    // Fix: TRUE -> true, FALSE -> false
+    // Fix: TRUE/FALSE -> true/false (lowercase)
     fixed = fixed.replace(" TRUE", " true");
     fixed = fixed.replace(" FALSE", " false");
-
-    // Fix: GUARD condition: -> GUARD (remove the 'condition:' keyword)
-    let guard_re = regex::Regex::new(r"GUARD\s+condition:\s+").unwrap();
-    fixed = guard_re.replace_all(&fixed, "GUARD ").to_string();
-
-    // Fix: Remove comments (OVSM doesn't support # comments yet)
-    let comment_re = regex::Regex::new(r"(?m)^\s*#.*$").unwrap();
-    fixed = comment_re.replace_all(&fixed, "").to_string();
-
-    // Fix: Clean up multiple blank lines
-    let blank_re = regex::Regex::new(r"\n\n\n+").unwrap();
-    fixed = blank_re.replace_all(&fixed, "\n\n").to_string();
+    fixed = fixed.replace("(TRUE", "(true");
+    fixed = fixed.replace("(FALSE", "(false");
 
     fixed
 }
