@@ -678,12 +678,13 @@ Conditional Logic:
           "B"
           "C"))
 
-# Essential Built-in Tools
+# Essential Built-in Functions
 
-**Data Manipulation**: MAP, FILTER, SUM, AVG, COUNT, FLATTEN, APPEND, FIND, SORT
-**Statistics**: MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE, PERCENTILE
-**Math**: ABS, SQRT, POW, ROUND, MAX, MIN
-**Utilities**: NOW, LOG, ERROR, INPUT, derivePDA, parseU64, SLEEP
+**LISP Forms**: define, const, set!, if, while, for, do, when
+**Logic**: not, null?, empty?
+**Arrays**: length, last, range
+**Utilities**: now, log
+**MCP Tools**: See "Your Available MCP Tools" section below for dynamic tools like COUNT, APPEND, etc.
 
 # MCP Tools Reference
 
@@ -892,7 +893,7 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 - Nest IF/THEN/ELSE inside loops for conditional logic
 - Use DECISION/BRANCH for multi-way strategy selection
 - Always include time estimates and confidence scores
-- Handle edge cases with GUARD statements
+- Handle edge cases with if-checks and error handling
 - For any RPC method not listed above, use solana_rpc_call(method: "method_name", params: [array_of_params])
 - RPC proxy is case-sensitive: method names must match exactly (e.g., "getBlockTime", not "getblocktime")
 - Params must be passed as an array, even for single parameters
