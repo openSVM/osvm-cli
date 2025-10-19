@@ -233,11 +233,14 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         if let Some(code_end) = code_content.find("```") {
             let extracted = code_content[..code_end].trim();
 
-            // Only consider blocks that look like OVSM code (have variables, loops, or constants)
-            if extracted.contains("CONST ") ||
-               extracted.contains("$") ||
-               extracted.contains("WHILE ") ||
-               extracted.contains("FOR ") {
+            // Only consider blocks that look like LISP code
+            if extracted.contains("(define ") ||
+               extracted.contains("(const ") ||
+               extracted.contains("(while ") ||
+               extracted.contains("(for ") ||
+               extracted.contains("(if ") ||
+               extracted.contains("(do ") ||
+               extracted.contains("(set! ") {
                 code_blocks.push(extracted.to_string());
             }
 
@@ -272,9 +275,10 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
 
         let ovsm_code = code_start[..min_end].trim();
 
-        // Validate it looks like OVSM code
-        if ovsm_code.contains("CONST ") || ovsm_code.contains("$") ||
-           ovsm_code.contains("WHILE ") || ovsm_code.contains("FOR ") {
+        // Validate it looks like LISP code
+        if ovsm_code.contains("(define ") || ovsm_code.contains("(const ") ||
+           ovsm_code.contains("(while ") || ovsm_code.contains("(for ") ||
+           ovsm_code.contains("(if ") || ovsm_code.contains("(set! ") {
             return Some(fix_ovsm_syntax(ovsm_code));
         }
     }

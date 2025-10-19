@@ -802,34 +802,33 @@ The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `g
 
 **For large data queries, ALWAYS implement pagination:**
 
-```
-CONST MAX_RESULTS_PER_CALL = 1000
+```lisp
+(const MAX_RESULTS_PER_CALL 1000)
 
-$all_signatures = []
-$before = null
-$continue = 1
+(define all_signatures [])
+(define before null)
+(define continue true)
 
-WHILE $continue == 1:
-    IF $before == null THEN
-        $batch = getSignaturesForAddress(address: $address, limit: MAX_RESULTS_PER_CALL)
-    ELSE
-        $batch = getSignaturesForAddress(address: $address, limit: MAX_RESULTS_PER_CALL, before: $before)
+(while continue
+  (define batch
+    (if (== before null)
+        (getSignaturesForAddress :address address :limit MAX_RESULTS_PER_CALL)
+        (getSignaturesForAddress :address address :limit MAX_RESULTS_PER_CALL :before before)))
 
-    $batch_size = COUNT($batch)
+  (define batch_size (COUNT batch))
 
-    IF $batch_size == 0 THEN
-        $continue = 0
-    ELSE
-        $all_signatures = APPEND($all_signatures, $batch)
+  (if (== batch_size 0)
+      (set! continue false)
+      (do
+        (set! all_signatures (APPEND all_signatures batch))
+        (if (< batch_size MAX_RESULTS_PER_CALL)
+            (set! continue false)
+            (do
+              (define last_idx (- batch_size 1))
+              (define last_item ([] batch last_idx))
+              (set! before (. last_item signature)))))))
 
-        IF $batch_size < MAX_RESULTS_PER_CALL THEN
-            $continue = 0
-        ELSE
-            $last_idx = $batch_size - 1
-            $last_item = $batch[$last_idx]
-            $before = $last_item.signature
-
-$total = COUNT($all_signatures)
+(define total (COUNT all_signatures))
 ```
 
 **Why this matters:**
@@ -842,16 +841,17 @@ $total = COUNT($all_signatures)
 
 1. List tools in "Available Tools" section
 2. Use DECISION/BRANCH for multi-way choices
-3. Use WHILE loops for continuous monitoring/iteration
-4. Use FOR loops for iterating over collections
-5. Use IF/THEN/ELSE for conditional logic within branches
-6. Handle errors with TRY/CATCH
-7. Run independent ops in PARALLEL
+3. Use (while ...) for continuous monitoring/iteration
+4. Use (for ...) for iterating over collections
+5. Use (if ...) for conditional logic
+6. Handle errors with error checking
+7. Run independent ops in PARALLEL blocks
 8. Always provide confidence score
-9. Use $ for variables, UPPERCASE for constants
-10. NO .method() syntax - use functions only
-11. For RPC methods, use solana_rpc_call(method: "method_name", params: [param_array]) when high-level tools aren't available
-12. Batch related queries using PARALLEL for better performance
+9. Use lowercase for variables (no $ prefix!)
+10. Use UPPERCASE for constants
+11. Use (. obj field) for field access, ([] arr idx) for indexing
+12. For RPC methods, use solana_rpc_call when high-level tools aren't available
+13. Batch related queries using PARALLEL for better performance
 
 # Example with RPC Tool Usage
 
@@ -862,23 +862,28 @@ $total = COUNT($all_signatures)
 getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 
 **Main Branch:**
-$slot = getSlot()
-$nodes = getClusterNodes()
-$node_count = COUNT($nodes)
+```lisp
+(define slot (getSlot))
+(define nodes (getClusterNodes))
+(define node_count (COUNT nodes))
 
-PARALLEL {
-  $block_time = solana_rpc_call(method: "getBlockTime", params: [$slot])
-  $health = getHealth()
-}
-WAIT_ALL
+;; Parallel execution
+(do
+  (define block_time (solana_rpc_call :method "getBlockTime" :params [slot]))
+  (define health (getHealth)))
 
-IF $health == "ok" THEN
-  $confidence = 95
-ELSE
-  $confidence = 60
+(define confidence
+  (if (== health "ok")
+      95
+      60))
+```
 
 **Action:**
-RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence: $confidence}
+```lisp
+(do
+  (define result {:status health :nodes node_count :block_time block_time :confidence confidence})
+  result)
+```
 
 # Important Notes
 
@@ -894,39 +899,47 @@ RETURN {status: $health, nodes: $node_count, block_time: $block_time, confidence
 
 # CRITICAL SYNTAX REMINDERS
 
-**Indentation-Based Blocks (Like Python):**
-- ❌ WRONG: WHILE ... DO ... ENDWHILE
-- ✅ CORRECT: WHILE condition: (colon, then indented body)
-- ❌ WRONG: IF ... THEN ... ENDIF
-- ✅ CORRECT: IF condition THEN (indented body)
-- ❌ WRONG: GUARD condition: $x != null
-- ✅ CORRECT: GUARD $x != null
-- ℹ️ NOTE: OVSM is flexible - ENDIF/ENDWHILE/ENDFOR/END markers are supported but OPTIONAL
+**Variables:**
+- ❌ WRONG: $variable, $x, $result
+- ✅ CORRECT: variable, x, result (no $ prefix)
+- ❌ WRONG: (define $x 10)
+- ✅ CORRECT: (define x 10)
+
+**Control Flow:**
+- ❌ WRONG: WHILE condition: ... ENDWHILE
+- ✅ CORRECT: (while condition body...)
+- ❌ WRONG: IF condition THEN ... ELSE ... ENDIF
+- ✅ CORRECT: (if condition then-expr else-expr)
+- ❌ WRONG: FOR x IN array: ...
+- ✅ CORRECT: (for (x array) body...)
 
 **Null Values:**
 - ❌ WRONG: NULL, NIL, None
 - ✅ CORRECT: null (lowercase only)
 
-**Array Indexing:**
-- Last element: $array[$last_idx] where $last_idx = COUNT($array) - 1
-- No negative indexing support (no $array[-1])
+**Array/Object Access:**
+- ❌ WRONG: array[0], obj.field
+- ✅ CORRECT: ([] array 0), (. obj field)
+- Last element: ([] array (- (COUNT array) 1))
+- No negative indexing support
 
-**NO Lambda Functions:**
+**Iteration:**
 - ❌ WRONG: MAP($array, lambda $x: $x * 2)
-- ✅ CORRECT: Use FOR loops instead:
-  ```
-  $result = []
-  FOR $x IN $array:
-      $doubled = $x * 2
-      $result = APPEND($result, $doubled)
+- ✅ CORRECT: Use (for ...) loops:
+  ```lisp
+  (define result [])
+  (for (x array)
+    (define doubled (* x 2))
+    (set! result (APPEND result doubled)))
   ```
 - ❌ WRONG: FILTER($array, lambda $x: $x > 5)
-- ✅ CORRECT: Use FOR loops with IF:
-  ```
-  $filtered = []
-  FOR $x IN $array:
-      IF $x > 5 THEN
-          $filtered = APPEND($filtered, $x)
+- ✅ CORRECT: Use (for ...) with (if ...):
+  ```lisp
+  (define filtered [])
+  (for (x array)
+    (if (> x 5)
+        (set! filtered (APPEND filtered x))
+        null))
   ```"#
     }
 
