@@ -230,31 +230,35 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         return Some(fix_ovsm_syntax(largest));
     }
 
-    // Strategy 2: Extract from **Main Branch:** section (plain text OVSM)
+    // Strategy 2: Extract from Main Branch: section (with or without bold markers)
     // This handles cases where AI returns OVSM without code blocks
-    if let Some(main_branch_start) = raw_plan.find("**Main Branch:**") {
-        let after_main = &raw_plan[main_branch_start + 16..]; // Skip "**Main Branch:**"
+    let main_branch_patterns = ["**Main Branch:**", "Main Branch:", "[Main Branch]"];
 
-        // Find the start of actual code (skip whitespace and newlines)
-        let code_start = after_main.trim_start();
+    for pattern in &main_branch_patterns {
+        if let Some(main_branch_start) = raw_plan.find(pattern) {
+            let after_main = &raw_plan[main_branch_start + pattern.len()..];
 
-        // Find the end of Main Branch section (next ** marker or **Action:** or **Decision**)
-        let end_markers = ["**Action:**", "**Decision", "**Available Tools"];
-        let mut min_end = code_start.len();
+            // Find the start of actual code (skip whitespace and newlines)
+            let code_start = after_main.trim_start();
 
-        for marker in &end_markers {
-            if let Some(pos) = code_start.find(marker) {
-                min_end = min_end.min(pos);
+            // Find the end of Main Branch section (next marker)
+            let end_markers = ["**Action:**", "Action:", "[Action]", "**Decision", "Decision Point:", "**Available Tools", "Available Tools:"];
+            let mut min_end = code_start.len();
+
+            for marker in &end_markers {
+                if let Some(pos) = code_start.find(marker) {
+                    min_end = min_end.min(pos);
+                }
             }
-        }
 
-        let ovsm_code = code_start[..min_end].trim();
+            let ovsm_code = code_start[..min_end].trim();
 
-        // Validate it looks like LISP code
-        if ovsm_code.contains("(define ") || ovsm_code.contains("(const ") ||
-           ovsm_code.contains("(while ") || ovsm_code.contains("(for ") ||
-           ovsm_code.contains("(if ") || ovsm_code.contains("(set! ") {
-            return Some(fix_ovsm_syntax(ovsm_code));
+            // Validate it looks like LISP code
+            if ovsm_code.contains("(define ") || ovsm_code.contains("(const ") ||
+               ovsm_code.contains("(while ") || ovsm_code.contains("(for ") ||
+               ovsm_code.contains("(if ") || ovsm_code.contains("(set! ") {
+                return Some(fix_ovsm_syntax(ovsm_code));
+            }
         }
     }
 
