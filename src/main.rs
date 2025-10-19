@@ -43,6 +43,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "rpc"
             | "deploy"
             | "doctor"
+            | "tutorial"
             | "audit"
             | "qa"
             | "ovsm"
@@ -647,6 +648,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "doctor" => {
             commands::doctor_handler::handle_doctor_command(matches).await?;
+        }
+        "tutorial" => {
+            commands::tutorial::run_interactive_tutorial().await?;
         }
         "audit" => {
             // This case should not be reached as audit is handled early to avoid config loading

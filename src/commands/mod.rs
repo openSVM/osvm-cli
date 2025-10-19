@@ -16,3 +16,4 @@ pub mod realtime;
 pub mod rpc_manager;
 pub mod snapshot;
 pub mod svm_handler;
+pub mod tutorial;
