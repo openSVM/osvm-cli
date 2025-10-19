@@ -1,7 +1,8 @@
-// Control Flow Examples - FOR loop
-$sum = 0
+;; Control Flow Examples - FOR loop in LISP Syntax
+(do
+  (define sum 0)
 
-FOR $i IN [1..6]:
-    $sum = $sum + $i
+  (for (i (range 1 6))
+    (set! sum (+ sum i)))
 
-RETURN $sum
+  sum)

@@ -1,3 +1,0 @@
-// Simple Hello World example
-$message = "Hello from OVSM! 🚀"
-RETURN $message

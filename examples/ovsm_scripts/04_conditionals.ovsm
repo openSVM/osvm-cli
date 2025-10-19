@@ -1,8 +1,0 @@
-// Conditional Logic with IF/THEN/ELSE
-$balance = 100
-$threshold = 50
-
-IF $balance > $threshold THEN
-    RETURN "Sufficient balance"
-ELSE
-    RETURN "Insufficient balance"

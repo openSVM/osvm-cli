@@ -1,8 +1,8 @@
-// Hello World - Basic OVSM Script
-// This is the simplest OVSM script demonstrating basic syntax
+;; Hello World - Basic OVSM Script in LISP Syntax
+;; This is the simplest OVSM script demonstrating basic syntax
 
-// Variables in OVSM start with $
-$greeting = "Hello from OVSM!"
+;; Variables are defined with define
+(define greeting "Hello from OVSM!")
 
-// RETURN statement sets the exit value and displays output
-RETURN $greeting
+;; Return the value
+greeting
