@@ -1,9 +1,0 @@
-// Pump.fun Transaction Monitor - Demo
-// Shows basic iteration pattern
-
-$sum = 0
-
-FOR $i IN [1..11]:
-    $sum = $sum + 1
-
-RETURN $sum

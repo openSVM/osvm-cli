@@ -1,12 +1,13 @@
-// Calculate Factorial
-// This is a more complex example showing loops and conditionals together
+;; Calculate factorial using LISP syntax
+;; This is a more complex example showing loops and conditionals together
 
-$n = 5
-$result = 1
+(do
+  (define n 5)
+  (define result 1)
 
-IF $n < 0 THEN
-    RETURN "Error: negative number"
-ELSE
-    FOR $i IN [1..$n+1]:
-        $result = $result * $i
-    RETURN $result
+  (if (< n 0)
+      "Error: negative number"
+      (do
+        (for (i (range 1 (+ n 1)))
+          (set! result (* result i)))
+        result)))
