@@ -343,35 +343,29 @@ impl LispEvaluator {
     }
 
     /// (for (var coll) body...) - For loop
+    ///
+    /// When parsing (for (x [1 2 3]) body...), the S-expression parser flattens the inner list,
+    /// so we receive: args = [Variable("x"), ArrayLiteral([1,2,3]), body...]
     fn eval_for(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
-        if args.len() < 2 {
+        if args.len() < 3 {
             return Err(Error::InvalidArguments {
                 tool: "for".to_string(),
-                reason: "Expected at least 2 arguments: (var collection) body...".to_string(),
+                reason: "Expected at least 3 arguments: var collection body...".to_string(),
             });
         }
 
-        // First arg should be a list: (var collection)
-        let binding = match &args[0].value {
-            Expression::ToolCall { name: _, args: bind_args } if bind_args.len() == 2 => {
-                // This is a parsed (var collection) expression
-                let var_name = match &bind_args[0].value {
-                    Expression::Variable(n) => n.clone(),
-                    _ => return Err(Error::ParseError("for requires variable name".to_string())),
-                };
-                let collection_expr = &bind_args[1].value;
-                (var_name, collection_expr)
-            }
+        // Extract variable name from first arg
+        let var_name = match &args[0].value {
+            Expression::Variable(n) => n.clone(),
             _ => {
-                // Try parsing from the raw structure
-                // For now, return error - need proper for syntax
                 return Err(Error::ParseError(
-                    "for syntax: (for (var collection) body...)".to_string(),
-                ));
+                    "for syntax: (for (var collection) body...), var must be a variable name".to_string(),
+                ))
             }
         };
 
-        let (var_name, collection_expr) = binding;
+        // Second arg is the collection expression
+        let collection_expr = &args[1].value;
 
         // Evaluate the collection
         let collection = self.evaluate_expression(collection_expr)?;
@@ -395,8 +389,8 @@ impl LispEvaluator {
             // Bind loop variable
             self.env.define(var_name.clone(), item);
 
-            // Execute body
-            for arg in &args[1..] {
+            // Execute body (args[2..] because args[0]=var, args[1]=collection)
+            for arg in &args[2..] {
                 last_val = self.evaluate_expression(&arg.value)?;
             }
         }
