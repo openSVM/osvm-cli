@@ -6,8 +6,8 @@ use ovsm::error::Result as OvsmResult;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-// Real Solana RPC endpoint  
-const SOLANA_RPC_URL: &str = "https://opensvm.com/api/proxy/rpc";
+// Real Solana RPC endpoint
+const SOLANA_RPC_URL: &str = "https://osvm.ai/api/proxy/rpc";
 
 /// Generic RPC Bridge Tool - Dynamically calls ANY Solana RPC method
 pub struct RpcBridgeTool {
