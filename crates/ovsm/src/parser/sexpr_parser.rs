@@ -536,17 +536,36 @@ impl SExprParser {
 
         let mut pairs = Vec::new();
         while !self.check(&TokenKind::RightBrace) {
-            // Expect :key
-            self.consume(TokenKind::Colon)?;
-            let key = if let TokenKind::Identifier(k) = &self.peek().kind {
-                k.clone()
-            } else {
-                return Err(Error::ParseError("Expected identifier for object key".to_string()));
-            };
-            self.advance();
+            // Check for two syntaxes:
+            // 1. :key value (explicit syntax)
+            // 2. identifier (shorthand - expands to :identifier identifier)
 
-            let value = self.parse_expression()?;
-            pairs.push((key, value));
+            if self.check(&TokenKind::Colon) {
+                // Explicit syntax: :key value
+                self.advance(); // consume colon
+                let key = if let TokenKind::Identifier(k) = &self.peek().kind {
+                    k.clone()
+                } else {
+                    return Err(Error::ParseError("Expected identifier for object key".to_string()));
+                };
+                self.advance();
+
+                let value = self.parse_expression()?;
+                pairs.push((key, value));
+            } else if let TokenKind::Identifier(name) = &self.peek().kind {
+                // Shorthand syntax: identifier expands to :identifier identifier
+                let key = name.clone();
+                self.advance();
+
+                // Value is a variable reference with the same name
+                let value = Expression::Variable(key.clone());
+                pairs.push((key, value));
+            } else {
+                return Err(Error::ParseError(format!(
+                    "Expected ':key value' or 'identifier' in object literal, got {:?}",
+                    self.peek().kind
+                )));
+            }
 
             if self.check(&TokenKind::Comma) {
                 self.advance();
