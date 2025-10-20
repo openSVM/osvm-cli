@@ -107,6 +107,8 @@ impl LispEvaluator {
                     "sort" => self.eval_sort(args),
                     "str" => self.eval_str(args),
                     "slice" => self.eval_slice(args),
+                    "keys" => self.eval_keys(args),
+                    "get" => self.eval_get(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -931,6 +933,43 @@ impl LispEvaluator {
 
         let sliced: Vec<Value> = array[start..end].to_vec();
         Ok(Value::Array(Arc::new(sliced)))
+    }
+
+    /// keys(object) - Get array of object keys
+    fn eval_keys(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "keys".to_string(),
+                reason: "Expected 1 argument: object".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        let keys: Vec<Value> = obj.keys()
+            .map(|k| Value::String(k.clone()))
+            .collect();
+
+        Ok(Value::Array(Arc::new(keys)))
+    }
+
+    /// get(object, key) - Safely get object property, returns null if not found
+    fn eval_get(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "get".to_string(),
+                reason: "Expected 2 arguments: object, key".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        let key_val = self.evaluate_expression(&args[1].value)?;
+        let key = key_val.as_string()?;
+
+        Ok(obj.get(&*key).cloned().unwrap_or(Value::Null))
     }
 
     /// Evaluate a regular tool call
