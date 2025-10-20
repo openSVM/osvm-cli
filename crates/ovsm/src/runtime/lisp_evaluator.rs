@@ -974,7 +974,45 @@ impl LispEvaluator {
 
     /// Evaluate a regular tool call
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
-        // Get the tool from registry
+        // Check if this is a user-defined function first
+        if let Ok(func_val) = self.env.get(name) {
+            if let Value::Function { params, body, closure: _ } = func_val {
+                // This is a function call!
+
+                // Evaluate arguments
+                let mut evaluated_args = Vec::new();
+                for arg in args {
+                    let val = self.evaluate_expression(&arg.value)?;
+                    evaluated_args.push(val);
+                }
+
+                // Check parameter count
+                if params.len() != evaluated_args.len() {
+                    return Err(Error::InvalidArguments {
+                        tool: name.to_string(),
+                        reason: format!("Function expects {} parameters, got {}", params.len(), evaluated_args.len()),
+                    });
+                }
+
+                // Create new scope for function execution
+                self.env.enter_scope();
+
+                // Bind parameters to arguments
+                for (param, arg_val) in params.iter().zip(evaluated_args.iter()) {
+                    self.env.set(param, arg_val.clone());
+                }
+
+                // Evaluate function body
+                let result = self.evaluate_expression(&body);
+
+                // Exit function scope
+                self.env.exit_scope();
+
+                return result;
+            }
+        }
+
+        // Not a function, try tool registry
         let tool = self.registry.get(name)?;
 
         // Evaluate arguments
