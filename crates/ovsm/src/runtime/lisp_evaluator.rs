@@ -83,6 +83,7 @@ impl LispEvaluator {
                 match name.as_str() {
                     "set!" => self.eval_set(args),
                     "define" => self.eval_define(args),
+                    "defun" => self.eval_defun(args),
                     "const" => self.eval_const(args),
                     "let" => self.eval_let(args),
                     "while" => self.eval_while(args),
@@ -101,6 +102,11 @@ impl LispEvaluator {
                     "max" => self.eval_max(args),
                     "now" => self.eval_now(args),
                     "log" => self.eval_log(args),
+                    "map" => self.eval_map(args),
+                    "filter" => self.eval_filter(args),
+                    "sort" => self.eval_sort(args),
+                    "str" => self.eval_str(args),
+                    "slice" => self.eval_slice(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -229,6 +235,50 @@ impl LispEvaluator {
         self.env.define(var_name, value.clone());
 
         Ok(value)
+    }
+
+    /// (defun name (params...) body) - Define named function
+    fn eval_defun(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "defun".to_string(),
+                reason: "Expected 3 arguments: name, parameters, body".to_string(),
+            });
+        }
+
+        // Get function name
+        let func_name = match &args[0].value {
+            Expression::Variable(name) => name.clone(),
+            _ => return Err(Error::ParseError("defun requires function name".to_string())),
+        };
+
+        // Get parameters list
+        let params = match &args[1].value {
+            Expression::ArrayLiteral(param_exprs) => {
+                let mut param_names = Vec::new();
+                for param_expr in param_exprs {
+                    if let Expression::Variable(name) = param_expr {
+                        param_names.push(name.clone());
+                    } else {
+                        return Err(Error::ParseError("defun parameters must be identifiers".to_string()));
+                    }
+                }
+                param_names
+            }
+            _ => return Err(Error::ParseError("defun requires parameter list".to_string())),
+        };
+
+        // Create function value
+        let func_value = Value::Function {
+            params,
+            body: Arc::new(args[2].value.clone()),
+            closure: Arc::new(std::collections::HashMap::new()),
+        };
+
+        // Define function in environment
+        self.env.define(func_name, func_value.clone());
+
+        Ok(func_value)
     }
 
     /// (const name value) - Define constant
@@ -663,6 +713,226 @@ impl LispEvaluator {
         Ok(Value::Null)
     }
 
+    /// (map collection lambda) - Map function over collection
+    fn eval_map(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "map".to_string(),
+                reason: "Expected 2 arguments: collection and lambda".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get lambda function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, closure: _ } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "map".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut result = Vec::new();
+
+                // Apply lambda to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate body
+                    let val = self.evaluate_expression(&body)?;
+                    result.push(val);
+
+                    // Exit scope
+                    self.env.exit_scope();
+                }
+
+                Ok(Value::Array(Arc::new(result)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (filter collection lambda) - Filter collection by predicate
+    fn eval_filter(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "filter".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get predicate function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, closure: _ } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "filter".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut result = Vec::new();
+
+                // Apply predicate to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate predicate
+                    let val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Include element if predicate is truthy
+                    if val.is_truthy() {
+                        result.push(elem.clone());
+                    }
+                }
+
+                Ok(Value::Array(Arc::new(result)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (sort collection comparator) - Sort collection using comparator lambda
+    fn eval_sort(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "sort".to_string(),
+                reason: "Expected 2 arguments: collection and comparator".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get comparator function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, closure: _ } => {
+                if params.len() != 2 {
+                    return Err(Error::InvalidArguments {
+                        tool: "sort".to_string(),
+                        reason: format!("Lambda must take exactly 2 parameters, got {}", params.len()),
+                    });
+                }
+
+                // Clone array for sorting
+                let mut sorted = array.to_vec();
+
+                // Manual bubble sort to avoid closure borrowing issues
+                let n = sorted.len();
+                for i in 0..n {
+                    for j in 0..(n - i - 1) {
+                        // Create new scope
+                        self.env.enter_scope();
+
+                        // Bind parameters (a=sorted[j], b=sorted[j+1])
+                        self.env.define(params[0].clone(), sorted[j].clone());
+                        self.env.define(params[1].clone(), sorted[j + 1].clone());
+
+                        // Evaluate comparator: if (comparator a b) is false, swap
+                        let result = self.evaluate_expression(&body)?;
+
+                        // Exit scope
+                        self.env.exit_scope();
+
+                        // If comparator returns false, swap
+                        if !result.is_truthy() {
+                            sorted.swap(j, j + 1);
+                        }
+                    }
+                }
+
+                Ok(Value::Array(Arc::new(sorted)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (str args...) - Concatenate values into string
+    fn eval_str(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        let mut result = String::new();
+
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            // Convert value to string
+            let s = match val {
+                Value::String(s) => s,
+                Value::Int(n) => n.to_string(),
+                Value::Float(f) => f.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "null".to_string(),
+                _ => format!("{}", val),
+            };
+            result.push_str(&s);
+        }
+
+        Ok(Value::String(result))
+    }
+
+    /// (slice array start end) - Extract subarray from start to end (exclusive)
+    fn eval_slice(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "slice".to_string(),
+                reason: "Expected 3 arguments: array, start, end".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let start_val = self.evaluate_expression(&args[1].value)?;
+        let start = start_val.as_int()? as usize;
+
+        let end_val = self.evaluate_expression(&args[2].value)?;
+        let end = end_val.as_int()? as usize;
+
+        // Bounds checking
+        if start > array.len() || end > array.len() || start > end {
+            return Err(Error::InvalidArguments {
+                tool: "slice".to_string(),
+                reason: format!("Invalid slice bounds: start={}, end={}, len={}", start, end, array.len()),
+            });
+        }
+
+        let sliced: Vec<Value> = array[start..end].to_vec();
+        Ok(Value::Array(Arc::new(sliced)))
+    }
+
     /// Evaluate a regular tool call
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
         // Get the tool from registry
@@ -689,6 +959,12 @@ impl LispEvaluator {
                 (Value::Int(l), Value::Float(r)) => Ok(Value::Float(l as f64 + r)),
                 (Value::Float(l), Value::Int(r)) => Ok(Value::Float(l + r as f64)),
                 (Value::String(l), Value::String(r)) => Ok(Value::String(l + &r)),
+                (Value::Array(l), Value::Array(r)) => {
+                    // Array concatenation
+                    let mut result = (*l).clone();
+                    result.extend((*r).clone());
+                    Ok(Value::Array(Arc::new(result)))
+                }
                 (l, r) => Err(Error::InvalidOperation {
                     op: "add".to_string(),
                     left_type: l.type_name(),
