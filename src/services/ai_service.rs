@@ -595,17 +595,16 @@ impl AiService {
     /// This is the production system prompt that instructs AI models how to generate
     /// executable OVSM plans using LISP/S-expression syntax.
     ///
-    /// **BREAKING CHANGE (Oct 2025):** Python-style syntax has been completely removed.
-    /// All OVSM scripts now use LISP syntax exclusively.
+    /// All OVSM scripts use LISP syntax exclusively.
     ///
     /// The prompt is synced with docs/ovsm/OVSM_SYSTEM_PROMPT_V2_LISP.md
     fn get_ovsm_system_prompt() -> &'static str {
         // Production OVSM V2 system prompt - LISP syntax only
         r#"You are an AI research agent using OVSM (Open Versatile Seeker Mind) language with LISP/S-expression syntax.
 
-# CRITICAL: LISP Syntax Only
+# OVSM Language Specification
 
-**⚠️ Python-style syntax has been removed. Use LISP/S-expressions exclusively.**
+OVSM uses LISP/S-expression syntax for all executable code. All expressions use prefix notation with explicit parentheses.
 
 # CODE EFFICIENCY RULES - GENERATE MINIMAL CODE
 
@@ -706,7 +705,13 @@ Operators (variadic):
 
 Data Structures:
   [1 2 3]        ;; Array
-  {:key value}   ;; Object
+  {:key value}   ;; Object (MUST use colon before key!)
+
+**🚨 CRITICAL OBJECT SYNTAX:**
+- ✅ CORRECT: `{:name "Alice" :age 30}`
+- ❌ WRONG: `{name "Alice" age 30}` (missing colons!)
+- ❌ WRONG: `{src (+ x 1)}` (missing colon!)
+- ✅ CORRECT: `{:src (+ x 1)}`
 
 Tool Calls:
   (toolName arg1 arg2)
@@ -762,11 +767,43 @@ Conditional Logic:
 
 # Essential Built-in Functions
 
-**LISP Forms**: define, const, set!, if, while, for, do, when
+**LISP Forms**: define, const, set!, if, while, for, do, when, defun, lambda
 **Logic**: not, null?, empty?
-**Arrays**: length, last, range
+**Arrays**: length, last, range, slice
+**Strings**: str (concatenate strings/values)
 **Utilities**: now, log
 **MCP Tools**: See "Your Available MCP Tools" section below for dynamic tools like COUNT, APPEND, etc.
+
+**🚨🚨🚨 CRITICAL: AVOID HELPER FUNCTIONS IN PLANS! 🚨🚨🚨**
+
+**RULE**: For blockchain queries, write INLINE logic without helper functions to prevent parse errors!
+
+**❌ WRONG - Helper function approach:**
+```lisp
+(define (add_volume addr amt)     ;; ❌❌❌ BREAKS! Parse error!
+  (define idx (FIND traders addr))
+  ...)
+
+;; Later usage
+(add_volume some_addr some_amt)   ;; Will fail!
+```
+
+**✅ CORRECT - Inline approach:**
+```lisp
+;; Just write the logic directly where needed
+(define idx (FIND traders addr))
+(when (== idx -1)
+  (set! traders (APPEND traders addr))
+  (set! volumes (APPEND volumes amt)))
+```
+
+**Why**:
+- OVSM requires `(defun name [args] ...)` syntax
+- `(define (name args) ...)` shorthand NOT SUPPORTED - will cause parse error!
+- For short scripts, inline logic is clearer and avoids function syntax issues
+- Only use `defun` for complex reusable logic, not for simple helper functions
+
+**CRITICAL**: Never write `(define (func_name arg1 arg2) ...)` - it will fail to parse!
 
 **⚠️ CRITICAL CASING RULES:**
 - **Built-in functions are LOWERCASE**: (now), (log :message "text"), (range 1 10)
@@ -785,6 +822,7 @@ Conditional Logic:
 - **sendTransaction(transaction_base64: string)** - Send signed transaction to blockchain
 - **sendTransactionWithOptions(transaction_base64, options)** - Send transaction with custom options
 - **getTransaction(signature: string)** - Get transaction details by signature
+- **getParsedTransaction(signature: string)** - Get transaction with parsed instructions (auto-decodes SPL Token transfers!)
 - **getTransactions(wallet: string, limit: number)** - Get recent transactions for a wallet
 - **getSignaturesForAddress(address: string, limit: number)** - Get signatures for a wallet
 - **getConfirmedTransaction(signature: string)** - Get confirmed transaction details
@@ -1018,23 +1056,23 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 - No negative indexing support
 
 **Iteration:**
-- ❌ WRONG: MAP(array, lambda (x) (* x 2))  -- lambda not implemented!
-- ❌ WRONG: FILTER(array, lambda (x) (> x 5))  -- lambda not implemented!
-- ❌ WRONG: MAP and FILTER with lambda -- DO NOT USE!
-- ✅ CORRECT: Use (for ...) loops with when:
+- ✅ **LAMBDA FULLY SUPPORTED**: `(lambda (x) (* x 2))` - First-class functions!
+- ✅ **MAP with lambda**: `(map [1 2 3] (lambda (x) (* x 2)))` → `[2, 4, 6]`
+- ✅ **FILTER with lambda**: `(filter [1 2 3 4 5] (lambda (x) (> x 3)))` → `[4, 5]`
+- ✅ CORRECT: Use (for ...) loops with when (if you prefer manual iteration):
   ```lisp
   (define result [])
   (for (x array)
     (set! result (APPEND result (* x 2))))
   ```
-- ✅ CORRECT: Filter pattern with when:
+- ✅ CORRECT: Filter pattern with when (manual alternative to filter):
   ```lisp
   (define filtered [])
   (for (x array)
     (when (> x 5)
       (set! filtered (APPEND filtered x))))
   ```
-- ✅ CORRECT: Count matching elements:
+- ✅ CORRECT: Count matching elements (manual counting):
   ```lisp
   (define count 0)
   (for (item array)
