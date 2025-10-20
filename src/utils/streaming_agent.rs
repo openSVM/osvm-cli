@@ -336,8 +336,25 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
     // Get available tools from MCP service
     let mut available_tools: HashMap<String, Vec<McpTool>> = HashMap::new();
 
-    // In a real implementation, would get tools from active MCP servers
-    let mock_tools = vec![
+    // Get tools from all configured MCP servers
+    for (server_id, _config) in mcp_service.list_servers() {
+        match mcp_service.list_tools(server_id).await {
+            Ok(tools) => {
+                if verbose > 0 {
+                    eprintln!("✓ Loaded {} tools from MCP server '{}'", tools.len(), server_id);
+                }
+                available_tools.insert(server_id.to_string(), tools);
+            }
+            Err(e) => {
+                if verbose > 0 {
+                    eprintln!("⚠️  Warning: Failed to load tools from '{}': {}", server_id, e);
+                }
+            }
+        }
+    }
+
+    // Fallback: Add minimal Solana RPC tools if no servers configured
+    let fallback_tools = vec![
         // Blockchain Tools
         McpTool {
             name: "get_balance".to_string(),
@@ -536,8 +553,12 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
         },
     ];
 
-    if !mock_tools.is_empty() {
-        available_tools.insert("blockchain_tools".to_string(), mock_tools);
+    // Only use fallback tools if no MCP servers provided any tools
+    if available_tools.is_empty() && !fallback_tools.is_empty() {
+        if verbose > 0 {
+            eprintln!("ℹ️  Using fallback tools (no MCP servers available)");
+        }
+        available_tools.insert("fallback_tools".to_string(), fallback_tools);
     }
 
     // Step 1: AI Planning
@@ -598,6 +619,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
             // Look for function calls like getSignaturesForAddress(...), getSlot(), etc.
             let rpc_methods = vec![
                 "getSignaturesForAddress", "getSlot", "getBlock", "getTransaction",
+                "getParsedTransaction",  // 🎯 Parses SPL Token transfers automatically!
                 "getAccountInfo", "getBalance", "getBlockTime", "getHealth",
                 "getVersion", "getBlockHeight", "getEpochInfo", "getSupply",
                 "getProgramAccounts", "getTokenAccountsByOwner", "getMultipleAccounts",
