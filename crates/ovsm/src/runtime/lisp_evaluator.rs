@@ -126,6 +126,8 @@ impl LispEvaluator {
                     // Multiple values (Common Lisp style)
                     "values" => self.eval_values(args),
                     "multiple-value-bind" => self.eval_multiple_value_bind(args),
+                    // Dynamic variables (Common Lisp special variables)
+                    "defvar" => self.eval_defvar(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -1302,6 +1304,41 @@ impl LispEvaluator {
         self.env.exit_scope();
 
         Ok(result)
+    }
+
+    // =========================================================================
+    // DYNAMIC VARIABLES (Common Lisp special variables)
+    // =========================================================================
+
+    /// (defvar *name* initial-value) - Define a dynamic (special) variable
+    /// Convention: use *earmuffs* for dynamic variable names
+    fn eval_defvar(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "defvar".to_string(),
+                reason: format!("Expected 2 arguments (name value), got {}", args.len()),
+            })?;
+        }
+
+        // First argument must be a variable name
+        let var_name = match &args[0].value {
+            Expression::Variable(name) => name.clone(),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "defvar".to_string(),
+                    reason: "First argument must be a variable name".to_string(),
+                })?
+            }
+        };
+
+        // Evaluate the initial value
+        let initial_value = self.evaluate_expression(&args[1].value)?;
+
+        // Define in the dynamic environment
+        self.env.defvar(var_name.clone(), initial_value.clone());
+
+        // Return the defined value
+        Ok(initial_value)
     }
 
     /// (length x) - Get length of collection
