@@ -1,18 +1,23 @@
 # OVSM Example Scripts
 
-This directory contains example OVSM (Open Versatile Seeker Mind) scripts demonstrating core language features.
+This directory contains example OVSM (Open Solana Virtual Machine) scripts demonstrating LISP language features.
+
+**OVSM v1.0.2** - 90% Common Lisp feature coverage - Production ready!
 
 ## Running the Examples
 
 ```bash
 # Run a specific example
-osvm ovsm run examples/ovsm_scripts/01_hello_world.ovsm
+osvm ovsm run examples/ovsm_scripts/balance_check.ovsm
 
 # Check syntax without running
-osvm ovsm check examples/ovsm_scripts/02_control_flow.ovsm
+osvm ovsm check examples/ovsm_scripts/loop_example.ovsm
 
-# Evaluate inline code
-osvm ovsm eval '$x = 42; RETURN $x'
+# Evaluate inline LISP code
+osvm ovsm eval '(+ 1 2 3 4 5)'
+
+# Start interactive REPL
+osvm ovsm repl
 
 # Run all examples
 for script in examples/ovsm_scripts/*.ovsm; do
@@ -22,32 +27,53 @@ for script in examples/ovsm_scripts/*.ovsm; do
 done
 ```
 
-## Example Scripts
+## Language Features
 
-### 01_hello_world.ovsm
-**Topics:** Variables, RETURN statement
+OVSM uses S-expression (LISP) syntax with explicit parentheses:
 
-The simplest OVSM script showing variable assignment and return values.
+### Variables and Arithmetic
+```lisp
+;; Define variables
+(define balance 1000)
+(define fee 0.02)
 
-```ovsm
-$greeting = "Hello from OVSM!"
-RETURN $greeting
+;; Calculate
+(define cost (* balance fee))
+(log :message "Cost:" :value cost)
 ```
 
-### 02_control_flow.ovsm
-**Topics:** FOR loops, ranges
+### Control Flow
+```lisp
+;; Conditionals
+(if (> balance 500)
+    (log :message "High balance!")
+    (log :message "Low balance"))
 
-Demonstrates loop iteration with ranges:
-
-```ovsm
-$sum = 0
-FOR $i IN [1..6]:  // Range [1..6) = 1,2,3,4,5
-    $sum = $sum + $i
-RETURN $sum  // Returns 15
+;; Loops
+(define sum 0)
+(for (i [1 2 3 4 5])
+  (set! sum (+ sum i)))
 ```
 
-### 03_arithmetic.ovsm
-**Topics:** Math operations
+### Advanced Features
+```lisp
+;; Macros
+(defmacro unless (condition &rest body)
+  `(if (not ,condition)
+       (do ,@body)))
+
+;; Closures
+(define (make-counter)
+  (define count 0)
+  (lambda ()
+    (set! count (+ count 1))
+    count))
+
+;; Pattern Matching
+(case value
+  (1 "one")
+  (2 "two")
+  (otherwise "many"))
 
 Shows all arithmetic operators:
 

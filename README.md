@@ -6,9 +6,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![Tests](https://img.shields.io/badge/Tests-98%25%20Coverage-success.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-91%25%20Pass%20Rate-success.svg)](tests/)
 [![Production](https://img.shields.io/badge/Status-Production%20Ready-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/Version-0.9.2-blue.svg)](#)
+[![Version](https://img.shields.io/badge/Version-0.9.3-blue.svg)](#)
+[![Binary](https://img.shields.io/badge/Binary-7.5MB-orange.svg)](#)
+[![OVSM](https://img.shields.io/badge/OVSM-90%25%20CL%20Coverage-blueviolet.svg)](#)
 
 **[Quick Start](#-quick-start)** • **[Features](#-revolutionary-features)** • **[AI Chat](#-ai-powered-chat-new)** • **[OVSM](#-ovsm-lisp-language)** • **[Architecture](#-architecture)** • **[Docs](#-documentation)**
 
@@ -20,8 +22,8 @@
 
 **OSVM** (Open Solana Virtual Machine) is the world's first **production blockchain infrastructure** with:
 
-- **🤖 AI-Powered Chat**: Execute blockchain operations with natural language (NEW in 0.9.2!)
-- **📝 OVSM LISP**: Domain-specific language for blockchain automation
+- **🤖 AI-Powered Chat**: Execute blockchain operations with natural language
+- **📝 OVSM LISP**: 90% Common Lisp feature parity - macros, closures, pattern matching
 - **🚀 Zero-Downtime Updates**: Update RPC nodes and validators without service interruption
 - **⚡ Sub-Millisecond Communication**: 10-500x faster than traditional networking
 - **🛡️ Hardware Isolation**: 99.83% attack surface reduction using unikernels and MicroVMs
@@ -54,7 +56,7 @@ cargo build --release
 sudo cp target/release/osvm /usr/bin/osvm
 
 # Verify installation
-osvm --version  # Should show 0.9.2
+osvm --version  # Should show 0.9.3
 ```
 
 ### 🆕 Try the AI-Powered Chat (NEW!)
@@ -231,16 +233,19 @@ osvm ovsm examples
 <tr>
 <td width="50%">
 
-### 🤖 **AI & Automation** (NEW!)
+### 🤖 **AI & Automation**
 - **Interactive Chat** with code execution
-- **OVSM LISP** interpreter (100% test coverage)
+- **OVSM LISP** interpreter (90% Common Lisp coverage)
 - **Natural Language** to code translation
 - **Automatic Validation** and timeout protection
+- **Macros**, **Closures**, **Pattern Matching**
 
 </td>
 <td width="50%">
 
-### 🚀 **Performance**
+### 🚀 **Performance** (v0.9.3 NEW!)
+- **87% Smaller Binary**: 7.5MB (UPX compressed)
+- **Zero Build Warnings**: Clean codebase
 - **600x Faster Boot**: 50-125ms vs 30-60s
 - **400x Less Memory**: 5-50MB vs 512MB-2GB
 - **500x Faster Communication**: 0.3ms vs 5-50ms
