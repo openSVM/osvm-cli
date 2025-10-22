@@ -151,5 +151,10 @@ fn format_value(value: &Value) -> String {
         }
         Value::Range { start, end } => format!("Range({}..{})", start, end),
         Value::Function { params, .. } => format!("Function({} params)", params.len()),
+        Value::Multiple(values) => {
+            let items: Vec<String> = values.iter().map(format_value).collect();
+            format!("Multiple([{}])", items.join(", "))
+        }
+        Value::Macro { params, .. } => format!("Macro({} params)", params.len()),
     }
 }

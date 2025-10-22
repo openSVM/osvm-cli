@@ -363,7 +363,7 @@ mod tests {
 
         progress.complete_step(2);
         progress.complete_step(3);
-        assert_eq!(progress.progress_percentage(), 60.0);
+        assert!((progress.progress_percentage() - 60.0).abs() < 0.001);
 
         progress.complete_step(4);
         progress.complete_step(5);

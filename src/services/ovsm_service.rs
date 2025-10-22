@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn test_execute_simple_code() {
         let mut service = OvsmService::new();
-        let result = service.execute_code("$x = 42\nRETURN $x").unwrap();
+        let result = service.execute_code("(define x 42) x").unwrap();
 
         match result {
             Value::Int(i) => assert_eq!(i, 42),
@@ -293,7 +293,7 @@ mod tests {
     fn test_execute_arithmetic() {
         let mut service = OvsmService::new();
         let result = service
-            .execute_code("$a = 10\n$b = 20\nRETURN $a + $b")
+            .execute_code("(let ((a 10) (b 20)) (+ a b))")
             .unwrap();
 
         match result {
@@ -306,7 +306,7 @@ mod tests {
     fn test_execute_loop() {
         let mut service = OvsmService::new();
         let result = service
-            .execute_code("$sum = 0\nFOR $i IN [1..6]:\n    $sum = $sum + $i\nRETURN $sum")
+            .execute_code("(let ((sum 0)) (for (i (range 1 6)) (set! sum (+ sum i))) sum)")
             .unwrap();
 
         match result {
@@ -318,14 +318,14 @@ mod tests {
     #[test]
     fn test_check_syntax_valid() {
         let service = OvsmService::new();
-        let result = service.check_syntax("$x = 10\nRETURN $x");
+        let result = service.check_syntax("(define x 10) x");
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_check_syntax_invalid() {
         let service = OvsmService::new();
-        let result = service.check_syntax("$x = \nRETURN $x");
+        let result = service.check_syntax("(define x");
         assert!(result.is_err());
     }
 
