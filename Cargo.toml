@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "osvm"
-version = "0.9.2"
+version = "0.9.3"
 edition = "2021"
 license = "MIT"
 description = "OpenSVM CLI tool for managing SVM nodes and deployments"
