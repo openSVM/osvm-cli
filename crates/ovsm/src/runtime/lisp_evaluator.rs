@@ -109,6 +109,16 @@ impl LispEvaluator {
                     // Assertions
                     "assert" => self.eval_assert(args),
                     "assert-type" => self.eval_assert_type(args),
+                    // Error handling
+                    "try" => self.eval_try(args),
+                    "error" => self.eval_error(args),
+                    // String operations
+                    "split" => self.eval_split(args),
+                    "join" => self.eval_join(args),
+                    "replace" => self.eval_replace(args),
+                    "trim" => self.eval_trim(args),
+                    "upper" => self.eval_upper(args),
+                    "lower" => self.eval_lower(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -809,6 +819,281 @@ impl LispEvaluator {
         }
 
         Ok(Value::Null)
+    }
+
+    /// (try body (catch error-var handler) [(finally cleanup)])
+    /// Error handling with optional finally block
+    fn eval_try(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(Error::InvalidArguments {
+                tool: "try".to_string(),
+                reason: format!("Expected 2-3 arguments (body, catch [, finally]), got {}", args.len()),
+            })?;
+        }
+
+        // Execute try body
+        let try_result = self.evaluate_expression(&args[0].value);
+
+        // Parse catch block: should be (catch error-var handler-body)
+        let catch_arg = &args[1];
+        let (error_var, catch_body) = match &catch_arg.value {
+            Expression::ToolCall { name, args: arguments } if name == "catch" => {
+                if arguments.len() != 2 {
+                    return Err(Error::InvalidArguments {
+                        tool: "try".to_string(),
+                        reason: "catch requires 2 arguments: error-var and handler-body".to_string(),
+                    })?;
+                }
+                // Extract error variable name
+                let error_var = match &arguments[0].value {
+                    Expression::Variable(name) => name.clone(),
+                    _ => return Err(Error::InvalidArguments {
+                        tool: "try".to_string(),
+                        reason: "catch first argument must be a variable name".to_string(),
+                    })?,
+                };
+                (error_var, &arguments[1].value)
+            },
+            _ => return Err(Error::InvalidArguments {
+                tool: "try".to_string(),
+                reason: "Second argument must be (catch error-var handler)".to_string(),
+            })?,
+        };
+
+        // Execute catch block if try failed
+        let result = match try_result {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                // Bind error to variable
+                self.env.enter_scope();
+                let error_str = format!("{}", error);
+                let _ = self.env.set(&error_var, Value::String(error_str));
+
+                // Execute catch handler
+                let catch_result = self.evaluate_expression(catch_body);
+                self.env.exit_scope();
+                catch_result
+            }
+        };
+
+        // Execute finally block if present
+        if args.len() == 3 {
+            let finally_arg = &args[2];
+            match &finally_arg.value {
+                Expression::ToolCall { name, args: arguments } if name == "finally" => {
+                    if arguments.len() != 1 {
+                        return Err(Error::InvalidArguments {
+                            tool: "try".to_string(),
+                            reason: "finally requires 1 argument: cleanup-body".to_string(),
+                        })?;
+                    }
+                    // Execute finally block (ignore errors)
+                    let _ = self.evaluate_expression(&arguments[0].value);
+                },
+                _ => return Err(Error::InvalidArguments {
+                    tool: "try".to_string(),
+                    reason: "Third argument must be (finally cleanup)".to_string(),
+                })?,
+            }
+        }
+
+        result
+    }
+
+    /// (error "message") - Throw an error with a message
+    fn eval_error(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "error".to_string(),
+                reason: format!("Expected 1 argument (message), got {}", args.len()),
+            })?;
+        }
+
+        let message = self.evaluate_expression(&args[0].value)?;
+        let message_str = match message {
+            Value::String(s) => s,
+            _ => format!("{:?}", message),
+        };
+
+        Err(Error::AssertionFailed { message: message_str })
+    }
+
+    /// (split string delimiter) - Split string by delimiter
+    fn eval_split(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "split".to_string(),
+                reason: format!("Expected 2 arguments (string, delimiter), got {}", args.len()),
+            })?;
+        }
+
+        let string = self.evaluate_expression(&args[0].value)?;
+        let delimiter = self.evaluate_expression(&args[1].value)?;
+
+        let string_val = match string {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", string),
+            }),
+        };
+
+        let delimiter_val = match delimiter {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", delimiter),
+            }),
+        };
+
+        let parts: Vec<Value> = string_val
+            .split(&delimiter_val)
+            .map(|s| Value::String(s.to_string()))
+            .collect();
+
+        Ok(Value::Array(Arc::new(parts)))
+    }
+
+    /// (join array delimiter) - Join array elements with delimiter
+    fn eval_join(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "join".to_string(),
+                reason: format!("Expected 2 arguments (array, delimiter), got {}", args.len()),
+            })?;
+        }
+
+        let array = self.evaluate_expression(&args[0].value)?;
+        let delimiter = self.evaluate_expression(&args[1].value)?;
+
+        let array_val = match array {
+            Value::Array(ref arr) => arr.clone(),
+            _ => return Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: format!("{:?}", array),
+            }),
+        };
+
+        let delimiter_val = match delimiter {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", delimiter),
+            }),
+        };
+
+        let strings: Vec<String> = array_val
+            .iter()
+            .map(|v| match v {
+                Value::String(s) => s.clone(),
+                _ => format!("{:?}", v),
+            })
+            .collect();
+
+        Ok(Value::String(strings.join(&delimiter_val)))
+    }
+
+    /// (replace string old new) - Replace all occurrences of old with new
+    fn eval_replace(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "replace".to_string(),
+                reason: format!("Expected 3 arguments (string, old, new), got {}", args.len()),
+            })?;
+        }
+
+        let string = self.evaluate_expression(&args[0].value)?;
+        let old = self.evaluate_expression(&args[1].value)?;
+        let new = self.evaluate_expression(&args[2].value)?;
+
+        let string_val = match string {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", string),
+            }),
+        };
+
+        let old_val = match old {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", old),
+            }),
+        };
+
+        let new_val = match new {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", new),
+            }),
+        };
+
+        Ok(Value::String(string_val.replace(&old_val, &new_val)))
+    }
+
+    /// (trim string) - Remove leading and trailing whitespace
+    fn eval_trim(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "trim".to_string(),
+                reason: format!("Expected 1 argument (string), got {}", args.len()),
+            })?;
+        }
+
+        let string = self.evaluate_expression(&args[0].value)?;
+        let string_val = match string {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", string),
+            }),
+        };
+
+        Ok(Value::String(string_val.trim().to_string()))
+    }
+
+    /// (upper string) - Convert string to uppercase
+    fn eval_upper(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "upper".to_string(),
+                reason: format!("Expected 1 argument (string), got {}", args.len()),
+            })?;
+        }
+
+        let string = self.evaluate_expression(&args[0].value)?;
+        let string_val = match string {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", string),
+            }),
+        };
+
+        Ok(Value::String(string_val.to_uppercase()))
+    }
+
+    /// (lower string) - Convert string to lowercase
+    fn eval_lower(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "lower".to_string(),
+                reason: format!("Expected 1 argument (string), got {}", args.len()),
+            })?;
+        }
+
+        let string = self.evaluate_expression(&args[0].value)?;
+        let string_val = match string {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: format!("{:?}", string),
+            }),
+        };
+
+        Ok(Value::String(string_val.to_lowercase()))
     }
 
     /// (length x) - Get length of collection
