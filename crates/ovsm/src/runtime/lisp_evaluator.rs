@@ -97,6 +97,18 @@ impl LispEvaluator {
                     "or" => self.eval_or(args),
                     "null?" => self.eval_null_check(args),
                     "empty?" => self.eval_empty_check(args),
+                    // Type predicates
+                    "int?" => self.eval_int_check(args),
+                    "float?" => self.eval_float_check(args),
+                    "number?" => self.eval_number_check(args),
+                    "string?" => self.eval_string_check(args),
+                    "bool?" => self.eval_bool_check(args),
+                    "array?" => self.eval_array_check(args),
+                    "object?" => self.eval_object_check(args),
+                    "function?" => self.eval_function_check(args),
+                    // Assertions
+                    "assert" => self.eval_assert(args),
+                    "assert-type" => self.eval_assert_type(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -626,6 +638,177 @@ impl LispEvaluator {
             _ => false,
         };
         Ok(Value::Bool(is_empty))
+    }
+
+    /// (int? x) - Check if integer
+    fn eval_int_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "int?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Int(_))))
+    }
+
+    /// (float? x) - Check if float
+    fn eval_float_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "float?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Float(_))))
+    }
+
+    /// (number? x) - Check if number (int or float)
+    fn eval_number_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "number?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Int(_) | Value::Float(_))))
+    }
+
+    /// (string? x) - Check if string
+    fn eval_string_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "string?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::String(_))))
+    }
+
+    /// (bool? x) - Check if boolean
+    fn eval_bool_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "bool?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Bool(_))))
+    }
+
+    /// (array? x) - Check if array
+    fn eval_array_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "array?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Array(_))))
+    }
+
+    /// (object? x) - Check if object
+    fn eval_object_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "object?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Object(_))))
+    }
+
+    /// (function? x) - Check if function
+    fn eval_function_check(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "function?".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Function { .. })))
+    }
+
+    /// (assert condition "message") - Assert condition is true
+    fn eval_assert(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "assert".to_string(),
+                reason: format!("Expected 2 arguments (condition, message), got {}", args.len()),
+            })?;
+        }
+
+        // Evaluate condition
+        let condition = self.evaluate_expression(&args[0].value)?;
+        let is_true = match condition {
+            Value::Bool(b) => b,
+            _ => return Err(Error::TypeError {
+                expected: "bool".to_string(),
+                got: format!("{:?}", condition),
+            }),
+        };
+
+        if !is_true {
+            // Evaluate message
+            let message = self.evaluate_expression(&args[1].value)?;
+            let message_str = match message {
+                Value::String(s) => s,
+                _ => format!("{:?}", message),
+            };
+            return Err(Error::AssertionFailed { message: message_str });
+        }
+
+        Ok(Value::Null)
+    }
+
+    /// (assert-type value predicate) - Assert value matches type predicate
+    fn eval_assert_type(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "assert-type".to_string(),
+                reason: format!("Expected 2 arguments (value, predicate), got {}", args.len()),
+            })?;
+        }
+
+        // Evaluate value
+        let value = self.evaluate_expression(&args[0].value)?;
+
+        // Evaluate type predicate (should be a function call like (int? x))
+        let predicate_result = self.evaluate_expression(&args[1].value)?;
+
+        let is_valid = match predicate_result {
+            Value::Bool(b) => b,
+            _ => return Err(Error::TypeError {
+                expected: "bool (type predicate)".to_string(),
+                got: format!("{:?}", predicate_result),
+            }),
+        };
+
+        if !is_valid {
+            let type_name = match value {
+                Value::Null => "null",
+                Value::Bool(_) => "bool",
+                Value::Int(_) => "int",
+                Value::Float(_) => "float",
+                Value::String(_) => "string",
+                Value::Array(_) => "array",
+                Value::Object(_) => "object",
+                Value::Range { .. } => "range",
+                Value::Function { .. } => "function",
+            };
+            return Err(Error::AssertionFailed {
+                message: format!("Type assertion failed: expected different type, got {}", type_name),
+            });
+        }
+
+        Ok(Value::Null)
     }
 
     /// (length x) - Get length of collection
@@ -1222,7 +1405,7 @@ impl LispEvaluator {
 
                 // Bind parameters to arguments
                 for (param, arg_val) in params.iter().zip(evaluated_args.iter()) {
-                    self.env.set(param, arg_val.clone());
+                    let _ = self.env.set(param, arg_val.clone());
                 }
 
                 // Evaluate function body
