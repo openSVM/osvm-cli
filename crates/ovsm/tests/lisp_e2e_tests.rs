@@ -1265,3 +1265,112 @@ fn test_multiple_values_nested() {
     let result = evaluator.execute(&program).unwrap();
     assert_eq!(result, Value::Int(10));
 }
+
+// ============================================================================
+// DYNAMIC VARIABLES TESTS (Common Lisp special variables)
+// ============================================================================
+
+#[test]
+fn test_defvar_basic() {
+    let source = r#"
+        (defvar counter 0)
+        counter
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(0));
+}
+
+#[test]
+fn test_defvar_mutation() {
+    let source = r#"
+        (defvar counter 0)
+        (set! counter 42)
+        counter
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+
+#[test]
+fn test_defvar_global_scope() {
+    // Dynamic variables are globally accessible
+    let source = r#"
+        (defvar global-var 100)
+
+        (defun get-global []
+          global-var)
+
+        (get-global)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(100));
+}
+
+#[test]
+fn test_defvar_mutation_in_function() {
+    let source = r#"
+        (defvar count 0)
+
+        (defun increment []
+          (set! count (+ count 1)))
+
+        (increment)
+        (increment)
+        (increment)
+        count
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(3));
+}
+
+#[test]
+fn test_defvar_with_expression() {
+    let source = r#"
+        (defvar result-var (+ 10 20 30))
+        result-var
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(60));
+}
+
+#[test]
+fn test_multiple_defvars() {
+    let source = r#"
+        (defvar x 10)
+        (defvar y 20)
+        (defvar z 30)
+        (+ x y z)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(60));
+}

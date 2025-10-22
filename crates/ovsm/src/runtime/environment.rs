@@ -11,6 +11,9 @@ pub struct Environment {
     scopes: Vec<Scope>,
     /// Immutable constants shared across all scopes
     constants: Arc<HashMap<String, Value>>,
+    /// Dynamic (special) variables with dynamic binding stack
+    /// Stack of (name, value) pairs for dynamic extent
+    dynamic_bindings: Vec<HashMap<String, Value>>,
 }
 
 /// Single scope in the environment
@@ -31,6 +34,7 @@ impl Environment {
                 parent: None,
             }],
             constants: Arc::new(HashMap::new()),
+            dynamic_bindings: vec![HashMap::new()], // Start with global dynamic scope
         }
     }
 
@@ -42,6 +46,7 @@ impl Environment {
                 parent: None,
             }],
             constants: Arc::new(constants),
+            dynamic_bindings: vec![HashMap::new()], // Start with global dynamic scope
         }
     }
 
@@ -88,7 +93,12 @@ impl Environment {
             return Ok(val.clone());
         }
 
-        // Walk scope chain from innermost to outermost
+        // Check dynamic variables (if this is a dynamic variable)
+        if let Some(val) = self.get_dynamic(name) {
+            return Ok(val);
+        }
+
+        // Walk scope chain from innermost to outermost for lexical variables
         let mut scope_idx = self.scopes.len() - 1;
         loop {
             let scope = &self.scopes[scope_idx];
@@ -115,7 +125,18 @@ impl Environment {
             });
         }
 
-        // Try to find variable in scope chain and update
+        // If this is a dynamic variable, update it in the dynamic binding stack
+        if self.is_dynamic(name) {
+            // Update the most recent binding
+            for frame in self.dynamic_bindings.iter_mut().rev() {
+                if frame.contains_key(name) {
+                    frame.insert(name.to_string(), value);
+                    return Ok(());
+                }
+            }
+        }
+
+        // Try to find variable in lexical scope chain and update
         let mut scope_idx = self.scopes.len() - 1;
         loop {
             let scope = &mut self.scopes[scope_idx];
@@ -178,6 +199,50 @@ impl Environment {
     /// Returns the current scope depth (1 for global scope)
     pub fn scope_depth(&self) -> usize {
         self.scopes.len()
+    }
+
+    // =========================================================================
+    // DYNAMIC VARIABLES (Common Lisp special variables)
+    // =========================================================================
+
+    /// Defines a dynamic (special) variable
+    /// Dynamic variables have dynamic scope, not lexical scope
+    /// Convention: *name* with earmuffs
+    pub fn defvar(&mut self, name: String, value: Value) {
+        // Define in the global dynamic scope
+        if let Some(global_dynamic) = self.dynamic_bindings.first_mut() {
+            global_dynamic.insert(name, value);
+        }
+    }
+
+    /// Pushes a new dynamic binding frame (for dynamic let)
+    pub fn push_dynamic_bindings(&mut self, bindings: HashMap<String, Value>) {
+        self.dynamic_bindings.push(bindings);
+    }
+
+    /// Pops the current dynamic binding frame
+    pub fn pop_dynamic_bindings(&mut self) {
+        if self.dynamic_bindings.len() > 1 {
+            self.dynamic_bindings.pop();
+        }
+    }
+
+    /// Gets a dynamic variable value (searches from top of stack down)
+    pub fn get_dynamic(&self, name: &str) -> Option<Value> {
+        // Search from most recent binding to oldest
+        for frame in self.dynamic_bindings.iter().rev() {
+            if let Some(value) = frame.get(name) {
+                return Some(value.clone());
+            }
+        }
+        None
+    }
+
+    /// Checks if a variable is a dynamic variable (exists in dynamic bindings)
+    pub fn is_dynamic(&self, name: &str) -> bool {
+        self.dynamic_bindings
+            .iter()
+            .any(|frame| frame.contains_key(name))
     }
 }
 
