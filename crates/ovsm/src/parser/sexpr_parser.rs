@@ -102,6 +102,7 @@ impl SExprParser {
             // Special forms (keywords)
             TokenKind::Identifier(name) if name == "if" => self.parse_if_expr(),
             TokenKind::Identifier(name) if name == "let" => self.parse_let_expr(),
+            TokenKind::Identifier(name) if name == "let*" => self.parse_let_star_expr(),
             TokenKind::Identifier(name) if name == "const" => self.parse_const(),
             TokenKind::Identifier(name) if name == "define" => self.parse_define(),
             TokenKind::Identifier(name) if name == "set!" => self.parse_set(),
@@ -201,12 +202,85 @@ impl SExprParser {
         }
         self.consume(TokenKind::RightParen)?;
 
-        // For now, convert to a function call
-        // In a full implementation, we'd have a Let expression
-        // We'll use a tool call to represent this
+        // Convert bindings to an ArrayLiteral of pairs
+        let binding_pairs: Vec<Expression> = bindings.into_iter()
+            .map(|(name, expr)| {
+                Expression::ArrayLiteral(vec![
+                    Expression::Variable(name),
+                    expr
+                ])
+            })
+            .collect();
+
+        let mut args = vec![
+            Argument::positional(Expression::ArrayLiteral(binding_pairs))
+        ];
+
+        // Add body expressions as arguments
+        for body_expr in body_exprs {
+            args.push(Argument::positional(body_expr));
+        }
+
         Ok(Expression::ToolCall {
             name: "let".to_string(),
-            args: vec![],
+            args,
+        })
+    }
+
+    /// Parse (let* ((var val)...) body) - Sequential binding version of let
+    fn parse_let_star_expr(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'let*'
+
+        // Parse bindings list (same as let)
+        self.consume(TokenKind::LeftParen)?;
+        let mut bindings = Vec::new();
+
+        while !self.check(&TokenKind::RightParen) {
+            self.consume(TokenKind::LeftParen)?;
+
+            let var_name = if let TokenKind::Identifier(name) = &self.peek().kind {
+                name.clone()
+            } else {
+                return Err(Error::ParseError("Expected identifier in let* binding".to_string()));
+            };
+            self.advance();
+
+            let value = self.parse_expression()?;
+            bindings.push((var_name, value));
+
+            self.consume(TokenKind::RightParen)?;
+        }
+        self.consume(TokenKind::RightParen)?; // close bindings list
+
+        // Parse body expressions (same as let)
+        let mut body_exprs = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            body_exprs.push(self.parse_expression()?);
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        // Convert bindings to an ArrayLiteral of pairs
+        let binding_pairs: Vec<Expression> = bindings.into_iter()
+            .map(|(name, expr)| {
+                Expression::ArrayLiteral(vec![
+                    Expression::Variable(name),
+                    expr
+                ])
+            })
+            .collect();
+
+        let mut args = vec![
+            Argument::positional(Expression::ArrayLiteral(binding_pairs))
+        ];
+
+        // Add body expressions as arguments
+        for body_expr in body_exprs {
+            args.push(Argument::positional(body_expr));
+        }
+
+        Ok(Expression::ToolCall {
+            name: "let*".to_string(),
+            args,
         })
     }
 
