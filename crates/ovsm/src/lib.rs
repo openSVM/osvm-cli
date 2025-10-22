@@ -273,6 +273,14 @@ pub use runtime::{Environment, LispEvaluator, Value};
 pub use tools::{Tool, ToolRegistry};
 
 // Convenient type aliases for the primary LISP-based interpreter
+/// Type alias for the S-expression scanner (lexer).
+/// Converts raw source text into tokens for the parser.
 pub type Scanner = SExprScanner;
+
+/// Type alias for the S-expression parser.
+/// Converts tokens into an abstract syntax tree (AST).
 pub type Parser = SExprParser;
+
+/// Type alias for the LISP evaluator (interpreter).
+/// Executes the AST and produces runtime values.
 pub type Evaluator = LispEvaluator;

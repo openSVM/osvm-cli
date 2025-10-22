@@ -3,7 +3,7 @@
 
 use cursive::event::{Event, Key};
 use cursive::traits::*;
-use cursive::{Cursive, CursiveExt};
+use cursive::Cursive;
 
 // Import the actual chat components
 use osvm::utils::agent_chat_v2::ui::text_area_wrapper::SendableTextArea;

@@ -8,13 +8,14 @@ use serde_json::json;
 mod api_helpers;
 use api_helpers::{call_osvm_ai_api, call_rpc_proxy};
 
-/// Helper to format planning responses nicely
+/// Helper to format planning responses nicely for debugging
+#[allow(dead_code)]
 fn format_planning_response(response: &str) -> String {
     format!("Planning Response:\n{}\n", response)
 }
 
 #[tokio::test]
-async fn test_osvm_ai_api_getAnswer() {
+async fn test_osvm_ai_api_get_answer() {
     println!("🧪 Testing osvm.ai/api/getAnswer endpoint...");
 
     let response = match call_osvm_ai_api("What is Solana?").await {
@@ -45,7 +46,7 @@ async fn test_osvm_ai_api_getAnswer() {
 }
 
 #[tokio::test]
-async fn test_rpc_proxy_getHealth() {
+async fn test_rpc_proxy_get_health() {
     println!("🧪 Testing osvm.ai/api/proxy/rpc with getHealth...");
 
     let response = match call_rpc_proxy("getHealth", vec![]).await {
@@ -72,7 +73,7 @@ async fn test_rpc_proxy_getHealth() {
 }
 
 #[tokio::test]
-async fn test_rpc_proxy_getBalance() {
+async fn test_rpc_proxy_get_balance() {
     println!("🧪 Testing osvm.ai/api/proxy/rpc with getBalance...");
 
     // Query balance of System Program
@@ -105,7 +106,7 @@ async fn test_rpc_proxy_getBalance() {
 }
 
 #[tokio::test]
-async fn test_rpc_proxy_getSlot() {
+async fn test_rpc_proxy_get_slot() {
     println!("🧪 Testing osvm.ai/api/proxy/rpc with getSlot...");
 
     let response = match call_rpc_proxy("getSlot", vec![]).await {
@@ -129,7 +130,7 @@ async fn test_rpc_proxy_getSlot() {
 }
 
 #[tokio::test]
-async fn test_rpc_proxy_getVersion() {
+async fn test_rpc_proxy_get_version() {
     println!("🧪 Testing osvm.ai/api/proxy/rpc with getVersion...");
 
     let response = match call_rpc_proxy("getVersion", vec![]).await {

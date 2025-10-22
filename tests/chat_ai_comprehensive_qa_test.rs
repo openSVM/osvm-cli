@@ -717,7 +717,7 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
 
     // Select random queries
     use rand::seq::SliceRandom;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let mut sampled_queries = queries.clone();
     sampled_queries.shuffle(&mut rng);
     let test_queries = &sampled_queries[..sample_size.min(queries.len())];

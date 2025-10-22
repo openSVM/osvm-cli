@@ -29,7 +29,7 @@ solana-client = "3.0.1"
 solana-logger = "3.0.0"
 solana-remote-wallet = { version = "3.0.1", optional = true }
 solana-sdk = "3.0.0"
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs", "process", "signal"] }
 tokio-vsock = "0.4"
 vsock = "0.3"
 thiserror = "2.0.16"
@@ -123,6 +123,20 @@ path = "src/bin/osvm_bootstrap.rs"
 [[bench]]
 name = "deployment_benchmarks"
 path = "benches/deployment_benchmarks.rs"
+
+# Optimized release profile for smaller binary size
+[profile.release]
+opt-level = "s"          # Optimize for size (faster than "z", similar size)
+lto = "thin"             # Thin LTO (faster compile, almost same size as fat)
+codegen-units = 1        # Better optimization, slower compile
+panic = "abort"          # Remove unwinding machinery
+strip = true             # Automatically strip symbols
+incremental = false      # Disable incremental for better optimization
+
+# Still-fast debug builds
+[profile.dev]
+opt-level = 0
+debug = true
 
 [patch.crates-io]
 curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }

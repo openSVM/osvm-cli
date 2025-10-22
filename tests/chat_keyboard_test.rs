@@ -4,7 +4,7 @@
 use cursive::event::{Event, Key};
 use cursive::views::TextView;
 use cursive::traits::*; // Import Nameable, etc.
-use cursive::{Cursive, CursiveExt};
+use cursive::Cursive;
 
 /// Test helper to simulate running the chat UI with event injection
 fn create_test_chat_ui() -> Cursive {
