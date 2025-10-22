@@ -196,6 +196,11 @@ impl OvsmService {
             Value::Range { start, end } => {
                 format!("[{}..{}]", start, end)
             }
+            Value::Multiple(vals) => {
+                // Format multiple values as (values ...)
+                let items: Vec<String> = vals.iter().map(|v| self.format_value(v)).collect();
+                format!("(values {})", items.join(" "))
+            }
         }
     }
 
@@ -239,6 +244,14 @@ impl OvsmService {
                     "type": "range",
                     "start": start,
                     "end": end
+                }))
+            }
+            Value::Multiple(vals) => {
+                // Represent multiple values as an array
+                let json_arr: Result<Vec<_>> = vals.iter().map(|v| self.value_to_json(v)).collect();
+                Ok(serde_json::json!({
+                    "type": "multiple-values",
+                    "values": json_arr?
                 }))
             }
         }

@@ -133,6 +133,11 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             // Convert range to array for JSON
             json!({"start": start, "end": end, "type": "range"})
         }
+        OvsmValue::Multiple(vals) => {
+            // Convert multiple values to JSON array
+            let items: Vec<Value> = vals.iter().map(ovsm_value_to_json).collect();
+            json!({"type": "multiple-values", "values": items})
+        }
     }
 }
 
