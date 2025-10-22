@@ -175,6 +175,14 @@ impl Environment {
         result
     }
 
+    /// Returns the current environment snapshot for creating closures
+    /// This captures all accessible variables from the current point in scope chain
+    pub fn current_env_snapshot(&self) -> HashMap<String, Value> {
+        // For flet, we want to capture the environment BEFORE entering flet scope
+        // This is the same as the full snapshot
+        self.snapshot()
+    }
+
     /// Checks if a variable or constant exists in any scope
     pub fn exists(&self, name: &str) -> bool {
         // Check constants

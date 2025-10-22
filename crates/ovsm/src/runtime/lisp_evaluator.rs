@@ -101,6 +101,7 @@ impl LispEvaluator {
                     "const" => self.eval_const(args),
                     "let" => self.eval_let(args),
                     "let*" => self.eval_let_star(args),
+                    "flet" => self.eval_flet(args),
                     "while" => self.eval_while(args),
                     "for" => self.eval_for(args),
                     "do" => self.eval_do(args),
@@ -477,6 +478,84 @@ impl LispEvaluator {
             let value = self.evaluate_expression(value_expr)?;
             self.env.define(var_name, value);
             // Note: Variable is immediately available for next binding!
+        }
+
+        // Execute body
+        let mut last_val = Value::Null;
+        for arg in &args[1..] {
+            last_val = self.evaluate_expression(&arg.value)?;
+        }
+
+        // Exit scope
+        self.env.exit_scope();
+
+        Ok(last_val)
+    }
+
+    /// (flet ((name (params) body)...) body) - Local function definitions
+    /// Unlike labels, functions can't call themselves or each other
+    fn eval_flet(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "flet".to_string(),
+                reason: "Expected at least 2 arguments: function definitions and body".to_string(),
+            });
+        }
+
+        // Parse function definitions (first argument should be array of function defs)
+        let func_defs = match &args[0].value {
+            Expression::ArrayLiteral(defs) => defs,
+            _ => {
+                return Err(Error::ParseError(
+                    "flet requires function definitions list: ((name (params) body)...)".to_string(),
+                ))
+            }
+        };
+
+        // Parse each function definition
+        let mut functions: Vec<(String, Vec<String>, Expression)> = Vec::new();
+
+        for func_def in func_defs {
+            match func_def {
+                Expression::ArrayLiteral(parts) if parts.len() == 3 => {
+                    // Extract name
+                    let name = match &parts[0] {
+                        Expression::Variable(n) => n.clone(),
+                        _ => return Err(Error::ParseError(
+                            "flet function definition requires name".to_string(),
+                        )),
+                    };
+
+                    // Extract parameters
+                    let params = self.parse_function_parameters(&parts[1], "flet")?;
+
+                    // Extract body (clone it)
+                    let body = parts[2].clone();
+
+                    functions.push((name, params, body));
+                }
+                _ => {
+                    return Err(Error::ParseError(
+                        "flet function definitions must be: (name (params) body)".to_string(),
+                    ))
+                }
+            }
+        }
+
+        // Create new scope for local functions
+        self.env.enter_scope();
+
+        // Bind functions in current environment (non-recursively)
+        // Each function closes over the OUTER environment, not seeing other flet functions
+        let outer_env = self.env.current_env_snapshot();
+
+        for (name, params, body) in functions {
+            let func_value = Value::Function {
+                params,
+                body: Arc::new(body),
+                closure: Arc::new(outer_env.clone()),
+            };
+            self.env.define(name, func_value);
         }
 
         // Execute body
