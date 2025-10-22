@@ -123,6 +123,9 @@ impl LispEvaluator {
                     "sqrt" => self.eval_sqrt(args),
                     "pow" => self.eval_pow(args),
                     "abs" => self.eval_abs(args),
+                    // Multiple values (Common Lisp style)
+                    "values" => self.eval_values(args),
+                    "multiple-value-bind" => self.eval_multiple_value_bind(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -816,6 +819,7 @@ impl LispEvaluator {
                 Value::Object(_) => "object",
                 Value::Range { .. } => "range",
                 Value::Function { .. } => "function",
+                Value::Multiple(_) => "multiple-values",
             };
             return Err(Error::AssertionFailed {
                 message: format!("Type assertion failed: expected different type, got {}", type_name),
@@ -1203,6 +1207,101 @@ impl LispEvaluator {
                 got: format!("{:?}", val),
             }),
         }
+    }
+
+    // =========================================================================
+    // MULTIPLE VALUES (Common Lisp)
+    // =========================================================================
+
+    /// (values ...) - Return multiple values
+    /// In single-value context, only the first value is used
+    fn eval_values(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments
+        let mut values = Vec::with_capacity(args.len());
+        for arg in args {
+            values.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Special case: (values) returns no values (null in single context)
+        if values.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        // Special case: (values x) returns x directly (not wrapped)
+        if values.len() == 1 {
+            return Ok(values.into_iter().next().unwrap());
+        }
+
+        // Multiple values: wrap in Value::Multiple
+        Ok(Value::multiple(values))
+    }
+
+    /// (multiple-value-bind (vars...) values-form body...)
+    /// Destructure multiple values and bind to variables
+    fn eval_multiple_value_bind(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 3 {
+            return Err(Error::InvalidArguments {
+                tool: "multiple-value-bind".to_string(),
+                reason: format!(
+                    "Expected at least 3 arguments (vars values-form body...), got {}",
+                    args.len()
+                ),
+            })?;
+        }
+
+        // First argument must be an array of variable names
+        let var_names = match &args[0].value {
+            Expression::ArrayLiteral(items) => {
+                let mut names = Vec::new();
+                for item in items {
+                    match item {
+                        Expression::Variable(name) => names.push(name.clone()),
+                        _ => {
+                            return Err(Error::InvalidArguments {
+                                tool: "multiple-value-bind".to_string(),
+                                reason: "Variable list must contain only variable names"
+                                    .to_string(),
+                            })?
+                        }
+                    }
+                }
+                names
+            }
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "multiple-value-bind".to_string(),
+                    reason: "First argument must be an array of variable names".to_string(),
+                })?
+            }
+        };
+
+        // Second argument is the values-form to evaluate
+        let values_result = self.evaluate_expression(&args[1].value)?;
+
+        // Extract values from result (handle both Multiple and single values)
+        let values = match values_result {
+            Value::Multiple(vals) => vals.as_ref().clone(),
+            single => vec![single],
+        };
+
+        // Enter new scope for bindings
+        self.env.enter_scope();
+
+        // Bind variables (extra values ignored, missing vars bound to null)
+        for (i, var_name) in var_names.iter().enumerate() {
+            let value = values.get(i).cloned().unwrap_or(Value::Null);
+            let _ = self.env.set(var_name, value);
+        }
+
+        // Execute body expressions in sequence, return last
+        let mut result = Value::Null;
+        for i in 2..args.len() {
+            result = self.evaluate_expression(&args[i].value)?;
+        }
+
+        self.env.exit_scope();
+
+        Ok(result)
     }
 
     /// (length x) - Get length of collection

@@ -1112,3 +1112,156 @@ fn test_abs_in_distance_calculation() {
     let result = evaluator.execute(&program).unwrap();
     assert_eq!(result, Value::Int(15));
 }
+
+// ============================================================================
+// MULTIPLE VALUES TESTS (Common Lisp)
+// ============================================================================
+
+#[test]
+fn test_values_single() {
+    // Single value - returns unwrapped
+    let source = "(values 42)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+
+#[test]
+fn test_values_multiple() {
+    // Multiple values - wrapped in Value::Multiple
+    let source = "(values 1 2 3)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    match result {
+        Value::Multiple(vals) => {
+            assert_eq!(vals.len(), 3);
+            assert_eq!(vals[0], Value::Int(1));
+            assert_eq!(vals[1], Value::Int(2));
+            assert_eq!(vals[2], Value::Int(3));
+        }
+        _ => panic!("Expected Multiple, got {:?}", result),
+    }
+}
+
+#[test]
+fn test_values_empty() {
+    // No values - returns null
+    let source = "(values)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_multiple_value_bind_basic() {
+    let source = r#"
+        (multiple-value-bind [x y z] (values 1 2 3)
+          (+ x y z))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(6));
+}
+
+#[test]
+fn test_multiple_value_bind_excess_values() {
+    // More values than variables - extra ignored
+    let source = r#"
+        (multiple-value-bind [x y] (values 1 2 3 4 5)
+          (+ x y))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(3));
+}
+
+#[test]
+fn test_multiple_value_bind_missing_values() {
+    // More variables than values - missing bound to null
+    let source = r#"
+        (multiple-value-bind [x y z] (values 1 2)
+          (if (null? z)
+              (+ x y)
+              (+ x y z)))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(3));
+}
+
+#[test]
+fn test_multiple_value_bind_single_value() {
+    // Bind from single value (not Multiple)
+    let source = r#"
+        (multiple-value-bind [x y] 42
+          (if (null? y)
+              x
+              (+ x y)))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+
+#[test]
+fn test_multiple_values_in_function() {
+    let source = r#"
+        (defun divmod [a b]
+          (values (/ a b) (% a b)))
+
+        (multiple-value-bind [quotient remainder] (divmod 17 5)
+          (+ (* quotient 10) remainder))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(32)); // 3*10 + 2
+}
+
+#[test]
+fn test_multiple_values_nested() {
+    let source = r#"
+        (multiple-value-bind [a b] (values 1 2)
+          (multiple-value-bind [c d] (values 3 4)
+            (+ a b c d)))
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(10));
+}

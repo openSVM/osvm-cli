@@ -43,6 +43,11 @@ pub enum Value {
         /// Captured environment (closure)
         closure: Arc<HashMap<String, Value>>,
     },
+
+    /// Multiple return values (Common Lisp style)
+    /// Only the first value is used in single-value context
+    /// Use multiple-value-bind to destructure all values
+    Multiple(Arc<Vec<Value>>),
 }
 
 impl Value {
@@ -54,6 +59,22 @@ impl Value {
     /// Creates an object value from a hashmap of fields
     pub fn object(fields: HashMap<String, Value>) -> Self {
         Value::Object(Arc::new(fields))
+    }
+
+    /// Creates a multiple values result
+    pub fn multiple(values: Vec<Value>) -> Self {
+        Value::Multiple(Arc::new(values))
+    }
+
+    /// Extracts the primary value from Multiple, or returns self
+    /// In Common Lisp, multiple values are "flattened" in single-value context
+    pub fn primary_value(self) -> Self {
+        match self {
+            Value::Multiple(vals) => {
+                vals.first().cloned().unwrap_or(Value::Null)
+            }
+            other => other,
+        }
     }
 
     /// Returns the type name as a string
@@ -68,6 +89,7 @@ impl Value {
             Value::Object(_) => "object".to_string(),
             Value::Range { .. } => "range".to_string(),
             Value::Function { .. } => "function".to_string(),
+            Value::Multiple(_) => "multiple-values".to_string(),
         }
     }
 
@@ -83,6 +105,10 @@ impl Value {
             Value::Object(obj) => !obj.is_empty(),
             Value::Range { .. } => true,
             Value::Function { .. } => true, // Functions are always truthy
+            Value::Multiple(vals) => {
+                // Multiple values: check first value (CL semantics)
+                vals.first().map(|v| v.is_truthy()).unwrap_or(false)
+            }
         }
     }
 
@@ -158,6 +184,13 @@ impl Value {
             Value::Object(obj) => format!("{{{}  fields}}", obj.len()),
             Value::Range { start, end } => format!("[{}..{}]", start, end),
             Value::Function { params, .. } => format!("<function({} params)>", params.len()),
+            Value::Multiple(vals) => {
+                if vals.is_empty() {
+                    "(values)".to_string()
+                } else {
+                    format!("(values {} items)", vals.len())
+                }
+            }
         }
     }
 
@@ -277,6 +310,13 @@ impl fmt::Display for Value {
             }
             Value::Range { start, end } => write!(f, "[{}..{}]", start, end),
             Value::Function { params, .. } => write!(f, "<function({} params)>", params.len()),
+            Value::Multiple(vals) => {
+                write!(f, "(values")?;
+                for val in vals.iter() {
+                    write!(f, " {}", val)?;
+                }
+                write!(f, ")")
+            }
         }
     }
 }
