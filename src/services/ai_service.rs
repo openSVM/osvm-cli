@@ -774,36 +774,37 @@ Conditional Logic:
 **Utilities**: now, log
 **MCP Tools**: See "Your Available MCP Tools" section below for dynamic tools like COUNT, APPEND, etc.
 
-**🚨🚨🚨 CRITICAL: AVOID HELPER FUNCTIONS IN PLANS! 🚨🚨🚨**
+**🎉 HELPER FUNCTIONS FULLY SUPPORTED! 🎉**
 
-**RULE**: For blockchain queries, write INLINE logic without helper functions to prevent parse errors!
+**You can now define and call helper functions using lambda:**
 
-**❌ WRONG - Helper function approach:**
 ```lisp
-(define (add_volume addr amt)     ;; ❌❌❌ BREAKS! Parse error!
+;; Define a helper function
+(define add_volume (lambda (addr amt)
   (define idx (FIND traders addr))
-  ...)
+  (when (== idx -1)
+    (set! traders (APPEND traders addr))
+    (set! volumes (APPEND volumes amt)))))
 
-;; Later usage
-(add_volume some_addr some_amt)   ;; Will fail!
+;; Call it
+(add_volume some_addr some_amt)  ;; ✅ WORKS!
 ```
 
-**✅ CORRECT - Inline approach:**
-```lisp
-;; Just write the logic directly where needed
-(define idx (FIND traders addr))
-(when (== idx -1)
-  (set! traders (APPEND traders addr))
-  (set! volumes (APPEND volumes amt)))
-```
+**Syntax rules:**
+- ✅ CORRECT: `(define func_name (lambda (args...) body))`
+- ❌ WRONG: `(define (func_name args...) body)` - shorthand NOT supported!
+- Functions create new scope automatically
+- Parameters are bound in function scope
+- Can call user-defined functions just like built-in tools
 
-**Why**:
-- OVSM requires `(defun name [args] ...)` syntax
-- `(define (name args) ...)` shorthand NOT SUPPORTED - will cause parse error!
-- For short scripts, inline logic is clearer and avoids function syntax issues
-- Only use `defun` for complex reusable logic, not for simple helper functions
+**When to use helper functions:**
+- Reuse complex logic multiple times
+- Make code more readable and maintainable
+- Encapsulate aggregation or filtering operations
 
-**CRITICAL**: Never write `(define (func_name arg1 arg2) ...)` - it will fail to parse!
+**Inline vs Helper Function** - Use your judgment:
+- Short operations (1-2 lines): inline is fine
+- Complex logic or reused code: use helper functions
 
 **⚠️ CRITICAL CASING RULES:**
 - **Built-in functions are LOWERCASE**: (now), (log :message "text"), (range 1 10)

@@ -104,6 +104,7 @@ impl LispEvaluator {
                     "log" => self.eval_log(args),
                     "map" => self.eval_map(args),
                     "filter" => self.eval_filter(args),
+                    "reduce" => self.eval_reduce(args),
                     "sort" => self.eval_sort(args),
                     "str" => self.eval_str(args),
                     "slice" => self.eval_slice(args),
@@ -695,21 +696,41 @@ impl LispEvaluator {
 
     /// (log :message msg) - Log message
     fn eval_log(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
-        // Find the message argument
+        // Collect message and value separately
+        let mut message_val = None;
+        let mut value_val = None;
+
         for arg in args {
             if let Some(ref name) = arg.name {
-                if name == "message" {
-                    let val = self.evaluate_expression(&arg.value)?;
-                    println!("{}", val);
-                    return Ok(Value::Null);
+                match name.as_str() {
+                    "message" => {
+                        message_val = Some(self.evaluate_expression(&arg.value)?);
+                    }
+                    "value" => {
+                        value_val = Some(self.evaluate_expression(&arg.value)?);
+                    }
+                    _ => {}
                 }
             }
         }
 
-        // If no named :message, print all args
-        for arg in args {
-            let val = self.evaluate_expression(&arg.value)?;
+        // Print message and value
+        if let Some(msg) = message_val {
+            if let Some(val) = value_val {
+                println!("{} {}", msg, val);
+            } else {
+                println!("{}", msg);
+            }
+        } else if let Some(val) = value_val {
             println!("{}", val);
+        } else {
+            // If no named args, print all positional args
+            for arg in args {
+                if arg.name.is_none() {
+                    let val = self.evaluate_expression(&arg.value)?;
+                    println!("{}", val);
+                }
+            }
         }
 
         Ok(Value::Null)
@@ -815,6 +836,59 @@ impl LispEvaluator {
                 }
 
                 Ok(Value::Array(Arc::new(result)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (reduce collection initial lambda) - Reduce collection to single value using accumulator lambda
+    fn eval_reduce(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "reduce".to_string(),
+                reason: "Expected 3 arguments: collection, initial value, and reducer lambda".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Evaluate initial accumulator value
+        let mut accumulator = self.evaluate_expression(&args[1].value)?;
+
+        // Get reducer function
+        let func = self.evaluate_expression(&args[2].value)?;
+
+        match func {
+            Value::Function { params, body, closure: _ } => {
+                if params.len() != 2 {
+                    return Err(Error::InvalidArguments {
+                        tool: "reduce".to_string(),
+                        reason: format!("Lambda must take exactly 2 parameters (accumulator, element), got {}", params.len()),
+                    });
+                }
+
+                // Apply reducer to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameters: accumulator and current element
+                    self.env.define(params[0].clone(), accumulator.clone());
+                    self.env.define(params[1].clone(), elem.clone());
+
+                    // Evaluate reducer body
+                    accumulator = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+                }
+
+                Ok(accumulator)
             }
             _ => Err(Error::TypeError {
                 expected: "function".to_string(),

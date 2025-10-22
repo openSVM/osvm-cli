@@ -393,6 +393,16 @@ function initializePageElements() {
         window.initCopyButtons();
     }
 
+    // Reinitialize expandable commands
+    if (window.initExpandableCommands) {
+        window.initExpandableCommands();
+    }
+
+    // Reinitialize copy to clipboard
+    if (window.initCopyToClipboard) {
+        window.initCopyToClipboard();
+    }
+
     // Reinitialize any other interactive elements
     if (window.initTabs) {
         window.initTabs();

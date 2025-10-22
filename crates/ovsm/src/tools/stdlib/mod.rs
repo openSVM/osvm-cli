@@ -2,6 +2,7 @@
 
 pub mod data_processing;
 pub mod math;
+pub mod objects;
 pub mod statistics;
 pub mod utilities;
 
@@ -13,4 +14,5 @@ pub fn register_all(registry: &mut ToolRegistry) {
     statistics::register(registry);
     math::register(registry);
     utilities::register(registry);
+    objects::register(registry);
 }

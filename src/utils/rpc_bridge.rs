@@ -114,13 +114,20 @@ impl Tool for RpcBridgeTool {
             }
         }
 
-        // For getTransaction, ensure we always include maxSupportedTransactionVersion
-        if matches!(self.name.as_str(), "getTransaction") {
+        // For getTransaction and getParsedTransaction, ensure we always include maxSupportedTransactionVersion
+        if matches!(self.name.as_str(), "getTransaction" | "getParsedTransaction") {
             // If we have no config yet, add one
             if rpc_params.len() == 1 {
                 let mut config = serde_json::Map::new();
                 config.insert("maxSupportedTransactionVersion".to_string(), json!(0));
-                config.insert("encoding".to_string(), json!("json"));
+
+                // getParsedTransaction needs "jsonParsed" encoding
+                if self.name == "getParsedTransaction" {
+                    config.insert("encoding".to_string(), json!("jsonParsed"));
+                } else {
+                    config.insert("encoding".to_string(), json!("json"));
+                }
+
                 rpc_params.push(Value::Object(config));
             } else if rpc_params.len() >= 2 {
                 // If we have a config, ensure it has maxSupportedTransactionVersion
@@ -129,7 +136,12 @@ impl Tool for RpcBridgeTool {
                         config.insert("maxSupportedTransactionVersion".to_string(), json!(0));
                     }
                     if !config.contains_key("encoding") {
-                        config.insert("encoding".to_string(), json!("json"));
+                        // getParsedTransaction needs "jsonParsed" encoding
+                        if self.name == "getParsedTransaction" {
+                            config.insert("encoding".to_string(), json!("jsonParsed"));
+                        } else {
+                            config.insert("encoding".to_string(), json!("json"));
+                        }
                     }
                 }
             }
@@ -247,6 +259,7 @@ pub fn create_rpc_registry() -> ToolRegistry {
     // Register common RPC methods
     let methods = vec![
         "getSignaturesForAddress",
+        "getParsedTransaction",
         "getSlot",
         "getBlock",
         "getTransaction",

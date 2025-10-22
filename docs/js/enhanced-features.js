@@ -499,3 +499,5 @@ if (document.readyState === 'loading') {
 window.copyCommandToClipboard = copyCommandToClipboard;
 window.toggleCommandExample = toggleCommandExample;
 window.showToast = showToast;
+window.initExpandableCommands = initExpandableCommands;
+window.initCopyToClipboard = initCopyToClipboard;

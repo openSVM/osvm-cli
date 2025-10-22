@@ -27,6 +27,9 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(FindTool);
     registry.register(JoinTool);
     registry.register(SplitTool);
+    registry.register(NthTool);
+    registry.register(IndexOfTool);
+    registry.register(TakeTool);
 }
 
 /// Tool for applying a function to each element of a collection
@@ -684,6 +687,97 @@ impl Tool for SplitTool {
             .collect();
 
         Ok(Value::array(parts))
+    }
+}
+
+/// Tool for getting nth element from array
+pub struct NthTool;
+
+impl Tool for NthTool {
+    fn name(&self) -> &str {
+        "NTH"
+    }
+
+    fn description(&self) -> &str {
+        "Get nth element from array (0-indexed)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "NTH".to_string(),
+                reason: "Expected array and index".to_string(),
+            });
+        }
+
+        let array = args[0].as_array()?;
+        let index = args[1].as_int()? as usize;
+
+        array.get(index).cloned().ok_or_else(|| Error::InvalidArguments {
+            tool: "NTH".to_string(),
+            reason: format!("Index {} out of bounds (array length: {})", index, array.len()),
+        })
+    }
+}
+
+/// Tool for finding index of element in array
+pub struct IndexOfTool;
+
+impl Tool for IndexOfTool {
+    fn name(&self) -> &str {
+        "INDEXOF"
+    }
+
+    fn description(&self) -> &str {
+        "Find index of element in array, returns -1 if not found"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "INDEXOF".to_string(),
+                reason: "Expected array and value to find".to_string(),
+            });
+        }
+
+        let array = args[0].as_array()?;
+        let target = &args[1];
+
+        for (i, val) in array.iter().enumerate() {
+            if val == target {
+                return Ok(Value::Int(i as i64));
+            }
+        }
+
+        Ok(Value::Int(-1))
+    }
+}
+
+/// Tool for taking first N elements (alias for TopN)
+pub struct TakeTool;
+
+impl Tool for TakeTool {
+    fn name(&self) -> &str {
+        "TAKE"
+    }
+
+    fn description(&self) -> &str {
+        "Take first N elements from array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "TAKE".to_string(),
+                reason: "Expected array and count".to_string(),
+            });
+        }
+
+        let array = args[0].as_array()?;
+        let n = args[1].as_int()? as usize;
+
+        let taken: Vec<Value> = array.iter().take(n).cloned().collect();
+        Ok(Value::array(taken))
     }
 }
 

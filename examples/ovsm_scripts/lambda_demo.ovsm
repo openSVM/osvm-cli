@@ -1,0 +1,120 @@
+;; ============================================
+;; Lambda Functions and Higher-Order Functions Demo
+;; ============================================
+;; Demonstrates OVSM's functional programming capabilities
+
+;; Basic Lambda Creation
+;; ============================================
+
+(define double (lambda (x) (* x 2)))
+(log :message "Double of 5:" :value (double 5))
+
+(define add (lambda (x y) (+ x y)))
+(log :message "3 + 7 =" :value (add 3 7))
+
+;; Using defun (syntactic sugar for define + lambda)
+;; ============================================
+
+(defun square [x] (* x x))
+(log :message "Square of 8:" :value (square 8))
+
+(defun multiply [a b] (* a b))
+(log :message "4 * 5 =" :value (multiply 4 5))
+
+;; MAP: Transform each element
+;; ============================================
+
+(define numbers [1 2 3 4 5])
+(log :message "Original numbers:" :value numbers)
+
+(define doubled (map numbers (lambda (x) (* x 2))))
+(log :message "Doubled:" :value doubled)
+
+(define squared (map numbers (lambda (x) (* x x))))
+(log :message "Squared:" :value squared)
+
+;; FILTER: Keep elements that match predicate
+;; ============================================
+
+(define all_nums [1 2 3 4 5 6 7 8 9 10])
+(log :message "All numbers:" :value all_nums)
+
+(define evens (filter all_nums (lambda (x) (== (% x 2) 0))))
+(log :message "Even numbers:" :value evens)
+
+(define gt_five (filter all_nums (lambda (x) (> x 5))))
+(log :message "Greater than 5:" :value gt_five)
+
+;; REDUCE: Combine all elements into single value
+;; ============================================
+
+(define sum (reduce [1 2 3 4 5] 0 (lambda (acc x) (+ acc x))))
+(log :message "Sum of 1-5:" :value sum)
+
+(define product (reduce [2 3 4] 1 (lambda (acc x) (* acc x))))
+(log :message "Product of 2*3*4:" :value product)
+
+(define max_val (reduce [3 7 2 9 4] 0 (lambda (acc x)
+  (if (> x acc) x acc))))
+(log :message "Maximum value:" :value max_val)
+
+;; Chaining Higher-Order Functions
+;; ============================================
+
+(log :message "\n=== Chaining Demo ===")
+(define data [1 2 3 4 5 6 7 8 9 10])
+
+;; Step 1: Filter even numbers
+(define step1 (filter data (lambda (x) (== (% x 2) 0))))
+(log :message "Step 1 - Filter evens:" :value step1)
+
+;; Step 2: Double each even number
+(define step2 (map step1 (lambda (x) (* x 2))))
+(log :message "Step 2 - Double them:" :value step2)
+
+;; Step 3: Sum all results
+(define step3 (reduce step2 0 (lambda (acc x) (+ acc x))))
+(log :message "Step 3 - Sum:" :value step3)
+
+;; Real-World Example: Data Processing Pipeline
+;; ============================================
+
+(log :message "\n=== Data Processing Pipeline ===")
+
+;; Simulate transaction amounts
+(define transactions [10 -5 20 -3 50 -10 100 30])
+(log :message "All transactions:" :value transactions)
+
+;; Filter positive transactions (deposits)
+(define deposits (filter transactions (lambda (x) (> x 0))))
+(log :message "Deposits only:" :value deposits)
+
+;; Apply 10% bonus to large deposits (>= 50)
+(define with_bonus (map deposits (lambda (x)
+  (if (>= x 50)
+      (+ x (* x 0.1))
+      x))))
+(log :message "With bonuses:" :value with_bonus)
+
+;; Calculate total
+(define total (reduce with_bonus 0 (lambda (acc x) (+ acc x))))
+(log :message "Total deposits (with bonuses):" :value total)
+
+;; Advanced: Closures (lambdas capturing variables)
+;; ============================================
+
+(log :message "\n=== Closure Demo ===")
+
+(define multiplier 3)
+(define times_multiplier (lambda (x) (* x multiplier)))
+(log :message "5 * 3 (via closure):" :value (times_multiplier 5))
+
+;; Create a function factory
+(define threshold 50)
+(define is_large (lambda (x) (>= x threshold)))
+
+(define values [20 40 60 80])
+(define large_values (filter values is_large))
+(log :message "Values >= 50:" :value large_values)
+
+(log :message "\n=== Demo Complete ===")
