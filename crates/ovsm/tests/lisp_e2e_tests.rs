@@ -926,3 +926,189 @@ fn test_error_handling_in_function() {
     assert!(result_str.contains("Error:"));
     assert!(result_str.contains("URL cannot be empty"));
 }
+
+// ============================================================================
+// ADVANCED MATH OPERATIONS TESTS
+// ============================================================================
+
+#[test]
+fn test_sqrt_basic() {
+    let source = "(sqrt 16)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(4.0));
+}
+
+#[test]
+fn test_sqrt_float() {
+    let source = "(sqrt 2.0)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    match result {
+        Value::Float(f) => {
+            assert!((f - 1.4142135623730951).abs() < 0.0001);
+        }
+        _ => panic!("Expected float result"),
+    }
+}
+
+#[test]
+fn test_sqrt_negative_error() {
+    let source = "(sqrt -4)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program);
+
+    assert!(result.is_err());
+    assert!(format!("{}", result.unwrap_err()).contains("Cannot take square root of negative"));
+}
+
+#[test]
+fn test_pow_basic() {
+    let source = "(pow 2 3)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(8.0));
+}
+
+#[test]
+fn test_pow_negative_exponent() {
+    let source = "(pow 2 -2)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(0.25));
+}
+
+#[test]
+fn test_pow_fractional_exponent() {
+    let source = "(pow 16 0.5)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(4.0));
+}
+
+#[test]
+fn test_abs_positive_int() {
+    let source = "(abs 42)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+
+#[test]
+fn test_abs_negative_int() {
+    let source = "(abs -42)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(42));
+}
+
+#[test]
+fn test_abs_negative_float() {
+    let source = "(abs -3.14)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(3.14));
+}
+
+#[test]
+fn test_math_in_expression() {
+    let source = r#"
+        (define distance 100)
+        (define time 2.5)
+        (define speed (/ distance time))
+        (pow speed 2)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(1600.0));
+}
+
+#[test]
+fn test_pythagorean_theorem() {
+    let source = r#"
+        (define a 3)
+        (define b 4)
+        (define c-squared (+ (pow a 2) (pow b 2)))
+        (sqrt c-squared)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(5.0));
+}
+
+#[test]
+fn test_math_in_function() {
+    let source = r#"
+        (defun hypotenuse [a b]
+          (sqrt (+ (pow a 2) (pow b 2))))
+        (hypotenuse 3 4)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Float(5.0));
+}
+
+#[test]
+fn test_abs_in_distance_calculation() {
+    let source = r#"
+        (defun distance [x1 x2]
+          (abs (- x1 x2)))
+        (distance 10 25)
+    "#;
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Int(15));
+}
