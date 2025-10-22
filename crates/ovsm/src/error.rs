@@ -84,6 +84,17 @@ pub enum Error {
     #[error("Division by zero")]
     DivisionByZero,
 
+    /// Assertion failed
+    ///
+    /// **Triggered by:** Assertion condition evaluated to false
+    /// **Example:** `(assert (> x 0) "x must be positive")` when x <= 0
+    /// **Prevention:** Ensure preconditions are met before assertions
+    #[error("Assertion failed: {message}")]
+    AssertionFailed {
+        /// Assertion failure message
+        message: String,
+    },
+
     /// Array index out of bounds
     ///
     /// **Triggered by:** Accessing array element beyond valid range
@@ -249,6 +260,7 @@ impl Error {
     pub fn classify(&self) -> ErrorSeverity {
         match self {
             Error::DivisionByZero => ErrorSeverity::Fatal,
+            Error::AssertionFailed { .. } => ErrorSeverity::Fatal,
             Error::OutOfMemory(_) => ErrorSeverity::Fatal,
             Error::SyntaxError { .. } => ErrorSeverity::Fatal,
             Error::UnexpectedEof => ErrorSeverity::Fatal,

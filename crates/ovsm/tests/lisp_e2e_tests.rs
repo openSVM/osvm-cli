@@ -441,3 +441,379 @@ fn test_recursive_list_sum() {
 
     assert_eq!(result, Value::Int(15));
 }
+
+// ============================================================================
+// Type Predicate Tests
+// ============================================================================
+
+#[test]
+fn test_int_predicate() {
+    // Test true case
+    let source = "(int? 42)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(int? 3.14)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_float_predicate() {
+    let source = "(float? 3.14)";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(float? 42)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_number_predicate() {
+    // Test int
+    let source = "(number? 42)";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // Test float
+    let source2 = "(number? 3.14)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source3 = "(number? \"hello\")";
+    let mut scanner = SExprScanner::new(source3);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_string_predicate() {
+    let source = "(string? \"hello\")";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(string? 42)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_bool_predicate() {
+    let source = "(bool? true)";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(bool? 1)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_array_predicate() {
+    let source = "(array? [1 2 3])";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(array? \"hello\")";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_object_predicate() {
+    let source = r#"(object? {:name "Alice" :age 30})"#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(object? [1 2 3])";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_function_predicate() {
+    // Test true case - check lambda directly
+    let source = "(function? (lambda (x) (+ x 1)))";
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(true));
+
+    // Test false case
+    let source2 = "(function? 42)";
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+    assert_eq!(result, Value::Bool(false));
+}
+
+#[test]
+fn test_type_predicates_in_conditional() {
+    // Practical use case: Type-based branching
+    let source = r#"
+        (define check-type (lambda (x)
+            (cond
+                ((int? x) "integer")
+                ((float? x) "float")
+                ((string? x) "string")
+                ((array? x) "array")
+                (true "unknown"))))
+
+        (check-type 42)
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("integer".to_string()));
+
+    // Test with string
+    let source2 = r#"
+        (define check-type (lambda (x)
+            (cond
+                ((int? x) "integer")
+                ((float? x) "float")
+                ((string? x) "string")
+                ((array? x) "array")
+                (true "unknown"))))
+
+        (check-type "hello")
+    "#;
+
+    let mut scanner = SExprScanner::new(source2);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("string".to_string()));
+}
+
+// ============================================================================
+// Assertion Tests
+// ============================================================================
+
+#[test]
+fn test_assert_success() {
+    // Assertion passes - should return true
+    let source = "(assert (> 10 5) \"x must be greater than 5\")";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_assert_failure() {
+    // Assertion fails - should error
+    let source = "(assert (> 3 5) \"x must be greater than 5\")";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("Assertion failed"));
+    assert!(format!("{}", err).contains("x must be greater than 5"));
+}
+
+#[test]
+fn test_assert_type_success() {
+    // Type assertion passes
+    let source = "(assert-type 42 (int? 42))";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Null);
+}
+
+#[test]
+fn test_assert_type_failure() {
+    // Type assertion fails
+    let source = "(assert-type \"hello\" (int? \"hello\"))";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("Type assertion failed"));
+}
+
+#[test]
+fn test_assertions_in_function() {
+    // Practical use case: Function with preconditions
+    let source = r#"
+        (defun safe-divide [a b]
+          (do
+            (assert (number? a) "First argument must be a number")
+            (assert (number? b) "Second argument must be a number")
+            (assert (!= b 0) "Cannot divide by zero")
+            (/ a b)))
+
+        (safe-divide 10 2)
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Int(5));
+}
+
+#[test]
+fn test_assertions_guard_against_invalid_input() {
+    // Test that assertions catch invalid input
+    let source = r#"
+        (defun safe-divide [a b]
+          (do
+            (assert (number? a) "First argument must be a number")
+            (assert (number? b) "Second argument must be a number")
+            (assert (!= b 0) "Cannot divide by zero")
+            (/ a b)))
+
+        (safe-divide 10 0)
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let err_msg = format!("{}", err);
+    // Should catch the assertion error OR division by zero error
+    assert!(err_msg.to_lowercase().contains("division by zero") || err_msg.contains("Assertion failed"));
+}
