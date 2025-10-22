@@ -102,6 +102,8 @@ impl LispEvaluator {
                     "let" => self.eval_let(args),
                     "let*" => self.eval_let_star(args),
                     "flet" => self.eval_flet(args),
+                    "case" => self.eval_case(args),
+                    "typecase" => self.eval_typecase(args),
                     "while" => self.eval_while(args),
                     "for" => self.eval_for(args),
                     "do" => self.eval_do(args),
@@ -568,6 +570,164 @@ impl LispEvaluator {
         self.env.exit_scope();
 
         Ok(last_val)
+    }
+
+    /// (case expr (value result)... (else default)) - Pattern matching by value
+    fn eval_case(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "case".to_string(),
+                reason: "Expected at least 2 arguments: test expression and clauses".to_string(),
+            });
+        }
+
+        // Evaluate the test expression
+        let test_value = self.evaluate_expression(&args[0].value)?;
+
+        // Process each clause
+        for arg in &args[1..] {
+            match &arg.value {
+                Expression::ArrayLiteral(clause) if clause.len() == 2 => {
+                    // Check if this is an else clause
+                    if let Expression::Variable(var) = &clause[0] {
+                        if var == "else" || var == "otherwise" || var == "t" {
+                            // Else clause matches everything
+                            return self.evaluate_expression(&clause[1]);
+                        }
+                    }
+
+                    // Match pattern (can be single value or list of values)
+                    let matches = match &clause[0] {
+                        // Single value to match
+                        Expression::Variable(_) | Expression::IntLiteral(_) |
+                        Expression::FloatLiteral(_) | Expression::StringLiteral(_) |
+                        Expression::BoolLiteral(_) => {
+                            let pattern_value = self.evaluate_expression(&clause[0])?;
+                            self.values_equal(&test_value, &pattern_value)
+                        }
+                        // Multiple values to match (any can match)
+                        Expression::ArrayLiteral(patterns) => {
+                            let mut any_match = false;
+                            for pattern in patterns {
+                                let pattern_value = self.evaluate_expression(pattern)?;
+                                if self.values_equal(&test_value, &pattern_value) {
+                                    any_match = true;
+                                    break;
+                                }
+                            }
+                            any_match
+                        }
+                        _ => {
+                            let pattern_value = self.evaluate_expression(&clause[0])?;
+                            self.values_equal(&test_value, &pattern_value)
+                        }
+                    };
+
+                    if matches {
+                        return self.evaluate_expression(&clause[1]);
+                    }
+                }
+                _ => {
+                    return Err(Error::ParseError(
+                        "case clauses must be (pattern result) pairs".to_string(),
+                    ))
+                }
+            }
+        }
+
+        // No match found and no else clause
+        Ok(Value::Null)
+    }
+
+    /// (typecase expr (type result)... (else default)) - Pattern matching by type
+    fn eval_typecase(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "typecase".to_string(),
+                reason: "Expected at least 2 arguments: test expression and clauses".to_string(),
+            });
+        }
+
+        // Evaluate the test expression
+        let test_value = self.evaluate_expression(&args[0].value)?;
+        let test_type = test_value.type_name();
+
+        // Process each clause
+        for arg in &args[1..] {
+            match &arg.value {
+                Expression::ArrayLiteral(clause) if clause.len() == 2 => {
+                    // Check if this is an else clause
+                    if let Expression::Variable(var) = &clause[0] {
+                        if var == "else" || var == "otherwise" || var == "t" {
+                            // Else clause matches everything
+                            return self.evaluate_expression(&clause[1]);
+                        }
+                    }
+
+                    // Match type pattern
+                    let type_match = match &clause[0] {
+                        Expression::Variable(type_name) => {
+                            self.type_matches(&test_type, type_name)
+                        }
+                        Expression::ArrayLiteral(types) => {
+                            // Multiple types (any can match)
+                            let mut any_match = false;
+                            for type_expr in types {
+                                if let Expression::Variable(type_name) = type_expr {
+                                    if self.type_matches(&test_type, type_name) {
+                                        any_match = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            any_match
+                        }
+                        _ => false,
+                    };
+
+                    if type_match {
+                        return self.evaluate_expression(&clause[1]);
+                    }
+                }
+                _ => {
+                    return Err(Error::ParseError(
+                        "typecase clauses must be (type result) pairs".to_string(),
+                    ))
+                }
+            }
+        }
+
+        // No match found and no else clause
+        Ok(Value::Null)
+    }
+
+    /// Helper: Check if two values are equal (for case matching)
+    fn values_equal(&self, a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Float(x), Value::Float(y)) => (x - y).abs() < f64::EPSILON,
+            (Value::String(x), Value::String(y)) => x == y,
+            (Value::Bool(x), Value::Bool(y)) => x == y,
+            (Value::Null, Value::Null) => true,
+            _ => false,
+        }
+    }
+
+    /// Helper: Check if a value type matches a type name
+    fn type_matches(&self, value_type: &str, pattern_type: &str) -> bool {
+        // Handle both singular and plural forms, and Common Lisp type names
+        match pattern_type.to_lowercase().as_str() {
+            "int" | "integer" | "number" => value_type == "int",
+            "float" | "real" | "double" => value_type == "float",
+            "string" | "str" => value_type == "string",
+            "bool" | "boolean" => value_type == "bool",
+            "array" | "list" | "vector" => value_type == "array",
+            "object" | "hash" | "map" => value_type == "object",
+            "null" | "nil" => value_type == "null",
+            "function" | "fn" | "lambda" => value_type == "function",
+            "macro" => value_type == "macro",
+            _ => value_type == pattern_type,
+        }
     }
 
     /// (while cond body...) - While loop

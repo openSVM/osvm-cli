@@ -104,6 +104,8 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "let" => self.parse_let_expr(),
             TokenKind::Identifier(name) if name == "let*" => self.parse_let_star_expr(),
             TokenKind::Identifier(name) if name == "flet" => self.parse_flet_expr(),
+            TokenKind::Identifier(name) if name == "case" => self.parse_case_expr(),
+            TokenKind::Identifier(name) if name == "typecase" => self.parse_typecase_expr(),
             TokenKind::Identifier(name) if name == "const" => self.parse_const(),
             TokenKind::Identifier(name) if name == "define" => self.parse_define(),
             TokenKind::Identifier(name) if name == "set!" => self.parse_set(),
@@ -340,6 +342,70 @@ impl SExprParser {
 
         Ok(Expression::ToolCall {
             name: "flet".to_string(),
+            args,
+        })
+    }
+
+    /// Parse (case expr (pattern result)... (else default)) - Pattern matching by value
+    fn parse_case_expr(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'case'
+
+        // Parse test expression
+        let test_expr = self.parse_expression()?;
+
+        // Parse clauses
+        let mut clauses = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            // Each clause is (pattern result)
+            self.consume(TokenKind::LeftParen)?;
+            let pattern = self.parse_expression()?;
+            let result = self.parse_expression()?;
+            self.consume(TokenKind::RightParen)?;
+
+            clauses.push(Expression::ArrayLiteral(vec![pattern, result]));
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        // Build arguments: test expression + all clauses
+        let mut args = vec![Argument::positional(test_expr)];
+        for clause in clauses {
+            args.push(Argument::positional(clause));
+        }
+
+        Ok(Expression::ToolCall {
+            name: "case".to_string(),
+            args,
+        })
+    }
+
+    /// Parse (typecase expr (type result)... (else default)) - Pattern matching by type
+    fn parse_typecase_expr(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'typecase'
+
+        // Parse test expression
+        let test_expr = self.parse_expression()?;
+
+        // Parse clauses
+        let mut clauses = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            // Each clause is (type result)
+            self.consume(TokenKind::LeftParen)?;
+            let type_pattern = self.parse_expression()?;
+            let result = self.parse_expression()?;
+            self.consume(TokenKind::RightParen)?;
+
+            clauses.push(Expression::ArrayLiteral(vec![type_pattern, result]));
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        // Build arguments: test expression + all clauses
+        let mut args = vec![Argument::positional(test_expr)];
+        for clause in clauses {
+            args.push(Argument::positional(clause));
+        }
+
+        Ok(Expression::ToolCall {
+            name: "typecase".to_string(),
             args,
         })
     }
