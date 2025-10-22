@@ -12,7 +12,6 @@
 use ovsm::lexer::SExprScanner;
 use ovsm::parser::SExprParser;
 use ovsm::runtime::{LispEvaluator, Value};
-use std::sync::Arc;
 
 // Helper function to execute LISP code
 fn execute_lisp(source: &str) -> Result<Value, Box<dyn std::error::Error>> {
