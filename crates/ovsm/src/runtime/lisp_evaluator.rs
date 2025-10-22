@@ -2351,8 +2351,25 @@ impl LispEvaluator {
     /// Parse function/macro parameters with &rest support
     /// Returns parameter list (last param may be "&rest" followed by varargs name)
     fn parse_function_parameters(&self, params_expr: &Expression, context: &str) -> Result<Vec<String>> {
-        match params_expr {
-            Expression::ArrayLiteral(param_exprs) => {
+        // In S-expression syntax, parameter lists are parsed as ToolCalls or ArrayLiterals
+        let param_exprs = match params_expr {
+            Expression::ArrayLiteral(exprs) => exprs,
+            Expression::ToolCall { name, args } => {
+                // Convert (name arg1 arg2) to [name, arg1, arg2]
+                let mut exprs = vec![Expression::Variable(name.clone())];
+                for arg in args {
+                    exprs.push(arg.value.clone());
+                }
+                return self.parse_params_from_list(&exprs, context);
+            }
+            _ => return Err(Error::ParseError(format!("{}: requires parameter list", context))),
+        };
+
+        self.parse_params_from_list(param_exprs, context)
+    }
+
+    /// Helper to parse parameter list from expression vector
+    fn parse_params_from_list(&self, param_exprs: &[Expression], context: &str) -> Result<Vec<String>> {
                 let mut param_names = Vec::new();
                 let mut found_rest = false;
 
@@ -2382,9 +2399,6 @@ impl LispEvaluator {
                 }
 
                 Ok(param_names)
-            }
-            _ => Err(Error::ParseError(format!("{}: requires parameter list", context))),
-        }
     }
 
     /// Bind function/macro parameters to arguments (supports &rest)
