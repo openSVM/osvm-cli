@@ -201,6 +201,9 @@ impl OvsmService {
                 let items: Vec<String> = vals.iter().map(|v| self.format_value(v)).collect();
                 format!("(values {})", items.join(" "))
             }
+            Value::Macro { params, .. } => {
+                format!("<macro({} params)>", params.len())
+            }
         }
     }
 
@@ -252,6 +255,13 @@ impl OvsmService {
                 Ok(serde_json::json!({
                     "type": "multiple-values",
                     "values": json_arr?
+                }))
+            }
+            Value::Macro { params, .. } => {
+                // Represent macro as JSON object
+                Ok(serde_json::json!({
+                    "type": "macro",
+                    "params": params.len()
                 }))
             }
         }

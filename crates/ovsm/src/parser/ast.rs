@@ -222,6 +222,19 @@ pub enum Expression {
 
     /// Grouping expression with parentheses (expr)
     Grouping(Box<Expression>),
+
+    // Macro system (Common Lisp)
+    /// Quasiquote expression `(...)
+    /// Template for code generation in macros
+    Quasiquote(Box<Expression>),
+
+    /// Unquote expression ,(...)
+    /// Evaluate and splice value into quasiquote template
+    Unquote(Box<Expression>),
+
+    /// Unquote-splice expression ,@(...)
+    /// Evaluate list and splice elements into quasiquote template
+    UnquoteSplice(Box<Expression>),
 }
 
 /// Binary operators

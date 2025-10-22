@@ -559,3 +559,105 @@ impl SExprParser {
 ## Next Steps
 
 See implementation tasks in TODO list above.
+
+## Macro System (Common Lisp Style)
+
+### Overview
+
+OVSM supports Common Lisp-style macros for compile-time code generation. Macros are functions that run at expansion time and generate code to be evaluated.
+
+### Defining Macros
+
+```lisp
+(defmacro name (params...) body)
+```
+
+Example - Simple `when` macro:
+```lisp
+(defmacro when (condition & body)
+  `(if ,condition
+       (do ,@body)
+       nil))
+```
+
+### Quasiquote System
+
+**Backtick (`)** - Create code template:
+```lisp
+`(+ 1 2)  ; Template: (+ 1 2)
+```
+
+**Comma (,)** - Unquote (evaluate inside template):
+```lisp
+(define x 10)
+`(+ ,x 2)  ; Expands to: (+ 10 2)
+```
+
+**Comma-at (,@)** - Unquote-splice (flatten array into template):
+```lisp
+(define args (list 1 2 3))
+`(+ ,@args)  ; Expands to: (+ 1 2 3)
+```
+
+### Macro Hygiene
+
+**gensym** - Generate unique symbols to prevent variable capture:
+```lisp
+(define temp (gensym "temp"))  ; → "temp__0"
+(gensym)                        ; → "G__1"
+```
+
+Example - Hygienic macro:
+```lisp
+(defmacro swap (a b)
+  (define temp (gensym "temp"))
+  `(do
+     (define ,temp ,a)
+     (set! ,a ,b)
+     (set! ,b ,temp)))
+```
+
+### Debugging Macros
+
+**macroexpand** - Expand macro once for inspection:
+```lisp
+(defmacro double (x) `(* ,x 2))
+(macroexpand (double 5))  ; Shows expansion
+```
+
+### Complete Macro Example
+
+```lisp
+;; Define a `unless` macro (opposite of `when`)
+(defmacro unless (condition & body)
+  `(if (not ,condition)
+       (do ,@body)
+       nil))
+
+;; Use it
+(define x 5)
+(unless (> x 10)
+  (log :message "x is not greater than 10")
+  (set! x 0))
+```
+
+### Limitations
+
+- Macro expansion is simplified compared to full Common Lisp
+- No `&rest`, `&optional`, or `&key` parameter destructuring yet
+- Code-as-data representation is basic (not full s-expressions)
+- No macro shadowing or local macros (`macrolet`)
+
+### When to Use Macros
+
+✅ **Good use cases:**
+- Domain-specific mini-languages
+- Eliminating boilerplate
+- Adding new control flow constructs
+- Code generation patterns
+
+❌ **Avoid macros for:**
+- Simple abstractions (use functions instead)
+- Runtime behavior (functions are simpler)
+- When hygiene is hard to maintain
+

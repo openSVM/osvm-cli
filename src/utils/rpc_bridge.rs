@@ -226,6 +226,10 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             let items: Vec<Value> = vals.iter().map(ovsm_value_to_json).collect();
             json!({"type": "multiple-values", "values": items})
         }
+        OvsmValue::Macro { params, .. } => {
+            // Macros cannot be serialized for RPC calls
+            json!({"error": "Cannot serialize macro to JSON for RPC call"})
+        }
     }
 }
 

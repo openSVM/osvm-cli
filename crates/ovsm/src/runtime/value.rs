@@ -48,6 +48,17 @@ pub enum Value {
     /// Only the first value is used in single-value context
     /// Use multiple-value-bind to destructure all values
     Multiple(Arc<Vec<Value>>),
+
+    /// Macro definition (compile-time code transformer)
+    /// Macros are expanded before evaluation
+    Macro {
+        /// Parameter names (may include &rest for variadic)
+        params: Vec<String>,
+        /// Macro body (returns code to be evaluated)
+        body: Arc<crate::parser::Expression>,
+        /// Captured environment at macro definition time
+        closure: Arc<HashMap<String, Value>>,
+    },
 }
 
 impl Value {
@@ -90,6 +101,7 @@ impl Value {
             Value::Range { .. } => "range".to_string(),
             Value::Function { .. } => "function".to_string(),
             Value::Multiple(_) => "multiple-values".to_string(),
+            Value::Macro { .. } => "macro".to_string(),
         }
     }
 
@@ -109,6 +121,7 @@ impl Value {
                 // Multiple values: check first value (CL semantics)
                 vals.first().map(|v| v.is_truthy()).unwrap_or(false)
             }
+            Value::Macro { .. } => true, // Macros are always truthy
         }
     }
 
@@ -191,6 +204,7 @@ impl Value {
                     format!("(values {} items)", vals.len())
                 }
             }
+            Value::Macro { params, .. } => format!("<macro({} params)>", params.len()),
         }
     }
 
@@ -317,6 +331,7 @@ impl fmt::Display for Value {
                 }
                 write!(f, ")")
             }
+            Value::Macro { params, .. } => write!(f, "<macro({} params)>", params.len()),
         }
     }
 }

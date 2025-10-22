@@ -77,7 +77,14 @@ impl SExprScanner {
             '`' => self.add_token(TokenKind::Backtick),
             '@' => self.add_token(TokenKind::At),
 
-            ',' => self.add_token(TokenKind::Comma),
+            ',' => {
+                // Check for ,@ (unquote-splice)
+                if self.match_char('@') {
+                    self.add_token(TokenKind::CommaAt);
+                } else {
+                    self.add_token(TokenKind::Comma);
+                }
+            }
 
             // Operators
             '+' => self.add_token(TokenKind::Plus),

@@ -18,6 +18,8 @@ pub struct LispEvaluator {
     env: Environment,
     /// Tool registry
     registry: Arc<ToolRegistry>,
+    /// Gensym counter for generating unique symbols
+    gensym_counter: std::cell::Cell<u64>,
 }
 
 impl LispEvaluator {
@@ -26,6 +28,7 @@ impl LispEvaluator {
         LispEvaluator {
             env: Environment::new(),
             registry: Arc::new(ToolRegistry::new()),
+            gensym_counter: std::cell::Cell::new(0),
         }
     }
 
@@ -34,6 +37,7 @@ impl LispEvaluator {
         LispEvaluator {
             env: Environment::new(),
             registry: Arc::new(registry),
+            gensym_counter: std::cell::Cell::new(0),
         }
     }
 
@@ -77,13 +81,23 @@ impl LispEvaluator {
 
     /// Evaluate an expression with LISP special form handling
     fn evaluate_expression(&mut self, expr: &Expression) -> Result<Value> {
+        // First, try macro expansion
+        if let Some(expanded) = self.try_expand_macro(expr)? {
+            // Recursively evaluate expanded form (macros can expand to macro calls)
+            return self.evaluate_expression(&expanded);
+        }
+
         match expr {
+            // Handle quasiquote expressions
+            Expression::Quasiquote(_) => self.eval_quasiquote(expr),
+
             Expression::ToolCall { name, args } => {
                 // Check if this is a LISP special form
                 match name.as_str() {
                     "set!" => self.eval_set(args),
                     "define" => self.eval_define(args),
                     "defun" => self.eval_defun(args),
+                    "defmacro" => self.eval_defmacro(args),
                     "const" => self.eval_const(args),
                     "let" => self.eval_let(args),
                     "while" => self.eval_while(args),
@@ -128,6 +142,9 @@ impl LispEvaluator {
                     "multiple-value-bind" => self.eval_multiple_value_bind(args),
                     // Dynamic variables (Common Lisp special variables)
                     "defvar" => self.eval_defvar(args),
+                    // Macro system
+                    "gensym" => self.eval_gensym(args),
+                    "macroexpand" => self.eval_macroexpand(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -318,6 +335,51 @@ impl LispEvaluator {
         self.env.define(func_name, func_value.clone());
 
         Ok(func_value)
+    }
+
+    /// (defmacro name (params...) body) - Define macro
+    /// Macros are compile-time code transformers that receive unevaluated arguments
+    fn eval_defmacro(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "defmacro".to_string(),
+                reason: "Expected 3 arguments: name, parameters, body".to_string(),
+            });
+        }
+
+        // Get macro name
+        let macro_name = match &args[0].value {
+            Expression::Variable(name) => name.clone(),
+            _ => return Err(Error::ParseError("defmacro requires macro name".to_string())),
+        };
+
+        // Get parameters list
+        let params = match &args[1].value {
+            Expression::ArrayLiteral(param_exprs) => {
+                let mut param_names = Vec::new();
+                for param_expr in param_exprs {
+                    if let Expression::Variable(name) = param_expr {
+                        param_names.push(name.clone());
+                    } else {
+                        return Err(Error::ParseError("defmacro parameters must be identifiers".to_string()));
+                    }
+                }
+                param_names
+            }
+            _ => return Err(Error::ParseError("defmacro requires parameter list".to_string())),
+        };
+
+        // Create macro value
+        let macro_value = Value::Macro {
+            params,
+            body: Arc::new(args[2].value.clone()),
+            closure: Arc::new(std::collections::HashMap::new()),
+        };
+
+        // Define macro in environment
+        self.env.define(macro_name, macro_value.clone());
+
+        Ok(macro_value)
     }
 
     /// (const name value) - Define constant
@@ -822,6 +884,7 @@ impl LispEvaluator {
                 Value::Range { .. } => "range",
                 Value::Function { .. } => "function",
                 Value::Multiple(_) => "multiple-values",
+                Value::Macro { .. } => "macro",
             };
             return Err(Error::AssertionFailed {
                 message: format!("Type assertion failed: expected different type, got {}", type_name),
@@ -2117,6 +2180,216 @@ impl LispEvaluator {
                 }),
             },
             UnaryOp::Not => Ok(Value::Bool(!operand.is_truthy())),
+        }
+    }
+
+    /// (gensym) or (gensym "prefix") - Generate unique symbol
+    /// Used in macros to prevent variable capture (hygiene)
+    fn eval_gensym(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        let prefix = if args.is_empty() {
+            "G".to_string()
+        } else {
+            let prefix_val = self.evaluate_expression(&args[0].value)?;
+            prefix_val.as_string()?.to_string()
+        };
+
+        let counter = self.gensym_counter.get();
+        self.gensym_counter.set(counter + 1);
+
+        Ok(Value::String(format!("{}__{}", prefix, counter)))
+    }
+
+    /// (macroexpand form) - Expand macro once (debugging tool)
+    fn eval_macroexpand(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "macroexpand".to_string(),
+                reason: "Expected 1 argument: form to expand".to_string(),
+            });
+        }
+
+        // Try to expand the expression once
+        match self.try_expand_macro(&args[0].value)? {
+            Some(expanded) => {
+                // Convert expanded expression back to a displayable value
+                // For now, return a string representation
+                Ok(Value::String(format!("{:?}", expanded)))
+            }
+            None => {
+                // Not a macro call, return original
+                Ok(Value::String(format!("{:?}", args[0].value)))
+            }
+        }
+    }
+
+    /// Try to expand a macro call once
+    /// Returns Some(expanded_expr) if it's a macro call, None otherwise
+    fn try_expand_macro(&mut self, expr: &Expression) -> Result<Option<Expression>> {
+        match expr {
+            Expression::ToolCall { name, args } => {
+                // Check if this is a macro
+                if let Ok(value) = self.env.get(name) {
+                    if let Value::Macro { params, body, .. } = value {
+                        // This is a macro! Expand it
+                        return Ok(Some(self.expand_macro(&params, &body, args)?));
+                    }
+                }
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Expand a macro by binding unevaluated arguments to parameters
+    /// and evaluating the macro body, which returns code
+    fn expand_macro(
+        &mut self,
+        params: &[String],
+        body: &Expression,
+        args: &[crate::parser::Argument],
+    ) -> Result<Expression> {
+        // Check argument count
+        if args.len() != params.len() {
+            return Err(Error::InvalidArguments {
+                tool: "macro".to_string(),
+                reason: format!("Expected {} arguments, got {}", params.len(), args.len()),
+            });
+        }
+
+        // Create new environment for macro expansion
+        // Save old environment
+        let old_env = self.env.clone();
+
+        // Bind parameters to UNEVALUATED arguments (key difference from functions!)
+        for (param, arg) in params.iter().zip(args.iter()) {
+            // Convert expression to a quoted value for manipulation
+            self.env.define(param.clone(), self.expression_to_value(&arg.value)?);
+        }
+
+        // Evaluate macro body (which generates code)
+        let result_value = self.evaluate_expression(body)?;
+
+        // Restore environment
+        self.env = old_env;
+
+        // Convert result back to an expression
+        self.value_to_expression(&result_value)
+    }
+
+    /// Convert an expression to a value (for macro parameter binding)
+    fn expression_to_value(&self, expr: &Expression) -> Result<Value> {
+        // This is a simplified version - in full CL, expressions would be first-class
+        // For now, we store them as strings or structured data
+        match expr {
+            Expression::IntLiteral(n) => Ok(Value::Int(*n)),
+            Expression::FloatLiteral(f) => Ok(Value::Float(*f)),
+            Expression::StringLiteral(s) => Ok(Value::String(s.clone())),
+            Expression::BoolLiteral(b) => Ok(Value::Bool(*b)),
+            Expression::NullLiteral => Ok(Value::Null),
+            Expression::Variable(name) => Ok(Value::String(name.clone())),
+            Expression::ArrayLiteral(exprs) => {
+                let vals: Result<Vec<_>> = exprs.iter().map(|e| self.expression_to_value(e)).collect();
+                Ok(Value::array(vals?))
+            }
+            _ => {
+                // For complex expressions, represent as string (simplified)
+                Ok(Value::String(format!("{:?}", expr)))
+            }
+        }
+    }
+
+    /// Convert a value back to an expression (for macro expansion result)
+    fn value_to_expression(&self, value: &Value) -> Result<Expression> {
+        match value {
+            Value::Int(n) => Ok(Expression::IntLiteral(*n)),
+            Value::Float(f) => Ok(Expression::FloatLiteral(*f)),
+            Value::String(s) => {
+                // Try to interpret as variable name if it's an identifier
+                if s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                    Ok(Expression::Variable(s.clone()))
+                } else {
+                    Ok(Expression::StringLiteral(s.clone()))
+                }
+            }
+            Value::Bool(b) => Ok(Expression::BoolLiteral(*b)),
+            Value::Null => Ok(Expression::NullLiteral),
+            Value::Array(arr) => {
+                let exprs: Result<Vec<_>> = arr.iter().map(|v| self.value_to_expression(v)).collect();
+                Ok(Expression::ArrayLiteral(exprs?))
+            }
+            _ => Err(Error::TypeError {
+                expected: "simple value".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// Evaluate quasiquote expression (template with unquote/splice)
+    fn eval_quasiquote(&mut self, expr: &Expression) -> Result<Value> {
+        match expr {
+            Expression::Quasiquote(inner) => {
+                // Process the template, evaluating unquotes
+                self.process_quasiquote_template(inner)
+            }
+            _ => Err(Error::ParseError("Expected quasiquote expression".to_string())),
+        }
+    }
+
+    /// Process quasiquote template, handling unquote and unquote-splice
+    fn process_quasiquote_template(&mut self, expr: &Expression) -> Result<Value> {
+        match expr {
+            Expression::Unquote(inner) => {
+                // Evaluate the unquoted expression
+                self.evaluate_expression(inner)
+            }
+            Expression::UnquoteSplice(inner) => {
+                // Evaluate and expect an array to splice
+                let val = self.evaluate_expression(inner)?;
+                match val {
+                    Value::Array(_) => Ok(val),
+                    _ => Err(Error::TypeError {
+                        expected: "array for unquote-splice".to_string(),
+                        got: val.type_name(),
+                    }),
+                }
+            }
+            Expression::ArrayLiteral(elements) => {
+                // Process each element, handling splicing
+                let mut result = Vec::new();
+                for elem in elements {
+                    if let Expression::UnquoteSplice(inner) = elem {
+                        // Splice array elements
+                        let val = self.evaluate_expression(inner)?;
+                        if let Value::Array(arr) = val {
+                            result.extend(arr.iter().cloned());
+                        } else {
+                            return Err(Error::TypeError {
+                                expected: "array for unquote-splice".to_string(),
+                                got: val.type_name(),
+                            });
+                        }
+                    } else {
+                        // Regular element
+                        result.push(self.process_quasiquote_template(elem)?);
+                    }
+                }
+                Ok(Value::array(result))
+            }
+            Expression::ToolCall { name, args } => {
+                // Process arguments
+                let processed_args: Result<Vec<_>> = args
+                    .iter()
+                    .map(|arg| self.process_quasiquote_template(&arg.value))
+                    .collect();
+                let vals = processed_args?;
+
+                // Create a tool call value (simplified - would need proper representation)
+                let mut result = vec![Value::String(name.clone())];
+                result.extend(vals);
+                Ok(Value::array(result))
+            }
+            // For other expressions, convert to values literally
+            _ => self.expression_to_value(expr),
         }
     }
 }
