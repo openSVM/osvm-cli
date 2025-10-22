@@ -1,4 +1,7 @@
-use super::ast::{Argument, Expression, Program, ProgramMetadata, Statement, BinaryOp};
+use super::ast::{
+    Argument, Expression, Program, ProgramMetadata, Statement, BinaryOp,
+    LoopData, IterationClause, AccumulationClause, ConditionClause, ExitClause,
+};
 use crate::error::{Error, Result};
 use crate::lexer::{Token, TokenKind};
 
@@ -112,6 +115,7 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "set!" => self.parse_set(),
             TokenKind::Identifier(name) if name == "while" => self.parse_while(),
             TokenKind::Identifier(name) if name == "for" => self.parse_for(),
+            TokenKind::Identifier(name) if name == "loop" => self.parse_loop_expr(),
             TokenKind::Identifier(name) if name == "lambda" => self.parse_lambda(),
             TokenKind::Identifier(name) if name == "do" => self.parse_do(),
             TokenKind::Identifier(name) if name == "when" => self.parse_when(),
@@ -968,6 +972,238 @@ impl SExprParser {
         self.consume(TokenKind::CommaAt)?;
         let expr = self.parse_expression()?;
         Ok(Expression::UnquoteSplice(Box::new(expr)))
+    }
+
+    // ========================================================================
+    // Loop Macro Parser (Common Lisp)
+    // ========================================================================
+
+    /// Parse (loop for ... sum/collect/count ...)
+    fn parse_loop_expr(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'loop'
+
+        let mut iteration = None;
+        let mut accumulation = None;
+        let mut condition = None;
+        let mut early_exit = None;
+        let mut body = Vec::new();
+
+        while !self.check(&TokenKind::RightParen) && !self.is_at_end() {
+            if let TokenKind::Identifier(keyword) = &self.peek().kind {
+                match keyword.as_str() {
+                    "for" => iteration = Some(self.parse_loop_for()?),
+                    "sum" => accumulation = Some(self.parse_loop_sum()?),
+                    "collect" => accumulation = Some(self.parse_loop_collect()?),
+                    "count" => accumulation = Some(self.parse_loop_count()?),
+                    "when" => condition = Some(self.parse_loop_when()?),
+                    "unless" => condition = Some(self.parse_loop_unless()?),
+                    "while" => early_exit = Some(self.parse_loop_while()?),
+                    "until" => early_exit = Some(self.parse_loop_until()?),
+                    "do" => body = self.parse_loop_do()?,
+                    _ => {
+                        return Err(Error::ParseError(format!(
+                            "Unknown loop clause: {}",
+                            keyword
+                        )))
+                    }
+                }
+            } else {
+                return Err(Error::ParseError(
+                    "Expected loop clause keyword".to_string(),
+                ));
+            }
+        }
+
+        let iteration = iteration.ok_or_else(|| {
+            Error::ParseError("Loop requires iteration clause (for ...)".to_string())
+        })?;
+
+        self.consume(TokenKind::RightParen)?;
+
+        Ok(Expression::Loop(Box::new(LoopData {
+            iteration,
+            accumulation,
+            condition,
+            early_exit,
+            body,
+        })))
+    }
+
+    /// Parse: for var from/downfrom/in ...
+    fn parse_loop_for(&mut self) -> Result<IterationClause> {
+        self.advance(); // consume 'for'
+
+        let var = self.expect_identifier()?;
+
+        if let TokenKind::Identifier(keyword) = &self.peek().kind {
+            match keyword.as_str() {
+                "from" => self.parse_numeric_iteration(var, false),
+                "downfrom" => self.parse_numeric_iteration(var, true),
+                "in" => self.parse_collection_iteration(var),
+                _ => Err(Error::ParseError(format!(
+                    "Expected 'from', 'downfrom', or 'in', got '{}'",
+                    keyword
+                ))),
+            }
+        } else {
+            Err(Error::ParseError(
+                "Expected iteration keyword after loop variable".to_string(),
+            ))
+        }
+    }
+
+    /// Parse: from/downfrom N to/below M [by step]
+    fn parse_numeric_iteration(&mut self, var: String, downfrom: bool) -> Result<IterationClause> {
+        self.advance(); // consume 'from' or 'downfrom'
+
+        let from = Box::new(self.parse_expression()?);
+
+        let to_keyword = self.peek_identifier_str()?;
+        let below = to_keyword == "below";
+        if !matches!(to_keyword.as_str(), "to" | "below") {
+            return Err(Error::ParseError(format!(
+                "Expected 'to' or 'below', got '{}'",
+                to_keyword
+            )));
+        }
+        self.advance();
+
+        let to = Box::new(self.parse_expression()?);
+
+        let by = if self.peek_identifier_str().ok() == Some("by".to_string()) {
+            self.advance(); // consume 'by'
+            Some(Box::new(self.parse_expression()?))
+        } else {
+            None
+        };
+
+        Ok(IterationClause::Numeric {
+            var,
+            from,
+            to,
+            by,
+            downfrom,
+            below,
+        })
+    }
+
+    /// Parse: in collection
+    fn parse_collection_iteration(&mut self, var: String) -> Result<IterationClause> {
+        self.advance(); // consume 'in'
+
+        let collection = Box::new(self.parse_expression()?);
+
+        Ok(IterationClause::Collection { var, collection })
+    }
+
+    /// Parse: sum [expr]
+    fn parse_loop_sum(&mut self) -> Result<AccumulationClause> {
+        self.advance(); // consume 'sum'
+
+        if self.is_loop_clause_keyword() || self.check(&TokenKind::RightParen) {
+            Ok(AccumulationClause::Sum(None))
+        } else {
+            Ok(AccumulationClause::Sum(Some(Box::new(
+                self.parse_expression()?,
+            ))))
+        }
+    }
+
+    /// Parse: collect [expr]
+    fn parse_loop_collect(&mut self) -> Result<AccumulationClause> {
+        self.advance(); // consume 'collect'
+
+        if self.is_loop_clause_keyword() || self.check(&TokenKind::RightParen) {
+            Ok(AccumulationClause::Collect(None))
+        } else {
+            Ok(AccumulationClause::Collect(Some(Box::new(
+                self.parse_expression()?,
+            ))))
+        }
+    }
+
+    /// Parse: count [expr]
+    fn parse_loop_count(&mut self) -> Result<AccumulationClause> {
+        self.advance(); // consume 'count'
+
+        if self.is_loop_clause_keyword() || self.check(&TokenKind::RightParen) {
+            Ok(AccumulationClause::Count(None))
+        } else {
+            Ok(AccumulationClause::Count(Some(Box::new(
+                self.parse_expression()?,
+            ))))
+        }
+    }
+
+    /// Parse: when test
+    fn parse_loop_when(&mut self) -> Result<ConditionClause> {
+        self.advance(); // consume 'when'
+        Ok(ConditionClause::When(Box::new(self.parse_expression()?)))
+    }
+
+    /// Parse: unless test
+    fn parse_loop_unless(&mut self) -> Result<ConditionClause> {
+        self.advance(); // consume 'unless'
+        Ok(ConditionClause::Unless(Box::new(
+            self.parse_expression()?,
+        )))
+    }
+
+    /// Parse: while test
+    fn parse_loop_while(&mut self) -> Result<ExitClause> {
+        self.advance(); // consume 'while'
+        Ok(ExitClause::While(Box::new(self.parse_expression()?)))
+    }
+
+    /// Parse: until test
+    fn parse_loop_until(&mut self) -> Result<ExitClause> {
+        self.advance(); // consume 'until'
+        Ok(ExitClause::Until(Box::new(self.parse_expression()?)))
+    }
+
+    /// Parse: do body...
+    fn parse_loop_do(&mut self) -> Result<Vec<Expression>> {
+        self.advance(); // consume 'do'
+
+        let mut body = Vec::new();
+        while !self.is_loop_clause_keyword() && !self.check(&TokenKind::RightParen) {
+            body.push(self.parse_expression()?);
+        }
+
+        Ok(body)
+    }
+
+    /// Check if current token is a loop clause keyword
+    fn is_loop_clause_keyword(&self) -> bool {
+        if let TokenKind::Identifier(name) = &self.peek().kind {
+            matches!(
+                name.as_str(),
+                "for" | "when" | "unless" | "while" | "until" | "do"
+                    | "sum" | "collect" | "count"
+            )
+        } else {
+            false
+        }
+    }
+
+    /// Peek identifier as string (returns error if not identifier)
+    fn peek_identifier_str(&self) -> Result<String> {
+        match &self.peek().kind {
+            TokenKind::Identifier(name) => Ok(name.clone()),
+            _ => Err(Error::ParseError("Expected identifier".to_string())),
+        }
+    }
+
+    /// Expect and consume identifier
+    fn expect_identifier(&mut self) -> Result<String> {
+        match &self.peek().kind {
+            TokenKind::Identifier(name) => {
+                let name = name.clone();
+                self.advance();
+                Ok(name)
+            }
+            _ => Err(Error::ParseError("Expected identifier".to_string())),
+        }
     }
 }
 
