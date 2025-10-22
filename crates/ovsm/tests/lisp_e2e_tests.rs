@@ -817,3 +817,112 @@ fn test_assertions_guard_against_invalid_input() {
     // Should catch the assertion error OR division by zero error
     assert!(err_msg.to_lowercase().contains("division by zero") || err_msg.contains("Assertion failed"));
 }
+
+// ============================================================================
+// Error Handling Tests
+// ============================================================================
+
+#[test]
+fn test_error_throw() {
+    // Test error function
+    let source = "(error \"Something went wrong\")";
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program);
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("Something went wrong"));
+}
+
+#[test]
+fn test_try_catch_success() {
+    // Try block succeeds - catch not executed
+    let source = r#"
+        (try
+          (+ 1 2 3)
+          (catch e "error"))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Int(6));
+}
+
+#[test]
+fn test_try_catch_failure() {
+    // Try block fails - catch executes
+    let source = r#"
+        (try
+          (error "boom")
+          (catch e "caught"))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("caught".to_string()));
+}
+
+#[test]
+fn test_try_catch_finally() {
+    // Test finally block always executes
+    let source = r#"
+        (try
+          (+ 1 2)
+          (catch e "error")
+          (finally (log :message "cleanup")))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Int(3));
+}
+
+#[test]
+fn test_error_handling_in_function() {
+    // Practical use case: Safe network operation
+    let source = r#"
+        (defun safe-fetch [url]
+          (try
+            (if (== url "")
+                (error "URL cannot be empty")
+                (str "Fetched: " url))
+            (catch e
+              (str "Error: " e))))
+
+        (safe-fetch "")
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    let result_str = match result {
+        Value::String(s) => s,
+        _ => panic!("Expected string result"),
+    };
+    assert!(result_str.contains("Error:"));
+    assert!(result_str.contains("URL cannot be empty"));
+}
