@@ -254,7 +254,15 @@ impl SExprScanner {
     }
 
     fn scan_identifier_or_keyword(&mut self) -> Result<()> {
+        // In Common Lisp, identifiers can contain *, +, -, /, etc as suffixes
+        // First, scan the base identifier
         while self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '-' || self.peek() == '?' || self.peek() == '!' || self.peek() == '&' {
+            self.advance();
+        }
+
+        // Now check for trailing *, +, / which are valid in CL identifiers like let*, 1+, etc.
+        // Allow any number of these at the end
+        while matches!(self.peek(), '*' | '+' | '/') {
             self.advance();
         }
 

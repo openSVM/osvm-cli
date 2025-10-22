@@ -100,6 +100,7 @@ impl LispEvaluator {
                     "defmacro" => self.eval_defmacro(args),
                     "const" => self.eval_const(args),
                     "let" => self.eval_let(args),
+                    "let*" => self.eval_let_star(args),
                     "while" => self.eval_while(args),
                     "for" => self.eval_for(args),
                     "do" => self.eval_do(args),
@@ -413,6 +414,69 @@ impl LispEvaluator {
         for (var_name, value_expr) in bindings {
             let value = self.evaluate_expression(value_expr)?;
             self.env.define(var_name, value);
+        }
+
+        // Execute body
+        let mut last_val = Value::Null;
+        for arg in &args[1..] {
+            last_val = self.evaluate_expression(&arg.value)?;
+        }
+
+        // Exit scope
+        self.env.exit_scope();
+
+        Ok(last_val)
+    }
+
+    /// (let* ((var val)...) body) - Sequential binding where each binding can reference previous ones
+    fn eval_let_star(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "let*".to_string(),
+                reason: "Expected at least 2 arguments: bindings and body".to_string(),
+            });
+        }
+
+        // Parse bindings (same format as let)
+        let bindings = match &args[0].value {
+            Expression::ArrayLiteral(binding_pairs) => {
+                let mut result = Vec::new();
+                for pair in binding_pairs {
+                    match pair {
+                        Expression::ArrayLiteral(elements) if elements.len() == 2 => {
+                            let var_name = match &elements[0] {
+                                Expression::Variable(n) => n.clone(),
+                                _ => return Err(Error::ParseError(
+                                    "let* binding requires variable name".to_string(),
+                                )),
+                            };
+                            result.push((var_name, &elements[1]));
+                        }
+                        _ => {
+                            return Err(Error::ParseError(
+                                "let* bindings must be pairs: (var value)".to_string(),
+                            ))
+                        }
+                    }
+                }
+                result
+            }
+            _ => {
+                return Err(Error::ParseError(
+                    "let* requires bindings list: ((x 10) (y 20))".to_string(),
+                ))
+            }
+        };
+
+        // Create new scope
+        self.env.enter_scope();
+
+        // KEY DIFFERENCE: Evaluate and bind variables SEQUENTIALLY
+        // Each binding can reference previously bound variables
+        for (var_name, value_expr) in bindings {
+            let value = self.evaluate_expression(value_expr)?;
+            self.env.define(var_name, value);
+            // Note: Variable is immediately available for next binding!
         }
 
         // Execute body
