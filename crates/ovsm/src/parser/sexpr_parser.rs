@@ -409,22 +409,23 @@ impl SExprParser {
         while !self.check(&TokenKind::RightParen) {
             self.consume(TokenKind::LeftParen)?;
 
-            let test_or_else = if let TokenKind::Identifier(name) = &self.peek().kind {
-                name.clone()
+            // Check for 'else' clause
+            let is_else = if let TokenKind::Identifier(name) = &self.peek().kind {
+                name == "else"
             } else {
-                return Err(Error::ParseError("Expected test in cond clause".to_string()));
+                false
             };
 
-            if test_or_else == "else" {
+            if is_else {
                 self.advance(); // consume 'else'
                 let result = self.parse_expression()?;
                 self.consume(TokenKind::RightParen)?;
 
-                // else clause - end of cond
+                // else clause - always true condition
                 clauses.push((Expression::BoolLiteral(true), result));
                 break;
             } else {
-                // Regular test clause
+                // Regular test clause - parse both test and result
                 let test = self.parse_expression()?;
                 let result = self.parse_expression()?;
                 self.consume(TokenKind::RightParen)?;

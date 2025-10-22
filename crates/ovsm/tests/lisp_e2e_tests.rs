@@ -334,3 +334,110 @@ fn test_map_with_defun() {
 
     assert_eq!(result, expected);
 }
+
+// ============================================
+// Phase 1: Core LISP Essentials Tests
+// ============================================
+
+#[test]
+fn test_cond_multi_branch() {
+    // Test cond with multiple branches
+    let source = r#"
+        (define score 85)
+        (cond
+          ((>= score 90) "A")
+          ((>= score 80) "B")
+          ((>= score 70) "C")
+          (else "F"))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("B".to_string()));
+}
+
+#[test]
+fn test_cond_first_match() {
+    // Test that cond returns first matching branch
+    let source = r#"
+        (define x 50)
+        (cond
+          ((< x 100) "first")
+          ((< x 200) "second")
+          (else "third"))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("first".to_string()));
+}
+
+#[test]
+fn test_unless_basic() {
+    // Test unless executes when condition is false
+    let source = r#"
+        (unless (> 3 5) "correct")
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::String("correct".to_string()));
+}
+
+#[test]
+fn test_first_rest_cons() {
+    // Test first, rest, cons
+    let source = r#"
+        (define nums [1 2 3 4 5])
+        (define head (first nums))
+        (define tail (rest nums))
+        (define new_list (cons 0 nums))
+        (+ head (first new_list))
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Int(1)); // 1 + 0 = 1
+}
+
+#[test]
+fn test_recursive_list_sum() {
+    // Test recursive processing with first and rest
+    let source = r#"
+        (defun sum-list [lst]
+          (if (empty? lst)
+              0
+              (+ (first lst) (sum-list (rest lst)))))
+
+        (sum-list [1 2 3 4 5])
+    "#;
+
+    let mut scanner = SExprScanner::new(source);
+    let tokens = scanner.scan_tokens().unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let program = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.execute(&program).unwrap();
+
+    assert_eq!(result, Value::Int(15));
+}

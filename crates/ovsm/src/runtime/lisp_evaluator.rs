@@ -90,6 +90,8 @@ impl LispEvaluator {
                     "for" => self.eval_for(args),
                     "do" => self.eval_do(args),
                     "when" => self.eval_when(args),
+                    "unless" => self.eval_unless(args),
+                    "cond" => self.eval_cond(args),
                     "not" => self.eval_not(args),
                     "and" => self.eval_and(args),
                     "or" => self.eval_or(args),
@@ -110,6 +112,9 @@ impl LispEvaluator {
                     "slice" => self.eval_slice(args),
                     "keys" => self.eval_keys(args),
                     "get" => self.eval_get(args),
+                    "first" => self.eval_first(args),
+                    "rest" => self.eval_rest(args),
+                    "cons" => self.eval_cons(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -483,6 +488,78 @@ impl LispEvaluator {
         }
     }
 
+    /// (unless cond body...) - Inverted when (execute if condition is false)
+    fn eval_unless(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "unless".to_string(),
+                reason: "Expected at least condition".to_string(),
+            });
+        }
+
+        let cond_val = self.evaluate_expression(&args[0].value)?;
+        if !cond_val.is_truthy() {
+            let mut last_val = Value::Null;
+            for arg in &args[1..] {
+                last_val = self.evaluate_expression(&arg.value)?;
+            }
+            Ok(last_val)
+        } else {
+            Ok(Value::Null)
+        }
+    }
+
+    /// (cond (test1 result1) (test2 result2) ... (else default)) - Multi-way conditional
+    fn eval_cond(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        for arg in args {
+            // Each clause can be either an array literal [cond result] or a ToolCall (cond result)
+            let (condition_expr, result_expr) = match &arg.value {
+                Expression::ArrayLiteral(pair) => {
+                    if pair.len() != 2 {
+                        return Err(Error::ParseError(
+                            "cond clause must have 2 elements: [condition result]".to_string(),
+                        ));
+                    }
+                    (&pair[0], &pair[1])
+                }
+                Expression::ToolCall { name: _, args: clause_args } => {
+                    // S-expression form: (condition result)
+                    if clause_args.len() != 2 {
+                        return Err(Error::ParseError(
+                            "cond clause must have 2 elements: (condition result)".to_string(),
+                        ));
+                    }
+                    (&clause_args[0].value, &clause_args[1].value)
+                }
+                _ => {
+                    return Err(Error::ParseError(
+                        "cond clauses must be lists or arrays: (condition result) or [condition result]".to_string(),
+                    ));
+                }
+            };
+
+            // Check for 'else' clause (always true)
+            let is_else = if let Expression::Variable(v) = condition_expr {
+                v == "else" || v == "true"
+            } else {
+                false
+            };
+
+            if is_else {
+                return self.evaluate_expression(result_expr);
+            }
+
+            // Evaluate condition
+            let cond_val = self.evaluate_expression(condition_expr)?;
+            if cond_val.is_truthy() {
+                return self.evaluate_expression(result_expr);
+            }
+        }
+
+        // No condition matched
+        Ok(Value::Null)
+    }
+
     // Helper functions
 
     /// (not x) - Logical NOT
@@ -592,6 +669,78 @@ impl LispEvaluator {
             _ => Err(Error::TypeError {
                 expected: "array".to_string(),
                 got: val.type_name(),
+            }),
+        }
+    }
+
+    /// (first coll) - Get first element of collection
+    fn eval_first(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "first".to_string(),
+                reason: "Expected 1 argument (collection)".to_string(),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        match val {
+            Value::Array(ref arr) => arr.first().cloned().ok_or(Error::IndexOutOfBounds {
+                index: 0,
+                length: 0,
+            }),
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: val.type_name(),
+            }),
+        }
+    }
+
+    /// (rest coll) - Get all elements except first
+    fn eval_rest(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "rest".to_string(),
+                reason: "Expected 1 argument (collection)".to_string(),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        match val {
+            Value::Array(ref arr) => {
+                if arr.is_empty() {
+                    Ok(Value::Array(Arc::new(vec![])))
+                } else {
+                    Ok(Value::Array(Arc::new(arr[1..].to_vec())))
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: val.type_name(),
+            }),
+        }
+    }
+
+    /// (cons elem coll) - Prepend element to collection
+    fn eval_cons(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "cons".to_string(),
+                reason: "Expected 2 arguments (element, collection)".to_string(),
+            });
+        }
+
+        let elem = self.evaluate_expression(&args[0].value)?;
+        let coll = self.evaluate_expression(&args[1].value)?;
+
+        match coll {
+            Value::Array(ref arr) => {
+                let mut new_arr = vec![elem];
+                new_arr.extend(arr.iter().cloned());
+                Ok(Value::Array(Arc::new(new_arr)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: coll.type_name(),
             }),
         }
     }
