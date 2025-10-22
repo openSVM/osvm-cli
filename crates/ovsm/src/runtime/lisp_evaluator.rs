@@ -1,5 +1,8 @@
 use crate::error::{Error, Result};
-use crate::parser::{BinaryOp, Expression, Program, Statement, UnaryOp};
+use crate::parser::{
+    BinaryOp, Expression, Program, Statement, UnaryOp,
+    LoopData, IterationClause, AccumulationClause, ConditionClause, ExitClause,
+};
 use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
 use std::sync::Arc;
@@ -245,6 +248,8 @@ impl LispEvaluator {
                     closure,
                 })
             }
+
+            Expression::Loop(loop_data) => self.eval_loop(loop_data),
 
             _ => Err(Error::NotImplemented {
                 tool: format!("Expression type: {:?}", expr),
@@ -2838,6 +2843,245 @@ impl LispEvaluator {
         }
 
         Ok(())
+    }
+
+    // ========================================================================
+    // Loop Macro Evaluator (Common Lisp)
+    // ========================================================================
+
+    /// Evaluate loop expression
+    fn eval_loop(&mut self, loop_data: &LoopData) -> Result<Value> {
+        // 1. Create new scope for loop
+        self.env.enter_scope();
+
+        // 2. Initialize accumulator based on accumulation type
+        let mut accumulator = match &loop_data.accumulation {
+            Some(AccumulationClause::Sum(_)) => Value::Int(0),
+            Some(AccumulationClause::Collect(_)) => Value::Array(Arc::new(Vec::new())),
+            Some(AccumulationClause::Count(_)) => Value::Int(0),
+            None => Value::Null,
+        };
+
+        // 3. Generate iteration values
+        let iteration_values = self.generate_iteration_values(&loop_data.iteration)?;
+        let var_name = self.get_iteration_var_name(&loop_data.iteration);
+
+        // 4. Execute loop
+        for value in iteration_values {
+            // Bind iteration variable
+            self.env.define(var_name.clone(), value.clone());
+
+            // Check early exit conditions
+            if let Some(early_exit) = &loop_data.early_exit {
+                if self.should_exit_loop(early_exit)? {
+                    break;
+                }
+            }
+
+            // Check conditional execution
+            if !self.check_loop_condition(&loop_data.condition)? {
+                continue;
+            }
+
+            // Execute accumulation or body
+            if let Some(accum) = &loop_data.accumulation {
+                accumulator = self.perform_accumulation(accum, &var_name, accumulator)?;
+            } else {
+                // Execute body expressions
+                for expr in &loop_data.body {
+                    self.evaluate_expression(expr)?;
+                }
+            }
+        }
+
+        // 5. Exit scope and return accumulator
+        self.env.exit_scope();
+        Ok(accumulator)
+    }
+
+    /// Generate iteration values from iteration clause
+    fn generate_iteration_values(&mut self, iteration: &IterationClause) -> Result<Vec<Value>> {
+        match iteration {
+            IterationClause::Numeric { var: _, from, to, by, downfrom, below } => {
+                let from_val = self.evaluate_expression(from)?;
+                let to_val = self.evaluate_expression(to)?;
+                let by_val = if let Some(by_expr) = by {
+                    self.evaluate_expression(by_expr)?
+                } else {
+                    Value::Int(1)
+                };
+
+                let start = match from_val {
+                    Value::Int(n) => n,
+                    Value::Float(f) => f as i64,
+                    _ => return Err(Error::TypeError {
+                        expected: "number".to_string(),
+                        got: format!("{:?}", from_val),
+                    }),
+                };
+
+                let end = match to_val {
+                    Value::Int(n) => n,
+                    Value::Float(f) => f as i64,
+                    _ => return Err(Error::TypeError {
+                        expected: "number".to_string(),
+                        got: format!("{:?}", to_val),
+                    }),
+                };
+
+                let step = match by_val {
+                    Value::Int(n) => n,
+                    Value::Float(f) => f as i64,
+                    _ => return Err(Error::TypeError {
+                        expected: "number".to_string(),
+                        got: format!("{:?}", by_val),
+                    }),
+                };
+
+                if step == 0 {
+                    return Err(Error::InvalidArguments {
+                        tool: "loop".to_string(),
+                        reason: "Loop 'by' step cannot be zero".to_string(),
+                    });
+                }
+
+                let mut values = Vec::new();
+
+                if *downfrom {
+                    // Counting down
+                    let mut i = start;
+                    while if *below { i > end } else { i >= end } {
+                        values.push(Value::Int(i));
+                        i -= step;
+                    }
+                } else {
+                    // Counting up
+                    let mut i = start;
+                    while if *below { i < end } else { i <= end } {
+                        values.push(Value::Int(i));
+                        i += step;
+                    }
+                }
+
+                Ok(values)
+            }
+            IterationClause::Collection { collection, .. } => {
+                let coll = self.evaluate_expression(collection)?;
+                match coll {
+                    Value::Array(arr) => Ok(Arc::try_unwrap(arr).unwrap_or_else(|arc| (*arc).clone())),
+                    Value::String(s) => {
+                        // Iterate over characters
+                        Ok(s.chars().map(|c| Value::String(c.to_string())).collect())
+                    }
+                    _ => Err(Error::TypeError {
+                        expected: "array or string".to_string(),
+                        got: format!("{:?}", coll),
+                    }),
+                }
+            }
+        }
+    }
+
+    /// Get iteration variable name from iteration clause
+    fn get_iteration_var_name(&self, iteration: &IterationClause) -> String {
+        match iteration {
+            IterationClause::Numeric { var, .. } => var.clone(),
+            IterationClause::Collection { var, .. } => var.clone(),
+        }
+    }
+
+    /// Check if loop should exit early
+    fn should_exit_loop(&mut self, exit: &ExitClause) -> Result<bool> {
+        match exit {
+            ExitClause::While(test) => {
+                let val = self.evaluate_expression(test)?;
+                Ok(!val.is_truthy())
+            }
+            ExitClause::Until(test) => {
+                let val = self.evaluate_expression(test)?;
+                Ok(val.is_truthy())
+            }
+        }
+    }
+
+    /// Check loop condition (when/unless)
+    fn check_loop_condition(&mut self, condition: &Option<ConditionClause>) -> Result<bool> {
+        match condition {
+            Some(ConditionClause::When(test)) => {
+                let val = self.evaluate_expression(test)?;
+                Ok(val.is_truthy())
+            }
+            Some(ConditionClause::Unless(test)) => {
+                let val = self.evaluate_expression(test)?;
+                Ok(!val.is_truthy())
+            }
+            None => Ok(true),
+        }
+    }
+
+    /// Perform accumulation (sum/collect/count)
+    fn perform_accumulation(
+        &mut self,
+        accum: &AccumulationClause,
+        var_name: &str,
+        current: Value,
+    ) -> Result<Value> {
+        match accum {
+            AccumulationClause::Sum(expr) => {
+                let val = if let Some(e) = expr {
+                    self.evaluate_expression(e)?
+                } else {
+                    self.env.get(var_name)?
+                };
+
+                match (current, val) {
+                    (Value::Int(sum), Value::Int(n)) => Ok(Value::Int(sum + n)),
+                    (Value::Float(sum), Value::Float(n)) => Ok(Value::Float(sum + n)),
+                    (Value::Int(sum), Value::Float(n)) => Ok(Value::Float(sum as f64 + n)),
+                    (Value::Float(sum), Value::Int(n)) => Ok(Value::Float(sum + n as f64)),
+                    (curr, val) => Err(Error::TypeError {
+                        expected: "number".to_string(),
+                        got: format!("sum operands: {:?} and {:?}", curr, val),
+                    }),
+                }
+            }
+            AccumulationClause::Collect(expr) => {
+                let val = if let Some(e) = expr {
+                    self.evaluate_expression(e)?
+                } else {
+                    self.env.get(var_name)?
+                };
+
+                if let Value::Array(arr) = current {
+                    let mut vec = Arc::try_unwrap(arr).unwrap_or_else(|arc| (*arc).clone());
+                    vec.push(val);
+                    Ok(Value::Array(Arc::new(vec)))
+                } else {
+                    Err(Error::ParseError(
+                        "Internal error: collect accumulator should be array".to_string()
+                    ))
+                }
+            }
+            AccumulationClause::Count(expr) => {
+                let val = if let Some(e) = expr {
+                    self.evaluate_expression(e)?
+                } else {
+                    Value::Bool(true)
+                };
+
+                if val.is_truthy() {
+                    if let Value::Int(count) = current {
+                        Ok(Value::Int(count + 1))
+                    } else {
+                        Err(Error::ParseError(
+                            "Internal error: count accumulator should be int".to_string()
+                        ))
+                    }
+                } else {
+                    Ok(current)
+                }
+            }
+        }
     }
 }
 

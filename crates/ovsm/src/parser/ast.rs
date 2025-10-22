@@ -235,6 +235,10 @@ pub enum Expression {
     /// Unquote-splice expression ,@(...)
     /// Evaluate list and splice elements into quasiquote template
     UnquoteSplice(Box<Expression>),
+
+    /// Loop expression (Common Lisp loop macro)
+    /// Declarative iteration with accumulation
+    Loop(Box<LoopData>),
 }
 
 /// Binary operators
@@ -450,4 +454,79 @@ mod tests {
         let named_arg = Argument::named("x".to_string(), Expression::IntLiteral(42));
         assert_eq!(named_arg.name, Some("x".to_string()));
     }
+}
+
+// ============================================================================
+// Loop Macro Structures (Common Lisp)
+// ============================================================================
+
+/// Loop expression data (Common Lisp loop macro)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LoopData {
+    /// Iteration clause (required - defines what to iterate over)
+    pub iteration: IterationClause,
+    /// Optional accumulation clause (sum/collect/count)
+    pub accumulation: Option<AccumulationClause>,
+    /// Optional condition clause (when/unless)
+    pub condition: Option<ConditionClause>,
+    /// Optional early exit clause (while/until)
+    pub early_exit: Option<ExitClause>,
+    /// Body expressions (for 'do' clause)
+    pub body: Vec<Expression>,
+}
+
+/// Iteration clause for loop
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum IterationClause {
+    /// Numeric iteration: (loop for i from 1 to 10 ...)
+    Numeric {
+        /// Iteration variable name
+        var: String,
+        /// Starting value expression
+        from: Box<Expression>,
+        /// Ending value expression
+        to: Box<Expression>,
+        /// Optional step value (default 1)
+        by: Option<Box<Expression>>,
+        /// True if using 'downfrom' instead of 'from'
+        downfrom: bool,
+        /// True if using 'below' instead of 'to' (exclusive upper bound)
+        below: bool,
+    },
+    /// Collection iteration: (loop for item in collection ...)
+    Collection {
+        /// Iteration variable name
+        var: String,
+        /// Collection expression to iterate over
+        collection: Box<Expression>,
+    },
+}
+
+/// Accumulation clause for loop
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AccumulationClause {
+    /// Sum accumulation: (loop ... sum expr)
+    Sum(Option<Box<Expression>>),
+    /// Collect accumulation: (loop ... collect expr)
+    Collect(Option<Box<Expression>>),
+    /// Count accumulation: (loop ... count expr)
+    Count(Option<Box<Expression>>),
+}
+
+/// Condition clause for loop
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ConditionClause {
+    /// When condition: (loop ... when test ...)
+    When(Box<Expression>),
+    /// Unless condition: (loop ... unless test ...)
+    Unless(Box<Expression>),
+}
+
+/// Early exit clause for loop
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ExitClause {
+    /// While clause: continue while condition is true
+    While(Box<Expression>),
+    /// Until clause: continue until condition becomes true
+    Until(Box<Expression>),
 }
