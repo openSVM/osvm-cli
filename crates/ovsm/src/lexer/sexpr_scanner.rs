@@ -160,7 +160,8 @@ impl SExprScanner {
 
             // Identifiers and keywords
             // LISP: No $variables - just regular identifiers like 'define', 'set!', 'if', etc.
-            c if c.is_alphabetic() || c == '_' || c == '?' => {
+            // Allow & for &rest, &optional, etc.
+            c if c.is_alphabetic() || c == '_' || c == '?' || c == '&' => {
                 self.scan_identifier_or_keyword()?;
             }
 
@@ -253,7 +254,7 @@ impl SExprScanner {
     }
 
     fn scan_identifier_or_keyword(&mut self) -> Result<()> {
-        while self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '-' || self.peek() == '?' || self.peek() == '!' {
+        while self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '-' || self.peek() == '?' || self.peek() == '!' || self.peek() == '&' {
             self.advance();
         }
 

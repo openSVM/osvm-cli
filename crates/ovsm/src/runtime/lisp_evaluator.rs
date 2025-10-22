@@ -308,21 +308,8 @@ impl LispEvaluator {
             _ => return Err(Error::ParseError("defun requires function name".to_string())),
         };
 
-        // Get parameters list
-        let params = match &args[1].value {
-            Expression::ArrayLiteral(param_exprs) => {
-                let mut param_names = Vec::new();
-                for param_expr in param_exprs {
-                    if let Expression::Variable(name) = param_expr {
-                        param_names.push(name.clone());
-                    } else {
-                        return Err(Error::ParseError("defun parameters must be identifiers".to_string()));
-                    }
-                }
-                param_names
-            }
-            _ => return Err(Error::ParseError("defun requires parameter list".to_string())),
-        };
+        // Get parameters list (supports &rest)
+        let params = self.parse_function_parameters(&args[1].value, "defun")?;
 
         // Create function value
         let func_value = Value::Function {
@@ -353,21 +340,8 @@ impl LispEvaluator {
             _ => return Err(Error::ParseError("defmacro requires macro name".to_string())),
         };
 
-        // Get parameters list
-        let params = match &args[1].value {
-            Expression::ArrayLiteral(param_exprs) => {
-                let mut param_names = Vec::new();
-                for param_expr in param_exprs {
-                    if let Expression::Variable(name) = param_expr {
-                        param_names.push(name.clone());
-                    } else {
-                        return Err(Error::ParseError("defmacro parameters must be identifiers".to_string()));
-                    }
-                }
-                param_names
-            }
-            _ => return Err(Error::ParseError("defmacro requires parameter list".to_string())),
-        };
+        // Get parameters list (supports &rest)
+        let params = self.parse_function_parameters(&args[1].value, "defmacro")?;
 
         // Create macro value
         let macro_value = Value::Macro {
@@ -1985,21 +1959,9 @@ impl LispEvaluator {
                     evaluated_args.push(val);
                 }
 
-                // Check parameter count
-                if params.len() != evaluated_args.len() {
-                    return Err(Error::InvalidArguments {
-                        tool: name.to_string(),
-                        reason: format!("Function expects {} parameters, got {}", params.len(), evaluated_args.len()),
-                    });
-                }
-
-                // Create new scope for function execution
+                // Bind parameters (supports &rest)
                 self.env.enter_scope();
-
-                // Bind parameters to arguments
-                for (param, arg_val) in params.iter().zip(evaluated_args.iter()) {
-                    let _ = self.env.set(param, arg_val.clone());
-                }
+                self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                 // Evaluate function body
                 let result = self.evaluate_expression(&body);
@@ -2248,23 +2210,16 @@ impl LispEvaluator {
         body: &Expression,
         args: &[crate::parser::Argument],
     ) -> Result<Expression> {
-        // Check argument count
-        if args.len() != params.len() {
-            return Err(Error::InvalidArguments {
-                tool: "macro".to_string(),
-                reason: format!("Expected {} arguments, got {}", params.len(), args.len()),
-            });
-        }
-
-        // Create new environment for macro expansion
         // Save old environment
         let old_env = self.env.clone();
 
-        // Bind parameters to UNEVALUATED arguments (key difference from functions!)
-        for (param, arg) in params.iter().zip(args.iter()) {
-            // Convert expression to a quoted value for manipulation
-            self.env.define(param.clone(), self.expression_to_value(&arg.value)?);
+        // Bind parameters to UNEVALUATED arguments (supports &rest)
+        // Convert args to expression values first
+        let mut arg_values = Vec::new();
+        for arg in args {
+            arg_values.push(self.expression_to_value(&arg.value)?);
         }
+        self.bind_function_parameters(params, &arg_values, "macro")?;
 
         // Evaluate macro body (which generates code)
         let result_value = self.evaluate_expression(body)?;
@@ -2391,6 +2346,94 @@ impl LispEvaluator {
             // For other expressions, convert to values literally
             _ => self.expression_to_value(expr),
         }
+    }
+
+    /// Parse function/macro parameters with &rest support
+    /// Returns parameter list (last param may be "&rest" followed by varargs name)
+    fn parse_function_parameters(&self, params_expr: &Expression, context: &str) -> Result<Vec<String>> {
+        match params_expr {
+            Expression::ArrayLiteral(param_exprs) => {
+                let mut param_names = Vec::new();
+                let mut found_rest = false;
+
+                for (i, param_expr) in param_exprs.iter().enumerate() {
+                    if let Expression::Variable(name) = param_expr {
+                        // Check if this is &rest marker
+                        if name == "&rest" {
+                            if found_rest {
+                                return Err(Error::ParseError(format!("{}: only one &rest allowed", context)));
+                            }
+                            if i == param_exprs.len() - 1 {
+                                return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+                            }
+                            found_rest = true;
+                            param_names.push(name.clone());
+                        } else if found_rest && param_names.last() == Some(&"&rest".to_string()) {
+                            // This is the varargs parameter name after &rest
+                            param_names.push(name.clone());
+                        } else if found_rest {
+                            return Err(Error::ParseError(format!("{}: &rest must be last parameter", context)));
+                        } else {
+                            param_names.push(name.clone());
+                        }
+                    } else {
+                        return Err(Error::ParseError(format!("{}: parameters must be identifiers", context)));
+                    }
+                }
+
+                Ok(param_names)
+            }
+            _ => Err(Error::ParseError(format!("{}: requires parameter list", context))),
+        }
+    }
+
+    /// Bind function/macro parameters to arguments (supports &rest)
+    fn bind_function_parameters(&mut self, params: &[String], args: &[Value], context: &str) -> Result<()> {
+        // Check if we have &rest
+        let rest_pos = params.iter().position(|p| p == "&rest");
+
+        if let Some(rest_idx) = rest_pos {
+            // We have &rest - collect varargs
+            if rest_idx + 1 >= params.len() {
+                return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+            }
+
+            let required_count = rest_idx;
+            let rest_param_name = &params[rest_idx + 1];
+
+            // Check we have at least the required arguments
+            if args.len() < required_count {
+                return Err(Error::InvalidArguments {
+                    tool: context.to_string(),
+                    reason: format!("Expected at least {} arguments, got {}", required_count, args.len()),
+                });
+            }
+
+            // Bind required parameters
+            for i in 0..required_count {
+                self.env.define(params[i].clone(), args[i].clone());
+            }
+
+            // Collect remaining arguments into array for rest parameter
+            let rest_args: Vec<Value> = args[required_count..].to_vec();
+            self.env.define(rest_param_name.clone(), Value::array(rest_args));
+
+        } else {
+            // No &rest - exact parameter count required
+            if params.len() != args.len() {
+                return Err(Error::InvalidArguments {
+                    tool: context.to_string(),
+                    reason: format!("Expected {} arguments, got {}", params.len(), args.len()),
+                });
+            }
+
+            // Bind all parameters
+            for (param, arg) in params.iter().zip(args.iter()) {
+                self.env.define(param.clone(), arg.clone());
+            }
+        }
+
+        Ok(())
     }
 }
 
