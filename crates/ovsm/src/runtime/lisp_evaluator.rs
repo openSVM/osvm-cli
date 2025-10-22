@@ -102,6 +102,7 @@ impl LispEvaluator {
                     "let" => self.eval_let(args),
                     "let*" => self.eval_let_star(args),
                     "flet" => self.eval_flet(args),
+                    "labels" => self.eval_labels(args),
                     "case" => self.eval_case(args),
                     "typecase" => self.eval_typecase(args),
                     "while" => self.eval_while(args),
@@ -558,6 +559,92 @@ impl LispEvaluator {
                 closure: Arc::new(outer_env.clone()),
             };
             self.env.define(name, func_value);
+        }
+
+        // Execute body
+        let mut last_val = Value::Null;
+        for arg in &args[1..] {
+            last_val = self.evaluate_expression(&arg.value)?;
+        }
+
+        // Exit scope
+        self.env.exit_scope();
+
+        Ok(last_val)
+    }
+
+    /// (labels ((name (params) body)...) body) - Recursive local function definitions
+    /// Unlike flet, functions CAN call themselves and each other
+    fn eval_labels(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "labels".to_string(),
+                reason: "Expected at least 2 arguments: function definitions and body".to_string(),
+            });
+        }
+
+        // Parse function definitions (first argument should be array of function defs)
+        let func_defs = match &args[0].value {
+            Expression::ArrayLiteral(defs) => defs,
+            _ => {
+                return Err(Error::ParseError(
+                    "labels requires function definitions list: ((name (params) body)...)".to_string(),
+                ))
+            }
+        };
+
+        // Parse each function definition
+        let mut functions: Vec<(String, Vec<String>, Expression)> = Vec::new();
+
+        for func_def in func_defs {
+            match func_def {
+                Expression::ArrayLiteral(parts) if parts.len() == 3 => {
+                    // Extract name
+                    let name = match &parts[0] {
+                        Expression::Variable(n) => n.clone(),
+                        _ => return Err(Error::ParseError(
+                            "labels function definition requires name".to_string(),
+                        )),
+                    };
+
+                    // Extract parameters
+                    let params = self.parse_function_parameters(&parts[1], "labels")?;
+
+                    // Extract body (clone it)
+                    let body = parts[2].clone();
+
+                    functions.push((name, params, body));
+                }
+                _ => {
+                    return Err(Error::ParseError(
+                        "labels function definitions must be: (name (params) body)".to_string(),
+                    ))
+                }
+            }
+        }
+
+        // Create new scope for local functions
+        self.env.enter_scope();
+
+        // TWO-PASS BINDING for recursion:
+        // Pass 1: Bind function names with placeholder values
+        // This allows functions to see each other's names
+        for (name, _, _) in &functions {
+            self.env.define(name.clone(), Value::Null);
+        }
+
+        // Pass 2: Create actual function closures
+        // Now each function's closure includes all the function names
+        let labels_env = self.env.current_env_snapshot();
+
+        for (name, params, body) in functions {
+            let func_value = Value::Function {
+                params,
+                body: Arc::new(body),
+                closure: Arc::new(labels_env.clone()),
+            };
+            // Update the binding with the real function
+            self.env.set(&name, func_value)?;
         }
 
         // Execute body

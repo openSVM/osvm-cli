@@ -104,6 +104,7 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "let" => self.parse_let_expr(),
             TokenKind::Identifier(name) if name == "let*" => self.parse_let_star_expr(),
             TokenKind::Identifier(name) if name == "flet" => self.parse_flet_expr(),
+            TokenKind::Identifier(name) if name == "labels" => self.parse_labels_expr(),
             TokenKind::Identifier(name) if name == "case" => self.parse_case_expr(),
             TokenKind::Identifier(name) if name == "typecase" => self.parse_typecase_expr(),
             TokenKind::Identifier(name) if name == "const" => self.parse_const(),
@@ -342,6 +343,65 @@ impl SExprParser {
 
         Ok(Expression::ToolCall {
             name: "flet".to_string(),
+            args,
+        })
+    }
+
+    /// Parse (labels ((name (params) body)...) body) - Recursive local function definitions
+    fn parse_labels_expr(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'labels'
+
+        // Parse function definitions list (same as flet)
+        self.consume(TokenKind::LeftParen)?;
+        let mut func_defs = Vec::new();
+
+        while !self.check(&TokenKind::RightParen) {
+            // Each function definition: (name (params) body)
+            self.consume(TokenKind::LeftParen)?;
+
+            // Parse name
+            let name = if let TokenKind::Identifier(n) = &self.peek().kind {
+                n.clone()
+            } else {
+                return Err(Error::ParseError("Expected function name in labels".to_string()));
+            };
+            self.advance();
+
+            // Parse parameters
+            let params = self.parse_expression()?;
+
+            // Parse body
+            let body = self.parse_expression()?;
+
+            self.consume(TokenKind::RightParen)?;
+
+            // Create function definition as array: [name, params, body]
+            func_defs.push(Expression::ArrayLiteral(vec![
+                Expression::Variable(name),
+                params,
+                body,
+            ]));
+        }
+        self.consume(TokenKind::RightParen)?; // close function definitions list
+
+        // Parse body expressions
+        let mut body_exprs = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            body_exprs.push(self.parse_expression()?);
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        let mut args = vec![
+            Argument::positional(Expression::ArrayLiteral(func_defs))
+        ];
+
+        // Add body expressions as arguments
+        for body_expr in body_exprs {
+            args.push(Argument::positional(body_expr));
+        }
+
+        Ok(Expression::ToolCall {
+            name: "labels".to_string(),
             args,
         })
     }
