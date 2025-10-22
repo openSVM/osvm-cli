@@ -9,6 +9,8 @@ struct TestQuery {
     query: String,
     category: &'static str,
     difficulty: QueryDifficulty,
+    /// Keywords that could be used for response validation in the future
+    #[allow(dead_code)]
     expected_keywords: Vec<&'static str>,
 }
 

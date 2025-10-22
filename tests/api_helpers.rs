@@ -94,6 +94,8 @@ pub async fn call_rpc_proxy(
 }
 
 /// Helper to check if osvm.ai APIs are reachable
+/// Useful for conditional test execution when APIs might be down
+#[allow(dead_code)]
 pub async fn check_apis_available() -> bool {
     let client = reqwest::Client::new();
 

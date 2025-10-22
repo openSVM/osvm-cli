@@ -2,7 +2,7 @@
 //! This test simulates the complete flow: input → processing → plan generation
 
 use osvm::services::ai_service::{AiService, PlannedTool};
-use osvm::services::mcp_service::{McpService, McpTool};
+use osvm::services::mcp_service::McpTool;
 use osvm::utils::agent_chat_v2::state::AdvancedChatState;
 use osvm::utils::agent_chat_v2::types::ChatMessage;
 use std::collections::HashMap;
