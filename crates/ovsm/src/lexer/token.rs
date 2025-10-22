@@ -215,6 +215,8 @@ pub enum TokenKind {
     Backtick,
     /// At symbol for LISP splice (@)
     At,
+    /// Comma-At for LISP unquote-splice (,@)
+    CommaAt,
     /// Indent token (for Python-style syntax)
     Indent,
     /// Dedent token (for Python-style syntax)

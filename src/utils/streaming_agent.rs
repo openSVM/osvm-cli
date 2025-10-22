@@ -138,6 +138,10 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             let items: Vec<Value> = vals.iter().map(ovsm_value_to_json).collect();
             json!({"type": "multiple-values", "values": items})
         }
+        OvsmValue::Macro { params, .. } => {
+            // Convert macro to JSON representation
+            json!({"type": "macro", "params": params.len()})
+        }
     }
 }
 

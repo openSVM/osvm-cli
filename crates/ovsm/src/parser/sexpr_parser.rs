@@ -42,6 +42,9 @@ impl SExprParser {
         match self.peek().kind {
             TokenKind::LeftParen => self.parse_list(),
             TokenKind::Quote => self.parse_quoted(),
+            TokenKind::Backtick => self.parse_quasiquote(),
+            TokenKind::Comma => self.parse_unquote(),
+            TokenKind::CommaAt => self.parse_unquote_splice(),
             TokenKind::Integer(n) => {
                 self.advance();
                 Ok(Expression::IntLiteral(n))
@@ -681,6 +684,30 @@ impl SExprParser {
                 self.peek().line
             )))
         }
+    }
+
+    /// Parse a quasiquoted expression `(...)
+    /// Used in macros for code templates
+    fn parse_quasiquote(&mut self) -> Result<Expression> {
+        self.consume(TokenKind::Backtick)?;
+        let expr = self.parse_expression()?;
+        Ok(Expression::Quasiquote(Box::new(expr)))
+    }
+
+    /// Parse an unquote expression ,(...)
+    /// Evaluates expression inside quasiquote
+    fn parse_unquote(&mut self) -> Result<Expression> {
+        self.consume(TokenKind::Comma)?;
+        let expr = self.parse_expression()?;
+        Ok(Expression::Unquote(Box::new(expr)))
+    }
+
+    /// Parse an unquote-splice expression ,@(...)
+    /// Evaluates and splices list elements into quasiquote
+    fn parse_unquote_splice(&mut self) -> Result<Expression> {
+        self.consume(TokenKind::CommaAt)?;
+        let expr = self.parse_expression()?;
+        Ok(Expression::UnquoteSplice(Box::new(expr)))
     }
 }
 
