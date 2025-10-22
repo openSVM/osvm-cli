@@ -301,9 +301,11 @@ mod tests {
 
     #[test]
     fn test_keyword_detection() {
-        assert_eq!(TokenKind::keyword("IF"), Some(TokenKind::If));
-        assert_eq!(TokenKind::keyword("WHILE"), Some(TokenKind::While));
-        assert_eq!(TokenKind::keyword("RETURN"), Some(TokenKind::Return));
+        // In LISP, there are no lexer-level keywords - everything is identifiers
+        // Keywords like 'if', 'define', 'while' are handled by the parser
+        assert_eq!(TokenKind::keyword("if"), None);
+        assert_eq!(TokenKind::keyword("define"), None);
+        assert_eq!(TokenKind::keyword("while"), None);
         assert_eq!(TokenKind::keyword("not_a_keyword"), None);
     }
 
