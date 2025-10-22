@@ -119,6 +119,10 @@ impl LispEvaluator {
                     "trim" => self.eval_trim(args),
                     "upper" => self.eval_upper(args),
                     "lower" => self.eval_lower(args),
+                    // Advanced math
+                    "sqrt" => self.eval_sqrt(args),
+                    "pow" => self.eval_pow(args),
+                    "abs" => self.eval_abs(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -1094,6 +1098,111 @@ impl LispEvaluator {
         };
 
         Ok(Value::String(string_val.to_lowercase()))
+    }
+
+    // =========================================================================
+    // ADVANCED MATH OPERATIONS
+    // =========================================================================
+
+    /// (sqrt x) - Square root of a number
+    fn eval_sqrt(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "sqrt".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => return Err(Error::TypeError {
+                expected: "number (int or float)".to_string(),
+                got: format!("{:?}", val),
+            }),
+        };
+
+        if num < 0.0 {
+            return Err(Error::InvalidArguments {
+                tool: "sqrt".to_string(),
+                reason: format!("Cannot take square root of negative number: {}", num),
+            })?;
+        }
+
+        Ok(Value::Float(num.sqrt()))
+    }
+
+    /// (pow base exponent) - Raise base to exponent power
+    fn eval_pow(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "pow".to_string(),
+                reason: format!("Expected 2 arguments (base, exponent), got {}", args.len()),
+            })?;
+        }
+
+        let base_val = self.evaluate_expression(&args[0].value)?;
+        let exp_val = self.evaluate_expression(&args[1].value)?;
+
+        let base = match base_val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => return Err(Error::TypeError {
+                expected: "number (int or float)".to_string(),
+                got: format!("{:?}", base_val),
+            }),
+        };
+
+        let exponent = match exp_val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => return Err(Error::TypeError {
+                expected: "number (int or float)".to_string(),
+                got: format!("{:?}", exp_val),
+            }),
+        };
+
+        let result = base.powf(exponent);
+
+        // Check for overflow/invalid results
+        if result.is_nan() {
+            return Err(Error::InvalidArguments {
+                tool: "pow".to_string(),
+                reason: format!("Result is not a number (base={}, exponent={})", base, exponent),
+            })?;
+        }
+
+        if result.is_infinite() {
+            return Err(Error::InvalidArguments {
+                tool: "pow".to_string(),
+                reason: format!("Result is infinite (base={}, exponent={})", base, exponent),
+            })?;
+        }
+
+        Ok(Value::Float(result))
+    }
+
+    /// (abs x) - Absolute value of a number
+    fn eval_abs(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "abs".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+
+        match val {
+            Value::Int(i) => Ok(Value::Int(i.abs())),
+            Value::Float(f) => Ok(Value::Float(f.abs())),
+            _ => Err(Error::TypeError {
+                expected: "number (int or float)".to_string(),
+                got: format!("{:?}", val),
+            }),
+        }
     }
 
     /// (length x) - Get length of collection
