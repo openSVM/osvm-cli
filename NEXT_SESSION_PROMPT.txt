@@ -1,3 +1,7 @@
+NEXT SESSION: Just say "Read NEXT_SESSION_PROMPT.txt and implement what it says"
+
+---
+
 Implement &optional and &key parameters for OVSM functions following the incremental approach (Option A).
 
 **Context:**
