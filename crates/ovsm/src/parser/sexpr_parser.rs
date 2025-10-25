@@ -606,19 +606,68 @@ impl SExprParser {
     }
 
     /// Parse (lambda (params...) body)
+    /// Supports: (lambda (x y) ...), (lambda (x &optional y) ...), (lambda (&key x y) ...)
     fn parse_lambda(&mut self) -> Result<Expression> {
         self.advance(); // consume 'lambda'
 
-        // Parse parameters
+        // Parse parameters - can be simple identifiers, &optional, &key, or (name default) forms
         self.consume(TokenKind::LeftParen)?;
         let mut params = Vec::new();
 
         while !self.check(&TokenKind::RightParen) {
             if let TokenKind::Identifier(name) = &self.peek().kind {
-                params.push(name.clone());
-                self.advance();
+                // Handle &optional, &rest, &key markers
+                if name == "&optional" || name == "&rest" || name == "&key" {
+                    params.push(name.clone());
+                    self.advance();
+                } else {
+                    params.push(name.clone());
+                    self.advance();
+                }
+            } else if self.check(&TokenKind::LeftParen) {
+                // Handle (param-name default-value) form
+                self.advance(); // consume (
+
+                if let TokenKind::Identifier(param_name) = &self.peek().kind {
+                    params.push(param_name.clone());
+                    self.advance();
+
+                    // Parse default value and convert to string
+                    let default_str = match self.peek().kind.clone() {
+                        TokenKind::Integer(n) => {
+                            self.advance();
+                            n.to_string()
+                        }
+                        TokenKind::Float(f) => {
+                            self.advance();
+                            f.to_string()
+                        }
+                        TokenKind::String(s) => {
+                            self.advance();
+                            format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+                        }
+                        TokenKind::True => {
+                            self.advance();
+                            "true".to_string()
+                        }
+                        TokenKind::False => {
+                            self.advance();
+                            "false".to_string()
+                        }
+                        TokenKind::Null => {
+                            self.advance();
+                            "null".to_string()
+                        }
+                        _ => "null".to_string(), // Default for unsupported expressions
+                    };
+                    params.push(default_str);
+
+                    self.consume(TokenKind::RightParen)?;
+                } else {
+                    return Err(Error::ParseError("Expected parameter name in lambda optional/key param".to_string()));
+                }
             } else {
-                return Err(Error::ParseError("Expected identifier in lambda params".to_string()));
+                return Err(Error::ParseError("Expected identifier or (name default) in lambda params".to_string()));
             }
         }
         self.consume(TokenKind::RightParen)?;
@@ -628,6 +677,18 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         Ok(Expression::Lambda { params, body })
+    }
+
+    /// Convert expression to default value string for parameter storage
+    fn expr_to_default_string(&self, expr: &Expression) -> String {
+        match expr {
+            Expression::IntLiteral(n) => n.to_string(),
+            Expression::FloatLiteral(f) => f.to_string(),
+            Expression::StringLiteral(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+            Expression::BoolLiteral(b) => b.to_string(),
+            Expression::NullLiteral => "null".to_string(),
+            _ => "null".to_string(), // Fallback for complex expressions
+        }
     }
 
     /// Parse (do expr1 expr2 ... exprN) - returns last expression
