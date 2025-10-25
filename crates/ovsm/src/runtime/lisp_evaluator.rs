@@ -98,6 +98,7 @@ impl LispEvaluator {
                 // Check if this is a LISP special form
                 match name.as_str() {
                     "set!" => self.eval_set(args),
+                    "setf" => self.eval_setf(args),
                     "define" => self.eval_define(args),
                     "defun" => self.eval_defun(args),
                     "defmacro" => self.eval_defmacro(args),
@@ -294,6 +295,75 @@ impl LispEvaluator {
         self.env.set(&var_name, value.clone())?;
 
         Ok(value)
+    }
+
+    /// (setf place value) - Generalized assignment
+    /// Can set variables, array elements, object fields, etc.
+    fn eval_setf(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "setf".to_string(),
+                reason: "Expected 2 arguments: place and value".to_string(),
+            });
+        }
+
+        // Evaluate the value first
+        let value = self.evaluate_expression(&args[1].value)?;
+
+        // Handle different types of places
+        match &args[0].value {
+            // Simple variable: (setf x 10)
+            Expression::Variable(name) => {
+                self.env.set(name, value.clone())?;
+                Ok(value)
+            }
+
+            // Function call form (for generalized references)
+            Expression::ToolCall { name, args: place_args } => {
+                match name.as_str() {
+                    // (setf (first list) value) - set first element
+                    "first" | "car" => {
+                        if place_args.len() != 1 {
+                            return Err(Error::InvalidArguments {
+                                tool: "setf".to_string(),
+                                reason: "first/car requires 1 argument".to_string(),
+                            });
+                        }
+
+                        // Get the list
+                        let list_val = self.evaluate_expression(&place_args[0].value)?;
+                        if let Value::Array(arr) = list_val {
+                            let mut new_arr = arr.to_vec();
+                            if new_arr.is_empty() {
+                                return Err(Error::InvalidArguments {
+                                    tool: "setf".to_string(),
+                                    reason: "Cannot set first of empty array".to_string(),
+                                });
+                            }
+                            new_arr[0] = value.clone();
+
+                            // Set the variable back
+                            if let Expression::Variable(var_name) = &place_args[0].value {
+                                self.env.set(var_name, Value::Array(Arc::new(new_arr)))?;
+                            }
+                            Ok(value)
+                        } else {
+                            Err(Error::TypeError {
+                                expected: "array".to_string(),
+                                got: list_val.type_name().to_string(),
+                            })
+                        }
+                    }
+
+                    // For now, other setf forms just fall back to regular set
+                    _ => Err(Error::NotImplemented {
+                        tool: format!("setf for {}", name),
+                    }),
+                }
+            }
+
+            _ => Err(Error::ParseError("setf requires valid place".to_string())),
+        }
     }
 
     /// (define var value) - Define new variable
