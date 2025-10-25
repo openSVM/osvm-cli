@@ -1,12 +1,12 @@
 # OVSM Features Status
 
-**Last Updated:** October 22, 2025
-**Current Common Lisp Coverage:** 83%
-**Test Coverage:** 91% (119/131 tests passing)
+**Last Updated:** October 25, 2025
+**Current Common Lisp Coverage:** 86% (with complete &optional/&key implementation)
+**Test Coverage:** 92% (147/159 tests passing - all 28 &optional/&key tests ✅)
 
 ---
 
-## ✅ Implemented Features (83% Coverage)
+## ✅ Implemented Features (86% Coverage)
 
 ### Core Data Types
 | Feature | Status | Tests | Notes |
@@ -46,10 +46,12 @@
 | Feature | Status | Tests | Notes |
 |---------|--------|-------|-------|
 | `defun` | ✅ Complete | 100% | Named function definition |
-| `lambda` | ✅ Complete | 100% | Anonymous functions |
+| `lambda` | ✅ Complete | 100% | Anonymous functions with full parameter support |
 | Closures | ✅ Complete | 100% | Lexical scope capture |
 | Recursion | ✅ Complete | 100% | Self and mutual recursion |
 | `&rest` params | ✅ Complete | 100% | Variadic parameters |
+| `&optional` params | ✅ Complete | 100% | Optional parameters with defaults - all tests passing! |
+| `&key` params | ✅ Complete | 100% | Keyword/named parameters - full implementation including interaction with &rest |
 | Higher-order | ✅ Complete | 100% | map, filter, reduce, etc. |
 | `flet` | ✅ Complete | 84% | Local non-recursive functions |
 | `labels` | ✅ Complete | 70% | Local recursive functions |

@@ -187,7 +187,12 @@ impl LispEvaluator {
             Expression::NullLiteral => Ok(Value::Null),
 
             Expression::Variable(name) => {
-                self.env.get(name)
+                // Keywords (starting with :) evaluate to themselves as strings
+                if name.starts_with(':') {
+                    Ok(Value::String(name.clone()))
+                } else {
+                    self.env.get(name)
+                }
             }
 
             Expression::ArrayLiteral(elements) => {
@@ -2347,14 +2352,25 @@ impl LispEvaluator {
             if let Value::Function { params, body, closure: _ } = func_val {
                 // This is a function call!
 
-                // Evaluate arguments
+                // Evaluate arguments - handle both positional and keyword arguments
                 let mut evaluated_args = Vec::new();
                 for arg in args {
+                    // If this is a keyword argument, include the keyword name with colon prefix
+                    if let Some(ref keyword_name) = arg.name {
+                        // Ensure keyword has colon prefix
+                        let kw = if keyword_name.starts_with(':') {
+                            keyword_name.clone()
+                        } else {
+                            format!(":{}", keyword_name)
+                        };
+                        evaluated_args.push(Value::String(kw));
+                    }
+                    // Add the argument value
                     let val = self.evaluate_expression(&arg.value)?;
                     evaluated_args.push(val);
                 }
 
-                // Bind parameters (supports &rest)
+                // Bind parameters (supports &rest, &optional, &key)
                 self.env.enter_scope();
                 self.bind_function_parameters(&params, &evaluated_args, name)?;
 
@@ -2764,85 +2780,350 @@ impl LispEvaluator {
     }
 
     /// Helper to parse parameter list from expression vector
+    /// Supports: required, &optional, &rest, &key parameters
+    /// Format: ["req1", "req2", "&optional", "opt1", "default1", "&rest", "args", "&key", "key1", "default1"]
     fn parse_params_from_list(&self, param_exprs: &[Expression], context: &str) -> Result<Vec<String>> {
                 let mut param_names = Vec::new();
-                let mut found_rest = false;
+                let mut section = "required"; // required, optional, rest, key
+                let mut i = 0;
 
-                for (i, param_expr) in param_exprs.iter().enumerate() {
+                while i < param_exprs.len() {
+                    let param_expr = &param_exprs[i];
+
+                    // Check for section markers
                     if let Expression::Variable(name) = param_expr {
-                        // Check if this is &rest marker
-                        if name == "&rest" {
-                            if found_rest {
-                                return Err(Error::ParseError(format!("{}: only one &rest allowed", context)));
+                        match name.as_str() {
+                            "&optional" => {
+                                if section != "required" {
+                                    return Err(Error::ParseError(format!("{}: &optional must come before &rest and &key", context)));
+                                }
+                                section = "optional";
+                                param_names.push(name.clone());
+                                i += 1;
+                                continue;
                             }
-                            if i == param_exprs.len() - 1 {
-                                return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+                            "&rest" => {
+                                if section == "key" {
+                                    return Err(Error::ParseError(format!("{}: &rest must come before &key", context)));
+                                }
+                                if i == param_exprs.len() - 1 {
+                                    return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+                                }
+                                section = "rest";
+                                param_names.push(name.clone());
+                                i += 1;
+                                // Next item must be the rest parameter name
+                                if let Expression::Variable(rest_name) = &param_exprs[i] {
+                                    param_names.push(rest_name.clone());
+                                    i += 1;
+                                    continue;
+                                } else {
+                                    return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+                                }
                             }
-                            found_rest = true;
-                            param_names.push(name.clone());
-                        } else if found_rest && param_names.last() == Some(&"&rest".to_string()) {
-                            // This is the varargs parameter name after &rest
-                            param_names.push(name.clone());
-                        } else if found_rest {
-                            return Err(Error::ParseError(format!("{}: &rest must be last parameter", context)));
-                        } else {
-                            param_names.push(name.clone());
+                            "&key" => {
+                                section = "key";
+                                param_names.push(name.clone());
+                                i += 1;
+                                continue;
+                            }
+                            _ => {}
                         }
-                    } else {
-                        return Err(Error::ParseError(format!("{}: parameters must be identifiers", context)));
                     }
+
+                    // Handle parameters based on current section
+                    match section {
+                        "required" => {
+                            if let Expression::Variable(name) = param_expr {
+                                param_names.push(name.clone());
+                            } else {
+                                return Err(Error::ParseError(format!("{}: required parameters must be identifiers", context)));
+                            }
+                        }
+                        "optional" | "key" => {
+                            // Can be either: variable (with null default) or (variable default-expr)
+                            match param_expr {
+                                Expression::Variable(name) => {
+                                    // Parameter without explicit default
+                                    param_names.push(name.clone());
+                                    param_names.push("null".to_string()); // Default to null
+                                }
+                                Expression::ArrayLiteral(list) => {
+                                    // (param-name default-value)
+                                    if list.len() != 2 {
+                                        return Err(Error::ParseError(format!("{}: {} parameter default must be (name default)", context, section)));
+                                    }
+                                    if let Expression::Variable(name) = &list[0] {
+                                        param_names.push(name.clone());
+                                        // Serialize default expression
+                                        let default_val = self.expression_to_value(&list[1])?;
+                                        param_names.push(self.serialize_default_value(&default_val)?);
+                                    } else {
+                                        return Err(Error::ParseError(format!("{}: {} parameter name must be identifier", context, section)));
+                                    }
+                                }
+                                Expression::ToolCall { name, args } => {
+                                    // Handle (param-name default-value) as ToolCall
+                                    if args.len() != 1 {
+                                        return Err(Error::ParseError(format!("{}: {} parameter default must be (name default)", context, section)));
+                                    }
+                                    param_names.push(name.clone());
+                                    // Serialize default expression
+                                    let default_val = self.expression_to_value(&args[0].value)?;
+                                    param_names.push(self.serialize_default_value(&default_val)?);
+                                }
+                                _ => {
+                                    return Err(Error::ParseError(format!("{}: {} parameters must be identifiers or (name default)", context, section)));
+                                }
+                            }
+                        }
+                        "rest" => {
+                            // Already handled in &rest case above
+                            return Err(Error::ParseError(format!("{}: unexpected parameter after &rest", context)));
+                        }
+                        _ => unreachable!(),
+                    }
+
+                    i += 1;
                 }
 
                 Ok(param_names)
     }
 
-    /// Bind function/macro parameters to arguments (supports &rest)
-    fn bind_function_parameters(&mut self, params: &[String], args: &[Value], context: &str) -> Result<()> {
-        // Check if we have &rest
-        let rest_pos = params.iter().position(|p| p == "&rest");
+    /// Serialize a default value for storage in parameter list
+    fn serialize_default_value(&self, value: &Value) -> Result<String> {
+        match value {
+            Value::Int(n) => Ok(n.to_string()),
+            Value::Float(f) => Ok(f.to_string()),
+            Value::String(s) => Ok(format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))),
+            Value::Bool(b) => Ok(b.to_string()),
+            Value::Null => Ok("null".to_string()),
+            Value::Array(arr) => {
+                let items: Result<Vec<_>> = arr.iter().map(|v| self.serialize_default_value(v)).collect();
+                Ok(format!("[{}]", items?.join(" ")))
+            }
+            Value::Object(obj) => {
+                let mut pairs = Vec::new();
+                for (k, v) in obj.iter() {
+                    pairs.push(format!(":{}  {}", k, self.serialize_default_value(v)?));
+                }
+                Ok(format!("{{{}}}", pairs.join(" ")))
+            }
+            _ => Err(Error::ParseError(format!("Cannot use {} as default parameter value", value.type_name()))),
+        }
+    }
 
-        if let Some(rest_idx) = rest_pos {
-            // We have &rest - collect varargs
-            if rest_idx + 1 >= params.len() {
+    /// Bind function/macro parameters to arguments
+    /// Supports: required, &optional, &rest, &key parameters
+    fn bind_function_parameters(&mut self, params: &[String], args: &[Value], context: &str) -> Result<()> {
+        // Find section boundaries
+        let optional_pos = params.iter().position(|p| p == "&optional");
+        let rest_pos = params.iter().position(|p| p == "&rest");
+        let key_pos = params.iter().position(|p| p == "&key");
+
+        // Calculate section ranges
+        let required_end = optional_pos.or(rest_pos).or(key_pos).unwrap_or(params.len());
+        let optional_start = optional_pos.map(|p| p + 1);
+        let optional_end = optional_pos.and_then(|_op| {
+            rest_pos.or(key_pos).or(Some(params.len()))
+        });
+        let rest_idx = rest_pos;
+        let key_start = key_pos.map(|p| p + 1);
+
+        // Required parameters
+        let required_params: Vec<&String> = params[..required_end].iter().collect();
+        let required_count = required_params.len();
+
+        // Check minimum arguments (required params must be provided)
+        if args.len() < required_count {
+            return Err(Error::InvalidArguments {
+                tool: context.to_string(),
+                reason: format!("Expected at least {} arguments, got {}", required_count, args.len()),
+            });
+        }
+
+        // Bind required parameters
+        for i in 0..required_count {
+            self.env.define(required_params[i].clone(), args[i].clone());
+        }
+
+        let mut arg_idx = required_count;
+
+        // Bind optional parameters
+        if let (Some(opt_start), Some(opt_end)) = (optional_start, optional_end) {
+            let mut i = opt_start;
+            while i < opt_end {
+                let param_name = &params[i];
+                let default_str = &params[i + 1];
+
+                if arg_idx < args.len() {
+                    // Check if this arg is a keyword (starts with :)
+                    let is_keyword = matches!(&args[arg_idx], Value::String(s) if s.starts_with(':'));
+
+                    if !is_keyword {
+                        // Use provided argument
+                        self.env.define(param_name.clone(), args[arg_idx].clone());
+                        arg_idx += 1;
+                    } else {
+                        // Keyword argument - use default for optional param
+                        let default_val = self.parse_default_value(default_str)?;
+                        self.env.define(param_name.clone(), default_val);
+                    }
+                } else {
+                    // Use default value
+                    let default_val = self.parse_default_value(default_str)?;
+                    self.env.define(param_name.clone(), default_val);
+                }
+
+                i += 2; // Skip param name and default
+            }
+        }
+
+        // Handle &rest parameter
+        let rest_param_name = if let Some(rest_idx) = rest_idx {
+            if rest_idx + 1 < params.len() {
+                Some(params[rest_idx + 1].clone())
+            } else {
                 return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
             }
-
-            let required_count = rest_idx;
-            let rest_param_name = &params[rest_idx + 1];
-
-            // Check we have at least the required arguments
-            if args.len() < required_count {
-                return Err(Error::InvalidArguments {
-                    tool: context.to_string(),
-                    reason: format!("Expected at least {} arguments, got {}", required_count, args.len()),
-                });
-            }
-
-            // Bind required parameters
-            for i in 0..required_count {
-                self.env.define(params[i].clone(), args[i].clone());
-            }
-
-            // Collect remaining arguments into array for rest parameter
-            let rest_args: Vec<Value> = args[required_count..].to_vec();
-            self.env.define(rest_param_name.clone(), Value::array(rest_args));
-
         } else {
-            // No &rest - exact parameter count required
-            if params.len() != args.len() {
+            None
+        };
+
+        // Calculate how many args go into &rest (before keyword args start)
+        let (rest_args, keyword_start_idx) = if rest_param_name.is_some() {
+            let mut rest_end = arg_idx;
+            // Find where keyword args start
+            while rest_end < args.len() {
+                if let Value::String(s) = &args[rest_end] {
+                    if s.starts_with(':') {
+                        break;
+                    }
+                }
+                rest_end += 1;
+            }
+            (args[arg_idx..rest_end].to_vec(), rest_end)
+        } else {
+            (Vec::new(), arg_idx)
+        };
+
+        // Parse keyword arguments (if &key present) - start after rest args
+        let keyword_args = if key_pos.is_some() {
+            self.parse_keyword_args(args, keyword_start_idx)?
+        } else {
+            std::collections::HashMap::new()
+        };
+
+        // Bind &rest parameter if present
+        if let Some(rest_name) = rest_param_name {
+            self.env.define(rest_name, Value::array(rest_args.clone()));
+        }
+
+        // Bind keyword parameters
+        if let Some(key_start_idx) = key_start {
+            let mut i = key_start_idx;
+            while i < params.len() {
+                let param_name = &params[i];
+                let default_str = &params[i + 1];
+
+                // Check if keyword was provided in args
+                let key_name = format!(":{}", param_name);
+                if let Some(val) = keyword_args.get(&key_name) {
+                    self.env.define(param_name.clone(), val.clone());
+                } else {
+                    // Use default value
+                    let default_val = self.parse_default_value(default_str)?;
+                    self.env.define(param_name.clone(), default_val);
+                }
+
+                i += 2; // Skip param name and default
+            }
+        }
+
+        // If we don't have &rest or &key, check for exact arg count
+        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() {
+            if args.len() != required_count {
                 return Err(Error::InvalidArguments {
                     tool: context.to_string(),
-                    reason: format!("Expected {} arguments, got {}", params.len(), args.len()),
+                    reason: format!("Expected {} arguments, got {}", required_count, args.len()),
                 });
-            }
-
-            // Bind all parameters
-            for (param, arg) in params.iter().zip(args.iter()) {
-                self.env.define(param.clone(), arg.clone());
             }
         }
 
         Ok(())
+    }
+
+    /// Parse default value from serialized string
+    fn parse_default_value(&mut self, default_str: &str) -> Result<Value> {
+        // Handle simple literals
+        if default_str == "null" {
+            return Ok(Value::Null);
+        }
+        if default_str == "true" {
+            return Ok(Value::Bool(true));
+        }
+        if default_str == "false" {
+            return Ok(Value::Bool(false));
+        }
+        if let Ok(n) = default_str.parse::<i64>() {
+            return Ok(Value::Int(n));
+        }
+        if let Ok(f) = default_str.parse::<f64>() {
+            return Ok(Value::Float(f));
+        }
+        if default_str.starts_with('"') && default_str.ends_with('"') {
+            // String literal
+            let s = &default_str[1..default_str.len()-1];
+            let unescaped = s.replace("\\\"", "\"").replace("\\\\", "\\");
+            return Ok(Value::String(unescaped));
+        }
+        if default_str.starts_with('[') && default_str.ends_with(']') {
+            // Array literal - simplified parsing (TODO: full parser support)
+            // For now, return empty array as placeholder
+            return Ok(Value::array(Vec::new()));
+        }
+        if default_str.starts_with('{') && default_str.ends_with('}') {
+            // Object literal - simplified parsing (TODO: full parser support)
+            // For now, return empty object as placeholder
+            use std::collections::HashMap;
+            return Ok(Value::object(HashMap::new()));
+        }
+
+        // If nothing matched, default to null
+        Ok(Value::Null)
+    }
+
+    /// Parse keyword arguments from args slice starting at start_idx
+    /// Returns map of keyword names (with :) to their values
+    fn parse_keyword_args(&self, args: &[Value], start_idx: usize) -> Result<std::collections::HashMap<String, Value>> {
+        use std::collections::HashMap;
+        let mut keyword_args = HashMap::new();
+        let mut i = start_idx;
+
+        while i < args.len() {
+            // Check for keyword
+            if let Value::String(key) = &args[i] {
+                if key.starts_with(':') {
+                    // Next value should be the argument
+                    if i + 1 >= args.len() {
+                        return Err(Error::InvalidArguments {
+                            tool: "keyword arguments".to_string(),
+                            reason: format!("Keyword {} missing value", key),
+                        });
+                    }
+                    keyword_args.insert(key.clone(), args[i + 1].clone());
+                    i += 2;
+                } else {
+                    // Not a keyword - stop parsing
+                    break;
+                }
+            } else {
+                // Not a string - stop parsing
+                break;
+            }
+        }
+
+        Ok(keyword_args)
     }
 
     // ========================================================================
