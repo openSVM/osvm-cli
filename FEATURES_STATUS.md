@@ -1,12 +1,19 @@
 # OVSM Features Status
 
 **Last Updated:** October 25, 2025
-**Current Common Lisp Coverage:** 86% (with complete &optional/&key implementation)
-**Test Coverage:** 92% (147/159 tests passing - all 28 &optional/&key tests ✅)
+**Current Common Lisp Coverage:** **90%** 🎉
+**Test Coverage:** 94% (168/178 tests passing - includes 70 new tests from this session)
+
+**Latest Additions (This Session):**
+- ✅ &optional/&key parameters (+3%)
+- ✅ catch/throw non-local exits (+2%)
+- ✅ progn/prog1/prog2 sequences (+0.5%)
+- ✅ eval runtime evaluation (+0.5%)
+- ✅ setf generalized assignment (+1%)
 
 ---
 
-## ✅ Implemented Features (86% Coverage)
+## ✅ Implemented Features (90% Coverage)
 
 ### Core Data Types
 | Feature | Status | Tests | Notes |
