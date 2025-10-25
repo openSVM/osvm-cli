@@ -156,6 +156,7 @@ impl LispEvaluator {
                     // Macro system
                     "gensym" => self.eval_gensym(args),
                     "macroexpand" => self.eval_macroexpand(args),
+                    "eval" => self.eval_eval(args),
                     "length" => self.eval_length(args),
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
@@ -2638,6 +2639,45 @@ impl LispEvaluator {
                 // Not a macro call, return original
                 Ok(Value::String(format!("{:?}", args[0].value)))
             }
+        }
+    }
+
+    /// (eval expr) - Evaluate an expression at runtime
+    /// Evaluates the result of evaluating the argument
+    fn eval_eval(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "eval".to_string(),
+                reason: "Expected 1 argument: expression to evaluate".to_string(),
+            });
+        }
+
+        // First, evaluate the argument to get an expression
+        let value = self.evaluate_expression(&args[0].value)?;
+
+        // Convert the value back to an expression and evaluate it
+        // For now, we'll use a simple approach: parse strings
+        match value {
+            Value::String(s) => {
+                // Try to parse and evaluate the string as OVSM code
+                use crate::lexer::SExprScanner;
+                use crate::parser::SExprParser;
+                let mut scanner = SExprScanner::new(&s);
+                let tokens = scanner.scan_tokens()?;
+                let mut parser = SExprParser::new(tokens);
+                let program = parser.parse()?;
+
+                // Execute the parsed program
+                let mut result = Value::Null;
+                for stmt in &program.statements {
+                    if let crate::parser::Statement::Expression(expr) = stmt {
+                        result = self.evaluate_expression(expr)?;
+                    }
+                }
+                Ok(result)
+            }
+            // For other types, just return them as-is (already evaluated)
+            other => Ok(other),
         }
     }
 
