@@ -111,6 +111,9 @@ impl LispEvaluator {
                     "while" => self.eval_while(args),
                     "for" => self.eval_for(args),
                     "do" => self.eval_do(args),
+                    "progn" => self.eval_do(args), // progn is same as do
+                    "prog1" => self.eval_prog1(args),
+                    "prog2" => self.eval_prog2(args),
                     "when" => self.eval_when(args),
                     "unless" => self.eval_unless(args),
                     "cond" => self.eval_cond(args),
@@ -936,6 +939,45 @@ impl LispEvaluator {
             last_val = self.evaluate_expression(&arg.value)?;
         }
         Ok(last_val)
+    }
+
+    /// (prog1 expr1 expr2 ...) - Evaluate all, return FIRST value
+    fn eval_prog1(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        // Evaluate first expression and save its value
+        let first_val = self.evaluate_expression(&args[0].value)?;
+
+        // Evaluate remaining expressions (for side effects)
+        for arg in &args[1..] {
+            self.evaluate_expression(&arg.value)?;
+        }
+
+        // Return the first value
+        Ok(first_val)
+    }
+
+    /// (prog2 expr1 expr2 expr3 ...) - Evaluate all, return SECOND value
+    fn eval_prog2(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Ok(Value::Null);
+        }
+
+        // Evaluate first expression (for side effects)
+        self.evaluate_expression(&args[0].value)?;
+
+        // Evaluate second expression and save its value
+        let second_val = self.evaluate_expression(&args[1].value)?;
+
+        // Evaluate remaining expressions (for side effects)
+        for arg in &args[2..] {
+            self.evaluate_expression(&arg.value)?;
+        }
+
+        // Return the second value
+        Ok(second_val)
     }
 
     /// (when cond body...) - Conditional execution
