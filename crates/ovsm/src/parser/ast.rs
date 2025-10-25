@@ -239,6 +239,24 @@ pub enum Expression {
     /// Loop expression (Common Lisp loop macro)
     /// Declarative iteration with accumulation
     Loop(Box<LoopData>),
+
+    /// Catch expression - establishes an exit point
+    /// (catch 'tag body...)
+    Catch {
+        /// Tag to identify this catch point (usually a symbol)
+        tag: Box<Expression>,
+        /// Body expressions to evaluate
+        body: Vec<Expression>,
+    },
+
+    /// Throw expression - non-local exit to matching catch
+    /// (throw 'tag value)
+    Throw {
+        /// Tag to identify target catch point
+        tag: Box<Expression>,
+        /// Value to return from the catch
+        value: Box<Expression>,
+    },
 }
 
 /// Binary operators

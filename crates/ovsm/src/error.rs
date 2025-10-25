@@ -242,6 +242,17 @@ pub enum Error {
     /// User-defined error
     #[error("User error: {0}")]
     UserError(String),
+
+    // Control flow (catch/throw)
+    /// Throw value for non-local exit (not really an error, used for control flow)
+    /// This is caught by matching catch blocks
+    #[error("Uncaught throw: tag {tag}")]
+    ThrowValue {
+        /// Tag to identify the target catch point
+        tag: String,
+        /// Value being thrown
+        value: Box<crate::runtime::Value>,
+    },
 }
 
 /// Error severity classification
