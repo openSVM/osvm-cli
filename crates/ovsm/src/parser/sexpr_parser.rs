@@ -120,6 +120,8 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "do" => self.parse_do(),
             TokenKind::Identifier(name) if name == "when" => self.parse_when(),
             TokenKind::Identifier(name) if name == "cond" => self.parse_cond(),
+            TokenKind::Identifier(name) if name == "catch" => self.parse_catch(),
+            TokenKind::Identifier(name) if name == "throw" => self.parse_throw(),
 
             // Special accessor forms
             TokenKind::Dot => self.parse_field_access(),
@@ -1265,6 +1267,40 @@ impl SExprParser {
             }
             _ => Err(Error::ParseError("Expected identifier".to_string())),
         }
+    }
+
+    /// Parse (catch tag body...) expression
+    /// Establishes a catch point for non-local exits
+    fn parse_catch(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'catch'
+
+        // Parse tag (usually a quoted symbol like 'done)
+        let tag = Box::new(self.parse_expression()?);
+
+        // Parse body expressions
+        let mut body = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            body.push(self.parse_expression()?);
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        Ok(Expression::Catch { tag, body })
+    }
+
+    /// Parse (throw tag value) expression
+    /// Performs non-local exit to matching catch
+    fn parse_throw(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'throw'
+
+        // Parse tag
+        let tag = Box::new(self.parse_expression()?);
+
+        // Parse value to return
+        let value = Box::new(self.parse_expression()?);
+
+        self.consume(TokenKind::RightParen)?;
+
+        Ok(Expression::Throw { tag, value })
     }
 }
 

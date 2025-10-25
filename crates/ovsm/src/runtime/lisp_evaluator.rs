@@ -256,6 +256,10 @@ impl LispEvaluator {
 
             Expression::Loop(loop_data) => self.eval_loop(loop_data),
 
+            Expression::Catch { tag, body } => self.eval_catch(tag, body),
+
+            Expression::Throw { tag, value } => self.eval_throw(tag, value),
+
             _ => Err(Error::NotImplemented {
                 tool: format!("Expression type: {:?}", expr),
             }),
@@ -3124,6 +3128,53 @@ impl LispEvaluator {
         }
 
         Ok(keyword_args)
+    }
+
+    // ========================================================================
+    // Catch/Throw - Non-Local Exits (Common Lisp)
+    // ========================================================================
+
+    /// Evaluate (catch tag body...) expression
+    /// Establishes an exit point for throw
+    fn eval_catch(&mut self, tag_expr: &Expression, body: &[Expression]) -> Result<Value> {
+        // Evaluate the tag (usually a quoted symbol)
+        let tag_value = self.evaluate_expression(tag_expr)?;
+        let tag_string = tag_value.to_string();
+
+        // Execute body expressions
+        let mut result = Value::Null;
+        for expr in body {
+            match self.evaluate_expression(expr) {
+                Ok(val) => result = val,
+                Err(Error::ThrowValue { tag, value }) => {
+                    // Check if this throw is for us
+                    if tag == tag_string {
+                        // Caught! Return the thrown value
+                        return Ok(*value);
+                    } else {
+                        // Not our tag, re-throw it
+                        return Err(Error::ThrowValue { tag, value });
+                    }
+                }
+                Err(e) => return Err(e), // Other errors propagate normally
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Evaluate (throw tag value) expression
+    /// Performs non-local exit to matching catch
+    fn eval_throw(&mut self, tag_expr: &Expression, value_expr: &Expression) -> Result<Value> {
+        // Evaluate tag and value
+        let tag_value = self.evaluate_expression(tag_expr)?;
+        let value = self.evaluate_expression(value_expr)?;
+
+        // Create throw error to unwind stack
+        Err(Error::ThrowValue {
+            tag: tag_value.to_string(),
+            value: Box::new(value),
+        })
     }
 
     // ========================================================================
