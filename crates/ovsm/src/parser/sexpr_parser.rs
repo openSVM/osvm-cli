@@ -134,6 +134,7 @@ impl SExprParser {
             | TokenKind::Slash
             | TokenKind::Percent
             | TokenKind::Eq
+            | TokenKind::Assign  // Handle `=` as comparison operator in LISP (same as ==)
             | TokenKind::NotEq
             | TokenKind::Lt
             | TokenKind::Gt
@@ -916,6 +917,7 @@ impl SExprParser {
             TokenKind::Slash => Ok(BinaryOp::Div),
             TokenKind::Percent => Ok(BinaryOp::Mod),
             TokenKind::Eq => Ok(BinaryOp::Eq),
+            TokenKind::Assign => Ok(BinaryOp::Eq), // In LISP, `=` is equality comparison (same as ==)
             TokenKind::NotEq => Ok(BinaryOp::NotEq),
             TokenKind::Lt => Ok(BinaryOp::Lt),
             TokenKind::Gt => Ok(BinaryOp::Gt),
