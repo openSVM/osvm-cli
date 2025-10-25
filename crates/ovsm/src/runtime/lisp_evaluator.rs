@@ -170,6 +170,7 @@ impl LispEvaluator {
                     "reduce" => self.eval_reduce(args),
                     "sort" => self.eval_sort(args),
                     "str" => self.eval_str(args),
+                    "format" => self.eval_format(args),
                     "slice" => self.eval_slice(args),
                     "keys" => self.eval_keys(args),
                     "get" => self.eval_get(args),
@@ -2393,6 +2394,110 @@ impl LispEvaluator {
         }
 
         Ok(Value::String(result))
+    }
+
+    /// (format destination control-string &rest args)
+    /// Common Lisp-style string formatting
+    /// Destination: nil = return string, t = print and return nil
+    /// Control directives: ~A (any), ~D (decimal), ~% (newline), ~~ (tilde)
+    fn eval_format(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "format".to_string(),
+                reason: "Expected at least 2 arguments: destination and control-string".to_string(),
+            });
+        }
+
+        // Evaluate destination (nil or t)
+        let dest = self.evaluate_expression(&args[0].value)?;
+
+        // Get control string
+        let control_val = self.evaluate_expression(&args[1].value)?;
+        let control_string = control_val.as_string()?;
+
+        // Evaluate remaining arguments for substitution
+        let mut format_args = Vec::new();
+        for arg in &args[2..] {
+            format_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Process control string
+        let mut result = String::new();
+        let mut chars = control_string.chars().peekable();
+        let mut arg_index = 0;
+
+        while let Some(ch) = chars.next() {
+            if ch == '~' {
+                // Process directive
+                if let Some(&next_ch) = chars.peek() {
+                    chars.next(); // Consume directive character
+                    match next_ch {
+                        'A' | 'a' => {
+                            // ~A - Aesthetic (any value)
+                            if arg_index < format_args.len() {
+                                result.push_str(&self.value_to_format_string(&format_args[arg_index]));
+                                arg_index += 1;
+                            }
+                        }
+                        'D' | 'd' => {
+                            // ~D - Decimal integer
+                            if arg_index < format_args.len() {
+                                if let Value::Int(n) = format_args[arg_index] {
+                                    result.push_str(&n.to_string());
+                                } else {
+                                    result.push_str(&self.value_to_format_string(&format_args[arg_index]));
+                                }
+                                arg_index += 1;
+                            }
+                        }
+                        '%' => {
+                            // ~% - Newline
+                            result.push('\n');
+                        }
+                        '~' => {
+                            // ~~ - Literal tilde
+                            result.push('~');
+                        }
+                        _ => {
+                            // Unknown directive, just include it
+                            result.push('~');
+                            result.push(next_ch);
+                        }
+                    }
+                } else {
+                    result.push('~');
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+
+        // Return based on destination
+        match dest {
+            Value::Null => Ok(Value::String(result)),
+            Value::Bool(true) => {
+                // Print and return nil
+                println!("{}", result);
+                Ok(Value::Null)
+            }
+            _ => Ok(Value::String(result)),
+        }
+    }
+
+    /// Helper to convert value to string for format
+    fn value_to_format_string(&self, val: &Value) -> String {
+        match val {
+            Value::String(s) => s.clone(),
+            Value::Int(n) => n.to_string(),
+            Value::Float(f) => f.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "null".to_string(),
+            Value::Array(arr) => {
+                let items: Vec<String> = arr.iter().map(|v| self.value_to_format_string(v)).collect();
+                format!("[{}]", items.join(", "))
+            }
+            _ => format!("{}", val),
+        }
     }
 
     /// (slice array start end) - Extract subarray from start to end (exclusive)

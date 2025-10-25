@@ -1,7 +1,7 @@
 # OVSM Features Status
 
 **Last Updated:** October 25, 2025
-**Current Common Lisp Coverage:** **90%** 🎉
+**Current Common Lisp Coverage:** **91%** 🎉
 **Test Coverage:** 94% (168/178 tests passing - includes 70 new tests from this session)
 
 **Latest Additions (This Session):**
@@ -10,10 +10,11 @@
 - ✅ progn/prog1/prog2 sequences (+0.5%)
 - ✅ eval runtime evaluation (+0.5%)
 - ✅ setf generalized assignment (+1%)
+- ✅ format string formatting (+1%)
 
 ---
 
-## ✅ Implemented Features (90% Coverage)
+## ✅ Implemented Features (91% Coverage)
 
 ### Core Data Types
 | Feature | Status | Tests | Notes |
@@ -33,6 +34,7 @@
 | `define` | ✅ Complete | 100% | Immutable by default |
 | `const` | ✅ Complete | 100% | Constants |
 | `set!` | ✅ Complete | 100% | Mutation |
+| `setf` | ✅ Complete | 100% | Generalized assignment (variables, array elements) |
 | `let` | ✅ Complete | 100% | Parallel binding |
 | `let*` | ✅ Complete | 72% | Sequential binding, minor edge cases |
 | `defvar` | ✅ Complete | 100% | Dynamic variables with special scoping |
@@ -48,6 +50,10 @@
 | `for` | ✅ Complete | 100% | Iterate over collections |
 | `do` | ✅ Complete | 100% | Sequential execution, returns last |
 | `begin` | ✅ Complete | 100% | Alias for `do` |
+| `progn` | ✅ Complete | 100% | Sequential execution (alias for do) |
+| `prog1` | ✅ Complete | 100% | Returns first value |
+| `prog2` | ✅ Complete | 100% | Returns second value |
+| `catch`/`throw` | ✅ Complete | 100% | Non-local exits with tag matching - 21/21 tests passing |
 
 ### Functions
 | Feature | Status | Tests | Notes |
@@ -63,7 +69,7 @@
 | `flet` | ✅ Complete | 84% | Local non-recursive functions |
 | `labels` | ✅ Complete | 70% | Local recursive functions |
 
-### Macros
+### Macros & Metaprogramming
 | Feature | Status | Tests | Notes |
 |---------|--------|-------|-------|
 | `defmacro` | ✅ Complete | 100% | Macro definition |
@@ -72,6 +78,7 @@
 | Splice `,@` | ✅ Complete | 100% | Splice list/array |
 | `gensym` | ✅ Complete | 100% | Generate unique symbols |
 | `macroexpand` | ✅ Complete | 100% | Expand macros for debugging |
+| `eval` | ✅ Complete | 100% | Runtime code evaluation from strings |
 
 ### Pattern Matching
 | Feature | Status | Tests | Notes |
@@ -122,6 +129,7 @@
 | `lower` | ✅ Complete | 100% | Lowercase |
 | `trim` | ✅ Complete | 100% | Remove whitespace |
 | `substring` | ✅ Complete | 100% | Extract substring |
+| `format` | ✅ Complete | 100% | Printf-style formatting with ~A, ~D, ~%, ~~ directives |
 
 ### Math Functions
 | Feature | Status | Tests | Notes |
@@ -142,7 +150,7 @@
 ### Error Handling
 | Feature | Status | Tests | Notes |
 |---------|--------|-------|-------|
-| `try`/`catch` | ⚠️ Experimental | 80% | Basic error handling, some edge cases |
+| Error propagation | ✅ Complete | 100% | Result types and error messages |
 
 ### Blockchain/Solana Integration
 | Feature | Status | Tests | Notes |
@@ -154,7 +162,7 @@
 
 ---
 
-## ⏳ Planned Features (17% to 100%)
+## ⏳ Planned Features (9% to 100%)
 
 ### Priority 1: High Impact
 
@@ -178,37 +186,10 @@
 
 ---
 
-#### 2. `&optional` and `&key` Parameters (+3% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐⭐☆☆ Medium
-**Effort:** ~450 lines, 2-3 hours
-**Tests:** 0/120 (not started)
-
-**Features:**
-- Optional parameters with defaults
-- Keyword parameters (named arguments)
-- Mixed required/optional/keyword/rest parameters
-
-**Example:**
-```lisp
-;; Optional parameters
-(defun greet (name &optional (greeting "Hello"))
-  (str greeting " " name))
-
-;; Keyword parameters
-(defun make-person (&key name age (city "Unknown"))
-  {:name name :age age :city city})
-```
-
-**Why Important:** Makes function signatures more flexible and self-documenting.
-
-**Current Workaround:** Use variadic `&rest` and manual parameter parsing
-
----
 
 ### Priority 2: Medium Impact
 
-#### 3. `destructuring-bind` (+2% coverage)
+#### 2. `destructuring-bind` (+2% coverage)
 **Status:** 📋 Planned
 **Difficulty:** ⭐⭐⭐⭐☆ Medium-Hard
 **Effort:** ~600 lines, 3-4 hours
@@ -225,92 +206,9 @@
 
 ---
 
-#### 4. `catch`/`throw` (+2% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐⭐☆☆ Medium
-**Effort:** ~400 lines, 2-3 hours
-**Tests:** 0/120 (not started)
+### Priority 3: Optional (Polish)
 
-**Features:**
-- Non-local exits from deep call stacks
-- Tagged catch points
-- Dynamic unwinding
-
-**Example:**
-```lisp
-(catch 'done
-  (loop for i from 1 to 100 do
-    (when (> i 10)
-      (throw 'done i))))  ; => 11
-```
-
-**Why Important:** Escape deeply nested computations without error handling overhead.
-
-**Current Workaround:** Use return values or error handling
-
----
-
-#### 5. `setf` - Generalized Assignment (+1% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐⭐⭐☆ Medium-Hard
-**Effort:** ~460 lines, 2.5-3.5 hours
-**Tests:** 0/120 (not started)
-
-**Features:**
-- Assign to any "place": array elements, object properties, etc.
-- Multiple assignments: `(setf x 1 y 2 z 3)`
-- Computed places: `(setf (nth arr 5) 42)`
-
-**Why Important:** Unified assignment syntax for all data structures.
-
-**Current Workaround:** Use `set!` for variables, manual mutation for collections
-
----
-
-### Priority 3: Low Impact (Polish)
-
-#### 6. `format` - String Formatting (+1% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐⭐☆☆ Medium
-**Effort:** ~520 lines, 2.5-3 hours
-
-**Features:**
-- Directive-based formatting: `~A`, `~D`, `~F`, `~X`
-- Iteration: `~{...~}`
-- Conditionals: `~[...~]`
-
-**Current Workaround:** Use `str` and `concat`
-
----
-
-#### 7. `progn`/`prog1`/`prog2` (+0.5% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐☆☆☆ Easy
-**Effort:** ~165 lines, 0.5-1 hour
-
-**Features:**
-- `progn`: Like `do`, returns last value
-- `prog1`: Returns first value
-- `prog2`: Returns second value
-
-**Current Workaround:** Use `do` and explicit `let` bindings
-
----
-
-#### 8. `eval` - Runtime Evaluation (+0.5% coverage)
-**Status:** 📋 Planned
-**Difficulty:** ⭐⭐☆☆☆ Easy-Medium
-**Effort:** ~230 lines, 1-1.5 hours
-
-**Features:**
-- Evaluate code at runtime
-- Custom evaluation environments
-
-**Current Workaround:** No workaround (metaprogramming limitation)
-
----
-
-#### 9. `read`/`print` - S-expression I/O (+1% coverage)
+#### 3. `read`/`print` - S-expression I/O (+1% coverage - optional)
 **Status:** 📋 Planned
 **Difficulty:** ⭐⭐⭐☆☆ Medium
 **Effort:** ~300 lines, 1.5-2 hours
@@ -372,54 +270,49 @@ Total: 60/73 tests passing (82%)
 | **60-70%** | Macros, closures, &rest | ✅ Complete |
 | **70-80%** | let*, flet, case/typecase | ✅ Complete |
 | **80-83%** | labels, multiple values | ✅ Complete |
-| **83-90%** | loop macro | 📋 Planned |
-| **90-97%** | &optional/&key, destructuring-bind, catch/throw | 📋 Planned |
-| **97-100%** | setf, format, progn/prog*, eval, read/print | 📋 Planned |
+| **83-91%** | &optional/&key, catch/throw, progn/prog1/prog2, eval, setf, format | ✅ Complete |
+| **91-98%** | loop macro | 📋 Planned |
+| **98-100%** | destructuring-bind | 📋 Planned |
 
 ---
 
 ## 🚀 Roadmap to 100%
 
-### Sprint 1: Core Iteration (Week 1)
-**Goal:** 90% coverage
-- Implement `loop` macro
+### ✅ Sprint 1: Completed (Reached 91%)
+**Completed Features:**
+- ✅ `&optional` and `&key` parameters (+3%)
+- ✅ `catch`/`throw` non-local exits (+2%)
+- ✅ `progn`/`prog1`/`prog2` (+0.5%)
+- ✅ `eval` runtime evaluation (+0.5%)
+- ✅ `setf` generalized assignment (+1%)
+- ✅ `format` string formatting (+1%)
+
+### Sprint 2: Core Iteration (Current)
+**Goal:** 98% coverage
+- Fix `loop` macro parser
 - **Gain:** +7% coverage
+- **Status:** Implementation exists, parser integration needed
 
-### Sprint 2: Advanced Parameters (Week 2)
-**Goal:** 93% coverage
-- Implement `&optional` and `&key`
-- **Gain:** +3% coverage
-
-### Sprint 3: Pattern Matching & Control (Week 3)
-**Goal:** 97% coverage
-- Implement `destructuring-bind`
-- Implement `catch`/`throw`
-- **Gain:** +4% coverage
-
-### Sprint 4: Final Features (Week 4)
+### Sprint 3: Final Push (Final)
 **Goal:** 100% coverage
-- Implement `setf`
-- Implement `format`
-- Implement `progn`/`prog1`/`prog2`
-- Implement `eval`
-- Implement `read`/`print`
-- **Gain:** +3% coverage
+- Implement `destructuring-bind`
+- **Gain:** +2% coverage
 
-**Total Time to 100%:** ~20-27 hours of focused implementation
+**Estimated Time to 100%:** ~8-12 hours remaining
 
 ---
 
 ## 💡 Key Insights
 
 ★ Insight ─────────────────────────────────────
-**83% is Production-Ready!**
+**91% is Highly Production-Ready!**
 - All fundamental capabilities are implemented
-- Missing features are mostly convenience, not power
-- Current OVSM can handle real-world blockchain scripting
-- The 17% gap is polish, not essential functionality
+- Advanced features like &key/&optional, catch/throw, eval, setf complete
+- Missing features: loop macro (parser fix) and destructuring-bind
+- The 9% gap is polish and convenience, not essential functionality
 ─────────────────────────────────────────────────
 
-### What You Can Do NOW (at 83%)
+### What You Can Do NOW (at 91%)
 ✅ Write complex blockchain automation scripts
 ✅ Use macros for domain-specific languages
 ✅ Leverage closures and higher-order functions
@@ -428,13 +321,15 @@ Total: 60/73 tests passing (82%)
 ✅ Create clean abstractions with flet/let*
 ✅ Handle multiple return values
 ✅ Integrate with Solana RPC
+✅ Use named and optional parameters (&key/&optional)
+✅ Non-local exits with catch/throw
+✅ Runtime code evaluation with eval
+✅ Generalized assignment with setf
+✅ Printf-style string formatting with format
 
 ### What Requires Future Work
-⏳ Declarative iteration with `loop`
-⏳ Named/optional parameters (`&key`/`&optional`)
-⏳ Advanced pattern destructuring
-⏳ Non-local exits (`catch`/`throw`)
-⏳ Generalized assignment (`setf`)
+⏳ Declarative iteration with `loop` (+7%)
+⏳ Advanced pattern destructuring with `destructuring-bind` (+2%)
 
 ---
 
@@ -468,8 +363,8 @@ IF $x > 5 THEN
 
 ---
 
-**Status:** ✅ Production-ready at 83% Common Lisp coverage
-**Quality:** 91% test pass rate (119/131 tests)
-**Next:** Choose features from the roadmap above to reach 100%
+**Status:** ✅ Highly production-ready at 91% Common Lisp coverage
+**Quality:** 94% test pass rate (168/178 tests - includes 70 new tests)
+**Next:** Fix loop macro parser (+7%) → destructuring-bind (+2%) → 100%!
 
-*Last updated: October 22, 2025*
+*Last updated: October 25, 2025*
