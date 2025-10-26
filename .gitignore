@@ -143,6 +143,15 @@ VALIDATION_*.md
 SYNTAX_FIX_*.md
 MANUAL_FIX_*.md
 
+# Documentation archive (historical docs, not needed in git)
+docs/archive/session-summaries/
+docs/archive/bug-reports/
+docs/archive/implementation-plans/
+docs/archive/test-reports/
+docs/archive/phase2/
+docs/archive/ui-ux/
+docs/archive/misc/
+
 # Temporary binaries
 osvm-local
 .aea/
