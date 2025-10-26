@@ -127,6 +127,42 @@ rm -f "$TMP_KEYPAIR"
 
 ---
 
+## 🚨 CRITICAL GIT SAFETY RULE - ALWAYS BACKUP BEFORE DESTRUCTIVE OPERATIONS 🚨
+
+**MANDATORY BACKUP REQUIREMENTS:**
+1. ⚠️ **ALWAYS** create a backup of `.git` directory BEFORE:
+   - `git filter-branch` operations
+   - `git filter-repo` operations
+   - Any history rewriting commands
+   - Force pushing with `--force` or `--force-with-lease`
+   - Running `git gc --prune` or `git reflog expire`
+
+2. **BACKUP PROCEDURE:**
+   ```bash
+   # REQUIRED: Create timestamped backup before ANY destructive git operation
+   tar czf ~/git-backup-$(date +%Y%m%d-%H%M%S).tar.gz .git
+   echo "✅ Backup created at ~/git-backup-*.tar.gz"
+
+   # Only then proceed with destructive operation
+   git filter-branch ... # or other destructive command
+   ```
+
+3. **VERIFICATION STEPS:**
+   - ✅ Confirm backup file exists and is non-empty
+   - ✅ Inform user about the backup location
+   - ✅ Warn user that operation will rewrite history
+   - ✅ Get explicit confirmation for force push operations
+
+**WHY:** Git history rewrites are IRREVERSIBLE. Without backups, mistakes can permanently destroy project history, lose commits, or corrupt the repository. Recovery without backups is often impossible.
+
+**RED FLAGS - STOP if you're about to:**
+- Run `rm -rf .git/refs/original/` without a backup
+- Use `--expire=now` without a backup
+- Force push without warning the user
+- Delete any `.git` subdirectories without backup
+
+---
+
 ## Development Commands
 
 ### Building
