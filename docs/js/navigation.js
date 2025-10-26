@@ -171,7 +171,24 @@ async function loadPageContent(filePath) {
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    return await response.text();
+
+    const content = await response.text();
+
+    // Check if it's a markdown file
+    if (filePath.endsWith('.md')) {
+        // Parse markdown to HTML using marked.js
+        const html = marked.parse(content);
+
+        // Wrap in styled container
+        return `
+            <div class="markdown-content">
+                ${html}
+            </div>
+        `;
+    }
+
+    // Return HTML as-is
+    return content;
 }
 
 /**
