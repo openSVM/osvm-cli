@@ -155,3 +155,9 @@ docs/archive/misc/
 # Temporary binaries
 osvm-local
 .aea/
+
+# Archive directories (keep local only)
+docs/archive/
+**/archive/
+archive/
+
