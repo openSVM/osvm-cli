@@ -116,6 +116,23 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
     // Initialize system status bar manager
     let mut status_bar_manager = SystemStatusBarManager::new();
 
+    // Check if raw mode is available (do this once at startup)
+    let raw_mode_available = if test_mode {
+        false // Test mode always uses line-buffered
+    } else {
+        super::input_handler::enable_raw_mode().is_ok()
+    };
+
+    if !raw_mode_available {
+        eprintln!("⚠️  Raw mode not available");
+        eprintln!("   Falling back to line-buffered input mode");
+        eprintln!("   (This can happen in non-interactive environments or Ghostty/some terminals)");
+        eprintln!();
+    } else {
+        // Disable it for now, will re-enable in input function
+        let _ = super::input_handler::disable_raw_mode();
+    }
+
     // Show initial setup - Claude Code style
     show_welcome_box();
 
@@ -195,7 +212,7 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
         show_enhanced_status_bar(&task_state);
 
         // Real-time input with suggestions - positioned immediately after status bar
-        let input = match get_enhanced_input_with_status(&suggestion_tx, &mut task_state, test_mode).await {
+        let input = match get_enhanced_input_with_status(&suggestion_tx, &mut task_state, test_mode || !raw_mode_available).await {
             Ok(input) => input,
             Err(e) => {
                 println!("{}✗ Input error: {}{}", Colors::RED, e, Colors::RESET);
@@ -397,12 +414,13 @@ async fn get_enhanced_input_with_status(
         .flush()
         .map_err(|e| anyhow!("Failed to flush stdout: {}", e))?;
 
-    // Enable raw mode for character-by-character input (unless in test mode)
+    // Enable raw mode for character-by-character input (unless in test/fallback mode)
     if test_mode {
-        // Test mode: Use line-buffered input for programmatic access
+        // Test mode or fallback mode: Use line-buffered input
         return read_line_buffered_input().await;
     }
 
+    // Enable raw mode (we already checked it's available at startup)
     super::input_handler::enable_raw_mode()?;
 
     loop {

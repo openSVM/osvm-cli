@@ -31,17 +31,42 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
     println!("Starting OSVM Advanced Agent Chat Interface...");
 
-    // Check if we're in a terminal environment - only fail if clearly no terminal support
+    // Enhanced terminal detection for better compatibility
     let term_var = std::env::var("TERM").unwrap_or_default();
+    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+    let colorterm = std::env::var("COLORTERM").unwrap_or_default();
+
+    // Detect terminal info
+    println!("Terminal Environment:");
+    println!("  TERM={}", if term_var.is_empty() { "(not set)" } else { &term_var });
+    if !term_program.is_empty() {
+        println!("  TERM_PROGRAM={}", term_program);
+    }
+    if !colorterm.is_empty() {
+        println!("  COLORTERM={}", colorterm);
+    }
+
+    // Check for incompatible terminals
     if term_var.is_empty() || term_var == "dumb" {
-        println!(
-            "No suitable terminal detected (TERM={}), falling back to demo mode",
-            term_var
-        );
+        println!("⚠️  No suitable terminal detected (TERM={})", term_var);
+        println!("   Falling back to demo mode");
         return run_advanced_demo_mode().await;
     }
 
-    println!("Terminal detected: {}", term_var);
+    // Check if terminal device is actually available
+    use std::fs::File;
+    let tty_check = File::open("/dev/tty");
+    if let Err(e) = tty_check {
+        println!("⚠️  Terminal device not accessible: {}", e);
+        println!("   This can happen in:");
+        println!("   - Non-interactive environments (CI/CD, containers)");
+        println!("   - When stdin/stdout are redirected");
+        println!("   - SSH sessions without proper TTY allocation");
+        println!("   Falling back to demo mode");
+        return run_advanced_demo_mode().await;
+    }
+
+    println!("✓ Terminal device accessible");
 
     // Initialize the state and MCP services (safe now that problematic servers are disabled)
     let state = AdvancedChatState::new()?;
@@ -134,12 +159,33 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
 /// Synchronous UI runner to avoid async runtime conflicts
 fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
+    println!("Initializing terminal UI backend...");
+
     // Create Cursive with panic protection - fallback to demo mode if no TTY
-    let mut siv = match std::panic::catch_unwind(|| Cursive::default()) {
-        Ok(siv) => siv,
+    let mut siv = match std::panic::catch_unwind(|| {
+        // Cursive::default() will automatically select the best backend
+        // For Linux/macOS: uses crossterm (cross-platform)
+        // This should work with: xterm, alacritty, kitty, ghostty, tmux, screen, etc.
+        Cursive::default()
+    }) {
+        Ok(siv) => {
+            println!("✓ Terminal backend initialized successfully");
+            siv
+        },
         Err(e) => {
-            eprintln!("Failed to initialize terminal UI: {:?}", e);
-            eprintln!("This usually means no interactive terminal is available.");
+            eprintln!("❌ Failed to initialize terminal UI: {:?}", e);
+            eprintln!();
+            eprintln!("Possible causes:");
+            eprintln!("  • Terminal emulator not fully compatible with crossterm");
+            eprintln!("  • Missing terminal capabilities");
+            eprintln!("  • Running in non-interactive environment");
+            eprintln!();
+            eprintln!("Troubleshooting:");
+            eprintln!("  1. Try running in a standard terminal (xterm, alacritty, kitty)");
+            eprintln!("  2. Check that TERM environment variable is set correctly");
+            eprintln!("  3. Ensure you're running in an interactive shell session");
+            eprintln!("  4. If using SSH, make sure to allocate a PTY (ssh -t)");
+            eprintln!();
             eprintln!("Falling back to demo mode...");
             return Err(anyhow::anyhow!("Terminal initialization failed"));
         }

@@ -145,3 +145,4 @@ MANUAL_FIX_*.md
 
 # Temporary binaries
 osvm-local
+.aea/
