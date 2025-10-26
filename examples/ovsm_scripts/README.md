@@ -74,103 +74,103 @@ OVSM uses S-expression (LISP) syntax with explicit parentheses:
   (1 "one")
   (2 "two")
   (otherwise "many"))
-
-Shows all arithmetic operators:
-
-```ovsm
-$a = 10
-$b = 3
-$result = $a + $b  // Addition
-$result = $a - $b  // Subtraction
-$result = $a * $b  // Multiplication
-$result = $a / $b  // Division
-$result = $a % $b  // Modulo
-$result = $a ** 2  // Exponentiation
-```
-
-### 04_conditionals.ovsm
-**Topics:** IF/THEN/ELSE statements
-
-Conditional logic with branching:
-
-```ovsm
-IF $balance > $threshold THEN
-    RETURN "Sufficient"
-ELSE
-    RETURN "Insufficient"
-```
-
-### 05_factorial.ovsm
-**Topics:** Combining loops and conditionals
-
-A more complex example calculating factorial:
-
-```ovsm
-$n = 5
-$result = 1
-
-IF $n < 0 THEN
-    RETURN "Error"
-ELSE
-    FOR $i IN [1..$n+1]:
-        $result = $result * $i
-    RETURN $result
 ```
 
 ## Key OVSM Language Features
 
+### Arithmetic Operations
+```lisp
+;; All arithmetic operators are variadic
+(+ 10 20)           ;; Addition → 30
+(- 100 30)          ;; Subtraction → 70
+(* 5 6)             ;; Multiplication → 30
+(/ 100 2)           ;; Division → 50
+(% 17 5)            ;; Modulo → 2
+```
+
+### Conditionals
+```lisp
+;; IF-THEN-ELSE (returns a value)
+(if (> balance threshold)
+    "Sufficient"
+    "Insufficient")
+```
+
+### Combining Loops and Conditionals
+```lisp
+;; Factorial calculation
+(define n 5)
+(define result 1)
+
+(if (< n 0)
+    "Error"
+    (do
+      (for (i (range 1 (+ n 1)))
+        (set! result (* result i)))
+      result))
+```
+
 ### Variables
-```ovsm
-$variable_name = "value"
-$number = 42
+```lisp
+;; Define immutable variables
+(define variable-name "value")
+(define number 42)
 ```
 
 ### Data Types
 - **Numbers:** Integer and floating-point
 - **Strings:** Text in double quotes
-- **Booleans:** `TRUE` and `FALSE`
-- **Arrays:** `[item1, item2, item3]`
-- **Objects:** `{"key": "value"}`
-- **NULL:** Absence of value
-- **Ranges:** `[start..end]` (end is exclusive)
+- **Booleans:** `true` and `false` (lowercase)
+- **Arrays:** `[item1 item2 item3]` or using square brackets
+- **Objects:** `{:key "value"}` with keyword syntax
+- **Null:** `null` (lowercase)
+- **Ranges:** `(range start end)` function (end is exclusive)
 
 ### Control Structures
-```ovsm
-// IF/THEN/ELSE
-IF condition THEN
-    // code
-ELSE
-    // code
+```lisp
+;; IF-THEN-ELSE
+(if condition
+    then-expr
+    else-expr)
 
-// FOR loop
-FOR $item IN collection:
-    // code
+;; FOR loop
+(for (item collection)
+  expr1
+  expr2)
 
-// WHILE loop
-WHILE condition:
-    // code
+;; WHILE loop
+(while condition
+  expr1
+  expr2)
 ```
 
 ### Operators
-- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
-- Comparison: `<`, `>`, `<=`, `>=`, `==`, `!=`
-- Logical: `AND`, `OR`, `NOT`
+- Arithmetic: `+`, `-`, `*`, `/`, `%` (variadic functions)
+- Comparison: `<`, `>`, `<=`, `>=`, `=`, `!=`
+- Logical: `and`, `or`, `not`
 
 ### Important Notes
 
 #### Range Behavior
 Ranges are **exclusive** of the end value:
-```ovsm
-[1..5]   // Creates: 1, 2, 3, 4 (NOT 5!)
-[1..6]   // Creates: 1, 2, 3, 4, 5
+```lisp
+(range 1 5)   ;; Creates: [1, 2, 3, 4] (NOT 5!)
+(range 1 6)   ;; Creates: [1, 2, 3, 4, 5]
 ```
 
-#### Indentation
-OVSM uses indentation for block structure (similar to Python):
-```ovsm
-FOR $i IN [1..5]:
-    $sum = $sum + $i   // Indented = inside loop
-RETURN $sum            // Not indented = after loop
+#### S-Expression Structure
+OVSM uses explicit parentheses for block structure (LISP syntax):
+```lisp
+;; Clear block boundaries with parentheses
+(for (i (range 1 6))
+  (set! sum (+ sum i)))
+
+;; Sequential execution with do
+(do
+  (define sum 0)
+  (for (i (range 1 6))
+    (set! sum (+ sum i)))
+  sum)  ;; Returns final value
 ```
 
 ## OVSM Test Coverage
@@ -186,8 +186,8 @@ osvm ovsm --help
 # Interactive REPL
 osvm ovsm repl
 
-# Quick evaluation
-osvm ovsm eval '$x = 10; $y = 20; RETURN $x + $y'
+# Quick evaluation (LISP syntax)
+osvm ovsm eval '(define x 10) (define y 20) (+ x y)'
 
 # View examples catalog
 osvm ovsm examples

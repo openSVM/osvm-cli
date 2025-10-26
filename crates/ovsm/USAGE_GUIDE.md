@@ -2,20 +2,30 @@
 
 ## How to Execute OVSM Scripts
 
-OVSM is a library crate, so you can execute scripts in several ways:
+OVSM is a library crate implementing a LISP dialect for blockchain scripting. You can execute scripts in several ways:
 
-### 1. Using the Example Runner (Recommended)
+### 1. Using the OSVM CLI (Recommended)
 
-The easiest way to run OVSM scripts from files:
+The easiest way to run OVSM LISP scripts:
 
 ```bash
-cargo run --example run_file <script.ovsm>
+# Run a LISP script file
+osvm ovsm run script.ovsm
+
+# Evaluate inline LISP code
+osvm ovsm eval '(define x 42) (+ x 8)'
+
+# Check syntax without running
+osvm ovsm check script.ovsm
+
+# Interactive REPL
+osvm ovsm repl
 ```
 
 **Example:**
 ```bash
-cd crates/ovsm
-cargo run --example run_file examples/hello_world.ovsm
+cd /path/to/osvm-cli
+osvm ovsm run examples/ovsm_scripts/balance_check.ovsm
 ```
 
 ### 2. Programmatic Usage
@@ -23,29 +33,28 @@ cargo run --example run_file examples/hello_world.ovsm
 Use OVSM as a library in your Rust programs:
 
 ```rust
-use ovsm::{Evaluator, Parser, Scanner, Value};
+use ovsm::{LispEvaluator, SExprParser, SExprScanner, Value};
 
 fn execute_ovsm(code: &str) -> Result<Value, Box<dyn std::error::Error>> {
     // Tokenize
-    let mut scanner = Scanner::new(code);
+    let mut scanner = SExprScanner::new(code);
     let tokens = scanner.scan_tokens()?;
 
     // Parse
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse()?;
+    let mut parser = SExprParser::new(tokens);
+    let sexpr = parser.parse()?;
 
     // Execute
-    let mut evaluator = Evaluator::new();
-    Ok(evaluator.execute(&program)?)
+    let mut evaluator = LispEvaluator::new();
+    Ok(evaluator.eval(&sexpr)?)
 }
 
 fn main() {
     let code = r#"
-        $x = 10
-        IF $x > 5 THEN
-            RETURN "high"
-        ELSE
-            RETURN "low"
+        (define x 10)
+        (if (> x 5)
+            "high"
+            "low")
     "#;
 
     match execute_ovsm(code) {
@@ -61,7 +70,7 @@ Execute the test suite to see many more examples:
 
 ```bash
 cargo test --lib --bins           # Core tests
-cargo test --test test_comparisons # Comparison operator tests
+cargo test --test lisp_e2e_tests  # LISP integration tests
 cargo test -- --show-output        # Show test output
 ```
 
@@ -69,215 +78,160 @@ cargo test -- --show-output        # Show test output
 
 ## Example Scripts
 
-### Hello World (`examples/hello_world.ovsm`)
+### Hello World
 
-```ovsm
-// Simple Hello World example
-$message = "Hello from OVSM! 🚀"
-RETURN $message
+```lisp
+;; Simple Hello World example
+(define message "Hello from OVSM! 🚀")
+message
 ```
 
 **Output:** `String("Hello from OVSM! 🚀")`
 
 ---
 
-### Factorial (`examples/factorial.ovsm`)
+### Factorial
 
-```ovsm
-// Calculate factorial of a number
-$n = 5
-$result = 1
+```lisp
+;; Calculate factorial of a number
+(define n 5)
+(define result 1)
 
-IF $n < 0 THEN
-    RETURN "Error: Factorial undefined for negative numbers"
-ELSE
-    FOR $i IN [1..$n]:
-        $result = $result * $i
-    RETURN $result
+(if (< n 0)
+    "Error: Factorial undefined for negative numbers"
+    (do
+      (for (i (range 1 (+ n 1)))
+        (set! result (* result i)))
+      result))
 ```
 
 **Output:** `Int(120)` (5! = 120)
-**Note:** Currently returns 24 due to range being 1..5 (exclusive end)
 
 ---
 
-### Conditional Logic (`examples/conditional_logic.ovsm`)
+### Conditional Logic
 
-```ovsm
-// Complex conditional logic
-$score = 85
+```lisp
+;; Complex conditional logic
+(define score 85)
 
-IF $score >= 90 THEN
-    RETURN "Grade: A - Excellent!"
-ELSE
-    IF $score >= 80 THEN
-        RETURN "Grade: B - Good job!"
-    ELSE
-        IF $score >= 70 THEN
-            RETURN "Grade: C - Average"
-        ELSE
-            IF $score >= 60 THEN
-                RETURN "Grade: D - Needs improvement"
-            ELSE
-                RETURN "Grade: F - Failed"
+(if (>= score 90)
+    "Grade: A - Excellent!"
+    (if (>= score 80)
+        "Grade: B - Good job!"
+        (if (>= score 70)
+            "Grade: C - Average"
+            (if (>= score 60)
+                "Grade: D - Needs improvement"
+                "Grade: F - Failed"))))
 ```
 
 **Output:** `String("Grade: B - Good job!")`
 
 ---
 
-### Array Operations (`examples/array_operations.ovsm`)
+### Array Operations
 
-```ovsm
-// Array iteration and operations
-$numbers = [1, 2, 3, 4, 5]
-$sum = 0
-$count = 0
-$average = 0
+```lisp
+;; Array iteration and operations
+(define numbers [1 2 3 4 5])
+(define sum 0)
+(define count 0)
 
-FOR $num IN $numbers:
-    $sum = $sum + $num
-    $count = $count + 1
-    $average = $sum / $count
+(for (num numbers)
+  (set! sum (+ sum num))
+  (set! count (+ count 1)))
 
-RETURN $average
+(define average (/ sum count))
+average
 ```
 
 **Output:** `Int(3)` (average of 1,2,3,4,5)
 
 ---
 
-### Loop Control (`examples/loop_control.ovsm`)
-
-```ovsm
-// Loop control with BREAK and CONTINUE
-$sum = 0
-
-FOR $i IN [1..20]:
-    // Skip even numbers
-    IF $i % 2 == 0 THEN
-        CONTINUE
-    ELSE
-        // Stop at 15
-        IF $i > 15 THEN
-            BREAK
-        ELSE
-            $sum = $sum + $i
-
-RETURN $sum
-```
-
-**Output:** `Int(64)` (sum of odd numbers 1-15)
-
----
-
-## OVSM Language Features
+## OVSM LISP Language Features
 
 ### Supported Features ✅
 
 #### Control Flow
-- `IF/THEN/ELSE` - Conditional execution
-- `FOR ... IN` - Iterate over arrays, ranges, strings
-- `WHILE` - Loop while condition is true
-- `BREAK` - Exit loop early (including `BREAK IF condition`)
-- `CONTINUE` - Skip to next iteration (including `CONTINUE IF condition`)
-- `RETURN` - Return value and exit
+- `if` - Conditional execution (always returns a value)
+- `for` - Iterate over arrays, ranges, sequences
+- `while` - Loop while condition is true
+- `do` - Sequential execution (returns last value)
+- `define` - Define variables and functions
+- `set!` - Mutate existing variables
 
 #### Data Types
 - **Integers:** `42`, `-10`
 - **Floats:** `3.14`, `-0.5`
 - **Strings:** `"hello"`, `"world"`
-- **Booleans:** `TRUE`, `FALSE`
-- **Null:** `NULL`
-- **Arrays:** `[1, 2, 3]`, `["a", "b"]`
-- **Objects:** `{name: "Alice", age: 30}`
-- **Ranges:** `[1..10]` (exclusive end)
+- **Booleans:** `true`, `false` (lowercase)
+- **Null:** `null` (lowercase)
+- **Arrays:** `[1 2 3]`, `["a" "b"]`
+- **Objects:** `{:name "Alice" :age 30}` (keyword syntax)
+- **Ranges:** `(range 1 10)` (exclusive end)
 
 #### Operators
-- **Arithmetic:** `+`, `-`, `*`, `/`, `%`, `**` (power)
-- **Comparison:** `<`, `>`, `<=`, `>=`, `==`, `!=`
-- **Logical:** `AND`, `OR`, `NOT`
-- **Ternary:** `condition ? then : else`
-- **Membership:** `IN` (check if item in array/string)
+- **Arithmetic:** `+`, `-`, `*`, `/`, `%` (all variadic)
+- **Comparison:** `<`, `>`, `<=`, `>=`, `=`, `!=`
+- **Logical:** `and`, `or`, `not`
+- **Membership:** `in` (check if item in array/string)
 
 #### Variables
-- **Assignment:** `$variable = value`
-- **Constants:** `CONST NAME = value`
-- **Scoping:** Proper scope chain with shadowing
+- **Definition:** `(define variable value)`
+- **Mutation:** `(set! variable new-value)`
+- **Scoping:** Proper lexical scope with shadowing
 
-### Implemented in OVSM Executor (osvm-cli) ✅
-
-When used through `osvm` CLI, additional features are available:
-- `DECISION/BRANCH` - Multi-way conditional execution
-- `CALL` statements - MCP tool integration
-- Monitoring loops - WHILE loops for continuous operations
-- Advanced data processing with registered tools
-
-### Not Yet Implemented in Core Interpreter ❌
-
-- `TRY/CATCH` - Error handling (parsed but has bugs)
-- Lambda functions (`fn:` syntax)
-- `PARALLEL` execution
-- `WAIT_ALL`, `WAIT_ANY`, `RACE` strategies
-- `GUARD` statements
-- `MATCH` expressions
-- Built-in tools: `MAP`, `FILTER`, `REDUCE`, `SUM`, `MEAN` (available via MCP)
+#### Advanced Features (83% Common Lisp coverage)
+- **Macros:** `defmacro`, quasiquote, gensym
+- **Closures:** First-class functions with lexical scope
+- **Let bindings:** `let`, `let*`, `flet`, `labels`
+- **Pattern matching:** `case`, `typecase`
+- **Multiple values:** `values`, `multiple-value-bind`
+- **Dynamic variables:** `defvar`
+- **Variadic functions:** `&rest` parameter
 
 ---
 
 ## Important Syntax Notes
 
-### ⚠️ Block Termination Rules
+### S-Expression Structure
 
-OVSM lacks explicit block delimiters (braces) or significant indentation. Follow these rules:
+OVSM uses S-expressions (symbolic expressions) with explicit parentheses:
 
-#### ✅ DO: Use Explicit ELSE Branches
+#### ✅ DO: Use Explicit Parentheses
 
-```ovsm
-// GOOD - Clear block boundaries
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "big"
-        BREAK
-    ELSE
-        $result = "small"
-
-RETURN $result  # Unambiguous
+```lisp
+;; GOOD - Clear block boundaries
+(for (i (range 1 11))
+  (if (> i 5)
+      (do
+        (log :message "big")
+        i)
+      (log :message "small")))
 ```
 
-#### ✅ DO: Calculate Inside Loops
+#### ✅ DO: Use `do` for Sequential Execution
 
-```ovsm
-// GOOD - All work happens in loop
-$sum = 0
-FOR $i IN [1..10]:
-    $sum = $sum + $i
-    $average = $sum / $i  # Calculate here
-
-RETURN $average
+```lisp
+;; GOOD - Multiple expressions in sequence
+(define sum 0)
+(for (i (range 1 11))
+  (do
+    (set! sum (+ sum i))
+    (log :value sum)))  ;; Both expressions execute
 ```
 
-#### ❌ DON'T: Put Statements After Loops Without BREAK
+#### ✅ DO: Return Final Values
 
-```ovsm
-// BAD - Parser may consume RETURN into loop!
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "found"
-
-RETURN $result  # ← This might get consumed into FOR body!
-```
-
-#### ✅ FIX: Use BREAK to Signal End
-
-```ovsm
-// GOOD - BREAK signals end of loop
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "found"
-        BREAK  # ← Explicitly ends loop
-
-RETURN $result  # Now unambiguous
+```lisp
+;; GOOD - Last expression is the return value
+(do
+  (define sum 0)
+  (for (i (range 1 11))
+    (set! sum (+ sum i)))
+  sum)  ;; Returns the final sum
 ```
 
 ---
@@ -287,18 +241,20 @@ RETURN $result  # Now unambiguous
 ### Quick Test
 
 ```bash
-cargo run --example run_file your_script.ovsm
+osvm ovsm run your_script.ovsm
 ```
 
 ### With Debugging
 
-Add print statements (when implemented) or use RETURN at strategic points:
+Use `log` for debugging output:
 
-```ovsm
-$x = 10
-$y = 20
-$sum = $x + $y
-RETURN $sum  # Check intermediate value
+```lisp
+(define x 10)
+(define y 20)
+(log :message "X value:" :value x)
+(define sum (+ x y))
+(log :message "Sum:" :value sum)
+sum
 ```
 
 ### Running Unit Tests
@@ -307,8 +263,8 @@ RETURN $sum  # Check intermediate value
 # All tests
 cargo test
 
-# Specific test file
-cargo test --test test_comparisons
+# LISP-specific tests
+cargo test --test lisp_e2e_tests
 
 # Show output
 cargo test -- --show-output --nocapture
@@ -320,54 +276,44 @@ cargo test -- --show-output --nocapture
 
 ### Accumulator Pattern
 
-```ovsm
-$sum = 0
-FOR $i IN [1..10]:
-    $sum = $sum + $i
-RETURN $sum
+```lisp
+(define sum 0)
+(for (i (range 1 11))
+  (set! sum (+ sum i)))
+sum
 ```
 
 ### Find Pattern
 
-```ovsm
-$found = FALSE
-FOR $item IN $array:
-    IF $item == $target THEN
-        $found = TRUE
-        BREAK
-RETURN $found
+```lisp
+(define found false)
+(for (item array)
+  (if (= item target)
+      (set! found true)
+      null))
+found
 ```
 
 ### Filter Pattern
 
-```ovsm
-$evens = []
-FOR $num IN $numbers:
-    IF $num % 2 == 0 THEN
-        // Note: APPEND not implemented yet
-        // For now, just count or accumulate
-        $count = $count + 1
-RETURN $count
+```lisp
+(define evens [])
+(for (num numbers)
+  (if (= (% num 2) 0)
+      (set! evens (append evens [num]))
+      null))
+evens
 ```
 
 ### Nested Loops
 
-```ovsm
-$result = 0
-FOR $i IN [1..5]:
-    FOR $j IN [1..5]:
-        $result = $result + ($i * $j)
-RETURN $result
+```lisp
+(define result 0)
+(for (i (range 1 6))
+  (for (j (range 1 6))
+    (set! result (+ result (* i j)))))
+result
 ```
-
----
-
-## Performance Notes
-
-- **Fast parsing:** Simple recursive descent parser
-- **Fast execution:** Direct AST interpretation
-- **Memory efficient:** No unnecessary allocations
-- **Safe:** Full scope isolation, no undefined behavior
 
 ---
 
@@ -375,31 +321,23 @@ RETURN $result
 
 ### Common Runtime Errors
 
-#### 1. "Undefined variable: $name"
+#### 1. "Undefined variable: name"
 
-**Cause:** Using a variable before it's been assigned.
+**Cause:** Using a variable before it's been defined.
 
 **Example error:**
-```ovsm
-// BAD
-FOR $i IN [1..5]:
-    $sum = $sum + $i  // $sum not defined!
+```lisp
+;; BAD
+(for (i (range 1 6))
+  (set! sum (+ sum i)))  ;; sum not defined!
 ```
 
-**Solution:** Initialize variables before use.
-```ovsm
-// GOOD
-$sum = 0  // Initialize first
-FOR $i IN [1..5]:
-    $sum = $sum + $i
-```
-
-**Scope note:** Variables defined inside FOR loops are not accessible outside:
-```ovsm
-FOR $i IN [1..5]:
-    $temp = $i * 2
-
-RETURN $temp  // ERROR: $temp not defined in this scope
+**Solution:** Define variables before use.
+```lisp
+;; GOOD
+(define sum 0)  ;; Initialize first
+(for (i (range 1 6))
+  (set! sum (+ sum i)))
 ```
 
 ---
@@ -409,55 +347,40 @@ RETURN $temp  // ERROR: $temp not defined in this scope
 **Cause:** Dividing or taking modulo by zero.
 
 **Example error:**
-```ovsm
-$result = 10 / 0  // ERROR: Division by zero
-$remainder = 5 % 0  // ERROR: Division by zero
+```lisp
+(/ 10 0)  ;; ERROR: Division by zero
+(% 5 0)   ;; ERROR: Division by zero
 ```
 
-**Solution:** Always check denominators before division.
-```ovsm
-// GOOD: Guard clause
-GUARD $denominator != 0 ELSE
-    ERROR("Cannot divide by zero")
-
-$result = $numerator / $denominator
-
-// GOOD: Conditional check
-IF $denominator == 0 THEN
-    RETURN "Error: division by zero"
-ELSE
-    RETURN $numerator / $denominator
+**Solution:** Check denominators before division.
+```lisp
+;; GOOD: Conditional check
+(if (= denominator 0)
+    "Error: division by zero"
+    (/ numerator denominator))
 ```
 
 ---
 
-#### 3. "Index out of bounds: {index} for array of length {length}"
+#### 3. "Index out of bounds"
 
 **Cause:** Accessing array index beyond array size.
 
 **Example error:**
-```ovsm
-$arr = [1, 2, 3]
-$value = $arr[5]  // ERROR: Index 5 out of bounds (length 3)
+```lisp
+(define arr [1 2 3])
+(nth arr 5)  ;; ERROR: Index 5 out of bounds (length 3)
 ```
 
 **Solution:** Check array length before indexing.
-```ovsm
-// GOOD: Check length
-$arr = [1, 2, 3]
-$index = 5
+```lisp
+;; GOOD: Check length
+(define arr [1 2 3])
+(define index 5)
 
-IF $index < LEN($arr) THEN
-    $value = $arr[$index]
-ELSE
-    $value = null  // Default value
-```
-
-**Prevention:** Use LEN() tool to validate indices.
-```ovsm
-$length = LEN($arr)
-GUARD $index >= 0 AND $index < $length ELSE
-    ERROR("Index out of range")
+(if (< index (length arr))
+    (nth arr index)
+    null)  ;; Default value
 ```
 
 ---
@@ -467,179 +390,60 @@ GUARD $index >= 0 AND $index < $length ELSE
 **Cause:** Operation expecting one type but receiving another.
 
 **Example errors:**
-```ovsm
-$x = "hello" + 5  // ERROR: Cannot add string and number
-$y = IF "text" THEN 1 ELSE 0  // ERROR: String cannot be used as boolean
+```lisp
+(+ "hello" 5)  ;; ERROR: Cannot add string and number
 ```
 
 **Solution:** Ensure type compatibility.
-```ovsm
-// GOOD: Consistent types
-$x = "hello" + " world"  // String concatenation
-$y = 5 + 10  // Number addition
+```lisp
+;; GOOD: Consistent types
+(+ "hello" " world")  ;; String concatenation
+(+ 5 10)              ;; Number addition
 
-// GOOD: Explicit boolean conditions
-$text = "hello"
-IF $text != null AND $text != "" THEN
-    $result = "valid"
+;; GOOD: Explicit type checks
+(define text "hello")
+(if (and (!= text null) (!= text ""))
+    "valid"
+    "invalid")
 ```
-
-**Type checking pattern:**
-```ovsm
-// Validate number type
-TRY:
-    $test = $input + 0  // Will fail if not a number
-CATCH:
-    ERROR("Value must be a number")
-```
-
----
-
-#### 5. "Undefined tool: {name}"
-
-**Cause:** Calling a tool that doesn't exist or isn't implemented yet.
-
-**Example error:**
-```ovsm
-$result = MAP($array, $func)  // ERROR: MAP not implemented
-```
-
-**Solution:** Check available tools in documentation or use workarounds.
-```ovsm
-// Workaround: Manual mapping
-$result = []
-FOR $item IN $array:
-    $transformed = $item * 2
-    $result = $result + [$transformed]
-```
-
-**Available stdlib tools:**
-- Math: `ABS()`, `SQRT()`, `POW()`
-- Statistics: `SUM()`, `MIN()`, `MAX()`, `MEAN()`
-- Data: `SORT()`, `FILTER()`
-- Utilities: `LOG()`, `ERROR()`, `LEN()`
 
 ---
 
 ### Common Parse Errors
 
-#### 1. "Syntax error: Expected THEN after IF condition"
+#### 1. "Syntax error: Expected closing parenthesis"
 
-**Cause:** Missing THEN keyword in IF statement.
+**Cause:** Missing closing parenthesis.
 
 **Example error:**
-```ovsm
-// BAD
-IF $x > 5
-    RETURN "big"
+```lisp
+;; BAD
+(define x (+ 10 20
 ```
 
-**Solution:** Always include THEN.
-```ovsm
-// GOOD
-IF $x > 5 THEN
-    RETURN "big"
-ELSE
-    RETURN "small"
+**Solution:** Always balance parentheses.
+```lisp
+;; GOOD
+(define x (+ 10 20))
 ```
 
 ---
 
-#### 2. "Unexpected token: expected expression, got {token}"
+#### 2. "Unexpected token"
 
-**Cause:** Syntax error in expression or missing operator.
+**Cause:** Syntax error in expression.
 
 **Example errors:**
-```ovsm
-$x = + 5  // Missing left operand
-$y = [1, 2, 3  // Missing closing bracket
-$z = {name: "Alice", age  // Missing value
+```lisp
+(define x + 5)         ;; Missing left operand
+(define y [1 2 3)      ;; Missing closing bracket
 ```
 
 **Solution:** Check expression syntax.
-```ovsm
-// GOOD
-$x = 10 + 5
-$y = [1, 2, 3]
-$z = {name: "Alice", age: 30}
-```
-
----
-
-#### 3. "Expected ':' after FOR iterable" or "Expected ':' after WHILE condition"
-
-**Cause:** Missing colon after loop declaration.
-
-**Example error:**
-```ovsm
-// BAD
-FOR $i IN [1..10]
-    $sum = $sum + $i
-
-WHILE $x < 10
-    $x = $x + 1
-```
-
-**Solution:** Add colons.
-```ovsm
-// GOOD
-FOR $i IN [1..10]:
-    $sum = $sum + $i
-
-WHILE $x < 10:
-    $x = $x + 1
-```
-
----
-
-### Block Termination Issues
-
-#### Problem: Statements Consumed Into Loops
-
-**Symptom:** RETURN or other statements after loops don't execute as expected.
-
-**Example:**
-```ovsm
-// PROBLEMATIC
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "found"
-
-RETURN $result  // May be parsed as part of FOR body!
-```
-
-**Solution 1:** Use BREAK to explicitly end loops.
-```ovsm
-// GOOD
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "found"
-        BREAK  // Explicitly ends loop
-
-RETURN $result  // Now unambiguous
-```
-
-**Solution 2:** Use ELSE branches.
-```ovsm
-// GOOD
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        $result = "found"
-        BREAK
-    ELSE
-        CONTINUE  // Explicit control flow
-
-RETURN $result
-```
-
-**Solution 3:** Return inside loops.
-```ovsm
-// GOOD
-FOR $i IN [1..10]:
-    IF $i > 5 THEN
-        RETURN "found"  // Exits immediately
-
-RETURN "not found"
+```lisp
+;; GOOD
+(define x (+ 10 5))
+(define y [1 2 3])
 ```
 
 ---
@@ -648,131 +452,55 @@ RETURN "not found"
 
 #### Slow Execution
 
-**Cause:** Inefficient loop patterns or unnecessary calculations.
+**Cause:** Inefficient patterns or unnecessary calculations.
 
 **Bad pattern:**
-```ovsm
-// Calculates length every iteration
-FOR $i IN [0..LEN($array)]:
-    $item = $array[$i]
-    LOG($item)
+```lisp
+;; Calculates length every iteration
+(for (i (range 0 (length array)))
+  (log :value (nth array i)))
 ```
 
 **Good pattern:**
-```ovsm
-// Calculate once
-$length = LEN($array)
-FOR $i IN [0..$length]:
-    $item = $array[$i]
-    LOG($item)
+```lisp
+;; Calculate once
+(define len (length array))
+(for (i (range 0 len))
+  (log :value (nth array i)))
 
-// Or iterate directly
-FOR $item IN $array:
-    LOG($item)
+;; Or iterate directly
+(for (item array)
+  (log :value item))
 ```
 
 ---
 
 ### Debugging Tips
 
-#### 1. Use LOG() for debugging
+#### 1. Use `log` for debugging
 
-```ovsm
-$x = 10
-LOG("Value of x:", $x)
+```lisp
+(define x 10)
+(log :message "Value of x:" :value x)
 
-FOR $i IN [1..5]:
-    LOG("Iteration:", $i)
-    $sum = $sum + $i
-    LOG("Current sum:", $sum)
+(for (i (range 1 6))
+  (log :message "Iteration:" :value i)
+  (set! sum (+ sum i))
+  (log :message "Current sum:" :value sum))
 
-RETURN $sum
+sum
 ```
 
-#### 2. Return intermediate values
+#### 2. Test with simple cases first
 
-```ovsm
-$a = 10
-$b = 20
-$sum = $a + $b
-RETURN $sum  // Check intermediate result
+```lisp
+;; Test with small array first
+(define test-array [1 2 3])
+;; ... test logic ...
 
-// Continue with more logic...
+;; Then scale to larger arrays
+(define real-array [1 2 3 4 5 6 7 8 9 10])
 ```
-
-#### 3. Test with simple cases first
-
-```ovsm
-// Test with small array first
-$test_array = [1, 2, 3]
-// ... test logic ...
-
-// Then scale to larger arrays
-$real_array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-```
-
-#### 4. Validate assumptions
-
-```ovsm
-// Check assumptions before processing
-GUARD $input != null ELSE
-    ERROR("Input is null")
-
-GUARD LEN($array) > 0 ELSE
-    ERROR("Array is empty")
-
-// Safe to proceed
-```
-
----
-
-### Getting Help
-
-#### Check Documentation
-
-1. **API Docs:** [docs.rs/ovsm](https://docs.rs/ovsm) - Complete API reference
-2. **Common Patterns:** See `docs/COMMON_PATTERNS.md` for idiomatic code
-3. **Examples:** Check `examples/` directory for working scripts
-4. **Test Suite:** Read `tests/` for complex usage examples
-
-#### Verify Implementation Status
-
-Some features are parsed but not fully implemented. Check:
-- `TEST_RESULTS_SUMMARY.md` - Test coverage report
-- `CHANGELOG.md` - Recent changes and fixes
-- GitHub Issues - Known bugs and planned features
-
-#### Report Issues
-
-If you encounter a bug:
-1. Create minimal reproduction case
-2. Check if it's a known issue
-3. File bug report with example code
-4. Include error message and expected behavior
-
----
-
-### Quick Troubleshooting Checklist
-
-- [ ] All variables initialized before use?
-- [ ] No division by zero?
-- [ ] Array indices within bounds?
-- [ ] Type compatibility in operations?
-- [ ] Required keywords (THEN, ELSE, colons)?
-- [ ] Explicit BREAK/RETURN for loop termination?
-- [ ] Tool exists and is implemented?
-- [ ] Valid syntax (brackets, braces, parentheses)?
-- [ ] Checked examples for similar patterns?
-- [ ] Consulted API documentation?
-
----
-
-## Next Steps
-
-1. **Explore Examples:** Run all scripts in `examples/` directory
-2. **Read Tests:** Check `tests/` for more complex examples
-3. **Check Status:** See `TEST_RESULTS_SUMMARY.md` for current implementation status
-4. **Report Issues:** File bugs or feature requests on GitHub
 
 ---
 
@@ -780,19 +508,28 @@ If you encounter a bug:
 
 | Feature | Syntax | Example |
 |---------|--------|---------|
-| Variable | `$name = value` | `$x = 42` |
-| Constant | `CONST NAME = value` | `CONST PI = 3.14` |
-| If/Else | `IF cond THEN ... ELSE ...` | `IF $x > 5 THEN RETURN "big" ELSE RETURN "small"` |
-| For Loop | `FOR $var IN iterable:` | `FOR $i IN [1..10]:` |
-| While Loop | `WHILE condition:` | `WHILE $x < 10:` |
-| Break | `BREAK` or `BREAK IF cond` | `BREAK IF $found` |
-| Continue | `CONTINUE` or `CONTINUE IF cond` | `CONTINUE IF $skip` |
-| Return | `RETURN value` | `RETURN $result` |
-| Array | `[item1, item2, ...]` | `[1, 2, 3]` |
-| Object | `{key: value, ...}` | `{name: "Alice"}` |
-| Range | `[start..end]` | `[1..10]` |
-| Comment | `//` | `// This is a comment` |
+| Variable | `(define name value)` | `(define x 42)` |
+| Mutation | `(set! name value)` | `(set! x 50)` |
+| If/Else | `(if cond then else)` | `(if (> x 5) "big" "small")` |
+| For Loop | `(for (var seq) body)` | `(for (i (range 1 11)) ...)` |
+| While Loop | `(while cond body)` | `(while (< x 10) ...)` |
+| Sequential | `(do expr1 expr2 ...)` | `(do (define x 1) (+ x 2))` |
+| Array | `[item1 item2 ...]` | `[1 2 3]` |
+| Object | `{:key value ...}` | `{:name "Alice"}` |
+| Range | `(range start end)` | `(range 1 10)` |
+| Comment | `;; text` | `;; This is a comment` |
+| Function | `(lambda (args) body)` | `(lambda (x) (* x 2))` |
+| Macro | `(defmacro name ...)` | `(defmacro unless ...)` |
 
 ---
 
-**Happy coding with OVSM! 🚀**
+## Next Steps
+
+1. **Explore Examples:** Run all scripts in `examples/ovsm_scripts/` directory
+2. **Read Tests:** Check `tests/lisp_e2e_tests.rs` for comprehensive examples
+3. **Check Docs:** See `OVSM_LISP_SYNTAX_SPEC.md` for complete language specification
+4. **Check Status:** See `FEATURES_STATUS.md` for current 83% → 100% roadmap
+
+---
+
+**Happy coding with OVSM LISP! 🚀**

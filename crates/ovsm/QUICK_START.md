@@ -1,8 +1,8 @@
 # OVSM Interpreter - Quick Start Guide
 
-**Version**: 1.1.0
-**Status**: Production Ready ✅
-**Last Updated**: October 10, 2025
+**Version**: 1.0.3
+**Status**: Production Ready ✅ (356/356 tests passing)
+**Last Updated**: October 26, 2025
 
 ---
 
@@ -17,27 +17,27 @@ cargo build --package ovsm --release
 
 # Verify installation
 cargo test --package ovsm
-# Should see: 108 tests passing
+# Should see: 356/356 tests passing (100%)
 ```
 
 ### Your First OVSM Program
 
 ```rust
-use ovsm::{Evaluator, Parser, Scanner};
+use ovsm::{LispEvaluator, SExprParser, SExprScanner};
 
 fn main() {
     let code = r#"
-        $x = 10
-        $y = 20
-        RETURN $x + $y
+        (define x 10)
+        (define y 20)
+        (+ x y)
     "#;
 
-    let mut scanner = Scanner::new(code);
+    let mut scanner = SExprScanner::new(code);
     let tokens = scanner.scan_tokens().unwrap();
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse().unwrap();
-    let mut evaluator = Evaluator::new();
-    let result = evaluator.execute(&program).unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let sexpr = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.eval(&sexpr).unwrap();
 
     println!("Result: {:?}", result);  // Int(30)
 }
@@ -47,111 +47,103 @@ fn main() {
 
 ## 📚 Essential Features
 
-### 1. Variables & Constants
+### 1. Variables & Definitions
 
-```ovsm
-// Variables (mutable)
-$name = "Alice"
-$age = 30
-$balance = 100.50
+```lisp
+;; Variables (mutable with set!)
+(define name "Alice")
+(define age 30)
+(define balance 100.50)
 
-// Constants (immutable)
-CONST PI = 3.14159
-CONST MAX_USERS = 1000
+;; Update variables
+(set! balance 200.00)
 ```
 
 ### 2. Arithmetic & Comparisons
 
-```ovsm
-// Arithmetic
-$sum = 10 + 20
-$product = 5 * 6
-$power = 2 ** 8  // 256
+```lisp
+;; Arithmetic (variadic - multiple arguments)
+(+ 10 20)           ;; 30
+(+ 10 20 30 40)     ;; 100 (variadic!)
+(* 5 6)             ;; 30
+(/ 100 2)           ;; 50
 
-// Comparisons
-$is_adult = $age >= 18
-$is_equal = $x == $y
-$is_greater = $a > $b
+;; Comparisons
+(>= age 18)         ;; true if adult
+(= x y)             ;; Equality check
+(> a b)             ;; Greater than
 ```
 
 ### 3. Control Flow
 
-```ovsm
-// IF-THEN-ELSE
-IF $score >= 90 THEN
-    $grade = "A"
-ELSE
-    $grade = "B"
+```lisp
+;; IF-THEN-ELSE (returns a value)
+(if (>= score 90)
+    "A"
+    "B")
 
-// WHILE loop
-$i = 0
-WHILE $i < 10:
-    $sum = $sum + $i
-    $i = $i + 1
+;; WHILE loop
+(define i 0)
+(while (< i 10)
+  (do
+    (set! sum (+ sum i))
+    (set! i (+ i 1))))
 
-// FOR loop
-FOR $item IN [1, 2, 3, 4, 5]:
-    $total = $total + $item
+;; FOR loop
+(for (item [1 2 3 4 5])
+  (set! total (+ total item)))
 ```
 
-### 4. ✨ GUARD Clauses (NEW!)
+### 4. Collections
 
-```ovsm
-// Early exit pattern
-$amount = 150
-$balance = 100
+```lisp
+;; Arrays
+(define numbers [1 2 3 4 5])
+(define first (car numbers))  ;; Get first element
 
-GUARD $balance >= $amount ELSE
-    RETURN "Insufficient funds"
+;; Objects (keyword syntax)
+(define user {:name "Alice" :age 30})
+(define user-name (get user :name))
 
-$balance = $balance - $amount
-RETURN "Success"
+;; Ranges (exclusive end)
+(for (i (range 1 11))
+  (set! sum (+ sum i)))
 ```
 
-### 5. ✨ TRY-CATCH (NEW!)
+### 5. ✨ Advanced Features (83% Common Lisp)
 
-```ovsm
-// Error handling
-TRY:
-    $result = 10 / 0
-CATCH:
-    $result = 0
+```lisp
+;; Macros
+(defmacro unless (condition &rest body)
+  `(if (not ,condition)
+       (do ,@body)))
 
-RETURN $result  // Returns 0
+;; Closures
+(define (make-counter)
+  (define count 0)
+  (lambda ()
+    (set! count (+ count 1))
+    count))
+
+;; Let bindings
+(let ((x 10)
+      (y 20))
+  (+ x y))  ;; Returns 30
+
+;; Pattern matching
+(case value
+  (1 "one")
+  (2 "two")
+  (otherwise "many"))
 ```
 
-### 6. Collections
+### 6. Logging
 
-```ovsm
-// Arrays
-$numbers = [1, 2, 3, 4, 5]
-$first = $numbers[0]
-
-// Objects
-$user = {name: "Alice", age: 30}
-$name = $user.name
-
-// Ranges
-FOR $i IN [1..10]:
-    $sum = $sum + $i
-```
-
-### 7. Tools (Built-in Functions)
-
-```ovsm
-// Array operations
-$sum = SUM([1, 2, 3, 4, 5])        // 15
-$max = MAX([5, 2, 8, 1, 9])        // 9
-$sorted = SORT([5, 2, 8, 1, 9])    // [1, 2, 5, 8, 9]
-
-// Math operations
-$abs_value = ABS(-10)               // 10
-$sqrt = SQRT(16)                    // 4
-$rounded = ROUND(3.7)               // 4
-
-// String operations
-$joined = JOIN(["a", "b", "c"], ",")  // "a,b,c"
-$split = SPLIT("a,b,c", ",")          // ["a", "b", "c"]
+```lisp
+;; Log messages and values
+(log :message "Processing...")
+(log :value result)
+(log :message "Result:" :value result)
 ```
 
 ---
@@ -160,149 +152,48 @@ $split = SPLIT("a,b,c", ",")          // ["a", "b", "c"]
 
 ### Pattern 1: Safe Data Access
 
-```ovsm
-$data = [1, 2, 3]
-$index = 10
+```lisp
+(define data [1 2 3])
+(define index 5)
 
-TRY:
-    $value = $data[$index]
-CATCH:
-    $value = null
-
-RETURN $value  // Returns null (safe fallback)
+(if (< index (length data))
+    (nth data index)
+    null)  ;; Safe fallback
 ```
 
 ### Pattern 2: Input Validation
 
-```ovsm
-GUARD $email != null ELSE
-    RETURN "Email required"
-
-GUARD $age >= 18 ELSE
-    RETURN "Must be 18 or older"
-
-GUARD $terms_accepted ELSE
-    RETURN "Must accept terms"
-
-// All guards passed - proceed with registration
-RETURN "Registration successful"
+```lisp
+(if (= email null)
+    "Email required"
+    (if (< age 18)
+        "Must be 18 or older"
+        (if (not terms-accepted)
+            "Must accept terms"
+            "Registration successful")))
 ```
 
-### Pattern 3: Error Recovery
+### Pattern 3: Accumulator Pattern
 
-```ovsm
-// Try primary source
-TRY:
-    $data = FETCH_FROM_API()
-CATCH:
-    // Fallback to cache
-    TRY:
-        $data = READ_FROM_CACHE()
-    CATCH:
-        // Final fallback to defaults
-        $data = []
-
-RETURN $data  // Always has a value
+```lisp
+(define sum 0)
+(for (num [1 2 3 4 5])
+  (set! sum (+ sum num)))
+sum  ;; Returns 15
 ```
 
 ### Pattern 4: Configuration with Defaults
 
-```ovsm
-$config = {timeout: 30, retries: 3}
+```lisp
+(define config {:timeout 30 :retries 3})
 
-TRY:
-    $timeout = $config.timeout
-CATCH:
-    $timeout = 60  // Default
+(define timeout (if (null? (get config :timeout))
+                    60
+                    (get config :timeout)))
 
-TRY:
-    $retries = $config.retries
-CATCH:
-    $retries = 5  // Default
-
-RETURN {timeout: $timeout, retries: $retries}
-```
-
----
-
-## ⚠️ Important Limitations
-
-### Not Yet Implemented
-
-These features will return clear `NotImplemented` errors:
-
-```ovsm
-// ❌ Lambda functions
-$doubled = MAP($numbers, $x => $x * 2)  // Error!
-
-// ❌ PARALLEL execution
-PARALLEL {
-    $task1 = FETCH_DATA()
-    $task2 = PROCESS_DATA()
-}  // Error!
-
-// ❌ DECISION points
-DECISION "Choose strategy":
-    BRANCH "aggressive": $speed = "fast"
-    BRANCH "safe": $speed = "slow"
-// Error!
-```
-
-**Workarounds**:
-- Use FOR loops instead of MAP/FILTER
-- Use sequential code instead of PARALLEL
-- Use IF-THEN-ELSE instead of DECISION
-
----
-
-## 🐛 Troubleshooting
-
-### Common Errors
-
-**1. "Undefined variable"**
-```ovsm
-// ❌ Wrong
-RETURN $x  // Error if $x not defined
-
-// ✅ Correct
-$x = 10
-RETURN $x
-```
-
-**2. "Division by zero"**
-```ovsm
-// ❌ Wrong
-$result = 10 / 0  // Error!
-
-// ✅ Correct
-TRY:
-    $result = 10 / $divisor
-CATCH:
-    $result = 0
-```
-
-**3. "Index out of bounds"**
-```ovsm
-// ❌ Wrong
-$arr = [1, 2, 3]
-$val = $arr[10]  // Error!
-
-// ✅ Correct
-TRY:
-    $val = $arr[10]
-CATCH:
-    $val = null
-```
-
-**4. "Constant reassignment"**
-```ovsm
-// ❌ Wrong
-CONST MAX = 100
-MAX = 200  // Error!
-
-// ✅ Correct
-$max = 100  // Use variable if it needs to change
-$max = 200
+(define retries (if (null? (get config :retries))
+                    5
+                    (get config :retries)))
 ```
 
 ---
@@ -311,40 +202,63 @@ $max = 200
 
 Here's a real-world example combining multiple features:
 
-```ovsm
-// User authentication and validation
-$username = "alice"
-$password = "secret123"
-$age = 25
+```lisp
+;; User authentication and validation
+(define username "alice")
+(define password "secret123")
+(define age 25)
 
-// Validation with GUARD clauses
-GUARD $username != null ELSE
-    RETURN {success: false, error: "Username required"}
+;; Validation
+(if (= username null)
+    {:success false :error "Username required"}
+    (if (= password null)
+        {:success false :error "Password required"}
+        (if (< age 18)
+            {:success false :error "Must be 18+"}
+            (do
+              ;; All checks passed
+              (define user {:id 123 :name username})
+              (define profile {:name "Alice" :level 1})
+              {:success true :user user :profile profile}))))
+```
 
-GUARD $password != null ELSE
-    RETURN {success: false, error: "Password required"}
+---
 
-GUARD $age >= 18 ELSE
-    RETURN {success: false, error: "Must be 18+"}
+## 🐛 Troubleshooting
 
-// Try to authenticate
-TRY:
-    $user = AUTHENTICATE($username, $password)
-CATCH:
-    RETURN {success: false, error: "Invalid credentials"}
+### Common Errors
 
-// Try to load user data
-TRY:
-    $profile = LOAD_PROFILE($user.id)
-CATCH:
-    $profile = {name: "Unknown", level: 1}  // Defaults
+**1. "Undefined variable"**
+```lisp
+;; ❌ Wrong
+x  ;; Error if x not defined
 
-// Success!
-RETURN {
-    success: true,
-    user: $user,
-    profile: $profile
-}
+;; ✅ Correct
+(define x 10)
+x
+```
+
+**2. "Division by zero"**
+```lisp
+;; ❌ Wrong
+(/ 10 0)  ;; Error!
+
+;; ✅ Correct
+(if (= divisor 0)
+    0
+    (/ 10 divisor))
+```
+
+**3. "Index out of bounds"**
+```lisp
+;; ❌ Wrong
+(define arr [1 2 3])
+(nth arr 10)  ;; Error!
+
+;; ✅ Correct
+(if (< index (length arr))
+    (nth arr index)
+    null)
 ```
 
 ---
@@ -357,18 +271,18 @@ RETURN {
 #[test]
 fn test_my_ovsm_code() {
     let code = r#"
-        $x = 10
-        GUARD $x > 0 ELSE
-            RETURN -1
-        RETURN $x
+        (define x 10)
+        (if (> x 0)
+            x
+            -1)
     "#;
 
-    let mut scanner = Scanner::new(code);
+    let mut scanner = SExprScanner::new(code);
     let tokens = scanner.scan_tokens().unwrap();
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse().unwrap();
-    let mut evaluator = Evaluator::new();
-    let result = evaluator.execute(&program).unwrap();
+    let mut parser = SExprParser::new(tokens);
+    let sexpr = parser.parse().unwrap();
+    let mut evaluator = LispEvaluator::new();
+    let result = evaluator.eval(&sexpr).unwrap();
 
     assert_eq!(result, ovsm::Value::Int(10));
 }
@@ -378,109 +292,16 @@ fn test_my_ovsm_code() {
 
 ## 📚 Further Reading
 
-- **FIXES_SUMMARY.md** - Technical details of recent fixes
-- **THIRD_ASSESSMENT.md** - Quality assessment journey
+- **OVSM_LISP_SYNTAX_SPEC.md** - Complete language specification
+- **FEATURES_STATUS.md** - Current feature status (83% → 100%)
+- **FINAL_LISP_IMPLEMENTATION_REPORT.md** - Implementation details
 - **RELEASE_NOTES.md** - Complete changelog
-- **IMPLEMENTATION_STATUS.md** - Full feature list
+- **CHANGELOG.md** - Version history
 
-### Examples
+### Test Files
 
-- `examples/test_guard.rs` - GUARD clause examples
-- `examples/test_try_catch.rs` - TRY-CATCH examples
-- `examples/showcase_new_features.rs` - 7 real-world patterns
-- `examples/comprehensive_tools.rs` - All 34 tools demonstrated
-
----
-
-## 🎯 Best Practices
-
-### ✅ Do
-
-```ovsm
-// Use GUARD for preconditions
-GUARD $input != null ELSE
-    RETURN "Invalid input"
-
-// Use TRY-CATCH for error handling
-TRY:
-    $result = RISKY_OPERATION()
-CATCH:
-    $result = SAFE_DEFAULT()
-
-// Chain multiple GUARDs
-GUARD $authenticated ELSE RETURN "Not logged in"
-GUARD $authorized ELSE RETURN "Not authorized"
-```
-
-### ❌ Don't
-
-```ovsm
-// Don't nest IF statements when GUARD works better
-// ❌ Avoid this:
-IF $x > 0 THEN
-    IF $y > 0 THEN
-        // ... deep nesting ...
-
-// ✅ Do this instead:
-GUARD $x > 0 ELSE RETURN "Invalid X"
-GUARD $y > 0 ELSE RETURN "Invalid Y"
-// ... clear linear code ...
-
-// Don't ignore errors
-// ❌ Avoid this:
-$result = 10 / $divisor  // Might error!
-
-// ✅ Do this:
-TRY:
-    $result = 10 / $divisor
-CATCH:
-    $result = 0
-```
-
----
-
-## 🚀 Performance Tips
-
-1. **Use constants**: `CONST` is faster than `$variable` for immutable values
-2. **Avoid deep nesting**: Use GUARD clauses to keep code flat
-3. **Reuse collections**: Arrays/objects use Arc, so cloning is cheap
-4. **Use tools**: Built-in tools are optimized (SUM, MAX, etc.)
-
----
-
-## 💡 Pro Tips
-
-### Tip 1: Error Messages
-
-```ovsm
-GUARD $valid ELSE
-    RETURN "Descriptive error message here"
-```
-
-### Tip 2: Nested TRY-CATCH
-
-```ovsm
-TRY:
-    TRY:
-        $data = PRIMARY_SOURCE()
-    CATCH:
-        $data = BACKUP_SOURCE()
-    $result = PROCESS($data)
-CATCH:
-    $result = null
-```
-
-### Tip 3: Tool Chaining
-
-```ovsm
-$result = TOP_N(
-    SORT(
-        FILTER($data, ...),
-        ...
-    ),
-    5
-)
-```
+- `tests/lisp_e2e_tests.rs` - 297 integration tests
+- Unit tests embedded in source files - 59 unit tests
 
 ---
 
@@ -488,31 +309,130 @@ $result = TOP_N(
 
 | Feature | Syntax | Example |
 |---------|--------|---------|
-| Variable | `$name = value` | `$x = 10` |
-| Constant | `CONST NAME = value` | `CONST PI = 3.14` |
-| IF | `IF cond THEN ... ELSE ...` | `IF $x > 0 THEN $y = 1 ELSE $y = 0` |
-| WHILE | `WHILE cond: ...` | `WHILE $i < 10: $i = $i + 1` |
-| FOR | `FOR $var IN list: ...` | `FOR $x IN [1,2,3]: $sum = $sum + $x` |
-| GUARD | `GUARD cond ELSE stmt` | `GUARD $x > 0 ELSE RETURN -1` |
-| TRY | `TRY: ... CATCH: ...` | `TRY: $x = 1/0 CATCH: $x = 0` |
-| Array | `[1, 2, 3]` | `$arr = [1, 2, 3]` |
-| Object | `{k: v}` | `$obj = {name: "Alice"}` |
-| Range | `[start..end]` | `FOR $i IN [1..10]: ...` |
+| Variable | `(define name value)` | `(define x 10)` |
+| Mutation | `(set! name value)` | `(set! x 50)` |
+| If/Else | `(if cond then else)` | `(if (> x 0) "pos" "neg")` |
+| While | `(while cond body)` | `(while (< i 10) ...)` |
+| For | `(for (var seq) body)` | `(for (x [1 2 3]) ...)` |
+| Do | `(do expr1 expr2 ...)` | `(do (define x 1) (+ x 2))` |
+| Array | `[item1 item2 ...]` | `[1 2 3]` |
+| Object | `{:key value ...}` | `{:name "Alice"}` |
+| Range | `(range start end)` | `(range 1 10)` |
+| Comment | `;; text` | `;; This is a comment` |
+| Function | `(lambda (args) body)` | `(lambda (x) (* x 2))` |
+| Macro | `(defmacro name ...)` | `(defmacro unless ...)` |
+| Let | `(let ((x val)) body)` | `(let ((x 10)) (+ x 5))` |
+| Case | `(case val (pat res)...)` | `(case x (1 "one") (2 "two"))` |
+
+---
+
+## 🎯 Best Practices
+
+### ✅ Do
+
+```lisp
+;; Use let for local scope
+(let ((x 10)
+      (y 20))
+  (+ x y))
+
+;; Use do for sequential expressions
+(do
+  (log :message "Starting...")
+  (define result (+ 10 20))
+  (log :value result)
+  result)
+
+;; Use variadic operators
+(+ 1 2 3 4 5)  ;; Returns 15
+```
+
+### ❌ Don't
+
+```lisp
+;; Don't nest IF statements deeply
+;; ❌ Avoid this:
+(if x
+    (if y
+        (if z
+            ...)))
+
+;; ✅ Do this instead:
+(and x y z)  ;; Or use cond/case
+```
+
+---
+
+## 🚀 Performance Tips
+
+1. **Use variadic operators**: `(+ 1 2 3 4)` is faster than `(+ (+ (+ 1 2) 3) 4)`
+2. **Avoid repeated calculations**: Store results in variables
+3. **Use direct iteration**: `(for (x list) ...)` is faster than index-based
+4. **Leverage macros**: They expand at parse time, not runtime
+
+---
+
+## 💡 Pro Tips
+
+### Tip 1: Debugging with REPL
+
+```bash
+# Start interactive REPL
+osvm ovsm repl
+
+# Try expressions live
+> (define x 10)
+> (+ x 20)
+30
+> (for (i (range 1 6)) (log :value (* i i)))
+```
+
+### Tip 2: Macro Power
+
+```lisp
+;; Define custom control structures
+(defmacro when (condition &rest body)
+  `(if ,condition
+       (do ,@body)
+       null))
+
+(when (> x 10)
+  (log :message "Big!")
+  (set! count (+ count 1)))
+```
+
+### Tip 3: Closure Patterns
+
+```lisp
+;; Counter with closure
+(define make-counter
+  (lambda ()
+    (define count 0)
+    (lambda ()
+      (set! count (+ count 1))
+      count)))
+
+(define counter1 (make-counter))
+(counter1)  ;; 1
+(counter1)  ;; 2
+```
 
 ---
 
 ## 🎉 You're Ready!
 
 You now know enough to:
-- ✅ Write OVSM scripts
+- ✅ Write OVSM LISP scripts
+- ✅ Use 83% of Common Lisp features
 - ✅ Handle errors gracefully
-- ✅ Validate inputs with GUARD
-- ✅ Use 34 built-in tools
-- ✅ Debug common issues
+- ✅ Write macros and closures
+- ✅ Debug with REPL and logs
+- ✅ Test your code properly
 
 **Happy coding!** 🚀
 
 ---
 
-*Quick Start Guide - OVSM Interpreter v1.1.0*
-*For more details, see the full documentation*
+*Quick Start Guide - OVSM Interpreter v1.0.3*
+*356/356 tests passing (100%) - Production Ready*
+*For complete language spec, see OVSM_LISP_SYNTAX_SPEC.md*
