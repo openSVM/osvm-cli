@@ -42,6 +42,9 @@ pub enum Value {
         body: Arc<crate::parser::Expression>,
         /// Captured environment (closure)
         closure: Arc<HashMap<String, Value>>,
+        /// If true, this is a flet function that must execute in isolation
+        /// (cannot see itself or sibling flet functions)
+        is_flet: bool,
     },
 
     /// Multiple return values (Common Lisp style)

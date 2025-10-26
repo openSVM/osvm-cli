@@ -197,7 +197,8 @@ impl LispEvaluator {
                 if name.starts_with(':') {
                     Ok(Value::String(name.clone()))
                 } else {
-                    self.env.get(name)
+                    let result = self.env.get(name);
+                    result
                 }
             }
 
@@ -257,6 +258,7 @@ impl LispEvaluator {
                     params: params.clone(),
                     body: Arc::new((**body).clone()),
                     closure,
+                    is_flet: false,
                 })
             }
 
@@ -388,7 +390,7 @@ impl LispEvaluator {
         };
 
         let value = self.evaluate_expression(&args[1].value)?;
-        self.env.define(var_name, value.clone());
+        self.env.define(var_name.clone(), value.clone());
 
         Ok(value)
     }
@@ -416,6 +418,7 @@ impl LispEvaluator {
             params,
             body: Arc::new(args[2].value.clone()),
             closure: Arc::new(std::collections::HashMap::new()),
+            is_flet: false,
         };
 
         // Define function in environment
@@ -615,22 +618,31 @@ impl LispEvaluator {
 
         for func_def in func_defs {
             match func_def {
-                Expression::ArrayLiteral(parts) if parts.len() == 3 => {
-                    // Extract name
-                    let name = match &parts[0] {
-                        Expression::Variable(n) => n.clone(),
-                        _ => return Err(Error::ParseError(
-                            "flet function definition requires name".to_string(),
-                        )),
-                    };
+                Expression::ArrayLiteral(parts) => {
+                    for (i, part) in parts.iter().enumerate() {
+                    }
 
-                    // Extract parameters
-                    let params = self.parse_function_parameters(&parts[1], "flet")?;
+                    if parts.len() == 3 {
+                        // Extract name
+                        let name = match &parts[0] {
+                            Expression::Variable(n) => n.clone(),
+                            _ => return Err(Error::ParseError(
+                                "flet function definition requires name".to_string(),
+                            )),
+                        };
 
-                    // Extract body (clone it)
-                    let body = parts[2].clone();
+                        // Extract parameters
+                        let params = self.parse_function_parameters(&parts[1], "flet")?;
 
-                    functions.push((name, params, body));
+                        // Extract body (clone it)
+                        let body = parts[2].clone();
+
+                        functions.push((name, params, body));
+                    } else {
+                        return Err(Error::ParseError(
+                            format!("flet function definition must have 3 parts (name params body), got {}", parts.len()),
+                        ))
+                    }
                 }
                 _ => {
                     return Err(Error::ParseError(
@@ -653,6 +665,7 @@ impl LispEvaluator {
                 params,
                 body: Arc::new(body),
                 closure: Arc::new(outer_env.clone()),
+                is_flet: true, // Mark as flet for isolated execution
             };
             self.env.define(name, func_value);
         }
@@ -738,6 +751,7 @@ impl LispEvaluator {
                 params,
                 body: Arc::new(body),
                 closure: Arc::new(labels_env.clone()),
+                is_flet: false, // labels allows recursion
             };
             // Update the binding with the real function
             self.env.set(&name, func_value)?;
@@ -1050,7 +1064,7 @@ impl LispEvaluator {
     /// (do expr1 expr2 ... exprN) - Sequential execution
     fn eval_do(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         let mut last_val = Value::Null;
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
             last_val = self.evaluate_expression(&arg.value)?;
         }
         Ok(last_val)
@@ -2213,7 +2227,7 @@ impl LispEvaluator {
         let func = self.evaluate_expression(&args[1].value)?;
 
         match func {
-            Value::Function { params, body, closure: _ } => {
+            Value::Function { params, body, .. } => {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "map".to_string(),
@@ -2265,7 +2279,7 @@ impl LispEvaluator {
         let func = self.evaluate_expression(&args[1].value)?;
 
         match func {
-            Value::Function { params, body, closure: _ } => {
+            Value::Function { params, body, .. } => {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "filter".to_string(),
@@ -2324,7 +2338,7 @@ impl LispEvaluator {
         let func = self.evaluate_expression(&args[2].value)?;
 
         match func {
-            Value::Function { params, body, closure: _ } => {
+            Value::Function { params, body, .. } => {
                 if params.len() != 2 {
                     return Err(Error::InvalidArguments {
                         tool: "reduce".to_string(),
@@ -2374,7 +2388,7 @@ impl LispEvaluator {
         let func = self.evaluate_expression(&args[1].value)?;
 
         match func {
-            Value::Function { params, body, closure: _ } => {
+            Value::Function { params, body, .. } => {
                 if params.len() != 2 {
                     return Err(Error::InvalidArguments {
                         tool: "sort".to_string(),
@@ -2614,7 +2628,7 @@ impl LispEvaluator {
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
         // Check if this is a user-defined function first
         if let Ok(func_val) = self.env.get(name) {
-            if let Value::Function { params, body, closure } = func_val {
+            if let Value::Function { params, body, closure, is_flet } = func_val {
                 // This is a function call!
 
                 // Evaluate arguments - handle both positional and keyword arguments
@@ -2635,25 +2649,43 @@ impl LispEvaluator {
                     evaluated_args.push(val);
                 }
 
-                // Create new scope for function execution
-                self.env.enter_scope();
+                // For flet functions, use isolated execution
+                // This prevents recursion by isolating from parent scopes
+                if is_flet {
+                    // Save current environment
+                    let saved_env = self.env.clone();
 
-                // Restore closure variables first (critical for flet)
-                // This ensures functions see ONLY their closure, not current environment
-                for (var_name, var_value) in closure.iter() {
-                    self.env.define(var_name.clone(), var_value.clone());
+                    // Create new isolated environment with only closure variables
+                    self.env = Environment::new();
+                    for (var_name, var_value) in closure.iter() {
+                        self.env.define(var_name.clone(), var_value.clone());
+                    }
+
+                    // Bind parameters
+                    self.bind_function_parameters(&params, &evaluated_args, name)?;
+
+                    // Evaluate function body
+                    let result = self.evaluate_expression(&*body);  // Explicit deref
+
+                    // Restore original environment
+                    self.env = saved_env;
+
+                    return result;
+                } else {
+                    // For regular defun functions (empty closure), use normal scope chain
+                    self.env.enter_scope();
+
+                    // Bind parameters
+                    self.bind_function_parameters(&params, &evaluated_args, name)?;
+
+                    // Evaluate function body
+                    let result = self.evaluate_expression(&*body);  // Explicit deref
+
+                    // Exit function scope
+                    self.env.exit_scope();
+
+                    return result;
                 }
-
-                // Then bind parameters on top of closure
-                self.bind_function_parameters(&params, &evaluated_args, name)?;
-
-                // Evaluate function body
-                let result = self.evaluate_expression(&body);
-
-                // Exit function scope
-                self.env.exit_scope();
-
-                return result;
             }
         }
 
