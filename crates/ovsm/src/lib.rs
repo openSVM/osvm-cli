@@ -268,6 +268,9 @@
 #![warn(missing_docs)]
 
 // Module declarations
+/// Version of the OVSM interpreter
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod error;
 pub mod lexer;
 pub mod parser;

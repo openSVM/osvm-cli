@@ -160,8 +160,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check for -version or -ver directly from args (special case for non-standard formats)
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 2 && (args[1] == "-version" || args[1] == "-ver") {
-        let version = env!("CARGO_PKG_VERSION");
-        println!("OSVM CLI v{}", version);
+        let osvm_version = env!("CARGO_PKG_VERSION");
+        let ovsm_version = ovsm::VERSION;
+        println!("OSVM CLI v{}", osvm_version);
+        println!("OVSM Interpreter v{}", ovsm_version);
         return Ok(());
     }
 
@@ -174,8 +176,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check for version flag (which includes aliases)
     if app_matches.get_flag("version_flag") {
         // Show version info and exit
-        let version = env!("CARGO_PKG_VERSION");
-        println!("OSVM CLI v{}", version);
+        let osvm_version = env!("CARGO_PKG_VERSION");
+        let ovsm_version = ovsm::VERSION;
+        println!("OSVM CLI v{}", osvm_version);
+        println!("OVSM Interpreter v{}", ovsm_version);
         return Ok(());
     }
 
@@ -270,8 +274,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Check for version subcommands
     if sub_command == "v" || sub_command == "ver" || sub_command == "version" {
         // Show version info and exit
-        let version = env!("CARGO_PKG_VERSION");
-        println!("OSVM CLI v{}", version);
+        let osvm_version = env!("CARGO_PKG_VERSION");
+        let ovsm_version = ovsm::VERSION;
+        println!("OSVM CLI v{}", osvm_version);
+        println!("OVSM Interpreter v{}", ovsm_version);
         return Ok(());
     }
 
