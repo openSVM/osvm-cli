@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 📌 TL;DR - What You Need to Know
+
+**OSVM CLI** = AI-powered natural language interface for Solana blockchain investigation
+
+**Primary Usage:** `osvm "your blockchain query in plain English"`
+- Example: `osvm "show me all DEX trades for wallet ABC...XYZ today"`
+- The AI agent interprets, plans in OVSM LISP, executes via MCP tools, and returns insights
+
+**Key Capabilities:**
+- Natural language blockchain queries (main feature!)
+- MCP server integration for enhanced data access
+- Interactive chat mode for complex investigations
+- OVSM LISP scripting for custom automation
+
+**Critical Rules:**
+- NEVER modify Solana keypairs or config
+- ALWAYS backup .git before destructive operations
+- Keep root directory clean (docs in /docs)
+
 ## 🚀 PRIMARY PURPOSE: SOLANA BLOCKCHAIN INVESTIGATION CLI 🚀
 
 **OSVM CLI** is an AI-powered blockchain investigation tool that enables natural language queries to explore the Solana blockchain. It combines AI agents, MCP tools, and the OVSM planning language to analyze on-chain data, transactions, and patterns.
@@ -68,101 +87,63 @@ AI Agent generates OVSM:
 Returns: Formatted table with wallet addresses and SOL amounts
 ```
 
-## 🎉 OVSM: A LISP-DIALECT FOR BLOCKCHAIN SCRIPTING 🎉
+## 🔎 Common Investigation Patterns
 
-### ✅ PRODUCTION-READY LISP IMPLEMENTATION ✅
-
-**STATUS:** ✅ **LISP-ONLY** - S-expression syntax is the sole supported format
-
-**WHAT IS OVSM?**
-OVSM (Open Solana Virtual Machine) is a **LISP-dialect domain-specific language** designed specifically for blockchain automation and Solana RPC integration. It uses S-expression syntax with explicit parentheses, eliminating the entire class of indentation-based parsing errors.
-
-**OVSM LISP Syntax:**
-```lisp
-;; Comments use semicolons
-(define balance 0)  ;; Define variables
-
-;; Conditionals with explicit parentheses
-(if (> balance 1000)
-    (log :message "High balance!")
-    (log :message "Low balance"))
-
-;; Loops with clear block boundaries
-(while (not done)
-  (set! batch (getSignaturesForAddress address))
-  (if (null? batch)
-      (set! done true)
-      (process batch)))
-
-;; Functions and sequential execution
-(do
-  (log :message "Step 1")
-  (set! result (+ 10 20 30))
-  (log :value result)
-  result)  ;; Returns 60
+**Pattern 1: Wallet Activity Analysis**
+```bash
+osvm "analyze all activity for wallet X in the last 24 hours"
+# Fetches: transactions, token transfers, NFT activity, program interactions
+# Returns: Categorized summary with timestamps and amounts
 ```
 
-**WHY LISP FOR OVSM:**
-1. **Unambiguous parsing** - Explicit parentheses define exact block boundaries
-2. **Zero indentation bugs** - No whitespace-sensitive syntax
-3. **Homoiconicity** - Code and data share the same structure
-4. **Simple grammar** - Easy to parse, easy to extend
-5. **Proven history** - LISP syntax has 60+ years of reliability
+**Pattern 2: Token Flow Tracking**
+```bash
+osvm "trace USDC flow from wallet A to find destination wallets"
+# Follows: multi-hop transfers, DEX swaps, intermediate wallets
+# Returns: Flow diagram with amounts and paths
+```
 
-**IMPLEMENTATION STATUS:**
-- ✅ S-Expression Lexer: 320 lines, 59/59 tests passing (100%)
-- ✅ S-Expression Parser: 650 lines, 25/25 tests passing (100%)
-- ✅ LISP Evaluator: 1,500+ lines, 272/272 tests passing (100%)
-- ✅ Advanced Features: let*, flet, labels, case/typecase, varargs, macros, closures
-- ✅ Unit Tests: 59/59 passing (100%)
-- ✅ Integration Tests: 297/297 passing (100%)
-- ✅ **Total: 356/356 tests passing (100%)**
-- ✅ **83% Common Lisp coverage** - Production-ready!
-- ✅ **Zero parser bugs** - Rock-solid parsing
+**Pattern 3: DEX Trading Analysis**
+```bash
+osvm "show arbitrage opportunities between Orca and Raydium for SOL/USDC"
+# Compares: prices, liquidity, fees, slippage
+# Returns: Profitable paths with expected returns
+```
 
-**CRITICAL FILES:**
-- `crates/ovsm/src/lexer/sexpr_scanner.rs` - S-expression lexer ✅
-- `crates/ovsm/src/parser/sexpr_parser.rs` - S-expression parser ✅
-- `crates/ovsm/src/runtime/lisp_evaluator.rs` - OVSM evaluator ✅
-- `crates/ovsm/tests/lisp_e2e_tests.rs` - End-to-end integration tests ✅
-- `examples/ovsm_scripts/*.ovsm` - OVSM LISP example scripts ✅
+**Pattern 4: Smart Contract Investigation**
+```bash
+osvm "find all unique wallets that called program X's withdraw function"
+# Analyzes: instruction data, program logs, success/failure rates
+# Returns: Wallet list with call patterns and frequencies
+```
 
-**DOCUMENTATION:**
-- `OVSM_LISP_SYNTAX_SPEC.md` - **Complete language specification (PRIMARY REFERENCE)**
-- `FEATURES_STATUS.md` - **Current feature status and roadmap (UPDATED)**
-- `OVSM_COMPLETION_PLAN.md` - Detailed plan for 83% → 100% coverage
-- `FINAL_LISP_IMPLEMENTATION_REPORT.md` - Implementation details and design decisions
-- `SESSION_SUMMARY_CONTINUED.md` - Latest implementation session summary
-- `crates/ovsm/README.md` - **Package overview (UPDATED with LISP syntax)**
-- `crates/ovsm/USAGE_GUIDE.md` - How to write OVSM scripts (TODO: update for LISP)
+**Pattern 5: NFT Collection Research**
+```bash
+osvm "identify wash trading in NFT collection Y over the past week"
+# Detects: circular trades, price manipulation, suspicious patterns
+# Returns: Flagged transactions with evidence scores
+```
 
-**CURRENT STATUS (October 2025):**
-- ✅ LISP/S-expression syntax is the **ONLY** supported format
-- ✅ All `.ovsm` files **MUST** use LISP syntax
-- ✅ **83% Common Lisp coverage** - Production-ready for real-world use
-- ✅ **100% test pass rate** (356/356 tests passing)
-- ✅ **100% unit test coverage** (59/59 passing)
-- ✅ **100% integration test coverage** (297/297 passing)
-- ✅ Previous indentation-based syntax completely removed from codebase
-- ✅ All obsolete Python syntax tests deleted (1,667 lines removed)
+## 📝 OVSM Planning Language
 
-**IMPLEMENTED FEATURES (83%):**
-- ✅ Macros (defmacro, quasiquote, gensym)
-- ✅ Closures and higher-order functions
-- ✅ Advanced binding (let, let*, flet, labels)
-- ✅ Pattern matching (case/typecase)
-- ✅ Multiple values (values, multiple-value-bind)
-- ✅ Dynamic variables (defvar)
-- ✅ Variadic functions (&rest)
+OVSM is a LISP-dialect that the AI agent uses to plan and execute blockchain investigations. Understanding its basics helps debug and write custom scripts.
 
-**PLANNED FOR 100% (17%):**
-- ⏳ loop macro (+7%) - Advanced iteration
-- ⏳ &optional/&key (+3%) - Named/optional parameters
-- ⏳ destructuring-bind (+2%) - Pattern destructuring
-- ⏳ catch/throw (+2%) - Non-local exits
-- ⏳ setf, format, progn/prog*, eval, read/print (+3%) - Utilities
+**Quick OVSM Reference:**
+```lisp
+;; Common patterns used in investigations
+(define wallet "ABC...XYZ")                    ; Variables
+(getBalance wallet)                            ; RPC calls
+(getSignaturesForAddress wallet :limit 100)    ; With options
+(filter transactions :type "transfer")         ; Data filtering
+(map balances :function getTokenAmount)        ; Transformations
+(sort results :by "amount" :desc true)         ; Sorting
+(aggregate data :by "program" :sum "fees")     ; Aggregations
+```
 
-**IMPORTANT:** There is NO alternative syntax. OVSM is a LISP-dialect, period.
+**Key Points:**
+- LISP S-expression syntax (parentheses-based)
+- 356/356 tests passing, production-ready
+- See `docs/ovsm/` for full documentation
 
 ---
 
@@ -885,6 +866,21 @@ osvm ovsm repl
 ```
 
 ---
+
+## 🏗️ Project Maintenance Best Practices
+
+**Repository Hygiene:**
+1. **Root directory** should only contain essential files (README, LICENSE, Cargo.toml)
+2. **Documentation** belongs in `/docs`, not scattered in root
+3. **Archive directories** should be gitignored, not in public repo
+4. **GitHub Pages** should serve from `/docs` with CNAME there
+5. **Large unrelated projects** (like turbo) should never be in the repo
+
+**When Helping with Cleanup:**
+- Always check if files are git-tracked before deleting
+- Move files to organized subdirectories rather than deleting
+- Use `git mv` to preserve history when reorganizing
+- Check `.gitignore` to understand what's local vs tracked
 
 ## Important Implementation Notes
 
