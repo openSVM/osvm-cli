@@ -48,6 +48,7 @@ impl SExprParser {
             TokenKind::Backtick => self.parse_quasiquote(),
             TokenKind::Comma => self.parse_unquote(),
             TokenKind::CommaAt => self.parse_unquote_splice(),
+            TokenKind::Colon => self.parse_keyword_literal(),
             TokenKind::Integer(n) => {
                 self.advance();
                 Ok(Expression::IntLiteral(n))
@@ -151,6 +152,24 @@ impl SExprParser {
                 "Unexpected form starting with {:?}",
                 first.kind
             ))),
+        }
+    }
+
+    /// Parse a keyword literal :name
+    fn parse_keyword_literal(&mut self) -> Result<Expression> {
+        self.consume(TokenKind::Colon)?;
+
+        // Next must be an identifier
+        if let TokenKind::Identifier(name) = &self.peek().kind {
+            let keyword = format!(":{}", name);
+            self.advance();
+            // Keywords evaluate to strings with colon prefix
+            Ok(Expression::StringLiteral(keyword))
+        } else {
+            Err(Error::ParseError(format!(
+                "Expected identifier after ':', got {:?}",
+                self.peek().kind
+            )))
         }
     }
 
@@ -827,23 +846,10 @@ impl SExprParser {
 
         let mut args = Vec::new();
         while !self.check(&TokenKind::RightParen) {
-            // Check for keyword argument
-            if self.check(&TokenKind::Colon) {
-                self.advance(); // consume :
-                let key = if let TokenKind::Identifier(k) = &self.peek().kind {
-                    k.clone()
-                } else {
-                    return Err(Error::ParseError("Expected identifier after :".to_string()));
-                };
-                self.advance();
-
-                let value = self.parse_expression()?;
-                args.push(Argument::named(key, value));
-            } else {
-                // Positional argument
-                let value = self.parse_expression()?;
-                args.push(Argument::positional(value));
-            }
+            // Parse argument - just use parse_expression for everything
+            // Keywords (:name) will be parsed as string literals by parse_keyword_literal
+            let value = self.parse_expression()?;
+            args.push(Argument::positional(value));
         }
         self.consume(TokenKind::RightParen)?;
 

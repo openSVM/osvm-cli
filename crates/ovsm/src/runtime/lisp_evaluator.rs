@@ -176,6 +176,7 @@ impl LispEvaluator {
                     "get" => self.eval_get(args),
                     "first" => self.eval_first(args),
                     "rest" => self.eval_rest(args),
+                    "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
@@ -509,12 +510,18 @@ impl LispEvaluator {
             }
         };
 
+        // Parallel binding: Evaluate ALL values in outer scope BEFORE entering new scope
+        let mut evaluated_bindings = Vec::new();
+        for (var_name, value_expr) in bindings {
+            let value = self.evaluate_expression(value_expr)?;
+            evaluated_bindings.push((var_name, value));
+        }
+
         // Create new scope
         self.env.enter_scope();
 
-        // Evaluate and bind variables
-        for (var_name, value_expr) in bindings {
-            let value = self.evaluate_expression(value_expr)?;
+        // Bind all variables in new scope
+        for (var_name, value) in evaluated_bindings {
             self.env.define(var_name, value);
         }
 
@@ -2045,6 +2052,40 @@ impl LispEvaluator {
         }
     }
 
+    /// (nth coll index) - Get element at index
+    fn eval_nth(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "nth".to_string(),
+                reason: "Expected 2 arguments (collection, index)".to_string(),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let index_val = self.evaluate_expression(&args[1].value)?;
+
+        let index = match index_val {
+            Value::Int(i) => i as usize,
+            _ => return Err(Error::TypeError {
+                expected: "int".to_string(),
+                got: index_val.type_name(),
+            }),
+        };
+
+        match val {
+            Value::Array(ref arr) => {
+                arr.get(index).cloned().ok_or(Error::IndexOutOfBounds {
+                    index,
+                    length: arr.len(),
+                })
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: val.type_name(),
+            }),
+        }
+    }
+
     /// (cons elem coll) - Prepend element to collection
     fn eval_cons(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 2 {
@@ -2619,9 +2660,16 @@ impl LispEvaluator {
         let obj = obj_val.as_object()?;
 
         let key_val = self.evaluate_expression(&args[1].value)?;
-        let key = key_val.as_string()?;
+        let key_str = key_val.as_string()?;
 
-        Ok(obj.get(&*key).cloned().unwrap_or(Value::Null))
+        // Strip leading colon from keywords (e.g., ":age" -> "age")
+        let key = if key_str.starts_with(':') {
+            &key_str[1..]
+        } else {
+            key_str
+        };
+
+        Ok(obj.get(key).cloned().unwrap_or(Value::Null))
     }
 
     /// Evaluate a regular tool call
