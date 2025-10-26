@@ -2,6 +2,12 @@
 //!
 //! This test suite verifies that all error types are properly triggered
 //! and handled across the lexer, parser, and runtime.
+//!
+//! NOTE: This file is currently disabled because it tests Python-style OVSM syntax
+//! which has been completely removed in favor of LISP/S-expression syntax.
+//! These tests should be rewritten using LISP syntax or removed entirely.
+
+#![cfg(feature = "incomplete_tests")]
 
 use ovsm::{Error, Evaluator, Parser, Scanner};
 
