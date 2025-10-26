@@ -29,8 +29,8 @@ const DEFAULT_EPHEMERAL_CPUS: u8 = 1;
 /// Maximum concurrent ephemeral VMs
 const MAX_CONCURRENT_VMS: usize = 50;
 
-/// vsock port for tool communication
-const VSOCK_TOOL_PORT: u32 = 5353;
+/// vsock port for tool communication (must match guest/mcp_vsock_wrapper)
+const VSOCK_TOOL_PORT: u32 = 5252;
 
 /// Next available vsock CID (starts at 3, reserves 0-2)
 static NEXT_VSOCK_CID: AtomicU32 = AtomicU32::new(3);
@@ -300,6 +300,7 @@ impl EphemeralVmManager {
                     "console=ttyS0 reboot=k panic=1 pci=off init=/init"
                 ),
             },
+            "drives": [],
             "machine-config": {
                 "vcpu_count": config.cpus,
                 "mem_size_mib": config.memory_mb,
@@ -310,14 +311,7 @@ impl EphemeralVmManager {
                 "guest_cid": config.vsock_cid,
                 "uds_path": format!("/tmp/osvm-vsock-{}.sock", config.id),
             },
-            "logger": if self.debug_mode {
-                serde_json::json!({
-                    "level": "Debug",
-                    "log_path": temp_dir.join("firecracker.log").to_string_lossy(),
-                })
-            } else {
-                serde_json::json!(null)
-            },
+            "logger": serde_json::json!(null),
             "metrics": serde_json::json!(null),
         }))
     }
@@ -325,7 +319,7 @@ impl EphemeralVmManager {
     /// Wait for VM to be ready
     async fn wait_for_vm_ready(&self, api_socket: &Path, vsock_cid: u32) -> Result<()> {
         let start = SystemTime::now();
-        let timeout_duration = Duration::from_secs(10);
+        let timeout_duration = Duration::from_secs(30);
 
         while SystemTime::now().duration_since(start)? < timeout_duration {
             // Check if API socket exists
@@ -361,7 +355,7 @@ impl EphemeralVmManager {
 
         // Connect to VM via vsock
         let mut stream = timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(15),
             tokio_vsock::VsockStream::connect(vsock_cid, VSOCK_TOOL_PORT),
         )
         .await
