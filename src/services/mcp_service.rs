@@ -1899,7 +1899,7 @@ impl McpService {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("Failed to spawn stdio MCP server process")?;
+            .with_context(|| format!("Failed to spawn stdio MCP server process: program='{}' args={:?}", program, args))?;
 
         let mut stdin = child
             .stdin
@@ -2458,7 +2458,7 @@ impl McpService {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("Failed to spawn stdio MCP server process")?;
+            .with_context(|| format!("Failed to spawn stdio MCP server process: program='{}' args={:?}", program, args))?;
 
         let mut stdin = child
             .stdin
