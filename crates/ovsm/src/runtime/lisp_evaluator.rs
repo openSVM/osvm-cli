@@ -101,6 +101,7 @@ impl LispEvaluator {
                     "setf" => self.eval_setf(args),
                     "define" => self.eval_define(args),
                     "defun" => self.eval_defun(args),
+                    "defn" => self.eval_defun(args), // Alias for defun
                     "defmacro" => self.eval_defmacro(args),
                     "const" => self.eval_const(args),
                     "let" => self.eval_let(args),
@@ -178,6 +179,7 @@ impl LispEvaluator {
                     "rest" => self.eval_rest(args),
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
+                    "append" => self.eval_append(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -1463,9 +1465,11 @@ impl LispEvaluator {
         // Execute try body
         let try_result = self.evaluate_expression(&args[0].value);
 
-        // Parse catch block: should be (catch error-var handler-body)
+        // Parse catch block: accepts both (catch error-var handler-body) ToolCall
+        // and Catch expression for compatibility with both try-catch and catch-throw
         let catch_arg = &args[1];
         let (error_var, catch_body) = match &catch_arg.value {
+            // Case 1: ToolCall form: (catch e handler) - for try-catch error handling
             Expression::ToolCall { name, args: arguments } if name == "catch" => {
                 if arguments.len() != 2 {
                     return Err(Error::InvalidArguments {
@@ -1482,6 +1486,18 @@ impl LispEvaluator {
                     })?,
                 };
                 (error_var, &arguments[1].value)
+            },
+            // Case 2: Catch expression form (from special parser)
+            // Note: Catch has body as Vec<Expression>, use first expression
+            Expression::Catch { tag, body } => {
+                // Use the tag as the error variable name
+                let error_var = match &**tag {
+                    Expression::Variable(name) => name.clone(),
+                    _ => "e".to_string(), // Default error var if tag is not a variable
+                };
+                // Get first body expression or use null
+                let catch_expr = body.first().unwrap_or(&Expression::NullLiteral);
+                (error_var, catch_expr)
             },
             _ => return Err(Error::InvalidArguments {
                 tool: "try".to_string(),
@@ -2107,6 +2123,35 @@ impl LispEvaluator {
             _ => Err(Error::TypeError {
                 expected: "array".to_string(),
                 got: coll.type_name(),
+            }),
+        }
+    }
+
+    /// (append arr1 arr2) - Concatenate two arrays
+    fn eval_append(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "append".to_string(),
+                reason: "Expected 2 arguments (array1, array2)".to_string(),
+            });
+        }
+
+        let arr1_val = self.evaluate_expression(&args[0].value)?;
+        let arr2_val = self.evaluate_expression(&args[1].value)?;
+
+        match (arr1_val, arr2_val) {
+            (Value::Array(ref arr1), Value::Array(ref arr2)) => {
+                let mut new_arr = arr1.to_vec();
+                new_arr.extend(arr2.iter().cloned());
+                Ok(Value::Array(Arc::new(new_arr)))
+            }
+            (Value::Array(_), other) => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: other.type_name(),
+            }),
+            (other, _) => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: other.type_name(),
             }),
         }
     }
