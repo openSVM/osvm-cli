@@ -14,6 +14,7 @@ use crate::{debug_error, debug_print, debug_success, debug_warn};
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use dirs;
+use which;
 use log::warn;
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -1093,16 +1094,24 @@ impl McpService {
             );
         }
 
-        // Command must be an absolute path
-        if !command.starts_with('/') {
-            anyhow::bail!(
-                "Command must be an absolute path (e.g., /usr/bin/node). \
-                Relative paths are not allowed for security."
-            );
-        }
+        // If command is not an absolute path, try to find it in PATH
+        let cmd_path = if !command.starts_with('/') {
+            // Try to find the command in PATH
+            match which::which(command) {
+                Ok(path) => path,
+                Err(_) => {
+                    anyhow::bail!(
+                        "Command '{}' not found in PATH. \
+                        Please provide an absolute path or ensure the command is in PATH.",
+                        command
+                    );
+                }
+            }
+        } else {
+            std::path::PathBuf::from(command)
+        };
 
         // Canonicalize path to prevent traversal
-        let cmd_path = PathBuf::from(command);
         let canonical = cmd_path
             .canonicalize()
             .context("Invalid command path or file does not exist")?;
@@ -1541,8 +1550,14 @@ impl McpService {
             }
         }
 
-        // Parse the command and arguments from the URL field
-        let mut cmd_parts = config.url.split_whitespace();
+        // Parse the command and arguments from the URL field, stripping the stdio:// prefix if present
+        let command_str = if config.url.starts_with("stdio://") {
+            &config.url[8..] // Skip "stdio://"
+        } else {
+            &config.url
+        };
+
+        let mut cmd_parts = command_str.split_whitespace();
         let command = cmd_parts
             .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid command in server URL: {}", config.url))?;
@@ -1864,8 +1879,14 @@ impl McpService {
             );
         }
 
-        // Parse the command from the URL field
-        let mut parts = config.url.split_whitespace();
+        // Parse the command from the URL field, stripping the stdio:// prefix if present
+        let command_str = if config.url.starts_with("stdio://") {
+            &config.url[8..] // Skip "stdio://"
+        } else {
+            &config.url
+        };
+
+        let mut parts = command_str.split_whitespace();
         let program = parts
             .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
@@ -2417,8 +2438,14 @@ impl McpService {
             );
         }
 
-        // Parse the command from the URL field
-        let mut parts = config.url.split_whitespace();
+        // Parse the command from the URL field, stripping the stdio:// prefix if present
+        let command_str = if config.url.starts_with("stdio://") {
+            &config.url[8..] // Skip "stdio://"
+        } else {
+            &config.url
+        };
+
+        let mut parts = command_str.split_whitespace();
         let program = parts
             .next()
             .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
