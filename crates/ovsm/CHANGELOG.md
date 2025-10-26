@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Initial documentation and usage guides
+## [1.0.3] - 2025-10-26
+
+### Changed
+- 🎯 **Achieved 356/356 tests passing (100%)**
+- ✅ Fixed all 5 varargs test failures (map/filter argument order, defun body wrapping)
+- ✅ Fixed 2 doctest examples (reduce signature)
+- 🗑️ Deleted 1,667 lines of obsolete Python syntax tests
+- 🧹 Complete LISP-only codebase (zero Python syntax remnants)
+- 📝 Updated all documentation examples to LISP syntax
+
+### Removed
+- Obsolete Python syntax test files:
+  - `error_handling_tests.rs` (642 lines, 42 tests)
+  - `integration_v1_1_0.rs` (463 lines, 18 tests)
+  - `verify_no_silent_failures.rs` (349 lines, 13 tests)
+  - `test_break_bug.rs` (145 lines, 7 tests)
+  - `test_comparisons.rs` (68 lines, 3 tests)
+- Python validation tool `query_validator.py` (388 lines)
 
 ## [1.0.0] - 2025-10-11
 

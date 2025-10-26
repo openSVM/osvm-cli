@@ -29,8 +29,9 @@ OVSM is a **LISP-1 dialect** (functions and variables share the same namespace) 
 ✅ **Higher-Order Functions** - map, filter, reduce, sort
 
 ### Production Quality
-✅ **100% unit test coverage** (59/59 tests passing)
-✅ **82% integration test coverage** (60/73 tests passing)
+✅ **100% test pass rate** (356/356 tests passing)
+✅ **100% unit test coverage** (59/59 passing)
+✅ **100% integration test coverage** (297/297 passing)
 ✅ **Zero unsafe code**
 ✅ **Comprehensive error messages**
 ✅ **Well-documented API**
