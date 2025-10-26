@@ -2,6 +2,72 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🚀 PRIMARY PURPOSE: SOLANA BLOCKCHAIN INVESTIGATION CLI 🚀
+
+**OSVM CLI** is an AI-powered blockchain investigation tool that enables natural language queries to explore the Solana blockchain. It combines AI agents, MCP tools, and the OVSM planning language to analyze on-chain data, transactions, and patterns.
+
+### 🎯 CORE FUNCTIONALITY: AI-POWERED BLOCKCHAIN QUERIES
+
+The primary way to use OSVM for blockchain investigation:
+
+```bash
+# Natural language blockchain queries - the MAIN feature
+osvm "show me all transactions for wallet ABC...XYZ in the last 24 hours"
+osvm "analyze the top DEX traders on Raydium today"
+osvm "find all NFT mints from collection X with traits Y"
+osvm "track SOL flow between these 5 wallets"
+osvm "identify potential wash trading in token ABC"
+
+# The AI agent interprets your query and:
+# 1. Plans the investigation using OVSM language
+# 2. Executes RPC calls via MCP tools
+# 3. Analyzes and formats the results
+# 4. Returns human-readable insights
+```
+
+### 📊 MCP (Model Context Protocol) Integration
+
+OSVM uses MCP servers to provide blockchain data access:
+
+```bash
+# Add MCP servers for enhanced capabilities
+osvm mcp add helius https://helius-mcp.example.com
+osvm mcp add birdeye https://birdeye-mcp.example.com
+osvm mcp list                          # Show available MCP tools
+
+# MCP tools provide functions like:
+# - getTransaction, getSignatures, getAccountInfo
+# - getTokenAccounts, getTokenMetadata
+# - getProgramAccounts, getSlot, getBlockTime
+# - Custom analytics and aggregations
+```
+
+### 🧠 How OSVM AI Agent Works
+
+When you run `osvm "your blockchain query"`, the AI agent:
+
+1. **Understands Intent**: Parses your natural language query
+2. **Plans Investigation**: Generates OVSM LISP code to execute the investigation
+3. **Executes via MCP**: Runs the plan using available MCP tools and RPC endpoints
+4. **Analyzes Results**: Processes raw blockchain data into insights
+5. **Returns Summary**: Provides human-readable analysis with key findings
+
+Example flow:
+```bash
+User: osvm "find the top 5 SOL receivers in the last hour"
+
+AI Agent generates OVSM:
+(do
+  (define current-slot (getSlot))
+  (define recent-blocks (getBlocks (- current-slot 150) current-slot))
+  (define transfers (filterTransfers recent-blocks "SOL"))
+  (define receivers (aggregateByReceiver transfers))
+  (define top5 (take 5 (sortByAmount receivers)))
+  (formatResults top5))
+
+Returns: Formatted table with wallet addresses and SOL amounts
+```
+
 ## 🎉 OVSM: A LISP-DIALECT FOR BLOCKCHAIN SCRIPTING 🎉
 
 ### ✅ PRODUCTION-READY LISP IMPLEMENTATION ✅
@@ -568,46 +634,76 @@ null
 
 ## Main Commands
 
-### OVSM Commands (No Solana Config Required)
+### 🔍 PRIMARY: Blockchain Investigation (AI-Powered)
 ```bash
-# Execute LISP script
-osvm ovsm run script.ovsm
+# Natural language queries for blockchain analysis - THE MAIN FEATURE
+osvm "show me all transactions for wallet ABC...XYZ in the last 24 hours"
+osvm "analyze DEX trading volume on Raydium for token XYZ"
+osvm "find NFT holders for collection ABC with rare traits"
+osvm "track token transfers between these wallets: [A, B, C]"
+osvm "identify unusual activity in program 123...456"
+osvm "what are the top 10 most active wallets today?"
+osvm "show me all failed transactions for this wallet"
 
-# Execute inline LISP code
-osvm ovsm eval '(define x 42) (+ x 8)'
-
-# Syntax check (parse only, don't execute)
-osvm ovsm check script.ovsm
-
-# Interactive REPL
-osvm ovsm repl
-
-# Show example LISP scripts
-osvm ovsm examples
+# Complex investigations
+osvm "analyze arbitrage opportunities between Orca and Raydium"
+osvm "find wallets that interacted with both program A and B"
+osvm "identify potential bot activity in the last 100 blocks"
+osvm "calculate total fees paid by wallet X this month"
 ```
 
-### Solana/SVM Commands
+### 📡 MCP Server Management (Enhanced Data Access)
+```bash
+# Configure MCP servers for additional data sources
+osvm mcp add helius https://helius-mcp.example.com
+osvm mcp add shyft https://shyft-mcp.example.com
+osvm mcp list                          # List configured MCP servers
+osvm mcp test helius                   # Test MCP server connection
+osvm mcp remove shyft                  # Remove MCP server
+
+# MCP servers provide specialized tools for:
+# - Enhanced RPC endpoints (Helius, Triton)
+# - DEX analytics (Jupiter, Raydium)
+# - NFT metadata (Metaplex, Magic Eden)
+# - Token analytics (Birdeye, CoinGecko)
+```
+
+### 💬 Interactive Chat Mode
+```bash
+# Start interactive AI chat for continuous investigation
+osvm chat                               # Basic chat interface
+osvm chat --advanced                    # Advanced mode with more tools
+
+# In chat mode, you can:
+# - Run multiple queries in sequence
+# - Refine investigations based on results
+# - Export findings to various formats
+# - Save investigation sessions
+```
+
+### 🔧 OVSM Scripting (Advanced Users)
+```bash
+# Direct OVSM LISP script execution
+osvm ovsm run investigation.ovsm       # Run investigation script
+osvm ovsm eval '(getBalance "wallet")' # Execute inline OVSM
+osvm ovsm repl                         # Interactive OVSM REPL
+osvm ovsm examples                     # Show example scripts
+```
+
+### 🌐 Basic Solana Commands
 ```bash
 osvm balance [ADDRESS]                 # Show SOL balance
 osvm rpc local                         # Start local RPC
 osvm rpc devnet                        # Start devnet validator
 osvm svm list                          # List SVMs
 osvm nodes list                        # List nodes
-osvm deploy <BINARY>                   # Deploy eBPF program
 ```
 
-### AI & Tools
+### 🛠️ Utilities
 ```bash
 osvm audit [REPO]                      # Security audit
-osvm mcp add <NAME> <URL>              # Add MCP server
-osvm chat [--advanced]                 # Interactive chat
 osvm doctor [--fix]                    # System diagnostics
-osvm "natural language query"          # AI query for unknown commands
-```
-
-### SSH Deployment
-```bash
-osvm user@host --svm sonic --node-type validator --network mainnet
+osvm user@host --svm sonic             # SSH deployment
 ```
 
 ---
