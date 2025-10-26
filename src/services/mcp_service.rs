@@ -384,7 +384,7 @@ impl McpService {
             microvm_launcher,
             mcp_server_microvms: HashMap::new(),
             ephemeral_vm_manager: EphemeralVmManager::new(false),
-            use_ephemeral_vms: true, // Enable ephemeral VMs by default
+            use_ephemeral_vms: true, // Enable ephemeral VMs - vsock now configured
         }
     }
 

@@ -14,9 +14,9 @@ use std::path::PathBuf;
 #[derive(Default)]
 pub enum ExecutionMode {
     /// Execute tool in ephemeral unikernel (high security, ~100ms overhead)
-    #[default]
     Unikernel,
-    /// Execute tool directly in microVM (lower security, minimal overhead)
+    /// Execute tool directly in microVM (Firecracker - preferred approach)
+    #[default]
     MicroVM,
 }
 
@@ -62,7 +62,7 @@ fn default_vcpus() -> u32 {
 impl Default for ToolConfig {
     fn default() -> Self {
         Self {
-            execution_mode: ExecutionMode::Unikernel,
+            execution_mode: ExecutionMode::MicroVM,  // Use Firecracker MicroVM by default
             unikernel_image: None,
             mounts: Vec::new(),
             memory_mb: default_memory_mb(),
@@ -142,7 +142,7 @@ fn default_unikernel_dir() -> String {
 impl Default for IsolationConfig {
     fn default() -> Self {
         Self {
-            default_execution_mode: ExecutionMode::Unikernel,
+            default_execution_mode: ExecutionMode::MicroVM,  // Use Firecracker MicroVM by default
             unikernel_dir: default_unikernel_dir(),
             mcp_servers: HashMap::new(),
         }

@@ -71,8 +71,12 @@ impl Default for EphemeralVmConfig {
             memory_mb: DEFAULT_EPHEMERAL_MEMORY_MB,
             cpus: DEFAULT_EPHEMERAL_CPUS,
             timeout_secs: DEFAULT_TOOL_TIMEOUT_SECS,
-            kernel_path: PathBuf::from("/usr/share/osvm/vmlinux"),
-            rootfs_path: PathBuf::from("/usr/share/osvm/rootfs.ext4"),
+            kernel_path: dirs::home_dir()
+                .map(|h| h.join(".osvm/kernel/vmlinux.bin"))
+                .unwrap_or_else(|| PathBuf::from("/usr/share/osvm/vmlinux")),
+            rootfs_path: dirs::home_dir()
+                .map(|h| h.join(".osvm/rootfs/osvm-runtime.ext4"))
+                .unwrap_or_else(|| PathBuf::from("/usr/share/osvm/rootfs.ext4")),
             env_vars: HashMap::new(),
             vsock_cid: NEXT_VSOCK_CID.fetch_add(1, Ordering::SeqCst),
             debug: false,
@@ -207,6 +211,33 @@ impl EphemeralVmManager {
             .await
             .context("Failed to create temp directory")?;
 
+        // Copy rootfs CPIO to temp directory
+        let rootfs_dest = temp_dir.join("rootfs.cpio");
+        let rootfs_source = config
+            .rootfs_path
+            .parent()
+            .unwrap()
+            .join("mcp-server.cpio");
+
+        debug!(
+            "Copying rootfs from {:?} to {:?}",
+            rootfs_source, rootfs_dest
+        );
+
+        let copy_result = Command::new("cp")
+            .arg(&rootfs_source)
+            .arg(&rootfs_dest)
+            .output()
+            .await
+            .context("Failed to copy rootfs")?;
+
+        if !copy_result.status.success() {
+            return Err(anyhow!(
+                "Failed to copy rootfs: {}",
+                String::from_utf8_lossy(&copy_result.stderr)
+            ));
+        }
+
         // Prepare Firecracker configuration
         let api_socket = temp_dir.join("firecracker.sock");
         let vm_config = temp_dir.join("vm_config.json");
@@ -259,23 +290,16 @@ impl EphemeralVmManager {
         config: &EphemeralVmConfig,
         temp_dir: &Path,
     ) -> Result<serde_json::Value> {
-        let rootfs_path = temp_dir.join("rootfs.ext4");
+        let initrd_path = temp_dir.join("rootfs.cpio");
 
         Ok(serde_json::json!({
             "boot-source": {
                 "kernel_image_path": config.kernel_path.to_string_lossy(),
+                "initrd_path": initrd_path.to_string_lossy(),
                 "boot_args": format!(
-                    "console=ttyS0 reboot=k panic=1 pci=off init=/usr/bin/osvm-tool-executor tool={} server={}",
-                    config.tool_name,
-                    config.server_id
+                    "console=ttyS0 reboot=k panic=1 pci=off init=/init"
                 ),
             },
-            "drives": [{
-                "drive_id": "rootfs",
-                "path_on_host": rootfs_path.to_string_lossy(),
-                "is_root_device": true,
-                "is_read_only": false,
-            }],
             "machine-config": {
                 "vcpu_count": config.cpus,
                 "mem_size_mib": config.memory_mb,
