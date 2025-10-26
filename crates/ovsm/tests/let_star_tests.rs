@@ -255,5 +255,6 @@ fn test_let_star_accumulator_pattern() {
   d)
 "#;
     let result = eval_lisp(source).unwrap();
-    assert_eq!(result, Value::Int(14)); // 1 + 3 + 6 + 4
+    // a=1, b=1+2=3, c=1+3+3=7, d=1+3+7+4=15
+    assert_eq!(result, Value::Int(15));
 }

@@ -699,14 +699,18 @@ impl SExprParser {
     fn parse_do(&mut self) -> Result<Expression> {
         self.advance(); // consume 'do'
 
-        let mut exprs = Vec::new();
+        let mut args = Vec::new();
         while !self.check(&TokenKind::RightParen) {
-            exprs.push(self.parse_expression()?);
+            args.push(Argument::positional(self.parse_expression()?));
         }
         self.consume(TokenKind::RightParen)?;
 
-        // Return the last expression, or null if empty
-        Ok(exprs.last().cloned().unwrap_or(Expression::NullLiteral))
+        // Return a ToolCall with all expressions as arguments
+        // The evaluator will execute them sequentially and return the last value
+        Ok(Expression::ToolCall {
+            name: "do".to_string(),
+            args,
+        })
     }
 
     /// Parse (when condition body...)
