@@ -628,9 +628,6 @@ impl LispEvaluator {
         for func_def in func_defs {
             match func_def {
                 Expression::ArrayLiteral(parts) => {
-                    for (i, part) in parts.iter().enumerate() {
-                    }
-
                     if parts.len() == 3 {
                         // Extract name
                         let name = match &parts[0] {
@@ -1073,7 +1070,7 @@ impl LispEvaluator {
     /// (do expr1 expr2 ... exprN) - Sequential execution
     fn eval_do(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         let mut last_val = Value::Null;
-        for (i, arg) in args.iter().enumerate() {
+        for arg in args.iter() {
             last_val = self.evaluate_expression(&arg.value)?;
         }
         Ok(last_val)

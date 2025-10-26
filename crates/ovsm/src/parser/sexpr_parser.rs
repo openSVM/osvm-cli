@@ -703,6 +703,8 @@ impl SExprParser {
     }
 
     /// Convert expression to default value string for parameter storage
+    /// Currently unused but kept for potential future use with &optional/&key parameters
+    #[allow(dead_code)]
     fn expr_to_default_string(&self, expr: &Expression) -> String {
         match expr {
             Expression::IntLiteral(n) => n.to_string(),

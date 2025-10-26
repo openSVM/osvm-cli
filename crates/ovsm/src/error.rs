@@ -8,8 +8,8 @@ pub enum Error {
     // Parse errors
     /// Syntax error encountered during parsing
     ///
-    /// **Triggered by:** Invalid OVSM syntax (missing keywords, malformed expressions)
-    /// **Example:** `IF $x > 10` (missing THEN keyword)
+    /// **Triggered by:** Invalid OVSM syntax (unmatched parentheses, invalid S-expressions)
+    /// **Example:** `(if (> x 10)` (missing closing parenthesis)
     #[error("Syntax error at line {line}, column {col}: {message}")]
     SyntaxError {
         /// Line number where error occurred
@@ -41,8 +41,8 @@ pub enum Error {
     /// Reference to undefined variable
     ///
     /// **Triggered by:** Using a variable before assignment
-    /// **Example:** `RETURN $x` (when $x was never assigned)
-    /// **Prevention:** Always initialize variables before use
+    /// **Example:** `x` (when x was never defined)
+    /// **Prevention:** Always define variables with `(define x value)` before use
     #[error("Undefined variable: {name}")]
     UndefinedVariable {
         /// Variable name
@@ -59,7 +59,7 @@ pub enum Error {
     /// Type mismatch error
     ///
     /// **Triggered by:** Operation expecting one type but receiving another
-    /// **Example:** `$x = "hello" + 5` (string + number), `IF "text" THEN` (string as boolean)
+    /// **Example:** `(+ "hello" 5)` (string + number), `(if "text" ...)` (string as boolean)
     /// **Prevention:** Ensure type compatibility in operations and conversions
     #[error("Type error: expected {expected}, got {got}")]
     TypeError {
