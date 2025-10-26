@@ -71,9 +71,10 @@ fn test_varargs_single_arg() {
 fn test_mixed_required_and_rest() {
     let source = r#"
 (defun greet (greeting &rest names)
-  (for (name names)
-    (log :message (str greeting " " name)))
-  (length names))
+  (do
+    (for (name names)
+      (log :message (str greeting " " name)))
+    (length names)))
 
 (greet "Hello" "Alice" "Bob" "Charlie")
 "#;
@@ -85,10 +86,11 @@ fn test_mixed_required_and_rest() {
 fn test_mixed_multiple_required() {
     let source = r#"
 (defun add-all (x y &rest more)
-  (define total (+ x y))
-  (for (val more)
-    (set! total (+ total val)))
-  total)
+  (do
+    (define total (+ x y))
+    (for (val more)
+      (set! total (+ total val)))
+    total))
 
 (add-all 1 2 3 4 5)
 "#;
@@ -163,10 +165,11 @@ fn test_varargs_rest_without_name() {
 fn test_varargs_with_accumulator() {
     let source = r#"
 (defun product (&rest numbers)
-  (define result 1)
-  (for (n numbers)
-    (set! result (* result n)))
-  result)
+  (do
+    (define result 1)
+    (for (n numbers)
+      (set! result (* result n)))
+    result))
 
 (product 2 3 4)
 "#;
@@ -178,7 +181,7 @@ fn test_varargs_with_accumulator() {
 fn test_varargs_with_map() {
     let source = r#"
 (defun double-all (&rest numbers)
-  (map (lambda (x) (* x 2)) numbers))
+  (map numbers (lambda (x) (* x 2))))
 
 (double-all 1 2 3 4)
 "#;
@@ -226,7 +229,7 @@ fn test_varargs_empty_rest() {
 fn test_varargs_with_filter() {
     let source = r#"
 (defun keep-positive (&rest numbers)
-  (filter (lambda (x) (> x 0)) numbers))
+  (filter numbers (lambda (x) (> x 0))))
 
 (keep-positive -1 2 -3 4 5 -6)
 "#;

@@ -165,7 +165,7 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let code = r#"
 //!     (define arr [1 2 3 4 5])
-//!     (reduce + 0 arr)
+//!     (reduce arr 0 (lambda (a b) (+ a b)))
 //! "#;
 //!
 //! let mut scanner = Scanner::new(code);
@@ -196,9 +196,9 @@
 //! (define numbers [10 25 5 30 15])
 //!
 //! (do
-//!   (define total (reduce + 0 numbers))
-//!   (define max-val (reduce (lambda (a b) (if (> a b) a b)) (nth numbers 0) numbers))
-//!   (define min-val (reduce (lambda (a b) (if (< a b) a b)) (nth numbers 0) numbers))
+//!   (define total (reduce numbers 0 (lambda (a b) (+ a b))))
+//!   (define max-val (reduce numbers (nth numbers 0) (lambda (a b) (if (> a b) a b))))
+//!   (define min-val (reduce numbers (nth numbers 0) (lambda (a b) (if (< a b) a b))))
 //!   (define count (length numbers))
 //!   (define avg (/ total count))
 //!
