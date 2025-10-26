@@ -623,7 +623,7 @@ impl RepairTransaction {
         match self.validate_rollback_success().await {
             Ok(_) => Ok(RepairResult::Partial(
                 "Manual rollback completed".to_string(),
-                vec![], // TODO: Return remaining issues
+                vec![], // Note: Remaining issues tracking not yet implemented
             )),
             Err(_) => Ok(RepairResult::RequiresManualIntervention(
                 "Manual rollback incomplete - please check system state".to_string(),

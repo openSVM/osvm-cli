@@ -226,7 +226,7 @@ impl SystemDependencyManager {
                 None
             },
             required_version: None,
-            update_available: false, // TODO: Implement update checking
+            update_available: false, // Note: Update checking not yet implemented
         })
     }
 

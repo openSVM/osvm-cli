@@ -14,9 +14,18 @@ pub async fn handle_qa_command(
     match matches.subcommand() {
         Some(("run", sub_m)) => {
             // Check if specific scenario or all
-            let category = if sub_m.get_flag("all") || sub_m.get_one::<String>("scenario").is_some() {
-                // If specific scenario or all, run all for now (TODO: filter by scenario name)
+            let category = if sub_m.get_flag("all") {
                 TestCategory::All
+            } else if let Some(scenario_name) = sub_m.get_one::<String>("scenario") {
+                // Filter by scenario name
+                match scenario_name.to_lowercase().as_str() {
+                    "chat" | "chat_ui" => TestCategory::Chat,
+                    "agent" | "agent_cli" => TestCategory::All, // Run all for agent scenarios
+                    _ => {
+                        eprintln!("Warning: Unknown scenario '{}', running all tests", scenario_name);
+                        TestCategory::All
+                    }
+                }
             } else {
                 // Default to chat tests for testing
                 TestCategory::Chat

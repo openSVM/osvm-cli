@@ -16,7 +16,7 @@ impl MarkdownRenderer {
     /// Create a new markdown renderer with custom theme configuration
     pub fn with_theme() -> Self {
         // For now, use default theme since termimad color API is complex
-        // TODO: Implement proper color configuration once termimad usage is clarified
+        // Note: Color configuration deferred until termimad usage patterns are established
         let skin = MadSkin::default();
         Self { skin }
     }

@@ -23,6 +23,7 @@ pub fn build_agent_command() -> Command {
                 .value_name("PROMPT")
                 .help("The prompt or command for the agent to execute")
                 .required(true)
+                .num_args(1..)
                 .index(1),
         )
         .arg(

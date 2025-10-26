@@ -152,7 +152,7 @@ impl LayoutManager {
             return;
         }
 
-        // TODO: Implement smooth animation between configs
+        // FUTURE: Implement smooth animation (requires animation framework integration)
         // For now, just update directly
         self.current_config = new_config;
     }

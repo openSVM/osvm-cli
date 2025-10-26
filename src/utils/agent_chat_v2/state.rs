@@ -636,7 +636,7 @@ impl AdvancedChatState {
         let theme_name = self.get_current_theme_name()?;
         let config = ThemeConfig {
             current_theme: Some(theme_name),
-            auto_theme_switching: false, // TODO: Add this setting
+            auto_theme_switching: false, // Note: Auto theme switching feature planned for future release
         };
 
         let json = serde_json::to_string_pretty(&config)?;

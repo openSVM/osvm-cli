@@ -55,6 +55,8 @@ fn is_known_command(sub_command: &str) -> bool {
             | "chat"
             | "agent"
             | "plan"
+            | "p"     // Short alias for plan
+            | "a"     // Short alias for agent
             | "v"
             | "ver"
             | "version"
@@ -336,9 +338,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle agent command for CLI-based agent execution
     if sub_command == "agent" {
-        let prompt = sub_matches
-            .get_one::<String>("prompt")
+        // Get prompt args (can be multiple words)
+        let prompt_parts: Vec<String> = sub_matches
+            .get_many::<String>("prompt")
+            .map(|values| values.map(|s| s.to_string()).collect())
             .ok_or("No prompt provided for agent command")?;
+
+        let prompt = prompt_parts.join(" ");
 
         let json_output = sub_matches.get_flag("json");
         let verbose = sub_matches.get_count("verbose");
@@ -349,7 +355,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap_or(90);  // Increased from 30s to 90s for complex agent queries with parallel tool execution
 
         return crate::utils::agent_cli::execute_agent_command(
-            prompt,
+            &prompt,
             json_output,
             verbose,
             no_tools,
@@ -361,9 +367,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle plan command for AI-powered command planning
     if sub_command == "plan" {
-        let query = sub_matches
-            .get_one::<String>("query")
+        // Get query args (can be multiple words)
+        let query_parts: Vec<String> = sub_matches
+            .get_many::<String>("query")
+            .map(|values| values.map(|s| s.to_string()).collect())
             .ok_or("No query provided for plan command")?;
+
+        let query = query_parts.join(" ");
 
         let execute = sub_matches.get_flag("execute");
         let yes = sub_matches.get_flag("yes");
@@ -378,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
 
         // Create the execution plan
-        match planner.create_plan(query).await {
+        match planner.create_plan(&query).await {
             Ok(plan) => {
                 if json_output {
                     // JSON output mode
@@ -435,6 +445,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         return Ok(());
+    }
+
+    // Handle short planning/agent aliases early (p and a commands)
+    if sub_command == "p" || sub_command == "a" {
+        return commands::ai_query::handle_ai_query_with_planning(sub_command, sub_matches, &app_matches).await;
     }
 
     // Handle AI queries early to avoid config loading
@@ -676,15 +691,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("   This indicates a programming error - please report this issue.");
             exit(1);
         }
+        // Short planning mode aliases - enable OVSM planning agent
+        "p" | "a" => {
+            // Extract the actual query from subcommand args
+            commands::ai_query::handle_ai_query_with_planning(sub_command, matches, &app_matches).await?;
+        }
         cmd => {
-            let command_duration = command_start_time.elapsed();
-            let result: Result<(), Box<dyn std::error::Error>> =
-                Err(format!("Unknown command: {cmd}").into());
-
-            // Log command execution
-            log_command_execution(sub_command, &command_args[1..], &result, command_duration).await;
-
-            return result;
+            // Check if this is meant to be an AI query (external subcommand)
+            // Route to AI query handler which will validate if it's natural language
+            commands::ai_query::handle_ai_query(cmd, matches, &app_matches).await?;
         }
     };
 

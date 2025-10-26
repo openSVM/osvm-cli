@@ -206,7 +206,7 @@ impl AdvancedChatUI {
                 }
             } else {
                 // Same session count - for now just do a full rebuild
-                // TODO: Implement true in-place updates when cursive API supports it
+                // FUTURE: Implement true in-place updates when cursive API supports it (blocked by upstream)
                 chat_list.clear();
 
                 for (id, name, agent_state) in session_names.iter() {

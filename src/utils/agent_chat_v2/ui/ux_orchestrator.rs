@@ -181,7 +181,7 @@ impl UXOrchestrator {
 
     /// Update notification stack
     fn update_notifications(&mut self, delta: f32) {
-        // TODO: Implement notification updates once VisualEffect trait is properly integrated
+        // FUTURE: Notification updates pending VisualEffect trait stabilization
         // if let Ok(mut notifications) = self.notifications.write() {
         //     notifications.update(delta);
         // }

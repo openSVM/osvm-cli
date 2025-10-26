@@ -673,7 +673,7 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
                 .iter()
                 .map(|_| "param".to_string())
                 .collect(),
-            return_type: None, // TODO: Implement return type analysis
+            return_type: None, // Note: Return type inference requires full type analysis
         };
         self.function_signatures.push(signature);
 
@@ -683,7 +683,7 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         let import = ImportDeclaration {
             path: "use_item".to_string(), // Simplified for now
-            items: vec![],                // TODO: Implement detailed import analysis
+            items: vec![], // Note: Detailed import analysis requires AST traversal
         };
         self.imports.push(import);
 

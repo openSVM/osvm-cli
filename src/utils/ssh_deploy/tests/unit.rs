@@ -70,7 +70,7 @@ mod tests {
 
     // These tests expect functions that weren't implemented in the validators module
     // They are disabled for now as they test resource validation functions
-    // TODO: Implement get_required_resources, validate_cpu_cores, validate_memory, validate_disk_space
+    // TEST PLAN: Implement resource validation tests (get_required_resources, validate_cpu_cores, validate_memory, validate_disk_space)
     /*
     #[test]
     fn test_get_required_resources() { ... }
@@ -87,7 +87,7 @@ mod tests {
 
     // This test expects advanced resource requirement validation beyond what was implemented
     // The current validate_system_requirements only checks for field presence and SVM type
-    // TODO: Enhance validate_system_requirements to check CPU, memory, and disk thresholds
+    // TEST PLAN: Enhance validate_system_requirements with CPU, memory, and disk threshold checks
     /*
     #[test]
     fn test_validate_system_requirements() {

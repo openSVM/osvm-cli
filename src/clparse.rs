@@ -123,6 +123,9 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
         .subcommand(Command::new("v").about("Show version information"))
         .subcommand(Command::new("ver").about("Show version information"))
         .subcommand(Command::new("version").about("Show version information"))
+        // Short aliases for planning/agent modes (external subcommands for natural language)
+        .subcommand(Command::new("p").about("AI planning mode - use OVSM to plan and execute queries").allow_external_subcommands(true))
+        .subcommand(Command::new("a").about("AI agent mode - use OVSM to plan and execute queries").allow_external_subcommands(true))
         .allow_external_subcommands(true)
         // Add a single version flag with multiple aliases
         .arg(
@@ -176,6 +179,15 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
                 .action(ArgAction::SetTrue)
                 .global(true)
                 .help("Show debug information"),
+        )
+        .arg(
+            Arg::new("plan")
+                .long("plan")
+                .short('p')
+                .visible_short_alias('a')
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Use AI planning mode (OVSM agent) for queries"),
         )
         .arg(
             Arg::new("json_rpc_url")

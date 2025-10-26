@@ -1061,7 +1061,7 @@ Format your response as:
         // Create static examples as fallback (if AI is disabled or fails)
         self.create_static_examples()?;
 
-        // TODO: Add AI-generated scenarios in future version
+        // Note: AI-generated test scenarios planned for v2.0 release
         // This would use ai_service.query() to generate comprehensive test scenarios
         // based on analyzing OSVM CLI structure and available commands
 

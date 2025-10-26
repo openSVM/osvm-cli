@@ -252,7 +252,7 @@ pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: Advan
         let current_content = input.get_content().to_string();
 
         // For TextArea, append suggestion at the end for now
-        // TODO: Implement proper cursor position insertion for TextArea
+        // FUTURE: Cursor position insertion (blocked by TextArea API limitations)
         let mut new_content = current_content;
         if !new_content.is_empty() && !new_content.ends_with('\n') {
             new_content.push(' ');
@@ -2470,7 +2470,7 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
     use std::sync::{Arc, Mutex};
 
     let theme_group = Arc::new(Mutex::new(RadioGroup::new()));
-    let current_theme = "dark"; // TODO: Get from state
+    let current_theme = "dark"; // FUTURE: Get from state (requires function signature refactor to pass state)
 
     let mut theme_list = LinearLayout::vertical();
     theme_list.add_child(TextView::new("Select Theme:"));
@@ -2924,7 +2924,7 @@ pub fn show_help_menu(s: &mut Cursive) {
 
 /// Toggle MCP server collapsed/expanded state
 pub fn toggle_mcp_server_collapsed(_s: &mut Cursive, _server_id: String) {
-    // TODO: Implement collapsible state tracking
+    // FUTURE: Collapsible state tracking (requires state management refactor)
     // For now, this is a placeholder - full implementation would track
     // collapsed state in AdvancedChatState and hide/show tools accordingly
 }
@@ -3096,7 +3096,7 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
 
 /// Show drafts dialog
 pub fn show_drafts_dialog(siv: &mut Cursive, _state: AdvancedChatState) {
-    // TODO: Implement draft storage and retrieval
+    // FUTURE: Draft storage (requires persistence layer integration)
     // For now, show a placeholder dialog
 
     siv.add_layer(

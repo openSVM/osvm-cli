@@ -20,6 +20,7 @@ pub fn build_plan_command() -> Command {
                 .value_name("QUERY")
                 .help("Natural language query describing what you want to do")
                 .required(true)
+                .num_args(1..)
                 .index(1),
         )
         .arg(

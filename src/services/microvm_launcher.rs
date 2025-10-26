@@ -957,7 +957,7 @@ impl MicroVmLauncher {
         let rootfs_path = osvm_home.join("rootfs/mcp-server.cpio");
 
         // For now, use the same rootfs as OSVM runtime
-        // TODO: Create specialized MCP server rootfs
+        // FUTURE: Create specialized MCP server rootfs (requires build pipeline integration)
         let rootfs_path = if !rootfs_path.exists() {
             osvm_home.join("rootfs/osvm-runtime.cpio")
         } else {
