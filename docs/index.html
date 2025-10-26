@@ -175,6 +175,7 @@
 
     <!-- Loading Scripts -->
     <script src="script.js"></script>
+    <script src="js/ghost-in-browser.js"></script>
     <script src="js/navigation.js"></script>
     <script src="js/search.js"></script>
     <script src="js/animations.js"></script>
@@ -231,9 +232,19 @@
             // Initialize all systems
             initNavigation();
 
+            // Initialize ghost effect with configuration
+            GhostInTheBrowser.init({
+                gridSize: 12,
+                trailLength: 600,
+                respectReducedMotion: true,
+                zIndex: 0,
+                mountPosition: 'first'
+            });
+
             // Add initialization complete message
             setTimeout(() => {
                 console.log('✅ Documentation system ready');
+                console.log('👻 Ghost effect initialized');
             }, 1000);
         });
     </script>
