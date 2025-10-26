@@ -838,21 +838,22 @@ impl LispEvaluator {
         for arg in &args[1..] {
             match &arg.value {
                 Expression::ArrayLiteral(clause) if clause.len() == 2 => {
-                    // Check if this is an else clause
+                    // Array literal syntax: [type result]
                     if let Expression::Variable(var) = &clause[0] {
                         if var == "else" || var == "otherwise" || var == "t" {
-                            // Else clause matches everything
                             return self.evaluate_expression(&clause[1]);
                         }
                     }
 
-                    // Match type pattern
                     let type_match = match &clause[0] {
                         Expression::Variable(type_name) => {
                             self.type_matches(&test_type, type_name)
                         }
+                        Expression::NullLiteral => {
+                            // null literal in pattern position matches null type
+                            test_type == "null"
+                        }
                         Expression::ArrayLiteral(types) => {
-                            // Multiple types (any can match)
                             let mut any_match = false;
                             for type_expr in types {
                                 if let Expression::Variable(type_name) = type_expr {
@@ -869,6 +870,41 @@ impl LispEvaluator {
 
                     if type_match {
                         return self.evaluate_expression(&clause[1]);
+                    }
+                }
+                Expression::ToolCall { args: clause_args, .. } if clause_args.len() == 2 => {
+                    // Parenthesized syntax: (type result)
+                    if let Expression::Variable(var) = &clause_args[0].value {
+                        if var == "else" || var == "otherwise" || var == "t" {
+                            return self.evaluate_expression(&clause_args[1].value);
+                        }
+                    }
+
+                    let type_match = match &clause_args[0].value {
+                        Expression::Variable(type_name) => {
+                            self.type_matches(&test_type, type_name)
+                        }
+                        Expression::NullLiteral => {
+                            // null literal in pattern position matches null type
+                            test_type == "null"
+                        }
+                        Expression::ArrayLiteral(types) => {
+                            let mut any_match = false;
+                            for type_expr in types {
+                                if let Expression::Variable(type_name) = type_expr {
+                                    if self.type_matches(&test_type, type_name) {
+                                        any_match = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            any_match
+                        }
+                        _ => false,
+                    };
+
+                    if type_match {
+                        return self.evaluate_expression(&clause_args[1].value);
                     }
                 }
                 _ => {
