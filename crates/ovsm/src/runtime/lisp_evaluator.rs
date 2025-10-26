@@ -266,6 +266,12 @@ impl LispEvaluator {
 
             Expression::Throw { tag, value } => self.eval_throw(tag, value),
 
+            Expression::DestructuringBind {
+                pattern,
+                value,
+                body,
+            } => self.eval_destructuring_bind(pattern, value, body),
+
             _ => Err(Error::NotImplemented {
                 tool: format!("Expression type: {:?}", expr),
             }),
@@ -3432,6 +3438,202 @@ impl LispEvaluator {
             tag: tag_value.to_string(),
             value: Box::new(value),
         })
+    }
+
+    /// Evaluate (destructuring-bind pattern value body...) expression
+    /// Pattern matching for variable binding
+    fn eval_destructuring_bind(
+        &mut self,
+        pattern: &Expression,
+        value_expr: &Expression,
+        body: &[Expression],
+    ) -> Result<Value> {
+        // Evaluate the value expression
+        let value = self.evaluate_expression(value_expr)?;
+
+        // Push new scope for bindings
+        self.env.enter_scope();
+
+        // Perform pattern matching and binding
+        self.destructure_pattern(pattern, &value)?;
+
+        // Evaluate body expressions
+        let mut result = Value::Null;
+        for expr in body {
+            result = self.evaluate_expression(expr)?;
+        }
+
+        // Pop scope
+        self.env.exit_scope();
+
+        Ok(result)
+    }
+
+    /// Recursively match pattern against value and bind variables
+    fn destructure_pattern(&mut self, pattern: &Expression, value: &Value) -> Result<()> {
+        match pattern {
+            // Simple variable binding
+            Expression::Variable(name) => {
+                // Special handling for &rest marker
+                if name.starts_with('&') {
+                    return Err(Error::ParseError(format!(
+                        "Unexpected lambda list keyword in pattern: {}",
+                        name
+                    )));
+                }
+                self.env.define(name.clone(), value.clone());
+                Ok(())
+            }
+
+            // Parenthesized list pattern (a b c) or function call pattern
+            Expression::ToolCall { name: _, args } => {
+                self.destructure_list_pattern(args, value)
+            }
+
+            // Array literal pattern [a b c] (treated like list)
+            Expression::ArrayLiteral(pattern_elements) => {
+                if let Value::Array(arr) = value {
+                    // Check for &rest
+                    let mut rest_idx = None;
+                    for (i, elem) in pattern_elements.iter().enumerate() {
+                        if let Expression::Variable(name) = elem {
+                            if name == "&rest" {
+                                rest_idx = Some(i);
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some(rest_pos) = rest_idx {
+                        // With &rest: bind required elements, then rest
+                        if arr.len() < rest_pos {
+                            return Err(Error::ParseError(format!(
+                                "Not enough elements: expected at least {}, got {}",
+                                rest_pos,
+                                arr.len()
+                            )));
+                        }
+
+                        // Bind required elements
+                        for (pattern_elem, val) in
+                            pattern_elements.iter().take(rest_pos).zip(arr.iter())
+                        {
+                            self.destructure_pattern(pattern_elem, val)?;
+                        }
+
+                        // Bind &rest variable
+                        if rest_pos + 1 < pattern_elements.len() {
+                            if let Expression::Variable(rest_var) = &pattern_elements[rest_pos + 1]
+                            {
+                                let rest_values = arr[rest_pos..].to_vec();
+                                self.env
+                                    .define(rest_var.clone(), Value::Array(Arc::new(rest_values)));
+                            }
+                        }
+                    } else {
+                        // Without &rest: exact length match
+                        if pattern_elements.len() != arr.len() {
+                            return Err(Error::ParseError(format!(
+                                "Pattern length mismatch: expected {}, got {}",
+                                pattern_elements.len(),
+                                arr.len()
+                            )));
+                        }
+
+                        for (pattern_elem, val) in pattern_elements.iter().zip(arr.iter()) {
+                            self.destructure_pattern(pattern_elem, val)?;
+                        }
+                    }
+                    Ok(())
+                } else {
+                    Err(Error::TypeError {
+                        expected: "Array".to_string(),
+                        got: format!("{:?}", value),
+                    })
+                }
+            }
+
+            _ => Err(Error::ParseError(format!(
+                "Invalid pattern in destructuring-bind: {:?}",
+                pattern
+            ))),
+        }
+    }
+
+    /// Destructure list pattern with support for &rest
+    fn destructure_list_pattern(
+        &mut self,
+        pattern_args: &[crate::parser::Argument],
+        value: &Value,
+    ) -> Result<()> {
+        // Extract pattern variable names
+        let mut pattern_vars = Vec::new();
+        let mut rest_idx = None;
+
+        for (i, arg) in pattern_args.iter().enumerate() {
+            if let Expression::Variable(name) = &arg.value {
+                if name == "&rest" {
+                    rest_idx = Some(i);
+                    break;
+                }
+                pattern_vars.push(name.clone());
+            } else {
+                // Nested pattern
+                pattern_vars.push(String::new()); // placeholder
+            }
+        }
+
+        // Get array values
+        let arr = if let Value::Array(arr) = value {
+            arr.clone()
+        } else {
+            return Err(Error::TypeError {
+                expected: "Array".to_string(),
+                got: format!("{:?}", value),
+            });
+        };
+
+        // Check length constraints
+        if let Some(rest_pos) = rest_idx {
+            // With &rest: need at least (rest_pos) elements
+            if arr.len() < rest_pos {
+                return Err(Error::ParseError(format!(
+                    "Not enough elements to destructure: expected at least {}, got {}",
+                    rest_pos,
+                    arr.len()
+                )));
+            }
+
+            // Bind required elements
+            for (i, arg) in pattern_args.iter().enumerate().take(rest_pos) {
+                self.destructure_pattern(&arg.value, &arr[i])?;
+            }
+
+            // Bind &rest variable (next after &rest keyword)
+            if rest_pos + 1 < pattern_args.len() {
+                if let Expression::Variable(rest_var) = &pattern_args[rest_pos + 1].value {
+                    let rest_values = arr[rest_pos..].to_vec();
+                    self.env
+                        .define(rest_var.clone(), Value::Array(Arc::new(rest_values)));
+                }
+            }
+        } else {
+            // Without &rest: exact length match
+            if pattern_vars.len() != arr.len() {
+                return Err(Error::ParseError(format!(
+                    "Pattern length mismatch: expected {}, got {}",
+                    pattern_vars.len(),
+                    arr.len()
+                )));
+            }
+
+            // Bind each element
+            for (i, arg) in pattern_args.iter().enumerate() {
+                self.destructure_pattern(&arg.value, &arr[i])?;
+            }
+        }
+
+        Ok(())
     }
 
     // ========================================================================

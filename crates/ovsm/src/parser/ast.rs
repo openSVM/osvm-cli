@@ -257,6 +257,17 @@ pub enum Expression {
         /// Value to return from the catch
         value: Box<Expression>,
     },
+
+    /// Destructuring-bind expression - pattern matching for variable binding
+    /// (destructuring-bind (a b c) [1 2 3] body...)
+    DestructuringBind {
+        /// Pattern to match against (list of variable names, possibly nested)
+        pattern: Box<Expression>,
+        /// Value expression to destructure
+        value: Box<Expression>,
+        /// Body expressions evaluated with pattern bindings in scope
+        body: Vec<Expression>,
+    },
 }
 
 /// Binary operators

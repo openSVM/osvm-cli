@@ -122,6 +122,7 @@ impl SExprParser {
             TokenKind::Identifier(name) if name == "cond" => self.parse_cond(),
             TokenKind::Identifier(name) if name == "catch" => self.parse_catch(),
             TokenKind::Identifier(name) if name == "throw" => self.parse_throw(),
+            TokenKind::Identifier(name) if name == "destructuring-bind" => self.parse_destructuring_bind(),
 
             // Special accessor forms
             TokenKind::Dot => self.parse_field_access(),
@@ -1303,6 +1304,32 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         Ok(Expression::Throw { tag, value })
+    }
+
+    /// Parse (destructuring-bind pattern value body...) expression
+    /// Pattern matching for variable binding
+    /// Example: (destructuring-bind (a b c) [1 2 3] (+ a b c))
+    fn parse_destructuring_bind(&mut self) -> Result<Expression> {
+        self.advance(); // consume 'destructuring-bind'
+
+        // Parse pattern (can be nested list of variables)
+        let pattern = Box::new(self.parse_expression()?);
+
+        // Parse value expression to destructure
+        let value = Box::new(self.parse_expression()?);
+
+        // Parse body expressions
+        let mut body = Vec::new();
+        while !self.check(&TokenKind::RightParen) {
+            body.push(self.parse_expression()?);
+        }
+        self.consume(TokenKind::RightParen)?;
+
+        Ok(Expression::DestructuringBind {
+            pattern,
+            value,
+            body,
+        })
     }
 }
 
