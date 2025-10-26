@@ -187,10 +187,10 @@ chmod +x init
 echo "✓ Rootfs customized"
 echo ""
 
-# Create cpio archive
-echo "[6/8] Creating cpio archive..."
-find . -print0 | cpio --null -ov --format=newc > "$OUTPUT_DIR/mcp-server.cpio" 2>&1 | grep -v "blocks" || true
-echo "✓ CPIO archive created: $OUTPUT_DIR/mcp-server.cpio"
+# Create cpio archive (gzip-compressed for kernel 5.10+)
+echo "[6/8] Creating gzip-compressed cpio archive..."
+find . -print0 | cpio --null -o --format=newc 2>/dev/null | gzip -9 > "$OUTPUT_DIR/mcp-server.cpio.gz"
+echo "✓ CPIO archive created: $OUTPUT_DIR/mcp-server.cpio.gz"
 echo ""
 
 # Get kernel
@@ -198,14 +198,20 @@ echo "[7/8] Checking kernel..."
 KERNEL_DIR="$HOME/.osvm/kernel"
 mkdir -p "$KERNEL_DIR"
 
+# Prefer 5.10 kernel with vsock support
 if [ ! -f "$KERNEL_DIR/vmlinux.bin" ]; then
-    echo "  Kernel not found. Downloading..."
-    
-    # Try to download a pre-built kernel
-    KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
-    
-    echo "  Downloading from: $KERNEL_URL"
-    curl -L -o "$KERNEL_DIR/vmlinux.bin" "$KERNEL_URL" || {
+    if [ -f "$KERNEL_DIR/vmlinux-5.10.bin" ]; then
+        echo "  Using kernel 5.10 with vsock support"
+        ln -sf "$KERNEL_DIR/vmlinux-5.10.bin" "$KERNEL_DIR/vmlinux.bin"
+    else
+        echo "  Kernel not found. Downloading 5.10 kernel with vsock support..."
+
+        # Download kernel 5.10 with vsock support
+        KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux-5.10.bin"
+
+        echo "  Downloading from: $KERNEL_URL"
+        curl -L -o "$KERNEL_DIR/vmlinux-5.10.bin" "$KERNEL_URL" && \
+        ln -sf "$KERNEL_DIR/vmlinux-5.10.bin" "$KERNEL_DIR/vmlinux.bin" || {
         echo ""
         echo "ERROR: Could not download kernel."
         echo "Please manually place a Linux kernel at: $KERNEL_DIR/vmlinux.bin"

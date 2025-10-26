@@ -212,12 +212,12 @@ impl EphemeralVmManager {
             .context("Failed to create temp directory")?;
 
         // Copy rootfs CPIO to temp directory
-        let rootfs_dest = temp_dir.join("rootfs.cpio");
+        let rootfs_dest = temp_dir.join("rootfs.cpio.gz");
         let rootfs_source = config
             .rootfs_path
             .parent()
             .unwrap()
-            .join("mcp-server.cpio");
+            .join("mcp-server.cpio.gz");
 
         debug!(
             "Copying rootfs from {:?} to {:?}",
@@ -290,7 +290,7 @@ impl EphemeralVmManager {
         config: &EphemeralVmConfig,
         temp_dir: &Path,
     ) -> Result<serde_json::Value> {
-        let initrd_path = temp_dir.join("rootfs.cpio");
+        let initrd_path = temp_dir.join("rootfs.cpio.gz");
 
         Ok(serde_json::json!({
             "boot-source": {
