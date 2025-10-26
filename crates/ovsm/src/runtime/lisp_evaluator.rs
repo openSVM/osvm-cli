@@ -640,13 +640,14 @@ impl LispEvaluator {
             }
         }
 
+        // Capture outer environment BEFORE creating flet scope
+        // This ensures flet functions can't see themselves or each other
+        let outer_env = self.env.current_env_snapshot();
+
         // Create new scope for local functions
         self.env.enter_scope();
 
-        // Bind functions in current environment (non-recursively)
-        // Each function closes over the OUTER environment, not seeing other flet functions
-        let outer_env = self.env.current_env_snapshot();
-
+        // Bind functions with closure over outer environment (non-recursively)
         for (name, params, body) in functions {
             let func_value = Value::Function {
                 params,
@@ -2613,7 +2614,7 @@ impl LispEvaluator {
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
         // Check if this is a user-defined function first
         if let Ok(func_val) = self.env.get(name) {
-            if let Value::Function { params, body, closure: _ } = func_val {
+            if let Value::Function { params, body, closure } = func_val {
                 // This is a function call!
 
                 // Evaluate arguments - handle both positional and keyword arguments
@@ -2634,8 +2635,16 @@ impl LispEvaluator {
                     evaluated_args.push(val);
                 }
 
-                // Bind parameters (supports &rest, &optional, &key)
+                // Create new scope for function execution
                 self.env.enter_scope();
+
+                // Restore closure variables first (critical for flet)
+                // This ensures functions see ONLY their closure, not current environment
+                for (var_name, var_value) in closure.iter() {
+                    self.env.define(var_name.clone(), var_value.clone());
+                }
+
+                // Then bind parameters on top of closure
                 self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                 // Evaluate function body
