@@ -626,11 +626,17 @@ osvm "identify unusual activity in program 123...456"
 osvm "what are the top 10 most active wallets today?"
 osvm "show me all failed transactions for this wallet"
 
-# Complex investigations
-osvm "analyze arbitrage opportunities between Orca and Raydium"
-osvm "find wallets that interacted with both program A and B"
-osvm "identify potential bot activity in the last 100 blocks"
-osvm "calculate total fees paid by wallet X this month"
+# AI Planning Mode (explicit planning with OVSM agent)
+osvm p "analyze arbitrage opportunities between Orca and Raydium"
+osvm a "find wallets that interacted with both program A and B"
+osvm --plan "identify potential bot activity in the last 100 blocks"
+osvm -p "calculate total fees paid by wallet X this month"
+
+# The planning mode provides:
+# - Explicit OVSM code generation
+# - Step-by-step execution plans
+# - Enhanced debugging capabilities
+# - Better control over query execution
 ```
 
 ### 📡 MCP Server Management (Enhanced Data Access)
@@ -647,6 +653,23 @@ osvm mcp remove shyft                  # Remove MCP server
 # - DEX analytics (Jupiter, Raydium)
 # - NFT metadata (Metaplex, Magic Eden)
 # - Token analytics (Birdeye, CoinGecko)
+```
+
+### 🤖 AI Planning Mode
+```bash
+# Use AI planning mode for natural language queries
+osvm p "show me all transactions for this wallet"
+osvm a "analyze recent DEX trades"
+osvm plan "find unusual activity"
+osvm --plan "calculate total fees"
+osvm -p "trace token flow"      # Short flag
+osvm -a "identify arbitrage"    # Short flag alias
+
+# Planning mode uses OVSM agent to:
+# - Parse natural language intent
+# - Generate OVSM execution plan
+# - Execute via MCP tools
+# - Return formatted results
 ```
 
 ### 💬 Interactive Chat Mode

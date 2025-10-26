@@ -38,7 +38,29 @@ See [CHANGELOG.md](../CHANGELOG.md) for complete release notes.
 
 ---
 
-## 🤖 AI-Powered Chat (NEW!)
+## 🤖 AI-Powered Features (NEW!)
+
+### AI Planning Mode
+
+OSVM now includes **AI-powered planning mode** that interprets natural language queries:
+
+**Quick Start:**
+```bash
+# Short command aliases
+osvm p "calculate transaction fees"
+osvm a "analyze network activity"
+
+# Flag syntax (global option)
+osvm --plan "check validator status"
+osvm -p "show me recent blocks"
+osvm -a "trace SOL transfers"
+```
+
+**How It Works:**
+1. **Parse Intent**: AI understands your natural language query
+2. **Generate Plan**: Creates OVSM LISP execution plan
+3. **Execute**: Runs plan using MCP tools and RPC endpoints
+4. **Format Results**: Returns human-readable insights
 
 ### Interactive Code Execution
 

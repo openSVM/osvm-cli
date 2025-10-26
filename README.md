@@ -74,6 +74,19 @@ osvm chat
 # - See results immediately
 ```
 
+### AI Planning Mode
+
+```bash
+# Use AI planning mode with natural language queries
+osvm p "how do I check my wallet balance?"
+osvm a "deploy a validator on testnet"
+
+# Or use the long form / flag syntax:
+osvm plan "show me recent network activity"
+osvm --plan "what's the current TPS?"
+osvm -p "analyze transaction fees"
+```
+
 ### Your First Deployment
 
 ```bash
@@ -85,9 +98,25 @@ osvm rpc local
 
 ---
 
-## 🤖 AI-Powered Chat (NEW!)
+## 🤖 AI-Powered Features (NEW!)
 
-### ✨ What's New in 0.9.2
+### ✨ AI Planning Mode
+
+OSVM now includes **AI-powered planning mode** that interprets natural language queries and executes them using the OVSM agent:
+
+**Quick Start:**
+```bash
+# Short aliases
+osvm p "calculate transaction fees for my wallet"
+osvm a "show me the current network status"
+
+# Flag syntax (can be combined with other commands)
+osvm --plan "deploy a validator"
+osvm -p "analyze recent blocks"
+osvm -a "check my SOL balance"
+```
+
+### ✨ Interactive Chat with Code Execution
 
 The chat interface now **automatically executes OVSM code** from AI responses!
 
