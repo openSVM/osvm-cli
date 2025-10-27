@@ -869,7 +869,24 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
 
         if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
             // No tools - direct response
-            match ai_service.query_with_debug(query, verbose > 1).await {
+            let finalization_prompt = format!(
+                "You are finalizing the answer to this user query: \"{}\"\n\n\
+                 The execution has completed. Your task is to:\n\
+                 1. Format the results in a clear, human-readable way\n\
+                 2. Directly answer the user's question based on the data\n\
+                 3. DO NOT generate any new plans or code\n\
+                 4. DO NOT suggest additional steps or actions\n\
+                 5. Just present the final answer clearly and concisely\n\n\
+                 Results to format:\n{:?}",
+                query, tool_results_for_ai
+            );
+
+            match ai_service.query_osvm_ai_with_options(
+                query,
+                Some(finalization_prompt),
+                Some(true), // ownPlan: true - tells server not to execute, just generate text
+                verbose > 1
+            ).await {
                 Ok(resp) => {
                     println!(" ✅");
                     resp

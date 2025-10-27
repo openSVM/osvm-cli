@@ -463,7 +463,7 @@ impl AiService {
         .await
     }
 
-    async fn query_osvm_ai_with_options(
+    pub async fn query_osvm_ai_with_options(
         &self,
         question: &str,
         system_prompt: Option<String>,
