@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpStream;
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout};
@@ -21,7 +22,7 @@ use uuid::Uuid;
 const DEFAULT_TOOL_TIMEOUT_SECS: u64 = 30;
 
 /// Default memory allocation for ephemeral VMs (MB)
-const DEFAULT_EPHEMERAL_MEMORY_MB: usize = 256;
+const DEFAULT_EPHEMERAL_MEMORY_MB: usize = 512;
 
 /// Default CPU count for ephemeral VMs
 const DEFAULT_EPHEMERAL_CPUS: u8 = 1;
@@ -29,10 +30,13 @@ const DEFAULT_EPHEMERAL_CPUS: u8 = 1;
 /// Maximum concurrent ephemeral VMs
 const MAX_CONCURRENT_VMS: usize = 50;
 
-/// vsock port for tool communication (must match guest/mcp_vsock_wrapper)
-const VSOCK_TOOL_PORT: u32 = 5252;
+/// TCP port for tool communication (must match guest/mcp_vsock_wrapper)
+const TCP_TOOL_PORT: u16 = 8080;
 
-/// Next available vsock CID (starts at 3, reserves 0-2)
+/// Guest VM IP address (fixed by network configuration)
+const GUEST_VM_IP: &str = "172.16.0.2";
+
+/// Next available vsock CID (starts at 3, reserves 0-2) - kept for VM ID generation
 static NEXT_VSOCK_CID: AtomicU32 = AtomicU32::new(3);
 
 /// Ephemeral MicroVM configuration
@@ -44,6 +48,8 @@ pub struct EphemeralVmConfig {
     pub tool_name: String,
     /// Server ID this tool belongs to
     pub server_id: String,
+    /// MCP server command to execute
+    pub server_command: String,
     /// Memory allocation in MB
     pub memory_mb: usize,
     /// Number of CPUs
@@ -60,14 +66,18 @@ pub struct EphemeralVmConfig {
     pub vsock_cid: u32,
     /// Whether to enable debug logging
     pub debug: bool,
+    /// TAP device name for networking
+    pub tap_device: String,
 }
 
 impl Default for EphemeralVmConfig {
     fn default() -> Self {
+        let cid = NEXT_VSOCK_CID.fetch_add(1, Ordering::SeqCst);
         Self {
             id: Uuid::new_v4().to_string(),
             tool_name: String::new(),
             server_id: String::new(),
+            server_command: String::new(),
             memory_mb: DEFAULT_EPHEMERAL_MEMORY_MB,
             cpus: DEFAULT_EPHEMERAL_CPUS,
             timeout_secs: DEFAULT_TOOL_TIMEOUT_SECS,
@@ -78,8 +88,9 @@ impl Default for EphemeralVmConfig {
                 .map(|h| h.join(".osvm/rootfs/osvm-runtime.ext4"))
                 .unwrap_or_else(|| PathBuf::from("/usr/share/osvm/rootfs.ext4")),
             env_vars: HashMap::new(),
-            vsock_cid: NEXT_VSOCK_CID.fetch_add(1, Ordering::SeqCst),
+            vsock_cid: cid,
             debug: false,
+            tap_device: format!("osvm-tap{}", cid),
         }
     }
 }
@@ -154,10 +165,106 @@ impl EphemeralVmManager {
         }
     }
 
+    /// Ensure Firecracker binary has necessary network capabilities
+    async fn ensure_firecracker_capabilities(&self) -> Result<()> {
+        // Check if firecracker binary exists
+        let firecracker_path = which::which("firecracker")
+            .context("Firecracker binary not found in PATH")?;
+
+        debug!("Granting CAP_NET_ADMIN capability to: {:?}", firecracker_path);
+
+        // Grant CAP_NET_ADMIN capability to Firecracker binary
+        let output = tokio::process::Command::new("sudo")
+            .args(&[
+                "setcap",
+                "cap_net_admin+ep",
+                firecracker_path.to_str().unwrap(),
+            ])
+            .output()
+            .await
+            .context("Failed to set capabilities on Firecracker binary")?;
+
+        if !output.status.success() {
+            warn!(
+                "Failed to set capabilities on Firecracker: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Setup TAP device for VM networking
+    async fn setup_tap_device(&self, tap_name: &str) -> Result<()> {
+        debug!("Setting up TAP device: {}", tap_name);
+
+        // Ensure Firecracker has network capabilities
+        self.ensure_firecracker_capabilities().await?;
+
+        // Create TAP device
+        tokio::process::Command::new("sudo")
+            .args(&["ip", "tuntap", "add", tap_name, "mode", "tap"])
+            .output()
+            .await
+            .context("Failed to create TAP device")?;
+
+        // Set TAP device up
+        tokio::process::Command::new("sudo")
+            .args(&["ip", "link", "set", tap_name, "up"])
+            .output()
+            .await
+            .context("Failed to bring TAP device up")?;
+
+        // Assign IP to TAP device (host side)
+        tokio::process::Command::new("sudo")
+            .args(&["ip", "addr", "add", "172.16.0.1/24", "dev", tap_name])
+            .output()
+            .await
+            .ok(); // Ignore if already exists
+
+        // Change ownership to current user so Firecracker can access it
+        let current_user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
+        tokio::process::Command::new("sudo")
+            .args(&["chown", &current_user, &format!("/dev/net/tun")])
+            .output()
+            .await
+            .ok();
+
+        // Enable IP forwarding
+        tokio::process::Command::new("sudo")
+            .args(&["sysctl", "-w", "net.ipv4.ip_forward=1"])
+            .output()
+            .await
+            .context("Failed to enable IP forwarding")?;
+
+        // Setup NAT (masquerade)
+        tokio::process::Command::new("sudo")
+            .args(&["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE"])
+            .output()
+            .await
+            .ok(); // Ignore if rule already exists
+
+        Ok(())
+    }
+
+    /// Cleanup TAP device
+    async fn cleanup_tap_device(&self, tap_name: &str) -> Result<()> {
+        debug!("Cleaning up TAP device: {}", tap_name);
+
+        tokio::process::Command::new("sudo")
+            .args(&["ip", "link", "delete", tap_name])
+            .output()
+            .await
+            .ok(); // Ignore errors on cleanup
+
+        Ok(())
+    }
+
     /// Launch an ephemeral VM for tool execution
     pub async fn launch_tool_vm(
         &self,
         server_id: &str,
+        server_command: &str,
         tool_name: &str,
         tool_args: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
@@ -177,6 +284,7 @@ impl EphemeralVmManager {
         let config = EphemeralVmConfig {
             tool_name: tool_name.to_string(),
             server_id: server_id.to_string(),
+            server_command: server_command.to_string(),
             debug: self.debug_mode,
             ..Default::default()
         };
@@ -248,9 +356,14 @@ impl EphemeralVmManager {
             .await
             .context("Failed to write VM config")?;
 
-        // Launch Firecracker
-        let mut firecracker_cmd = Command::new("firecracker");
+        // Setup TAP device for networking
+        self.setup_tap_device(&config.tap_device).await?;
+
+        // Launch Firecracker with sudo to access TAP devices
+        // TODO: In production, use Firecracker jailer instead of sudo
+        let mut firecracker_cmd = Command::new("sudo");
         firecracker_cmd
+            .arg("firecracker")
             .arg("--api-sock")
             .arg(&api_socket)
             .arg("--config-file")
@@ -297,7 +410,9 @@ impl EphemeralVmManager {
                 "kernel_image_path": config.kernel_path.to_string_lossy(),
                 "initrd_path": initrd_path.to_string_lossy(),
                 "boot_args": format!(
-                    "console=ttyS0 reboot=k panic=1 pci=off init=/init"
+                    "console=ttyS0 loglevel=4 reboot=k panic=1 pci=off root=/dev/ram0 rdinit=/init OSVM_MCP_SERVER_ID={} OSVM_MCP_SERVER_CMD={}",
+                    config.server_id,
+                    config.server_command.replace(" ", "___SPACE___") // Encode spaces for kernel cmdline
                 ),
             },
             "drives": [],
@@ -306,7 +421,11 @@ impl EphemeralVmManager {
                 "mem_size_mib": config.memory_mb,
                 "smt": false,
             },
-            "network-interfaces": [],
+            "network-interfaces": [{
+                "iface_id": "eth0",
+                "guest_mac": "AA:FC:00:00:00:01",
+                "host_dev_name": config.tap_device,
+            }],
             "vsock": {
                 "guest_cid": config.vsock_cid,
                 "uds_path": format!("/tmp/osvm-vsock-{}.sock", config.id),
@@ -320,19 +439,20 @@ impl EphemeralVmManager {
     async fn wait_for_vm_ready(&self, api_socket: &Path, vsock_cid: u32) -> Result<()> {
         let start = SystemTime::now();
         let timeout_duration = Duration::from_secs(30);
+        let guest_addr = format!("{}:{}", GUEST_VM_IP, TCP_TOOL_PORT);
 
         while SystemTime::now().duration_since(start)? < timeout_duration {
             // Check if API socket exists
             if api_socket.exists() {
-                // Try to connect via vsock
+                // Try to connect via TCP
                 if let Ok(stream) = timeout(
                     Duration::from_secs(1),
-                    tokio_vsock::VsockStream::connect(vsock_cid, VSOCK_TOOL_PORT),
+                    TcpStream::connect(&guest_addr),
                 )
                 .await
                 {
                     if stream.is_ok() {
-                        debug!("VM {} is ready", vsock_cid);
+                        debug!("VM {} is ready (connected to {})", vsock_cid, guest_addr);
                         return Ok(());
                     }
                 }
@@ -343,7 +463,7 @@ impl EphemeralVmManager {
         Err(anyhow!("Timeout waiting for VM to be ready"))
     }
 
-    /// Execute tool in the VM via vsock
+    /// Execute tool in the VM via TCP
     async fn execute_tool_in_vm(
         &self,
         vsock_cid: u32,
@@ -351,24 +471,34 @@ impl EphemeralVmManager {
         tool_args: Option<serde_json::Value>,
         timeout_secs: u64,
     ) -> Result<serde_json::Value> {
-        debug!("Executing tool {} in VM (CID: {})", tool_name, vsock_cid);
+        let guest_addr = format!("{}:{}", GUEST_VM_IP, TCP_TOOL_PORT);
+        debug!("Executing tool {} in VM (CID: {}, addr: {})", tool_name, vsock_cid, guest_addr);
 
-        // Connect to VM via vsock
+        // Connect to VM via TCP
         let mut stream = timeout(
             Duration::from_secs(15),
-            tokio_vsock::VsockStream::connect(vsock_cid, VSOCK_TOOL_PORT),
+            TcpStream::connect(&guest_addr),
         )
         .await
         .context("Timeout connecting to ephemeral VM")?
         .context("Failed to connect to ephemeral VM")?;
 
-        // Send tool execution request
+        // Send tool execution request with length prefix
         let request = serde_json::json!({
             "tool": tool_name,
             "args": tool_args,
         });
 
         let request_bytes = serde_json::to_vec(&request)?;
+
+        // Send 4-byte length prefix (little-endian to match guest)
+        let length = request_bytes.len() as u32;
+        stream
+            .write_all(&length.to_le_bytes())
+            .await
+            .context("Failed to send length prefix")?;
+
+        // Send JSON payload
         stream
             .write_all(&request_bytes)
             .await
@@ -387,26 +517,32 @@ impl EphemeralVmManager {
         Ok(response)
     }
 
-    /// Read tool response from vsock stream
+    /// Read tool response from TCP stream (length-prefixed)
     async fn read_tool_response(
         &self,
-        stream: &mut tokio_vsock::VsockStream,
+        stream: &mut TcpStream,
     ) -> Result<serde_json::Value> {
-        let mut buffer = Vec::new();
-        let mut temp_buf = [0u8; 4096];
+        use tokio::io::AsyncReadExt;
 
-        loop {
-            match stream.read(&mut temp_buf).await {
-                Ok(0) => break, // EOF
-                Ok(n) => {
-                    buffer.extend_from_slice(&temp_buf[..n]);
-                    if buffer.len() > 10 * 1024 * 1024 {
-                        return Err(anyhow!("Response too large"));
-                    }
-                }
-                Err(e) => return Err(anyhow!("Failed to read response: {}", e)),
-            }
+        // Read 4-byte length prefix (little-endian to match guest)
+        let mut len_buf = [0u8; 4];
+        stream
+            .read_exact(&mut len_buf)
+            .await
+            .context("Failed to read response length prefix")?;
+
+        let msg_len = u32::from_le_bytes(len_buf) as usize;
+
+        if msg_len > 10 * 1024 * 1024 {
+            return Err(anyhow!("Response too large: {} bytes", msg_len));
         }
+
+        // Read the JSON payload
+        let mut buffer = vec![0u8; msg_len];
+        stream
+            .read_exact(&mut buffer)
+            .await
+            .context("Failed to read response payload")?;
 
         serde_json::from_slice(&buffer).context("Failed to parse tool response")
     }
@@ -497,7 +633,7 @@ impl ChatVmOrchestrator {
         tool_args: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
         self.ephemeral_manager
-            .launch_tool_vm(server_id, tool_name, tool_args)
+            .launch_tool_vm(server_id, "", tool_name, tool_args)
             .await
     }
 

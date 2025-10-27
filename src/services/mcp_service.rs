@@ -384,7 +384,7 @@ impl McpService {
             microvm_launcher,
             mcp_server_microvms: HashMap::new(),
             ephemeral_vm_manager: EphemeralVmManager::new(false),
-            use_ephemeral_vms: true, // Enable ephemeral VMs - vsock now configured
+            use_ephemeral_vms: false, // DISABLED: Ephemeral VMs - networking issues, run directly on host
         }
     }
 
@@ -2147,7 +2147,7 @@ impl McpService {
             }
             return self
                 .ephemeral_vm_manager
-                .launch_tool_vm(server_id, tool_name, arguments)
+                .launch_tool_vm(server_id, &config.url, tool_name, arguments)
                 .await
                 .context("Failed to execute tool in ephemeral VM");
         }
@@ -2160,7 +2160,8 @@ impl McpService {
         }
 
         // Priority 3: Check if this tool should be executed in ephemeral unikernel
-        if self
+        // DISABLED: Skip unikernel isolation when use_ephemeral_vms is false
+        if false && self
             .isolation_config
             .should_use_unikernel(server_id, tool_name)
         {

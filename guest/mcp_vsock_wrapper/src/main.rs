@@ -1,27 +1,27 @@
-//! MCP Vsock Wrapper - Guest-side bridge for MCP servers in microVMs
+//! MCP TCP Wrapper - Guest-side bridge for MCP servers in microVMs
 //!
-//! This binary runs inside Firecracker microVM guests and bridges vsock
+//! This binary runs inside Firecracker microVM guests and bridges TCP
 //! communication from the host to MCP server processes via stdio.
 //!
 //! Architecture:
 //! ```
-//! Host (OSVM) ──[vsock]──> Guest Wrapper ──[stdio]──> MCP Server
-//!                          (this program)           (Node.js/Python)
+//! Host (OSVM) ──[TCP]──> Guest Wrapper ──[stdio]──> MCP Server
+//!                        (this program)           (Node.js/Python)
 //! ```
 //!
 //! Protocol:
-//! - Vsock: Length-prefixed (4-byte LE) + JSON-RPC payload
+//! - TCP: Length-prefixed (4-byte LE) + JSON-RPC payload
 //! - Stdio: Line-delimited JSON-RPC messages
 
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::process::Command;
-use tokio_vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY};
 
-/// Vsock port for MCP communication (must match host-side)
-const VSOCK_MCP_PORT: u32 = 5252;
+/// TCP port for MCP communication (must match host-side)
+const TCP_MCP_PORT: u16 = 8080;
 
 /// Maximum message size (10 MB)
 const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
@@ -38,23 +38,24 @@ async fn main() -> Result<()> {
         "OSVM_MCP_SERVER_CMD not set. This variable must contain the command to run the MCP server.",
     )?;
 
-    info!("MCP Vsock Wrapper starting");
+    info!("MCP TCP Wrapper starting");
     info!("Server ID: {}", server_id);
     info!("Server command: {}", server_cmd);
 
-    // Bind vsock listener on port 5252
-    let addr = VsockAddr::new(VMADDR_CID_ANY, VSOCK_MCP_PORT);
-    let mut listener = VsockListener::bind(addr)
-        .context("Failed to bind vsock listener. Ensure virtio-vsock kernel module is loaded.")?;
+    // Bind TCP listener on all interfaces
+    let bind_addr = format!("0.0.0.0:{}", TCP_MCP_PORT);
+    let listener = TcpListener::bind(&bind_addr)
+        .await
+        .context(format!("Failed to bind TCP listener on {}", bind_addr))?;
 
-    info!("Listening on vsock port {}", VSOCK_MCP_PORT);
+    info!("Listening on TCP port {}", TCP_MCP_PORT);
     info!("Ready to accept connections from host");
 
     // Accept connections and spawn handlers
     loop {
         match listener.accept().await {
             Ok((stream, addr)) => {
-                info!("Accepted connection from CID {}", addr.cid());
+                info!("Accepted connection from {}", addr);
 
                 let cmd = server_cmd.clone();
                 let sid = server_id.clone();
@@ -73,14 +74,14 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Handle a single vsock connection by spawning an MCP server and bridging I/O
-async fn handle_connection(stream: VsockStream, server_cmd: String, server_id: String) -> Result<()> {
+/// Handle a single TCP connection by spawning an MCP server and bridging I/O
+async fn handle_connection(stream: TcpStream, server_cmd: String, server_id: String) -> Result<()> {
     info!("[{}] Starting MCP server process", server_id);
 
-    // Split vsock stream for concurrent read/write
-    let (vsock_reader, vsock_writer) = tokio::io::split(stream);
-    let mut vsock_reader = BufReader::new(vsock_reader);
-    let mut vsock_writer = vsock_writer;
+    // Split TCP stream for concurrent read/write
+    let (tcp_reader, tcp_writer) = tokio::io::split(stream);
+    let mut tcp_reader = BufReader::new(tcp_reader);
+    let mut tcp_writer = tcp_writer;
 
     // Spawn MCP server process
     let mut child = Command::new("sh")
@@ -130,10 +131,10 @@ async fn handle_connection(stream: VsockStream, server_cmd: String, server_id: S
     // Bidirectional forwarding loop
     let result = tokio::select! {
         // Host -> MCP Server
-        res = forward_host_to_mcp(&mut vsock_reader, &mut mcp_stdin, &server_id) => res,
+        res = forward_host_to_mcp(&mut tcp_reader, &mut mcp_stdin, &server_id) => res,
 
         // MCP Server -> Host
-        res = forward_mcp_to_host(&mut mcp_stdout_reader, &mut vsock_writer, &server_id) => res,
+        res = forward_mcp_to_host(&mut mcp_stdout_reader, &mut tcp_writer, &server_id) => res,
 
         // Wait for process exit
         res = child.wait() => {
@@ -162,15 +163,15 @@ async fn handle_connection(stream: VsockStream, server_cmd: String, server_id: S
     result
 }
 
-/// Forward messages from host (vsock) to MCP server (stdin)
+/// Forward messages from host (TCP) to MCP server (stdin)
 async fn forward_host_to_mcp(
-    vsock_reader: &mut BufReader<tokio::io::ReadHalf<VsockStream>>,
+    tcp_reader: &mut BufReader<tokio::io::ReadHalf<TcpStream>>,
     mcp_stdin: &mut tokio::process::ChildStdin,
     server_id: &str,
 ) -> Result<()> {
     loop {
-        // Read length-prefixed message from vsock
-        let message = read_length_prefixed_message(vsock_reader, server_id).await?;
+        // Read length-prefixed message from TCP
+        let message = read_length_prefixed_message(tcp_reader, server_id).await?;
 
         debug!(
             "[{}] Received {} bytes from host, forwarding to MCP server",
@@ -187,10 +188,10 @@ async fn forward_host_to_mcp(
     }
 }
 
-/// Forward messages from MCP server (stdout) to host (vsock)
+/// Forward messages from MCP server (stdout) to host (TCP)
 async fn forward_mcp_to_host(
     mcp_stdout: &mut BufReader<tokio::process::ChildStdout>,
-    vsock_writer: &mut tokio::io::WriteHalf<VsockStream>,
+    tcp_writer: &mut tokio::io::WriteHalf<TcpStream>,
     server_id: &str,
 ) -> Result<()> {
     let mut line = String::new();
@@ -227,16 +228,16 @@ async fn forward_mcp_to_host(
             // Continue anyway - host will handle the error
         }
 
-        // Send to host via vsock (length-prefixed)
-        write_length_prefixed_message(vsock_writer, trimmed.as_bytes(), server_id).await?;
+        // Send to host via TCP (length-prefixed)
+        write_length_prefixed_message(tcp_writer, trimmed.as_bytes(), server_id).await?;
 
         debug!("[{}] Message forwarded to host", server_id);
     }
 }
 
-/// Read a length-prefixed message from vsock
+/// Read a length-prefixed message from TCP
 async fn read_length_prefixed_message(
-    reader: &mut BufReader<tokio::io::ReadHalf<VsockStream>>,
+    reader: &mut BufReader<tokio::io::ReadHalf<TcpStream>>,
     server_id: &str,
 ) -> Result<Vec<u8>> {
     // Read 4-byte length prefix (little-endian)
@@ -274,9 +275,9 @@ async fn read_length_prefixed_message(
     Ok(buffer)
 }
 
-/// Write a length-prefixed message to vsock
+/// Write a length-prefixed message to TCP
 async fn write_length_prefixed_message(
-    writer: &mut tokio::io::WriteHalf<VsockStream>,
+    writer: &mut tokio::io::WriteHalf<TcpStream>,
     data: &[u8],
     server_id: &str,
 ) -> Result<()> {

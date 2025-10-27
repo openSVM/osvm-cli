@@ -145,41 +145,120 @@ cat > init << 'INIT_SCRIPT'
 #!/bin/sh
 # Init script for MCP server microVM guest
 
-echo "Starting MCP Server Guest Init..."
+# Mount essential filesystems FIRST
+mount -t proc none /proc 2>/dev/null
+mount -t sysfs none /sys 2>/dev/null
+mount -t devtmpfs none /dev 2>/dev/null
+mkdir -p /dev/pts /dev/shm /tmp
+mount -t devpts none /dev/pts 2>/dev/null
+mount -t tmpfs none /dev/shm 2>/dev/null
+mount -t tmpfs none /tmp 2>/dev/null
 
-# Mount essential filesystems
-mount -t proc none /proc
-mount -t sysfs none /sys
-mount -t devtmpfs none /dev
-mkdir -p /dev/pts /dev/shm
-mount -t devpts none /dev/pts
-mount -t tmpfs none /dev/shm
+# NOW setup debug log file and console output
+DEBUG_LOG="/tmp/init-debug.log"
+CONSOLE="/dev/console"
+exec 2>&1  # Redirect stderr to stdout
+
+# Write directly to console to ensure visibility
+echo "===== INIT STARTING =====" > "$CONSOLE"
+echo "===== MCP Server Guest Init Starting at $(date) =====" > "$DEBUG_LOG"
+echo "Starting MCP Server Guest Init..." | tee -a "$DEBUG_LOG" > "$CONSOLE"
+
+echo "Filesystems mounted" | tee -a "$DEBUG_LOG" "$CONSOLE"
 
 # Load vsock module
-echo "Loading vsock kernel module..."
-modprobe vsock || modprobe vhost_vsock || echo "Warning: Could not load vsock module"
+echo "Loading vsock kernel module..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+if modprobe vsock 2>&1 | tee -a "$DEBUG_LOG" "$CONSOLE"; then
+    echo "vsock module loaded" | tee -a "$DEBUG_LOG" "$CONSOLE"
+elif modprobe vhost_vsock 2>&1 | tee -a "$DEBUG_LOG" "$CONSOLE"; then
+    echo "vhost_vsock module loaded" | tee -a "$DEBUG_LOG" "$CONSOLE"
+else
+    echo "Warning: Could not load vsock module" | tee -a "$DEBUG_LOG" "$CONSOLE"
+fi
 
-# Set up networking (localhost only, no external network)
-ifconfig lo up
+# Set up networking
+echo "Setting up network..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+ifconfig lo up 2>&1 | tee -a "$DEBUG_LOG"
+
+# Configure eth0 if available (for internet access)
+if ip link show eth0 2>/dev/null | tee -a "$DEBUG_LOG"; then
+    echo "Configuring network interface eth0..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+    ip addr add 172.16.0.2/24 dev eth0 2>&1 | tee -a "$DEBUG_LOG"
+    ip link set eth0 up 2>&1 | tee -a "$DEBUG_LOG"
+    ip route add default via 172.16.0.1 2>&1 | tee -a "$DEBUG_LOG"
+
+    # Configure DNS
+    echo "nameserver 8.8.8.8" > /etc/resolv.conf
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf
+
+    echo "Network configured: eth0 with IP 172.16.0.2" | tee -a "$DEBUG_LOG" "$CONSOLE"
+else
+    echo "eth0 not found, skipping network config" | tee -a "$DEBUG_LOG" "$CONSOLE"
+fi
 
 # Set environment variables
+echo "Setting PATH and HOME..." | tee -a "$DEBUG_LOG" "$CONSOLE"
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 export HOME=/root
 
+# Parse kernel command line for OSVM environment variables
+echo "Parsing kernel command line..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+echo "Full cmdline: $(cat /proc/cmdline)" | tee -a "$DEBUG_LOG" "$CONSOLE"
+
+for param in $(cat /proc/cmdline); do
+    case "$param" in
+        OSVM_MCP_SERVER_ID=*)
+            export OSVM_MCP_SERVER_ID="${param#*=}"
+            echo "Found SERVER_ID: $OSVM_MCP_SERVER_ID" | tee -a "$DEBUG_LOG" "$CONSOLE"
+            ;;
+        OSVM_MCP_SERVER_CMD=*)
+            # Decode spaces and export
+            export OSVM_MCP_SERVER_CMD=$(echo "${param#*=}" | sed 's/___SPACE___/ /g')
+            echo "Found SERVER_CMD: $OSVM_MCP_SERVER_CMD" | tee -a "$DEBUG_LOG" "$CONSOLE"
+            ;;
+    esac
+done
+
 # Log startup
-echo "Guest environment initialized"
-echo "Server ID: ${OSVM_MCP_SERVER_ID:-unknown}"
-echo "Server Command: ${OSVM_MCP_SERVER_CMD:-not set}"
+echo "===== Guest environment initialized =====" | tee -a "$DEBUG_LOG" "$CONSOLE"
+echo "Server ID: ${OSVM_MCP_SERVER_ID:-NOT_SET}" | tee -a "$DEBUG_LOG" "$CONSOLE"
+echo "Server Command: ${OSVM_MCP_SERVER_CMD:-NOT_SET}" | tee -a "$DEBUG_LOG" "$CONSOLE"
 
 # Check if mcp_vsock_wrapper exists
-if [ ! -x /usr/local/bin/mcp_vsock_wrapper ]; then
-    echo "ERROR: mcp_vsock_wrapper not found or not executable"
+echo "Checking for mcp_vsock_wrapper..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+if [ ! -f /usr/local/bin/mcp_vsock_wrapper ]; then
+    echo "ERROR: mcp_vsock_wrapper not found at /usr/local/bin/mcp_vsock_wrapper" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    ls -l /usr/local/bin/ | tee -a "$DEBUG_LOG"
     exec /bin/sh
 fi
 
-# Start mcp_vsock_wrapper
-echo "Starting mcp_vsock_wrapper..."
-exec /usr/local/bin/mcp_vsock_wrapper
+if [ ! -x /usr/local/bin/mcp_vsock_wrapper ]; then
+    echo "ERROR: mcp_vsock_wrapper not executable" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    ls -l /usr/local/bin/mcp_vsock_wrapper | tee -a "$DEBUG_LOG"
+    exec /bin/sh
+fi
+
+# Start mcp_vsock_wrapper with output redirected to log
+echo "Starting mcp_vsock_wrapper..." | tee -a "$DEBUG_LOG" "$CONSOLE"
+echo "Environment:" | tee -a "$DEBUG_LOG" "$CONSOLE"
+env | grep OSVM | tee -a "$DEBUG_LOG" "$CONSOLE"
+
+# Run wrapper with logging and capture exit code
+/usr/local/bin/mcp_vsock_wrapper 2>&1 | tee -a "$DEBUG_LOG" "$CONSOLE"
+EXIT_CODE=$?
+
+# If wrapper exited (shouldn't happen normally), log and dump debug info to console
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "===== MCP WRAPPER EXITED WITH CODE $EXIT_CODE =====" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    echo "===== DEBUG LOG CONTENTS =====" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    cat "$DEBUG_LOG" > "$CONSOLE"
+    echo "===== ENTERING EMERGENCY SHELL =====" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    exec /bin/sh
+else
+    echo "===== MCP WRAPPER EXITED NORMALLY =====" | tee -a "$DEBUG_LOG" "$CONSOLE"
+    cat "$DEBUG_LOG" > "$CONSOLE"
+    exec /bin/sh
+fi
 INIT_SCRIPT
 
 chmod +x init
@@ -222,8 +301,9 @@ if [ ! -f "$KERNEL_DIR/vmlinux.bin" ]; then
         echo "  3. Build and copy vmlinux to $KERNEL_DIR/vmlinux.bin"
         exit 1
     }
-    
-    echo "✓ Kernel downloaded"
+
+        echo "✓ Kernel downloaded"
+    fi
 else
     echo "✓ Kernel found: $KERNEL_DIR/vmlinux.bin"
 fi
