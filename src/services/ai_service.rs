@@ -1963,6 +1963,153 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
         error_message.contains("syntax error") ||
         error_message.contains("Unexpected token")
     }
+
+    /// Create a semantic refinement prompt when code runs but doesn't achieve goal
+    ///
+    /// This is Level 2 self-healing: code executed successfully but the result
+    /// doesn't match the expected outcome (logic error, not syntax error).
+    ///
+    /// # Arguments
+    /// * `original_query` - The user's original request
+    /// * `expected_outcome` - What the plan said it would do
+    /// * `executed_code` - The OVSM code that ran successfully
+    /// * `actual_result` - What the code actually returned
+    /// * `attempt_number` - Which retry attempt this is
+    ///
+    /// # Returns
+    /// A prompt that asks AI to revise the logic/algorithm to achieve the goal
+    pub fn create_semantic_refinement_prompt(
+        &self,
+        original_query: &str,
+        expected_outcome: &str,
+        executed_code: &str,
+        actual_result: &str,
+        attempt_number: u32,
+    ) -> String {
+        format!(
+            r#"The previous OVSM plan executed successfully but did NOT achieve the goal.
+
+**Original Query:** {}
+
+**Expected Outcome:** {}
+
+**Code That Ran (Attempt #{}):**
+```lisp
+{}
+```
+
+**Actual Result:**
+```
+{}
+```
+
+**Problem Analysis:**
+The code ran without errors, but the result doesn't match the goal. Common issues:
+
+1. **Wrong Tool Selection**
+   - Used getBalance when should use getSignaturesForAddress
+   - Used getTransaction when signature object already has data
+   - Missing pagination for large datasets
+
+2. **Logic Errors**
+   - Wrong filter conditions (filtered out target data)
+   - Incorrect aggregation (summed wrong fields)
+   - Missing data transformation (didn't extract sender wallet)
+
+3. **Data Extraction Issues**
+   - Parsed transaction but didn't extract the needed field
+   - Got array but didn't iterate through items
+   - Returned intermediate value instead of final result
+
+4. **Algorithm Problems**
+   - Didn't handle empty arrays/null values
+   - Wrong sort direction (ascending vs descending)
+   - Missed combining multiple data sources
+
+**Please provide a REVISED OVSM plan that:**
+- Uses the correct MCP tools for the goal
+- Implements proper logic to extract/transform data
+- Handles edge cases (empty arrays, null values)
+- Returns data in the format that matches the goal
+- Includes proper aggregation/sorting if needed
+
+**Focus on:** Why didn't the result match the goal? What needs to change in the algorithm?
+
+Respond ONLY with the corrected OVSM plan structure."#,
+            original_query,
+            expected_outcome,
+            attempt_number,
+            executed_code,
+            actual_result
+        )
+    }
+
+    /// Validate if OVSM result matches the expected outcome (semantic validation)
+    ///
+    /// This checks if the code ran successfully AND produced meaningful results
+    /// that align with the stated goal.
+    ///
+    /// # Arguments
+    /// * `result` - The result from OVSM execution
+    /// * `expected_outcome` - What the plan said it would achieve
+    /// * `original_query` - The user's original request
+    ///
+    /// # Returns
+    /// (is_valid, explanation) - Whether result achieves goal and why/why not
+    pub fn validate_ovsm_result(
+        result: &str,
+        expected_outcome: &str,
+        original_query: &str,
+    ) -> (bool, String) {
+        let result_lower = result.to_lowercase();
+        let query_lower = original_query.to_lowercase();
+
+        // Check for clear failure indicators
+        if result == "null" || result == "[]" || result.trim().is_empty() {
+            return (false, format!(
+                "Result is empty ({}). Expected: {}",
+                result, expected_outcome
+            ));
+        }
+
+        // Check if query asked for "find" or "get" but result is null/empty
+        if (query_lower.contains("find") || query_lower.contains("get"))
+            && (result_lower.contains("null") || result_lower == "0") {
+            return (false, format!(
+                "Query asked to find/get data but result is null/empty. Expected: {}",
+                expected_outcome
+            ));
+        }
+
+        // Check if query asked for "list" or "all" but got single item
+        if (query_lower.contains("all") || query_lower.contains("list"))
+            && !result_lower.contains("[") && !result_lower.contains("array") {
+            return (false, format!(
+                "Query asked for 'all' or 'list' but result appears to be single value. Expected: {}",
+                expected_outcome
+            ));
+        }
+
+        // Check if query asked for "count" or "total" but got non-numeric
+        if (query_lower.contains("count") || query_lower.contains("total") || query_lower.contains("how many"))
+            && !result.chars().any(|c| c.is_numeric()) {
+            return (false, format!(
+                "Query asked for count/total but result is not numeric. Expected: {}",
+                expected_outcome
+            ));
+        }
+
+        // Check if query asked for "sort" but result doesn't show ordering
+        if query_lower.contains("sort") && !result_lower.contains("[") {
+            return (false, format!(
+                "Query asked for sorted results but result doesn't appear to be an array. Expected: {}",
+                expected_outcome
+            ));
+        }
+
+        // If we get here, result looks reasonable
+        (true, "Result appears to match expected outcome".to_string())
+    }
 }
 
 /// Enhanced tool plan structure for better planning
