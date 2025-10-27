@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ToastType"],"fn":["init_toast_system","show_error_toast","show_info_toast","show_success_toast","show_toast","show_warning_toast"],"struct":["Toast","ToastManager"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BorderStyle"],"struct":["BorderChars","FocusIndicator","FocusManager","FocusTrail"]};

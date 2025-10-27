@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_balance_command"]};

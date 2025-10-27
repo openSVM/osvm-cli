@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["configure_hot_swap","configure_log_rotation","create_identity_transition_script","setup_failover_monitoring"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ComponentPattern","PolicyEffect","TlsVersion"],"struct":["Connection","NetworkManager","NetworkPolicy","PolicyConstraints","ZeroTrustNetwork"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RiskLevel"],"struct":["DiskInfo","ManualFix","MemoryInfo","SecureSystemManager","SystemStatus"]};

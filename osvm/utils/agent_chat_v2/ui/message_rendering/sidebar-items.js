@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["MessageType"],"struct":["CodeRenderer","MessageAnimator","MessageBorder","MessageRenderer"],"trait":["MessageAnimation"]};

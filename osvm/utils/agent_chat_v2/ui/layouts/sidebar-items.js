@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["LayoutType"],"mod":["adaptive","golden_ratio","responsive"],"struct":["LayoutConfig","LayoutManager"]};

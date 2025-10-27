@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_autocomplete_view","handle_autocomplete_tab","init_autocomplete","show_inline_suggestions"],"struct":["AutocompleteEngine","CommandSuggestion","TemplateSuggestion","ToolSuggestion"]};

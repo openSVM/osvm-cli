@@ -1,0 +1,1 @@
+searchState.loadedDescShard("osvm_bootstrap", 0, "OSVM Bootstrap Binary\nCheck if Firecracker is available on the system\nLaunch OSVM runtime inside a microVM\nRun OSVM agent directly (fallback or when in microVM)")

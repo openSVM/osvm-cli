@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["execute_ai_plan_with_colors","extract_ovsm_code_blocks","generate_realtime_suggestions","get_user_choice","process_with_realtime_ai","run_demo_mode","show_animated_status","show_colored_plan_diagram","show_context_visualization","show_contextual_suggestions","show_help_commands","show_status_overview","wrap_text"]};

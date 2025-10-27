@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["setup_ux_orchestrator"],"struct":["PerformanceStats","UXOrchestrator"]};

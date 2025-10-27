@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_firecracker_available","launch_in_microvm","main","run_osvm_agent_directly"]};

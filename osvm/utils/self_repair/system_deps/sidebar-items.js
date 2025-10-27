@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SystemDepsError"],"fn":["check_solana_cli","get_solana_version","install_solana_cli"],"struct":["DependencyInfo","SystemDependencyManager"]};
