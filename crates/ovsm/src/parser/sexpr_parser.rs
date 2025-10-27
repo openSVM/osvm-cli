@@ -167,10 +167,12 @@ impl SExprParser {
             // Keywords evaluate to strings with colon prefix
             Ok(Expression::StringLiteral(keyword))
         } else {
-            Err(Error::ParseError(format!(
-                "Expected identifier after ':', got {:?}",
-                self.peek().kind
-            )))
+            Err(self.expected_error(
+                "identifier after `:`",
+                Some("Keyword syntax: :name\n\
+                      Used for object keys: {:name value}\n\
+                      Example: {:wallet \"ABC...\" :amount 100}")
+            ))
         }
     }
 
@@ -922,10 +924,13 @@ impl SExprParser {
                 let value = Expression::Variable(key.clone());
                 pairs.push((key, value));
             } else {
-                return Err(Error::ParseError(format!(
-                    "Expected ':key value' or 'identifier' in object literal, got {:?}",
-                    self.peek().kind
-                )));
+                return Err(self.expected_error(
+                    "`:key value` pair or identifier",
+                    Some("Object syntax:\n\
+                          {:key value} - key-value pair (requires colon before key!)\n\
+                          {name} - shorthand for {:name name}\n\
+                          Example: {:wallet addr :amount 100}")
+                ));
             }
 
             if self.check(&TokenKind::Comma) {
