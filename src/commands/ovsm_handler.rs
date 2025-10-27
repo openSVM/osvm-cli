@@ -1,4 +1,7 @@
 use crate::services::ovsm_service::OvsmService;
+use crate::services::mcp_service::McpService;
+use crate::utils::mcp_bridge::McpBridgeTool;
+use std::sync::Arc;
 
 /// Handle OVSM command for script execution and management
 pub async fn handle_ovsm_command(
@@ -15,7 +18,28 @@ pub async fn handle_ovsm_command(
             // Always enable RPC tools for ovsm run
             use crate::utils::rpc_bridge::create_rpc_registry;
 
-            let registry = create_rpc_registry();
+            let mut registry = create_rpc_registry();
+            // Register MCP tools for OVSM script execution
+            let mut mcp_service = McpService::new_with_debug(debug);
+            let _ = mcp_service.load_config();
+            let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+            let mcp_tools = vec![
+                "get_account_transactions", "get_transaction", "batch_transactions",
+                "analyze_transaction", "explain_transaction", "get_account_stats",
+                "get_account_portfolio", "get_solana_balance", "get_account_token_stats",
+                "check_account_type", "search_accounts", "get_balance",
+                "get_block", "get_recent_blocks", "get_block_stats",
+                "get_token_info", "get_token_metadata", "get_nft_collections",
+                "get_trending_nfts", "get_defi_overview", "get_dex_analytics",
+                "get_defi_health", "get_validator_analytics",
+                "universal_search", "verify_wallet_signature", "get_user_history",
+                "get_usage_stats", "manage_api_keys", "get_api_metrics",
+                "report_error", "get_program_registry", "get_program_info",
+                "solana_rpc_call",
+            ];
+            for tool in mcp_tools {
+                registry.register(McpBridgeTool::new(tool, Arc::clone(&mcp_arc)));
+            }
             let mut service = OvsmService::with_registry(registry, verbose, debug);
 
             println!("🚀 Executing OVSM script: {}", script);

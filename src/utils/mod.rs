@@ -22,6 +22,7 @@ pub mod agent_chat_v2;
 pub mod agent_cli;
 /// Streaming agent with real-time terminal output (for `osvm {query}`)
 pub mod streaming_agent;
+pub mod mcp_bridge;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage

@@ -175,7 +175,7 @@ impl AiService {
                         (url, true)
                     } else {
                         eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
-                        ("http://localhost:3004/api/getAnswer".to_string(), false)
+                        ("https://opensvm.com/api/getAnswer".to_string(), false)
                     }
                 } else {
                     // Custom URL, treat as external API
@@ -183,13 +183,13 @@ impl AiService {
                 }
             }
             None => {
-                // Default behavior: use osvm.ai unless explicitly configured for OpenAI
+                // Default behavior: use opensvm.com unless explicitly configured for OpenAI
                 if let (Some(url), Some(_)) =
                     (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok())
                 {
                     (url, true)
                 } else {
-                    ("http://localhost:3004/api/getAnswer".to_string(), false)
+                    ("https://opensvm.com/api/getAnswer".to_string(), false)
                 }
             }
         };
@@ -827,12 +827,12 @@ impl AiService {
 
         // NEW: If response starts with [TIME:...] and has Main Branch:, it's valid!
         let has_time_marker = plan_text.contains("[TIME:") || plan_text.contains("[CONFIDENCE:");
-        let has_main_branch = plan_text.contains("Main Branch:") || plan_text.contains("**Main Branch:**");
+        let has_main_branch = plan_text.contains("Main Branch") && plan_text.contains("```");
 
         if has_time_marker && has_main_branch {
             eprintln!("DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!");
             // This is a valid OVSM plan in simplified format - continue parsing
-        } else if !plan_text.contains("**Expected Plan:**") && !plan_text.contains("Expected Plan:") {
+        } else if !plan_text.contains("Expected Plan") {
             eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
             anyhow::bail!("No OVSM plan structure found");
         } else {
@@ -1531,7 +1531,7 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
     /// # Returns
     /// true if the error can potentially be fixed by regenerating code
     pub fn is_retryable_ovsm_error(error_message: &str) -> bool {
-        // Parse errors and syntax errors are retryable
+        // Parse errors, syntax errors, and type errors are retryable
         error_message.contains("Parse error") ||
         error_message.contains("Tokenization error") ||
         error_message.contains("Expected identifier") ||
@@ -1540,7 +1540,13 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
         error_message.contains("Undefined variable") ||
         error_message.contains("Undefined tool") ||
         error_message.contains("syntax error") ||
-        error_message.contains("Unexpected token")
+        error_message.contains("Unexpected token") ||
+        error_message.contains("Type error") ||
+        error_message.contains("type mismatch") ||
+        error_message.contains("expected array") ||
+        error_message.contains("expected object") ||
+        error_message.contains("expected string") ||
+        error_message.contains("expected number")
     }
 
     /// Create a semantic refinement prompt when code runs but doesn't achieve goal
