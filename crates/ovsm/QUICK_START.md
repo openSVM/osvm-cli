@@ -429,10 +429,16 @@ You now know enough to:
 - ✅ Debug with REPL and logs
 - ✅ Test your code properly
 
+### 📚 Next Steps
+
+- **[BUILTIN_FUNCTIONS.md](BUILTIN_FUNCTIONS.md)** - Complete glossary of all 91+ built-in functions
+- **[USAGE_GUIDE.md](USAGE_GUIDE.md)** - Comprehensive usage guide with examples
+- **[docs/COMMON_PATTERNS.md](docs/COMMON_PATTERNS.md)** - Idiomatic patterns and best practices
+- **[OVSM_LISP_SYNTAX_SPEC.md](../../OVSM_LISP_SYNTAX_SPEC.md)** - Complete language specification
+
 **Happy coding!** 🚀
 
 ---
 
 *Quick Start Guide - OVSM Interpreter v1.0.3*
 *356/356 tests passing (100%) - Production Ready*
-*For complete language spec, see OVSM_LISP_SYNTAX_SPEC.md*

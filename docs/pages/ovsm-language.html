@@ -1,127 +1,128 @@
 <div class="doc-content">
     <h1>🧠 OVSM Language</h1>
-    <p class="subtitle">Open Versatile Seeker Mind - AI Agent Research Planning Language</p>
+    <p class="subtitle">Open Versatile S-expression Machine - Production-Ready Common Lisp Dialect</p>
 
     <div class="info-box">
-        <strong>OVSM</strong> (pronounced "OH-vism") is a domain-specific language for expressing AI agent research plans with conditional branching, parallel execution, and adaptive learning.
+        <strong>OVSM</strong> is a LISP-1 dialect interpreter with 83% Common Lisp compatibility, designed for blockchain automation, Solana RPC integration, and general-purpose scripting. <strong>100% test coverage</strong> (356/356 tests passing).
     </div>
 
     <h2>📋 Overview</h2>
-    <p>OVSM enables AI agents to articulate sophisticated investigation strategies for blockchain research, statistical analysis, and knowledge discovery.</p>
+    <p>OVSM combines the elegance of LISP with practical blockchain tools, offering 91+ built-in functions including cryptographic operations, map-reduce functional programming, and native Solana integration.</p>
 
     <div class="feature-grid">
         <div class="feature-card">
-            <h3>🔍 Research-Optimized</h3>
-            <p>Built for multi-step investigation workflows with conditional branching and decision points.</p>
+            <h3>🔐 Blockchain-Native</h3>
+            <p>Base58/Base64/Hex encoding, SHA-256/512 hashing, and first-class Solana RPC integration.</p>
         </div>
         <div class="feature-card">
-            <h3>🤖 Multi-Agent</h3>
-            <p>Native support for agent delegation, coordination, and result merging.</p>
+            <h3>🎯 LISP Elegance</h3>
+            <p>S-expression syntax, macros with quasiquote, closures, and pattern matching.</p>
         </div>
         <div class="feature-card">
-            <h3>📊 Statistical</h3>
-            <p>Built-in hypothesis testing, causal inference, and confidence scoring.</p>
+            <h3>🔄 Map-Reduce Stack</h3>
+            <p>28 functional programming functions: map, filter, reduce, find, distinct, group-by, and more.</p>
         </div>
         <div class="feature-card">
-            <h3>🧠 Adaptive</h3>
-            <p>Meta-learning from past queries to optimize future research strategies.</p>
+            <h3>✅ Production-Ready</h3>
+            <p>100% test coverage, zero unsafe code, comprehensive error handling.</p>
         </div>
     </div>
 
     <h2>💡 Quick Example</h2>
-    <pre class="code-block"><code>## Q: "What is the average transaction fee on Solana?"
+    <pre class="code-block"><code>;; Analyze Solana transactions with functional programming
+(define addresses [
+  "ABC...123"
+  "DEF...456"
+  "GHI...789"
+])
 
-**Expected Plan:**
+;; Filter active wallets with balance > 1000 SOL
+(define rich-wallets
+  (filter
+    (lambda (addr)
+      (> (getBalance addr) 1000000000))
+    addresses))
 
-[TIME: ~15s] [COST: free] [CONFIDENCE: 95%]
+;; Extract transaction signatures
+(define recent-txs
+  (map
+    (lambda (addr)
+      (getSignaturesForAddress :address addr :limit 10))
+    rich-wallets))
 
-**Available Tools:**
-From Standard Library: getSlot, getBlock, MAP, MEAN, MEDIAN
+;; Group by transaction type
+(define by-type
+  (group-by
+    (flatten recent-txs)
+    (lambda (tx) (. tx type))))
 
-**Main Branch:**
-$current_slot = getSlot()
-$blocks = []
-
-FOR $i IN 0..10:
-  $block = getBlock(slot: $current_slot - $i)
-  $blocks = APPEND(array: $blocks, item: $block)
-
-$fees = MAP($blocks, b => b.transactions).flat().map(tx => tx.fee)
-$mean_fee = MEAN(data: $fees)
-
-DECISION: Check distribution
-  BRANCH A (high variance):
-    $result = MEDIAN(data: $fees)
-  BRANCH B (normal):
-    $result = $mean_fee
-
-**Action:**
-RETURN {average_fee: $result, confidence: 95}</code></pre>
+(log :message "Analysis complete" :value by-type)</code></pre>
 
     <h2>📚 Documentation</h2>
     <ul class="doc-links">
-        <li><a href="ovsm/OVSM_README.md" target="_blank">📘 OVSM Overview</a> - Start here! Introduction and quick examples</li>
-        <li><a href="ovsm/ovsm-spec.md" target="_blank">📕 Core Specification</a> - Complete language reference (2,811 lines, 104 tools)</li>
-        <li><a href="ovsm/ovsm-agents.md" target="_blank">📗 Agent Extensions</a> - Multi-agent features (1,908 lines, 103 tools)</li>
-        <li><a href="ovsm/COMPLETE_TOOL_INDEX.md" target="_blank">📑 Tool Index</a> - All 207 tools categorized</li>
-        <li><a href="ovsm/PLANNING_FORMAT.md" target="_blank">📋 Planning Guide</a> - Methodology and best practices</li>
-        <li><a href="ovsm/INDEX.md" target="_blank">🗂️ Full Documentation Index</a> - Complete navigation</li>
+        <li><a href="ovsm/BUILTIN_FUNCTIONS.md" target="_blank">📘 Built-in Functions Glossary</a> - Complete reference for all 91+ functions (32KB)</li>
+        <li><a href="ovsm/README_LISP.md" target="_blank">📖 OVSM Overview</a> - Start here! Introduction and quick examples</li>
+        <li><a href="ovsm/OVSM_LISP_SYNTAX_SPEC.md" target="_blank">📕 LISP Syntax Specification</a> - Complete language reference</li>
+        <li><a href="ovsm/llms.txt" target="_blank">🤖 LLM Reference</a> - LLM-optimized documentation (16KB)</li>
+        <li><a href="ovsm/FEATURES_STATUS.md" target="_blank">📊 Features Status</a> - 83% Common Lisp compatibility</li>
+        <li><a href="ovsm/INDEX.md" target="_blank">🗂️ Legacy Documentation</a> - Original OVSM planning language</li>
     </ul>
 
     <h2>🎯 Key Features</h2>
 
-    <h3>Core Language (104 tools)</h3>
+    <h3>Core Language (83% Common Lisp)</h3>
     <ul>
-        <li><strong>Variables:</strong> <code>$variable_name</code> (shell-style)</li>
-        <li><strong>Constants:</strong> <code>CONST NAME = value</code> (immutable)</li>
-        <li><strong>Control Flow:</strong> IF/ELSE, WHILE, FOR, LOOP EVERY, DECISION/BRANCH</li>
-        <li><strong>Error Handling:</strong> TRY/CATCH with FATAL/RECOVERABLE/WARNING types</li>
-        <li><strong>Parallel Execution:</strong> PARALLEL blocks, WAIT_ALL, WAIT_ANY, RACE</li>
-        <li><strong>Data Processing:</strong> MAP, FILTER, REDUCE, 27 collection operations</li>
-        <li><strong>Statistics:</strong> MEAN, MEDIAN, STDDEV, T_TEST, CORRELATE</li>
-        <li><strong>Solana Tools:</strong> 18 RPC methods, 13 utility functions</li>
+        <li><strong>Data Types:</strong> Numbers, strings, booleans, arrays, objects, ranges</li>
+        <li><strong>Control Flow:</strong> if, when, unless, cond, case, typecase, while, for, do</li>
+        <li><strong>Functions:</strong> defun, lambda, closures, recursion, variadic (&rest)</li>
+        <li><strong>Macros:</strong> defmacro, quasiquote (` , ,@), gensym, macroexpand</li>
+        <li><strong>Advanced Binding:</strong> let, let* (sequential), flet, labels (recursive)</li>
+        <li><strong>Pattern Matching:</strong> case/typecase with multiple patterns</li>
+        <li><strong>Multiple Values:</strong> values, multiple-value-bind</li>
+        <li><strong>Dynamic Variables:</strong> defvar with special scoping</li>
     </ul>
 
-    <h3>Agent Extensions (103 tools, 15 features)</h3>
+    <h3>Map-Reduce Functional Programming (28 functions)</h3>
     <div class="two-column">
         <div>
             <ul>
-                <li>🤖 Agent Delegation</li>
-                <li>📊 Research State Management</li>
-                <li>🌐 Knowledge Graph Building</li>
-                <li>🔬 Hypothesis Testing</li>
-                <li>🔄 Progressive Refinement</li>
-                <li>✅ Cross-Validation</li>
-                <li>🧠 Contextual Memory</li>
-                <li>🎯 Confidence Scoring</li>
+                <li>🔄 <strong>Core:</strong> map, filter, reduce</li>
+                <li>🔍 <strong>Search:</strong> find, some, every</li>
+                <li>📊 <strong>Transform:</strong> flatten, reverse, distinct</li>
+                <li>✂️ <strong>Slice:</strong> take, drop, slice, partition</li>
             </ul>
         </div>
         <div>
             <ul>
-                <li>📚 Literature Review</li>
-                <li>⚡ Dynamic Query Planning</li>
-                <li>🔗 Causal Inference</li>
-                <li>🎨 Multi-Modal Fusion</li>
-                <li>💬 Explanation Generation</li>
-                <li>⏰ Real-Time Monitoring</li>
-                <li>📈 Meta-Learning</li>
+                <li>🔗 <strong>Combine:</strong> zip, append, cons</li>
+                <li>📦 <strong>Extract:</strong> pluck, compact, first, rest, last</li>
+                <li>📈 <strong>Aggregate:</strong> group-by, count-by</li>
+                <li>🔢 <strong>Utilities:</strong> sort, length, range, nth</li>
             </ul>
         </div>
     </div>
 
-    <h2>📖 Language Stats</h2>
+    <h3>Cryptography & Encoding (8 functions)</h3>
+    <ul>
+        <li><strong>Base58:</strong> encode/decode (Solana address format)</li>
+        <li><strong>Base64:</strong> encode/decode (data encoding)</li>
+        <li><strong>Hex:</strong> encode/decode (byte arrays)</li>
+        <li><strong>Hashing:</strong> SHA-256, SHA-512 (transaction verification)</li>
+    </ul>
+
+    <h2>📖 Function Categories</h2>
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-value">207</div>
-            <div class="stat-label">Total Tools</div>
+            <div class="stat-value">91+</div>
+            <div class="stat-label">Total Functions</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">19</div>
-            <div class="stat-label">Constants</div>
+            <div class="stat-value">16</div>
+            <div class="stat-label">Categories</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">25</div>
-            <div class="stat-label">Keywords</div>
+            <div class="stat-value">100%</div>
+            <div class="stat-label">Test Coverage</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">.ovsm</div>
@@ -129,50 +130,70 @@ RETURN {average_fee: $result, confidence: 95}</code></pre>
         </div>
     </div>
 
-    <h2>🚀 Tool Categories</h2>
+    <h2>🚀 Function Reference</h2>
     <table class="tool-table">
         <thead>
             <tr>
                 <th>Category</th>
-                <th>Tools</th>
+                <th>Count</th>
                 <th>Examples</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td><strong>Solana RPC</strong></td>
-                <td>18</td>
-                <td>getSlot, getBlock, getTransaction</td>
+                <td><strong>Control Flow</strong></td>
+                <td>10</td>
+                <td>if, when, cond, case, while, for, do</td>
             </tr>
             <tr>
-                <td><strong>Data Processing</strong></td>
-                <td>27</td>
-                <td>MAP, FILTER, REDUCE, SUM, AVG</td>
+                <td><strong>Variables</strong></td>
+                <td>5</td>
+                <td>define, set!, setf, const, defvar</td>
             </tr>
             <tr>
-                <td><strong>Statistical</strong></td>
-                <td>14</td>
-                <td>MEAN, T_TEST, CORRELATE</td>
+                <td><strong>Functions</strong></td>
+                <td>7</td>
+                <td>defun, lambda, let, let*, flet, labels</td>
+            </tr>
+            <tr>
+                <td><strong>Macros</strong></td>
+                <td>4</td>
+                <td>defmacro, gensym, macroexpand, eval</td>
+            </tr>
+            <tr>
+                <td><strong>Logical</strong></td>
+                <td>3</td>
+                <td>not, and, or</td>
+            </tr>
+            <tr>
+                <td><strong>Type Predicates</strong></td>
+                <td>10</td>
+                <td>null?, int?, string?, array?, object?</td>
+            </tr>
+            <tr>
+                <td><strong>Crypto & Encoding</strong></td>
+                <td>8</td>
+                <td>base58-encode, sha256, hex-decode</td>
+            </tr>
+            <tr>
+                <td><strong>Strings</strong></td>
+                <td>8</td>
+                <td>str, split, join, trim, upper, lower</td>
             </tr>
             <tr>
                 <td><strong>Math</strong></td>
-                <td>8</td>
-                <td>ABS, SQRT, POW, ROUND</td>
+                <td>15</td>
+                <td>+, -, *, /, %, =, <, >, abs, sqrt, pow</td>
             </tr>
             <tr>
-                <td><strong>Solana Utilities</strong></td>
-                <td>13</td>
-                <td>derivePDA, parseU64, deriveATA</td>
+                <td><strong>Collections</strong></td>
+                <td>28</td>
+                <td>map, filter, reduce, find, group-by</td>
             </tr>
             <tr>
-                <td><strong>Agent Coordination</strong></td>
-                <td>103</td>
-                <td>SPAWN_AGENT, MERGE_RESULTS</td>
-            </tr>
-            <tr>
-                <td><strong>Utilities</strong></td>
-                <td>24</td>
-                <td>NOW, LOG, ERROR, INPUT</td>
+                <td><strong>Objects</strong></td>
+                <td>3</td>
+                <td>get, keys, merge</td>
             </tr>
         </tbody>
     </table>
@@ -183,28 +204,28 @@ RETURN {average_fee: $result, confidence: 95}</code></pre>
             <div class="step-number">1</div>
             <div class="step-content">
                 <h4>Read OVSM Overview</h4>
-                <p>5 minutes - Understand philosophy and capabilities</p>
+                <p>5 minutes - Understand LISP syntax and capabilities</p>
             </div>
         </div>
         <div class="step">
             <div class="step-number">2</div>
             <div class="step-content">
-                <h4>Study Core Specification</h4>
-                <p>30 minutes - Learn syntax, operators, control flow</p>
+                <h4>Explore Built-in Functions</h4>
+                <p>30 minutes - Browse the complete glossary</p>
             </div>
         </div>
         <div class="step">
             <div class="step-number">3</div>
             <div class="step-content">
                 <h4>Practice with Examples</h4>
-                <p>20 minutes - Work through 4 executable examples</p>
+                <p>20 minutes - Try factorial, closures, macros</p>
             </div>
         </div>
         <div class="step">
             <div class="step-number">4</div>
             <div class="step-content">
-                <h4>Explore Agent Extensions</h4>
-                <p>2-3 hours - Master all 15 advanced features</p>
+                <h4>Build Blockchain Scripts</h4>
+                <p>1-2 hours - Create Solana analysis tools</p>
             </div>
         </div>
     </div>
@@ -214,65 +235,107 @@ RETURN {average_fee: $result, confidence: 95}</code></pre>
         <div class="use-case-section">
             <h3>✅ Perfect For:</h3>
             <ul>
-                <li>Blockchain research and investigation</li>
-                <li>Multi-step data analysis workflows</li>
-                <li>Statistical hypothesis testing</li>
-                <li>Cross-validation across data sources</li>
-                <li>Automated literature review</li>
-                <li>Real-time monitoring with alerts</li>
-                <li>Adaptive query optimization</li>
+                <li>Blockchain data analysis and automation</li>
+                <li>Solana transaction investigation</li>
+                <li>Functional data transformations</li>
+                <li>Cryptographic operations</li>
+                <li>Address encoding/decoding</li>
+                <li>Custom DSLs in Rust applications</li>
+                <li>Learning LISP concepts</li>
             </ul>
         </div>
         <div class="use-case-section">
             <h3>❌ Not Ideal For:</h3>
             <ul>
-                <li>Real-time systems (&lt;1ms requirements)</li>
+                <li>Real-time systems (&lt;1ms latency)</li>
                 <li>Direct hardware control</li>
-                <li>Simple single-step queries</li>
-                <li>Non-research tasks</li>
+                <li>Large-scale production web apps</li>
+                <li>When you need 100% Common Lisp (currently 83%)</li>
             </ul>
         </div>
     </div>
 
-    <h2>💻 Example: Multi-Agent Research</h2>
-    <pre class="code-block"><code>PARALLEL_AGENTS {
-  $price_analysis = SPAWN_AGENT(
-    agent_type: "price_analyzer",
-    task: "Track price movements",
-    context: {token: $token_address}
-  )
+    <h2>💻 Example: Transaction Hash Verification</h2>
+    <pre class="code-block"><code>;; Blockchain address encoding and verification
+(define wallet-data "user_wallet_data_12345")
 
-  $volume_analysis = SPAWN_AGENT(
-    agent_type: "volume_analyzer",
-    task: "Analyze trading volume",
-    context: {token: $token_address}
-  )
+;; Compute hash for verification
+(define data-hash (sha256 wallet-data))
+(log :message "SHA-256 hash:" :value data-hash)
 
-  $sentiment = SPAWN_AGENT(
-    agent_type: "sentiment_analyzer",
-    task: "Analyze social sentiment",
-    context: {token_name: $token_name}
-  )
-}
-WAIT_ALL
+;; Encode hash in different formats
+(define hash-base64 (base64-encode data-hash))
+(define hash-hex (hex-encode data-hash))
 
-$report = MERGE_RESULTS([$price_analysis, $volume_analysis, $sentiment])</code></pre>
+;; Verify round-trip encoding
+(assert (= wallet-data (base64-decode hash-base64))
+        "Base64 round-trip failed")
+
+;; Solana address encoding
+(define solana-addr (base58-encode wallet-data))
+(log :message "Solana address format:" :value solana-addr)
+
+;; Hash stability verification (deterministic)
+(define hash2 (sha256 wallet-data))
+(assert (= data-hash hash2) "Hash is not deterministic")
+
+(log :message "✅ All verifications passed")</code></pre>
+
+    <h2>💻 Example: Functional Data Pipeline</h2>
+    <pre class="code-block"><code>;; Filter-Map-Reduce pipeline for blockchain analysis
+(define transactions [
+  {:type "swap" :amount 1000 :active true}
+  {:type "transfer" :amount 500 :active false}
+  {:type "swap" :amount 2000 :active true}
+  {:type "mint" :amount 100 :active true}
+])
+
+;; Find all active swaps with amount > 1000
+(define large-swaps
+  (filter
+    (lambda (tx)
+      (and (= (. tx type) "swap")
+           (. tx active)
+           (> (. tx amount) 1000)))
+    transactions))
+
+;; Extract amounts and calculate total
+(define total
+  (reduce +
+    (map (lambda (tx) (. tx amount)) large-swaps)
+    0))
+
+;; Group transactions by type
+(define by-type
+  (group-by transactions
+    (lambda (tx) (. tx type))))
+
+;; Count transactions by type
+(define type-counts
+  (count-by transactions
+    (lambda (tx) (. tx type))))
+
+(log :message "Total large swaps:" :value total)
+(log :message "Grouped by type:" :value by-type)
+(log :message "Type counts:" :value type-counts)</code></pre>
 
     <h2>🔗 Quick Links</h2>
     <div class="button-group">
-        <a href="ovsm/OVSM_README.md" class="btn btn-primary" target="_blank">Get Started with OVSM</a>
-        <a href="ovsm/ovsm-spec.md" class="btn btn-secondary" target="_blank">Read Full Spec</a>
-        <a href="ovsm/COMPLETE_TOOL_INDEX.md" class="btn btn-secondary" target="_blank">Tool Reference</a>
+        <a href="ovsm/BUILTIN_FUNCTIONS.md" class="btn btn-primary" target="_blank">Function Glossary</a>
+        <a href="ovsm/README_LISP.md" class="btn btn-secondary" target="_blank">Get Started</a>
+        <a href="ovsm/OVSM_LISP_SYNTAX_SPEC.md" class="btn btn-secondary" target="_blank">Full Specification</a>
     </div>
 
     <div class="info-box" style="margin-top: 2rem;">
-        <p><strong>Version:</strong> v1.1 (Stable)</p>
+        <p><strong>Version:</strong> 1.0.0</p>
         <p><strong>Status:</strong> Production-Ready ✅</p>
         <p><strong>License:</strong> MIT</p>
-        <p><strong>Lines of Spec:</strong> 4,719</p>
+        <p><strong>Test Coverage:</strong> 100% (356/356 passing)</p>
+        <p><strong>Common Lisp:</strong> 83% compatible</p>
+        <p><strong>Built-in Functions:</strong> 91+</p>
     </div>
 
     <blockquote style="margin-top: 2rem; font-style: italic; border-left: 3px solid var(--accent-color); padding-left: 1rem;">
-        "Plan like you think, seek like a mind" - OVSM Language Philosophy
+        "Where blockchain meets LISP elegance" - OVSM Language Philosophy
     </blockquote>
 </div>

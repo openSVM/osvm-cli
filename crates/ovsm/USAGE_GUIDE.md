@@ -1,5 +1,9 @@
 # OVSM Usage Guide
 
+**📚 Looking for a complete function reference?** See **[BUILTIN_FUNCTIONS.md](BUILTIN_FUNCTIONS.md)** for a comprehensive glossary of all 91+ built-in functions organized by category.
+
+---
+
 ## How to Execute OVSM Scripts
 
 OVSM is a library crate implementing a LISP dialect for blockchain scripting. You can execute scripts in several ways:
@@ -525,10 +529,12 @@ sum
 
 ## Next Steps
 
-1. **Explore Examples:** Run all scripts in `examples/ovsm_scripts/` directory
-2. **Read Tests:** Check `tests/lisp_e2e_tests.rs` for comprehensive examples
-3. **Check Docs:** See `OVSM_LISP_SYNTAX_SPEC.md` for complete language specification
-4. **Check Status:** See `FEATURES_STATUS.md` for current 83% → 100% roadmap
+1. **Function Reference:** See **[BUILTIN_FUNCTIONS.md](BUILTIN_FUNCTIONS.md)** for complete glossary of all 91+ built-in functions
+2. **Explore Examples:** Run all scripts in `examples/ovsm_scripts/` directory
+3. **Read Tests:** Check `tests/lisp_e2e_tests.rs` for comprehensive examples
+4. **Check Docs:** See `OVSM_LISP_SYNTAX_SPEC.md` for complete language specification
+5. **Common Patterns:** See `docs/COMMON_PATTERNS.md` for idiomatic patterns
+6. **Check Status:** See `FEATURES_STATUS.md` for current 83% → 100% roadmap
 
 ---
 

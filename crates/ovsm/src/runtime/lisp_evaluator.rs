@@ -6,6 +6,8 @@ use crate::parser::{
 use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
 use std::sync::Arc;
+use sha2::{Sha256, Sha512, Digest};
+use base64::Engine;
 
 /// LISP-specific evaluator that handles special forms
 ///
@@ -136,6 +138,15 @@ impl LispEvaluator {
                     // Assertions
                     "assert" => self.eval_assert(args),
                     "assert-type" => self.eval_assert_type(args),
+                    // Cryptography and encoding
+                    "base58-decode" => self.eval_base58_decode(args),
+                    "base58-encode" => self.eval_base58_encode(args),
+                    "base64-decode" => self.eval_base64_decode(args),
+                    "base64-encode" => self.eval_base64_encode(args),
+                    "hex-decode" => self.eval_hex_decode(args),
+                    "hex-encode" => self.eval_hex_encode(args),
+                    "sha256" => self.eval_sha256(args),
+                    "sha512" => self.eval_sha512(args),
                     // Error handling
                     "try" => self.eval_try(args),
                     "error" => self.eval_error(args),
@@ -174,12 +185,28 @@ impl LispEvaluator {
                     "format" => self.eval_format(args),
                     "slice" => self.eval_slice(args),
                     "keys" => self.eval_keys(args),
+                    "merge" => self.eval_merge(args),
                     "get" => self.eval_get(args),
                     "first" => self.eval_first(args),
                     "rest" => self.eval_rest(args),
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
+                    // LINQ-style functional operations
+                    "compact" => self.eval_compact(args),
+                    "count-by" => self.eval_count_by(args),
+                    "distinct" => self.eval_distinct(args),
+                    "drop" => self.eval_drop(args),
+                    "every" => self.eval_every(args),
+                    "find" => self.eval_find(args),
+                    "flatten" => self.eval_flatten(args),
+                    "group-by" => self.eval_group_by(args),
+                    "partition" => self.eval_partition(args),
+                    "pluck" => self.eval_pluck(args),
+                    "reverse" => self.eval_reverse(args),
+                    "some" => self.eval_some(args),
+                    "take" => self.eval_take(args),
+                    "zip" => self.eval_zip(args),
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -2251,6 +2278,207 @@ impl LispEvaluator {
         Ok(Value::Int(timestamp as i64))
     }
 
+    /// (base58-encode string) - Encode string to base58
+    fn eval_base58_encode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "base58-encode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s.as_bytes().to_vec(),
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let encoded = bs58::encode(input).into_string();
+        Ok(Value::String(encoded))
+    }
+
+    /// (base58-decode base58-string) - Decode base58 to string
+    fn eval_base58_decode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "base58-decode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let decoded = bs58::decode(input)
+            .into_vec()
+            .map_err(|e| Error::ParseError(format!("Invalid base58: {}", e)))?;
+
+        let result = String::from_utf8(decoded)
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in decoded base58: {}", e)))?;
+
+        Ok(Value::String(result))
+    }
+
+    /// (base64-encode string) - Encode string to base64
+    fn eval_base64_encode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "base64-encode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s.as_bytes().to_vec(),
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&input);
+        Ok(Value::String(encoded))
+    }
+
+    /// (base64-decode base64-string) - Decode base64 to string
+    fn eval_base64_decode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "base64-decode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(input)
+            .map_err(|e| Error::ParseError(format!("Invalid base64: {}", e)))?;
+
+        let result = String::from_utf8(decoded)
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in decoded base64: {}", e)))?;
+
+        Ok(Value::String(result))
+    }
+
+    /// (hex-encode string) - Encode string to hexadecimal
+    fn eval_hex_encode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "hex-encode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s.as_bytes().to_vec(),
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let encoded = hex::encode(&input);
+        Ok(Value::String(encoded))
+    }
+
+    /// (hex-decode hex-string) - Decode hexadecimal to string
+    fn eval_hex_decode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "hex-decode".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s,
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let decoded = hex::decode(input)
+            .map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
+
+        let result = String::from_utf8(decoded)
+            .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in decoded hex: {}", e)))?;
+
+        Ok(Value::String(result))
+    }
+
+    /// (sha256 string) - Compute SHA-256 hash
+    fn eval_sha256(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "sha256".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s.as_bytes().to_vec(),
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let mut hasher = Sha256::new();
+        hasher.update(&input);
+        let result = hasher.finalize();
+        let hash_hex = hex::encode(result);
+
+        Ok(Value::String(hash_hex))
+    }
+
+    /// (sha512 string) - Compute SHA-512 hash
+    fn eval_sha512(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "sha512".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s.as_bytes().to_vec(),
+            _ => return Err(Error::TypeError {
+                expected: "string".to_string(),
+                got: val.type_name().to_string(),
+            }),
+        };
+
+        let mut hasher = Sha512::new();
+        hasher.update(&input);
+        let result = hasher.finalize();
+        let hash_hex = hex::encode(result);
+
+        Ok(Value::String(hash_hex))
+    }
+
     /// (log :message msg) - Log message
     fn eval_log(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         // Collect message and value separately
@@ -2689,6 +2917,32 @@ impl LispEvaluator {
         Ok(Value::Array(Arc::new(keys)))
     }
 
+    /// merge(obj1, obj2, ...) - Merge objects left-to-right (later values override earlier)
+    fn eval_merge(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "merge".to_string(),
+                reason: "Expected at least 1 object argument".to_string(),
+            });
+        }
+
+        // Start with empty map
+        let mut result = std::collections::HashMap::new();
+
+        // Merge each object from left to right
+        for arg in args {
+            let obj_val = self.evaluate_expression(&arg.value)?;
+            let obj = obj_val.as_object()?;
+
+            // Insert/override keys from this object
+            for (key, value) in obj.iter() {
+                result.insert(key.clone(), value.clone());
+            }
+        }
+
+        Ok(Value::Object(Arc::new(result)))
+    }
+
     /// get(object, key) - Safely get object property, returns null if not found
     fn eval_get(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 2 {
@@ -2712,6 +2966,609 @@ impl LispEvaluator {
         };
 
         Ok(obj.get(key).cloned().unwrap_or(Value::Null))
+    }
+
+    // ========================================
+    // LINQ-Style Functional Operations
+    // ========================================
+
+    /// (find collection predicate) - Find first element matching predicate
+    fn eval_find(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "find".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get predicate function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "find".to_string(),
+                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                // Apply predicate to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate predicate
+                    let val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Return first matching element
+                    if val.is_truthy() {
+                        return Ok(elem.clone());
+                    }
+                }
+
+                // No match found
+                Ok(Value::Null)
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (distinct collection) - Remove duplicate elements
+    fn eval_distinct(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "distinct".to_string(),
+                reason: "Expected 1 argument: collection".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let mut seen = std::collections::HashSet::new();
+        let mut result = Vec::new();
+
+        for elem in array.iter() {
+            // Create a string representation for hashing
+            let key = format!("{:?}", elem);
+            if seen.insert(key) {
+                result.push(elem.clone());
+            }
+        }
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (flatten nested-array) - Flatten nested arrays one level
+    fn eval_flatten(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "flatten".to_string(),
+                reason: "Expected 1 argument: nested array".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let mut result = Vec::new();
+
+        for elem in array.iter() {
+            match elem {
+                Value::Array(inner) => {
+                    // Flatten one level
+                    for inner_elem in inner.iter() {
+                        result.push(inner_elem.clone());
+                    }
+                }
+                _ => {
+                    // Non-array elements are kept as-is
+                    result.push(elem.clone());
+                }
+            }
+        }
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (reverse collection) - Reverse array order
+    fn eval_reverse(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "reverse".to_string(),
+                reason: "Expected 1 argument: collection".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let mut result = array.to_vec();
+        result.reverse();
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (some collection predicate) - Check if any element matches
+    fn eval_some(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "some".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get predicate function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "some".to_string(),
+                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                // Apply predicate to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate predicate
+                    let val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Return true if any match
+                    if val.is_truthy() {
+                        return Ok(Value::Bool(true));
+                    }
+                }
+
+                // No match found
+                Ok(Value::Bool(false))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (every collection predicate) - Check if all elements match
+    fn eval_every(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "every".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get predicate function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "every".to_string(),
+                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                // Apply predicate to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate predicate
+                    let val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Return false if any don't match
+                    if !val.is_truthy() {
+                        return Ok(Value::Bool(false));
+                    }
+                }
+
+                // All matched
+                Ok(Value::Bool(true))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (partition collection predicate) - Split into matching and not-matching
+    fn eval_partition(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "partition".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get predicate function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "partition".to_string(),
+                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut matching = Vec::new();
+                let mut not_matching = Vec::new();
+
+                // Apply predicate to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate predicate
+                    let val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Partition based on predicate result
+                    if val.is_truthy() {
+                        matching.push(elem.clone());
+                    } else {
+                        not_matching.push(elem.clone());
+                    }
+                }
+
+                // Return [matching-array, not-matching-array]
+                Ok(Value::Array(Arc::new(vec![
+                    Value::Array(Arc::new(matching)),
+                    Value::Array(Arc::new(not_matching)),
+                ])))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (take collection n) - Take first N elements
+    fn eval_take(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "take".to_string(),
+                reason: "Expected 2 arguments: collection and n".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let n_val = self.evaluate_expression(&args[1].value)?;
+        let n = match n_val {
+            Value::Int(i) => {
+                if i < 0 {
+                    return Err(Error::InvalidArguments {
+                        tool: "take".to_string(),
+                        reason: "n must be non-negative".to_string(),
+                    });
+                }
+                i as usize
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: n_val.type_name(),
+                });
+            }
+        };
+
+        let result: Vec<Value> = array.iter().take(n).cloned().collect();
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (drop collection n) - Skip first N elements
+    fn eval_drop(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "drop".to_string(),
+                reason: "Expected 2 arguments: collection and n".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let n_val = self.evaluate_expression(&args[1].value)?;
+        let n = match n_val {
+            Value::Int(i) => {
+                if i < 0 {
+                    return Err(Error::InvalidArguments {
+                        tool: "drop".to_string(),
+                        reason: "n must be non-negative".to_string(),
+                    });
+                }
+                i as usize
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: n_val.type_name(),
+                });
+            }
+        };
+
+        let result: Vec<Value> = array.iter().skip(n).cloned().collect();
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (zip array1 array2) - Combine two arrays element-wise
+    fn eval_zip(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "zip".to_string(),
+                reason: "Expected 2 arguments: array1 and array2".to_string(),
+            });
+        }
+
+        let array1_val = self.evaluate_expression(&args[0].value)?;
+        let array1 = array1_val.as_array()?;
+
+        let array2_val = self.evaluate_expression(&args[1].value)?;
+        let array2 = array2_val.as_array()?;
+
+        let mut result = Vec::new();
+        let min_len = std::cmp::min(array1.len(), array2.len());
+
+        for i in 0..min_len {
+            let pair = vec![array1[i].clone(), array2[i].clone()];
+            result.push(Value::Array(Arc::new(pair)));
+        }
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (compact collection) - Remove null values
+    fn eval_compact(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "compact".to_string(),
+                reason: "Expected 1 argument: collection".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let result: Vec<Value> = array
+            .iter()
+            .filter(|elem| !matches!(elem, Value::Null))
+            .cloned()
+            .collect();
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (pluck collection property-name) - Extract property from array of objects
+    fn eval_pluck(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "pluck".to_string(),
+                reason: "Expected 2 arguments: collection and property-name".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let prop_val = self.evaluate_expression(&args[1].value)?;
+        let prop_name = prop_val.as_string()?;
+
+        // Strip leading colon from keywords
+        let prop = if prop_name.starts_with(':') {
+            &prop_name[1..]
+        } else {
+            prop_name
+        };
+
+        let mut result = Vec::new();
+
+        for elem in array.iter() {
+            match elem {
+                Value::Object(obj) => {
+                    let val = obj.get(prop).cloned().unwrap_or(Value::Null);
+                    result.push(val);
+                }
+                _ => {
+                    // Non-object elements yield null
+                    result.push(Value::Null);
+                }
+            }
+        }
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (group-by collection key-fn) - Group elements by key function
+    fn eval_group_by(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "group-by".to_string(),
+                reason: "Expected 2 arguments: collection and key-fn".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get key function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "group-by".to_string(),
+                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut groups: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+
+                // Apply key function to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate key function
+                    let key_val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Convert key to string
+                    let key = match key_val {
+                        Value::String(s) => s,
+                        Value::Int(i) => i.to_string(),
+                        Value::Float(f) => f.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => format!("{:?}", key_val),
+                    };
+
+                    groups.entry(key).or_insert_with(Vec::new).push(elem.clone());
+                }
+
+                // Convert groups to object with arrays
+                let mut result_map = std::collections::HashMap::new();
+                for (key, values) in groups {
+                    result_map.insert(key, Value::Array(Arc::new(values)));
+                }
+
+                Ok(Value::Object(Arc::new(result_map)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (count-by collection key-fn) - Count occurrences by key function
+    fn eval_count_by(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "count-by".to_string(),
+                reason: "Expected 2 arguments: collection and key-fn".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get key function
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "count-by".to_string(),
+                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+
+                // Apply key function to each element
+                for elem in array.iter() {
+                    // Create new scope for lambda execution
+                    self.env.enter_scope();
+
+                    // Bind parameter
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate key function
+                    let key_val = self.evaluate_expression(&body)?;
+
+                    // Exit scope
+                    self.env.exit_scope();
+
+                    // Convert key to string
+                    let key = match key_val {
+                        Value::String(s) => s,
+                        Value::Int(i) => i.to_string(),
+                        Value::Float(f) => f.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => format!("{:?}", key_val),
+                    };
+
+                    *counts.entry(key).or_insert(0) += 1;
+                }
+
+                // Convert counts to object with int values
+                let mut result_map = std::collections::HashMap::new();
+                for (key, count) in counts {
+                    result_map.insert(key, Value::Int(count));
+                }
+
+                Ok(Value::Object(Arc::new(result_map)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
     }
 
     /// Evaluate a regular tool call

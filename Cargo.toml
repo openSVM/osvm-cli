@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/ovsm"]
+members = [".", "crates/ovsm", "guest/mcp_vsock_wrapper"]
 resolver = "2"
 
 [package]
