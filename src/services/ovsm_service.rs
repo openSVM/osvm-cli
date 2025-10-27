@@ -68,8 +68,16 @@ impl OvsmService {
             println!("{}", code);
         }
 
-        // Tokenize the code
-        let mut scanner = Scanner::new(code);
+        // Auto-correct parenthesis imbalances
+        let fixer = ovsm::parser::ParenFixer::new(code);
+        let (fixed_code, report) = fixer.fix_with_report();
+
+        if let Some(msg) = report {
+            println!("{}", msg);
+        }
+
+        // Tokenize the code (using potentially fixed code)
+        let mut scanner = Scanner::new(&fixed_code);
         let tokens = scanner
             .scan_tokens()
             .map_err(|e| anyhow::anyhow!("Tokenization error: {}", e))?;
