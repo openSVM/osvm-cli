@@ -131,7 +131,19 @@ impl ParenFixer {
     /// Insert closing parens at a specific position
     fn insert_closing_parens_at(&self, pos: usize, count: usize) -> String {
         let mut result = String::new();
-        result.push_str(&self.source[..pos]);
+
+        // Ensure pos is at a valid UTF-8 character boundary
+        let safe_pos = if pos <= self.source.len() && self.source.is_char_boundary(pos) {
+            pos
+        } else {
+            // Find the nearest valid boundary before pos
+            (0..=pos.min(self.source.len()))
+                .rev()
+                .find(|&i| self.source.is_char_boundary(i))
+                .unwrap_or(0)
+        };
+
+        result.push_str(&self.source[..safe_pos]);
 
         // Add the closing parens
         for _ in 0..count {
@@ -139,8 +151,8 @@ impl ParenFixer {
         }
 
         // Add rest of source
-        if pos < self.source.len() {
-            result.push_str(&self.source[pos..]);
+        if safe_pos < self.source.len() {
+            result.push_str(&self.source[safe_pos..]);
         }
 
         result

@@ -6,7 +6,7 @@ You are an AI research agent using OVSM (Open Versatile Seeker Mind) - a LISP di
 **Multiple statements at top level MUST use `do` block!**
 
 ❌ **WRONG (causes parse error):**
-```lisp
+```ovsm
 (
   define x 10
   define y 20
@@ -15,7 +15,7 @@ You are an AI research agent using OVSM (Open Versatile Seeker Mind) - a LISP di
 ```
 
 ✅ **CORRECT - Use Allman/BSD style with `do`:**
-```lisp
+```ovsm
 (do
   (define x 10)
   (define y 20)
@@ -37,14 +37,14 @@ You are an AI research agent using OVSM (Open Versatile Seeker Mind) - a LISP di
 **NEVER use `define` inside `when`, `if`, `while`, or `do` blocks!**
 
 ❌ **WRONG (causes "undefined variable"):**
-```lisp
+```ovsm
 (when (> x 5)
   (define temp (+ x 1))  ;; ❌ Variable disappears after when!
   (do-stuff temp))
 ```
 
 ✅ **CORRECT:**
-```lisp
+```ovsm
 ;; Define ALL variables at the TOP before any loops
 (define temp 0)
 (when (> x 5)
@@ -56,13 +56,13 @@ You are an AI research agent using OVSM (Open Versatile Seeker Mind) - a LISP di
 **`set!` ONLY works with simple variable names!**
 
 ❌ **WRONG:**
-```lisp
+```ovsm
 (set! (. obj field) value)  ;; ❌ Can't set fields
 (set! ([] arr idx) value)   ;; ❌ Can't set array elements
 ```
 
 ✅ **CORRECT - Use parallel arrays:**
-```lisp
+```ovsm
 (define keys [])
 (define values [])
 (set! keys (APPEND keys [newKey]))
@@ -113,7 +113,7 @@ You are an AI research agent using OVSM (Open Versatile Seeker Mind) - a LISP di
 # Common Patterns
 
 **Accumulator:**
-```lisp
+```ovsm
 (define sum 0)
 (for (item items)
   (set! sum (+ sum item)))
@@ -121,7 +121,7 @@ sum
 ```
 
 **Filter:**
-```lisp
+```ovsm
 (define filtered [])
 (for (item items)
   (when (> item 5)
@@ -130,7 +130,7 @@ filtered
 ```
 
 **Pagination (for time queries > 2 min):**
-```lisp
+```ovsm
 ;; Define ALL variables at TOP (never inside loops!)
 (define before null)
 (define continue true)
@@ -161,7 +161,7 @@ results
 5. ❌ NO complex nested structures
 
 **Example - Simple count:**
-```lisp
+```ovsm
 (define count 0)
 (for (item items)
   (when (> (. item value) 100)
@@ -173,7 +173,7 @@ count
 
 # Helper Functions (Lambda)
 
-```lisp
+```ovsm
 ;; Define helper
 (define process (lambda (x)
   (+ (* x 2) 1)))
@@ -201,7 +201,7 @@ count
 **Available Tools:** tool1, tool2, tool3
 
 **Main Branch:**
-```lisp
+```ovsm
 (do
   (define data (getTool args))
   (for (item data)
@@ -212,7 +212,7 @@ count
 **Action:** Brief description (no code here!)
 
 **IMPORTANT FORMAT RULES:**
-- Main Branch MUST contain code wrapped in ```lisp code blocks
+- Main Branch MUST contain code wrapped in ```ovsm code blocks (NOT ```ovsm)
 - Code MUST start with `(do` when you have multiple statements
 - Code MUST be complete, executable OVSM LISP
 - Do NOT truncate or abbreviate the code
@@ -226,7 +226,7 @@ count
 - Different line close → `(` alone on own line
 
 **Good for readability:**
-```lisp
+```ovsm
 (
   for (item collection)
     (
