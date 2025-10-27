@@ -11,6 +11,7 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::time::Duration;
 
 #[derive(Serialize, Debug)]
 struct AiRequest {
@@ -224,8 +225,14 @@ impl AiService {
             }
         }
 
+        // Build client with extended timeout for large OVSM planning prompts
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(120)) // 2 minutes for AI processing
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
-            client: reqwest::Client::new(),
+            client,
             api_url,
             api_key,
             use_openai,
@@ -1096,6 +1103,53 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 ```lisp
 (when (and continue (> batch_size 0))
   (set! before (. ([] batch (- batch_size 1)) signature)))  ;; ✅✅✅ WORKS!
+```
+
+**🚨🚨🚨 CRITICAL: set! ONLY WORKS WITH SIMPLE VARIABLES! 🚨🚨🚨**
+
+**THE RULE:** `set!` can ONLY mutate simple variables, NOT field access expressions!
+
+**❌ COMMON MISTAKE #2 (causes "Expected identifier after set!" error):**
+```lisp
+(set! (. obj field) value)        ;; ❌❌❌ BREAKS! set! doesn't support field access
+(set! ([] arr idx) value)         ;; ❌❌❌ BREAKS! set! doesn't support indexing
+```
+
+**✅ CORRECT ALTERNATIVES:**
+
+**For aggregating data by key, use arrays:**
+```lisp
+;; ✅ CORRECT: Use parallel arrays instead of dynamic object fields
+(define wallets [])
+(define amounts [])
+
+(for (tx transactions)
+  (define sender (. tx sender))
+  (define idx (FIND wallets sender))
+
+  (if (== idx -1)
+      (do
+        (set! wallets (APPEND wallets [sender]))
+        (set! amounts (APPEND amounts [(. tx amount)])))
+      (set! amounts (UPDATE amounts idx (+ ([] amounts idx) (. tx amount))))))
+```
+
+**For simple field updates, reassign the whole variable:**
+```lisp
+;; ❌ WRONG
+(set! (. stats count) (+ (. stats count) 1))
+
+;; ✅ CORRECT: Define new object with merge
+(set! stats (merge stats {:count (+ (. stats count) 1)}))
+```
+
+**For dynamic object keys, use the merge function:**
+```lisp
+;; ❌ WRONG: Can't set dynamic keys
+(set! (. agg wallet_addr) amount)
+
+;; ✅ CORRECT: Use merge to add/update keys
+(set! agg (merge agg {wallet_addr amount}))
 ```
 
 **Additional scoping rules:**
