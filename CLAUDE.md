@@ -968,3 +968,4 @@ osvm ovsm repl
 - `crates/ovsm/src/lexer/sexpr_scanner.rs` - S-expression lexer
 - `crates/ovsm/src/parser/sexpr_parser.rs` - S-expression parser
 - `crates/ovsm/src/runtime/lisp_evaluator.rs` - OVSM LISP evaluator
+- why BUILD  release? WE DEBUGGING
