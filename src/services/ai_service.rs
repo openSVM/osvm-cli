@@ -1888,6 +1888,81 @@ Focus on what matters to the user.
 
         self.query_with_debug(&response_prompt, false).await
     }
+
+    /// Create a refinement prompt from OVSM execution error
+    ///
+    /// This enables self-healing by sending error context back to AI for automatic correction.
+    ///
+    /// # Arguments
+    /// * `original_query` - The user's original blockchain investigation query
+    /// * `broken_code` - The OVSM code that failed to execute
+    /// * `error_message` - The parse/execution error message
+    /// * `attempt_number` - Which retry attempt this is (for context)
+    ///
+    /// # Returns
+    /// A prompt that asks the AI to fix the error and generate corrected OVSM code
+    pub fn create_error_refinement_prompt(
+        &self,
+        original_query: &str,
+        broken_code: &str,
+        error_message: &str,
+        attempt_number: u32,
+    ) -> String {
+        format!(
+            r#"The previous OVSM plan had an error. Please analyze and fix it.
+
+**Original Query:** {}
+
+**Broken Code (Attempt #{}):**
+```lisp
+{}
+```
+
+**Error Message:**
+{}
+
+**Common OVSM Errors to Check:**
+1. ❌ Infix notation: `(COUNT arr - 1)` → ✅ Use prefix: `(- (COUNT arr) 1)`
+2. ❌ Field assignment: `(set! (. obj field) value)` → ✅ Use merge or parallel arrays
+3. ❌ Define in loop: Variables defined inside when/if/while → ✅ Define at top
+4. ❌ Missing parens: Incomplete expressions → ✅ Balance all parentheses
+5. ❌ Wrong tool names: Undefined MCP tools → ✅ Check available tools
+
+**Please provide a CORRECTED OVSM plan with:**
+- Fixed syntax errors
+- Proper LISP prefix notation
+- All variables defined at the top
+- Correct tool names from available MCP tools
+
+Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available Tools, Main Branch, Action)."#,
+            original_query,
+            attempt_number,
+            broken_code,
+            error_message
+        )
+    }
+
+    /// Check if an OVSM error is retryable (can be fixed by AI)
+    ///
+    /// Parse and syntax errors are retryable, but runtime/network errors are not.
+    ///
+    /// # Arguments
+    /// * `error_message` - The error message from OVSM execution
+    ///
+    /// # Returns
+    /// true if the error can potentially be fixed by regenerating code
+    pub fn is_retryable_ovsm_error(error_message: &str) -> bool {
+        // Parse errors and syntax errors are retryable
+        error_message.contains("Parse error") ||
+        error_message.contains("Tokenization error") ||
+        error_message.contains("Expected identifier") ||
+        error_message.contains("Expected RightParen") ||
+        error_message.contains("Expected LeftParen") ||
+        error_message.contains("Undefined variable") ||
+        error_message.contains("Undefined tool") ||
+        error_message.contains("syntax error") ||
+        error_message.contains("Unexpected token")
+    }
 }
 
 /// Enhanced tool plan structure for better planning
