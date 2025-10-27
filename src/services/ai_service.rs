@@ -1094,8 +1094,9 @@ The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `g
 9. Use lowercase for variables (no $ prefix!)
 10. Use UPPERCASE for constants
 11. Use (. obj field) for field access, ([] arr idx) for indexing
-12. Use MCP tools listed in "Available Tools" section - all RPC methods are available directly!
-13. Batch related queries using PARALLEL for better performance
+12. Prefer specific RPC tools (getSlot, getBlockTime, etc.) when available - they're faster and simpler
+13. For RPC methods without dedicated tools, use: (solana_rpc_call :method "methodName" :params [args])
+14. Batch related queries using PARALLEL for better performance
 
 # Example with RPC Tool Usage
 
@@ -1135,8 +1136,12 @@ Return status object with cluster health and slot information.
 - Use DECISION/BRANCH for multi-way strategy selection
 - Always include time estimates and confidence scores
 - Handle edge cases with if-checks and error handling
-- **IMPORTANT:** All RPC methods are available as direct MCP tools (getSlot, getBlockTime, getTransaction, etc.)
-- **DO NOT** use generic RPC wrappers - use the specific tools listed in "Your Available MCP Tools"
+- **IMPORTANT:** Prefer specific RPC tools (getSlot, getBlockTime, etc.) - they're simpler and faster
+- **Fallback:** If specific tool unavailable, use: (solana_rpc_call :method "methodName" :params [args])
+- **Examples:**
+  - Specific tool: (define slot (getSlot))  ;; Preferred
+  - Generic fallback: (solana_rpc_call :method "getBlockHeight" :params [])
+  - With params: (solana_rpc_call :method "getBlockTime" :params [slot])
 - Tool names are case-sensitive: use exact names from the tools list
 
 # CRITICAL SYNTAX REMINDERS

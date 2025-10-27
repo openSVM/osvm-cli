@@ -81,10 +81,11 @@ impl SExprParser {
             }
             TokenKind::LeftBracket => self.parse_array_literal(),
             TokenKind::LeftBrace => self.parse_object_literal(),
-            _ => Err(Error::ParseError(format!(
-                "Unexpected token {:?} at line {}",
-                self.peek().kind,
-                self.peek().line
+            _ => Err(self.syntax_error(format!(
+                "Unexpected token {} in expression.\n\n\
+                 Help: Expected one of: number, string, boolean, null, identifier, \
+                 S-expression `(...)`, array `[...]`, or object `{{...}}`",
+                Self::token_kind_name(&self.peek().kind)
             ))),
         }
     }
@@ -528,7 +529,10 @@ impl SExprParser {
         let name = if let TokenKind::Identifier(n) = &self.peek().kind {
             n.clone()
         } else {
-            return Err(Error::ParseError("Expected identifier after define".to_string()));
+            return Err(self.expected_error(
+                "identifier (variable name)",
+                Some("Syntax: (define variable-name value)\nExample: (define count 0)")
+            ));
         };
         self.advance();
 
@@ -551,7 +555,13 @@ impl SExprParser {
         let name = if let TokenKind::Identifier(n) = &self.peek().kind {
             n.clone()
         } else {
-            return Err(Error::ParseError("Expected identifier after set!".to_string()));
+            return Err(self.expected_error(
+                "identifier (variable name)",
+                Some("Syntax: (set! variable-name new-value)\n\
+                      Note: set! can ONLY mutate simple variables, not field access.\n\
+                      ❌ Wrong: (set! (. obj field) value)\n\
+                      ✅ Correct: (set! obj (merge obj {:field value}))")
+            ));
         };
         self.advance();
 
@@ -687,10 +697,16 @@ impl SExprParser {
 
                     self.consume(TokenKind::RightParen)?;
                 } else {
-                    return Err(Error::ParseError("Expected parameter name in lambda optional/key param".to_string()));
+                    return Err(self.expected_error(
+                        "identifier (parameter name)",
+                        Some("Lambda parameters must be identifiers or (name default-value) pairs.")
+                    ));
                 }
             } else {
-                return Err(Error::ParseError("Expected identifier or (name default) in lambda params".to_string()));
+                return Err(self.expected_error(
+                    "identifier or `(name default-value)`",
+                    Some("Syntax: (lambda (param1 param2 ...) body)\nExample: (lambda (x y) (+ x y))")
+                ));
             }
         }
         self.consume(TokenKind::RightParen)?;
@@ -1019,12 +1035,132 @@ impl SExprParser {
         if self.check(&kind) {
             Ok(self.advance())
         } else {
-            Err(Error::ParseError(format!(
-                "Expected {:?}, got {:?} at line {}",
-                kind,
-                self.peek().kind,
-                self.peek().line
-            )))
+            let token = self.peek();
+            let message = self.build_error_message(&kind, &token);
+
+            Err(Error::SyntaxError {
+                line: token.line,
+                col: token.column,
+                message,
+            })
+        }
+    }
+
+    /// Build a helpful error message like Rust's compiler
+    fn build_error_message(&self, expected: &TokenKind, got: &Token) -> String {
+        let expected_str = Self::token_kind_name(expected);
+        let got_str = Self::token_kind_name(&got.kind);
+
+        let mut message = format!("Expected {}, found {}", expected_str, got_str);
+
+        // Add contextual hints based on the specific error
+        let hint = match (expected, &got.kind) {
+            // Parenthesis mismatches
+            (TokenKind::RightParen, TokenKind::LeftParen) => {
+                Some("You may be missing a closing `)` before this point.\n\
+                      Check that all opening `(` have matching closing `)`.")
+            }
+            (TokenKind::RightParen, _) => {
+                Some("Missing closing `)` for an earlier opening `(`.\n\
+                      Count your parentheses to find the unmatched one.")
+            }
+            (TokenKind::LeftParen, _) => {
+                Some("Expected an S-expression starting with `(`.")
+            }
+
+            // Bracket mismatches
+            (TokenKind::RightBracket, TokenKind::LeftBracket) => {
+                Some("You may be missing a closing `]` before this point.\n\
+                      Check that all opening `[` have matching closing `]`.")
+            }
+            (TokenKind::RightBracket, _) => {
+                Some("Missing closing `]` for an array literal.")
+            }
+
+            // Brace mismatches
+            (TokenKind::RightBrace, TokenKind::LeftBrace) => {
+                Some("You may be missing a closing `}` before this point.\n\
+                      Check that all opening `{` have matching closing `}`.")
+            }
+            (TokenKind::RightBrace, _) => {
+                Some("Missing closing `}` for an object literal.")
+            }
+
+            // Identifier expected
+            (TokenKind::Identifier(_), _) => {
+                Some("Expected a variable name or identifier here.\n\
+                      Valid identifiers start with a letter or underscore.")
+            }
+
+            // Colon expected (object keys)
+            (TokenKind::Colon, _) => {
+                Some("Object keys must start with `:` in OVSM.\n\
+                      Example: {:key value} not {key value}")
+            }
+
+            _ => None,
+        };
+
+        if let Some(hint) = hint {
+            message.push_str("\n\nHelp: ");
+            message.push_str(hint);
+        }
+
+        message
+    }
+
+    /// Get a human-readable name for a token kind
+    fn token_kind_name(kind: &TokenKind) -> String {
+        match kind {
+            TokenKind::LeftParen => "`(`".to_string(),
+            TokenKind::RightParen => "`)`".to_string(),
+            TokenKind::LeftBracket => "`[`".to_string(),
+            TokenKind::RightBracket => "`]`".to_string(),
+            TokenKind::LeftBrace => "`{`".to_string(),
+            TokenKind::RightBrace => "`}`".to_string(),
+            TokenKind::Colon => "`:`".to_string(),
+            TokenKind::Quote => "`'`".to_string(),
+            TokenKind::Backtick => "`` ` ``".to_string(),
+            TokenKind::Comma => "`,`".to_string(),
+            TokenKind::CommaAt => "`,@`".to_string(),
+            TokenKind::Dot => "`.`".to_string(),
+            TokenKind::Integer(_) => "integer".to_string(),
+            TokenKind::Float(_) => "float".to_string(),
+            TokenKind::String(_) => "string".to_string(),
+            TokenKind::Identifier(name) => format!("identifier `{}`", name),
+            TokenKind::True | TokenKind::False => "boolean".to_string(),
+            TokenKind::Null => "`null`".to_string(),
+            TokenKind::Eof => "end of file".to_string(),
+            _ => format!("{:?}", kind), // Fallback for any other token kinds
+        }
+    }
+
+    /// Helper to create a syntax error at current position with helpful message
+    fn syntax_error(&self, message: impl Into<String>) -> Error {
+        let token = self.peek();
+        Error::SyntaxError {
+            line: token.line,
+            col: token.column,
+            message: message.into(),
+        }
+    }
+
+    /// Helper to create a syntax error with expected/got pattern
+    fn expected_error(&self, expected: &str, hint: Option<&str>) -> Error {
+        let token = self.peek();
+        let got_str = Self::token_kind_name(&token.kind);
+
+        let mut message = format!("Expected {}, found {}", expected, got_str);
+
+        if let Some(hint) = hint {
+            message.push_str("\n\nHelp: ");
+            message.push_str(hint);
+        }
+
+        Error::SyntaxError {
+            line: token.line,
+            col: token.column,
+            message,
         }
     }
 
