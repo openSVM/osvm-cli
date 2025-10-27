@@ -1170,6 +1170,75 @@ Return status object with cluster health and slot information.
 - Last element: ([] array (- (COUNT array) 1))
 - No negative indexing support
 
+**🎨 CODE FORMATTING - ALLMAN/BSD STYLE FOR LISP:**
+
+**THE ONE-LINER RULE:**
+- If `(` and `)` close on SAME line → Everything can be inline
+- If `(` and `)` close on DIFFERENT lines → Opening `(` MUST be on its own line
+
+**✅ CORRECT Examples:**
+```lisp
+;; One-liner: closes on same line → inline OK
+(define x (+ 1 2))
+
+;; Multi-line: opening ( alone on its own line
+(
+  define add_tx
+  (
+    lambda (sender amt sig)
+      (
+        define idx (FIND senders sender)
+      )
+      (
+        if (== idx -1)
+          (
+            do
+              (set! senders (APPEND senders [sender]))
+              (set! amounts (APPEND amounts [amt]))
+          )
+          (
+            do
+              (set! amounts (UPDATE amounts idx (+ ([] amounts idx) amt)))
+          )
+      )
+  )
+)
+
+;; Mixed style (preferred for readability):
+(
+  for (tx page)              ;; (tx page) closes same line → inline OK
+    (
+      when (>= (. tx timestamp) START)    ;; condition inline OK
+        (
+          set! sigs (APPEND sigs [(. tx signature)])
+        )
+    )
+)
+```
+
+**❌ WRONG Examples:**
+```lisp
+;; BAD: ( has "for" on it but doesn't close on same line
+(for (tx page)
+  (when condition
+    (do-stuff)))
+
+;; CORRECT version:
+(
+  for (tx page)
+    (
+      when condition
+        (do-stuff)
+    )
+)
+```
+
+**Formatting Benefits:**
+- Vertical alignment makes nesting depth obvious
+- Easy to spot missing or extra parentheses
+- Consistent indentation = 2 spaces per level
+- Human-readable and machine-parseable
+
 **Iteration:**
 - ✅ **LAMBDA FULLY SUPPORTED**: `(lambda (x) (* x 2))` - First-class functions!
 - ✅ **MAP with lambda**: `(map [1 2 3] (lambda (x) (* x 2)))` → `[2, 4, 6]`
