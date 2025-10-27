@@ -371,12 +371,116 @@ impl AiService {
         }
     }
 
+    /// Check if an error is a timeout that should be retried
+    ///
+    /// Detects API timeouts, gateway timeouts, and connection timeouts
+    fn is_timeout_error(error: &anyhow::Error) -> bool {
+        let error_str = error.to_string().to_lowercase();
+        error_str.contains("504") ||
+        error_str.contains("gateway timeout") ||
+        error_str.contains("timeout") ||
+        error_str.contains("timed out") ||
+        error_str.contains("connection timeout") ||
+        error_str.contains("request timeout")
+    }
+
+    /// Retry an API call with exponential backoff on timeout errors
+    ///
+    /// This handles transient infrastructure issues like:
+    /// - 504 Gateway Timeout
+    /// - Connection timeouts
+    /// - Request timeouts
+    ///
+    /// Retry schedule: 5s, 10s, 20s, 40s (max 4 attempts, up to 75s total wait)
+    ///
+    /// This is patient enough for:
+    /// - Large system prompts (30KB+)
+    /// - Complex blockchain queries
+    /// - AI server under load
+    async fn with_timeout_retry<F, Fut>(
+        &self,
+        operation: F,
+        max_attempts: u32,
+        debug_mode: bool,
+    ) -> Result<String>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<String>>,
+    {
+        let mut attempt = 1;
+        let base_delay_ms = 5000; // Start with 5 seconds for AI processing
+
+        loop {
+            match operation().await {
+                Ok(response) => {
+                    if attempt > 1 && debug_mode {
+                        println!("✅ API call succeeded on attempt #{}", attempt);
+                    }
+                    return Ok(response);
+                }
+                Err(e) => {
+                    let is_timeout = Self::is_timeout_error(&e);
+
+                    if !is_timeout || attempt >= max_attempts {
+                        // Not a timeout or max attempts reached - fail
+                        if debug_mode {
+                            if is_timeout {
+                                println!("⛔ Max timeout retry attempts ({}) exceeded", max_attempts);
+                            } else {
+                                println!("⛔ Non-timeout error, not retrying");
+                            }
+                        }
+                        return Err(e);
+                    }
+
+                    // Calculate exponential backoff delay
+                    let delay_ms = base_delay_ms * (1 << (attempt - 1)); // 5s, 10s, 20s, 40s
+
+                    println!(
+                        "⏱️  API timeout on attempt #{}/{} ({}s wait). Retrying in {}s...",
+                        attempt,
+                        max_attempts,
+                        if attempt == 1 { 0 } else { base_delay_ms * ((1 << (attempt - 2)) - 1) / 1000 },
+                        delay_ms / 1000
+                    );
+
+                    // Wait before retrying
+                    tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+
+                    attempt += 1;
+                }
+            }
+        }
+    }
+
     async fn query_osvm_ai(&self, question: &str, debug_mode: bool) -> Result<String> {
-        self.query_osvm_ai_with_options(question, None, None, debug_mode)
-            .await
+        // Wrap with timeout retry logic (max 4 attempts with exponential backoff)
+        self.with_timeout_retry(
+            || self.query_osvm_ai_internal(question, None, None, debug_mode),
+            4, // 4 attempts = up to 75 seconds total wait time
+            debug_mode,
+        )
+        .await
     }
 
     async fn query_osvm_ai_with_options(
+        &self,
+        question: &str,
+        system_prompt: Option<String>,
+        only_plan: Option<bool>,
+        debug_mode: bool,
+    ) -> Result<String> {
+        // Wrap with timeout retry logic
+        self.with_timeout_retry(
+            || self.query_osvm_ai_internal(question, system_prompt.clone(), only_plan, debug_mode),
+            4,
+            debug_mode,
+        )
+        .await
+    }
+
+    /// Internal API call without retry logic
+    async fn query_osvm_ai_internal(
         &self,
         question: &str,
         system_prompt: Option<String>,
