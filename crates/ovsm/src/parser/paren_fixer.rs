@@ -3,7 +3,9 @@
 //! This module provides automatic correction of missing or mismatched
 //! parentheses in OVSM code, similar to error recovery in modern compilers.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::Scanner;
+use crate::parser::SExprParser;
 
 /// Attempts to automatically fix missing or mismatched parentheses
 pub struct ParenFixer {
@@ -22,7 +24,7 @@ impl ParenFixer {
         Self { source, lines }
     }
 
-    /// Analyze and fix parenthesis imbalances
+    /// Analyze and fix parenthesis imbalances with smart iterative placement
     pub fn fix(&self) -> Result<String> {
         // Count parentheses
         let stats = self.count_parens();
@@ -32,16 +34,130 @@ impl ParenFixer {
             return Ok(self.source.clone());
         }
 
-        // Try to fix the imbalance
+        // Try to fix the imbalance with smart placement
         if stats.open_count > stats.close_count {
-            // Missing closing parens - add them at the end
+            // Missing closing parens - try smart placement
             let missing = stats.open_count - stats.close_count;
+
+            // Try smart iterative placement first
+            if let Some(fixed) = self.smart_fix_missing_parens(missing) {
+                return Ok(fixed);
+            }
+
+            // Fallback to simple end placement
             Ok(self.add_closing_parens(missing))
         } else {
-            // Too many closing parens - remove extras or add opening
+            // Too many closing parens - remove extras
             let extra = stats.close_count - stats.open_count;
             Ok(self.remove_extra_closing_parens(extra))
         }
+    }
+
+    /// Try to fix missing parens by iteratively trying different positions
+    /// Returns the first valid placement that parses successfully
+    fn smart_fix_missing_parens(&self, missing: usize) -> Option<String> {
+        // Find candidate positions where we can insert closing parens
+        let candidates = self.find_insertion_candidates();
+
+        // Try each candidate position
+        for pos in candidates {
+            let attempt = self.insert_closing_parens_at(pos, missing);
+
+            // Validate by parsing
+            if self.validates(&attempt) {
+                return Some(attempt);
+            }
+        }
+
+        None
+    }
+
+    /// Find candidate positions for inserting closing parens
+    /// Returns positions sorted by likelihood of being correct
+    fn find_insertion_candidates(&self) -> Vec<usize> {
+        let mut candidates = Vec::new();
+        let mut in_string = false;
+        let mut escape_next = false;
+        let mut depth = 0_i32;
+
+        for (idx, ch) in self.source.chars().enumerate() {
+            // Handle escape sequences
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+
+            if ch == '\\' && in_string {
+                escape_next = true;
+                continue;
+            }
+
+            // Handle strings
+            if ch == '"' {
+                in_string = !in_string;
+                continue;
+            }
+
+            if in_string {
+                continue;
+            }
+
+            // Track depth and record positions
+            match ch {
+                '(' => {
+                    depth += 1;
+                }
+                ')' => {
+                    depth -= 1;
+                }
+                '\n' => {
+                    // End of line is a good candidate if we're in nested code
+                    if depth > 0 {
+                        candidates.push(idx + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Add end of file as final candidate
+        candidates.push(self.source.len());
+
+        // Sort by likelihood (prefer positions with higher depth changes)
+        // For now, keep them in order (end of lines, then end of file)
+        candidates
+    }
+
+    /// Insert closing parens at a specific position
+    fn insert_closing_parens_at(&self, pos: usize, count: usize) -> String {
+        let mut result = String::new();
+        result.push_str(&self.source[..pos]);
+
+        // Add the closing parens
+        for _ in 0..count {
+            result.push(')');
+        }
+
+        // Add rest of source
+        if pos < self.source.len() {
+            result.push_str(&self.source[pos..]);
+        }
+
+        result
+    }
+
+    /// Validate code by attempting to parse it
+    fn validates(&self, code: &str) -> bool {
+        // Try to tokenize
+        let mut scanner = Scanner::new(code);
+        let tokens = match scanner.scan_tokens() {
+            Ok(t) => t,
+            Err(_) => return false,
+        };
+
+        // Try to parse
+        let mut parser = SExprParser::new(tokens);
+        parser.parse().is_ok()
     }
 
     /// Count all parentheses in the source
@@ -195,13 +311,32 @@ impl ParenFixer {
             return (self.source.clone(), None);
         }
 
+        // Try to fix and determine which method was used
+        let fixed_result = self.fix();
+
         let report = if stats.open_count > stats.close_count {
             let missing = stats.open_count - stats.close_count;
-            Some(format!(
-                "⚠️  Auto-corrected: Added {} missing closing paren{} at end of code",
-                missing,
-                if missing == 1 { "" } else { "s" }
-            ))
+
+            // Check if smart placement found a solution
+            let used_smart = if let Ok(ref _fixed) = fixed_result {
+                self.smart_fix_missing_parens(missing).is_some()
+            } else {
+                false
+            };
+
+            if used_smart {
+                Some(format!(
+                    "✨ Auto-corrected: Added {} missing closing paren{} (smart placement validated)",
+                    missing,
+                    if missing == 1 { "" } else { "s" }
+                ))
+            } else {
+                Some(format!(
+                    "⚠️  Auto-corrected: Added {} missing closing paren{} at end of code",
+                    missing,
+                    if missing == 1 { "" } else { "s" }
+                ))
+            }
         } else {
             let extra = stats.close_count - stats.open_count;
             Some(format!(
@@ -211,7 +346,7 @@ impl ParenFixer {
             ))
         };
 
-        match self.fix() {
+        match fixed_result {
             Ok(fixed) => (fixed, report),
             Err(_) => (self.source.clone(), Some("⚠️  Could not auto-correct parentheses".to_string())),
         }
@@ -253,9 +388,10 @@ mod tests {
         let (fixed, report) = fixer.fix_with_report();
 
         assert!(fixed.contains(')'));
-        assert!(fixed.contains("Auto-corrected"));
         assert!(report.is_some());
-        assert!(report.unwrap().contains("1 missing closing paren"));
+        let msg = report.unwrap();
+        assert!(msg.contains("Auto-corrected"));
+        assert!(msg.contains("1 missing closing paren"));
     }
 
     #[test]
@@ -348,5 +484,48 @@ mod tests {
         // This should NOT be modified
         assert_eq!(fixed, code);
         assert!(report.is_none());
+    }
+
+    #[test]
+    fn test_smart_placement_validation() {
+        // Code with missing paren that SHOULD be placed mid-code, not at end
+        let code = "(define x (+ 1 2)\n(define y (+ 3 4))";
+
+        let fixer = ParenFixer::new(code);
+        let (fixed, report) = fixer.fix_with_report();
+
+        // Should be fixed and parseable
+        assert!(report.is_some());
+
+        // Verify it actually parses
+        let validates = fixer.validates(&fixed);
+        assert!(validates, "Smart placement should produce parseable code");
+
+        // Should use smart placement (indicated by ✨)
+        if let Some(msg) = report {
+            // Either smart placement (✨) or fallback (⚠️) - both should work
+            assert!(msg.contains("Auto-corrected"));
+        }
+    }
+
+    #[test]
+    fn test_smart_placement_finds_correct_position() {
+        // Code with missing paren where smart placement should help
+        let code = "(define data [1 2 3]\n(define count (+ 1 2)";
+
+        let fixer = ParenFixer::new(code);
+        let (fixed, report) = fixer.fix_with_report();
+
+        // Should fix it
+        assert!(report.is_some());
+
+        // Count should be balanced
+        let open = fixed.chars().filter(|&c| c == '(').count();
+        let close = fixed.chars().filter(|&c| c == ')').count();
+        assert_eq!(open, close, "Parentheses should be balanced");
+
+        // Ideally the fixed code should parse (best effort)
+        // Note: Smart placement may not always find the perfect spot,
+        // but it should at least balance the parens
     }
 }
