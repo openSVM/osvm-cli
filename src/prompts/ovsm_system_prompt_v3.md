@@ -194,6 +194,8 @@ count
 
 # Plan Structure
 
+**CRITICAL: You MUST provide executable code in the Main Branch section!**
+
 **Expected Plan:** [TIME: estimate] [CONFIDENCE: %]
 
 **Available Tools:** tool1, tool2, tool3
@@ -209,7 +211,11 @@ count
 
 **Action:** Brief description (no code here!)
 
-**Remember:** Main Branch MUST start with `(do` when you have multiple statements!
+**IMPORTANT FORMAT RULES:**
+- Main Branch MUST contain code wrapped in ```lisp code blocks
+- Code MUST start with `(do` when you have multiple statements
+- Code MUST be complete, executable OVSM LISP
+- Do NOT truncate or abbreviate the code
 
 ---
 
