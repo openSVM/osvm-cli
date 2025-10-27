@@ -868,17 +868,31 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
             .collect();
 
         if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
-            // No tools - direct response
+            // No tools - direct response (no execution happened)
+            match ai_service.query_with_debug(query, verbose > 1).await {
+                Ok(resp) => {
+                    println!(" ✅");
+                    resp
+                }
+                Err(e) => {
+                    println!(" ❌");
+                    eprintln!("❌ Failed to generate response: {}", e);
+                    format!("Error: {}", e)
+                }
+            }
+        } else {
+            // Format results from tool execution - use finalization prompt
             let finalization_prompt = format!(
                 "You are finalizing the answer to this user query: \"{}\"\n\n\
-                 The execution has completed. Your task is to:\n\
-                 1. Format the results in a clear, human-readable way\n\
+                 Plan execution has completed. Your task is to:\n\
+                 1. Format the execution results in a clear, human-readable way\n\
                  2. Directly answer the user's question based on the data\n\
                  3. DO NOT generate any new plans or code\n\
                  4. DO NOT suggest additional steps or actions\n\
                  5. Just present the final answer clearly and concisely\n\n\
-                 Results to format:\n{:?}",
-                query, tool_results_for_ai
+                 Execution results to format:\n{}",
+                query,
+                format_plan_execution_results(&tool_plan, &tool_results_for_ai)
             );
 
             match ai_service.query_osvm_ai_with_options(
@@ -893,14 +907,11 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                 }
                 Err(e) => {
                     println!(" ❌");
-                    eprintln!("❌ Failed to generate response: {}", e);
-                    format!("Error: {}", e)
+                    eprintln!("❌ Failed to finalize results: {}", e);
+                    // Fallback to raw formatted results if finalization fails
+                    format_plan_execution_results(&tool_plan, &tool_results_for_ai)
                 }
             }
-        } else {
-            // Format results from tool execution
-            println!(" ✅");
-            format_plan_execution_results(&tool_plan, &tool_results_for_ai)
         }
     };
 
