@@ -1382,23 +1382,76 @@ Return status object with cluster health and slot information.
         if available_tools.is_empty() {
             tools_context.push_str("No MCP tools are currently available.\n");
         } else {
-            tools_context.push_str("Available MCP Tools:\n");
+            // Concise tool listing - just names, grouped by category
+            tools_context.push_str("Available MCP Tools (call with UPPERCASE names):\n\n");
+
             for (server_id, tools) in available_tools {
-                tools_context.push_str(&format!("\nServer: {}\n", server_id));
-                for tool in tools {
-                    // Skip built-in LISP functions that are incorrectly listed as MCP tools
-                    // These are implemented directly in the LISP evaluator
-                    if matches!(tool.name.as_str(), "NOW" | "LOG" | "now" | "log") {
-                        continue;
+                let tool_names: Vec<String> = tools
+                    .iter()
+                    .filter(|t| !matches!(t.name.as_str(), "NOW" | "LOG" | "now" | "log"))
+                    .map(|t| t.name.clone())
+                    .collect();
+
+                if !tool_names.is_empty() {
+                    tools_context.push_str(&format!("Server '{}': ", server_id));
+
+                    // Group tools by category for readability
+                    let mut tx_tools = Vec::new();
+                    let mut account_tools = Vec::new();
+                    let mut block_tools = Vec::new();
+                    let mut token_tools = Vec::new();
+                    let mut defi_tools = Vec::new();
+                    let mut util_tools = Vec::new();
+
+                    for name in &tool_names {
+                        let lower = name.to_lowercase();
+                        if lower.contains("transaction") || lower.contains("tx") {
+                            tx_tools.push(name);
+                        } else if lower.contains("account") || lower.contains("balance") || lower.contains("portfolio") {
+                            account_tools.push(name);
+                        } else if lower.contains("block") || lower.contains("slot") {
+                            block_tools.push(name);
+                        } else if lower.contains("token") || lower.contains("nft") {
+                            token_tools.push(name);
+                        } else if lower.contains("defi") || lower.contains("dex") || lower.contains("validator") {
+                            defi_tools.push(name);
+                        } else {
+                            util_tools.push(name);
+                        }
                     }
 
-                    let description = tool
-                        .description
-                        .as_deref()
-                        .unwrap_or("No description available");
-                    tools_context.push_str(&format!("  - {}: {}\n", tool.name, description));
+                    let mut categories = Vec::new();
+                    if !tx_tools.is_empty() {
+                        let names: Vec<&str> = tx_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("Transactions({})", names.join(", ")));
+                    }
+                    if !account_tools.is_empty() {
+                        let names: Vec<&str> = account_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("Accounts({})", names.join(", ")));
+                    }
+                    if !block_tools.is_empty() {
+                        let names: Vec<&str> = block_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("Blocks({})", names.join(", ")));
+                    }
+                    if !token_tools.is_empty() {
+                        let names: Vec<&str> = token_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("Tokens({})", names.join(", ")));
+                    }
+                    if !defi_tools.is_empty() {
+                        let names: Vec<&str> = defi_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("DeFi({})", names.join(", ")));
+                    }
+                    if !util_tools.is_empty() {
+                        let names: Vec<&str> = util_tools.iter().map(|s| s.as_str()).collect();
+                        categories.push(format!("Utils({})", names.join(", ")));
+                    }
+
+                    tools_context.push_str(&categories.join(" | "));
+                    tools_context.push('\n');
                 }
             }
+
+            tools_context.push_str("\nNote: Tool names are case-sensitive. Use exact names from list above.\n");
         }
 
         // Create system prompt with OVSM instructions and available tools
