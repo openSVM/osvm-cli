@@ -175,7 +175,7 @@ impl AiService {
                         (url, true)
                     } else {
                         eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
-                        ("https://osvm.ai/api/getAnswer".to_string(), false)
+                        ("http://localhost:3004/api/getAnswer".to_string(), false)
                     }
                 } else {
                     // Custom URL, treat as external API
@@ -189,7 +189,7 @@ impl AiService {
                 {
                     (url, true)
                 } else {
-                    ("https://osvm.ai/api/getAnswer".to_string(), false)
+                    ("http://localhost:3004/api/getAnswer".to_string(), false)
                 }
             }
         };
