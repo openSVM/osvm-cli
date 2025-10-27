@@ -1094,7 +1094,7 @@ The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `g
 9. Use lowercase for variables (no $ prefix!)
 10. Use UPPERCASE for constants
 11. Use (. obj field) for field access, ([] arr idx) for indexing
-12. For RPC methods, use solana_rpc_call when high-level tools aren't available
+12. Use MCP tools listed in "Available Tools" section - all RPC methods are available directly!
 13. Batch related queries using PARALLEL for better performance
 
 # Example with RPC Tool Usage
@@ -1103,7 +1103,7 @@ The Solana RPC has a **HARD LIMIT of 1000 results per call** for methods like `g
 [TIME: ~30s] [CONFIDENCE: 90%]
 
 **Available Tools:**
-getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
+getSlot, getBlockTime, getClusterNodes, getHealth, COUNT
 
 **Main Branch:**
 ```lisp
@@ -1111,23 +1111,21 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 (define nodes (getClusterNodes))
 (define node_count (COUNT nodes))
 
-;; Parallel execution
-(do
-  (define block_time (solana_rpc_call :method "getBlockTime" :params [slot]))
-  (define health (getHealth)))
+;; Get block time and health status
+(define block_time (getBlockTime slot))
+(define health (getHealth))
 
 (define confidence
   (if (== health "ok")
       95
       60))
+
+;; Return the result
+{:status health :nodes node_count :block_time block_time :confidence confidence :slot slot}
 ```
 
 **Action:**
-```lisp
-(do
-  (define result {:status health :nodes node_count :block_time block_time :confidence confidence})
-  result)
-```
+Return status object with cluster health and slot information.
 
 # Important Notes
 
@@ -1137,9 +1135,9 @@ getClusterNodes, getTransaction, monitorTransaction, MEAN, COUNT
 - Use DECISION/BRANCH for multi-way strategy selection
 - Always include time estimates and confidence scores
 - Handle edge cases with if-checks and error handling
-- For any RPC method not listed above, use solana_rpc_call(method: "method_name", params: [array_of_params])
-- RPC proxy is case-sensitive: method names must match exactly (e.g., "getBlockTime", not "getblocktime")
-- Params must be passed as an array, even for single parameters
+- **IMPORTANT:** All RPC methods are available as direct MCP tools (getSlot, getBlockTime, getTransaction, etc.)
+- **DO NOT** use generic RPC wrappers - use the specific tools listed in "Your Available MCP Tools"
+- Tool names are case-sensitive: use exact names from the tools list
 
 # CRITICAL SYNTAX REMINDERS
 

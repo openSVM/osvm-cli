@@ -646,28 +646,162 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
             // Initialize OVSM service with registry (already has stdlib + RPC tools)
             let mut ovsm_service = OvsmService::with_registry(registry, verbose > 0, verbose > 1);
 
-            let execution_start = std::time::Instant::now();
+            // ═══════════════════════════════════════════════════════════════
+            // TWO-LEVEL SELF-HEALING RETRY LOOP
+            // ═══════════════════════════════════════════════════════════════
+            // Level 1: Fix syntax errors (parse, tokenization, scoping)
+            // Level 2: Fix logic errors (wrong result, semantic mismatch)
+            // ═══════════════════════════════════════════════════════════════
 
-            // Execute the OVSM code
-            match ovsm_service.execute_code(&ovsm_code) {
-                Ok(result) => {
-                    let elapsed = execution_start.elapsed().as_millis();
-                    println!("✅ OVSM execution completed in {}ms\n", elapsed);
+            const MAX_RETRY_ATTEMPTS: u32 = 3;
 
-                    // Format the result as a string
-                    let formatted_result = ovsm_service.format_value(&result);
+            let mut current_code = ovsm_code.clone();
+            let mut attempt = 1;
 
-                    if verbose > 0 {
-                        println!("📊 OVSM Result:");
-                        println!("{}\n", formatted_result);
+            loop {
+                println!("🔄 OVSM Execution Attempt #{}/{}", attempt, MAX_RETRY_ATTEMPTS);
+
+                let execution_start = std::time::Instant::now();
+
+                // ═══ LEVEL 1: TRY TO EXECUTE ═══
+                match ovsm_service.execute_code(&current_code) {
+                    Ok(result) => {
+                        let elapsed = execution_start.elapsed().as_millis();
+                        println!("✅ OVSM execution completed in {}ms", elapsed);
+
+                        let formatted_result = ovsm_service.format_value(&result);
+
+                        // ═══ LEVEL 2: VALIDATE RESULT ═══
+                        let (is_valid, validation_msg) = AiService::validate_ovsm_result(
+                            &formatted_result,
+                            &tool_plan.expected_outcome,
+                            query,
+                        );
+
+                        if is_valid {
+                            // ✅ SUCCESS - Result matches goal!
+                            if attempt > 1 {
+                                println!("🔧 Self-healing success! AI fixed {} issue(s)", attempt - 1);
+                            }
+
+                            if verbose > 0 {
+                                println!("\n📊 OVSM Result:");
+                                println!("{}\n", formatted_result);
+                            }
+
+                            ovsm_result = Some(formatted_result);
+                            break;
+                        } else {
+                            // ⚠️ SEMANTIC FAILURE - Code ran but wrong result
+                            println!("⚠️  Code executed but result doesn't match goal");
+                            println!("   Validation: {}", validation_msg);
+
+                            if attempt >= MAX_RETRY_ATTEMPTS {
+                                println!("⛔ Max attempts reached. Returning best available result.\n");
+                                ovsm_result = Some(formatted_result);
+                                break;
+                            }
+
+                            println!("🔧 Attempting logic refinement (Level 2)...");
+
+                            // Ask AI to fix the logic
+                            let semantic_prompt = ai_service.create_semantic_refinement_prompt(
+                                query,
+                                &tool_plan.expected_outcome,
+                                &current_code,
+                                &formatted_result,
+                                attempt,
+                            );
+
+                            match ai_service.create_tool_plan(&semantic_prompt, &available_tools).await {
+                                Ok(refined_plan) => {
+                                    if let Some(ref raw_plan) = refined_plan.raw_ovsm_plan {
+                                        if let Some(refined_code) = extract_ovsm_code(raw_plan) {
+                                            println!("✨ AI revised the logic\n");
+
+                                            if verbose > 1 {
+                                                println!("Refined code:");
+                                                println!("{}\n", refined_code);
+                                            }
+
+                                            current_code = refined_code;
+                                            attempt += 1;
+                                        } else {
+                                            println!("❌ Could not extract code from refined plan\n");
+                                            ovsm_result = Some(formatted_result);
+                                            break;
+                                        }
+                                    } else {
+                                        println!("❌ No OVSM plan in refined response\n");
+                                        ovsm_result = Some(formatted_result);
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    println!("❌ Logic refinement failed: {}\n", e);
+                                    ovsm_result = Some(formatted_result);
+                                    break;
+                                }
+                            }
+                        }
                     }
+                    Err(e) => {
+                        // ═══ LEVEL 1: SYNTAX ERROR ═══
+                        let error_msg = e.to_string();
+                        println!("❌ Syntax/execution error: {}\n", error_msg);
 
-                    ovsm_result = Some(formatted_result);
-                }
-                Err(e) => {
-                    println!("❌ OVSM execution failed: {}\n", e);
-                    eprintln!("Error details: {}", e);
-                    ovsm_result = None;
+                        if attempt >= MAX_RETRY_ATTEMPTS {
+                            println!("⛔ Max attempts reached. Giving up.\n");
+                            ovsm_result = None;
+                            break;
+                        }
+
+                        if !AiService::is_retryable_ovsm_error(&error_msg) {
+                            println!("⛔ Non-retryable error (network/runtime issue)\n");
+                            ovsm_result = None;
+                            break;
+                        }
+
+                        println!("🔧 Attempting syntax fix (Level 1)...");
+
+                        let syntax_prompt = ai_service.create_error_refinement_prompt(
+                            query,
+                            &current_code,
+                            &error_msg,
+                            attempt,
+                        );
+
+                        match ai_service.create_tool_plan(&syntax_prompt, &available_tools).await {
+                            Ok(refined_plan) => {
+                                if let Some(ref raw_plan) = refined_plan.raw_ovsm_plan {
+                                    if let Some(refined_code) = extract_ovsm_code(raw_plan) {
+                                        println!("✨ AI fixed the syntax\n");
+
+                                        if verbose > 1 {
+                                            println!("Refined code:");
+                                            println!("{}\n", refined_code);
+                                        }
+
+                                        current_code = refined_code;
+                                        attempt += 1;
+                                    } else {
+                                        println!("❌ Could not extract code from refined plan\n");
+                                        ovsm_result = None;
+                                        break;
+                                    }
+                                } else {
+                                    println!("❌ No OVSM plan in refined response\n");
+                                    ovsm_result = None;
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                println!("❌ Syntax refinement failed: {}\n", e);
+                                ovsm_result = None;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         } else {
