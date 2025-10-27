@@ -653,7 +653,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
             // Level 2: Fix logic errors (wrong result, semantic mismatch)
             // ═══════════════════════════════════════════════════════════════
 
-            const MAX_RETRY_ATTEMPTS: u32 = 3;
+            const MAX_RETRY_ATTEMPTS: u32 = 10;
 
             let mut current_code = ovsm_code.clone();
             let mut attempt = 1;
