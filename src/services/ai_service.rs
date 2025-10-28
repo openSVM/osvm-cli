@@ -13,7 +13,10 @@ use std::collections::HashMap;
 use std::env;
 use std::time::Duration;
 
-#[derive(Serialize, Debug)]
+// Import OVSM parser for validation
+use ovsm::{Parser as OvsmParser, Scanner as OvsmScanner};
+
+#[derive(Serialize, Debug, Clone)]
 struct AiRequest {
     question: String,
     #[serde(skip_serializing_if = "Option::is_none", rename = "systemPrompt")]
@@ -160,11 +163,7 @@ impl AiService {
             crate::utils::debug_logger::set_verbosity(VerbosityLevel::Silent);
         }
 
-        debug_print!(
-            VerbosityLevel::Basic,
-            "Initializing AI service with debug mode: {}",
-            debug_mode
-        );
+        debug_print!("Initializing AI service with debug mode: {}", debug_mode);
 
         let (api_url, use_openai) = match custom_api_url {
             Some(url) => {
@@ -175,7 +174,7 @@ impl AiService {
                         (url, true)
                     } else {
                         eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
-                        ("https://opensvm.com/api/getAnswer".to_string(), false)
+                        ("http://localhost:3000/api/getAnswer".to_string(), false)
                     }
                 } else {
                     // Custom URL, treat as external API
@@ -189,7 +188,7 @@ impl AiService {
                 {
                     (url, true)
                 } else {
-                    ("https://opensvm.com/api/getAnswer".to_string(), false)
+                    ("http://localhost:3000/api/getAnswer".to_string(), false)
                 }
             }
         };
@@ -376,12 +375,12 @@ impl AiService {
     /// Detects API timeouts, gateway timeouts, and connection timeouts
     fn is_timeout_error(error: &anyhow::Error) -> bool {
         let error_str = error.to_string().to_lowercase();
-        error_str.contains("504") ||
-        error_str.contains("gateway timeout") ||
-        error_str.contains("timeout") ||
-        error_str.contains("timed out") ||
-        error_str.contains("connection timeout") ||
-        error_str.contains("request timeout")
+        error_str.contains("504")
+            || error_str.contains("gateway timeout")
+            || error_str.contains("timeout")
+            || error_str.contains("timed out")
+            || error_str.contains("connection timeout")
+            || error_str.contains("request timeout")
     }
 
     /// Retry an API call with exponential backoff on timeout errors
@@ -425,7 +424,10 @@ impl AiService {
                         // Not a timeout or max attempts reached - fail
                         if debug_mode {
                             if is_timeout {
-                                println!("⛔ Max timeout retry attempts ({}) exceeded", max_attempts);
+                                println!(
+                                    "⛔ Max timeout retry attempts ({}) exceeded",
+                                    max_attempts
+                                );
                             } else {
                                 println!("⛔ Non-timeout error, not retrying");
                             }
@@ -440,7 +442,11 @@ impl AiService {
                         "⏱️  API timeout on attempt #{}/{} ({}s wait). Retrying in {}s...",
                         attempt,
                         max_attempts,
-                        if attempt == 1 { 0 } else { base_delay_ms * ((1 << (attempt - 2)) - 1) / 1000 },
+                        if attempt == 1 {
+                            0
+                        } else {
+                            base_delay_ms * ((1 << (attempt - 2)) - 1) / 1000
+                        },
                         delay_ms / 1000
                     );
 
@@ -471,12 +477,28 @@ impl AiService {
         debug_mode: bool,
     ) -> Result<String> {
         // Wrap with timeout retry logic
-        self.with_timeout_retry(
+        let mut response = self.with_timeout_retry(
             || self.query_osvm_ai_internal(question, system_prompt.clone(), only_plan, debug_mode),
             4,
             debug_mode,
         )
-        .await
+        .await?;
+        
+        // Check for truncation and handle continuation if needed
+        if self.is_response_truncated(&response) {
+            if debug_mode {
+                println!("⚠️ Response appears truncated ({} chars). Requesting continuation...", response.len());
+            }
+            response = self.handle_truncated_response(
+                question,
+                system_prompt,
+                only_plan,
+                response,
+                debug_mode
+            ).await?;
+        }
+        
+        Ok(response)
     }
 
     /// Internal API call without retry logic
@@ -496,9 +518,18 @@ impl AiService {
         if debug_mode {
             println!("📤 OSVM AI Request:");
             println!("  question: {} chars", question.len());
-            println!("  systemPrompt: {} chars", system_prompt.as_ref().map(|s| s.len()).unwrap_or(0));
+            println!(
+                "  systemPrompt: {} chars",
+                system_prompt.as_ref().map(|s| s.len()).unwrap_or(0)
+            );
             println!("  ownPlan: {:?}", only_plan);
-            println!("  Full JSON: {}", serde_json::to_string_pretty(&request_body)?);
+            // Hide system prompt from logs for security/readability
+            // Removed Full JSON output as it's not useful in logs
+            // let mut debug_body = request_body.clone();
+            // if debug_body.system_prompt.is_some() {
+            //     debug_body.system_prompt = Some("[HIDDEN - see length above]".to_string());
+            // }
+            // println!("  Full JSON: {}", serde_json::to_string_pretty(&debug_body)?);
         }
 
         let response = self
@@ -625,12 +656,12 @@ impl AiService {
             self.query_with_debug(&planning_prompt, false).await?
         } else {
             // OSVM AI: use ownPlan=true to get structured plan
-            debug_print!(VerbosityLevel::Basic, "Sending OVSM plan request with custom system prompt");
+            debug_print!("Sending OVSM plan request with custom system prompt");
             self.query_osvm_ai_with_options(
                 &planning_prompt,
                 Some(ovsm_system_prompt.clone()),
                 Some(true), // ownPlan=true
-                true, // DEBUG MODE ON
+                true,       // DEBUG MODE ON
             )
             .await?
         };
@@ -697,7 +728,7 @@ impl AiService {
             reasoning: "I'll help you directly with your request.".to_string(),
             osvm_tools_to_use: vec![],
             expected_outcome: "Provide a helpful answer based on the request.".to_string(),
-            raw_ovsm_plan: None,  // No OVSM plan for empty fallback
+            raw_ovsm_plan: None, // No OVSM plan for empty fallback
         })
     }
 
@@ -757,13 +788,19 @@ impl AiService {
                         let lower = name.to_lowercase();
                         if lower.contains("transaction") || lower.contains("tx") {
                             tx_tools.push(name);
-                        } else if lower.contains("account") || lower.contains("balance") || lower.contains("portfolio") {
+                        } else if lower.contains("account")
+                            || lower.contains("balance")
+                            || lower.contains("portfolio")
+                        {
                             account_tools.push(name);
                         } else if lower.contains("block") || lower.contains("slot") {
                             block_tools.push(name);
                         } else if lower.contains("token") || lower.contains("nft") {
                             token_tools.push(name);
-                        } else if lower.contains("defi") || lower.contains("dex") || lower.contains("validator") {
+                        } else if lower.contains("defi")
+                            || lower.contains("dex")
+                            || lower.contains("validator")
+                        {
                             defi_tools.push(name);
                         } else {
                             util_tools.push(name);
@@ -801,7 +838,9 @@ impl AiService {
                 }
             }
 
-            tools_context.push_str("\nNote: Tool names are case-sensitive. Use exact names from list above.\n");
+            tools_context.push_str(
+                "\nNote: Tool names are case-sensitive. Use exact names from list above.\n",
+            );
         }
 
         // Create system prompt with OVSM instructions and available tools
@@ -822,15 +861,33 @@ impl AiService {
 
     /// Parse OVSM-formatted plan
     fn parse_ovsm_plan(&self, plan_text: &str) -> Result<ToolPlan> {
-        eprintln!("DEBUG parse_ovsm_plan: called with {} chars", plan_text.len());
-        eprintln!("DEBUG parse_ovsm_plan: first 200 chars: {}", &plan_text[..plan_text.len().min(200)]);
+        eprintln!(
+            "DEBUG parse_ovsm_plan: called with {} chars",
+            plan_text.len()
+        );
+        eprintln!(
+            "DEBUG parse_ovsm_plan: first 200 chars: {}",
+            &plan_text[..plan_text.len().min(200)]
+        );
 
-        // NEW: If response starts with [TIME:...] and has Main Branch:, it's valid!
+        // PRIORITY 1: Check for XML format first (new preferred format)
+        if plan_text.contains("<ovsm_plan") || plan_text.contains("<ovsv_plan") {
+            if plan_text.contains("<ovsv_plan") {
+                eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsv_plan> tag! Normalizing to <ovsm_plan>.");
+            } else {
+                eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsm_plan> tag!");
+            }
+            return self.parse_osvm_plan_xml(plan_text);
+        }
+
+        // PRIORITY 2: Check for simplified format with TIME marker and Main Branch
         let has_time_marker = plan_text.contains("[TIME:") || plan_text.contains("[CONFIDENCE:");
         let has_main_branch = plan_text.contains("Main Branch") && plan_text.contains("```");
 
         if has_time_marker && has_main_branch {
-            eprintln!("DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!");
+            eprintln!(
+                "DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!"
+            );
             // This is a valid OVSM plan in simplified format - continue parsing
         } else if !plan_text.contains("Expected Plan") {
             eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
@@ -917,7 +974,7 @@ impl AiService {
             reasoning,
             osvm_tools_to_use: tools,
             expected_outcome,
-            raw_ovsm_plan: Some(plan_text.to_string()),  // Store raw OVSM plan for Phase 2 executor
+            raw_ovsm_plan: Some(plan_text.to_string()), // Store raw OVSM plan for Phase 2 executor
         })
     }
 
@@ -1043,14 +1100,24 @@ impl AiService {
 
     /// Parse OSVM plan XML format
     fn parse_osvm_plan_xml(&self, xml_response: &str) -> Result<ToolPlan> {
+        let normalized_xml = if xml_response.contains("<ovsv_plan") {
+            eprintln!("DEBUG parse_osvm_plan_xml: Normalizing <ovsv_plan> wrapper to <ovsm_plan>");
+            xml_response
+                .replace("<ovsv_plan", "<ovsm_plan")
+                .replace("</ovsv_plan>", "</ovsm_plan>")
+        } else {
+            xml_response.to_string()
+        };
+        let xml_str = normalized_xml.as_str();
+
         // Extract overview
         let overview = self
-            .extract_xml_value(xml_response, "overview")
+            .extract_xml_value(xml_str, "overview")
             .unwrap_or_else(|_| "Analyzing request and creating execution plan".to_string());
 
         // Extract tools from XML
         let mut tools = Vec::new();
-        if let Some(tools_section) = self.extract_xml_section(xml_response, "tools") {
+        if let Some(tools_section) = self.extract_xml_section(xml_str, "tools") {
             // Find all tool sections
             let mut pos = 0;
             while let Some(tool_start) = tools_section[pos..].find("<tool") {
@@ -1088,15 +1155,15 @@ impl AiService {
 
         // Extract expected outcome from overview or separate tag
         let expected_outcome = self
-            .extract_xml_value(xml_response, "expected_outcome")
-            .or_else(|_| self.extract_xml_value(xml_response, "estimatedTime"))
+            .extract_xml_value(xml_str, "expected_outcome")
+            .or_else(|_| self.extract_xml_value(xml_str, "estimatedTime"))
             .unwrap_or_else(|_| overview.clone());
 
         Ok(ToolPlan {
             reasoning: overview,
             osvm_tools_to_use: tools,
             expected_outcome,
-            raw_ovsm_plan: None,  // XML plans don't have full OVSM text
+            raw_ovsm_plan: Some(xml_response.to_string()), // Store full XML for extract_ovsm_code()
         })
     }
 
@@ -1218,7 +1285,7 @@ impl AiService {
             reasoning,
             osvm_tools_to_use: tools,
             expected_outcome,
-            raw_ovsm_plan: None,  // XML plans don't have full OVSM text
+            raw_ovsm_plan: None, // XML plans don't have full OVSM text
         })
     }
 
@@ -1276,7 +1343,7 @@ impl AiService {
                 osvm_tools_to_use: tools,
                 expected_outcome: expected
                     .unwrap_or_else(|| "Provide helpful assistance".to_string()),
-                raw_ovsm_plan: None,  // Salvaged plans don't have full OVSM text
+                raw_ovsm_plan: None, // Salvaged plans don't have full OVSM text
             });
         }
 
@@ -1345,7 +1412,7 @@ impl AiService {
                 } else {
                     expected
                 },
-                raw_ovsm_plan: None,  // Salvaged JSON doesn't have full OVSM text
+                raw_ovsm_plan: None, // Salvaged JSON doesn't have full OVSM text
             });
         }
         None
@@ -1426,6 +1493,174 @@ impl AiService {
         }
 
         serde_json::Value::Object(args_object)
+    }
+
+    /// Detect if an AI response has been truncated
+    ///
+    /// Common indicators of truncation:
+    /// - Missing closing XML tags (</code>, </ovsm_plan>)
+    /// - Unclosed code blocks (missing closing ```)
+    /// - Unbalanced parentheses in LISP code
+    /// - Response ends abruptly at ~3KB mark
+    fn is_response_truncated(&self, response: &str) -> bool {
+        // Check response length is suspiciously close to truncation limits
+        let length = response.len();
+        let near_3kb = length >= 2900 && length <= 3100;
+        
+        // Check for missing closing tags in XML-formatted responses
+        let has_unclosed_xml = (response.contains("<ovsm_plan>") || response.contains("<ovsv_plan>"))
+            && !response.contains("</ovsm_plan>")
+            && !response.contains("</ovsv_plan>");
+            
+        let has_unclosed_code = response.contains("<code>") && !response.contains("</code>");
+        
+        // Check for unclosed code blocks (markdown)
+        let code_blocks = response.matches("```").count();
+        let has_unclosed_markdown = code_blocks % 2 != 0;
+        
+        // Check for severely unbalanced parentheses (LISP code)
+        let open_parens = response.matches('(').count();
+        let close_parens = response.matches(')').count();
+        let severely_unbalanced = open_parens > close_parens + 5; // Allow small imbalance
+        
+        // Detect if response ends mid-sentence or mid-tag
+        let ends_abruptly = response.trim_end().ends_with(',')
+            || response.trim_end().ends_with('-')
+            || response.trim_end().ends_with('(')
+            || response.trim_end().ends_with('<')
+            || response.trim_end().ends_with("define");
+            
+        // Return true if any strong truncation indicator is present
+        near_3kb || has_unclosed_xml || has_unclosed_code || has_unclosed_markdown || 
+        (severely_unbalanced && length > 1000) || ends_abruptly
+    }
+    
+    /// Handle truncated response by requesting continuation
+    ///
+    /// This method detects truncation and requests the AI to continue
+    /// generating the response from where it left off. It can handle
+    /// multiple continuation requests to build the complete response.
+    async fn handle_truncated_response(
+        &self,
+        original_question: &str,
+        system_prompt: Option<String>,
+        only_plan: Option<bool>,
+        partial_response: String,
+        debug_mode: bool,
+    ) -> Result<String> {
+        let mut full_response = partial_response.clone();
+        let mut continuation_count = 0;
+        const MAX_CONTINUATIONS: u32 = 5; // Prevent infinite loops
+        
+        while continuation_count < MAX_CONTINUATIONS && self.is_response_truncated(&full_response) {
+            continuation_count += 1;
+            
+            if debug_mode {
+                println!("📝 Requesting continuation #{} (current length: {} chars)", 
+                    continuation_count, full_response.len());
+            }
+            
+            // Create continuation prompt
+            let continuation_prompt = self.create_continuation_prompt(
+                original_question,
+                &full_response,
+                continuation_count,
+            );
+            
+            // Request continuation
+            let continuation = self.with_timeout_retry(
+                || self.query_osvm_ai_internal(
+                    &continuation_prompt,
+                    system_prompt.clone(),
+                    only_plan,
+                    debug_mode
+                ),
+                2, // Fewer retries for continuations
+                debug_mode,
+            )
+            .await?;
+            
+            // Append continuation to full response
+            full_response = self.merge_continuation(&full_response, &continuation);
+            
+            if debug_mode {
+                println!("✅ Continuation #{} added ({} chars, total: {} chars)",
+                    continuation_count, continuation.len(), full_response.len());
+            }
+        }
+        
+        if continuation_count >= MAX_CONTINUATIONS && self.is_response_truncated(&full_response) {
+            if debug_mode {
+                println!("⚠️ Max continuations reached but response still appears truncated");
+            }
+        }
+        
+        Ok(full_response)
+    }
+    
+    /// Create a continuation prompt for truncated responses
+    fn create_continuation_prompt(
+        &self,
+        original_question: &str,
+        partial_response: &str,
+        attempt: u32,
+    ) -> String {
+        // Find the last complete element to help AI understand where to continue
+        let last_100_chars = if partial_response.len() > 100 {
+            &partial_response[partial_response.len() - 100..]
+        } else {
+            partial_response
+        };
+        
+        format!(
+            r#"Your previous response was truncated. Please CONTINUE from where you left off.
+
+Original Question: {}
+
+Your response was cut off at (last 100 chars):
+...{}
+
+Please CONTINUE the response from this exact point. Do not repeat what was already written.
+Just continue with the next part of the plan/code.
+
+Important: Start your continuation immediately from where it was cut off."#,
+            original_question,
+            last_100_chars
+        )
+    }
+    
+    /// Merge a continuation with the partial response
+    ///
+    /// This method intelligently merges the continuation, handling cases where
+    /// the AI might repeat some context or add transitional text.
+    fn merge_continuation(&self, partial: &str, continuation: &str) -> String {
+        // Remove common continuation phrases the AI might add
+        let cleaned_continuation = continuation
+            .trim_start_matches("Continuing from where I left off:")
+            .trim_start_matches("Continuing the plan:")
+            .trim_start_matches("Continuing:")
+            .trim_start_matches("...")
+            .trim_start();
+        
+        // Look for overlap between end of partial and start of continuation
+        // (AI might repeat last few tokens for context)
+        let overlap_window = 50; // Check last 50 chars for overlap
+        if partial.len() > overlap_window {
+            let partial_end = &partial[partial.len() - overlap_window..];
+            
+            // Find if continuation starts with any substring of partial_end
+            for i in 0..overlap_window {
+                let potential_overlap = &partial_end[i..];
+                if cleaned_continuation.starts_with(potential_overlap) {
+                    // Found overlap, skip it in continuation
+                    let continuation_without_overlap = &cleaned_continuation[potential_overlap.len()..];
+                    return format!("{}{}", partial, continuation_without_overlap);
+                }
+            }
+        }
+        
+        // No overlap found, just concatenate
+        format!("{}{}", partial, cleaned_continuation)
     }
 
     /// Generate a contextual response based on tool results
@@ -1514,10 +1749,7 @@ Focus on what matters to the user.
 - Correct tool names from available MCP tools
 
 Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available Tools, Main Branch, Action)."#,
-            original_query,
-            attempt_number,
-            broken_code,
-            error_message
+            original_query, attempt_number, broken_code, error_message
         )
     }
 
@@ -1532,37 +1764,38 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
     /// true if the error can potentially be fixed by regenerating code
     pub fn is_retryable_ovsm_error(error_message: &str) -> bool {
         // Parse errors, syntax errors, and type errors are retryable
-        error_message.contains("Parse error") ||
-        error_message.contains("Tokenization error") ||
-        error_message.contains("Expected identifier") ||
-        error_message.contains("Expected RightParen") ||
-        error_message.contains("Expected LeftParen") ||
-        error_message.contains("Undefined variable") ||
-        error_message.contains("Undefined tool") ||
-        error_message.contains("syntax error") ||
-        error_message.contains("Unexpected token") ||
-        error_message.contains("Type error") ||
-        error_message.contains("type mismatch") ||
-        error_message.contains("expected array") ||
-        error_message.contains("expected object") ||
-        error_message.contains("expected string") ||
-        error_message.contains("expected number")
+        error_message.contains("Parse error")
+            || error_message.contains("Tokenization error")
+            || error_message.contains("Expected identifier")
+            || error_message.contains("Expected RightParen")
+            || error_message.contains("Expected LeftParen")
+            || error_message.contains("Undefined variable")
+            || error_message.contains("Undefined tool")
+            || error_message.contains("syntax error")
+            || error_message.contains("Unexpected token")
+            || error_message.contains("Type error")
+            || error_message.contains("type mismatch")
+            || error_message.contains("expected array")
+            || error_message.contains("expected object")
+            || error_message.contains("expected string")
+            || error_message.contains("expected number")
     }
 
     /// Create a semantic refinement prompt when code runs but doesn't achieve goal
     ///
-    /// This is Level 2 self-healing: code executed successfully but the result
-    /// doesn't match the expected outcome (logic error, not syntax error).
+    /// This enables ITERATIVE RESEARCH STRATEGY REFINEMENT:
+    /// OVSM is an autonomous research agent that iterates on its approach
+    /// until the investigation goal is achieved.
     ///
     /// # Arguments
-    /// * `original_query` - The user's original request
-    /// * `expected_outcome` - What the plan said it would do
-    /// * `executed_code` - The OVSM code that ran successfully
-    /// * `actual_result` - What the code actually returned
-    /// * `attempt_number` - Which retry attempt this is
+    /// * `original_query` - The user's original research question
+    /// * `expected_outcome` - What the current strategy aimed to discover
+    /// * `executed_code` - The OVSM strategy that ran successfully
+    /// * `actual_result` - What was discovered (intermediate findings)
+    /// * `attempt_number` - Strategy iteration number
     ///
     /// # Returns
-    /// A prompt that asks AI to revise the logic/algorithm to achieve the goal
+    /// A prompt that asks AI to devise a NEW RESEARCH STRATEGY based on findings
     pub fn create_semantic_refinement_prompt(
         &self,
         original_query: &str,
@@ -1571,61 +1804,121 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
         actual_result: &str,
         attempt_number: u32,
     ) -> String {
+        self.create_semantic_refinement_prompt_with_history(
+            original_query,
+            expected_outcome,
+            executed_code,
+            actual_result,
+            attempt_number,
+            &[], // No history for backward compatibility
+        )
+    }
+
+    /// Create semantic refinement prompt with strategy history
+    pub fn create_semantic_refinement_prompt_with_history(
+        &self,
+        original_query: &str,
+        expected_outcome: &str,
+        executed_code: &str,
+        actual_result: &str,
+        attempt_number: u32,
+        strategy_history: &[String],
+    ) -> String {
+        let history_section = if strategy_history.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n## Previous Strategy Attempts (AVOID REPEATING THESE):\n{}\n",
+                strategy_history
+                    .iter()
+                    .enumerate()
+                    .map(|(i, s)| format!("{}. {}", i + 1, s))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        };
+
         format!(
-            r#"The previous OVSM plan executed successfully but did NOT achieve the goal.
+            r#"## OVSM Research Strategy Iteration Required
 
-**Original Query:** {}
+**OVSM Philosophy:** OVSM is an autonomous research agent that makes automated decisions based on calling MCP tools iteratively until the investigation goal is achieved. Each iteration should refine the research strategy based on what was learned.
 
-**Expected Outcome:** {}
+**Original Research Question:** {}
 
-**Code That Ran (Attempt #{}):**
+**Current Strategy Goal (Iteration #{}):** {}
+{}
+**Previous Research Strategy (OVSM Code):**
 ```lisp
 {}
 ```
 
-**Actual Result:**
+**Findings from Previous Strategy:**
 ```
 {}
 ```
 
-**Problem Analysis:**
-The code ran without errors, but the result doesn't match the goal. Common issues:
+## Research Progress Analysis
 
-1. **Wrong Tool Selection**
-   - Used getBalance when should use getSignaturesForAddress
-   - Used getTransaction when signature object already has data
-   - Missing pagination for large datasets
+The previous OVSM strategy executed successfully and discovered some information, but the investigation is not complete. This is **Strategy Iteration #{}**.
 
-2. **Logic Errors**
-   - Wrong filter conditions (filtered out target data)
-   - Incorrect aggregation (summed wrong fields)
-   - Missing data transformation (didn't extract sender wallet)
+**What We've Learned:**
+- The previous strategy revealed: [analyze the actual_result]
+- This gives us new information about: [what aspect of the problem]
+- We now know: [key insights from the result]
 
-3. **Data Extraction Issues**
-   - Parsed transaction but didn't extract the needed field
-   - Got array but didn't iterate through items
-   - Returned intermediate value instead of final result
+**Why a New Strategy is Needed:**
+The investigation needs to continue because:
+1. We have partial information but need more details
+2. The discovered data points to additional areas to explore
+3. The original question requires deeper analysis
 
-4. **Algorithm Problems**
-   - Didn't handle empty arrays/null values
-   - Wrong sort direction (ascending vs descending)
-   - Missed combining multiple data sources
+## Design Your Next Research Strategy
 
-**Please provide a REVISED OVSM plan that:**
-- Uses the correct MCP tools for the goal
-- Implements proper logic to extract/transform data
-- Handles edge cases (empty arrays, null values)
-- Returns data in the format that matches the goal
-- Includes proper aggregation/sorting if needed
+**CRITICAL REQUIREMENTS:**
 
-**Focus on:** Why didn't the result match the goal? What needs to change in the algorithm?
+1. **DO NOT REPEAT** any approaches from the "Previous Strategy Attempts" list above
+2. **MUST BE DIFFERENT** - Use completely different tools, parameters, or analysis angles
+3. **BUILD ON FINDINGS** - Use what was discovered, don't start from scratch
 
-Respond ONLY with the corrected OVSM plan structure."#,
+**Your NEW strategy must:**
+
+1. **Take a Different Angle**
+   - If previous strategies looked at transactions, try accounts
+   - If previous strategies analyzed recent data, try historical
+   - If previous strategies counted items, try analyzing patterns
+   - If previous strategies used one tool, combine multiple tools
+
+2. **Go Deeper Based on Findings**
+   - Use specific values discovered (addresses, signatures, amounts)
+   - Follow up on anomalies or interesting patterns found
+   - Drill into details that were summarized before
+
+3. **Advance Toward the Goal**
+   - Each iteration should get closer to answering the original question
+   - Focus on what's still unknown or unclear
+   - Be more specific based on what we've discovered
+
+**Strategy Pivot Examples:**
+- Found wallet address → Now track its token movements
+- Got transaction count → Now analyze transaction patterns
+- Discovered high activity → Now investigate the cause
+- Found totals → Now break down the components
+
+**IMPORTANT:** Start your response with a brief explanation of WHY you're taking this new approach and HOW it differs from previous attempts.
+
+Respond with:
+1. **Strategy Reasoning:** (1-2 sentences on why this approach)
+2. **OVSM Plan:** (The actual XML structure with code)
+
+Remember: This is **Research Strategy Iteration #{}** - make it meaningfully different!"#,
             original_query,
             expected_outcome,
             attempt_number,
+            history_section,
             executed_code,
-            actual_result
+            actual_result,
+            attempt_number + 1,
+            attempt_number + 1
         )
     }
 
@@ -1651,24 +1944,33 @@ Respond ONLY with the corrected OVSM plan structure."#,
 
         // Check for clear failure indicators
         if result == "null" || result == "[]" || result.trim().is_empty() {
-            return (false, format!(
-                "Result is empty ({}). Expected: {}",
-                result, expected_outcome
-            ));
+            return (
+                false,
+                format!(
+                    "Result is empty ({}). Expected: {}",
+                    result, expected_outcome
+                ),
+            );
         }
 
         // Check if query asked for "find" or "get" but result is null/empty
         if (query_lower.contains("find") || query_lower.contains("get"))
-            && (result_lower.contains("null") || result_lower == "0") {
-            return (false, format!(
-                "Query asked to find/get data but result is null/empty. Expected: {}",
-                expected_outcome
-            ));
+            && (result_lower.contains("null") || result_lower == "0")
+        {
+            return (
+                false,
+                format!(
+                    "Query asked to find/get data but result is null/empty. Expected: {}",
+                    expected_outcome
+                ),
+            );
         }
 
         // Check if query asked for "list" or "all" but got single item
         if (query_lower.contains("all") || query_lower.contains("list"))
-            && !result_lower.contains("[") && !result_lower.contains("array") {
+            && !result_lower.contains("[")
+            && !result_lower.contains("array")
+        {
             return (false, format!(
                 "Query asked for 'all' or 'list' but result appears to be single value. Expected: {}",
                 expected_outcome
@@ -1676,12 +1978,18 @@ Respond ONLY with the corrected OVSM plan structure."#,
         }
 
         // Check if query asked for "count" or "total" but got non-numeric
-        if (query_lower.contains("count") || query_lower.contains("total") || query_lower.contains("how many"))
-            && !result.chars().any(|c| c.is_numeric()) {
-            return (false, format!(
-                "Query asked for count/total but result is not numeric. Expected: {}",
-                expected_outcome
-            ));
+        if (query_lower.contains("count")
+            || query_lower.contains("total")
+            || query_lower.contains("how many"))
+            && !result.chars().any(|c| c.is_numeric())
+        {
+            return (
+                false,
+                format!(
+                    "Query asked for count/total but result is not numeric. Expected: {}",
+                    expected_outcome
+                ),
+            );
         }
 
         // Check if query asked for "sort" but result doesn't show ordering
@@ -1694,6 +2002,183 @@ Respond ONLY with the corrected OVSM plan structure."#,
 
         // If we get here, result looks reasonable
         (true, "Result appears to match expected outcome".to_string())
+    }
+    
+    /// Validate OVSM code syntax using the parser
+    ///
+    /// This method parses the OVSM code to check for syntax errors before execution.
+    /// It extracts LISP code from various plan formats and validates it.
+    ///
+    /// # Arguments
+    /// * `code` - The OVSM code to validate (can be raw LISP or wrapped in XML/markdown)
+    ///
+    /// # Returns
+    /// Ok(()) if the code is syntactically valid, Err with detailed error message otherwise
+    pub fn validate_ovsm_syntax(&self, code: &str) -> Result<()> {
+        // Extract LISP code from various formats
+        let lisp_code = self.extract_ovsm_lisp_code(code);
+        
+        // Try to parse the code using OVSM parser
+        let mut scanner = OvsmScanner::new(&lisp_code);
+        let tokens = scanner.scan_tokens()
+            .map_err(|e| anyhow::anyhow!("Tokenization error: {}", e))?;
+        
+        let mut parser = OvsmParser::new(tokens);
+        let _program = parser.parse()
+            .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+        
+        Ok(())
+    }
+    
+    /// Extract LISP code from various OVSM plan formats
+    ///
+    /// Handles:
+    /// - Raw LISP code
+    /// - XML-wrapped plans (<code> tags)
+    /// - Markdown code blocks (```lisp)
+    /// - Mixed format plans with sections
+    ///
+    /// # Arguments
+    /// * `plan_text` - The full plan text that may contain LISP code
+    ///
+    /// # Returns
+    /// The extracted LISP code, or the original text if no wrapper found
+    pub fn extract_ovsm_lisp_code(&self, plan_text: &str) -> String {
+        // Try to extract from <code> XML tags
+        if let Some(code_start) = plan_text.find("<code>") {
+            if let Some(code_end) = plan_text.find("</code>") {
+                return plan_text[code_start + 6..code_end].trim().to_string();
+            }
+        }
+        
+        // Try to extract from markdown code blocks
+        if let Some(code_start) = plan_text.find("```lisp") {
+            let start = code_start + 7;
+            if let Some(code_end) = plan_text[start..].find("```") {
+                return plan_text[start..start + code_end].trim().to_string();
+            }
+        } else if let Some(code_start) = plan_text.find("```") {
+            let start = code_start + 3;
+            // Check if it's not another language marker
+            if !plan_text[start..].starts_with("xml") && !plan_text[start..].starts_with("json") {
+                if let Some(code_end) = plan_text[start..].find("```") {
+                    return plan_text[start..start + code_end].trim().to_string();
+                }
+            }
+        }
+        
+        // Try to extract from Main Branch section (structured plans)
+        if plan_text.contains("**Main Branch:**") {
+            let mut collected_code = Vec::new();
+            let mut in_code_block = false;
+            
+            for line in plan_text.lines() {
+                if line.trim().starts_with("```") {
+                    in_code_block = !in_code_block;
+                    continue;
+                }
+                if in_code_block && !line.starts_with("**") {
+                    collected_code.push(line);
+                }
+            }
+            
+            if !collected_code.is_empty() {
+                return collected_code.join("\n");
+            }
+        }
+        
+        // If it looks like raw LISP (starts with parenthesis), return as-is
+        if plan_text.trim().starts_with('(') {
+            return plan_text.trim().to_string();
+        }
+        
+        // Default: return the original text
+        plan_text.trim().to_string()
+    }
+    
+    /// Generate a validated OVSM plan with automatic error correction
+    ///
+    /// This method generates an OVSM plan and validates it, automatically
+    /// requesting corrections from the AI if syntax errors are found.
+    ///
+    /// # Arguments
+    /// * `user_request` - The user's original request
+    /// * `available_tools` - Available MCP tools for planning
+    /// * `max_retries` - Maximum number of correction attempts (default: 3)
+    ///
+    /// # Returns
+    /// A validated ToolPlan with syntactically correct OVSM code
+    pub async fn create_validated_tool_plan(
+        &self,
+        user_request: &str,
+        available_tools: &HashMap<String, Vec<crate::services::mcp_service::McpTool>>,
+        max_retries: u32,
+    ) -> Result<ToolPlan> {
+        let mut attempt = 0;
+        let mut last_error: Option<String> = None;
+        
+        loop {
+            attempt += 1;
+            
+            // Generate or regenerate the plan
+            let plan = if attempt == 1 {
+                // First attempt: normal plan generation
+                self.create_tool_plan(user_request, available_tools).await?
+            } else {
+                // Retry: use error refinement prompt
+                let error_msg = last_error.as_ref().unwrap();
+                let refinement_prompt = self.create_error_refinement_prompt(
+                    user_request,
+                    "", // We don't have the broken code in this context
+                    error_msg,
+                    attempt - 1,
+                );
+                
+                // Generate corrected plan
+                let (_, ovsm_system_prompt) = self.build_ovsm_planning_prompt(user_request, available_tools)?;
+                let corrected_response = self.query_osvm_ai_with_options(
+                    &refinement_prompt,
+                    Some(ovsm_system_prompt),
+                    Some(true),
+                    true,
+                ).await?;
+                
+                // Parse the corrected plan
+                self.parse_ovsm_plan(&corrected_response)
+                    .or_else(|_| self.parse_osvm_plan_xml(&corrected_response))
+                    .unwrap_or_else(|_| ToolPlan {
+                        reasoning: "Attempting to correct the plan".to_string(),
+                        osvm_tools_to_use: vec![],
+                        expected_outcome: "Execute corrected plan".to_string(),
+                        raw_ovsm_plan: Some(corrected_response),
+                    })
+            };
+            
+            // If we have raw OVSM plan code, validate it
+            if let Some(ref raw_plan) = plan.raw_ovsm_plan {
+                match self.validate_ovsm_syntax(raw_plan) {
+                    Ok(()) => {
+                        debug_success!("OVSM plan validated successfully on attempt {}", attempt);
+                        return Ok(plan);
+                    }
+                    Err(e) => {
+                        debug_warn!("OVSM validation failed on attempt {}/{}: {}", attempt, max_retries, e);
+                        last_error = Some(e.to_string());
+                        
+                        if attempt >= max_retries {
+                            debug_error!("Max validation retries exceeded");
+                            // Return the plan anyway, let runtime handle errors
+                            return Ok(plan);
+                        }
+                        
+                        // Continue loop for retry
+                    }
+                }
+            } else {
+                // No raw OVSM code to validate, return as-is
+                return Ok(plan);
+            }
+        }
     }
 }
 
@@ -1723,7 +2208,7 @@ pub struct ToolPlan {
     pub reasoning: String,
     pub osvm_tools_to_use: Vec<PlannedTool>,
     pub expected_outcome: String,
-    pub raw_ovsm_plan: Option<String>,  // Phase 2: Store raw OVSM plan for executor
+    pub raw_ovsm_plan: Option<String>, // Phase 2: Store raw OVSM plan for executor
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1745,6 +2230,38 @@ mod tests {
     use super::*;
     use mockito::Server;
     use serde_json::json;
+
+    #[test]
+    fn test_parse_ovsv_plan_wrapper() {
+        let ai_service = AiService::new();
+
+        let ovsv_plan = r#"
+<ovsv_plan>
+  <overview>Test overview</overview>
+  <tools>
+    <tool name="get_account_stats">
+      <description>Fetch account stats</description>
+    </tool>
+  </tools>
+  <steps></steps>
+  <expected_outcome>Return stats</expected_outcome>
+</ovsv_plan>
+"#;
+
+        let plan = ai_service
+            .parse_ovsm_plan(ovsv_plan)
+            .expect("Plan should parse");
+        assert_eq!(plan.reasoning, "Test overview");
+        assert_eq!(plan.expected_outcome, "Return stats");
+        assert!(plan
+            .osvm_tools_to_use
+            .iter()
+            .any(|tool| tool.tool_name == "get_account_stats"));
+        assert_eq!(
+            plan.raw_ovsm_plan.as_ref().map(|s| s.trim()),
+            Some(ovsv_plan.trim())
+        );
+    }
 
     #[tokio::test]
     async fn test_ai_service_success() {
