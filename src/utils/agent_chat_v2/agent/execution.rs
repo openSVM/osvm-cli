@@ -55,10 +55,10 @@ impl AdvancedChatState {
             }
         };
 
-        // Use the proper AI service method to create tool plan
+        // Use the proper AI service method to create tool plan with validation
         let tool_plan_result = tokio::time::timeout(
             Duration::from_secs(120), // Extended timeout for comprehensive AI responses
-            self.ai_service.create_tool_plan(&input, &available_tools),
+            self.ai_service.create_validated_tool_plan(&input, &available_tools, 3),
         )
         .await;
 
@@ -69,7 +69,8 @@ impl AdvancedChatState {
 
             // Batch validator analysis
             if (lc.contains("validator") || lc.contains("validators"))
-                && (lc.contains("100") || lc.contains("top") || lc.contains("analyze")) {
+                && (lc.contains("100") || lc.contains("top") || lc.contains("analyze"))
+            {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "analyze_batch_validators".into(),
@@ -83,7 +84,8 @@ impl AdvancedChatState {
 
             // Batch token analysis
             if (lc.contains("token") || lc.contains("tokens"))
-                && (lc.contains("50") || lc.contains("top") || lc.contains("portfolio")) {
+                && (lc.contains("50") || lc.contains("top") || lc.contains("portfolio"))
+            {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "analyze_batch_tokens".into(),
@@ -98,7 +100,8 @@ impl AdvancedChatState {
 
             // Batch account analysis
             if (lc.contains("account") || lc.contains("accounts"))
-                && (lc.contains("transaction") || lc.contains("pattern")) {
+                && (lc.contains("transaction") || lc.contains("pattern"))
+            {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "analyze_batch_accounts".into(),
@@ -122,7 +125,9 @@ impl AdvancedChatState {
 
             // Single transaction query
             if (lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx"))
-                && !lc.contains("account") && !lc.contains("validator") {
+                && !lc.contains("account")
+                && !lc.contains("validator")
+            {
                 tools.push(PlannedTool {
                     server_id: "local_sim".into(),
                     tool_name: "get_transactions".into(),
@@ -203,7 +208,14 @@ impl AdvancedChatState {
                     } else {
                         // Fallback: Execute tools iteratively (Phase 1 behavior)
                         debug!("No raw OVSM plan available, using iterative execution");
-                        let _ = self.execute_tools_iteratively(session_id, tool_plan.osvm_tools_to_use, &input, &available_tools).await;
+                        let _ = self
+                            .execute_tools_iteratively(
+                                session_id,
+                                tool_plan.osvm_tools_to_use,
+                                &input,
+                                &available_tools,
+                            )
+                            .await;
                     }
 
                     // Generate final response with all executed tools
@@ -469,7 +481,7 @@ impl AdvancedChatState {
                             ]
                         }
                     }))
-                },
+                }
                 "analyze_batch_tokens" => {
                     let count = planned_tool.args["count"].as_u64().unwrap_or(10);
                     info!("Simulating batch analysis of {} tokens", count);
@@ -495,11 +507,16 @@ impl AdvancedChatState {
                             "correlation_matrix": "Available in detailed view"
                         }
                     }))
-                },
+                }
                 "analyze_batch_accounts" => {
                     let account_count = planned_tool.args["account_count"].as_u64().unwrap_or(10);
-                    let tx_limit = planned_tool.args["transaction_limit"].as_u64().unwrap_or(100);
-                    info!("Simulating batch analysis of {} accounts ({} tx each)", account_count, tx_limit);
+                    let tx_limit = planned_tool.args["transaction_limit"]
+                        .as_u64()
+                        .unwrap_or(100);
+                    info!(
+                        "Simulating batch analysis of {} accounts ({} tx each)",
+                        account_count, tx_limit
+                    );
 
                     tokio::time::sleep(Duration::from_millis(1000)).await;
 
@@ -526,7 +543,7 @@ impl AdvancedChatState {
                             "total_volume_sol": account_count * tx_limit * 10
                         }
                     }))
-                },
+                }
                 "get_balance" => {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     Ok(serde_json::json!({
@@ -534,7 +551,7 @@ impl AdvancedChatState {
                         "balance_lamports": 42_500_000_000u64,
                         "status": "success"
                     }))
-                },
+                }
                 "get_transactions" => {
                     tokio::time::sleep(Duration::from_millis(200)).await;
                     Ok(serde_json::json!({
@@ -545,11 +562,11 @@ impl AdvancedChatState {
                         "count": 2,
                         "status": "success"
                     }))
-                },
+                }
                 _ => Ok(serde_json::json!({
                     "error": format!("Unknown local_sim tool: {}", planned_tool.tool_name),
                     "status": "unknown_tool"
-                }))
+                })),
             };
         }
 
@@ -727,11 +744,11 @@ impl AdvancedChatState {
             original_input, results_context
         );
 
-        // Use a shorter timeout for follow-up checks
+        // Use a shorter timeout for follow-up checks with validation
         match tokio::time::timeout(
             Duration::from_secs(10),
             self.ai_service
-                .create_tool_plan(&follow_up_prompt, available_tools),
+                .create_validated_tool_plan(&follow_up_prompt, available_tools, 3),
         )
         .await
         {
@@ -979,10 +996,7 @@ async fn execute_tool_async(
 ) -> Result<serde_json::Value> {
     // Add tool call message to chat
     let execution_id = Uuid::new_v4().to_string();
-    state.set_agent_state(
-        session_id,
-        AgentState::ExecutingTool(tool_name.to_string()),
-    );
+    state.set_agent_state(session_id, AgentState::ExecutingTool(tool_name.to_string()));
     let _ = state.add_message_to_session(
         session_id,
         ChatMessage::ToolCall {
