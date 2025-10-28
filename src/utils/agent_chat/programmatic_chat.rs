@@ -76,7 +76,9 @@ impl ProgrammaticChatState {
     /// Initialize the chat state
     pub async fn initialize(&self) -> Result<()> {
         // Load MCP configurations
-        let mut mcp = self.mcp_service.lock()
+        let mut mcp = self
+            .mcp_service
+            .lock()
             .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
 
         if let Err(e) = mcp.load_config() {
@@ -117,7 +119,8 @@ impl ProgrammaticChatState {
             }
             "clear" | "/clear" => {
                 self.clear_history().await;
-                self.add_system_message("Chat history cleared".to_string()).await;
+                self.add_system_message("Chat history cleared".to_string())
+                    .await;
                 return Ok(());
             }
             "tools" | "/tools" => {
@@ -144,7 +147,9 @@ impl ProgrammaticChatState {
                 "OSVM Plan: {} (confidence: {:.0}%)\nSteps: {}",
                 osvm_plan.reasoning,
                 osvm_plan.confidence * 100.0,
-                osvm_plan.steps.iter()
+                osvm_plan
+                    .steps
+                    .iter()
                     .map(|s| format!("  - {}: {}", s.full_command, s.explanation))
                     .collect::<Vec<_>>()
                     .join("\n")
@@ -153,14 +158,13 @@ impl ProgrammaticChatState {
             self.add_agent_response(plan_summary).await;
 
             // Auto-execute in headless mode for testing
-            self.set_agent_state(AgentState::ExecutingTool("OSVM Plan".to_string())).await;
+            self.set_agent_state(AgentState::ExecutingTool("OSVM Plan".to_string()))
+                .await;
 
             match planner.execute_plan(&osvm_plan, false).await {
                 Ok(results) => {
-                    let results_summary = format!(
-                        "Executed {} command(s) successfully",
-                        results.len()
-                    );
+                    let results_summary =
+                        format!("Executed {} command(s) successfully", results.len());
                     self.add_agent_response(results_summary).await;
                     self.set_agent_state(AgentState::Idle).await;
                     return Ok(());
@@ -179,12 +183,18 @@ impl ProgrammaticChatState {
 
         let available_tools = self.get_available_tools().await;
 
-        match self.ai_service.create_tool_plan(&message, &available_tools).await {
+        match self
+            .ai_service
+            .create_validated_tool_plan(&message, &available_tools, 3)
+            .await
+        {
             Ok(ai_plan) => {
                 let plan_summary = format!(
                     "AI Plan: {}\nTools: {}",
                     ai_plan.reasoning,
-                    ai_plan.osvm_tools_to_use.iter()
+                    ai_plan
+                        .osvm_tools_to_use
+                        .iter()
                         .map(|t| format!("  - {}: {}", t.tool_name, t.reason))
                         .collect::<Vec<_>>()
                         .join("\n")
@@ -193,11 +203,13 @@ impl ProgrammaticChatState {
                 self.add_agent_response(plan_summary).await;
 
                 // Execute plan in headless mode
-                self.set_agent_state(AgentState::ExecutingTool("AI Plan".to_string())).await;
+                self.set_agent_state(AgentState::ExecutingTool("AI Plan".to_string()))
+                    .await;
 
                 // Execute tools (mock execution for now)
                 for planned_tool in &ai_plan.osvm_tools_to_use {
-                    self.set_agent_state(AgentState::ExecutingTool(planned_tool.tool_name.clone())).await;
+                    self.set_agent_state(AgentState::ExecutingTool(planned_tool.tool_name.clone()))
+                        .await;
 
                     let mock_result = serde_json::json!({
                         "success": true,
@@ -216,21 +228,28 @@ impl ProgrammaticChatState {
                 }
 
                 // Generate final response
-                let tool_names: Vec<String> = ai_plan.osvm_tools_to_use.iter()
+                let tool_names: Vec<String> = ai_plan
+                    .osvm_tools_to_use
+                    .iter()
                     .map(|t| t.tool_name.clone())
                     .collect();
 
-                match self.ai_service.query(&format!(
+                match self
+                    .ai_service
+                    .query(&format!(
                     "Based on the execution of these tools: {}, provide a concise response to: {}",
                     tool_names.join(", "),
                     message
-                )).await {
+                ))
+                    .await
+                {
                     Ok(response) => {
                         self.add_agent_response(response).await;
                     }
                     Err(e) => {
                         warn!("Failed to generate AI response: {}", e);
-                        self.add_agent_response("Tools executed successfully".to_string()).await;
+                        self.add_agent_response("Tools executed successfully".to_string())
+                            .await;
                     }
                 }
 
@@ -259,7 +278,8 @@ impl ProgrammaticChatState {
 
     /// Get the current agent state
     pub async fn get_agent_state(&self) -> AgentState {
-        self.agent_state.lock()
+        self.agent_state
+            .lock()
             .map(|s| s.clone())
             .unwrap_or(AgentState::Idle)
     }
@@ -310,7 +330,8 @@ impl ProgrammaticChatState {
     /// Get recent messages (for testing)
     pub async fn get_recent_messages(&self, count: usize) -> Vec<ChatMessage> {
         if let Ok(history) = self.chat_history.lock() {
-            history.iter()
+            history
+                .iter()
                 .rev()
                 .take(count)
                 .cloned()
@@ -356,12 +377,15 @@ impl ProgrammaticChatState {
          - /help: Show this help\n\
          - /clear: Clear chat history\n\
          - /tools: List available tools\n\
-         - /status: Show system status".to_string()
+         - /status: Show system status"
+            .to_string()
     }
 
     /// Generate tools response
     async fn generate_tools_response(&self) -> Result<String> {
-        let mcp = self.mcp_service.lock()
+        let mcp = self
+            .mcp_service
+            .lock()
             .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
 
         let servers = mcp.list_servers();
@@ -371,7 +395,8 @@ impl ProgrammaticChatState {
         } else {
             format!(
                 "Available MCP servers: {}",
-                servers.iter()
+                servers
+                    .iter()
                     .map(|(id, _)| id.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
@@ -383,7 +408,9 @@ impl ProgrammaticChatState {
 
     /// Generate status response
     async fn generate_status_response(&self) -> Result<String> {
-        let mcp = self.mcp_service.lock()
+        let mcp = self
+            .mcp_service
+            .lock()
             .map_err(|e| anyhow!("Failed to lock MCP service: {}", e))?;
 
         let servers = mcp.list_servers();
@@ -405,7 +432,9 @@ impl ProgrammaticChatState {
     }
 
     /// Get available tools for AI planning
-    async fn get_available_tools(&self) -> std::collections::HashMap<String, Vec<crate::services::mcp_service::McpTool>> {
+    async fn get_available_tools(
+        &self,
+    ) -> std::collections::HashMap<String, Vec<crate::services::mcp_service::McpTool>> {
         use crate::services::mcp_service::McpTool;
         use std::collections::HashMap;
 
@@ -447,8 +476,15 @@ impl ChatMessage {
             ChatMessage::Agent(s) => s.clone(),
             ChatMessage::System(s) => s.clone(),
             ChatMessage::Error(s) => s.clone(),
-            ChatMessage::ToolExecution { tool_name, result, success } => {
-                format!("Tool {} execution: {} (success: {})", tool_name, result, success)
+            ChatMessage::ToolExecution {
+                tool_name,
+                result,
+                success,
+            } => {
+                format!(
+                    "Tool {} execution: {} (success: {})",
+                    tool_name, result, success
+                )
             }
         }
     }

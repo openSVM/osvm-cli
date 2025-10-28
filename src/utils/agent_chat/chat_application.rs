@@ -212,7 +212,13 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
         show_enhanced_status_bar(&task_state);
 
         // Real-time input with suggestions - positioned immediately after status bar
-        let input = match get_enhanced_input_with_status(&suggestion_tx, &mut task_state, test_mode || !raw_mode_available).await {
+        let input = match get_enhanced_input_with_status(
+            &suggestion_tx,
+            &mut task_state,
+            test_mode || !raw_mode_available,
+        )
+        .await
+        {
             Ok(input) => input,
             Err(e) => {
                 println!("{}✗ Input error: {}{}", Colors::RED, e, Colors::RESET);
@@ -269,16 +275,28 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
                 }
                 continue;
             }
-            cmd if cmd == "screenshot" || cmd == "/screenshot" || cmd.starts_with("/screenshot ") => {
+            cmd if cmd == "screenshot"
+                || cmd == "/screenshot"
+                || cmd.starts_with("/screenshot ") =>
+            {
                 // Parse arguments for --terminal-only or --fullscreen
                 let terminal_only = if input.contains("--fullscreen") {
                     false
                 } else {
-                    true  // Default to terminal-only
+                    true // Default to terminal-only
                 };
 
-                let mode_str = if terminal_only { "terminal-only" } else { "full-screen" };
-                println!("{}• Taking {} screenshot...{}", Colors::CYAN, mode_str, Colors::RESET);
+                let mode_str = if terminal_only {
+                    "terminal-only"
+                } else {
+                    "full-screen"
+                };
+                println!(
+                    "{}• Taking {} screenshot...{}",
+                    Colors::CYAN,
+                    mode_str,
+                    Colors::RESET
+                );
 
                 match crate::utils::screenshot::take_terminal_screenshot(terminal_only) {
                     Ok(path) => {
@@ -291,12 +309,7 @@ pub async fn run_agent_chat_ui_with_mode(test_mode: bool) -> Result<()> {
                         );
                     }
                     Err(e) => {
-                        println!(
-                            "{}✗ Screenshot failed: {}{}",
-                            Colors::RED,
-                            e,
-                            Colors::RESET
-                        );
+                        println!("{}✗ Screenshot failed: {}{}", Colors::RED, e, Colors::RESET);
                     }
                 }
                 continue;
@@ -1442,7 +1455,7 @@ async fn process_with_realtime_ai(
     show_animated_status("Creating execution plan", "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏", 1000).await;
 
     let ai_plan = match ai_service
-        .create_tool_plan(&message, &available_tools)
+        .create_validated_tool_plan(&message, &available_tools, 3)
         .await
     {
         Ok(plan) => {
