@@ -124,14 +124,25 @@ impl ToolRegistry {
         self.tools.insert(name, Arc::new(tool));
     }
 
-    /// Get tool by name
+    /// Get tool by name (case-insensitive fallback)
     pub fn get(&self, name: &str) -> Result<Arc<dyn Tool>> {
-        self.tools
-            .get(name)
-            .cloned()
-            .ok_or_else(|| crate::error::Error::UndefinedTool {
-                name: name.to_string(),
-            })
+        // Try exact match first
+        if let Some(tool) = self.tools.get(name) {
+            return Ok(tool.clone());
+        }
+        
+        // Try case-insensitive match
+        let name_lower = name.to_lowercase();
+        for (key, tool) in &self.tools {
+            if key.to_lowercase() == name_lower {
+                return Ok(tool.clone());
+            }
+        }
+        
+        // No match found
+        Err(crate::error::Error::UndefinedTool {
+            name: name.to_string(),
+        })
     }
 
     /// Check if tool exists
