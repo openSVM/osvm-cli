@@ -308,7 +308,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle RPC early - it generates its own keypairs and doesn't need default config
     if sub_command == "rpc" {
-        return commands::rpc_manager::handle_rpc_manager(sub_matches).await.map_err(|e| e.into());
+        return commands::rpc_manager::handle_rpc_manager(sub_matches)
+            .await
+            .map_err(|e| e.into());
     }
 
     // Handle chat command early to avoid config loading that might trigger self-repair
@@ -352,7 +354,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let timeout = sub_matches
             .get_one::<String>("timeout")
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(90);  // Increased from 30s to 90s for complex agent queries with parallel tool execution
+            .unwrap_or(90); // Increased from 30s to 90s for complex agent queries with parallel tool execution
 
         return crate::utils::agent_cli::execute_agent_command(
             &prompt,
@@ -449,7 +451,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Handle short planning/agent aliases early (p and a commands)
     if sub_command == "p" || sub_command == "a" {
-        return commands::ai_query::handle_ai_query_with_planning(sub_command, sub_matches, &app_matches).await;
+        return commands::ai_query::handle_ai_query_with_planning(
+            sub_command,
+            sub_matches,
+            &app_matches,
+        )
+        .await;
     }
 
     // Handle AI queries early to avoid config loading
@@ -457,11 +464,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !is_known_command(sub_command) {
         // Check if verbose flag is set
         let verbose = app_matches.get_count("verbose");
+        let plan_only = app_matches.get_flag("plan_only");
 
         // Use streaming agent for direct queries
-        return crate::utils::streaming_agent::execute_streaming_agent(sub_command, verbose)
-            .await
-            .map_err(|e| format!("Streaming agent failed: {}", e).into());
+        return crate::utils::streaming_agent::execute_streaming_agent(
+            sub_command,
+            verbose,
+            plan_only,
+        )
+        .await
+        .map_err(|e| format!("Streaming agent failed: {}", e).into());
     }
 
     // Load configuration using the new Config module
@@ -694,7 +706,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Short planning mode aliases - enable OVSM planning agent
         "p" | "a" => {
             // Extract the actual query from subcommand args
-            commands::ai_query::handle_ai_query_with_planning(sub_command, matches, &app_matches).await?;
+            commands::ai_query::handle_ai_query_with_planning(sub_command, matches, &app_matches)
+                .await?;
         }
         cmd => {
             // Check if this is meant to be an AI query (external subcommand)

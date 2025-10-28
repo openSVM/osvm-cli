@@ -10,7 +10,6 @@
 /// - MCP tool integration for Solana RPC calls
 /// - State management across execution
 /// - Progress reporting and streaming results
-
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,11 +68,7 @@ impl OvsmExecutor {
     }
 
     /// Register an MCP tool for execution
-    pub async fn register_tool(
-        &self,
-        name: String,
-        tool: Box<dyn McpToolExecutor>,
-    ) -> Result<()> {
+    pub async fn register_tool(&self, name: String, tool: Box<dyn McpToolExecutor>) -> Result<()> {
         let mut tools = self.mcp_tools.lock().await;
         tools.insert(name.clone(), tool);
 
@@ -161,8 +156,12 @@ impl OvsmExecutor {
 
         // Top-level section keywords (case-insensitive)
         let top_level_sections = vec![
-            "Expected Plan", "Main Branch", "Action",
-            "Decision Point", "Alternative", "Context"
+            "Expected Plan",
+            "Main Branch",
+            "Action",
+            "Decision Point",
+            "Alternative",
+            "Context",
         ];
 
         for line in plan_text.lines() {
@@ -192,7 +191,8 @@ impl OvsmExecutor {
                 };
 
                 // Check if it matches a known top-level section
-                let is_known_section = top_level_sections.iter()
+                let is_known_section = top_level_sections
+                    .iter()
                     .any(|s| section_candidate.eq_ignore_ascii_case(s));
 
                 // Also check if line has no indentation (except for numbered items in content)
@@ -246,7 +246,10 @@ impl OvsmExecutor {
         }
 
         if self.debug {
-            println!("  Parsed sections: {:?}", sections.iter().map(|s| &s.section_type).collect::<Vec<_>>());
+            println!(
+                "  Parsed sections: {:?}",
+                sections.iter().map(|s| &s.section_type).collect::<Vec<_>>()
+            );
         }
 
         Ok(ParsedPlan { sections })
@@ -306,11 +309,13 @@ impl OvsmExecutor {
                     // - It's the DECISION line itself
                     // - It's indented more than the DECISION line
                     // - It starts with IF, THEN, BRANCH, ELSE at appropriate indentation
-                    if j == i || l_indent > indent_level ||
-                       l.trim().starts_with("IF ") ||
-                       l.trim().starts_with("THEN") ||
-                       l.trim().starts_with("BRANCH ") ||
-                       l.trim().starts_with("ELSE") {
+                    if j == i
+                        || l_indent > indent_level
+                        || l.trim().starts_with("IF ")
+                        || l.trim().starts_with("THEN")
+                        || l.trim().starts_with("BRANCH ")
+                        || l.trim().starts_with("ELSE")
+                    {
                         decision_lines.push(l);
                     } else if !l.trim().is_empty() {
                         // Stop at next non-empty line at same or less indentation
@@ -332,10 +337,11 @@ impl OvsmExecutor {
             if line.starts_with("FOR ") {
                 // Parse: FOR $item IN $collection:
                 let for_expr = if line.ends_with(':') {
-                    &line[4..line.len()-1]
+                    &line[4..line.len() - 1]
                 } else {
                     &line[4..]
-                }.trim();
+                }
+                .trim();
 
                 let parts: Vec<&str> = for_expr.split(" IN ").collect();
                 if parts.len() != 2 {
@@ -352,7 +358,7 @@ impl OvsmExecutor {
                 let mut loop_body = Vec::new();
                 let loop_indent = raw_line.len() - raw_line.trim_start().len();
 
-                for j in (i+1)..all_lines.len() {
+                for j in (i + 1)..all_lines.len() {
                     let body_line = all_lines[j];
                     let body_indent = body_line.len() - body_line.trim_start().len();
 
@@ -393,16 +399,17 @@ impl OvsmExecutor {
             // WHILE loop: WHILE condition:
             if line.starts_with("WHILE ") {
                 let condition_part = if line.ends_with(':') {
-                    &line[6..line.len()-1]
+                    &line[6..line.len() - 1]
                 } else {
                     &line[6..]
-                }.trim();
+                }
+                .trim();
 
                 // Collect loop body (indented lines after WHILE)
                 let mut loop_body = Vec::new();
                 let loop_indent = raw_line.len() - raw_line.trim_start().len();
 
-                for j in (i+1)..all_lines.len() {
+                for j in (i + 1)..all_lines.len() {
                     let body_line = all_lines[j];
                     let body_indent = body_line.len() - body_line.trim_start().len();
 
@@ -444,7 +451,10 @@ impl OvsmExecutor {
                 }
 
                 if iterations >= MAX_ITERATIONS {
-                    anyhow::bail!("WHILE loop exceeded maximum iterations ({})", MAX_ITERATIONS);
+                    anyhow::bail!(
+                        "WHILE loop exceeded maximum iterations ({})",
+                        MAX_ITERATIONS
+                    );
                 }
 
                 i += loop_body.len() + 1;
@@ -562,7 +572,7 @@ impl OvsmExecutor {
 
                 // Parse branch name: "BRANCH name:" or "BRANCH name (condition):"
                 let branch_line = if trimmed.ends_with(':') {
-                    &trimmed[7..trimmed.len()-1]
+                    &trimmed[7..trimmed.len() - 1]
                 } else {
                     &trimmed[7..]
                 };
@@ -671,7 +681,9 @@ impl OvsmExecutor {
                 //
                 // Current workaround: Log and continue (skips nested decision)
                 if self.debug {
-                    println!("  ⚠️ Skipping nested DECISION (requires structure-preserving parser)");
+                    println!(
+                        "  ⚠️ Skipping nested DECISION (requires structure-preserving parser)"
+                    );
                 }
             }
             // Try as tool call (function syntax)
@@ -705,7 +717,8 @@ impl OvsmExecutor {
         let tools = self.mcp_tools.lock().await;
         if let Some(tool) = tools.get(tool_name) {
             let args = serde_json::json!({});
-            let result = tool.execute(&args)
+            let result = tool
+                .execute(&args)
                 .with_context(|| format!("Failed to execute tool '{}'", tool_name))?;
 
             if self.debug {
@@ -741,7 +754,8 @@ impl OvsmExecutor {
             let tools = self.mcp_tools.lock().await;
             if let Some(tool) = tools.get(tool_name) {
                 let args = serde_json::json!({});
-                return tool.execute(&args)
+                return tool
+                    .execute(&args)
                     .with_context(|| format!("Failed to execute tool '{}'", tool_name));
             }
 
@@ -771,7 +785,9 @@ impl OvsmExecutor {
         if expr.starts_with('$') {
             let var_name = expr.trim_start_matches('$');
             let state = self.state.lock().await;
-            return Ok(state.variables.get(var_name)
+            return Ok(state
+                .variables
+                .get(var_name)
                 .cloned()
                 .unwrap_or(serde_json::Value::Null));
         }
@@ -788,8 +804,9 @@ impl OvsmExecutor {
 
         // Array literal: [1, 2, 3]
         if expr.starts_with('[') && expr.ends_with(']') {
-            let inner = &expr[1..expr.len()-1];
-            let items: Vec<serde_json::Value> = inner.split(',')
+            let inner = &expr[1..expr.len() - 1];
+            let items: Vec<serde_json::Value> = inner
+                .split(',')
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty())
                 .map(|s| {
@@ -826,16 +843,32 @@ impl OvsmExecutor {
         // Simple arithmetic: left op right
         let (left, op, right) = if expr.contains('+') {
             let parts: Vec<&str> = expr.splitn(2, '+').collect();
-            (parts[0].trim(), "+", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+            (
+                parts[0].trim(),
+                "+",
+                parts.get(1).map(|s| s.trim()).unwrap_or(""),
+            )
         } else if expr.contains('-') {
             let parts: Vec<&str> = expr.splitn(2, '-').collect();
-            (parts[0].trim(), "-", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+            (
+                parts[0].trim(),
+                "-",
+                parts.get(1).map(|s| s.trim()).unwrap_or(""),
+            )
         } else if expr.contains('*') {
             let parts: Vec<&str> = expr.splitn(2, '*').collect();
-            (parts[0].trim(), "*", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+            (
+                parts[0].trim(),
+                "*",
+                parts.get(1).map(|s| s.trim()).unwrap_or(""),
+            )
         } else if expr.contains('/') {
             let parts: Vec<&str> = expr.splitn(2, '/').collect();
-            (parts[0].trim(), "/", parts.get(1).map(|s| s.trim()).unwrap_or(""))
+            (
+                parts[0].trim(),
+                "/",
+                parts.get(1).map(|s| s.trim()).unwrap_or(""),
+            )
         } else {
             return Ok(serde_json::Value::Null);
         };
@@ -844,7 +877,9 @@ impl OvsmExecutor {
         let left_val = if left.starts_with('$') {
             let var_name = left.trim_start_matches('$');
             let state = self.state.lock().await;
-            state.variables.get(var_name)
+            state
+                .variables
+                .get(var_name)
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0)
         } else {
@@ -855,7 +890,9 @@ impl OvsmExecutor {
         let right_val = if right.starts_with('$') {
             let var_name = right.trim_start_matches('$');
             let state = self.state.lock().await;
-            state.variables.get(var_name)
+            state
+                .variables
+                .get(var_name)
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0)
         } else {
@@ -867,7 +904,13 @@ impl OvsmExecutor {
             "+" => left_val + right_val,
             "-" => left_val - right_val,
             "*" => left_val * right_val,
-            "/" => if right_val != 0 { left_val / right_val } else { 0 },
+            "/" => {
+                if right_val != 0 {
+                    left_val / right_val
+                } else {
+                    0
+                }
+            }
             _ => 0,
         };
 
@@ -940,7 +983,11 @@ impl OvsmExecutor {
     }
 
     /// Extract a value from expression or variable
-    async fn extract_value(&self, expr: &str, state: &tokio::sync::MutexGuard<'_, ExecutionState>) -> Result<serde_json::Value> {
+    async fn extract_value(
+        &self,
+        expr: &str,
+        state: &tokio::sync::MutexGuard<'_, ExecutionState>,
+    ) -> Result<serde_json::Value> {
         let expr = expr.trim();
 
         // Variable reference

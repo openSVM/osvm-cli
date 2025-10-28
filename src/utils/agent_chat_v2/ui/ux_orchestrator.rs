@@ -6,21 +6,21 @@ use std::time::Instant;
 
 use super::{
     animations::{
-        AnimationManager, AnimationState, FrameRateController, QualityLevel,
-        typewriter::TypewriterEffect,
-        spinners::{Spinner, SpinnerType},
-        progress::SmoothProgressBar,
         color_transitions::{ColorFade, RainbowCycle},
+        progress::SmoothProgressBar,
+        spinners::{Spinner, SpinnerType},
+        typewriter::TypewriterEffect,
+        AnimationManager, AnimationState, FrameRateController, QualityLevel,
     },
     effects::{
-        AttentionDirector,
         focus::{FocusIndicator, FocusManager},
         micro_interactions::*,
-        notifications::{ToastNotification, NotificationStack, NotificationType},
+        notifications::{NotificationStack, NotificationType, ToastNotification},
+        AttentionDirector,
     },
-    themes::ThemeManager,
     layouts::LayoutManager,
     message_rendering::{MessageRenderer, MessageType},
+    themes::ThemeManager,
 };
 
 /// Central UX coordinator that manages all visual enhancements
@@ -270,9 +270,16 @@ impl UXOrchestrator {
     pub fn render_message(&self, content: &str, msg_type: MessageType) -> String {
         if let Ok(renderer) = self.message_renderer.read() {
             // Simplified rendering for now
-            format!("{} {}: {}", msg_type.ascii_icon(),
-                    if msg_type == MessageType::User { "You" } else { "Agent" },
-                    content)
+            format!(
+                "{} {}: {}",
+                msg_type.ascii_icon(),
+                if msg_type == MessageType::User {
+                    "You"
+                } else {
+                    "Agent"
+                },
+                content
+            )
         } else {
             content.to_string()
         }
@@ -291,14 +298,22 @@ impl UXOrchestrator {
     /// Toggle animations
     pub fn toggle_animations(&mut self) {
         self.animations_enabled = !self.animations_enabled;
-        let status = if self.animations_enabled { "enabled" } else { "disabled" };
+        let status = if self.animations_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        };
         self.notify_success(&format!("Animations {}", status));
     }
 
     /// Toggle effects
     pub fn toggle_effects(&mut self) {
         self.effects_enabled = !self.effects_enabled;
-        let status = if self.effects_enabled { "enabled" } else { "disabled" };
+        let status = if self.effects_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        };
         self.notify_success(&format!("Effects {}", status));
     }
 }

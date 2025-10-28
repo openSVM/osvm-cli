@@ -374,11 +374,7 @@ impl SecurityVisitor {
     /// Check for owner validation patterns in the surrounding context
     fn check_for_owner_validation(&self, receiver_str: &str) -> bool {
         // Enhanced owner validation detection with deeper context analysis
-        debug_print!(
-            VerbosityLevel::Verbose,
-            "Checking for owner validation in context: {}",
-            receiver_str
-        );
+        debug_print!("Checking for owner validation in context: {}", receiver_str);
 
         // Check for explicit owner validation patterns using line tracker
         // Look for common owner validation patterns in the code
@@ -411,7 +407,6 @@ impl SecurityVisitor {
             || self.line_tracker.find_all_pattern_lines("owner: ").len() > 0;
 
         debug_print!(
-            VerbosityLevel::Detailed,
             "Owner validation found: {}",
             has_owner_check || has_anchor_owner_constraint
         );
@@ -422,7 +417,6 @@ impl SecurityVisitor {
     fn check_for_signer_validation(&self, receiver_str: &str) -> bool {
         // Enhanced signer validation detection with deeper context analysis
         debug_print!(
-            VerbosityLevel::Verbose,
             "Checking for signer validation in context: {}",
             receiver_str
         );
@@ -449,7 +443,6 @@ impl SecurityVisitor {
                 && self.line_tracker.find_all_pattern_lines("signer").len() > 0);
 
         debug_print!(
-            VerbosityLevel::Detailed,
             "Signer validation found: {}",
             has_signer_check || has_conditional_signer
         );
@@ -683,7 +676,7 @@ impl<'ast> Visit<'ast> for SecurityVisitor {
     fn visit_item_use(&mut self, item_use: &'ast syn::ItemUse) {
         let import = ImportDeclaration {
             path: "use_item".to_string(), // Simplified for now
-            items: vec![], // Note: Detailed import analysis requires AST traversal
+            items: vec![],                // Note: Detailed import analysis requires AST traversal
         };
         self.imports.push(import);
 

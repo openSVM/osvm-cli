@@ -168,10 +168,13 @@ impl EphemeralVmManager {
     /// Ensure Firecracker binary has necessary network capabilities
     async fn ensure_firecracker_capabilities(&self) -> Result<()> {
         // Check if firecracker binary exists
-        let firecracker_path = which::which("firecracker")
-            .context("Firecracker binary not found in PATH")?;
+        let firecracker_path =
+            which::which("firecracker").context("Firecracker binary not found in PATH")?;
 
-        debug!("Granting CAP_NET_ADMIN capability to: {:?}", firecracker_path);
+        debug!(
+            "Granting CAP_NET_ADMIN capability to: {:?}",
+            firecracker_path
+        );
 
         // Grant CAP_NET_ADMIN capability to Firecracker binary
         let output = tokio::process::Command::new("sudo")
@@ -239,7 +242,17 @@ impl EphemeralVmManager {
 
         // Setup NAT (masquerade)
         tokio::process::Command::new("sudo")
-            .args(&["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE"])
+            .args(&[
+                "iptables",
+                "-t",
+                "nat",
+                "-A",
+                "POSTROUTING",
+                "-o",
+                "eth0",
+                "-j",
+                "MASQUERADE",
+            ])
             .output()
             .await
             .ok(); // Ignore if rule already exists
@@ -445,11 +458,8 @@ impl EphemeralVmManager {
             // Check if API socket exists
             if api_socket.exists() {
                 // Try to connect via TCP
-                if let Ok(stream) = timeout(
-                    Duration::from_secs(1),
-                    TcpStream::connect(&guest_addr),
-                )
-                .await
+                if let Ok(stream) =
+                    timeout(Duration::from_secs(1), TcpStream::connect(&guest_addr)).await
                 {
                     if stream.is_ok() {
                         debug!("VM {} is ready (connected to {})", vsock_cid, guest_addr);
@@ -472,16 +482,16 @@ impl EphemeralVmManager {
         timeout_secs: u64,
     ) -> Result<serde_json::Value> {
         let guest_addr = format!("{}:{}", GUEST_VM_IP, TCP_TOOL_PORT);
-        debug!("Executing tool {} in VM (CID: {}, addr: {})", tool_name, vsock_cid, guest_addr);
+        debug!(
+            "Executing tool {} in VM (CID: {}, addr: {})",
+            tool_name, vsock_cid, guest_addr
+        );
 
         // Connect to VM via TCP
-        let mut stream = timeout(
-            Duration::from_secs(15),
-            TcpStream::connect(&guest_addr),
-        )
-        .await
-        .context("Timeout connecting to ephemeral VM")?
-        .context("Failed to connect to ephemeral VM")?;
+        let mut stream = timeout(Duration::from_secs(15), TcpStream::connect(&guest_addr))
+            .await
+            .context("Timeout connecting to ephemeral VM")?
+            .context("Failed to connect to ephemeral VM")?;
 
         // Send tool execution request with length prefix
         let request = serde_json::json!({
@@ -518,10 +528,7 @@ impl EphemeralVmManager {
     }
 
     /// Read tool response from TCP stream (length-prefixed)
-    async fn read_tool_response(
-        &self,
-        stream: &mut TcpStream,
-    ) -> Result<serde_json::Value> {
+    async fn read_tool_response(&self, stream: &mut TcpStream) -> Result<serde_json::Value> {
         use tokio::io::AsyncReadExt;
 
         // Read 4-byte length prefix (little-endian to match guest)

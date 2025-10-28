@@ -209,10 +209,7 @@ impl SmartCursorManager {
 
     /// Get focus breadcrumb trail
     pub fn get_breadcrumb(&self) -> Vec<&str> {
-        self.focus_history
-            .iter()
-            .map(|s| s.as_str())
-            .collect()
+        self.focus_history.iter().map(|s| s.as_str()).collect()
     }
 
     /// Enable/disable predictive mode
@@ -237,10 +234,18 @@ impl CursorParking {
         };
 
         // Set default idle positions
-        parking.idle_positions.insert(PanelType::Input, "input".to_string());
-        parking.idle_positions.insert(PanelType::Chat, "chat_scroll".to_string());
-        parking.idle_positions.insert(PanelType::Sessions, "new_session".to_string());
-        parking.idle_positions.insert(PanelType::Settings, "close_button".to_string());
+        parking
+            .idle_positions
+            .insert(PanelType::Input, "input".to_string());
+        parking
+            .idle_positions
+            .insert(PanelType::Chat, "chat_scroll".to_string());
+        parking
+            .idle_positions
+            .insert(PanelType::Sessions, "new_session".to_string());
+        parking
+            .idle_positions
+            .insert(PanelType::Settings, "close_button".to_string());
 
         parking
     }
@@ -267,10 +272,10 @@ pub struct CursorIndicator {
 
 #[derive(Clone, Copy)]
 pub enum CursorStyle {
-    Block,      // █
-    Underline,  // _
-    Bar,        // |
-    Hollow,     // ▯
+    Block,     // █
+    Underline, // _
+    Bar,       // |
+    Hollow,    // ▯
 }
 
 impl CursorIndicator {
@@ -393,10 +398,13 @@ pub fn setup_smart_cursor(siv: &mut Cursive) -> SmartCursorManager {
     });
 
     // Set up Shift+Tab navigation
-    siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::Tab), move |s| {
-        // Reverse tab navigation
-        s.focus_name("prev_element").ok();
-    });
+    siv.add_global_callback(
+        cursive::event::Event::Shift(cursive::event::Key::Tab),
+        move |s| {
+            // Reverse tab navigation
+            s.focus_name("prev_element").ok();
+        },
+    );
 
     cursor_manager
 }

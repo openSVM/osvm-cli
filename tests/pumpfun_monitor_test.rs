@@ -1,7 +1,7 @@
 //! Test for pump.fun monitoring plan with WHILE and FOR loops
 
 use anyhow::Result;
-use osvm::services::ovsm_executor::{OvsmExecutor, McpToolExecutor};
+use osvm::services::ovsm_executor::{McpToolExecutor, OvsmExecutor};
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 
@@ -105,22 +105,46 @@ async fn test_pumpfun_monitor_plan() -> Result<()> {
     let executor = OvsmExecutor::new(false);
 
     // Register all tools
-    executor.register_tool("get_current_timestamp".to_string(),
-        Box::new(TimestampTool { time: time.clone() })).await?;
-    executor.register_tool("fetch_pumpfun_transactions".to_string(),
-        Box::new(FetchTool)).await?;
-    executor.register_tool("analyze_transaction_patterns".to_string(),
-        Box::new(AnalyzeTool { call_count: call_count.clone() })).await?;
-    executor.register_tool("rank_patterns_by_profit".to_string(),
-        Box::new(RankTool)).await?;
-    executor.register_tool("report_to_chat".to_string(),
-        Box::new(ReportTool { reports: reports.clone() })).await?;
-    executor.register_tool("sleep".to_string(),
-        Box::new(SleepTool)).await?;
-    executor.register_tool("noop".to_string(),
-        Box::new(NoopTool)).await?;
-    executor.register_tool("report_final_summary".to_string(),
-        Box::new(SummaryTool)).await?;
+    executor
+        .register_tool(
+            "get_current_timestamp".to_string(),
+            Box::new(TimestampTool { time: time.clone() }),
+        )
+        .await?;
+    executor
+        .register_tool(
+            "fetch_pumpfun_transactions".to_string(),
+            Box::new(FetchTool),
+        )
+        .await?;
+    executor
+        .register_tool(
+            "analyze_transaction_patterns".to_string(),
+            Box::new(AnalyzeTool {
+                call_count: call_count.clone(),
+            }),
+        )
+        .await?;
+    executor
+        .register_tool("rank_patterns_by_profit".to_string(), Box::new(RankTool))
+        .await?;
+    executor
+        .register_tool(
+            "report_to_chat".to_string(),
+            Box::new(ReportTool {
+                reports: reports.clone(),
+            }),
+        )
+        .await?;
+    executor
+        .register_tool("sleep".to_string(), Box::new(SleepTool))
+        .await?;
+    executor
+        .register_tool("noop".to_string(), Box::new(NoopTool))
+        .await?;
+    executor
+        .register_tool("report_final_summary".to_string(), Box::new(SummaryTool))
+        .await?;
 
     // Load the plan
     let plan = std::fs::read_to_string("examples/pumpfun_monitor.ovsm")?;
@@ -140,11 +164,18 @@ async fn test_pumpfun_monitor_plan() -> Result<()> {
     assert!(iterations >= 100, "Should run ~100+ iterations for 1 hour");
 
     // Should have called various tools
-    assert!(result.tools_called.contains(&"fetch_pumpfun_transactions".to_string()));
-    assert!(result.tools_called.contains(&"analyze_transaction_patterns".to_string()));
+    assert!(result
+        .tools_called
+        .contains(&"fetch_pumpfun_transactions".to_string()));
+    assert!(result
+        .tools_called
+        .contains(&"analyze_transaction_patterns".to_string()));
 
     // Should have generated some reports
-    assert!(reports.lock().unwrap().len() > 0, "Should generate pattern reports");
+    assert!(
+        reports.lock().unwrap().len() > 0,
+        "Should generate pattern reports"
+    );
 
     Ok(())
 }

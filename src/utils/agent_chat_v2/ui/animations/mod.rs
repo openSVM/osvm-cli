@@ -224,13 +224,11 @@ where
 /// Interpolate colors smoothly
 pub fn lerp_color(start: Color, end: Color, t: f32) -> Color {
     match (start, end) {
-        (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-            Color::Rgb(
-                lerp(r1 as f32, r2 as f32, t) as u8,
-                lerp(g1 as f32, g2 as f32, t) as u8,
-                lerp(b1 as f32, b2 as f32, t) as u8,
-            )
-        }
+        (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => Color::Rgb(
+            lerp(r1 as f32, r2 as f32, t) as u8,
+            lerp(g1 as f32, g2 as f32, t) as u8,
+            lerp(b1 as f32, b2 as f32, t) as u8,
+        ),
         _ => end, // Fallback to end color if types don't match
     }
 }

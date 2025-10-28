@@ -1,6 +1,6 @@
 use super::ast::{
-    Argument, Expression, Program, ProgramMetadata, Statement, BinaryOp,
-    LoopData, IterationClause, AccumulationClause, ConditionClause, ExitClause,
+    AccumulationClause, Argument, BinaryOp, ConditionClause, ExitClause, Expression,
+    IterationClause, LoopData, Program, ProgramMetadata, Statement,
 };
 use crate::error::{Error, Result};
 use crate::lexer::{Token, TokenKind};
@@ -169,9 +169,11 @@ impl SExprParser {
         } else {
             Err(self.expected_error(
                 "identifier after `:`",
-                Some("Keyword syntax: :name\n\
+                Some(
+                    "Keyword syntax: :name\n\
                       Used for object keys: {:name value}\n\
-                      Example: {:wallet \"ABC...\" :amount 100}")
+                      Example: {:wallet \"ABC...\" :amount 100}",
+                ),
             ))
         }
     }
@@ -218,7 +220,9 @@ impl SExprParser {
             let var_name = if let TokenKind::Identifier(name) = &self.peek().kind {
                 name.clone()
             } else {
-                return Err(Error::ParseError("Expected identifier in let binding".to_string()));
+                return Err(Error::ParseError(
+                    "Expected identifier in let binding".to_string(),
+                ));
             };
             self.advance();
 
@@ -237,18 +241,14 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         // Convert bindings to an ArrayLiteral of pairs
-        let binding_pairs: Vec<Expression> = bindings.into_iter()
-            .map(|(name, expr)| {
-                Expression::ArrayLiteral(vec![
-                    Expression::Variable(name),
-                    expr
-                ])
-            })
+        let binding_pairs: Vec<Expression> = bindings
+            .into_iter()
+            .map(|(name, expr)| Expression::ArrayLiteral(vec![Expression::Variable(name), expr]))
             .collect();
 
-        let mut args = vec![
-            Argument::positional(Expression::ArrayLiteral(binding_pairs))
-        ];
+        let mut args = vec![Argument::positional(Expression::ArrayLiteral(
+            binding_pairs,
+        ))];
 
         // Add body expressions as arguments
         for body_expr in body_exprs {
@@ -275,7 +275,9 @@ impl SExprParser {
             let var_name = if let TokenKind::Identifier(name) = &self.peek().kind {
                 name.clone()
             } else {
-                return Err(Error::ParseError("Expected identifier in let* binding".to_string()));
+                return Err(Error::ParseError(
+                    "Expected identifier in let* binding".to_string(),
+                ));
             };
             self.advance();
 
@@ -294,18 +296,14 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         // Convert bindings to an ArrayLiteral of pairs
-        let binding_pairs: Vec<Expression> = bindings.into_iter()
-            .map(|(name, expr)| {
-                Expression::ArrayLiteral(vec![
-                    Expression::Variable(name),
-                    expr
-                ])
-            })
+        let binding_pairs: Vec<Expression> = bindings
+            .into_iter()
+            .map(|(name, expr)| Expression::ArrayLiteral(vec![Expression::Variable(name), expr]))
             .collect();
 
-        let mut args = vec![
-            Argument::positional(Expression::ArrayLiteral(binding_pairs))
-        ];
+        let mut args = vec![Argument::positional(Expression::ArrayLiteral(
+            binding_pairs,
+        ))];
 
         // Add body expressions as arguments
         for body_expr in body_exprs {
@@ -334,7 +332,9 @@ impl SExprParser {
             let name = if let TokenKind::Identifier(n) = &self.peek().kind {
                 n.clone()
             } else {
-                return Err(Error::ParseError("Expected function name in flet".to_string()));
+                return Err(Error::ParseError(
+                    "Expected function name in flet".to_string(),
+                ));
             };
             self.advance();
 
@@ -362,9 +362,7 @@ impl SExprParser {
         }
         self.consume(TokenKind::RightParen)?;
 
-        let mut args = vec![
-            Argument::positional(Expression::ArrayLiteral(func_defs))
-        ];
+        let mut args = vec![Argument::positional(Expression::ArrayLiteral(func_defs))];
 
         // Add body expressions as arguments
         for body_expr in body_exprs {
@@ -393,7 +391,9 @@ impl SExprParser {
             let name = if let TokenKind::Identifier(n) = &self.peek().kind {
                 n.clone()
             } else {
-                return Err(Error::ParseError("Expected function name in labels".to_string()));
+                return Err(Error::ParseError(
+                    "Expected function name in labels".to_string(),
+                ));
             };
             self.advance();
 
@@ -421,9 +421,7 @@ impl SExprParser {
         }
         self.consume(TokenKind::RightParen)?;
 
-        let mut args = vec![
-            Argument::positional(Expression::ArrayLiteral(func_defs))
-        ];
+        let mut args = vec![Argument::positional(Expression::ArrayLiteral(func_defs))];
 
         // Add body expressions as arguments
         for body_expr in body_exprs {
@@ -507,7 +505,9 @@ impl SExprParser {
         let name = if let TokenKind::Identifier(n) = &self.peek().kind {
             n.clone()
         } else {
-            return Err(Error::ParseError("Expected identifier after const".to_string()));
+            return Err(Error::ParseError(
+                "Expected identifier after const".to_string(),
+            ));
         };
         self.advance();
 
@@ -533,7 +533,7 @@ impl SExprParser {
         } else {
             return Err(self.expected_error(
                 "identifier (variable name)",
-                Some("Syntax: (define variable-name value)\nExample: (define count 0)")
+                Some("Syntax: (define variable-name value)\nExample: (define count 0)"),
             ));
         };
         self.advance();
@@ -559,10 +559,12 @@ impl SExprParser {
         } else {
             return Err(self.expected_error(
                 "identifier (variable name)",
-                Some("Syntax: (set! variable-name new-value)\n\
+                Some(
+                    "Syntax: (set! variable-name new-value)\n\
                       Note: set! can ONLY mutate simple variables, not field access.\n\
                       ❌ Wrong: (set! (. obj field) value)\n\
-                      ✅ Correct: (set! obj (merge obj {:field value}))")
+                      ✅ Correct: (set! obj (merge obj {:field value}))",
+                ),
             ));
         };
         self.advance();
@@ -612,7 +614,9 @@ impl SExprParser {
         let var_name = if let TokenKind::Identifier(n) = &self.peek().kind {
             n.clone()
         } else {
-            return Err(Error::ParseError("Expected identifier in for loop".to_string()));
+            return Err(Error::ParseError(
+                "Expected identifier in for loop".to_string(),
+            ));
         };
         self.advance();
 
@@ -701,7 +705,9 @@ impl SExprParser {
                 } else {
                     return Err(self.expected_error(
                         "identifier (parameter name)",
-                        Some("Lambda parameters must be identifiers or (name default-value) pairs.")
+                        Some(
+                            "Lambda parameters must be identifiers or (name default-value) pairs.",
+                        ),
                     ));
                 }
             } else {
@@ -727,7 +733,9 @@ impl SExprParser {
         match expr {
             Expression::IntLiteral(n) => n.to_string(),
             Expression::FloatLiteral(f) => f.to_string(),
-            Expression::StringLiteral(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+            Expression::StringLiteral(s) => {
+                format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+            }
             Expression::BoolLiteral(b) => b.to_string(),
             Expression::NullLiteral => "null".to_string(),
             _ => "null".to_string(), // Fallback for complex expressions
@@ -835,7 +843,9 @@ impl SExprParser {
         self.consume(TokenKind::RightParen)?;
 
         if operands.is_empty() {
-            return Err(Error::ParseError("Operator requires at least one operand".to_string()));
+            return Err(Error::ParseError(
+                "Operator requires at least one operand".to_string(),
+            ));
         }
 
         // For variadic operators like +, *, and, or - chain them
@@ -909,7 +919,9 @@ impl SExprParser {
                 let key = if let TokenKind::Identifier(k) = &self.peek().kind {
                     k.clone()
                 } else {
-                    return Err(Error::ParseError("Expected identifier for object key".to_string()));
+                    return Err(Error::ParseError(
+                        "Expected identifier for object key".to_string(),
+                    ));
                 };
                 self.advance();
 
@@ -926,10 +938,12 @@ impl SExprParser {
             } else {
                 return Err(self.expected_error(
                     "`:key value` pair or identifier",
-                    Some("Object syntax:\n\
+                    Some(
+                        "Object syntax:\n\
                           {:key value} - key-value pair (requires colon before key!)\n\
                           {name} - shorthand for {:name name}\n\
-                          Example: {:wallet addr :amount 100}")
+                          Example: {:wallet addr :amount 100}",
+                    ),
                 ));
             }
 
@@ -959,7 +973,10 @@ impl SExprParser {
             TokenKind::GtEq => Ok(BinaryOp::GtEq),
             TokenKind::And => Ok(BinaryOp::And),
             TokenKind::Or => Ok(BinaryOp::Or),
-            _ => Err(Error::ParseError(format!("Not a binary operator: {:?}", token.kind))),
+            _ => Err(Error::ParseError(format!(
+                "Not a binary operator: {:?}",
+                token.kind
+            ))),
         }
     }
 
@@ -1061,47 +1078,41 @@ impl SExprParser {
         // Add contextual hints based on the specific error
         let hint = match (expected, &got.kind) {
             // Parenthesis mismatches
-            (TokenKind::RightParen, TokenKind::LeftParen) => {
-                Some("You may be missing a closing `)` before this point.\n\
-                      Check that all opening `(` have matching closing `)`.")
-            }
-            (TokenKind::RightParen, _) => {
-                Some("Missing closing `)` for an earlier opening `(`.\n\
-                      Count your parentheses to find the unmatched one.")
-            }
-            (TokenKind::LeftParen, _) => {
-                Some("Expected an S-expression starting with `(`.")
-            }
+            (TokenKind::RightParen, TokenKind::LeftParen) => Some(
+                "You may be missing a closing `)` before this point.\n\
+                      Check that all opening `(` have matching closing `)`.",
+            ),
+            (TokenKind::RightParen, _) => Some(
+                "Missing closing `)` for an earlier opening `(`.\n\
+                      Count your parentheses to find the unmatched one.",
+            ),
+            (TokenKind::LeftParen, _) => Some("Expected an S-expression starting with `(`."),
 
             // Bracket mismatches
-            (TokenKind::RightBracket, TokenKind::LeftBracket) => {
-                Some("You may be missing a closing `]` before this point.\n\
-                      Check that all opening `[` have matching closing `]`.")
-            }
-            (TokenKind::RightBracket, _) => {
-                Some("Missing closing `]` for an array literal.")
-            }
+            (TokenKind::RightBracket, TokenKind::LeftBracket) => Some(
+                "You may be missing a closing `]` before this point.\n\
+                      Check that all opening `[` have matching closing `]`.",
+            ),
+            (TokenKind::RightBracket, _) => Some("Missing closing `]` for an array literal."),
 
             // Brace mismatches
-            (TokenKind::RightBrace, TokenKind::LeftBrace) => {
-                Some("You may be missing a closing `}` before this point.\n\
-                      Check that all opening `{` have matching closing `}`.")
-            }
-            (TokenKind::RightBrace, _) => {
-                Some("Missing closing `}` for an object literal.")
-            }
+            (TokenKind::RightBrace, TokenKind::LeftBrace) => Some(
+                "You may be missing a closing `}` before this point.\n\
+                      Check that all opening `{` have matching closing `}`.",
+            ),
+            (TokenKind::RightBrace, _) => Some("Missing closing `}` for an object literal."),
 
             // Identifier expected
-            (TokenKind::Identifier(_), _) => {
-                Some("Expected a variable name or identifier here.\n\
-                      Valid identifiers start with a letter or underscore.")
-            }
+            (TokenKind::Identifier(_), _) => Some(
+                "Expected a variable name or identifier here.\n\
+                      Valid identifiers start with a letter or underscore.",
+            ),
 
             // Colon expected (object keys)
-            (TokenKind::Colon, _) => {
-                Some("Object keys must start with `:` in OVSM.\n\
-                      Example: {:key value} not {key value}")
-            }
+            (TokenKind::Colon, _) => Some(
+                "Object keys must start with `:` in OVSM.\n\
+                      Example: {:key value} not {key value}",
+            ),
 
             _ => None,
         };
@@ -1363,9 +1374,7 @@ impl SExprParser {
     /// Parse: unless test
     fn parse_loop_unless(&mut self) -> Result<ConditionClause> {
         self.advance(); // consume 'unless'
-        Ok(ConditionClause::Unless(Box::new(
-            self.parse_expression()?,
-        )))
+        Ok(ConditionClause::Unless(Box::new(self.parse_expression()?)))
     }
 
     /// Parse: while test
@@ -1397,8 +1406,7 @@ impl SExprParser {
         if let TokenKind::Identifier(name) = &self.peek().kind {
             matches!(
                 name.as_str(),
-                "for" | "when" | "unless" | "while" | "until" | "do"
-                    | "sum" | "collect" | "count"
+                "for" | "when" | "unless" | "while" | "until" | "do" | "sum" | "collect" | "count"
             )
         } else {
             false

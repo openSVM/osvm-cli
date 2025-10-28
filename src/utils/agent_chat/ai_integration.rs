@@ -134,7 +134,7 @@ pub async fn process_with_realtime_ai(
                         Colors::RESET
                     );
                     println!("{}Error: {}{}", Colors::DIM, e, Colors::RESET);
-                    continue;  // Skip this block
+                    continue; // Skip this block
                 }
 
                 println!(
@@ -152,7 +152,7 @@ pub async fn process_with_realtime_ai(
                 if code.lines().count() > 3 {
                     println!("{}│{} ...", Colors::MAGENTA, Colors::RESET);
                 }
-                println!("{}╰─{}",  Colors::MAGENTA, Colors::RESET);
+                println!("{}╰─{}", Colors::MAGENTA, Colors::RESET);
 
                 // Ask user with enhanced options
                 print!(
@@ -176,15 +176,17 @@ pub async fn process_with_realtime_ai(
                         Colors::RESET
                     );
                     for (line_num, line) in code.lines().enumerate() {
-                        println!("{}{:4}{} │ {}", Colors::DIM, line_num + 1, Colors::RESET, line);
+                        println!(
+                            "{}{:4}{} │ {}",
+                            Colors::DIM,
+                            line_num + 1,
+                            Colors::RESET,
+                            line
+                        );
                     }
 
                     // Ask again after showing
-                    print!(
-                        "\n{}Execute now? (y/n): {}",
-                        Colors::YELLOW,
-                        Colors::RESET
-                    );
+                    print!("\n{}Execute now? (y/n): {}", Colors::YELLOW, Colors::RESET);
                     io::stdout().flush()?;
 
                     buffer.clear();
@@ -211,21 +213,19 @@ pub async fn process_with_realtime_ai(
                         tokio::task::spawn_blocking(move || {
                             let mut ovsm_service = OvsmService::with_verbose(true);
                             ovsm_service.execute_code(&code_clone)
-                        })
-                    ).await {
+                        }),
+                    )
+                    .await
+                    {
                         Ok(Ok(Ok(result))) => {
                             println!(
                                 "\n{}✓ Execution successful!{}",
                                 Colors::GREEN,
                                 Colors::RESET
                             );
-                            println!(
-                                "{}Result:{} {:?}",
-                                Colors::CYAN,
-                                Colors::RESET,
-                                result
-                            );
-                            chat_history.push(format!("System: Executed OVSM code, result: {:?}", result));
+                            println!("{}Result:{} {:?}", Colors::CYAN, Colors::RESET, result);
+                            chat_history
+                                .push(format!("System: Executed OVSM code, result: {:?}", result));
                         }
                         Ok(Ok(Err(e))) => {
                             println!(
@@ -237,12 +237,7 @@ pub async fn process_with_realtime_ai(
                             chat_history.push(format!("System: OVSM execution failed: {}", e));
                         }
                         Ok(Err(e)) => {
-                            println!(
-                                "\n{}✗ Thread panic: {}{}",
-                                Colors::RED,
-                                e,
-                                Colors::RESET
-                            );
+                            println!("\n{}✗ Thread panic: {}{}", Colors::RED, e, Colors::RESET);
                             chat_history.push("System: OVSM execution panicked".to_string());
                         }
                         Err(_) => {

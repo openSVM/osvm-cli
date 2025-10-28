@@ -14,7 +14,6 @@ use crate::{debug_error, debug_print, debug_success, debug_warn};
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use dirs;
-use which;
 use log::warn;
 use reqwest;
 use serde::{Deserialize, Serialize};
@@ -26,6 +25,7 @@ use std::process::{ChildStdout, Command, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader as TokioBufReader};
 use tokio::process::{Child, Command as TokioCommand};
 use toml;
+use which;
 
 // Constants for MCP protocol
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
@@ -264,10 +264,7 @@ impl McpService {
                 "bearer" => {
                     if let Some(token) = &auth.token {
                         if self.debug_mode {
-                            debug_print!(
-                                VerbosityLevel::Detailed,
-                                "Using Bearer authentication (token masked)"
-                            );
+                            debug_print!("Using Bearer authentication (token masked)");
                         }
                         req_builder.header("Authorization", format!("Bearer {}", token))
                     } else {
@@ -280,10 +277,7 @@ impl McpService {
                 "api_key" => {
                     if let Some(token) = &auth.token {
                         if self.debug_mode {
-                            debug_print!(
-                                VerbosityLevel::Detailed,
-                                "Using API Key authentication (key masked)"
-                            );
+                            debug_print!("Using API Key authentication (key masked)");
                         }
                         req_builder.header("X-API-Key", token)
                     } else {
@@ -298,7 +292,6 @@ impl McpService {
                         if let Some(password) = &auth.password {
                             if self.debug_mode {
                                 debug_print!(
-                                    VerbosityLevel::Detailed,
                                     "Using Basic authentication for user: {} (password masked)",
                                     username
                                 );
@@ -420,7 +413,7 @@ impl McpService {
         }
 
         if self.debug_mode {
-            debug_print!(VerbosityLevel::Basic, "No MCP servers configured, initializing defaults...");
+            debug_print!("No MCP servers configured, initializing defaults...");
         }
 
         // Add osvm-mcp as default MCP server
@@ -713,11 +706,7 @@ impl McpService {
         }
 
         if self.debug_mode {
-            debug_print!(
-                VerbosityLevel::Basic,
-                "Cloning MCP server from GitHub: {}",
-                github_url
-            );
+            debug_print!("Cloning MCP server from GitHub: {}", github_url);
         }
 
         // Create directory for cloning in user's home directory
@@ -810,11 +799,7 @@ impl McpService {
             }
 
             if self.debug_mode {
-                debug_print!(
-                    VerbosityLevel::Basic,
-                    "Building Rust project at {:?}",
-                    local_path
-                );
+                debug_print!("Building Rust project at {:?}", local_path);
             }
 
             let build_result = Command::new("cargo")
@@ -873,11 +858,7 @@ impl McpService {
             }
 
             if self.debug_mode {
-                debug_print!(
-                    VerbosityLevel::Basic,
-                    "Building Node.js project at {:?}",
-                    local_path
-                );
+                debug_print!("Building Node.js project at {:?}", local_path);
             }
 
             // Run npm install with --ignore-scripts to prevent automatic script execution
@@ -1147,6 +1128,9 @@ impl McpService {
 
             // Add ~/.cargo/bin (rust binaries)
             allowed_dirs.push(home_path.join(".cargo/bin"));
+
+            // Add ~/.osvm/mcp (osvm MCP servers)
+            allowed_dirs.push(home_path.join(".osvm/mcp"));
         }
 
         let is_in_allowed_dir = allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
@@ -1160,20 +1144,31 @@ impl McpService {
             );
         }
 
-        // Whitelist of allowed executables by filename
-        let allowed_executables = ["node", "python3", "python", "deno"];
-        let filename = canonical
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or_else(|| anyhow::anyhow!("Invalid executable name"))?;
+        // Check if command is in the trusted ~/.osvm/mcp directory
+        let is_in_osvm_mcp = if let Ok(home) = std::env::var("HOME") {
+            let osvm_mcp_dir = PathBuf::from(home).join(".osvm/mcp");
+            canonical.starts_with(osvm_mcp_dir)
+        } else {
+            false
+        };
 
-        if !allowed_executables.contains(&filename) {
-            anyhow::bail!(
-                "Executable '{}' is not in the whitelist. \
-                Allowed executables: {}",
-                filename,
-                allowed_executables.join(", ")
-            );
+        // Skip whitelist check for trusted ~/.osvm/mcp directory
+        if !is_in_osvm_mcp {
+            // Whitelist of allowed executables by filename
+            let allowed_executables = ["node", "python3", "python", "deno"];
+            let filename = canonical
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| anyhow::anyhow!("Invalid executable name"))?;
+
+            if !allowed_executables.contains(&filename) {
+                anyhow::bail!(
+                    "Executable '{}' is not in the whitelist. \
+                    Allowed executables: {}",
+                    filename,
+                    allowed_executables.join(", ")
+                );
+            }
         }
 
         Ok(canonical.to_string_lossy().to_string())
@@ -1303,7 +1298,6 @@ impl McpService {
 
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Basic,
                 "Server '{}' {}",
                 server_id,
                 if enabled { "enabled" } else { "disabled" }
@@ -1356,7 +1350,6 @@ impl McpService {
     ) -> Result<()> {
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Basic,
                 "Initializing MCP server '{}' in dedicated microVM",
                 server_id
             );
@@ -1534,11 +1527,7 @@ impl McpService {
         config: &McpServerConfig,
     ) -> Result<()> {
         if self.debug_mode {
-            debug_print!(
-                VerbosityLevel::Basic,
-                "Starting stdio MCP server: {}",
-                config.url
-            );
+            debug_print!("Starting stdio MCP server: {}", config.url);
         }
 
         // Kill existing process if running
@@ -1689,7 +1678,6 @@ impl McpService {
     pub async fn shutdown_all_mcp_microvms(&mut self) -> Result<()> {
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Basic,
                 "Shutting down {} MCP server microVMs",
                 self.mcp_server_microvms.len()
             );
@@ -1716,10 +1704,7 @@ impl McpService {
     /// Cleanup all resources (stdio processes and microVMs)
     pub async fn cleanup_all(&mut self) -> Result<()> {
         if self.debug_mode {
-            debug_print!(
-                VerbosityLevel::Basic,
-                "Cleaning up all MCP service resources"
-            );
+            debug_print!("Cleaning up all MCP service resources");
         }
 
         // Cleanup stdio processes
@@ -1872,11 +1857,7 @@ impl McpService {
         // We'll spawn a new process for each request (not ideal but works for now)
 
         if self.debug_mode {
-            debug_print!(
-                VerbosityLevel::Basic,
-                "Listing tools from stdio MCP server: {}",
-                config.name
-            );
+            debug_print!("Listing tools from stdio MCP server: {}", config.name);
         }
 
         // Parse the command from the URL field, stripping the stdio:// prefix if present
@@ -1899,7 +1880,12 @@ impl McpService {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .with_context(|| format!("Failed to spawn stdio MCP server process: program='{}' args={:?}", program, args))?;
+            .with_context(|| {
+                format!(
+                    "Failed to spawn stdio MCP server process: program='{}' args={:?}",
+                    program, args
+                )
+            })?;
 
         let mut stdin = child
             .stdin
@@ -2044,11 +2030,7 @@ impl McpService {
                             && (json.get("result").is_some() || json.get("error").is_some())
                         {
                             if self.debug_mode {
-                                debug_print!(
-                                    VerbosityLevel::Detailed,
-                                    "Found valid MCP response for {}",
-                                    operation
-                                );
+                                debug_print!("Found valid MCP response for {}", operation);
                             }
                             return Ok(trimmed.to_string());
                         }
@@ -2056,11 +2038,7 @@ impl McpService {
                     Err(_) => {
                         // Not valid JSON, might be a log message that starts with '{'
                         if self.debug_mode {
-                            debug_print!(
-                                VerbosityLevel::Detailed,
-                                "Skipping invalid JSON line: {}",
-                                trimmed
-                            );
+                            debug_print!("Skipping invalid JSON line: {}", trimmed);
                         }
                         continue;
                     }
@@ -2070,22 +2048,14 @@ impl McpService {
             // Skip lines that look like structured logs
             if self.is_log_message(trimmed) {
                 if self.debug_mode {
-                    debug_print!(
-                        VerbosityLevel::Detailed,
-                        "Skipping log message: {}",
-                        trimmed
-                    );
+                    debug_print!("Skipping log message: {}", trimmed);
                 }
                 continue;
             }
 
             // Skip other non-protocol messages
             if self.debug_mode {
-                debug_print!(
-                    VerbosityLevel::Detailed,
-                    "Skipping non-protocol line: {}",
-                    trimmed
-                );
+                debug_print!("Skipping non-protocol line: {}", trimmed);
             }
         }
     }
@@ -2126,6 +2096,14 @@ impl McpService {
         tool_name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
+        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("🔧 MCP SERVICE call_tool ENTRY");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📍 Server ID: {}", server_id);
+        println!("📍 Tool Name: {}", tool_name);
+        println!("📍 use_ephemeral_vms: {}", self.use_ephemeral_vms);
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        
         let config = self
             .servers
             .get(server_id)
@@ -2137,9 +2115,9 @@ impl McpService {
 
         // Priority 1: Use ephemeral microVM for tool execution if enabled
         if self.use_ephemeral_vms {
+            println!("🔀 Taking Priority 1: Ephemeral microVM path\n");
             if self.debug_mode {
                 debug_print!(
-                    VerbosityLevel::Basic,
                     "Launching ephemeral microVM for tool: {}/{}",
                     server_id,
                     tool_name
@@ -2154,6 +2132,7 @@ impl McpService {
 
         // Priority 2: Check if server is running in dedicated microVM
         if let Some(handle) = self.mcp_server_microvms.get(server_id) {
+            println!("🔀 Taking Priority 2: Dedicated microVM path\n");
             return self
                 .call_tool_via_microvm(handle, tool_name, arguments)
                 .await;
@@ -2161,13 +2140,14 @@ impl McpService {
 
         // Priority 3: Check if this tool should be executed in ephemeral unikernel
         // DISABLED: Skip unikernel isolation when use_ephemeral_vms is false
-        if false && self
-            .isolation_config
-            .should_use_unikernel(server_id, tool_name)
+        if false
+            && self
+                .isolation_config
+                .should_use_unikernel(server_id, tool_name)
         {
+            println!("🔀 Taking Priority 3: Unikernel path\n");
             if self.debug_mode {
                 debug_print!(
-                    VerbosityLevel::Basic,
                     "Executing tool '{}' in ephemeral unikernel for enhanced security",
                     tool_name
                 );
@@ -2178,7 +2158,8 @@ impl McpService {
                 .await;
         }
 
-        // Priority 3: Direct execution based on transport type
+        // Priority 4: Direct execution based on transport type
+        println!("🔀 Taking Priority 4: Direct execution via transport = {:?}\n", config.transport_type);
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
                 self.call_tool_http(server_id, tool_name, arguments, config)
@@ -2200,7 +2181,6 @@ impl McpService {
     ) -> Result<serde_json::Value> {
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Basic,
                 "Calling tool '{}' via dedicated microVM '{}'",
                 tool_name,
                 handle.server_id()
@@ -2279,7 +2259,6 @@ impl McpService {
 
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Detailed,
                 "Spawning unikernel for tool '{}' with {} MB memory, {} vCPUs",
                 tool_name,
                 tool_config.memory_mb,
@@ -2348,8 +2327,37 @@ impl McpService {
                 .request_counter
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst),
             method: MCP_METHOD_TOOLS_CALL.to_string(),
-            params: Some(tool_call),
+            params: Some(tool_call.clone()),
         };
+
+        // 🔍 DETAILED DEBUG LOGGING
+        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("🔧 MCP TOOL CALL DEBUG TRACE");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📍 Server ID: {}", server_id);
+        println!("📍 Server Name: {}", config.name);
+        println!("📍 Server URL: {}", config.url);
+        println!("📍 Transport: HTTP");
+        println!("📍 Tool Name: {}", tool_name);
+        println!("\n📦 Arguments Sent:");
+        if let Some(ref args) = arguments {
+            println!("{}", serde_json::to_string_pretty(args).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        } else {
+            println!("  (no arguments)");
+        }
+        println!("\n📤 Full Request:");
+        println!("{}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        println!("\n🌐 Endpoint: {}/api/mcp", config.url);
+        
+        if let Some(auth) = &config.auth {
+            println!("🔐 Auth Type: {}", auth.auth_type);
+            if auth.token.is_some() {
+                println!("🔐 Auth Token: <present, {} chars>", auth.token.as_ref().unwrap().len());
+            }
+        } else {
+            println!("🔐 Auth: None");
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         let mut req_builder = self
             .client
@@ -2378,26 +2386,63 @@ impl McpService {
             };
         }
 
+        let start_time = std::time::Instant::now();
         let response = req_builder
             .send()
             .await
             .context("Failed to send tools/call request to MCP server")?;
 
+        let elapsed = start_time.elapsed();
+        let status = response.status();
+        
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📥 MCP RESPONSE DEBUG TRACE");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("⏱️  Response Time: {:?}", elapsed);
+        println!("📊 HTTP Status: {} {}", status.as_u16(), status.canonical_reason().unwrap_or(""));
+        println!("📊 Success: {}", status.is_success());
+
         if !response.status().is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "<failed to read body>".to_string());
+            println!("❌ Error Response Body:");
+            println!("{}", error_body);
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
             return Err(anyhow::anyhow!(
-                "MCP server returned error status: {}",
-                response.status()
+                "MCP server returned error status: {} - Body: {}",
+                status,
+                error_body
             ));
         }
 
-        let mcp_response: McpResponse = response
-            .json()
-            .await
+        let response_text = response.text().await.context("Failed to read response body")?;
+        
+        println!("📦 Raw Response Body ({} bytes):", response_text.len());
+        if response_text.len() < 2000 {
+            println!("{}", response_text);
+        } else {
+            println!("{}... (truncated, {} total bytes)", &response_text[..2000], response_text.len());
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        let mcp_response: McpResponse = serde_json::from_str(&response_text)
             .context("Failed to parse MCP tools/call response")?;
 
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
+            
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("❌ MCP PROTOCOL ERROR");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("Error Code: {}", error.code);
+            println!("Error Message: {}", error.message);
+            if let Some(data) = &error.data {
+                println!("Error Data:");
+                println!("{}", serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data)));
+            }
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
                 error.code,
@@ -2408,6 +2453,12 @@ impl McpService {
         let result = mcp_response
             .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
+
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("✅ MCP SUCCESS RESULT");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result)));
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
 
@@ -2430,9 +2481,25 @@ impl McpService {
         arguments: Option<serde_json::Value>,
         config: &McpServerConfig,
     ) -> Result<serde_json::Value> {
+        // 🔍 DETAILED DEBUG LOGGING FOR STDIO
+        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("🔧 MCP STDIO TOOL CALL DEBUG TRACE");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📍 Server ID: {}", server_id);
+        println!("📍 Server Name: {}", config.name);
+        println!("📍 Server URL/Command: {}", config.url);
+        println!("📍 Transport: STDIO");
+        println!("📍 Tool Name: {}", tool_name);
+        println!("\n📦 Arguments Sent:");
+        if let Some(ref args) = arguments {
+            println!("{}", serde_json::to_string_pretty(args).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        } else {
+            println!("  (no arguments)");
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
         if self.debug_mode {
             debug_print!(
-                VerbosityLevel::Basic,
                 "Calling tool '{}' on stdio MCP server: {}",
                 tool_name,
                 config.name
@@ -2452,6 +2519,13 @@ impl McpService {
             .ok_or_else(|| anyhow::anyhow!("Invalid stdio command: {}", config.url))?;
         let args: Vec<&str> = parts.collect();
 
+        println!("🚀 Spawning Process:");
+        println!("   Program: {}", program);
+        println!("   Args: {:?}", args);
+        println!();
+
+        let start_time = std::time::Instant::now();
+
         // Create the process
         let mut child = Command::new(program)
             .args(&args)
@@ -2459,7 +2533,12 @@ impl McpService {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .with_context(|| format!("Failed to spawn stdio MCP server process: program='{}' args={:?}", program, args))?;
+            .with_context(|| {
+                format!(
+                    "Failed to spawn stdio MCP server process: program='{}' args={:?}",
+                    program, args
+                )
+            })?;
 
         let mut stdin = child
             .stdin
@@ -2486,6 +2565,11 @@ impl McpService {
         };
 
         let init_request_str = serde_json::to_string(&init_request)?;
+        
+        println!("📤 Sending Initialize Request:");
+        println!("{}", serde_json::to_string_pretty(&init_request).unwrap_or_else(|_| init_request_str.clone()));
+        println!();
+        
         stdin.write_all(init_request_str.as_bytes())?;
         stdin.write_all(b"\n")?;
         stdin.flush()?;
@@ -2495,6 +2579,10 @@ impl McpService {
         let init_response_str = self
             .read_mcp_response(&mut reader, "initialization")
             .context("Failed to read initialization response from stdio MCP server")?;
+
+        println!("📥 Initialize Response Received:");
+        println!("{}", init_response_str);
+        println!();
 
         let _init_response: McpResponse = serde_json::from_str(&init_response_str)
             .context("Failed to parse initialize response from stdio MCP server")?;
@@ -2509,10 +2597,15 @@ impl McpService {
             jsonrpc: MCP_JSONRPC_VERSION.to_string(),
             id: 2,
             method: MCP_METHOD_TOOLS_CALL.to_string(),
-            params: Some(tool_call),
+            params: Some(tool_call.clone()),
         };
 
         let call_request_str = serde_json::to_string(&call_request)?;
+        
+        println!("📤 Sending Tool Call Request:");
+        println!("{}", serde_json::to_string_pretty(&call_request).unwrap_or_else(|_| call_request_str.clone()));
+        println!();
+        
         stdin.write_all(call_request_str.as_bytes())?;
         stdin.write_all(b"\n")?;
         stdin.flush()?;
@@ -2522,6 +2615,20 @@ impl McpService {
             .read_mcp_response(&mut reader, "tools/call")
             .context("Failed to read tools/call response from stdio MCP server")?;
 
+        let elapsed = start_time.elapsed();
+
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("📥 MCP STDIO RESPONSE DEBUG TRACE");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("⏱️  Response Time: {:?}", elapsed);
+        println!("\n📦 Raw Response ({} bytes):", call_response_str.len());
+        if call_response_str.len() < 5000 {
+            println!("{}", call_response_str);
+        } else {
+            println!("{}... (truncated, {} total bytes)", &call_response_str[..5000], call_response_str.len());
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
         let call_response: McpResponse = serde_json::from_str(&call_response_str)
             .context("Failed to parse tools/call response from stdio MCP server")?;
 
@@ -2529,6 +2636,17 @@ impl McpService {
         let _ = child.kill();
 
         if let Some(error) = call_response.error {
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("❌ MCP STDIO PROTOCOL ERROR");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("Error Code: {}", error.code);
+            println!("Error Message: {}", error.message);
+            if let Some(data) = &error.data {
+                println!("Error Data:");
+                println!("{}", serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data)));
+            }
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
                 error.code,
@@ -2539,6 +2657,17 @@ impl McpService {
         let result = call_response
             .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
+
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("✅ MCP STDIO SUCCESS RESULT");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        let result_str = serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result));
+        if result_str.len() < 5000 {
+            println!("{}", result_str);
+        } else {
+            println!("{}... (truncated, {} total bytes)", &result_str[..5000], result_str.len());
+        }
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         if self.debug_mode {
             debug_success!(

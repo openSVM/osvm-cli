@@ -167,29 +167,23 @@ impl AiService {
 
         let (api_url, use_openai) = match custom_api_url {
             Some(url) => {
-                // Check if it's an OpenAI URL and we have an API key
+                // Always use localhost:3000 for non-OpenAI URLs
                 if url.contains("openai.com") || url.contains("api.openai.com") {
                     if let Some(key) = env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty())
                     {
                         (url, true)
                     } else {
-                        eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to OSVM AI");
+                        eprintln!("⚠️  OpenAI URL provided but no OPENAI_KEY found, falling back to localhost:3000");
                         ("http://localhost:3000/api/getAnswer".to_string(), false)
                     }
                 } else {
-                    // Custom URL, treat as external API
-                    (url, false)
+                    // Use localhost:3000 - user's special AI backend
+                    ("http://localhost:3000/api/getAnswer".to_string(), false)
                 }
             }
             None => {
-                // Default behavior: use opensvm.com unless explicitly configured for OpenAI
-                if let (Some(url), Some(_)) =
-                    (env::var("OPENAI_URL").ok(), env::var("OPENAI_KEY").ok())
-                {
-                    (url, true)
-                } else {
-                    ("http://localhost:3000/api/getAnswer".to_string(), false)
-                }
+                // CRITICAL: Always use localhost:3000 backend - user's special AI
+                ("http://localhost:3000/api/getAnswer".to_string(), false)
             }
         };
 
@@ -850,11 +844,9 @@ impl AiService {
             tools_context
         );
 
-        // Create user prompt
-        let user_prompt = format!(
-            "Create an OVSM execution plan for this request: {}\n\nRespond ONLY with the OVSM plan structure. No additional prose before or after.",
-            user_request
-        );
+        // For ownPlan mode, send the raw user request without additional instructions
+        // The system prompt already contains all the instructions needed
+        let user_prompt = user_request.to_string();
 
         Ok((user_prompt, system_prompt))
     }
@@ -1606,26 +1598,30 @@ impl AiService {
         attempt: u32,
     ) -> String {
         // Find the last complete element to help AI understand where to continue
-        let last_100_chars = if partial_response.len() > 100 {
-            &partial_response[partial_response.len() - 100..]
+        let last_200_chars = if partial_response.len() > 200 {
+            &partial_response[partial_response.len() - 200..]
         } else {
             partial_response
         };
         
         format!(
-            r#"Your previous response was truncated. Please CONTINUE from where you left off.
+            r#"Your previous OVSM code was truncated. Continue ONLY the code, not the entire response.
 
-Original Question: {}
+DO NOT regenerate the plan from scratch. DO NOT add <ovsm_plan> or <code> tags.
+Just continue the LISP code from where it was cut off.
 
-Your response was cut off at (last 100 chars):
+Your code was cut off at (last 200 chars):
 ...{}
 
-Please CONTINUE the response from this exact point. Do not repeat what was already written.
-Just continue with the next part of the plan/code.
+IMPORTANT RULES:
+1. Start immediately with the next line of LISP code (no preamble)
+2. Do NOT repeat any code already written above
+3. Do NOT restart the plan or add XML tags
+4. Close any open parentheses and complete the code
+5. Keep it concise - finish the current logic block
 
-Important: Start your continuation immediately from where it was cut off."#,
-            original_question,
-            last_100_chars
+Continue the code now:"#,
+            last_200_chars
         )
     }
     

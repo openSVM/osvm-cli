@@ -18,11 +18,11 @@ mod nodes;
 mod ovsm;
 mod plan;
 mod qa;
-mod tutorial;
 mod realtime;
 mod rpc;
 mod snapshot;
 mod svm;
+mod tutorial;
 
 fn validate_signer(s: &str) -> Result<String, String> {
     is_valid_signer(s).map(|()| s.to_string())
@@ -37,7 +37,8 @@ pub fn parse_command_line() -> clap::ArgMatches {
     command!()
         .disable_version_flag(true) // Disable the auto-generated --version flag
         .arg_required_else_help(false) // Allow no args to default to advanced chat
-        .after_help("
+        .after_help(
+            "
 REVOLUTIONARY ARCHITECTURE:
   🛡️ OSVM uses revolutionary microVM/unikernel isolation:
   • Unikernels (50KB) - 99.9% attack surface reduction, 10-50ms boot
@@ -101,8 +102,10 @@ AI-POWERED NATURAL LANGUAGE:
   → Provide intelligent responses with context
 
 For more info: osvm examples | Architecture.md
-Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
-        .before_help(format!("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
+        )
+        .before_help(format!(
+            "░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 ........███████.....█████████..█████...█████..█████...█████.....▐█░░░░░░
 ......███░░░░░███..███░░░░░███░░███...░░███.░░██████.██████.......▐█░░░░
@@ -118,14 +121,23 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
 
    🛡️ Revolutionary microVM/unikernel architecture with hardware isolation
    ⚡ 99.9% attack surface reduction | <1ms latency | 125ms boot time",
-    env!("CARGO_PKG_VERSION")))
+            env!("CARGO_PKG_VERSION")
+        ))
         // Add version aliases as subcommands
         .subcommand(Command::new("v").about("Show version information"))
         .subcommand(Command::new("ver").about("Show version information"))
         .subcommand(Command::new("version").about("Show version information"))
         // Short aliases for planning/agent modes (external subcommands for natural language)
-        .subcommand(Command::new("p").about("AI planning mode - use OVSM to plan and execute queries").allow_external_subcommands(true))
-        .subcommand(Command::new("a").about("AI agent mode - use OVSM to plan and execute queries").allow_external_subcommands(true))
+        .subcommand(
+            Command::new("p")
+                .about("AI planning mode - use OVSM to plan and execute queries")
+                .allow_external_subcommands(true),
+        )
+        .subcommand(
+            Command::new("a")
+                .about("AI agent mode - use OVSM to plan and execute queries")
+                .allow_external_subcommands(true),
+        )
         .allow_external_subcommands(true)
         // Add a single version flag with multiple aliases
         .arg(
@@ -135,7 +147,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
                 .visible_aliases(["v", "ver"])
                 .action(ArgAction::SetTrue)
                 .help("Show version information")
-                .global(false)
+                .global(false),
         )
         // Global arguments
         .arg({
@@ -190,6 +202,13 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
                 .help("Use AI planning mode (OVSM agent) for queries"),
         )
         .arg(
+            Arg::new("plan_only")
+                .long("plan-only")
+                .action(ArgAction::SetTrue)
+                .global(true)
+                .help("Generate OVSM plans without executing them"),
+        )
+        .arg(
             Arg::new("json_rpc_url")
                 .short('u')
                 .long("url")
@@ -208,7 +227,10 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
             Arg::new("node-type")
                 .long("node-type")
                 .value_name("TYPE")
-                .value_parser(clap::builder::PossibleValuesParser::new(["validator", "rpc"]))
+                .value_parser(clap::builder::PossibleValuesParser::new([
+                    "validator",
+                    "rpc",
+                ]))
                 .default_value("validator")
                 .help("Type of node to install (validator or RPC)"),
         )
@@ -216,23 +238,25 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues")
             Arg::new("network")
                 .long("network")
                 .value_name("NETWORK")
-                .value_parser(clap::builder::PossibleValuesParser::new(["mainnet", "testnet", "devnet"]))
+                .value_parser(clap::builder::PossibleValuesParser::new([
+                    "mainnet", "testnet", "devnet",
+                ]))
                 .default_value("mainnet")
-                .help("Network to deploy on")
+                .help("Network to deploy on"),
         )
         .arg(
             Arg::new("theme")
                 .long("theme")
                 .value_name("THEME")
                 .global(true)
-                .help("UI theme to use")
+                .help("UI theme to use"),
         )
         .arg(
             Arg::new("auto_theme")
                 .long("auto-theme")
                 .action(ArgAction::SetTrue)
                 .global(true)
-                .help("Enable automatic theme switching")
+                .help("Enable automatic theme switching"),
         )
         // Core commands - using modular builders
         .subcommand(balance::build_balance_command())

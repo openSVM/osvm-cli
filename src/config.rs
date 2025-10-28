@@ -35,7 +35,8 @@ impl Config {
             return Err(format!(
                 "Invalid RPC URL: must start with http:// or https://, got: {}",
                 self.json_rpc_url
-            ).into());
+            )
+            .into());
         }
 
         // Validate verbose level (0-4 is reasonable)
@@ -43,7 +44,8 @@ impl Config {
             return Err(format!(
                 "Verbose level {} is too high (max 4). Using default.",
                 self.verbose
-            ).into());
+            )
+            .into());
         }
 
         // Validate theme name if provided

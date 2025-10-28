@@ -7,8 +7,8 @@ mod tests {
             services::{create_binary_service_content, create_docker_service_content},
             types::{AuthMethod, DeploymentConfig, NetworkType, ServerConfig},
             validators::{
-                validate_remote_path, validate_service_name, validate_package_name,
-                validate_hostname, validate_port, validate_system_requirements,
+                validate_hostname, validate_package_name, validate_port, validate_remote_path,
+                validate_service_name, validate_system_requirements,
             },
         },
         std::collections::HashMap,

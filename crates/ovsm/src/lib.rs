@@ -280,7 +280,7 @@ pub mod tools;
 // Re-export main types
 pub use error::{Error, Result};
 pub use lexer::{SExprScanner, Token, TokenKind};
-pub use parser::{BinaryOp, Expression, SExprParser, Program, Statement, UnaryOp};
+pub use parser::{BinaryOp, Expression, Program, SExprParser, Statement, UnaryOp};
 pub use runtime::{Environment, LispEvaluator, Value};
 pub use tools::{Tool, ToolRegistry};
 

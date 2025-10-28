@@ -84,9 +84,7 @@ impl Value {
     /// In Common Lisp, multiple values are "flattened" in single-value context
     pub fn primary_value(self) -> Self {
         match self {
-            Value::Multiple(vals) => {
-                vals.first().cloned().unwrap_or(Value::Null)
-            }
+            Value::Multiple(vals) => vals.first().cloned().unwrap_or(Value::Null),
             other => other,
         }
     }

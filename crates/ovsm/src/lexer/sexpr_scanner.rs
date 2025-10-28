@@ -241,11 +241,13 @@ impl SExprScanner {
         let text: String = self.source[self.start..self.current].iter().collect();
 
         if is_float {
-            let value: f64 = text.parse()
+            let value: f64 = text
+                .parse()
                 .map_err(|_| Error::ParseError(format!("Invalid float: {}", text)))?;
             self.add_token(TokenKind::Float(value));
         } else {
-            let value: i64 = text.parse()
+            let value: i64 = text
+                .parse()
                 .map_err(|_| Error::ParseError(format!("Invalid integer: {}", text)))?;
             self.add_token(TokenKind::Integer(value));
         }
@@ -256,7 +258,13 @@ impl SExprScanner {
     fn scan_identifier_or_keyword(&mut self) -> Result<()> {
         // In Common Lisp, identifiers can contain *, +, -, /, etc as suffixes
         // First, scan the base identifier
-        while self.peek().is_alphanumeric() || self.peek() == '_' || self.peek() == '-' || self.peek() == '?' || self.peek() == '!' || self.peek() == '&' {
+        while self.peek().is_alphanumeric()
+            || self.peek() == '_'
+            || self.peek() == '-'
+            || self.peek() == '?'
+            || self.peek() == '!'
+            || self.peek() == '&'
+        {
             self.advance();
         }
 
@@ -327,7 +335,8 @@ impl SExprScanner {
 
     fn add_token(&mut self, kind: TokenKind) {
         let lexeme: String = self.source[self.start..self.current].iter().collect();
-        self.tokens.push(Token::new(kind, lexeme, self.line, self.column));
+        self.tokens
+            .push(Token::new(kind, lexeme, self.line, self.column));
     }
 }
 

@@ -40,7 +40,5 @@ pub fn build_realtime_command() -> Command {
                 ),
         )
         .subcommand(Command::new("stop").about("Stop real-time sync daemon"))
-        .subcommand(
-            Command::new("status").about("Check real-time sync daemon status"),
-        )
+        .subcommand(Command::new("status").about("Check real-time sync daemon status"))
 }

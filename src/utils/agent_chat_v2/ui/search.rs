@@ -13,8 +13,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use super::super::state::AdvancedChatState;
-use crate::services::mcp_service::McpTool;
 use super::handlers::show_tool_details;
+use crate::services::mcp_service::McpTool;
 
 /// MCP Tool search state
 pub struct ToolSearchState {
@@ -57,7 +57,11 @@ impl ToolSearchState {
             }
 
             for (tool_name, server_id) in &self.recent_tools {
-                if !self.favorites.iter().any(|(t, s)| t == tool_name && s == server_id) {
+                if !self
+                    .favorites
+                    .iter()
+                    .any(|(t, s)| t == tool_name && s == server_id)
+                {
                     if let Some(tools) = self.all_tools.get(server_id) {
                         if let Some(tool) = tools.iter().find(|t| &t.name == tool_name) {
                             self.filtered_tools.push((server_id.clone(), tool.clone()));
@@ -86,7 +90,11 @@ impl ToolSearchState {
 
     /// Add tool to favorites
     pub fn add_favorite(&mut self, tool_name: String, server_id: String) {
-        if !self.favorites.iter().any(|(t, s)| t == &tool_name && s == &server_id) {
+        if !self
+            .favorites
+            .iter()
+            .any(|(t, s)| t == &tool_name && s == &server_id)
+        {
             self.favorites.push((tool_name, server_id));
             // Keep only last 10 favorites
             if self.favorites.len() > 10 {
@@ -98,7 +106,8 @@ impl ToolSearchState {
     /// Add tool to recent
     pub fn add_recent(&mut self, tool_name: String, server_id: String) {
         // Remove if already in recent
-        self.recent_tools.retain(|(t, s)| !(t == &tool_name && s == &server_id));
+        self.recent_tools
+            .retain(|(t, s)| !(t == &tool_name && s == &server_id));
         // Add to front
         self.recent_tools.insert(0, (tool_name, server_id));
         // Keep only last 5 recent
@@ -164,7 +173,7 @@ pub fn show_mcp_tool_search(s: &mut Cursive) {
     // Help text
     layout.add_child(DummyView);
     layout.add_child(TextView::new(
-        "↑↓: Navigate | Enter: Select | *: Favorite | Esc: Cancel"
+        "↑↓: Navigate | Enter: Select | *: Favorite | Esc: Cancel",
     ));
 
     // Create dialog
@@ -210,8 +219,14 @@ fn create_search_results_view(search_state: &Arc<RwLock<ToolSearchState>>) -> im
             let mut others_shown = false;
 
             for (server_id, tool) in &search.filtered_tools {
-                let is_favorite = search.favorites.iter().any(|(t, s)| t == &tool.name && s == server_id);
-                let is_recent = search.recent_tools.iter().any(|(t, s)| t == &tool.name && s == server_id);
+                let is_favorite = search
+                    .favorites
+                    .iter()
+                    .any(|(t, s)| t == &tool.name && s == server_id);
+                let is_recent = search
+                    .recent_tools
+                    .iter()
+                    .any(|(t, s)| t == &tool.name && s == server_id);
 
                 let prefix = if is_favorite {
                     if !favorites_shown {
@@ -227,7 +242,8 @@ fn create_search_results_view(search_state: &Arc<RwLock<ToolSearchState>>) -> im
                     "  ⏱ "
                 } else {
                     if !others_shown {
-                        select_view.add_item("── Search Results ──", (String::new(), String::new()));
+                        select_view
+                            .add_item("── Search Results ──", (String::new(), String::new()));
                         others_shown = true;
                     }
                     "  "
@@ -273,7 +289,9 @@ fn rebuild_search_results_view(s: &mut Cursive, search_state: &Arc<RwLock<ToolSe
     let new_results = create_search_results_view(search_state);
 
     // Replace the old results view with the new one
-    if let Some(mut old_results) = s.find_name::<SelectView<(String, String)>>("tool_search_results") {
+    if let Some(mut old_results) =
+        s.find_name::<SelectView<(String, String)>>("tool_search_results")
+    {
         // Get current selection if any
         let current_selection = old_results.selected_id();
 
@@ -295,8 +313,14 @@ fn rebuild_search_results_view(s: &mut Cursive, search_state: &Arc<RwLock<ToolSe
                 let mut others_shown = false;
 
                 for (server_id, tool) in &search.filtered_tools {
-                    let is_favorite = search.favorites.iter().any(|(t, s)| t == &tool.name && s == server_id);
-                    let is_recent = search.recent_tools.iter().any(|(t, s)| t == &tool.name && s == server_id);
+                    let is_favorite = search
+                        .favorites
+                        .iter()
+                        .any(|(t, s)| t == &tool.name && s == server_id);
+                    let is_recent = search
+                        .recent_tools
+                        .iter()
+                        .any(|(t, s)| t == &tool.name && s == server_id);
 
                     if is_favorite && !favorites_shown {
                         old_results.add_item("── ★ Favorites ──", (String::new(), String::new()));
@@ -307,16 +331,25 @@ fn rebuild_search_results_view(s: &mut Cursive, search_state: &Arc<RwLock<ToolSe
                         recent_shown = true;
                     }
                     if !is_favorite && !is_recent && !others_shown {
-                        old_results.add_item("── Search Results ──", (String::new(), String::new()));
+                        old_results
+                            .add_item("── Search Results ──", (String::new(), String::new()));
                         others_shown = true;
                     }
 
-                    let prefix = if is_favorite { "  ★ " }
-                                else if is_recent { "  ⏱ " }
-                                else { "  " };
+                    let prefix = if is_favorite {
+                        "  ★ "
+                    } else if is_recent {
+                        "  ⏱ "
+                    } else {
+                        "  "
+                    };
 
-                    let display = format!("{}{} ({})", prefix, tool.name,
-                                        server_id.chars().take(15).collect::<String>());
+                    let display = format!(
+                        "{}{} ({})",
+                        prefix,
+                        tool.name,
+                        server_id.chars().take(15).collect::<String>()
+                    );
                     old_results.add_item(display, (server_id.clone(), tool.name.clone()));
                 }
             }

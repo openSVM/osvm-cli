@@ -3,12 +3,12 @@
 //! This module provides functionality to capture screenshots of the current terminal window
 //! and save them as PNG images.
 
+use ab_glyph::{FontRef, PxScale};
 use anyhow::{anyhow, Context, Result};
 use image::{Rgb, RgbImage};
-use imageproc::drawing::{draw_text_mut, draw_filled_rect_mut};
+use imageproc::drawing::{draw_filled_rect_mut, draw_text_mut};
 use imageproc::rect::Rect;
-use ab_glyph::{FontRef, PxScale};
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -44,9 +44,9 @@ pub fn render_tui_buffer_to_image(buffer: TuiBuffer) -> Result<PathBuf> {
     info!("Rendering TUI buffer screenshot: {}", filepath.display());
 
     // Font metrics for monospace rendering
-    let char_width = 10;  // pixels per character
+    let char_width = 10; // pixels per character
     let char_height = 20; // pixels per line
-    let padding = 10;     // border padding
+    let padding = 10; // border padding
 
     let width = (buffer.width as u32 * char_width) + (padding * 2);
     let height = (buffer.height as u32 * char_height) + (padding * 2);
@@ -57,8 +57,7 @@ pub fn render_tui_buffer_to_image(buffer: TuiBuffer) -> Result<PathBuf> {
 
     // Load embedded font
     let font_data = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf");
-    let font = FontRef::try_from_slice(font_data)
-        .context("Failed to load embedded font")?;
+    let font = FontRef::try_from_slice(font_data).context("Failed to load embedded font")?;
 
     let scale = PxScale::from(14.0);
 
@@ -82,7 +81,10 @@ pub fn render_tui_buffer_to_image(buffer: TuiBuffer) -> Result<PathBuf> {
             (padding + 30) as i32,
             PxScale::from(12.0),
             &font,
-            &format!("Screenshot taken: {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")),
+            &format!(
+                "Screenshot taken: {}",
+                chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+            ),
         );
 
         draw_text_mut(
@@ -147,9 +149,9 @@ pub fn take_tui_screenshot() -> Result<PathBuf> {
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
     // Calculate image dimensions (using monospace font metrics)
-    let char_width = 10;  // pixels per character
+    let char_width = 10; // pixels per character
     let char_height = 20; // pixels per line
-    let padding = 20;     // border padding
+    let padding = 20; // border padding
 
     let width = (cols as u32 * char_width) + (padding * 2);
     let height = (rows as u32 * char_height) + (padding * 2);
@@ -160,8 +162,7 @@ pub fn take_tui_screenshot() -> Result<PathBuf> {
 
     // Load embedded font
     let font_data = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf");
-    let font = FontRef::try_from_slice(font_data)
-        .context("Failed to load embedded font")?;
+    let font = FontRef::try_from_slice(font_data).context("Failed to load embedded font")?;
 
     let scale = PxScale::from(16.0);
 
@@ -173,7 +174,10 @@ pub fn take_tui_screenshot() -> Result<PathBuf> {
         padding as i32,
         scale,
         &font,
-        &format!("OSVM Chat TUI Screenshot - {}", chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")),
+        &format!(
+            "OSVM Chat TUI Screenshot - {}",
+            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S")
+        ),
     );
 
     // Add terminal info
@@ -184,7 +188,12 @@ pub fn take_tui_screenshot() -> Result<PathBuf> {
         (padding + 30) as i32,
         PxScale::from(14.0),
         &font,
-        &format!("Terminal: {}x{} | Type: {}", cols, rows, std::env::var("TERM").unwrap_or_else(|_| "unknown".to_string())),
+        &format!(
+            "Terminal: {}x{} | Type: {}",
+            cols,
+            rows,
+            std::env::var("TERM").unwrap_or_else(|_| "unknown".to_string())
+        ),
     );
 
     // Add note about TUI rendering
@@ -238,17 +247,27 @@ pub fn take_terminal_screenshot(terminal_only: bool) -> Result<PathBuf> {
 /// # Arguments
 /// * `terminal_only` - If true, captures only the terminal window. If false, captures full screen.
 /// * `crop_to_chat` - If true, crops the screenshot to show only the chat UI area
-pub fn take_terminal_screenshot_with_crop(terminal_only: bool, crop_to_chat: bool) -> Result<PathBuf> {
+pub fn take_terminal_screenshot_with_crop(
+    terminal_only: bool,
+    crop_to_chat: bool,
+) -> Result<PathBuf> {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let screenshots_dir = PathBuf::from(format!("{}/.osvm/screenshots", home));
     std::fs::create_dir_all(&screenshots_dir)?;
 
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
-    let mode = if terminal_only { "terminal" } else { "fullscreen" };
+    let mode = if terminal_only {
+        "terminal"
+    } else {
+        "fullscreen"
+    };
     let filename = format!("osvm_chat_{}_{}.png", mode, timestamp);
     let filepath = screenshots_dir.join(&filename);
 
-    debug!("Taking screenshot (terminal_only={}, crop_to_chat={})", terminal_only, crop_to_chat);
+    debug!(
+        "Taking screenshot (terminal_only={}, crop_to_chat={})",
+        terminal_only, crop_to_chat
+    );
 
     // Try different screenshot methods
     let captured_path = if let Ok(path) = try_imagemagick_import(&filepath, terminal_only) {
@@ -319,15 +338,15 @@ fn crop_to_chat_ui(screenshot_path: &PathBuf) -> Result<PathBuf> {
     // We need to crop to show ONLY the chat panel, not VSCode or other panels
 
     // Vertical cropping (remove window chrome)
-    let top_offset = 50;  // Skip title bar and menu
-    let bottom_offset = 40;  // Skip bottom status bar
+    let top_offset = 50; // Skip title bar and menu
+    let bottom_offset = 40; // Skip bottom status bar
 
     // Horizontal cropping (isolate right chat panel)
     // Assume chat UI takes up right 50-60% of the screen
     // Look for the chat panel starting around the middle-right
-    let chat_panel_start = width / 2;  // Chat typically starts in right half
-    let left_offset = chat_panel_start;  // Skip everything left of chat panel
-    let right_offset = 10;  // Small right border
+    let chat_panel_start = width / 2; // Chat typically starts in right half
+    let left_offset = chat_panel_start; // Skip everything left of chat panel
+    let right_offset = 10; // Small right border
 
     let crop_width = width.saturating_sub(left_offset + right_offset);
     let crop_height = height.saturating_sub(top_offset + bottom_offset);
@@ -345,7 +364,10 @@ fn crop_to_chat_ui(screenshot_path: &PathBuf) -> Result<PathBuf> {
         .join(&cropped_filename);
 
     // Crop using ImageMagick
-    let crop_spec = format!("{}x{}+{}+{}", crop_width, crop_height, left_offset, top_offset);
+    let crop_spec = format!(
+        "{}x{}+{}+{}",
+        crop_width, crop_height, left_offset, top_offset
+    );
 
     debug!("Cropping to: {}", crop_spec);
 
@@ -353,7 +375,7 @@ fn crop_to_chat_ui(screenshot_path: &PathBuf) -> Result<PathBuf> {
         .arg(screenshot_path.to_str().unwrap())
         .arg("-crop")
         .arg(&crop_spec)
-        .arg("+repage")  // Remove virtual canvas
+        .arg("+repage") // Remove virtual canvas
         .arg(cropped_path.to_str().unwrap())
         .output()?;
 
@@ -362,7 +384,10 @@ fn crop_to_chat_ui(screenshot_path: &PathBuf) -> Result<PathBuf> {
         let _ = std::fs::remove_file(screenshot_path);
         Ok(cropped_path)
     } else {
-        Err(anyhow!("Crop failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(anyhow!(
+            "Crop failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -378,12 +403,12 @@ fn try_imagemagick_import(output_path: &PathBuf, terminal_only: bool) -> Result<
     if terminal_only {
         // Get active window ID using xdotool
         if which_command_exists("xdotool") {
-            let window_id = Command::new("xdotool")
-                .arg("getactivewindow")
-                .output()?;
+            let window_id = Command::new("xdotool").arg("getactivewindow").output()?;
 
             if window_id.status.success() {
-                let wid = String::from_utf8_lossy(&window_id.stdout).trim().to_string();
+                let wid = String::from_utf8_lossy(&window_id.stdout)
+                    .trim()
+                    .to_string();
                 debug!("Capturing window ID: {}", wid);
                 cmd.arg(&wid);
             } else {
@@ -405,7 +430,10 @@ fn try_imagemagick_import(output_path: &PathBuf, terminal_only: bool) -> Result<
     if output.status.success() {
         Ok(output_path.clone())
     } else {
-        Err(anyhow!("import failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(anyhow!(
+            "import failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -429,7 +457,10 @@ fn try_scrot(output_path: &PathBuf, terminal_only: bool) -> Result<PathBuf> {
     if output.status.success() {
         Ok(output_path.clone())
     } else {
-        Err(anyhow!("scrot failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(anyhow!(
+            "scrot failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -454,7 +485,10 @@ fn try_gnome_screenshot(output_path: &PathBuf, terminal_only: bool) -> Result<Pa
     if output.status.success() {
         Ok(output_path.clone())
     } else {
-        Err(anyhow!("gnome-screenshot failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(anyhow!(
+            "gnome-screenshot failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -474,7 +508,7 @@ fn try_spectacle(output_path: &PathBuf, terminal_only: bool) -> Result<PathBuf> 
         cmd.arg("-f");
     }
 
-    cmd.arg("-b");  // Background (no GUI)
+    cmd.arg("-b"); // Background (no GUI)
     cmd.arg("-o");
     cmd.arg(output_path.to_str().unwrap());
     let output = cmd.output()?;
@@ -482,7 +516,10 @@ fn try_spectacle(output_path: &PathBuf, terminal_only: bool) -> Result<PathBuf> 
     if output.status.success() {
         Ok(output_path.clone())
     } else {
-        Err(anyhow!("spectacle failed: {}", String::from_utf8_lossy(&output.stderr)))
+        Err(anyhow!(
+            "spectacle failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -496,8 +533,7 @@ fn try_text_fallback(output_path: &PathBuf, terminal_only: bool) -> Result<PathB
 
     // Load embedded font
     let font_data = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf");
-    let font = FontRef::try_from_slice(font_data)
-        .context("Failed to load embedded font")?;
+    let font = FontRef::try_from_slice(font_data).context("Failed to load embedded font")?;
 
     let title_scale = PxScale::from(24.0);
     let text_scale = PxScale::from(16.0);
@@ -544,7 +580,9 @@ fn try_text_fallback(output_path: &PathBuf, terminal_only: bool) -> Result<PathB
     }
 
     // Draw timestamp
-    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+    let timestamp = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S UTC")
+        .to_string();
     draw_text_mut(
         &mut img,
         Rgb([150u8, 150u8, 150u8]),

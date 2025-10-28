@@ -5,8 +5,14 @@ use osvm::utils::agent_chat_v2::state::AdvancedChatState;
 use osvm::utils::agent_chat_v2::types::ChatMessage;
 
 /// Helper function to analyze session messages and extract plan/execution info
-fn analyze_session_messages(session_id: uuid::Uuid, state: &AdvancedChatState, query: &str) -> TestResult {
-    let session = state.get_session_by_id(session_id).expect("Session should exist");
+fn analyze_session_messages(
+    session_id: uuid::Uuid,
+    state: &AdvancedChatState,
+    query: &str,
+) -> TestResult {
+    let session = state
+        .get_session_by_id(session_id)
+        .expect("Session should exist");
     let messages = &session.messages;
 
     println!("\n════════════════════════════════════════════════════════════════════════════════");
@@ -33,7 +39,7 @@ fn analyze_session_messages(session_id: uuid::Uuid, state: &AdvancedChatState, q
                     result.has_user_message = true;
                     println!("  {}. 💬 User: {}", i, text);
                 }
-            },
+            }
             ChatMessage::AgentPlan(tools) => {
                 result.has_plan = true;
                 result.plan_tool_count = tools.len();
@@ -43,14 +49,22 @@ fn analyze_session_messages(session_id: uuid::Uuid, state: &AdvancedChatState, q
                     println!("       Reason: {}", tool.reason);
                     result.plan_tools.push(tool.tool_name.clone());
                 }
-            },
-            ChatMessage::ToolCall { tool_name, description, .. } => {
+            }
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                ..
+            } => {
                 result.tools_executed += 1;
                 result.executed_tools.push(tool_name.clone());
                 println!("  {}. 🔧 Tool Call: {}", i, tool_name);
                 println!("       Description: {}", description);
-            },
-            ChatMessage::ToolResult { tool_name, result: res, .. } => {
+            }
+            ChatMessage::ToolResult {
+                tool_name,
+                result: res,
+                ..
+            } => {
                 result.tools_with_results += 1;
                 println!("  {}. ✅ Tool Result: {}", i, tool_name);
                 let result_preview = format!("{:?}", res);
@@ -60,7 +74,7 @@ fn analyze_session_messages(session_id: uuid::Uuid, state: &AdvancedChatState, q
                     result_preview
                 };
                 println!("       Result: {}", preview);
-            },
+            }
             ChatMessage::Agent(text) => {
                 result.has_final_response = true;
                 println!("  {}. 🤖 Agent Response:", i);
@@ -71,13 +85,13 @@ fn analyze_session_messages(session_id: uuid::Uuid, state: &AdvancedChatState, q
                 if text.lines().count() > 5 {
                     println!("       ... ({} more lines)", text.lines().count() - 5);
                 }
-            },
+            }
             ChatMessage::Processing { message, .. } => {
                 println!("  {}. ⏳ Processing: {}", i, message);
-            },
+            }
             ChatMessage::Error(err) => {
                 println!("  {}. ❌ Error: {}", err, i);
-            },
+            }
             _ => {
                 // Skip other message types for clarity
             }
@@ -103,8 +117,14 @@ impl TestResult {
     fn print_summary(&self) {
         println!("\n📊 Test Summary:");
         println!("   Query: \"{}\"", self.query);
-        println!("   ✓ User message present: {}", if self.has_user_message { "✅" } else { "❌" });
-        println!("   ✓ Plan generated: {}", if self.has_plan { "✅" } else { "❌" });
+        println!(
+            "   ✓ User message present: {}",
+            if self.has_user_message { "✅" } else { "❌" }
+        );
+        println!(
+            "   ✓ Plan generated: {}",
+            if self.has_plan { "✅" } else { "❌" }
+        );
         if self.has_plan {
             println!("     → Plan tool count: {}", self.plan_tool_count);
             println!("     → Planned tools: {:?}", self.plan_tools);
@@ -113,8 +133,18 @@ impl TestResult {
         if self.tools_executed > 0 {
             println!("     → Executed tools: {:?}", self.executed_tools);
         }
-        println!("   ✓ Tools with results: {} results", self.tools_with_results);
-        println!("   ✓ Final response: {}", if self.has_final_response { "✅" } else { "❌" });
+        println!(
+            "   ✓ Tools with results: {} results",
+            self.tools_with_results
+        );
+        println!(
+            "   ✓ Final response: {}",
+            if self.has_final_response {
+                "✅"
+            } else {
+                "❌"
+            }
+        );
     }
 
     fn verify_complete_flow(&self) -> bool {
@@ -174,7 +204,9 @@ async fn test_balance_query_generates_plan() {
     let query = "What is my SOL balance?";
 
     println!("📤 Sending query: \"{}\"", query);
-    let result = state.process_input_async(session_id, query.to_string()).await;
+    let result = state
+        .process_input_async(session_id, query.to_string())
+        .await;
     assert!(result.is_ok(), "Processing should succeed");
 
     let test_result = analyze_session_messages(session_id, &state, query);
@@ -185,13 +217,22 @@ async fn test_balance_query_generates_plan() {
     assert!(test_result.has_final_response, "Should have final response");
 
     if test_result.has_plan {
-        println!("\n✅ Plan was generated with {} tools", test_result.plan_tool_count);
-        assert!(test_result.plan_tool_count > 0, "Plan should have at least one tool");
+        println!(
+            "\n✅ Plan was generated with {} tools",
+            test_result.plan_tool_count
+        );
+        assert!(
+            test_result.plan_tool_count > 0,
+            "Plan should have at least one tool"
+        );
     } else {
         println!("\nℹ️  No plan generated (AI decided no tools needed or fallback used)");
     }
 
-    assert!(test_result.verify_complete_flow(), "Complete flow should be valid");
+    assert!(
+        test_result.verify_complete_flow(),
+        "Complete flow should be valid"
+    );
 }
 
 #[tokio::test]
@@ -210,7 +251,9 @@ async fn test_transaction_query_generates_plan() {
     let query = "Show me my recent transactions";
 
     println!("📤 Sending query: \"{}\"", query);
-    let result = state.process_input_async(session_id, query.to_string()).await;
+    let result = state
+        .process_input_async(session_id, query.to_string())
+        .await;
     assert!(result.is_ok(), "Processing should succeed");
 
     let test_result = analyze_session_messages(session_id, &state, query);
@@ -220,14 +263,20 @@ async fn test_transaction_query_generates_plan() {
     assert!(test_result.has_final_response, "Should have final response");
 
     if test_result.has_plan {
-        println!("\n✅ Plan was generated with {} tools", test_result.plan_tool_count);
+        println!(
+            "\n✅ Plan was generated with {} tools",
+            test_result.plan_tool_count
+        );
         // Transaction queries might need multiple tools
         println!("   Tools in plan: {:?}", test_result.plan_tools);
     } else {
         println!("\nℹ️  No plan generated (AI decided no tools needed or fallback used)");
     }
 
-    assert!(test_result.verify_complete_flow(), "Complete flow should be valid");
+    assert!(
+        test_result.verify_complete_flow(),
+        "Complete flow should be valid"
+    );
 }
 
 #[tokio::test]
@@ -246,7 +295,9 @@ async fn test_complex_query_generates_multi_tool_plan() {
     let query = "Analyze my wallet: show balance, recent transactions, and staking info";
 
     println!("📤 Sending query: \"{}\"", query);
-    let result = state.process_input_async(session_id, query.to_string()).await;
+    let result = state
+        .process_input_async(session_id, query.to_string())
+        .await;
     assert!(result.is_ok(), "Processing should succeed");
 
     let test_result = analyze_session_messages(session_id, &state, query);
@@ -256,7 +307,10 @@ async fn test_complex_query_generates_multi_tool_plan() {
     assert!(test_result.has_final_response, "Should have final response");
 
     if test_result.has_plan {
-        println!("\n✅ Plan was generated with {} tools", test_result.plan_tool_count);
+        println!(
+            "\n✅ Plan was generated with {} tools",
+            test_result.plan_tool_count
+        );
         if test_result.plan_tool_count > 1 {
             println!("   🎯 Multi-tool plan confirmed!");
             println!("   Tools: {:?}", test_result.plan_tools);
@@ -265,7 +319,10 @@ async fn test_complex_query_generates_multi_tool_plan() {
         println!("\nℹ️  No plan generated (AI decided no tools needed or fallback used)");
     }
 
-    assert!(test_result.verify_complete_flow(), "Complete flow should be valid");
+    assert!(
+        test_result.verify_complete_flow(),
+        "Complete flow should be valid"
+    );
 }
 
 #[tokio::test]
@@ -284,7 +341,9 @@ async fn test_simple_query_may_skip_tools() {
     let query = "What is Solana?";
 
     println!("📤 Sending query: \"{}\"", query);
-    let result = state.process_input_async(session_id, query.to_string()).await;
+    let result = state
+        .process_input_async(session_id, query.to_string())
+        .await;
     assert!(result.is_ok(), "Processing should succeed");
 
     let test_result = analyze_session_messages(session_id, &state, query);
@@ -302,7 +361,10 @@ async fn test_simple_query_may_skip_tools() {
     // For simple queries, a direct response without tools is acceptable
     println!("\nℹ️  Simple queries may get direct AI responses without tool execution");
 
-    assert!(test_result.verify_complete_flow(), "Complete flow should be valid");
+    assert!(
+        test_result.verify_complete_flow(),
+        "Complete flow should be valid"
+    );
 }
 
 #[tokio::test]
@@ -320,7 +382,9 @@ async fn test_plan_execution_matches_plan() {
     let query = "Check my balance and staking rewards";
 
     println!("📤 Sending query: \"{}\"", query);
-    let result = state.process_input_async(session_id, query.to_string()).await;
+    let result = state
+        .process_input_async(session_id, query.to_string())
+        .await;
     assert!(result.is_ok(), "Processing should succeed");
 
     let test_result = analyze_session_messages(session_id, &state, query);
@@ -346,7 +410,10 @@ async fn test_plan_execution_matches_plan() {
             }
 
             if matched > 0 {
-                println!("   ✅ {}/{} executed tools matched the plan", matched, test_result.tools_executed);
+                println!(
+                    "   ✅ {}/{} executed tools matched the plan",
+                    matched, test_result.tools_executed
+                );
             } else {
                 println!("   ⚠️  Executed tools don't match plan (this might be follow-up tools)");
             }
@@ -357,5 +424,8 @@ async fn test_plan_execution_matches_plan() {
         println!("\nℹ️  No plan was generated for this query");
     }
 
-    assert!(test_result.verify_complete_flow(), "Complete flow should be valid");
+    assert!(
+        test_result.verify_complete_flow(),
+        "Complete flow should be valid"
+    );
 }

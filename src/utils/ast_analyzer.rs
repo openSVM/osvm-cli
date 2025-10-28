@@ -308,10 +308,7 @@ impl AstAnalyzer {
 
     /// Extract the variable name that holds an account reference using AST parsing
     fn extract_account_variable_name(&self, content: &str) -> Option<String> {
-        debug_print!(
-            VerbosityLevel::Detailed,
-            "Extracting account variable name from content"
-        );
+        debug_print!("Extracting account variable name from content");
 
         // Try to parse the content as statements to properly extract variable names
         if let Ok(parsed) = syn::parse_str::<syn::Block>(&format!("{{{}}}", content)) {
@@ -323,11 +320,7 @@ impl AstAnalyzer {
                         if content.contains(&format!("{}.balance", var_name))
                             || content.contains(&format!("{}.", var_name))
                         {
-                            debug_print!(
-                                VerbosityLevel::Detailed,
-                                "Found account variable: {}",
-                                var_name
-                            );
+                            debug_print!("Found account variable: {}", var_name);
                             return Some(var_name);
                         }
                     }
@@ -343,11 +336,7 @@ impl AstAnalyzer {
                 if content.contains(&format!("{}.balance", var_name))
                     || content.contains(&format!("{}.", var_name))
                 {
-                    debug_print!(
-                        VerbosityLevel::Detailed,
-                        "Found account variable (fallback): {}",
-                        var_name
-                    );
+                    debug_print!("Found account variable (fallback): {}", var_name);
                     return Some(var_name.to_string());
                 }
             }
@@ -359,32 +348,26 @@ impl AstAnalyzer {
 
     /// Advanced signer validation analysis using control flow
     fn analyze_signer_validation(&self, content: &str) -> SignerValidationResult {
-        debug_print!(
-            VerbosityLevel::Verbose,
-            "Analyzing signer validation patterns"
-        );
+        debug_print!("Analyzing signer validation patterns");
 
         let mut result = SignerValidationResult::default();
 
         // Check for explicit is_signer checks
         if content.contains("is_signer") {
             result.has_signer_check = true;
-            debug_print!(VerbosityLevel::Detailed, "Found explicit is_signer check");
+            debug_print!("Found explicit is_signer check");
         }
 
         // Check for require! macros with signer validation
         if content.contains("require!") && content.contains("is_signer") {
             result.has_require_signer = true;
-            debug_print!(
-                VerbosityLevel::Detailed,
-                "Found require! with signer validation"
-            );
+            debug_print!("Found require! with signer validation");
         }
 
         // Check for anchor constraints
         if content.contains("#[account(signer)]") || content.contains("Signer<") {
             result.has_anchor_signer_constraint = true;
-            debug_print!(VerbosityLevel::Detailed, "Found Anchor signer constraint");
+            debug_print!("Found Anchor signer constraint");
         }
 
         // Analyze control flow for conditional signer checks
@@ -399,29 +382,26 @@ impl AstAnalyzer {
 
     /// Advanced owner validation analysis using control flow
     fn analyze_owner_validation(&self, content: &str) -> OwnerValidationResult {
-        debug_print!(
-            VerbosityLevel::Verbose,
-            "Analyzing owner validation patterns"
-        );
+        debug_print!("Analyzing owner validation patterns");
 
         let mut result = OwnerValidationResult::default();
 
         // Check for explicit owner checks
         if content.contains(".owner") && (content.contains("==") || content.contains("require!")) {
             result.has_owner_check = true;
-            debug_print!(VerbosityLevel::Detailed, "Found explicit owner check");
+            debug_print!("Found explicit owner check");
         }
 
         // Check for program ID validation
         if content.contains("program_id") && content.contains("==") {
             result.has_program_id_check = true;
-            debug_print!(VerbosityLevel::Detailed, "Found program ID validation");
+            debug_print!("Found program ID validation");
         }
 
         // Check for anchor constraints
         if content.contains("#[account(owner") {
             result.has_anchor_owner_constraint = true;
-            debug_print!(VerbosityLevel::Detailed, "Found Anchor owner constraint ");
+            debug_print!("Found Anchor owner constraint ");
         }
 
         result
@@ -439,17 +419,14 @@ impl AstAnalyzer {
                 let cond_str = quote::quote!(#if_expr.cond).to_string();
                 if cond_str.contains("is_signer") {
                     result.has_conditional_signer_check = true;
-                    debug_print!(VerbosityLevel::Verbose, "Found conditional signer check ");
+                    debug_print!("Found conditional signer check ");
                 }
             }
             syn::Stmt::Expr(syn::Expr::Macro(macro_expr), _) => {
                 let macro_str = quote::quote!(#macro_expr).to_string();
                 if macro_str.contains("require!") && macro_str.contains("is_signer") {
                     result.has_require_signer = true;
-                    debug_print!(
-                        VerbosityLevel::Verbose,
-                        "Found require macro with signer validation "
-                    );
+                    debug_print!("Found require macro with signer validation ");
                 }
             }
             _ => {}
@@ -459,7 +436,6 @@ impl AstAnalyzer {
     /// Apply pattern-based fixes with AST-aware insertion
     fn apply_pattern_based_fixes(&self, content: &str, finding: &AuditFinding) -> String {
         debug_print!(
-            VerbosityLevel::Detailed,
             "Applying pattern-based fixes for category: {}",
             finding.category
         );
@@ -501,7 +477,7 @@ impl AstAnalyzer {
 
     /// Insert signer validation fix using AST-aware positioning
     fn insert_signer_validation_fix(&self, content: &str, finding: &AuditFinding) -> String {
-        debug_print!(VerbosityLevel::Verbose, "Inserting signer validation fix");
+        debug_print!("Inserting signer validation fix");
 
         // Extract account variable name from the content
         if let Some(account_var) = self.extract_account_variable_name(content) {
@@ -545,10 +521,7 @@ impl AstAnalyzer {
 
     /// Insert owner validation fix using AST-aware positioning (unified with signer approach)
     fn insert_owner_validation_fix(&self, content: &str, finding: &AuditFinding) -> String {
-        debug_print!(
-            VerbosityLevel::Verbose,
-            "Inserting owner validation fix with AST-aware positioning"
-        );
+        debug_print!("Inserting owner validation fix with AST-aware positioning");
 
         // Extract account variable name similar to signer validation approach
         if let Some(account_var) = self.extract_account_variable_name(content) {

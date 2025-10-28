@@ -70,7 +70,7 @@ impl SshClient {
 
         Ok(SshClient {
             session,
-            config,  // Move ownership directly (no clone needed)
+            config, // Move ownership directly (no clone needed)
             connected: false,
         })
     }

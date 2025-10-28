@@ -3,12 +3,12 @@
 use crate::utils::agent_chat_v2::agent::ThemeCommandType;
 use anyhow::{anyhow, Context, Result};
 use cursive::direction::Orientation;
+use cursive::event::Key;
 use cursive::traits::*; // Import Nameable, Resizable, etc.
 use cursive::views::{
-    Button, Dialog, DummyView, EditView, LinearLayout, ListView, OnEventView, Panel, ScrollView, SelectView,
-    TextArea, TextView,
+    Button, Dialog, DummyView, EditView, LinearLayout, ListView, OnEventView, Panel, ScrollView,
+    SelectView, TextArea, TextView,
 };
-use cursive::event::Key;
 use cursive::Cursive;
 use log::{error, info, warn};
 use uuid::Uuid;
@@ -96,40 +96,42 @@ pub fn copy_last_message(siv: &mut Cursive, state: AdvancedChatState) {
 pub fn delete_last_message(siv: &mut Cursive, state: AdvancedChatState) {
     // Show confirmation dialog before deleting
     siv.add_layer(
-        Dialog::text("Are you sure you want to delete the last message?\nThis action cannot be undone.")
-            .title("Confirm Delete")
-            .button("Yes, Delete", move |s| {
-                s.pop_layer(); // Close confirmation dialog
+        Dialog::text(
+            "Are you sure you want to delete the last message?\nThis action cannot be undone.",
+        )
+        .title("Confirm Delete")
+        .button("Yes, Delete", move |s| {
+            s.pop_layer(); // Close confirmation dialog
 
-                if let Some(session) = state.get_active_session() {
-                    let session_id = session.id;
+            if let Some(session) = state.get_active_session() {
+                let session_id = session.id;
 
-                    // First, clear any processing messages that might be stuck
-                    if let Err(e) = state.remove_last_processing_message(session_id) {
-                        error!("Failed to remove processing message: {}", e);
-                    }
+                // First, clear any processing messages that might be stuck
+                if let Err(e) = state.remove_last_processing_message(session_id) {
+                    error!("Failed to remove processing message: {}", e);
+                }
 
-                    // Then delete the last actual message
-                    if let Ok(mut sessions) = state.sessions.write() {
-                        if let Some(session) = sessions.get_mut(&session_id) {
-                            if !session.messages.is_empty() {
-                                session.messages.pop();
+                // Then delete the last actual message
+                if let Ok(mut sessions) = state.sessions.write() {
+                    if let Some(session) = sessions.get_mut(&session_id) {
+                        if !session.messages.is_empty() {
+                            session.messages.pop();
 
-                                // Show success feedback with toast
-                                super::toast::show_success_toast(s, "Message deleted successfully");
-                            } else {
-                                super::toast::show_info_toast(s, "No messages to delete");
-                            }
+                            // Show success feedback with toast
+                            super::toast::show_success_toast(s, "Message deleted successfully");
+                        } else {
+                            super::toast::show_info_toast(s, "No messages to delete");
                         }
                     }
-
-                    // Update UI after all changes
-                    update_ui_displays(s);
                 }
-            })
-            .button("Cancel", |s| {
-                s.pop_layer();
-            })
+
+                // Update UI after all changes
+                update_ui_displays(s);
+            }
+        })
+        .button("Cancel", |s| {
+            s.pop_layer();
+        }),
     );
 }
 
@@ -180,17 +182,19 @@ pub fn take_screenshot(siv: &mut Cursive) {
 
         match result {
             Ok(path) => {
-                let success_msg = format!("Screenshot saved successfully!\n\nMode: TUI Content Export\nLocation:\n{}", path.display());
+                let success_msg = format!(
+                    "Screenshot saved successfully!\n\nMode: TUI Content Export\nLocation:\n{}",
+                    path.display()
+                );
                 cb_sink
                     .send(Box::new(move |s| {
                         s.pop_layer(); // Remove "taking screenshot" dialog
-                        s.add_layer(
-                            Dialog::text(success_msg)
-                                .title("Screenshot Saved")
-                                .button("OK", |s| {
-                                    s.pop_layer();
-                                }),
-                        );
+                        s.add_layer(Dialog::text(success_msg).title("Screenshot Saved").button(
+                            "OK",
+                            |s| {
+                                s.pop_layer();
+                            },
+                        ));
                     }))
                     .ok();
             }
@@ -199,13 +203,12 @@ pub fn take_screenshot(siv: &mut Cursive) {
                 cb_sink
                     .send(Box::new(move |s| {
                         s.pop_layer(); // Remove "taking screenshot" dialog
-                        s.add_layer(
-                            Dialog::text(error_msg)
-                                .title("Screenshot Error")
-                                .button("OK", |s| {
-                                    s.pop_layer();
-                                }),
-                        );
+                        s.add_layer(Dialog::text(error_msg).title("Screenshot Error").button(
+                            "OK",
+                            |s| {
+                                s.pop_layer();
+                            },
+                        ));
                     }))
                     .ok();
             }
@@ -269,7 +272,9 @@ pub fn insert_suggestion_at_cursor(siv: &mut Cursive, index: usize, state: Advan
 }
 
 pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState) {
-    use super::input_validation::{validate_input, ValidationResult, contains_sensitive_pattern, get_sensitive_warning};
+    use super::input_validation::{
+        contains_sensitive_pattern, get_sensitive_warning, validate_input, ValidationResult,
+    };
 
     // Validate input first
     match validate_input(text) {
@@ -277,7 +282,10 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
             // Silently ignore empty input
             return;
         }
-        ValidationResult::TooLong { text: truncated, max_length } => {
+        ValidationResult::TooLong {
+            text: truncated,
+            max_length,
+        } => {
             siv.add_layer(
                 Dialog::text(format!(
                     "Message Too Long\n\n\
@@ -290,7 +298,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
                 .title("Input Validation")
                 .button("OK", |s| {
                     s.pop_layer();
-                })
+                }),
             );
             return;
         }
@@ -306,7 +314,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
                 .title("Input Validation")
                 .button("OK", |s| {
                     s.pop_layer();
-                })
+                }),
             );
             return;
         }
@@ -315,12 +323,12 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
                 Dialog::text(
                     "Invalid Characters\n\n\
                     Your message contains invalid or binary characters.\n\
-                    Please use only text characters."
+                    Please use only text characters.",
                 )
                 .title("Input Validation")
                 .button("OK", |s| {
                     s.pop_layer();
-                })
+                }),
             );
             return;
         }
@@ -338,7 +346,7 @@ pub fn handle_user_input(siv: &mut Cursive, text: &str, state: AdvancedChatState
                         .button("Send Anyway", move |s| {
                             s.pop_layer();
                             process_validated_input(s, &text_clone, state_clone.clone());
-                        })
+                        }),
                 );
                 return;
             }
@@ -389,7 +397,9 @@ fn process_validated_input(siv: &mut Cursive, text: &str, state: AdvancedChatSta
         }
 
         // Add user message to the session
-        if let Err(e) = state.add_message_to_session(session.id, ChatMessage::User(user_message.clone())) {
+        if let Err(e) =
+            state.add_message_to_session(session.id, ChatMessage::User(user_message.clone()))
+        {
             error!("Failed to add user message to session: {}", e);
         }
 
@@ -517,7 +527,7 @@ pub fn clear_current_chat(siv: &mut Cursive) {
         Dialog::text(
             "Are you sure you want to clear all messages in this chat?\n\
             This action cannot be undone.\n\n\
-            Tip: Use 'Export Chat' first if you want to save the conversation."
+            Tip: Use 'Export Chat' first if you want to save the conversation.",
         )
         .title("Confirm Clear Chat")
         .button("Yes, Clear All", |s| {
@@ -545,17 +555,20 @@ pub fn clear_current_chat(siv: &mut Cursive) {
             // Show success feedback
             if let Some(Some(count)) = cleared {
                 s.add_layer(
-                    Dialog::info(format!("Chat cleared successfully\n{} messages removed", count))
-                        .title("Cleared")
-                        .button("OK", |s| {
-                            s.pop_layer();
-                        })
+                    Dialog::info(format!(
+                        "Chat cleared successfully\n{} messages removed",
+                        count
+                    ))
+                    .title("Cleared")
+                    .button("OK", |s| {
+                        s.pop_layer();
+                    }),
                 );
             }
         })
         .button("Cancel", |s| {
             s.pop_layer();
-        })
+        }),
     );
 }
 
@@ -810,7 +823,7 @@ pub fn show_advanced_help(siv: &mut Cursive) {
     let mut help_layout = LinearLayout::vertical();
     help_layout.add_child(
         ScrollView::new(TextView::new(help_text))
-            .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToBottom)
+            .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToBottom),
     );
 
     siv.add_layer(
@@ -868,7 +881,7 @@ pub fn show_essential_shortcuts(siv: &mut Cursive) {
             ScrollView::new(TextView::new(help_text))
                 .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
                 .max_width(80)
-                .max_height(30)
+                .max_height(30),
         )
         .title("📚 Level 1: Essential Shortcuts")
         .button("Got it!", |s| {
@@ -925,7 +938,7 @@ pub fn show_common_shortcuts(siv: &mut Cursive) {
             ScrollView::new(TextView::new(help_text))
                 .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
                 .max_width(80)
-                .max_height(35)
+                .max_height(35),
         )
         .title("📚 Level 2: Common Shortcuts")
         .button("← Back: F1 Essential", |s| {
@@ -1041,7 +1054,7 @@ pub fn show_advanced_shortcuts(siv: &mut Cursive) {
     siv.add_layer(
         Dialog::around(
             ScrollView::new(TextView::new(help_text))
-                .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop)
+                .scroll_strategy(cursive::view::scroll::ScrollStrategy::StickToTop),
         )
         .title("📚 Level 3: Advanced Reference (Complete Guide)")
         .button("← Back: F2 Common", |s| {
@@ -1083,7 +1096,7 @@ pub fn show_keyboard_shortcuts_hint(siv: &mut Cursive) {
             })
             .button("OK", |s| {
                 s.pop_layer();
-            })
+            }),
     );
 }
 
@@ -1993,7 +2006,10 @@ async fn execute_ai_plan(
             let param_value = match param_match.get(2) {
                 Some(m) => m.as_str(),
                 None => {
-                    log::warn!("Malformed parameter: missing value for parameter '{}'", param_name);
+                    log::warn!(
+                        "Malformed parameter: missing value for parameter '{}'",
+                        param_name
+                    );
                     continue;
                 }
             };
@@ -2081,7 +2097,9 @@ pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedCha
 
     if let Some(session) = state.get_active_session() {
         // Add user command to chat
-        if let Err(e) = state.add_message_to_session(session.id, ChatMessage::User(command.to_string())) {
+        if let Err(e) =
+            state.add_message_to_session(session.id, ChatMessage::User(command.to_string()))
+        {
             error!("Failed to add command message to session: {}", e);
         }
 
@@ -2106,7 +2124,8 @@ pub fn handle_theme_command(siv: &mut Cursive, command: &str, state: AdvancedCha
                     /theme preview [theme_name] - Preview a theme\n\
                     /theme current - Show current theme name";
                 if let Err(e) = state
-                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string())) {
+                    .add_message_to_session(session.id, ChatMessage::System(help_msg.to_string()))
+                {
                     error!("Failed to add help message to session: {}", e);
                 }
                 update_ui_displays(siv);
@@ -2317,8 +2336,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
 
                             let mut result_layout = LinearLayout::vertical();
 
-                            result_layout
-                                .add_child(TextView::new(format!("Execution Successful")));
+                            result_layout.add_child(TextView::new(format!("Execution Successful")));
                             result_layout.add_child(DummyView.fixed_height(1));
 
                             result_layout.add_child(TextView::new(format!(
@@ -2327,8 +2345,7 @@ fn execute_test_tool(siv: &mut Cursive, server_id: String, tool_name: String) {
                             )));
                             result_layout
                                 .add_child(TextView::new(format!("Server: {}", server_id)));
-                            result_layout
-                                .add_child(TextView::new(format!("Tool: {}", tool_name)));
+                            result_layout.add_child(TextView::new(format!("Tool: {}", tool_name)));
                             result_layout.add_child(DummyView.fixed_height(1));
 
                             result_layout.add_child(TextView::new("Response:"));
@@ -2498,7 +2515,9 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
     theme_list.add_child(TextView::new("Descriptions:"));
     theme_list.add_child(TextView::new("  dark         - VS Code Dark+ (default)"));
     theme_list.add_child(TextView::new("  light        - Clean light theme"));
-    theme_list.add_child(TextView::new("  high_contrast- Maximum contrast (accessibility)"));
+    theme_list.add_child(TextView::new(
+        "  high_contrast- Maximum contrast (accessibility)",
+    ));
 
     let theme_group_apply = theme_group.clone();
     let theme_group_preview = theme_group.clone();
@@ -2531,7 +2550,9 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
                             s.pop_layer();
                             show_theme_switcher(s);
                         })
-                        .button("OK", |s| { s.pop_layer(); })
+                        .button("OK", |s| {
+                            s.pop_layer();
+                        }),
                 );
             })
             .button("Preview", move |s| {
@@ -2552,7 +2573,7 @@ pub fn show_theme_switcher(siv: &mut Cursive) {
             .button("Cancel", |s| {
                 s.pop_layer();
             })
-            .max_width(60)
+            .max_width(60),
     );
 }
 
@@ -2565,70 +2586,82 @@ pub fn show_file_menu(s: &mut Cursive) {
     let mut menu_list = ListView::new();
 
     // Visual mnemonics: use brackets [E] to highlight the hotkey letter
-    menu_list.add_child("export_chat", Button::new_raw("  [E]xport Chat      ", |s| {
-        s.pop_layer();
-        export_chat(s);
-    }).full_width());
+    menu_list.add_child(
+        "export_chat",
+        Button::new_raw("  [E]xport Chat      ", |s| {
+            s.pop_layer();
+            export_chat(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("export_all", Button::new_raw("  Export [A]ll       ", |s| {
-        s.pop_layer();
-        export_all_chats(s);
-    }).full_width());
+    menu_list.add_child(
+        "export_all",
+        Button::new_raw("  Export [A]ll       ", |s| {
+            s.pop_layer();
+            export_all_chats(s);
+        })
+        .full_width(),
+    );
 
     menu_list.add_child("div1", TextView::new("  ───────────────────  "));
 
-    menu_list.add_child("settings", Button::new_raw("  [S]ettings         ", |s| {
-        s.pop_layer();
-        show_settings(s);
-    }).full_width());
+    menu_list.add_child(
+        "settings",
+        Button::new_raw("  [S]ettings         ", |s| {
+            s.pop_layer();
+            show_settings(s);
+        })
+        .full_width(),
+    );
 
     menu_list.add_child("div2", TextView::new("  ───────────────────  "));
 
-    menu_list.add_child("quit", Button::new_raw("  [Q]uit        Esc  ", |s| {
-        s.quit();
-    }).full_width());
+    menu_list.add_child(
+        "quit",
+        Button::new_raw("  [Q]uit        Esc  ", |s| {
+            s.quit();
+        })
+        .full_width(),
+    );
 
     // ListView already supports arrow key navigation by default
 
     // Wrap in OnEventView for keyboard shortcuts
-    let dropdown = OnEventView::new(
-        Panel::new(menu_list)
-            .title("File")
-            .fixed_width(24)
-    )
-    .on_event('e', |s| {
-        s.pop_layer();
-        export_chat(s);
-    })
-    .on_event('E', |s| {
-        s.pop_layer();
-        export_chat(s);
-    })
-    .on_event('a', |s| {
-        s.pop_layer();
-        export_all_chats(s);
-    })
-    .on_event('A', |s| {
-        s.pop_layer();
-        export_all_chats(s);
-    })
-    .on_event('s', |s| {
-        s.pop_layer();
-        show_settings(s);
-    })
-    .on_event('S', |s| {
-        s.pop_layer();
-        show_settings(s);
-    })
-    .on_event('q', |s| {
-        s.quit();
-    })
-    .on_event('Q', |s| {
-        s.quit();
-    })
-    .on_event(Key::Esc, |s| {
-        s.pop_layer();
-    });
+    let dropdown = OnEventView::new(Panel::new(menu_list).title("File").fixed_width(24))
+        .on_event('e', |s| {
+            s.pop_layer();
+            export_chat(s);
+        })
+        .on_event('E', |s| {
+            s.pop_layer();
+            export_chat(s);
+        })
+        .on_event('a', |s| {
+            s.pop_layer();
+            export_all_chats(s);
+        })
+        .on_event('A', |s| {
+            s.pop_layer();
+            export_all_chats(s);
+        })
+        .on_event('s', |s| {
+            s.pop_layer();
+            show_settings(s);
+        })
+        .on_event('S', |s| {
+            s.pop_layer();
+            show_settings(s);
+        })
+        .on_event('q', |s| {
+            s.quit();
+        })
+        .on_event('Q', |s| {
+            s.quit();
+        })
+        .on_event(Key::Esc, |s| {
+            s.pop_layer();
+        });
     // Note: Enter key is handled by ListView's default behavior
     // Arrow keys automatically work with ListView for navigation
 
@@ -2641,66 +2674,74 @@ pub fn show_edit_menu(s: &mut Cursive) {
     let mut menu_list = ListView::new();
 
     if let Some(state) = state_opt.clone() {
-        menu_list.add_child("copy", Button::new_raw("  [C]opy Message     ", move |s| {
-            s.pop_layer();
-            copy_last_message(s, state.clone());
-        }).full_width());
+        menu_list.add_child(
+            "copy",
+            Button::new_raw("  [C]opy Message     ", move |s| {
+                s.pop_layer();
+                copy_last_message(s, state.clone());
+            })
+            .full_width(),
+        );
     }
 
     if let Some(state) = state_opt.clone() {
-        menu_list.add_child("delete", Button::new_raw("  [D]elete Message   ", move |s| {
-            s.pop_layer();
-            delete_last_message(s, state.clone());
-        }).full_width());
+        menu_list.add_child(
+            "delete",
+            Button::new_raw("  [D]elete Message   ", move |s| {
+                s.pop_layer();
+                delete_last_message(s, state.clone());
+            })
+            .full_width(),
+        );
     }
 
     menu_list.add_child("div1", TextView::new("  ───────────────────  "));
 
-    menu_list.add_child("clear", Button::new_raw("  C[l]ear Chat       ", |s| {
-        s.pop_layer();
-        clear_current_chat(s);
-    }).full_width());
+    menu_list.add_child(
+        "clear",
+        Button::new_raw("  C[l]ear Chat       ", |s| {
+            s.pop_layer();
+            clear_current_chat(s);
+        })
+        .full_width(),
+    );
 
-    let dropdown = OnEventView::new(
-        Panel::new(menu_list)
-            .title("Edit")
-            .fixed_width(24)
-    )
-    .on_event('c', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            copy_last_message(s, state);
-        }
-    })
-    .on_event('C', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            copy_last_message(s, state);
-        }
-    })
-    .on_event('d', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            delete_last_message(s, state);
-        }
-    })
-    .on_event('D', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            delete_last_message(s, state);
-        }
-    })
-    .on_event('l', |s| {
-        s.pop_layer();
-        clear_current_chat(s);
-    })
-    .on_event('L', |s| {
-        s.pop_layer();
-        clear_current_chat(s);
-    })
-    .on_event(Key::Esc, |s| {
-        s.pop_layer();
-    });
+    let dropdown = OnEventView::new(Panel::new(menu_list).title("Edit").fixed_width(24))
+        .on_event('c', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                copy_last_message(s, state);
+            }
+        })
+        .on_event('C', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                copy_last_message(s, state);
+            }
+        })
+        .on_event('d', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                delete_last_message(s, state);
+            }
+        })
+        .on_event('D', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                delete_last_message(s, state);
+            }
+        })
+        .on_event('l', |s| {
+            s.pop_layer();
+            clear_current_chat(s);
+        })
+        .on_event('L', |s| {
+            s.pop_layer();
+            clear_current_chat(s);
+        })
+        .on_event(Key::Esc, |s| {
+            s.pop_layer();
+        });
 
     s.add_layer(dropdown);
 }
@@ -2710,74 +2751,86 @@ pub fn show_session_menu(s: &mut Cursive) {
     let state_opt = s.user_data::<AdvancedChatState>().cloned();
     let mut menu_list = ListView::new();
 
-    menu_list.add_child("new", Button::new_raw("  [N]ew Session      ", |s| {
-        s.pop_layer();
-        create_new_chat_dialog(s);
-    }).full_width());
+    menu_list.add_child(
+        "new",
+        Button::new_raw("  [N]ew Session      ", |s| {
+            s.pop_layer();
+            create_new_chat_dialog(s);
+        })
+        .full_width(),
+    );
 
     if let Some(state) = state_opt.clone() {
-        menu_list.add_child("fork", Button::new_raw("  [F]ork Session     ", move |s| {
-            s.pop_layer();
-            fork_conversation(s, state.clone());
-        }).full_width());
+        menu_list.add_child(
+            "fork",
+            Button::new_raw("  [F]ork Session     ", move |s| {
+                s.pop_layer();
+                fork_conversation(s, state.clone());
+            })
+            .full_width(),
+        );
     }
 
     menu_list.add_child("div1", TextView::new("  ───────────────────  "));
 
-    menu_list.add_child("start_rec", Button::new_raw("  Start [R]ecording  ", |s| {
-        s.pop_layer();
-        start_recording(s);
-    }).full_width());
+    menu_list.add_child(
+        "start_rec",
+        Button::new_raw("  Start [R]ecording  ", |s| {
+            s.pop_layer();
+            start_recording(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("stop_rec", Button::new_raw("  S[t]op Recording   ", |s| {
-        s.pop_layer();
-        stop_recording(s);
-    }).full_width());
+    menu_list.add_child(
+        "stop_rec",
+        Button::new_raw("  S[t]op Recording   ", |s| {
+            s.pop_layer();
+            stop_recording(s);
+        })
+        .full_width(),
+    );
 
-    let dropdown = OnEventView::new(
-        Panel::new(menu_list)
-            .title("Session")
-            .fixed_width(24)
-    )
-    .on_event('n', |s| {
-        s.pop_layer();
-        create_new_chat_dialog(s);
-    })
-    .on_event('N', |s| {
-        s.pop_layer();
-        create_new_chat_dialog(s);
-    })
-    .on_event('f', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            fork_conversation(s, state);
-        }
-    })
-    .on_event('F', |s| {
-        s.pop_layer();
-        if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
-            fork_conversation(s, state);
-        }
-    })
-    .on_event('r', |s| {
-        s.pop_layer();
-        start_recording(s);
-    })
-    .on_event('R', |s| {
-        s.pop_layer();
-        start_recording(s);
-    })
-    .on_event('t', |s| {
-        s.pop_layer();
-        stop_recording(s);
-    })
-    .on_event('T', |s| {
-        s.pop_layer();
-        stop_recording(s);
-    })
-    .on_event(Key::Esc, |s| {
-        s.pop_layer();
-    });
+    let dropdown = OnEventView::new(Panel::new(menu_list).title("Session").fixed_width(24))
+        .on_event('n', |s| {
+            s.pop_layer();
+            create_new_chat_dialog(s);
+        })
+        .on_event('N', |s| {
+            s.pop_layer();
+            create_new_chat_dialog(s);
+        })
+        .on_event('f', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                fork_conversation(s, state);
+            }
+        })
+        .on_event('F', |s| {
+            s.pop_layer();
+            if let Some(state) = s.user_data::<AdvancedChatState>().cloned() {
+                fork_conversation(s, state);
+            }
+        })
+        .on_event('r', |s| {
+            s.pop_layer();
+            start_recording(s);
+        })
+        .on_event('R', |s| {
+            s.pop_layer();
+            start_recording(s);
+        })
+        .on_event('t', |s| {
+            s.pop_layer();
+            stop_recording(s);
+        })
+        .on_event('T', |s| {
+            s.pop_layer();
+            stop_recording(s);
+        })
+        .on_event(Key::Esc, |s| {
+            s.pop_layer();
+        });
 
     s.add_layer(dropdown);
 }
@@ -2786,68 +2839,80 @@ pub fn show_session_menu(s: &mut Cursive) {
 pub fn show_tools_menu(s: &mut Cursive) {
     let mut menu_list = ListView::new();
 
-    menu_list.add_child("refresh", Button::new_raw("  [R]efresh MCP      ", |s| {
-        s.pop_layer();
-        refresh_mcp_tools(s);
-    }).full_width());
+    menu_list.add_child(
+        "refresh",
+        Button::new_raw("  [R]efresh MCP      ", |s| {
+            s.pop_layer();
+            refresh_mcp_tools(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("add", Button::new_raw("  [A]dd Server       ", |s| {
-        s.pop_layer();
-        show_add_mcp_server_dialog(s);
-    }).full_width());
+    menu_list.add_child(
+        "add",
+        Button::new_raw("  [A]dd Server       ", |s| {
+            s.pop_layer();
+            show_add_mcp_server_dialog(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("manage", Button::new_raw("  [M]anage Servers   ", |s| {
-        s.pop_layer();
-        show_mcp_server_list(s);
-    }).full_width());
+    menu_list.add_child(
+        "manage",
+        Button::new_raw("  [M]anage Servers   ", |s| {
+            s.pop_layer();
+            show_mcp_server_list(s);
+        })
+        .full_width(),
+    );
 
     menu_list.add_child("div1", TextView::new("  ───────────────────  "));
 
-    menu_list.add_child("theme", Button::new_raw("  [T]heme Switcher   ", |s| {
-        s.pop_layer();
-        show_theme_switcher(s);
-    }).full_width());
+    menu_list.add_child(
+        "theme",
+        Button::new_raw("  [T]heme Switcher   ", |s| {
+            s.pop_layer();
+            show_theme_switcher(s);
+        })
+        .full_width(),
+    );
 
-    let dropdown = OnEventView::new(
-        Panel::new(menu_list)
-            .title("Tools")
-            .fixed_width(24)
-    )
-    .on_event('r', |s| {
-        s.pop_layer();
-        refresh_mcp_tools(s);
-    })
-    .on_event('R', |s| {
-        s.pop_layer();
-        refresh_mcp_tools(s);
-    })
-    .on_event('a', |s| {
-        s.pop_layer();
-        show_add_mcp_server_dialog(s);
-    })
-    .on_event('A', |s| {
-        s.pop_layer();
-        show_add_mcp_server_dialog(s);
-    })
-    .on_event('m', |s| {
-        s.pop_layer();
-        show_mcp_server_list(s);
-    })
-    .on_event('M', |s| {
-        s.pop_layer();
-        show_mcp_server_list(s);
-    })
-    .on_event('t', |s| {
-        s.pop_layer();
-        show_theme_switcher(s);
-    })
-    .on_event('T', |s| {
-        s.pop_layer();
-        show_theme_switcher(s);
-    })
-    .on_event(Key::Esc, |s| {
-        s.pop_layer();
-    });
+    let dropdown = OnEventView::new(Panel::new(menu_list).title("Tools").fixed_width(24))
+        .on_event('r', |s| {
+            s.pop_layer();
+            refresh_mcp_tools(s);
+        })
+        .on_event('R', |s| {
+            s.pop_layer();
+            refresh_mcp_tools(s);
+        })
+        .on_event('a', |s| {
+            s.pop_layer();
+            show_add_mcp_server_dialog(s);
+        })
+        .on_event('A', |s| {
+            s.pop_layer();
+            show_add_mcp_server_dialog(s);
+        })
+        .on_event('m', |s| {
+            s.pop_layer();
+            show_mcp_server_list(s);
+        })
+        .on_event('M', |s| {
+            s.pop_layer();
+            show_mcp_server_list(s);
+        })
+        .on_event('t', |s| {
+            s.pop_layer();
+            show_theme_switcher(s);
+        })
+        .on_event('T', |s| {
+            s.pop_layer();
+            show_theme_switcher(s);
+        })
+        .on_event(Key::Esc, |s| {
+            s.pop_layer();
+        });
 
     s.add_layer(dropdown);
 }
@@ -2856,20 +2921,32 @@ pub fn show_tools_menu(s: &mut Cursive) {
 pub fn show_help_menu(s: &mut Cursive) {
     let mut menu_list = ListView::new();
 
-    menu_list.add_child("essential", Button::new_raw("  F1: Essential Shortcuts  ", |s| {
-        s.pop_layer();
-        show_essential_shortcuts(s);
-    }).full_width());
+    menu_list.add_child(
+        "essential",
+        Button::new_raw("  F1: Essential Shortcuts  ", |s| {
+            s.pop_layer();
+            show_essential_shortcuts(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("common", Button::new_raw("  F2: Common Shortcuts     ", |s| {
-        s.pop_layer();
-        show_common_shortcuts(s);
-    }).full_width());
+    menu_list.add_child(
+        "common",
+        Button::new_raw("  F2: Common Shortcuts     ", |s| {
+            s.pop_layer();
+            show_common_shortcuts(s);
+        })
+        .full_width(),
+    );
 
-    menu_list.add_child("advanced", Button::new_raw("  F3: Advanced Shortcuts   ", |s| {
-        s.pop_layer();
-        show_advanced_shortcuts(s);
-    }).full_width());
+    menu_list.add_child(
+        "advanced",
+        Button::new_raw("  F3: Advanced Shortcuts   ", |s| {
+            s.pop_layer();
+            show_advanced_shortcuts(s);
+        })
+        .full_width(),
+    );
 
     menu_list.add_child("div1", TextView::new("  ─────────────────────────  "));
 
@@ -2995,7 +3072,7 @@ pub fn enhance_message_with_ai(siv: &mut Cursive, state: AdvancedChatState) {
                    export OPENAI_KEY=\"sk-your-key-here\"\n\n\
                 3. Use local Ollama:\n\
                    export OPENAI_URL=\"http://localhost:11434/v1/chat/completions\"\n\
-                   export OPENAI_KEY=\"ollama-key\""
+                   export OPENAI_KEY=\"ollama-key\"",
             )
             .title("Configuration Issue")
             .button("Use OSVM.ai (Default)", |s| {
@@ -3237,12 +3314,8 @@ fn filter_sessions(siv: &mut Cursive, query: &str, state: AdvancedChatState) {
             for (idx, (session_id, session)) in matches.iter().enumerate() {
                 let session_id = **session_id;
                 let state_clone = state.clone();
-                let is_active = state
-                    .active_session_id
-                    .read()
-                    .ok()
-                    .and_then(|id| *id)
-                    == Some(session_id);
+                let is_active =
+                    state.active_session_id.read().ok().and_then(|id| *id) == Some(session_id);
 
                 let display_name = if is_active {
                     format!("▶ {} (active)", session.name)

@@ -38,7 +38,14 @@ pub async fn run_advanced_agent_chat() -> Result<()> {
 
     // Detect terminal info
     println!("Terminal Environment:");
-    println!("  TERM={}", if term_var.is_empty() { "(not set)" } else { &term_var });
+    println!(
+        "  TERM={}",
+        if term_var.is_empty() {
+            "(not set)"
+        } else {
+            &term_var
+        }
+    );
     if !term_program.is_empty() {
         println!("  TERM_PROGRAM={}", term_program);
     }
@@ -171,7 +178,7 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
         Ok(siv) => {
             println!("✓ Terminal backend initialized successfully");
             siv
-        },
+        }
         Err(e) => {
             eprintln!("❌ Failed to initialize terminal UI: {:?}", e);
             eprintln!();
@@ -269,7 +276,9 @@ fn run_advanced_ui_sync(state: AdvancedChatState) -> Result<()> {
             eprintln!("⚠️  UI event loop panicked: {:?}", e);
             eprintln!("This can happen when terminal device is unavailable.");
             eprintln!("The UI will fall back to demo mode.");
-            Err(anyhow::anyhow!("UI event loop panic - terminal device unavailable"))
+            Err(anyhow::anyhow!(
+                "UI event loop panic - terminal device unavailable"
+            ))
         }
     }
 }

@@ -39,11 +39,12 @@ pub enum RepairOperation {
 impl RepairOperation {
     /// Check if this operation is critical (must succeed)
     pub fn is_critical(&self) -> bool {
-        matches!(self,
-            RepairOperation::InstallSolanaCli |
-            RepairOperation::CreateConfigDirectory |
-            RepairOperation::GenerateKeypair(_) |
-            RepairOperation::ConfigureNetwork(_)
+        matches!(
+            self,
+            RepairOperation::InstallSolanaCli
+                | RepairOperation::CreateConfigDirectory
+                | RepairOperation::GenerateKeypair(_)
+                | RepairOperation::ConfigureNetwork(_)
         )
     }
 }
@@ -252,7 +253,10 @@ impl RepairTransaction {
                             println!("❌ Critical operation validation failed: {}", e);
                             return self.rollback_transaction().await;
                         } else {
-                            println!("⚠️  Non-critical operation validation failed (continuing): {}", e);
+                            println!(
+                                "⚠️  Non-critical operation validation failed (continuing): {}",
+                                e
+                            );
                         }
                     }
 

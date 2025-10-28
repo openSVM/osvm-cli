@@ -61,7 +61,8 @@ impl ThemeManager {
         );
 
         // Cyberpunk Neon
-        self.themes.insert("cyberpunk".to_string(), cyberpunk::theme());
+        self.themes
+            .insert("cyberpunk".to_string(), cyberpunk::theme());
         self.theme_info.insert(
             "cyberpunk".to_string(),
             ThemeInfo {
@@ -127,7 +128,8 @@ impl ThemeManager {
         );
 
         // Solarized
-        self.themes.insert("solarized".to_string(), solarized::theme());
+        self.themes
+            .insert("solarized".to_string(), solarized::theme());
         self.theme_info.insert(
             "solarized".to_string(),
             ThemeInfo {

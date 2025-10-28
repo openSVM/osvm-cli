@@ -87,10 +87,7 @@ fn create_regex(pattern: &str, name: &str) -> regex::Regex {
 
 /// Cached regex patterns for performance with lazy loading and optimization
 static REGEX_CACHE: Lazy<HashMap<&'static str, regex::Regex>> = Lazy::new(|| {
-    debug_print!(
-        VerbosityLevel::Detailed,
-        "Initializing regex cache with lazy loading"
-    );
+    debug_print!("Initializing regex cache with lazy loading");
     HashMap::new() // Start with empty cache
 });
 
@@ -154,11 +151,7 @@ fn get_regex(pattern_name: &'static str) -> Option<regex::Regex> {
     };
 
     cache.insert(pattern_name, regex.clone());
-    debug_print!(
-        VerbosityLevel::Verbose,
-        "Lazy-loaded regex pattern: {}",
-        pattern_name
-    );
+    debug_print!("Lazy-loaded regex pattern: {}", pattern_name);
     Some(regex)
 }
 

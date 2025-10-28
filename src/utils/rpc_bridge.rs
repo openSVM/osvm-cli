@@ -1,8 +1,8 @@
 //! RPC Bridge for OVSM - allows OVSM scripts to call Solana RPC methods
 
+use ovsm::error::Result as OvsmResult;
 use ovsm::runtime::Value as OvsmValue;
 use ovsm::tools::{Tool, ToolRegistry};
-use ovsm::error::Result as OvsmResult;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -45,7 +45,8 @@ impl Tool for RpcBridgeTool {
             // Single argument - could be just primary param or an object
             if let OvsmValue::Object(obj) = &args[0] {
                 // If it's an object, check if it's a config or has a primary param
-                let primary_param = obj.get("address")
+                let primary_param = obj
+                    .get("address")
                     .or_else(|| obj.get("signature"))
                     .or_else(|| obj.get("slot"))
                     .or_else(|| obj.get("pubkey"));
@@ -115,7 +116,10 @@ impl Tool for RpcBridgeTool {
         }
 
         // For getTransaction and getParsedTransaction, ensure we always include maxSupportedTransactionVersion
-        if matches!(self.name.as_str(), "getTransaction" | "getParsedTransaction") {
+        if matches!(
+            self.name.as_str(),
+            "getTransaction" | "getParsedTransaction"
+        ) {
             // If we have no config yet, add one
             if rpc_params.len() == 1 {
                 let mut config = serde_json::Map::new();
@@ -148,9 +152,8 @@ impl Tool for RpcBridgeTool {
         }
 
         let result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                call_solana_rpc(&self.name, rpc_params).await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { call_solana_rpc(&self.name, rpc_params).await })
         });
 
         match result {
@@ -165,7 +168,7 @@ impl Tool for RpcBridgeTool {
 async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Value> {
     // Configure client with proper timeouts to prevent hanging
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))       // Total request timeout
+        .timeout(std::time::Duration::from_secs(30)) // Total request timeout
         .connect_timeout(std::time::Duration::from_secs(10)) // Connection timeout
         .build()?;
 
@@ -175,7 +178,6 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> anyhow::Result<Val
         "method": method,
         "params": params
     });
-
 
     let response = client
         .post(SOLANA_RPC_URL)

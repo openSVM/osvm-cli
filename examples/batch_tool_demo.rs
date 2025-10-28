@@ -1,6 +1,5 @@
 /// Demonstration of batch tool execution with REAL code paths
 /// This shows ACTUAL execution, not imaginary results!
-
 use serde_json::json;
 use std::time::Duration;
 

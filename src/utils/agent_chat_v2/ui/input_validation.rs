@@ -44,9 +44,9 @@ pub fn validate_input(input: &str) -> ValidationResult {
     }
 
     // Check for binary data or control characters (except common ones)
-    let has_binary = input.chars().any(|c| {
-        c.is_control() && c != '\n' && c != '\t' && c != '\r'
-    });
+    let has_binary = input
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r');
 
     if has_binary {
         return ValidationResult::ContainsBinaryData;

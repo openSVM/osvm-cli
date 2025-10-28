@@ -16,10 +16,8 @@ pub fn show_loading_dialog(siv: &mut Cursive, title: &str, message: &str) {
     layout.add_child(cursive::views::DummyView);
 
     // Add animated spinner text
-    layout.add_child(
-        TextView::new("⠋ Processing...")
-            .with_name(format!("{}_spinner", dialog_name)),
-    );
+    layout
+        .add_child(TextView::new("⠋ Processing...").with_name(format!("{}_spinner", dialog_name)));
 
     siv.add_layer(
         Dialog::around(layout)

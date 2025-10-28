@@ -43,14 +43,17 @@ impl PersistedState {
         }
 
         let content = std::fs::read_to_string(&path)?;
-        let state: PersistedState = serde_json::from_str(&content)
-            .context("Failed to parse persisted state")?;
+        let state: PersistedState =
+            serde_json::from_str(&content).context("Failed to parse persisted state")?;
 
         Ok(Some(state))
     }
 
     /// Save state to disk
-    pub fn save(sessions: &HashMap<Uuid, ChatSession>, active_session_id: Option<Uuid>) -> Result<()> {
+    pub fn save(
+        sessions: &HashMap<Uuid, ChatSession>,
+        active_session_id: Option<Uuid>,
+    ) -> Result<()> {
         let state = PersistedState {
             sessions: sessions.clone(),
             active_session_id,
@@ -69,15 +72,18 @@ impl PersistedState {
         let mut sessions = HashMap::new();
 
         let main_id = Uuid::new_v4();
-        sessions.insert(main_id, ChatSession {
-            id: main_id,
-            name: "Main Chat".to_string(),
-            created_at: chrono::Utc::now(),
-            messages: Vec::new(),
-            agent_state: super::types::AgentState::Idle,
-            recording: false,
-            recording_file: None,
-        });
+        sessions.insert(
+            main_id,
+            ChatSession {
+                id: main_id,
+                name: "Main Chat".to_string(),
+                created_at: chrono::Utc::now(),
+                messages: Vec::new(),
+                agent_state: super::types::AgentState::Idle,
+                recording: false,
+                recording_file: None,
+            },
+        );
 
         sessions
     }

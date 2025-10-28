@@ -20,9 +20,6 @@ pub mod agent_chat_tests;
 pub mod agent_chat_v2;
 /// CLI-based agent execution without UI
 pub mod agent_cli;
-/// Streaming agent with real-time terminal output (for `osvm {query}`)
-pub mod streaming_agent;
-pub mod mcp_bridge;
 /// Color formatting utilities for terminal output
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage
@@ -39,6 +36,7 @@ pub mod input_sanitization;
 pub mod isolation;
 /// Custom keybinding system for agent interfaces
 pub mod keybindings;
+pub mod mcp_bridge;
 /// Network security utilities for safe network operations
 pub mod network_security;
 /// Node dashboard utilities for interactive node monitoring
@@ -56,16 +54,18 @@ pub mod nodes_dashboard;
 pub mod osvm_command_planner;
 /// Path security validation and utilities
 pub mod path_security;
-/// RPC bridge for OVSM scripts to call Solana RPC
-pub mod rpc_bridge;
 /// Plugin system for extending functionality
 pub mod plugins;
+/// RPC bridge for OVSM scripts to call Solana RPC
+pub mod rpc_bridge;
 /// Screenshot capture utilities for terminal windows
 pub mod screenshot;
 /// Secure logging utilities to prevent information disclosure
 pub mod secure_logger;
 /// Secure system operations without privilege escalation
 pub mod secure_system;
+/// Streaming agent with real-time terminal output (for `osvm {query}`)
+pub mod streaming_agent;
 /// Modern theme system with gradients and effects
 pub mod theme;
 /// Advanced theme customization system

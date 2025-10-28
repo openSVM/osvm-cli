@@ -28,14 +28,13 @@ impl ChatError {
     /// Get user-friendly error message with emoji icon
     pub fn message(&self) -> String {
         match self {
-            ChatError::AgentStuck => {
-                "⚠️ Agent Stuck\n\n\
+            ChatError::AgentStuck => "⚠️ Agent Stuck\n\n\
                 The agent appears to be stuck in processing state.\n\n\
                 This usually happens when:\n\
                 • AI service is slow to respond\n\
                 • Network connection is unstable\n\
-                • Processing message wasn't cleaned up".to_string()
-            }
+                • Processing message wasn't cleaned up"
+                .to_string(),
             ChatError::McpServerFailed(server) => {
                 format!(
                     "🔌 MCP Server Connection Failed\n\n\
@@ -47,23 +46,21 @@ impl ChatError {
                     server
                 )
             }
-            ChatError::AiServiceUnavailable => {
-                "🤖 AI Service Unavailable\n\n\
+            ChatError::AiServiceUnavailable => "🤖 AI Service Unavailable\n\n\
                 The AI service is not responding.\n\n\
                 This usually happens when:\n\
                 • API key is invalid or missing\n\
                 • Service is temporarily down\n\
                 • Network connection issues\n\
-                • Rate limit exceeded".to_string()
-            }
-            ChatError::SessionNotFound => {
-                "💬 Session Not Found\n\n\
+                • Rate limit exceeded"
+                .to_string(),
+            ChatError::SessionNotFound => "💬 Session Not Found\n\n\
                 The chat session could not be found.\n\n\
                 This usually happens when:\n\
                 • Session was deleted\n\
                 • Application state was reset\n\
-                • Internal error occurred".to_string()
-            }
+                • Internal error occurred"
+                .to_string(),
             ChatError::MessageSendFailed(reason) => {
                 format!(
                     "📤 Message Send Failed\n\n\
@@ -87,12 +84,11 @@ impl ChatError {
                     operation
                 )
             }
-            ChatError::TerminalTooSmall => {
-                "📏 Terminal Too Small\n\n\
+            ChatError::TerminalTooSmall => "📏 Terminal Too Small\n\n\
                 Your terminal window is too small for the chat interface.\n\n\
                 Minimum required size: 60 columns × 15 rows\n\
-                Please resize your terminal and restart.".to_string()
-            }
+                Please resize your terminal and restart."
+                .to_string(),
             ChatError::Unknown(context) => {
                 format!(
                     "❌ Unknown Error\n\n\

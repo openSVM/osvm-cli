@@ -95,12 +95,7 @@ impl ToastNotification {
             "▓"
         };
 
-        format!(
-            "{}\n{}\n{}",
-            top_border,
-            content,
-            bottom_border
-        )
+        format!("{}\n{}\n{}", top_border, content, bottom_border)
     }
 }
 
@@ -372,7 +367,8 @@ impl AlertDialog {
 
         let padding = " ".repeat(shake_offset.abs() as usize);
 
-        let buttons_str = self.buttons
+        let buttons_str = self
+            .buttons
             .iter()
             .enumerate()
             .map(|(i, b)| {

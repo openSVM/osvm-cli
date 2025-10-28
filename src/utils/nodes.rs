@@ -678,7 +678,7 @@ pub fn stop_node(node_id: &str) -> Result<(), Box<dyn Error>> {
             passphrase: None,
         },
         install_dir: "/opt/osvm".to_string(),
-            connection_timeout_secs: 30,
+        connection_timeout_secs: 30,
     };
 
     let service_name = format!("{}-{}-{}", node.svm_type, node.node_type, node.network);
@@ -724,7 +724,7 @@ pub fn start_node(node_id: &str) -> Result<(), Box<dyn Error>> {
             passphrase: None,
         },
         install_dir: "/opt/osvm".to_string(),
-            connection_timeout_secs: 30,
+        connection_timeout_secs: 30,
     };
 
     let service_name = format!("{}-{}-{}", node.svm_type, node.node_type, node.network);
@@ -770,7 +770,7 @@ pub fn get_node_status(node_id: &str) -> Result<NodeStatus, Box<dyn Error>> {
             passphrase: None,
         },
         install_dir: "/opt/osvm".to_string(),
-            connection_timeout_secs: 30,
+        connection_timeout_secs: 30,
     };
 
     let service_name = format!("{}-{}-{}", node.svm_type, node.node_type, node.network);
@@ -1178,7 +1178,7 @@ pub fn get_node_logs(node_id: &str, lines: usize, follow: bool) -> Result<(), Bo
             passphrase: None,
         },
         install_dir: "/opt/osvm".to_string(),
-            connection_timeout_secs: 30,
+        connection_timeout_secs: 30,
     };
 
     let service_name = format!("{}-{}-{}", node.svm_type, node.node_type, node.network);

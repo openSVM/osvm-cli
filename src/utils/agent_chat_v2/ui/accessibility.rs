@@ -298,9 +298,9 @@ impl Announcements {
 /// Announcement priority levels (ARIA live regions)
 #[derive(Debug, Clone, Copy)]
 pub enum AnnouncementPriority {
-    Polite,     // Announce when convenient
-    Assertive,  // Announce immediately
-    Off,        // Don't announce
+    Polite,    // Announce when convenient
+    Assertive, // Announce immediately
+    Off,       // Don't announce
 }
 
 /// Quick accessibility tips

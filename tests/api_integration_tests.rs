@@ -2,7 +2,6 @@
 /// These tests validate actual integration with:
 /// 1. osvm.ai/api/getAnswer - AI planning endpoint
 /// 2. osvm.ai/api/proxy/rpc - Solana RPC proxy endpoint
-
 use serde_json::json;
 
 mod api_helpers;
@@ -34,7 +33,11 @@ async fn test_osvm_ai_api_get_answer() {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
     // Verify we got a successful HTTP response
-    assert_eq!(response.status, 200, "Expected 200 status, got {}", response.status);
+    assert_eq!(
+        response.status, 200,
+        "Expected 200 status, got {}",
+        response.status
+    );
 
     // Verify the response contains meaningful content
     assert!(
@@ -61,7 +64,11 @@ async fn test_rpc_proxy_get_health() {
     println!("📝 Response body: {}", response.body);
 
     // Verify we got a successful HTTP response
-    assert_eq!(response.status, 200, "Expected 200 status, got {}", response.status);
+    assert_eq!(
+        response.status, 200,
+        "Expected 200 status, got {}",
+        response.status
+    );
 
     // Verify response contains valid JSON-RPC response
     assert!(
@@ -94,7 +101,11 @@ async fn test_rpc_proxy_get_balance() {
     println!("📝 Response body: {}", response.body);
 
     // Verify we got a successful HTTP response
-    assert_eq!(response.status, 200, "Expected 200 status, got {}", response.status);
+    assert_eq!(
+        response.status, 200,
+        "Expected 200 status, got {}",
+        response.status
+    );
 
     // Verify response contains valid JSON-RPC response with balance
     assert!(
@@ -145,7 +156,10 @@ async fn test_rpc_proxy_get_version() {
     println!("📝 Response body: {}", response.body);
 
     assert_eq!(response.status, 200);
-    assert!(response.body.contains("solana-core"), "Should contain Solana version info");
+    assert!(
+        response.body.contains("solana-core"),
+        "Should contain Solana version info"
+    );
 
     println!("✅ RPC proxy getVersion test PASSED");
 }
@@ -156,15 +170,14 @@ async fn test_integration_ai_then_rpc() {
 
     // Step 1: Get AI recommendation
     println!("  Step 1: Querying AI for deployment advice...");
-    let plan = match call_osvm_ai_api("Should I deploy on mainnet or devnet? List pros and cons.")
-        .await
-    {
-        Ok(resp) => resp,
-        Err(e) => {
-            eprintln!("❌ AI API call failed: {}", e);
-            panic!("Failed to call AI API: {}", e);
-        }
-    };
+    let plan =
+        match call_osvm_ai_api("Should I deploy on mainnet or devnet? List pros and cons.").await {
+            Ok(resp) => resp,
+            Err(e) => {
+                eprintln!("❌ AI API call failed: {}", e);
+                panic!("Failed to call AI API: {}", e);
+            }
+        };
 
     assert_eq!(plan.status, 200, "AI API should return 200");
     println!("  ✓ AI response received: {} bytes", plan.body.len());
@@ -184,7 +197,10 @@ async fn test_integration_ai_then_rpc() {
     };
 
     assert_eq!(health.status, 200, "RPC proxy should return 200");
-    println!("  ✓ Network health response received: {} bytes", health.body.len());
+    println!(
+        "  ✓ Network health response received: {} bytes",
+        health.body.len()
+    );
     println!("  Health: {}", health.body);
 
     println!("✅ Integration flow test PASSED");
@@ -205,7 +221,12 @@ async fn test_concurrent_api_calls() {
     for (i, result) in results.iter().enumerate() {
         match result {
             Ok(Ok(response)) => {
-                println!("  ✓ API call {} succeeded (status: {}, {} bytes)", i + 1, response.status, response.body.len());
+                println!(
+                    "  ✓ API call {} succeeded (status: {}, {} bytes)",
+                    i + 1,
+                    response.status,
+                    response.body.len()
+                );
                 if i == 0 {
                     println!("  AI Response ({}): {}", i + 1, response.body);
                 }

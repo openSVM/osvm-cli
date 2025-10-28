@@ -112,7 +112,10 @@ impl CommandProcessor {
         commands.insert("/clear".to_string(), clear_command as CommandHandler);
         commands.insert("/exit".to_string(), exit_command as CommandHandler);
         commands.insert("/quit".to_string(), exit_command as CommandHandler);
-        commands.insert("/screenshot".to_string(), screenshot_command as CommandHandler);
+        commands.insert(
+            "/screenshot".to_string(),
+            screenshot_command as CommandHandler,
+        );
 
         Self { commands }
     }

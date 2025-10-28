@@ -62,7 +62,7 @@ fn default_vcpus() -> u32 {
 impl Default for ToolConfig {
     fn default() -> Self {
         Self {
-            execution_mode: ExecutionMode::MicroVM,  // Use Firecracker MicroVM by default
+            execution_mode: ExecutionMode::MicroVM, // Use Firecracker MicroVM by default
             unikernel_image: None,
             mounts: Vec::new(),
             memory_mb: default_memory_mb(),
@@ -142,7 +142,7 @@ fn default_unikernel_dir() -> String {
 impl Default for IsolationConfig {
     fn default() -> Self {
         Self {
-            default_execution_mode: ExecutionMode::MicroVM,  // Use Firecracker MicroVM by default
+            default_execution_mode: ExecutionMode::MicroVM, // Use Firecracker MicroVM by default
             unikernel_dir: default_unikernel_dir(),
             mcp_servers: HashMap::new(),
         }

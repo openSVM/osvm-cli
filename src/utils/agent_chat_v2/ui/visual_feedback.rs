@@ -17,12 +17,12 @@ impl FeedbackLevel {
     /// Get color for feedback level
     pub fn color(&self) -> Color {
         match self {
-            FeedbackLevel::Success => Color::Rgb(34, 197, 94),    // Green
-            FeedbackLevel::Info => Color::Rgb(59, 130, 246),       // Blue
-            FeedbackLevel::Warning => Color::Rgb(251, 146, 60),    // Orange
-            FeedbackLevel::Error => Color::Rgb(239, 68, 68),       // Red
+            FeedbackLevel::Success => Color::Rgb(34, 197, 94), // Green
+            FeedbackLevel::Info => Color::Rgb(59, 130, 246),   // Blue
+            FeedbackLevel::Warning => Color::Rgb(251, 146, 60), // Orange
+            FeedbackLevel::Error => Color::Rgb(239, 68, 68),   // Red
             FeedbackLevel::Processing => Color::Rgb(139, 92, 246), // Purple
-            FeedbackLevel::Neutral => Color::Rgb(156, 163, 175),   // Gray
+            FeedbackLevel::Neutral => Color::Rgb(156, 163, 175), // Gray
         }
     }
 
@@ -41,12 +41,12 @@ impl FeedbackLevel {
     /// Get background color for feedback level
     pub fn background(&self) -> Color {
         match self {
-            FeedbackLevel::Success => Color::Rgb(20, 83, 45),    // Dark green
-            FeedbackLevel::Info => Color::Rgb(30, 58, 138),       // Dark blue
-            FeedbackLevel::Warning => Color::Rgb(120, 53, 15),    // Dark orange
-            FeedbackLevel::Error => Color::Rgb(127, 29, 29),      // Dark red
+            FeedbackLevel::Success => Color::Rgb(20, 83, 45), // Dark green
+            FeedbackLevel::Info => Color::Rgb(30, 58, 138),   // Dark blue
+            FeedbackLevel::Warning => Color::Rgb(120, 53, 15), // Dark orange
+            FeedbackLevel::Error => Color::Rgb(127, 29, 29),  // Dark red
             FeedbackLevel::Processing => Color::Rgb(67, 56, 202), // Dark purple
-            FeedbackLevel::Neutral => Color::Rgb(55, 65, 81),     // Dark gray
+            FeedbackLevel::Neutral => Color::Rgb(55, 65, 81), // Dark gray
         }
     }
 }
@@ -200,7 +200,8 @@ pub struct AnimatedIndicators;
 
 impl AnimatedIndicators {
     /// Spinner frames for different states
-    pub const SPINNER_DOTS: &'static [&'static str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    pub const SPINNER_DOTS: &'static [&'static str] =
+        &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     pub const SPINNER_CIRCLE: &'static [&'static str] = &["◐", "◓", "◑", "◒"];
     pub const SPINNER_PULSE: &'static [&'static str] = &["○", "◔", "◑", "◕", "●", "◕", "◑", "◔"];
     pub const SPINNER_BOUNCE: &'static [&'static str] = &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"];
@@ -217,7 +218,11 @@ impl AnimatedIndicators {
     }
 
     /// Create animated spinner with message
-    pub fn spinner_with_message(frame_index: usize, message: &str, style: SpinnerStyle) -> StyledString {
+    pub fn spinner_with_message(
+        frame_index: usize,
+        message: &str,
+        style: SpinnerStyle,
+    ) -> StyledString {
         let frame = Self::spinner_frame(frame_index, style);
         styled_feedback(&format!("{} {}", frame, message), FeedbackLevel::Processing)
     }

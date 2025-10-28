@@ -23,11 +23,10 @@
 
 use crate::services::ai_service::AiService;
 use crate::services::mcp_service::McpService;
-use crate::utils::agent_chat::{
-    BasicAgentState, BasicChatMessage, ProgrammaticChatState,
-};
+use crate::utils::agent_chat::{BasicAgentState, BasicChatMessage, ProgrammaticChatState};
 use crate::utils::agent_chat_v2::{
-    AdvancedChatState, AgentState as AdvancedAgentState, ChatMessage as AdvancedChatMessage, ChatSession,
+    AdvancedChatState, AgentState as AdvancedAgentState, ChatMessage as AdvancedChatMessage,
+    ChatSession,
 };
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -58,16 +57,16 @@ impl Default for ChatMode {
 /// Test scenario category
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum TestCategory {
-    Basic,         // Basic commands (balance, version, help)
-    Rpc,           // RPC operations
-    Svm,           // SVM management
-    Nodes,         // Node operations
-    Deploy,        // Deployment operations
-    Audit,         // Security auditing
-    Mcp,           // MCP server operations
-    Ovsm,          // OVSM script execution
-    Chat,          // Chat functionality
-    All,           // All categories
+    Basic,  // Basic commands (balance, version, help)
+    Rpc,    // RPC operations
+    Svm,    // SVM management
+    Nodes,  // Node operations
+    Deploy, // Deployment operations
+    Audit,  // Security auditing
+    Mcp,    // MCP server operations
+    Ovsm,   // OVSM script execution
+    Chat,   // Chat functionality
+    All,    // All categories
 }
 
 /// Test scenario definition
@@ -85,9 +84,9 @@ pub struct TestScenario {
 /// Individual test step
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestStep {
-    pub action: String,             // User input to send to chat
+    pub action: String,                    // User input to send to chat
     pub expected_response: Option<String>, // Optional expected response pattern
-    pub timeout_seconds: u64,       // Max wait time for response
+    pub timeout_seconds: u64,              // Max wait time for response
 }
 
 /// Bug detection result
@@ -113,11 +112,11 @@ pub struct BugReport {
 /// Bug severity level
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd)]
 pub enum BugSeverity {
-    Critical,  // Crashes, data loss, security issues
-    High,      // Major functionality broken
-    Medium,    // Minor functionality issues
-    Low,       // UI glitches, typos
-    Info,      // Suggestions, improvements
+    Critical, // Crashes, data loss, security issues
+    High,     // Major functionality broken
+    Medium,   // Minor functionality issues
+    Low,      // UI glitches, typos
+    Info,     // Suggestions, improvements
 }
 
 /// QA test result
@@ -388,7 +387,10 @@ impl QaAgentService {
 
     /// Run a single test scenario
     async fn run_single_test(&self, scenario: &TestScenario) -> Result<TestResult> {
-        info!("Running test: {} ({}) in {:?} mode", scenario.name, scenario.id, self.config.chat_mode);
+        info!(
+            "Running test: {} ({}) in {:?} mode",
+            scenario.name, scenario.id, self.config.chat_mode
+        );
         let start_time = std::time::Instant::now();
 
         let mut bugs_found = Vec::new();
@@ -416,10 +418,18 @@ impl QaAgentService {
 
                     // Wait for agent to process (with timeout)
                     let step_timeout = Duration::from_secs(step.timeout_seconds);
-                    match timeout(step_timeout, self.wait_for_advanced_agent_response(&state, session_id)).await {
+                    match timeout(
+                        step_timeout,
+                        self.wait_for_advanced_agent_response(&state, session_id),
+                    )
+                    .await
+                    {
                         Ok(Ok(messages)) => {
                             // Check for errors in messages
-                            if let Some(bug) = self.detect_bugs_in_advanced_messages(&messages, scenario, step_idx).await? {
+                            if let Some(bug) = self
+                                .detect_bugs_in_advanced_messages(&messages, scenario, step_idx)
+                                .await?
+                            {
                                 bugs_found.push(bug);
                                 test_passed = false;
                             }
@@ -449,7 +459,11 @@ impl QaAgentService {
                             warnings.push(format!("Step {}: {}", step_idx + 1, e));
                         }
                         Err(_) => {
-                            error!("  Step {} timed out after {}s", step_idx + 1, step.timeout_seconds);
+                            error!(
+                                "  Step {} timed out after {}s",
+                                step_idx + 1,
+                                step.timeout_seconds
+                            );
                             test_passed = false;
                             warnings.push(format!("Step {} timed out", step_idx + 1));
                         }
@@ -476,7 +490,10 @@ impl QaAgentService {
                             let messages = state.get_recent_messages(10).await;
 
                             // Check for errors in messages
-                            if let Some(bug) = self.detect_bugs_in_basic_messages(&messages, scenario, step_idx).await? {
+                            if let Some(bug) = self
+                                .detect_bugs_in_basic_messages(&messages, scenario, step_idx)
+                                .await?
+                            {
                                 bugs_found.push(bug);
                                 test_passed = false;
                             }
@@ -506,7 +523,11 @@ impl QaAgentService {
                             warnings.push(format!("Step {}: {}", step_idx + 1, e));
                         }
                         Err(_) => {
-                            error!("  Step {} timed out after {}s", step_idx + 1, step.timeout_seconds);
+                            error!(
+                                "  Step {} timed out after {}s",
+                                step_idx + 1,
+                                step.timeout_seconds
+                            );
                             test_passed = false;
                             warnings.push(format!("Step {} timed out", step_idx + 1));
                         }
@@ -540,16 +561,20 @@ impl QaAgentService {
             tokio::time::sleep(Duration::from_millis(500)).await;
             attempts += 1;
 
-            let agent_state = state.get_agent_state(session_id)
+            let agent_state = state
+                .get_agent_state(session_id)
                 .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
 
             match agent_state {
                 AdvancedAgentState::Idle => {
                     // Agent finished processing - get messages from session
-                    let session = state.get_session_by_id(session_id)
+                    let session = state
+                        .get_session_by_id(session_id)
                         .ok_or_else(|| anyhow::anyhow!("Session not found"))?;
                     // Return last 10 messages
-                    let messages = session.messages.iter()
+                    let messages = session
+                        .messages
+                        .iter()
                         .rev()
                         .take(10)
                         .cloned()
@@ -616,11 +641,7 @@ impl QaAgentService {
             BugSeverity::Medium
         };
 
-        let title = format!(
-            "[QA] Bug found in {}: Step {}",
-            scenario.name,
-            step_idx + 1
-        );
+        let title = format!("[QA] Bug found in {}: Step {}", scenario.name, step_idx + 1);
 
         let description = format!(
             "Automated QA testing detected an issue in test scenario '{}'.\n\n\
@@ -710,11 +731,7 @@ impl QaAgentService {
             BugSeverity::Medium
         };
 
-        let title = format!(
-            "[QA] Bug found in {}: Step {}",
-            scenario.name,
-            step_idx + 1
-        );
+        let title = format!("[QA] Bug found in {}: Step {}", scenario.name, step_idx + 1);
 
         let description = format!(
             "Automated QA testing detected an issue in test scenario '{}'.\n\n\
@@ -812,15 +829,13 @@ Format your response as:
 
         // Parse response to extract analysis and fix
         let parts: Vec<&str> = response.split("## Suggested Fix").collect();
-        let analysis = parts.get(0)
+        let analysis = parts
+            .get(0)
             .unwrap_or(&"")
             .replace("## Analysis", "")
             .trim()
             .to_string();
-        let fix = parts.get(1)
-            .unwrap_or(&"")
-            .trim()
-            .to_string();
+        let fix = parts.get(1).unwrap_or(&"").trim().to_string();
 
         Ok((analysis, fix))
     }
@@ -856,7 +871,11 @@ Format your response as:
 
         report.push_str("## Test Results\n\n");
         for result in results {
-            let status = if result.passed { "✅ PASS" } else { "❌ FAIL" };
+            let status = if result.passed {
+                "✅ PASS"
+            } else {
+                "❌ FAIL"
+            };
             report.push_str(&format!(
                 "### {} - {} ({:.2}s)\n",
                 status, result.scenario_id, result.duration_seconds
@@ -946,7 +965,10 @@ Format your response as:
         }
         body.push_str("\n");
 
-        body.push_str(&format!("## Expected Behavior\n{}\n\n", bug.expected_behavior));
+        body.push_str(&format!(
+            "## Expected Behavior\n{}\n\n",
+            bug.expected_behavior
+        ));
         body.push_str(&format!("## Actual Behavior\n{}\n\n", bug.actual_behavior));
 
         if !bug.error_messages.is_empty() {
@@ -967,7 +989,10 @@ Format your response as:
             body.push_str(&format!("{}\n\n", fix));
         }
 
-        body.push_str(&format!("\n---\n*Automatically generated by QA Agent (Bug ID: {})*\n", bug.id));
+        body.push_str(&format!(
+            "\n---\n*Automatically generated by QA Agent (Bug ID: {})*\n",
+            bug.id
+        ));
 
         // Add labels based on severity and category
         let labels = format!(
@@ -1035,7 +1060,11 @@ Format your response as:
             for scenario in scenarios {
                 println!("║ • {} ({})", scenario.name, scenario.id);
                 println!("║   {}", scenario.description);
-                println!("║   Timeout: {}s, Steps: {}", scenario.timeout_seconds, scenario.steps.len());
+                println!(
+                    "║   Timeout: {}s, Steps: {}",
+                    scenario.timeout_seconds,
+                    scenario.steps.len()
+                );
                 println!("╠───────────────────────────────────────────────────╣");
             }
             println!("╚═══════════════════════════════════════════════════╝\n");
@@ -1208,7 +1237,10 @@ osvm qa list  # List all scenarios
         println!("╠═══════════════════════════════════════════════════════════════╣");
 
         for (i, (path, modified)) in reports.iter().take(10).enumerate() {
-            let filename = path.file_name().and_then(|s| s.to_str()).unwrap_or("unknown");
+            let filename = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
             let modified_time: DateTime<Utc> = (*modified).into();
             let time_ago = Utc::now().signed_duration_since(modified_time);
 
@@ -1223,7 +1255,11 @@ osvm qa list  # List all scenarios
             };
 
             println!("║ {}. {}", i + 1, filename);
-            println!("║    Created: {} ({})", modified_time.format("%Y-%m-%d %H:%M:%S"), time_str);
+            println!(
+                "║    Created: {} ({})",
+                modified_time.format("%Y-%m-%d %H:%M:%S"),
+                time_str
+            );
             println!("║    Path: {}", path.display());
 
             if i < reports.len() - 1 {
@@ -1237,7 +1273,10 @@ osvm qa list  # List all scenarios
             println!("\n... and {} more reports", reports.len() - 10);
         }
 
-        println!("\nView full report with: cat {}/[report-name].md", reports_dir.display());
+        println!(
+            "\nView full report with: cat {}/[report-name].md",
+            reports_dir.display()
+        );
 
         Ok(())
     }

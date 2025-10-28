@@ -106,12 +106,12 @@ fn show_tips_hint(siv: &mut Cursive) {
             "💡 Quick Tip:\n\n\
             The footer bar always shows the most important shortcuts.\n\
             Press F1 anytime for complete help!\n\n\
-            Try pressing ↑ (up arrow) to test the history feature!"
+            Try pressing ↑ (up arrow) to test the history feature!",
         )
         .title("💡 Pro Tip")
         .button("Got it!", |s| {
             s.pop_layer();
-        })
+        }),
     );
 }
 
@@ -152,7 +152,7 @@ pub fn show_random_tip(siv: &mut Cursive) {
             .button("Show All Tips", |s| {
                 s.pop_layer();
                 show_all_tips(s);
-            })
+            }),
     );
 }
 

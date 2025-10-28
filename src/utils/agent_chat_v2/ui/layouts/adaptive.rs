@@ -4,17 +4,17 @@ use cursive::direction::Orientation;
 use cursive::views::{
     BoxedView, Dialog, DummyView, LinearLayout, Panel, ResizedView, ScrollView, TextView,
 };
-use cursive::View;
 use cursive::Vec2;
+use cursive::View;
 
 /// Breakpoints for responsive design
 pub struct Breakpoints;
 
 impl Breakpoints {
-    pub const MOBILE: usize = 60;     // < 60 cols
-    pub const TABLET: usize = 80;     // 60-80 cols
-    pub const DESKTOP: usize = 120;   // 80-120 cols
-    pub const WIDE: usize = 160;      // 120-160 cols
+    pub const MOBILE: usize = 60; // < 60 cols
+    pub const TABLET: usize = 80; // 60-80 cols
+    pub const DESKTOP: usize = 120; // 80-120 cols
+    pub const WIDE: usize = 160; // 120-160 cols
     pub const ULTRAWIDE: usize = 200; // > 160 cols
 }
 
@@ -26,11 +26,11 @@ pub struct AdaptiveContainer {
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum AdaptiveLayout {
-    Stacked,    // All elements vertical
-    TwoColumn,  // Side by side
+    Stacked,   // All elements vertical
+    TwoColumn, // Side by side
     ThreeColumn,
-    Grid,       // 2x2 or 3x3 grid
-    Masonry,    // Pinterest-style
+    Grid,    // 2x2 or 3x3 grid
+    Masonry, // Pinterest-style
 }
 
 impl AdaptiveContainer {
@@ -156,9 +156,8 @@ impl AdaptiveContainer {
         // Pinterest-style layout with varying heights
         let mut layout = LinearLayout::horizontal();
         let num_columns = 4;
-        let mut columns: Vec<LinearLayout> = (0..num_columns)
-            .map(|_| LinearLayout::vertical())
-            .collect();
+        let mut columns: Vec<LinearLayout> =
+            (0..num_columns).map(|_| LinearLayout::vertical()).collect();
 
         // Distribute items to columns with least height (simplified)
         for (i, _child) in self.content.iter().enumerate() {
@@ -236,12 +235,10 @@ impl CollapsibleSidebar {
         let width = self.current_width();
         let title = if self.expanded { "◂ Sessions" } else { "▸" };
 
-        Box::new(
-            ResizedView::with_fixed_width(
-                width,
-                Panel::new(content).title(title)
-            )
-        )
+        Box::new(ResizedView::with_fixed_width(
+            width,
+            Panel::new(content).title(title),
+        ))
     }
 }
 

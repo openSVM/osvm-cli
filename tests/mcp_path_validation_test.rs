@@ -76,14 +76,9 @@ fn test_nvm_node_path_should_be_allowed() {
             .canonicalize()
             .expect("Should be able to canonicalize node path");
 
-        let is_in_allowed_dir = allowed_dirs
-            .iter()
-            .any(|dir| canonical.starts_with(dir));
+        let is_in_allowed_dir = allowed_dirs.iter().any(|dir| canonical.starts_with(dir));
 
-        println!(
-            "\n🔍 Checking: {}",
-            canonical.display()
-        );
+        println!("\n🔍 Checking: {}", canonical.display());
         println!("   Is in allowed dir: {}", is_in_allowed_dir);
 
         assert!(
@@ -156,11 +151,7 @@ fn test_node_executable_exists() {
     println!("\n🧪 Testing Node Executable Exists");
 
     // Try to find node in various locations
-    let possible_paths = [
-        "/usr/bin/node",
-        "/usr/local/bin/node",
-        "/bin/node",
-    ];
+    let possible_paths = ["/usr/bin/node", "/usr/local/bin/node", "/bin/node"];
 
     let home = std::env::var("HOME").unwrap_or_else(|_| "/home/test".to_string());
     let nvm_node = format!("{}/.nvm/versions/node/v24.7.0/bin/node", home);

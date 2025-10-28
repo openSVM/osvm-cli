@@ -70,7 +70,8 @@ pub fn enable_and_start_service(
         })?;
 
     // Start the service
-    client.execute_command(&format!("sudo systemctl start {}", escaped_name))
+    client
+        .execute_command(&format!("sudo systemctl start {}", escaped_name))
         .map_err(|e| {
             DeploymentError::DeploymentError(format!(
                 "Failed to start service '{}': {} (check service configuration and logs)",

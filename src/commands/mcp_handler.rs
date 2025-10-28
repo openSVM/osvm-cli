@@ -1,6 +1,4 @@
-use crate::services::mcp_service::{
-    McpAuthConfig, McpServerConfig, McpService, McpTransportType,
-};
+use crate::services::mcp_service::{McpAuthConfig, McpServerConfig, McpService, McpTransportType};
 use crate::utils::input_sanitization;
 
 /// Handle MCP commands using the dedicated MCP service

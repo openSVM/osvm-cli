@@ -2,8 +2,8 @@
 
 use cursive::direction::Orientation;
 use cursive::views::{LinearLayout, Panel, ResizedView};
-use cursive::View;
 use cursive::Vec2;
+use cursive::View;
 
 /// Golden ratio constant (phi)
 pub const GOLDEN_RATIO: f64 = 1.618033988749895;
@@ -107,25 +107,25 @@ pub fn create_golden_layout(
     let mut root = LinearLayout::horizontal();
 
     // Sidebar (smaller golden ratio part)
-    root.add_child(
-        ResizedView::with_fixed_width(
-            sidebar_width,
-            Panel::new(sidebar_content).title("φ Sessions"),
-        ),
-    );
+    root.add_child(ResizedView::with_fixed_width(
+        sidebar_width,
+        Panel::new(sidebar_content).title("φ Sessions"),
+    ));
 
     // Main area (larger golden ratio part)
     let mut main_layout = LinearLayout::vertical();
 
     // Chat area (larger part of vertical split)
-    main_layout.add_child(
-        ResizedView::with_fixed_height(main_height, Panel::new(main_content).title("φ Chat")),
-    );
+    main_layout.add_child(ResizedView::with_fixed_height(
+        main_height,
+        Panel::new(main_content).title("φ Chat"),
+    ));
 
     // Input area (smaller part of vertical split)
-    main_layout.add_child(
-        ResizedView::with_fixed_height(input_height, Panel::new(input_content).title("φ Input")),
-    );
+    main_layout.add_child(ResizedView::with_fixed_height(
+        input_height,
+        Panel::new(input_content).title("φ Input"),
+    ));
 
     root.add_child(ResizedView::with_fixed_width(main_width, main_layout));
 
@@ -141,9 +141,10 @@ pub fn create_spiral_layout(size: Vec2) -> LinearLayout {
     // Create nested panels following the spiral
     for (i, (x, y, w, h)) in rectangles.iter().enumerate() {
         let content = format!("Section {} ({}, {}) {}x{}", i + 1, x, y, w, h);
-        layout.add_child(Panel::new(
-            ResizedView::with_fixed_size((*w, *h), cursive::views::TextView::new(content)),
-        ));
+        layout.add_child(Panel::new(ResizedView::with_fixed_size(
+            (*w, *h),
+            cursive::views::TextView::new(content),
+        )));
     }
 
     layout

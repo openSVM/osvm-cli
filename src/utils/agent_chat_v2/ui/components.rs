@@ -123,19 +123,21 @@ impl AdvancedChatUI {
                         SendableTextArea::new()
                             .with_name("input")
                             .min_height(2)
-                            .max_height(8)  // Auto-expand up to 8 lines
+                            .max_height(8) // Auto-expand up to 8 lines
                             .full_width(),
-                    )
+                    ),
             )
             .child(
-                TextView::new("📝 Shift+Enter or Ctrl+Enter to send | Enter for new line | Tab to navigate")
-                    .with_name("input_hint")
+                TextView::new(
+                    "📝 Shift+Enter or Ctrl+Enter to send | Enter for new line | Tab to navigate",
+                )
+                .with_name("input_hint"),
             );
 
         chat_layout.add_child(
             Panel::new(input_layout)
                 .title("Message (Multi-line)")
-                .with_name("input_panel")
+                .with_name("input_panel"),
         );
 
         // Agent status bar with live updates and icon
@@ -164,10 +166,7 @@ impl AdvancedChatUI {
         let footer_hint = TextView::new(
             "💡 Quick: Tab=Nav | Alt+R/C/D/F=Actions | Ctrl+1-5=Suggest | F1=Help | F10=Menu | F12=📸"
         );
-        chat_layout.add_child(
-            Panel::new(footer_hint)
-                .title("⌨️ Shortcuts")
-        );
+        chat_layout.add_child(Panel::new(footer_hint).title("⌨️ Shortcuts"));
 
         chat_layout
     }
@@ -202,16 +201,19 @@ impl AdvancedChatUI {
         // BUG-2022 fix: Add error logging when session missing
         let status = match self.state.get_active_session() {
             Some(session) => {
-                format!("[Agent: {}]", match session.agent_state {
-                    super::super::types::AgentState::Idle => "Idle",
-                    super::super::types::AgentState::Thinking => "Thinking",
-                    super::super::types::AgentState::Planning => "Planning",
-                    super::super::types::AgentState::ExecutingTool(_) => "Executing",
-                    super::super::types::AgentState::Waiting => "Waiting",
-                    super::super::types::AgentState::Paused => "Paused",
-                    super::super::types::AgentState::Error(_) => "Error",
-                })
-            },
+                format!(
+                    "[Agent: {}]",
+                    match session.agent_state {
+                        super::super::types::AgentState::Idle => "Idle",
+                        super::super::types::AgentState::Thinking => "Thinking",
+                        super::super::types::AgentState::Planning => "Planning",
+                        super::super::types::AgentState::ExecutingTool(_) => "Executing",
+                        super::super::types::AgentState::Waiting => "Waiting",
+                        super::super::types::AgentState::Paused => "Paused",
+                        super::super::types::AgentState::Error(_) => "Error",
+                    }
+                )
+            }
             None => {
                 log::warn!("No active session found for menu bar status");
                 "[Agent: No Session]".to_string()
@@ -275,13 +277,21 @@ impl AdvancedChatUI {
         // Compact control buttons
         sidebar.add_child(
             LinearLayout::horizontal()
-                .child(Button::new(format!("{}", Icons::EXECUTING), |siv| resume_agent(siv)))
+                .child(Button::new(format!("{}", Icons::EXECUTING), |siv| {
+                    resume_agent(siv)
+                }))
                 .child(DummyView.min_width(1))
-                .child(Button::new(format!("{}", Icons::PAUSED), |siv| pause_agent(siv)))
+                .child(Button::new(format!("{}", Icons::PAUSED), |siv| {
+                    pause_agent(siv)
+                }))
                 .child(DummyView.min_width(1))
-                .child(Button::new(format!("{}", Icons::STOP), |siv| stop_agent(siv)))
+                .child(Button::new(format!("{}", Icons::STOP), |siv| {
+                    stop_agent(siv)
+                }))
                 .child(DummyView.min_width(1))
-                .child(Button::new(format!("{}", Icons::RECORD), |siv| start_recording(siv))),
+                .child(Button::new(format!("{}", Icons::RECORD), |siv| {
+                    start_recording(siv)
+                })),
         );
 
         sidebar
@@ -370,9 +380,9 @@ impl AdvancedChatUI {
                         SendableTextArea::new()
                             .with_name("input")
                             .min_height(3)
-                            .max_height(10)  // Auto-expand up to 10 lines
+                            .max_height(10) // Auto-expand up to 10 lines
                             .full_width(),
-                    )
+                    ),
             )
             .child(
                 LinearLayout::horizontal()
@@ -386,11 +396,13 @@ impl AdvancedChatUI {
                     .child(DummyView.fixed_width(2))
                     .child(Button::new("✅ SEND (Shift/Ctrl+Enter)", move |s| {
                         send_message_from_button(s, state_clone_send.clone());
-                    }))
+                    })),
             )
             .child(
-                TextView::new("💡 Shift+Enter or Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help")
-                    .with_name("input_hint")
+                TextView::new(
+                    "💡 Shift+Enter or Ctrl+Enter=Send | Enter=Newline | Ctrl+K=Clear | ?=Help",
+                )
+                .with_name("input_hint"),
             );
 
         chat_layout.add_child(

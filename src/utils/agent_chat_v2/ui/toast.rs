@@ -28,18 +28,16 @@ impl ToastType {
                 Color::Light(BaseColor::White),
                 Color::Dark(BaseColor::Green),
             ),
-            ToastType::Error => ColorStyle::new(
-                Color::Light(BaseColor::White),
-                Color::Dark(BaseColor::Red),
-            ),
+            ToastType::Error => {
+                ColorStyle::new(Color::Light(BaseColor::White), Color::Dark(BaseColor::Red))
+            }
             ToastType::Warning => ColorStyle::new(
                 Color::Dark(BaseColor::Black),
                 Color::Light(BaseColor::Yellow),
             ),
-            ToastType::Info => ColorStyle::new(
-                Color::Light(BaseColor::White),
-                Color::Dark(BaseColor::Blue),
-            ),
+            ToastType::Info => {
+                ColorStyle::new(Color::Light(BaseColor::White), Color::Dark(BaseColor::Blue))
+            }
         }
     }
 
@@ -86,8 +84,7 @@ impl Toast {
         text_view.set_style(self.toast_type.color_style());
 
         // Wrap in a panel for better visibility
-        Panel::new(text_view)
-            .title("")
+        Panel::new(text_view).title("")
     }
 }
 
@@ -165,7 +162,12 @@ pub fn show_info_toast(s: &mut Cursive, message: impl Into<String>) {
 }
 
 /// Show a toast notification
-pub fn show_toast(s: &mut Cursive, message: impl Into<String>, toast_type: ToastType, duration: Duration) {
+pub fn show_toast(
+    s: &mut Cursive,
+    message: impl Into<String>,
+    toast_type: ToastType,
+    duration: Duration,
+) {
     // Create the toast view
     let toast = Toast::new(message, toast_type, duration);
     let toast_view = toast.create_view();

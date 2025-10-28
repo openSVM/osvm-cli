@@ -1,9 +1,9 @@
 //! Enhanced message rendering with semantic colors and effects
 
-use cursive::theme::{Color, ColorStyle};
-use cursive::utils::markup::StyledString;
 use super::animations::typewriter::TypewriterEffect;
 use crate::utils::agent_chat_v2::types::ChatMessage;
+use cursive::theme::{Color, ColorStyle};
+use cursive::utils::markup::StyledString;
 
 /// Message type for semantic coloring
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -23,36 +23,36 @@ impl MessageType {
     pub fn color(&self) -> ColorStyle {
         match self {
             Self::User => ColorStyle::new(
-                Color::Rgb(59, 130, 246),  // Blue - human, trustworthy
+                Color::Rgb(59, 130, 246), // Blue - human, trustworthy
                 Color::Rgb(30, 30, 30),
             ),
             Self::Agent => ColorStyle::new(
-                Color::Rgb(147, 51, 234),   // Purple - AI, intelligent
+                Color::Rgb(147, 51, 234), // Purple - AI, intelligent
                 Color::Rgb(30, 30, 30),
             ),
             Self::System => ColorStyle::new(
-                Color::Rgb(107, 114, 128),  // Gray - neutral, background
+                Color::Rgb(107, 114, 128), // Gray - neutral, background
                 Color::Rgb(30, 30, 30),
             ),
             Self::Tool => ColorStyle::new(
-                Color::Rgb(251, 146, 60),   // Orange - action, execution
+                Color::Rgb(251, 146, 60), // Orange - action, execution
                 Color::Rgb(30, 30, 30),
             ),
             Self::Error => ColorStyle::new(
-                Color::Rgb(239, 68, 68),    // Red - alert, problem
+                Color::Rgb(239, 68, 68), // Red - alert, problem
                 Color::Rgb(30, 30, 30),
             ),
             Self::Success => ColorStyle::new(
-                Color::Rgb(34, 197, 94),    // Green - complete, good
+                Color::Rgb(34, 197, 94), // Green - complete, good
                 Color::Rgb(30, 30, 30),
             ),
             Self::Processing => ColorStyle::new(
-                Color::Rgb(59, 130, 246),   // Blue - working, active
+                Color::Rgb(59, 130, 246), // Blue - working, active
                 Color::Rgb(30, 30, 30),
             ),
             Self::Code => ColorStyle::new(
-                Color::Rgb(212, 212, 212),  // Light gray on dark
-                Color::Rgb(24, 24, 36),     // Dark background
+                Color::Rgb(212, 212, 212), // Light gray on dark
+                Color::Rgb(24, 24, 36),    // Dark background
             ),
         }
     }
@@ -206,7 +206,7 @@ impl MessageRenderer {
             ChatMessage::AgentPlan(plan) => {
                 plan_display = format!("{} planned tools", plan.len());
                 ("Planning", plan_display.as_str())
-            },
+            }
             ChatMessage::Processing { message: msg, .. } => ("Processing", msg.as_str()),
         };
 
@@ -215,7 +215,9 @@ impl MessageRenderer {
         // Add message content
         let content_style = match msg_type {
             MessageType::Code => msg_type.color(),
-            MessageType::Error => ColorStyle::new(Color::Rgb(254, 202, 202), Color::Rgb(30, 30, 30)),
+            MessageType::Error => {
+                ColorStyle::new(Color::Rgb(254, 202, 202), Color::Rgb(30, 30, 30))
+            }
             _ => ColorStyle::primary(),
         };
 
@@ -250,8 +252,14 @@ impl MessageRenderer {
             ChatMessage::User(text) => text,
             ChatMessage::Agent(text) => text,
             ChatMessage::System(text) => text,
-            ChatMessage::ToolCall { tool_name, description, .. } => &format!("{}: {}", tool_name, description),
-            ChatMessage::ToolResult { tool_name, result, .. } => &format!("{} result: {}", tool_name, result),
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                ..
+            } => &format!("{}: {}", tool_name, description),
+            ChatMessage::ToolResult {
+                tool_name, result, ..
+            } => &format!("{} result: {}", tool_name, result),
             ChatMessage::Error(text) => text,
             ChatMessage::AgentThinking(text) => text,
             ChatMessage::AgentPlan(plan) => &format!("Plan with {} tools", plan.len()),
@@ -339,7 +347,10 @@ impl MessageRenderer {
                 colors[colors.len() - 1]
             };
 
-            result.append_styled(ch.to_string(), ColorStyle::new(color, Color::Rgb(30, 30, 30)));
+            result.append_styled(
+                ch.to_string(),
+                ColorStyle::new(color, Color::Rgb(30, 30, 30)),
+            );
         }
 
         result
@@ -347,13 +358,11 @@ impl MessageRenderer {
 
     fn lerp_color(&self, start: Color, end: Color, t: f32) -> Color {
         match (start, end) {
-            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-                Color::Rgb(
-                    (r1 as f32 + (r2 as f32 - r1 as f32) * t) as u8,
-                    (g1 as f32 + (g2 as f32 - g1 as f32) * t) as u8,
-                    (b1 as f32 + (b2 as f32 - b1 as f32) * t) as u8,
-                )
-            }
+            (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => Color::Rgb(
+                (r1 as f32 + (r2 as f32 - r1 as f32) * t) as u8,
+                (g1 as f32 + (g2 as f32 - g1 as f32) * t) as u8,
+                (b1 as f32 + (b2 as f32 - b1 as f32) * t) as u8,
+            ),
             _ => end,
         }
     }
@@ -439,16 +448,14 @@ mod tests {
         let agent_color = MessageType::Agent.color();
 
         // Colors should be different
-        assert_ne!(
-            format!("{:?}", user_color),
-            format!("{:?}", agent_color)
-        );
+        assert_ne!(format!("{:?}", user_color), format!("{:?}", agent_color));
     }
 
     #[test]
     fn test_message_wrapping() {
         let renderer = MessageRenderer::new();
-        let wrapped = renderer.wrap_text("This is a very long message that needs to be wrapped", 20);
+        let wrapped =
+            renderer.wrap_text("This is a very long message that needs to be wrapped", 20);
 
         assert!(wrapped.len() > 1);
         for line in &wrapped {

@@ -4,8 +4,8 @@
 //! enabling users to write and execute automation scripts with full access to OSVM operations.
 
 use anyhow::{Context, Result};
-use ovsm::{Evaluator, Parser, Scanner, Value};
 use ovsm::tools::ToolRegistry;
+use ovsm::{Evaluator, Parser, Scanner, Value};
 use std::fs;
 use std::path::Path;
 
@@ -88,7 +88,9 @@ impl OvsmService {
 
         // Parse the tokens into an AST
         let mut parser = Parser::new(tokens);
-        let program = parser.parse().map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
+        let program = parser
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
 
         if self.debug {
             println!("✅ Parsing successful");

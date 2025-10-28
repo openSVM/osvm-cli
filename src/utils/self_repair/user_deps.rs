@@ -240,7 +240,7 @@ impl UserDependencyManager {
         let output = Command::new("solana-keygen")
             .arg("new")
             .arg("--outfile")
-            .arg(&keypair_path)  // Generate directly to target file
+            .arg(&keypair_path) // Generate directly to target file
             .arg("--no-passphrase")
             .output();
 
@@ -262,7 +262,9 @@ impl UserDependencyManager {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                if let Err(e) = fs::set_permissions(&keypair_path, fs::Permissions::from_mode(0o600)) {
+                if let Err(e) =
+                    fs::set_permissions(&keypair_path, fs::Permissions::from_mode(0o600))
+                {
                     // Clean up on permission failure
                     let _ = fs::remove_file(&keypair_path);
                     return Err(UserDepsError::PermissionError(format!(

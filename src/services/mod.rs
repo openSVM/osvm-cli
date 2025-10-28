@@ -3,19 +3,19 @@ pub mod activity_logger;
 pub mod ai_service;
 pub mod audit_service;
 pub mod blockchain_indexer;
+pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;
 pub mod ephemeral_microvm;
 pub mod isolation_config;
 pub mod ledger_service;
 pub mod mcp_service;
 pub mod microvm_launcher;
+pub mod ovsm_executor; // Phase 2: OVSM execution engine
 pub mod ovsm_service;
-pub mod ovsm_executor;  // Phase 2: OVSM execution engine
 pub mod qa_agent_service;
 pub mod rocksdb_parser;
-pub mod tui_test_agent;
-pub mod visual_layout_validator;
-pub mod chat_ui_test_scenarios;
 pub mod snapshot_service;
 pub mod transaction_decoders;
+pub mod tui_test_agent;
 pub mod unikernel_runtime;
+pub mod visual_layout_validator;

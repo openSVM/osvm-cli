@@ -314,7 +314,6 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                 title: Some("Layout Validation".to_string()),
             }],
         },
-
         // Test 2: Panel navigation with Tab
         TuiTestScenario {
             name: "advanced_chat_panel_navigation".to_string(),
@@ -366,7 +365,6 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                 },
             ],
         },
-
         // Test 3: Context menu (F10)
         TuiTestScenario {
             name: "advanced_chat_context_menu".to_string(),
@@ -398,16 +396,13 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                     description: "Capture after closing menu".to_string(),
                 },
             ],
-            expected_screens: vec![
-                ScreenExpectation {
-                    after_step: 3,
-                    contains_text: vec![],
-                    not_contains_text: vec!["Error".to_string()],
-                    title: Some("Context Menu Open".to_string()),
-                },
-            ],
+            expected_screens: vec![ScreenExpectation {
+                after_step: 3,
+                contains_text: vec![],
+                not_contains_text: vec!["Error".to_string()],
+                title: Some("Context Menu Open".to_string()),
+            }],
         },
-
         // Test 4: Session list navigation
         TuiTestScenario {
             name: "advanced_chat_session_list".to_string(),
@@ -446,7 +441,6 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
             ],
             expected_screens: vec![],
         },
-
         // Test 5: Message composition and sending
         TuiTestScenario {
             name: "advanced_chat_message_send".to_string(),
@@ -478,16 +472,13 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                     description: "Capture after sending".to_string(),
                 },
             ],
-            expected_screens: vec![
-                ScreenExpectation {
-                    after_step: 3,
-                    contains_text: vec!["Test message".to_string()],
-                    not_contains_text: vec![],
-                    title: Some("Message Typed".to_string()),
-                },
-            ],
+            expected_screens: vec![ScreenExpectation {
+                after_step: 3,
+                contains_text: vec!["Test message".to_string()],
+                not_contains_text: vec![],
+                title: Some("Message Typed".to_string()),
+            }],
         },
-
         // Test 6: Window resizing behavior
         TuiTestScenario {
             name: "advanced_chat_resize_behavior".to_string(),
@@ -511,7 +502,6 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                 title: Some("Initial Size".to_string()),
             }],
         },
-
         // Test 7: Status bar information
         TuiTestScenario {
             name: "advanced_chat_status_bar".to_string(),
@@ -535,7 +525,6 @@ pub fn create_advanced_chat_scenarios() -> Vec<TuiTestScenario> {
                 title: Some("Status Bar Check".to_string()),
             }],
         },
-
         // Test 8: Rapid input handling
         TuiTestScenario {
             name: "advanced_chat_rapid_input".to_string(),

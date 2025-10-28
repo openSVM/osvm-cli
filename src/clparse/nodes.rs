@@ -19,7 +19,9 @@ pub fn build_nodes_command() -> Command {
                         .long("type")
                         .value_name("NODE_TYPE")
                         .value_parser(clap::builder::PossibleValuesParser::new([
-                            "validator", "rpc", "all",
+                            "validator",
+                            "rpc",
+                            "all",
                         ]))
                         .default_value("all")
                         .help("Filter nodes by type"),
@@ -51,9 +53,7 @@ pub fn build_nodes_command() -> Command {
                         .help("Output as JSON"),
                 ),
         )
-        .subcommand(
-            Command::new("dashboard").about("Launch interactive node monitoring dashboard"),
-        )
+        .subcommand(Command::new("dashboard").about("Launch interactive node monitoring dashboard"))
         .subcommand(
             Command::new("status")
                 .about("Check status of nodes")
@@ -151,7 +151,8 @@ pub fn build_nodes_command() -> Command {
                         .long("type")
                         .value_name("NODE_TYPE")
                         .value_parser(clap::builder::PossibleValuesParser::new([
-                            "validator", "rpc",
+                            "validator",
+                            "rpc",
                         ]))
                         .default_value("validator")
                         .help("Type of node to deploy"),

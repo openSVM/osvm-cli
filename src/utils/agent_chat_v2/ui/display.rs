@@ -175,17 +175,14 @@ impl AdvancedChatUI {
                     };
 
                     // Get session metadata
-                    let (msg_count, last_activity) = if let Some(session) = self.state.get_session_by_id(*id) {
-                        let count = session.messages.len();
-                        let last = if count > 0 {
-                            "recent"
+                    let (msg_count, last_activity) =
+                        if let Some(session) = self.state.get_session_by_id(*id) {
+                            let count = session.messages.len();
+                            let last = if count > 0 { "recent" } else { "empty" };
+                            (count, last)
                         } else {
-                            "empty"
+                            (0, "empty")
                         };
-                        (count, last)
-                    } else {
-                        (0, "empty")
-                    };
 
                     let text_name = format!("");
                     // Include message count in display
@@ -221,17 +218,14 @@ impl AdvancedChatUI {
                     };
 
                     // Get session metadata
-                    let (msg_count, _last_activity) = if let Some(session) = self.state.get_session_by_id(*id) {
-                        let count = session.messages.len();
-                        let last = if count > 0 {
-                            "recent"
+                    let (msg_count, _last_activity) =
+                        if let Some(session) = self.state.get_session_by_id(*id) {
+                            let count = session.messages.len();
+                            let last = if count > 0 { "recent" } else { "empty" };
+                            (count, last)
                         } else {
-                            "empty"
+                            (0, "empty")
                         };
-                        (count, last)
-                    } else {
-                        (0, "empty")
-                    };
 
                     // Include message count in display
                     let display_name = format!("{} {} ({})", status_icon, name, msg_count);
@@ -306,7 +300,9 @@ impl AdvancedChatUI {
     pub fn update_mcp_tools_visibility(&self, siv: &mut Cursive) {
         use cursive::views::DummyView;
 
-        let is_visible = self.state.mcp_tools_visible
+        let is_visible = self
+            .state
+            .mcp_tools_visible
             .read()
             .map(|v| *v)
             .unwrap_or(false);
@@ -316,9 +312,8 @@ impl AdvancedChatUI {
 
             if is_visible {
                 // Show MCP tools with "Hide" button
-                container.add_child(Button::new(
-                    format!("{} MCP Tools [Alt+T to hide]", Icons::TOOL),
-                    |s| {
+                container.add_child(
+                    Button::new(format!("{} MCP Tools [Alt+T to hide]", Icons::TOOL), |s| {
                         // Toggle visibility
                         if let Some(state) = s.user_data::<AdvancedChatState>() {
                             if let Ok(mut visible) = state.mcp_tools_visible.write() {
@@ -326,18 +321,20 @@ impl AdvancedChatUI {
                             }
                             super::super::ui::update_ui_displays(s);
                         }
-                    }
-                ).full_width());
+                    })
+                    .full_width(),
+                );
 
                 // Add the actual tools list
-                let tools_list = super::layout::AdvancedChatUI { state: self.state.clone() }
-                    .create_collapsible_mcp_tools();
+                let tools_list = super::layout::AdvancedChatUI {
+                    state: self.state.clone(),
+                }
+                .create_collapsible_mcp_tools();
                 container.add_child(tools_list.min_height(5).max_height(12));
             } else {
                 // Show compact "Show Tools" button
-                container.add_child(Button::new(
-                    format!("{} Show MCP Tools [Alt+T]", Icons::TOOL),
-                    |s| {
+                container.add_child(
+                    Button::new(format!("{} Show MCP Tools [Alt+T]", Icons::TOOL), |s| {
                         // Toggle visibility
                         if let Some(state) = s.user_data::<AdvancedChatState>() {
                             if let Ok(mut visible) = state.mcp_tools_visible.write() {
@@ -345,8 +342,9 @@ impl AdvancedChatUI {
                             }
                             super::super::ui::update_ui_displays(s);
                         }
-                    }
-                ).full_width());
+                    })
+                    .full_width(),
+                );
             }
         }
     }
@@ -438,10 +436,7 @@ impl AdvancedChatUI {
             }
             ChatMessage::Error(text) => {
                 let sanitized = self.sanitize_text(text);
-                styled.append_styled(
-                    format!("[ERROR] ", ),
-                    ColorStyle::new(error_color, bg_color),
-                );
+                styled.append_styled(format!("[ERROR] ",), ColorStyle::new(error_color, bg_color));
                 styled.append_styled(
                     format!("[{}]: {}\n\n", timestamp, sanitized),
                     ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
@@ -456,12 +451,12 @@ impl AdvancedChatUI {
                 let sanitized_tool_name = self.sanitize_text(tool_name);
                 let sanitized_description = self.sanitize_text(description);
 
+                styled.append_styled(format!("[TOOL] ",), ColorStyle::new(tool_color, bg_color));
                 styled.append_styled(
-                    format!("[TOOL] ", ),
-                    ColorStyle::new(tool_color, bg_color),
-                );
-                styled.append_styled(
-                    format!("[{}]: {} - {}\n", timestamp, sanitized_tool_name, sanitized_description),
+                    format!(
+                        "[{}]: {} - {}\n",
+                        timestamp, sanitized_tool_name, sanitized_description
+                    ),
                     ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
                 );
 
@@ -486,11 +481,14 @@ impl AdvancedChatUI {
                 let sanitized_result = self.sanitize_json(result);
 
                 styled.append_styled(
-                    format!("[RESULT] ", ),
+                    format!("[RESULT] ",),
                     ColorStyle::new(result_color, bg_color),
                 );
                 styled.append_styled(
-                    format!("{} [{}] (ID: {}):\n", sanitized_tool_name, timestamp, execution_id),
+                    format!(
+                        "{} [{}] (ID: {}):\n",
+                        sanitized_tool_name, timestamp, execution_id
+                    ),
                     ColorStyle::new(Color::Rgb(212, 212, 212), bg_color),
                 );
                 styled.append_styled(
@@ -501,7 +499,7 @@ impl AdvancedChatUI {
             ChatMessage::AgentThinking(text) => {
                 let sanitized = self.sanitize_text(text);
                 styled.append_styled(
-                    format!("[...] ", ),
+                    format!("[...] ",),
                     ColorStyle::new(Color::Rgb(206, 145, 120), bg_color),
                 );
                 styled.append_styled(
@@ -511,7 +509,7 @@ impl AdvancedChatUI {
             }
             ChatMessage::AgentPlan(plan) => {
                 styled.append_styled(
-                    format!("[PLAN] ", ),
+                    format!("[PLAN] ",),
                     ColorStyle::new(Color::Rgb(86, 156, 214), bg_color),
                 );
                 styled.append_styled(
@@ -692,7 +690,9 @@ impl AdvancedChatUI {
 
                 // Send UI update callback to main thread
                 let _ = cb_sink.send(Box::new(move |siv| {
-                    if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
+                    if let Some(mut status_bar_view) =
+                        siv.find_name::<TextView>("system_status_bar")
+                    {
                         status_bar_view.set_content(status_text);
                     }
                 }));
@@ -702,9 +702,7 @@ impl AdvancedChatUI {
         // Always show cached status immediately (non-blocking)
         if let Ok(cached_status) = self.state.cached_status_text.read() {
             if let Some(status_text) = cached_status.as_ref() {
-                if let Some(mut status_bar_view) =
-                    siv.find_name::<TextView>("system_status_bar")
-                {
+                if let Some(mut status_bar_view) = siv.find_name::<TextView>("system_status_bar") {
                     let content_ref = status_bar_view.get_content();
                     let current_content = content_ref.source().to_string();
                     if &current_content != status_text {

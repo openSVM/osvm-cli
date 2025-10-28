@@ -76,11 +76,17 @@ RETURN {
     let features = vec![
         ("Variables", "$current_slot, $blocks, $fees - Use $ prefix"),
         ("Tool Calls", "getSlot(), getBlock() - Standard Solana RPC"),
-        ("Data Processing", "MAP, FLATTEN, APPEND - Collection operations"),
+        (
+            "Data Processing",
+            "MAP, FLATTEN, APPEND - Collection operations",
+        ),
         ("Statistics", "MEAN, MEDIAN, STDDEV - Statistical analysis"),
         ("Control Flow", "FOR loop with range iteration"),
         ("Decision Points", "DECISION/BRANCH for conditional logic"),
-        ("Error Handling", "TRY/CATCH support (not shown in this example)"),
+        (
+            "Error Handling",
+            "TRY/CATCH support (not shown in this example)",
+        ),
         ("Metadata", "[TIME], [COST], [CONFIDENCE] tags"),
     ];
 

@@ -22,7 +22,14 @@ async fn test_batch_validator_heuristic_detection() {
         let should_trigger = (lc.contains("validator") || lc.contains("validators"))
             && (lc.contains("100") || lc.contains("top") || lc.contains("analyze"));
 
-        println!("   Detection: {}", if should_trigger { "✅ MATCHED" } else { "❌ NOT MATCHED" });
+        println!(
+            "   Detection: {}",
+            if should_trigger {
+                "✅ MATCHED"
+            } else {
+                "❌ NOT MATCHED"
+            }
+        );
 
         if should_trigger {
             let planned_tool = PlannedTool {
@@ -36,7 +43,10 @@ async fn test_batch_validator_heuristic_detection() {
             };
 
             println!("   Tool: {}", planned_tool.tool_name);
-            println!("   Args: {}", serde_json::to_string_pretty(&planned_tool.args).unwrap());
+            println!(
+                "   Args: {}",
+                serde_json::to_string_pretty(&planned_tool.args).unwrap()
+            );
         }
     }
 
@@ -62,7 +72,14 @@ async fn test_batch_token_heuristic_detection() {
         let should_trigger = (lc.contains("token") || lc.contains("tokens"))
             && (lc.contains("50") || lc.contains("top") || lc.contains("portfolio"));
 
-        println!("   Detection: {}", if should_trigger { "✅ MATCHED" } else { "❌ NOT MATCHED" });
+        println!(
+            "   Detection: {}",
+            if should_trigger {
+                "✅ MATCHED"
+            } else {
+                "❌ NOT MATCHED"
+            }
+        );
 
         if should_trigger {
             let planned_tool = PlannedTool {
@@ -77,7 +94,10 @@ async fn test_batch_token_heuristic_detection() {
             };
 
             println!("   Tool: {}", planned_tool.tool_name);
-            println!("   Args: {}", serde_json::to_string_pretty(&planned_tool.args).unwrap());
+            println!(
+                "   Args: {}",
+                serde_json::to_string_pretty(&planned_tool.args).unwrap()
+            );
         }
     }
 
@@ -93,7 +113,10 @@ async fn test_mock_tool_execution_simulation() {
     // Simulate what the mock tool would return
     let count = 100u64;
 
-    println!("\n⚙️  Simulating: analyze_batch_validators(count={})", count);
+    println!(
+        "\n⚙️  Simulating: analyze_batch_validators(count={})",
+        count
+    );
     println!("   Processing... (simulated 800ms delay)");
 
     let mock_result = json!({
@@ -130,8 +153,17 @@ async fn test_mock_tool_execution_simulation() {
     // Verify result structure
     assert_eq!(mock_result["status"], "success");
     assert_eq!(mock_result["validators_analyzed"], 100);
-    assert_eq!(mock_result["data"]["top_performers"].as_array().unwrap().len(), 5);
-    assert_eq!(mock_result["data"]["anomalies"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        mock_result["data"]["top_performers"]
+            .as_array()
+            .unwrap()
+            .len(),
+        5
+    );
+    assert_eq!(
+        mock_result["data"]["anomalies"].as_array().unwrap().len(),
+        3
+    );
 
     println!("\n✅ Mock tool execution simulation passed");
     println!("   • Status: success ✅");
@@ -150,28 +182,16 @@ fn test_all_complex_queries_trigger_correct_tools() {
         (
             "Analyze top 100 validators",
             "analyze_batch_validators",
-            true
+            true,
         ),
-        (
-            "Show me 50 token prices",
-            "analyze_batch_tokens",
-            true
-        ),
+        ("Show me 50 token prices", "analyze_batch_tokens", true),
         (
             "Analyze transaction patterns across 50 accounts",
             "analyze_batch_accounts",
-            true
+            true,
         ),
-        (
-            "What's my balance?",
-            "get_balance",
-            true
-        ),
-        (
-            "Show my recent transactions",
-            "get_transactions",
-            true
-        ),
+        ("What's my balance?", "get_balance", true),
+        ("Show my recent transactions", "get_transactions", true),
     ];
 
     let mut passed = 0;
@@ -186,22 +206,23 @@ fn test_all_complex_queries_trigger_correct_tools() {
             "analyze_batch_validators" => {
                 (lc.contains("validator") || lc.contains("validators"))
                     && (lc.contains("100") || lc.contains("top") || lc.contains("analyze"))
-            },
+            }
             "analyze_batch_tokens" => {
                 (lc.contains("token") || lc.contains("tokens"))
                     && (lc.contains("50") || lc.contains("top") || lc.contains("portfolio"))
-            },
+            }
             "analyze_batch_accounts" => {
                 (lc.contains("account") || lc.contains("accounts"))
                     && (lc.contains("transaction") || lc.contains("pattern"))
-            },
+            }
             "get_balance" => {
                 lc.contains("balance") && !lc.contains("validator") && !lc.contains("token")
-            },
+            }
             "get_transactions" => {
                 (lc.contains("transaction") || lc.contains("transactions") || lc.contains("tx"))
-                    && !lc.contains("account") && !lc.contains("validator")
-            },
+                    && !lc.contains("account")
+                    && !lc.contains("validator")
+            }
             _ => false,
         };
 
@@ -210,7 +231,10 @@ fn test_all_complex_queries_trigger_correct_tools() {
             println!("   Result: ✅ PASS");
             passed += 1;
         } else {
-            println!("   Result: ❌ FAIL (expected {}, got {})", should_match, matched);
+            println!(
+                "   Result: ❌ FAIL (expected {}, got {})",
+                should_match, matched
+            );
         }
     }
 

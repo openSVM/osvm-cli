@@ -146,16 +146,16 @@ async fn test_complex_multi_step_plan_generation() -> Result<(), Box<dyn std::er
 
         // Estimate steps required
         let estimated_steps = match test_name.as_ref() {
-            "validator_analysis" => 100 * 6,  // 100 validators × 6 operations each
-            "token_portfolio_analysis" => 50 * 8,  // 50 tokens × 8 operations
-            "multi_account_analysis" => 50 * 100,  // 50 accounts × 100 transactions
-            "defi_protocol_comparison" => 20 * 10,  // 20 protocols × 10 metrics
-            "program_security_audit" => 25 * 15,  // 25 programs × 15 checks
-            "nft_collection_analysis" => 30 * 12,  // 30 collections × 12 metrics
-            "network_performance_monitoring" => 120 * 8,  // 120 samples × 8 metrics
-            "cross_chain_bridge_analysis" => 100 * 5,  // 100 transactions × 5 analyses
-            "whale_tracking_analysis" => 50 * 10,  // 50 whales × 10 metrics
-            "ecosystem_comprehensive_mapping" => 200 * 5,  // 200 entities × 5 analyses
+            "validator_analysis" => 100 * 6, // 100 validators × 6 operations each
+            "token_portfolio_analysis" => 50 * 8, // 50 tokens × 8 operations
+            "multi_account_analysis" => 50 * 100, // 50 accounts × 100 transactions
+            "defi_protocol_comparison" => 20 * 10, // 20 protocols × 10 metrics
+            "program_security_audit" => 25 * 15, // 25 programs × 15 checks
+            "nft_collection_analysis" => 30 * 12, // 30 collections × 12 metrics
+            "network_performance_monitoring" => 120 * 8, // 120 samples × 8 metrics
+            "cross_chain_bridge_analysis" => 100 * 5, // 100 transactions × 5 analyses
+            "whale_tracking_analysis" => 50 * 10, // 50 whales × 10 metrics
+            "ecosystem_comprehensive_mapping" => 200 * 5, // 200 entities × 5 analyses
             _ => 100,
         };
 
@@ -163,10 +163,15 @@ async fn test_complex_multi_step_plan_generation() -> Result<(), Box<dyn std::er
         println!("   • Estimated steps: {} steps", estimated_steps);
         println!("   • Requires loops: YES");
         println!("   • Requires aggregation: YES");
-        println!("   • Complexity level: {}",
-            if estimated_steps > 500 { "VERY HIGH" }
-            else if estimated_steps > 200 { "HIGH" }
-            else { "MEDIUM" }
+        println!(
+            "   • Complexity level: {}",
+            if estimated_steps > 500 {
+                "VERY HIGH"
+            } else if estimated_steps > 200 {
+                "HIGH"
+            } else {
+                "MEDIUM"
+            }
         );
 
         results.push((test_name, estimated_steps, expected_keywords));
@@ -188,9 +193,12 @@ async fn test_complex_multi_step_plan_generation() -> Result<(), Box<dyn std::er
     println!("Total estimated steps: {} steps", total_steps);
     println!("Average steps per query: {} steps", avg_steps);
     println!("Maximum steps in a query: {} steps", max_steps);
-    println!("Queries requiring 100+ steps: {}/{} ({:.1}%)",
-             queries_over_100, total_queries,
-             (queries_over_100 as f64 / total_queries as f64) * 100.0);
+    println!(
+        "Queries requiring 100+ steps: {}/{} ({:.1}%)",
+        queries_over_100,
+        total_queries,
+        (queries_over_100 as f64 / total_queries as f64) * 100.0
+    );
 
     println!("\n✅ All {} complex queries designed!", total_queries);
     println!("✅ All queries require multi-step plans with loops");
@@ -198,7 +206,10 @@ async fn test_complex_multi_step_plan_generation() -> Result<(), Box<dyn std::er
 
     // Assertions
     assert_eq!(total_queries, 10, "Should have 10 complex queries");
-    assert!(queries_over_100 >= 8, "At least 8 queries should require 100+ steps");
+    assert!(
+        queries_over_100 >= 8,
+        "At least 8 queries should require 100+ steps"
+    );
     assert!(avg_steps >= 200, "Average should be at least 200 steps");
 
     Ok(())
@@ -301,14 +312,49 @@ recommendations for investors, developers, and network participants.
 
     let components = vec![
         ("Validator Analysis", 100, 7, "100 validators × 7 metrics"),
-        ("Token Price History", 50, 720, "50 tokens × 720 hourly data points"),
-        ("Token Holder Analysis", 50, 100, "50 tokens × top 100 holders"),
-        ("DeFi Protocol TVL Tracking", 25, 168, "25 protocols × 168 hours"),
-        ("NFT Floor Price Tracking", 30, 720, "30 collections × 720 hours"),
+        (
+            "Token Price History",
+            50,
+            720,
+            "50 tokens × 720 hourly data points",
+        ),
+        (
+            "Token Holder Analysis",
+            50,
+            100,
+            "50 tokens × top 100 holders",
+        ),
+        (
+            "DeFi Protocol TVL Tracking",
+            25,
+            168,
+            "25 protocols × 168 hours",
+        ),
+        (
+            "NFT Floor Price Tracking",
+            30,
+            720,
+            "30 collections × 720 hours",
+        ),
         ("NFT Holder Analysis", 30, 50, "30 collections × 50 holders"),
-        ("Program Security Audits", 20, 50, "20 programs × 50 check types"),
-        ("Whale Transaction History", 50, 1000, "50 whales × 1000 transactions"),
-        ("Cross-Correlation Analysis", 5, 100, "5 cross-analyses × 100 comparisons"),
+        (
+            "Program Security Audits",
+            20,
+            50,
+            "20 programs × 50 check types",
+        ),
+        (
+            "Whale Transaction History",
+            50,
+            1000,
+            "50 whales × 1000 transactions",
+        ),
+        (
+            "Cross-Correlation Analysis",
+            5,
+            100,
+            "5 cross-analyses × 100 comparisons",
+        ),
         ("Predictive Modeling", 8, 50, "8 forecasts × 50 data points"),
     ];
 

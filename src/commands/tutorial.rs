@@ -58,7 +58,10 @@ pub async fn run_interactive_tutorial() -> Result<()> {
     let steps = create_tutorial_steps();
     let mut progress = TutorialProgress::new(steps.len());
 
-    println!("\n{}This tutorial will guide you through:", "📚 ".bright_cyan().bold());
+    println!(
+        "\n{}This tutorial will guide you through:",
+        "📚 ".bright_cyan().bold()
+    );
     for step in &steps {
         println!("  {}. {}", step.number, step.title.bright_white());
     }
@@ -72,7 +75,10 @@ pub async fn run_interactive_tutorial() -> Result<()> {
 
         if let Err(e) = execute_tutorial_step(&step, &mut progress).await {
             eprintln!("{} {}", "❌ Error:".bright_red(), e);
-            println!("\n{}", "Tutorial paused. Press Enter to continue or Ctrl+C to exit...".yellow());
+            println!(
+                "\n{}",
+                "Tutorial paused. Press Enter to continue or Ctrl+C to exit...".yellow()
+            );
             wait_for_enter();
         }
     }
@@ -99,11 +105,18 @@ async fn execute_tutorial_step(step: &TutorialStep, progress: &mut TutorialProgr
         println!("\n{}Try this command:", "💡 ".bright_yellow());
         println!("\n  {}\n", cmd.bright_cyan().bold());
 
-        println!("{}", "Press Enter to execute, or 's' to skip...".bright_black());
+        println!(
+            "{}",
+            "Press Enter to execute, or 's' to skip...".bright_black()
+        );
         let choice = get_user_choice();
 
         if choice != "s" {
-            println!("\n{}Executing: {}\n", "⚡ ".bright_green(), cmd.bright_cyan());
+            println!(
+                "\n{}Executing: {}\n",
+                "⚡ ".bright_green(),
+                cmd.bright_cyan()
+            );
 
             // Execute the command
             let output = execute_command_safe(cmd)?;
@@ -122,7 +135,8 @@ async fn execute_tutorial_step(step: &TutorialStep, progress: &mut TutorialProgr
 
     if completed {
         progress.complete_step(step.number);
-        println!("\n{}Step {} complete! ({:.0}% total progress)",
+        println!(
+            "\n{}Step {} complete! ({:.0}% total progress)",
             "🎉 ".bright_green(),
             step.number,
             progress.progress_percentage()
@@ -144,24 +158,25 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
             description: "Let's verify that OSVM is properly installed.".to_string(),
             command: Some("osvm --version".to_string()),
             explanation: "The --version flag shows the current version of OSVM CLI and confirms \
-                         it's correctly installed in your PATH.".to_string(),
+                         it's correctly installed in your PATH."
+                .to_string(),
             completion_check: Some(check_osvm_installed),
         },
-
         TutorialStep {
             number: 2,
             title: "System Health Check".to_string(),
-            description: "OSVM includes a built-in doctor command to check your system.".to_string(),
+            description: "OSVM includes a built-in doctor command to check your system."
+                .to_string(),
             command: Some("osvm doctor".to_string()),
             explanation: "The doctor command checks:\n\
                          • Solana CLI installation\n\
                          • Keypair configuration\n\
                          • RPC connectivity\n\
                          • Firecracker support (optional)\n\n\
-                         It will suggest fixes for any issues found.".to_string(),
+                         It will suggest fixes for any issues found."
+                .to_string(),
             completion_check: None,
         },
-
         TutorialStep {
             number: 3,
             title: "OVSM LISP Introduction".to_string(),
@@ -171,10 +186,10 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
                          • (+ 1 2 3) adds numbers: 1 + 2 + 3 = 6\n\
                          • All operations use parentheses\n\
                          • No indentation sensitivity\n\
-                         • Zero parser bugs!".to_string(),
+                         • Zero parser bugs!"
+                .to_string(),
             completion_check: None,
         },
-
         TutorialStep {
             number: 4,
             title: "OVSM Examples".to_string(),
@@ -185,10 +200,10 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
                          • Process blockchain data\n\
                          • Automate validator operations\n\
                          • Analyze transaction patterns\n\n\
-                         All with a simple, functional syntax.".to_string(),
+                         All with a simple, functional syntax."
+                .to_string(),
             completion_check: None,
         },
-
         TutorialStep {
             number: 5,
             title: "Interactive REPL".to_string(),
@@ -199,10 +214,10 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
                          >>> (+ x 8)\n\
                          50\n\n\
                          Try it later when you want to test OVSM expressions!\n\
-                         (Skipping in tutorial to continue)".to_string(),
+                         (Skipping in tutorial to continue)"
+                .to_string(),
             completion_check: None,
         },
-
         TutorialStep {
             number: 6,
             title: "AI Chat Interface".to_string(),
@@ -214,10 +229,10 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
                          • Generate OVSM scripts\n\
                          • Debug issues\n\n\
                          The chat works out-of-the-box with no configuration!\n\
-                         (Skipping in tutorial - try it later!)".to_string(),
+                         (Skipping in tutorial - try it later!)"
+                .to_string(),
             completion_check: None,
         },
-
         TutorialStep {
             number: 7,
             title: "Next Steps".to_string(),
@@ -229,7 +244,8 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
                          3. Chat with AI: osvm chat\n\
                          4. Check examples/: Example OVSM scripts\n\
                          5. Join community: https://github.com/openSVM/osvm-cli\n\n\
-                         Run 'osvm --help' anytime to see all available commands.".to_string(),
+                         Run 'osvm --help' anytime to see all available commands."
+                .to_string(),
             completion_check: None,
         },
     ]
@@ -237,14 +253,40 @@ fn create_tutorial_steps() -> Vec<TutorialStep> {
 
 /// Show welcome banner
 fn show_welcome_banner() {
-    println!("{}", "╔═══════════════════════════════════════════════════════════════╗".bright_cyan());
-    println!("{}", "║                                                               ║".bright_cyan());
-    println!("{}", "║           🚀  WELCOME TO OSVM INTERACTIVE TUTORIAL  🚀        ║".bright_cyan().bold());
-    println!("{}", "║                                                               ║".bright_cyan());
-    println!("{}", "║  This guided tutorial will teach you the basics of OSVM CLI  ║".bright_white());
-    println!("{}", "║  in just 5-10 minutes.                                       ║".bright_white());
-    println!("{}", "║                                                               ║".bright_cyan());
-    println!("{}", "╚═══════════════════════════════════════════════════════════════╝".bright_cyan());
+    println!(
+        "{}",
+        "╔═══════════════════════════════════════════════════════════════╗".bright_cyan()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_cyan()
+    );
+    println!(
+        "{}",
+        "║           🚀  WELCOME TO OSVM INTERACTIVE TUTORIAL  🚀        ║"
+            .bright_cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_cyan()
+    );
+    println!(
+        "{}",
+        "║  This guided tutorial will teach you the basics of OSVM CLI  ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║  in just 5-10 minutes.                                       ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_cyan()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════════╝".bright_cyan()
+    );
 }
 
 /// Show step header with progress
@@ -252,7 +294,8 @@ fn show_step_header(step: &TutorialStep, progress: &TutorialProgress) {
     let progress_bar = create_progress_bar(progress.progress_percentage());
 
     println!("{}", "═".repeat(65).bright_cyan());
-    println!("\n{} {}/{}  {}",
+    println!(
+        "\n{} {}/{}  {}",
         "📍 STEP".bright_cyan().bold(),
         step.number,
         progress.total_steps,
@@ -280,28 +323,95 @@ fn create_progress_bar(percentage: f32) -> String {
 fn show_completion_certificate() {
     clear_screen();
 
-    println!("\n{}", "╔═══════════════════════════════════════════════════════════════╗".bright_green());
-    println!("{}", "║                                                               ║".bright_green());
-    println!("{}", "║              🎉  TUTORIAL COMPLETE!  🎉                       ║".bright_green().bold());
-    println!("{}", "║                                                               ║".bright_green());
-    println!("{}", "║  You've successfully completed the OSVM CLI tutorial!         ║".bright_white());
-    println!("{}", "║                                                               ║".bright_green());
-    println!("{}", "║  You now know how to:                                        ║".bright_white());
-    println!("{}", "║    ✅ Check OSVM installation                                 ║".bright_white());
-    println!("{}", "║    ✅ Run system diagnostics                                  ║".bright_white());
-    println!("{}", "║    ✅ Use OVSM LISP language                                  ║".bright_white());
-    println!("{}", "║    ✅ Access examples and REPL                                ║".bright_white());
-    println!("{}", "║    ✅ Use the AI chat assistant                               ║".bright_white());
-    println!("{}", "║                                                               ║".bright_green());
-    println!("{}", "║  Next steps:                                                 ║".bright_cyan().bold());
-    println!("{}", "║    • Try 'osvm chat' for AI assistance                       ║".bright_white());
-    println!("{}", "║    • Explore 'examples/' directory                           ║".bright_white());
-    println!("{}", "║    • Read docs at https://docs.osvm.dev                      ║".bright_white());
-    println!("{}", "║    • Join us at https://github.com/openSVM/osvm-cli          ║".bright_white());
-    println!("{}", "║                                                               ║".bright_green());
-    println!("{}", "╚═══════════════════════════════════════════════════════════════╝".bright_green());
+    println!(
+        "\n{}",
+        "╔═══════════════════════════════════════════════════════════════╗".bright_green()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_green()
+    );
+    println!(
+        "{}",
+        "║              🎉  TUTORIAL COMPLETE!  🎉                       ║"
+            .bright_green()
+            .bold()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_green()
+    );
+    println!(
+        "{}",
+        "║  You've successfully completed the OSVM CLI tutorial!         ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_green()
+    );
+    println!(
+        "{}",
+        "║  You now know how to:                                        ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    ✅ Check OSVM installation                                 ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    ✅ Run system diagnostics                                  ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    ✅ Use OVSM LISP language                                  ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    ✅ Access examples and REPL                                ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    ✅ Use the AI chat assistant                               ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_green()
+    );
+    println!(
+        "{}",
+        "║  Next steps:                                                 ║"
+            .bright_cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        "║    • Try 'osvm chat' for AI assistance                       ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    • Explore 'examples/' directory                           ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    • Read docs at https://docs.osvm.dev                      ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║    • Join us at https://github.com/openSVM/osvm-cli          ║".bright_white()
+    );
+    println!(
+        "{}",
+        "║                                                               ║".bright_green()
+    );
+    println!(
+        "{}",
+        "╚═══════════════════════════════════════════════════════════════╝".bright_green()
+    );
 
-    println!("\n{}", "🌟 Happy building with OSVM! 🌟\n".bright_yellow().bold());
+    println!(
+        "\n{}",
+        "🌟 Happy building with OSVM! 🌟\n".bright_yellow().bold()
+    );
 }
 
 /// Clear screen
@@ -331,9 +441,7 @@ fn execute_command_safe(cmd: &str) -> Result<String> {
         return Ok(String::new());
     }
 
-    let output = Command::new(parts[0])
-        .args(&parts[1..])
-        .output()?;
+    let output = Command::new(parts[0]).args(&parts[1..]).output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -343,10 +451,7 @@ fn execute_command_safe(cmd: &str) -> Result<String> {
 
 /// Check if OSVM is installed
 fn check_osvm_installed() -> bool {
-    Command::new("osvm")
-        .arg("--version")
-        .output()
-        .is_ok()
+    Command::new("osvm").arg("--version").output().is_ok()
 }
 
 #[cfg(test)]

@@ -13,7 +13,10 @@ async fn test_message_generates_plan_with_tools() {
     let state = AdvancedChatState::new().expect("Failed to create state");
 
     // Initialize the state (loads MCP config)
-    state.initialize().await.expect("Failed to initialize state");
+    state
+        .initialize()
+        .await
+        .expect("Failed to initialize state");
 
     // Get the active session
     let session = state.get_active_session().expect("No active session");
@@ -23,12 +26,16 @@ async fn test_message_generates_plan_with_tools() {
     let test_message = "check my SOL balance";
 
     // Process the input (this is what happens when you press Ctrl+M/Shift+Enter)
-    let result = state.process_input_async(session_id, test_message.to_string()).await;
+    let result = state
+        .process_input_async(session_id, test_message.to_string())
+        .await;
 
     assert!(result.is_ok(), "Message processing should succeed");
 
     // Get the session messages after processing
-    let updated_session = state.get_session_by_id(session_id).expect("Session should exist");
+    let updated_session = state
+        .get_session_by_id(session_id)
+        .expect("Session should exist");
 
     // Verify the message flow
     let messages = &updated_session.messages;
@@ -41,21 +48,30 @@ async fn test_message_generates_plan_with_tools() {
             ChatMessage::AgentPlan(tools) => {
                 println!("  {}. 📋 Agent Plan: {} tools", i, tools.len());
                 for tool in tools {
-                    println!("     - {} ({}): {}", tool.tool_name, tool.server_id, tool.reason);
+                    println!(
+                        "     - {} ({}): {}",
+                        tool.tool_name, tool.server_id, tool.reason
+                    );
                 }
-            },
-            ChatMessage::ToolCall { tool_name, description, .. } => {
+            }
+            ChatMessage::ToolCall {
+                tool_name,
+                description,
+                ..
+            } => {
                 println!("  {}. 🔧 Tool Call: {} - {}", i, tool_name, description);
-            },
-            ChatMessage::ToolResult { tool_name, result, .. } => {
+            }
+            ChatMessage::ToolResult {
+                tool_name, result, ..
+            } => {
                 println!("  {}. ✅ Tool Result: {} = {:?}", i, tool_name, result);
-            },
+            }
             ChatMessage::Processing { message, .. } => {
                 println!("  {}. ⏳ Processing: {}", i, message);
-            },
+            }
             ChatMessage::Error(err) => {
                 println!("  {}. ❌ Error: {}", i, err);
-            },
+            }
             _ => {
                 println!("  {}. Other message type", i);
             }
@@ -63,13 +79,17 @@ async fn test_message_generates_plan_with_tools() {
     }
 
     // Check if we have AgentPlan message
-    let has_plan = messages.iter().any(|msg| matches!(msg, ChatMessage::AgentPlan(_)));
+    let has_plan = messages
+        .iter()
+        .any(|msg| matches!(msg, ChatMessage::AgentPlan(_)));
 
     if !has_plan {
         println!("\n⚠️  No plan generated. Checking for alternative responses...");
 
         // Check if we got any agent response
-        let has_agent_response = messages.iter().any(|msg| matches!(msg, ChatMessage::Agent(_)));
+        let has_agent_response = messages
+            .iter()
+            .any(|msg| matches!(msg, ChatMessage::Agent(_)));
 
         if has_agent_response {
             println!("✅ Got agent response (plan may not be needed for this query)");
@@ -80,7 +100,10 @@ async fn test_message_generates_plan_with_tools() {
         println!("\n✅ Plan was generated!");
 
         // Extract the plan
-        if let Some(ChatMessage::AgentPlan(tools)) = messages.iter().find(|msg| matches!(msg, ChatMessage::AgentPlan(_))) {
+        if let Some(ChatMessage::AgentPlan(tools)) = messages
+            .iter()
+            .find(|msg| matches!(msg, ChatMessage::AgentPlan(_)))
+        {
             println!("\n📋 Plan Details:");
             println!("   Tools to execute: {}", tools.len());
             for tool in tools {
@@ -141,7 +164,9 @@ async fn test_ai_service_creates_tool_plan() {
     let user_input = "check my balance";
 
     // Call the AI service to create a plan
-    let result = ai_service.create_tool_plan(user_input, &available_tools).await;
+    let result = ai_service
+        .create_tool_plan(user_input, &available_tools)
+        .await;
 
     match result {
         Ok(plan) => {
@@ -156,10 +181,14 @@ async fn test_ai_service_creates_tool_plan() {
 
             // If AI decided tools are needed, verify we have them
             if !plan.osvm_tools_to_use.is_empty() {
-                assert!(plan.osvm_tools_to_use.iter().any(|t| t.tool_name.contains("balance")),
-                        "Plan should include a balance-related tool");
+                assert!(
+                    plan.osvm_tools_to_use
+                        .iter()
+                        .any(|t| t.tool_name.contains("balance")),
+                    "Plan should include a balance-related tool"
+                );
             }
-        },
+        }
         Err(e) => {
             println!("⚠️  AI service returned error: {}", e);
             println!("   This might be expected if AI service is not configured");

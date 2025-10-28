@@ -140,7 +140,7 @@ impl ChatSession {
         // BUG-2009 fix: Explicitly flush the file to disk before enabling recording
         // This ensures the recording file header is written even if power loss occurs immediately
         file.flush()?;
-        file.sync_all()?;  // Sync to persistent storage
+        file.sync_all()?; // Sync to persistent storage
 
         // Now enable recording and add the message
         self.recording = true;

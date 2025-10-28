@@ -61,7 +61,12 @@ impl VisualEffect for ButtonPressEffect {
     fn render(&self) -> String {
         let shadow = self.get_shadow_char();
         let (x, y) = self.get_offset();
-        format!("{}{}[{}]", " ".repeat(x as usize), shadow, if self.is_pressed { "▼" } else { "▶" })
+        format!(
+            "{}{}[{}]",
+            " ".repeat(x as usize),
+            shadow,
+            if self.is_pressed { "▼" } else { "▶" }
+        )
     }
 
     fn is_active(&self) -> bool {
@@ -122,7 +127,12 @@ impl VisualEffect for HoverEffect {
 
     fn render(&self) -> String {
         let (left, right) = self.get_decoration();
-        format!("{}{}{}", left, "═".repeat((self.scale * 10.0) as usize), right)
+        format!(
+            "{}{}{}",
+            left,
+            "═".repeat((self.scale * 10.0) as usize),
+            right
+        )
     }
 
     fn is_active(&self) -> bool {
@@ -164,10 +174,7 @@ impl TypingFeedback {
         self.typing_speed = 1.0;
 
         // Add ripple effect
-        self.ripples.push(KeyRipple {
-            age: 0.0,
-            char: ch,
-        });
+        self.ripples.push(KeyRipple { age: 0.0, char: ch });
 
         // Keep only recent ripples
         if self.ripples.len() > 3 {
@@ -180,9 +187,17 @@ impl TypingFeedback {
         let blink = (self.cursor_phase * blink_speed).sin() > 0.0;
 
         if self.typing_speed > 0.5 {
-            if blink { '▌' } else { '▐' }  // Fast blinking when typing
+            if blink {
+                '▌'
+            } else {
+                '▐'
+            } // Fast blinking when typing
         } else {
-            if blink { '█' } else { '▁' }  // Slow pulse when idle
+            if blink {
+                '█'
+            } else {
+                '▁'
+            } // Slow pulse when idle
         }
     }
 
@@ -222,11 +237,7 @@ impl VisualEffect for TypingFeedback {
     }
 
     fn render(&self) -> String {
-        format!(
-            "{} {}",
-            self.get_cursor(),
-            self.get_ripple_chars().join("")
-        )
+        format!("{} {}", self.get_cursor(), self.get_ripple_chars().join(""))
     }
 
     fn is_active(&self) -> bool {

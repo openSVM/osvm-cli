@@ -167,7 +167,7 @@ impl SelfRepairSystem {
                         .and_then(|s| s.split('.').next())
                         .unwrap_or("key-default")
                 } else {
-                    "key-default"  // Default to "key-default" to match get_default_keypair_path()
+                    "key-default" // Default to "key-default" to match get_default_keypair_path()
                 };
 
                 // ALWAYS use OSVM-specific path: ~/.config/osvm/{purpose}.json

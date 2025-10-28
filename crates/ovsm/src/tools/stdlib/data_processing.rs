@@ -713,10 +713,17 @@ impl Tool for NthTool {
         let array = args[0].as_array()?;
         let index = args[1].as_int()? as usize;
 
-        array.get(index).cloned().ok_or_else(|| Error::InvalidArguments {
-            tool: "NTH".to_string(),
-            reason: format!("Index {} out of bounds (array length: {})", index, array.len()),
-        })
+        array
+            .get(index)
+            .cloned()
+            .ok_or_else(|| Error::InvalidArguments {
+                tool: "NTH".to_string(),
+                reason: format!(
+                    "Index {} out of bounds (array length: {})",
+                    index,
+                    array.len()
+                ),
+            })
     }
 }
 

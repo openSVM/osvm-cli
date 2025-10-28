@@ -3,7 +3,7 @@
 
 use cursive::event::{Event, Key};
 use cursive::traits::*;
-use cursive::{Cursive};
+use cursive::Cursive;
 use std::sync::{Arc, Mutex};
 
 // Import chat components
@@ -33,9 +33,11 @@ fn test_ctrl_enter_sends_and_processes_message() {
     // Add Ctrl+M callback that mimics real handler
     siv.add_global_callback(Event::CtrlChar('m'), move |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Simulate message processing
@@ -53,14 +55,21 @@ fn test_ctrl_enter_sends_and_processes_message() {
     siv.on_event(Event::CtrlChar('m'));
 
     // Verify message was processed
-    assert!(*message_processed.lock().unwrap(), "Message should have been processed");
+    assert!(
+        *message_processed.lock().unwrap(),
+        "Message should have been processed"
+    );
     assert_eq!(*processed_content.lock().unwrap(), "test message for AI");
 
     // Verify input was cleared
     let remaining = siv.call_on_name("input", |view: &mut SendableTextArea| {
         view.get_content().to_string()
     });
-    assert_eq!(remaining, Some("".to_string()), "Input should be cleared after send");
+    assert_eq!(
+        remaining,
+        Some("".to_string()),
+        "Input should be cleared after send"
+    );
 }
 
 #[test]
@@ -86,9 +95,11 @@ fn test_shift_enter_sends_and_processes_message() {
     // Add Shift+Enter callback
     siv.add_global_callback(Event::Shift(Key::Enter), move |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Simulate message processing
@@ -106,14 +117,21 @@ fn test_shift_enter_sends_and_processes_message() {
     siv.on_event(Event::Shift(Key::Enter));
 
     // Verify message was processed
-    assert!(*message_processed.lock().unwrap(), "Message should have been processed");
+    assert!(
+        *message_processed.lock().unwrap(),
+        "Message should have been processed"
+    );
     assert_eq!(*processed_content.lock().unwrap(), "another test message");
 
     // Verify input was cleared
     let remaining = siv.call_on_name("input", |view: &mut SendableTextArea| {
         view.get_content().to_string()
     });
-    assert_eq!(remaining, Some("".to_string()), "Input should be cleared after send");
+    assert_eq!(
+        remaining,
+        Some("".to_string()),
+        "Input should be cleared after send"
+    );
 }
 
 #[test]
@@ -136,9 +154,11 @@ fn test_message_added_to_chat_history() {
     // Add Ctrl+M callback that adds to history
     siv.add_global_callback(Event::CtrlChar('m'), move |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Add to history using the correct method name
@@ -156,7 +176,10 @@ fn test_message_added_to_chat_history() {
 
     // Verify we can retrieve the message from history
     if let Some(msg) = state.history_previous() {
-        assert_eq!(msg, "history test message", "History should contain the sent message");
+        assert_eq!(
+            msg, "history test message",
+            "History should contain the sent message"
+        );
     } else {
         panic!("Should be able to retrieve message from history");
     }
@@ -177,9 +200,11 @@ fn test_multiple_messages_in_sequence() {
     // Add Ctrl+M callback
     siv.add_global_callback(Event::CtrlChar('m'), move |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Store message
@@ -233,9 +258,11 @@ fn test_empty_messages_not_processed() {
     // Add Ctrl+M callback
     siv.add_global_callback(Event::CtrlChar('m'), move |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Increment counter
@@ -261,5 +288,9 @@ fn test_empty_messages_not_processed() {
     siv.on_event(Event::CtrlChar('m'));
 
     // Verify no messages were processed
-    assert_eq!(*message_count.lock().unwrap(), 0, "Empty messages should not be processed");
+    assert_eq!(
+        *message_count.lock().unwrap(),
+        0,
+        "Empty messages should not be processed"
+    );
 }

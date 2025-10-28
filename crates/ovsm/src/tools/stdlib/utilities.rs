@@ -3,12 +3,15 @@
 use crate::error::{Error, Result};
 use crate::runtime::Value;
 use crate::tools::{Tool, ToolRegistry};
+use std::sync::Arc;
 
 /// Register utility tools
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(LogTool);
     registry.register(ErrorTool);
     registry.register(NowTool);
+    registry.register(TypeOfTool);
+    registry.register(KeysTool);
 }
 
 /// Tool for logging messages to stdout (debugging purposes)
@@ -80,12 +83,81 @@ impl Tool for NowTool {
 
     fn execute(&self, _args: &[Value]) -> Result<Value> {
         use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|e| Error::ToolExecutionError {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| {
+            Error::ToolExecutionError {
                 tool: "NOW".to_string(),
                 reason: format!("Failed to get system time: {}", e),
-            })?;
+            }
+        })?;
         Ok(Value::Int(now.as_secs() as i64))
+    }
+}
+
+/// Tool for type introspection - returns the type of a value as a string
+///
+/// Usage: `TYPEOF(value)` - returns type as string
+/// Example: `TYPEOF([1,2,3])` returns "array"
+/// Example: `TYPEOF({:key "value"})` returns "object"
+pub struct TypeOfTool;
+
+impl Tool for TypeOfTool {
+    fn name(&self) -> &str {
+        "TYPEOF"
+    }
+
+    fn description(&self) -> &str {
+        "Returns the type of a value as a string"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::String("null".to_string()));
+        }
+
+        let type_str = match &args[0] {
+            Value::Null => "null",
+            Value::Bool(_) => "bool",
+            Value::Int(_) => "int",
+            Value::Float(_) => "float",
+            Value::String(_) => "string",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+            Value::Function { .. } => "function",
+            Value::Range { .. } => "range",
+            Value::Multiple(_) => "multiple",
+            Value::Macro { .. } => "macro",
+        };
+
+        Ok(Value::String(type_str.to_string()))
+    }
+}
+
+/// Tool for getting object keys - returns the keys of an object as an array
+///
+/// Usage: `KEYS(object)` - returns array of keys
+/// Example: `KEYS({:a 1 :b 2})` returns ["a", "b"]
+pub struct KeysTool;
+
+impl Tool for KeysTool {
+    fn name(&self) -> &str {
+        "KEYS"
+    }
+
+    fn description(&self) -> &str {
+        "Returns the keys of an object as an array of strings"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+
+        match &args[0] {
+            Value::Object(obj) => {
+                let keys: Vec<Value> = obj.keys().map(|k| Value::String(k.clone())).collect();
+                Ok(Value::Array(Arc::new(keys)))
+            }
+            _ => Ok(Value::Array(Arc::new(vec![]))),
+        }
     }
 }

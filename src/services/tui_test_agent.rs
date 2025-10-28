@@ -32,13 +32,13 @@ use tokio::process::{Child as TokioChild, Command as TokioCommand};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 // PNG screenshot dependencies
+use ab_glyph::{FontRef, PxScale};
 use image::{Rgb, RgbImage};
 use imageproc::drawing::draw_text_mut;
-use ab_glyph::{FontRef, PxScale};
 // VT100 terminal emulator for capturing alternate screen buffer
 use vt100::Parser as VT100Parser;
 // Visual layout validator
-use super::visual_layout_validator::{VisualLayoutValidator, LayoutAnalysis};
+use super::visual_layout_validator::{LayoutAnalysis, VisualLayoutValidator};
 
 /// Terminal dimensions
 #[derive(Debug, Clone, Copy)]
@@ -199,7 +199,11 @@ impl TuiTestAgent {
         cmd.arg(&display)
             .arg("-screen")
             .arg("0")
-            .arg(format!("{}x{}x24", self.size.cols * 10, self.size.rows * 20))
+            .arg(format!(
+                "{}x{}x24",
+                self.size.cols * 10,
+                self.size.rows * 20
+            ))
             .arg("-ac") // Disable access control
             .arg("+extension")
             .arg("GLX")
@@ -208,8 +212,7 @@ impl TuiTestAgent {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
 
-        let child = cmd.spawn()
-            .context("Failed to spawn Xvfb")?;
+        let child = cmd.spawn().context("Failed to spawn Xvfb")?;
 
         info!("Xvfb started with PID: {:?}", child.id());
 
@@ -255,7 +258,10 @@ impl TuiTestAgent {
     /// Launch the OSVM chat in a terminal (supports both headless and windowed mode)
     pub async fn launch_chat(&self, advanced: bool) -> Result<()> {
         let mode = if advanced { "advanced" } else { "basic" };
-        info!("Launching OSVM {} chat in terminal ({}x{})", mode, self.size.cols, self.size.rows);
+        info!(
+            "Launching OSVM {} chat in terminal ({}x{})",
+            mode, self.size.cols, self.size.rows
+        );
 
         let binary_path = std::env::current_exe()?;
         let chat_cmd = if advanced {
@@ -269,34 +275,46 @@ impl TuiTestAgent {
         let has_display = display_env.is_some();
 
         // If no display and Xvfb is available, start it
-        let display_to_use = if !has_display && which_command_exists("Xvfb") && which_command_exists("xterm") {
-            info!("No DISPLAY set, starting Xvfb for headless visual testing");
-            match self.start_xvfb().await {
-                Ok(display) => {
-                    info!("Using Xvfb display: {}", display);
-                    Some(display)
+        let display_to_use =
+            if !has_display && which_command_exists("Xvfb") && which_command_exists("xterm") {
+                info!("No DISPLAY set, starting Xvfb for headless visual testing");
+                match self.start_xvfb().await {
+                    Ok(display) => {
+                        info!("Using Xvfb display: {}", display);
+                        Some(display)
+                    }
+                    Err(e) => {
+                        warn!(
+                            "Failed to start Xvfb: {}, falling back to headless PTY mode",
+                            e
+                        );
+                        None
+                    }
                 }
-                Err(e) => {
-                    warn!("Failed to start Xvfb: {}, falling back to headless PTY mode", e);
-                    None
-                }
-            }
-        } else {
-            display_env
-        };
+            } else {
+                display_env
+            };
 
         let mut child = if let Some(ref display) = display_to_use {
             // Launch in actual xterm window for screenshot capability
-            info!("Launching in xterm window for visual screenshot support (DISPLAY={})", display);
+            info!(
+                "Launching in xterm window for visual screenshot support (DISPLAY={})",
+                display
+            );
 
             let mut cmd = TokioCommand::new("xterm");
             cmd.arg("-geometry")
                 .arg(format!("{}x{}", self.size.cols, self.size.rows))
-                .arg("-bg").arg("black")
-                .arg("-fg").arg("white")
-                .arg("-fa").arg("Monospace")
-                .arg("-fs").arg("12")
-                .arg("-title").arg("OSVM Chat Test")
+                .arg("-bg")
+                .arg("black")
+                .arg("-fg")
+                .arg("white")
+                .arg("-fa")
+                .arg("Monospace")
+                .arg("-fs")
+                .arg("12")
+                .arg("-title")
+                .arg("OSVM Chat Test")
                 .arg("-e")
                 .arg(&chat_cmd)
                 .env("DISPLAY", display)
@@ -411,10 +429,17 @@ impl TuiTestAgent {
         // Debug: log screen state
         debug!("VT100 Screen State:");
         debug!("  Size: {}x{}", screen.size().1, screen.size().0);
-        debug!("  Cursor: ({}, {})", screen.cursor_position().1, screen.cursor_position().0);
+        debug!(
+            "  Cursor: ({}, {})",
+            screen.cursor_position().1,
+            screen.cursor_position().0
+        );
         debug!("  Alternate screen: {}", screen.alternate_screen());
         debug!("  Content length: {} chars", clean_content.len());
-        debug!("  First 200 chars: {:?}", clean_content.chars().take(200).collect::<String>());
+        debug!(
+            "  First 200 chars: {:?}",
+            clean_content.chars().take(200).collect::<String>()
+        );
 
         // If content is mostly empty or just escape codes, try to get cell-by-cell content
         let content = if clean_content.trim().is_empty() || clean_content.len() < 50 {
@@ -453,11 +478,7 @@ impl TuiTestAgent {
             \n\
             --- With ANSI Codes ---\n\
             {}\n",
-            capture.timestamp,
-            capture.width,
-            capture.height,
-            capture.content,
-            capture.ansi_content
+            capture.timestamp, capture.width, capture.height, capture.content, capture.ansi_content
         );
 
         std::fs::write(&filepath, content)?;
@@ -480,7 +501,10 @@ impl TuiTestAgent {
             }
             Err(e) => {
                 // Fallback to text-based rendering if window capture fails
-                warn!("Window screenshot failed ({}), falling back to text rendering", e);
+                warn!(
+                    "Window screenshot failed ({}), falling back to text rendering",
+                    e
+                );
                 let capture = self.capture_screen().await?;
                 render_terminal_to_png(&capture.content, capture.width, capture.height, &filepath)?;
                 info!("Text-rendered PNG saved to: {}", filepath.display());
@@ -496,8 +520,7 @@ impl TuiTestAgent {
         let display_env = if let Some(ref d) = *display_lock {
             d.clone()
         } else {
-            std::env::var("DISPLAY")
-                .map_err(|_| anyhow::anyhow!("No DISPLAY available"))?
+            std::env::var("DISPLAY").map_err(|_| anyhow::anyhow!("No DISPLAY available"))?
         };
         drop(display_lock);
 
@@ -550,7 +573,9 @@ impl TuiTestAgent {
     /// Find the window ID of the OSVM Chat Test window
     async fn find_osvm_window(&self) -> Result<String> {
         if !which_command_exists("xdotool") {
-            return Err(anyhow::anyhow!("xdotool not installed (needed to find window)"));
+            return Err(anyhow::anyhow!(
+                "xdotool not installed (needed to find window)"
+            ));
         }
 
         // Get the display to use (either Xvfb or system DISPLAY)
@@ -558,8 +583,7 @@ impl TuiTestAgent {
         let display_env = if let Some(ref d) = *display_lock {
             d.clone()
         } else {
-            std::env::var("DISPLAY")
-                .map_err(|_| anyhow::anyhow!("No DISPLAY available"))?
+            std::env::var("DISPLAY").map_err(|_| anyhow::anyhow!("No DISPLAY available"))?
         };
         drop(display_lock);
 
@@ -592,7 +616,11 @@ impl TuiTestAgent {
     }
 
     /// Run a complete TUI test scenario
-    pub async fn run_scenario(&self, scenario: &TuiTestScenario, save_as_png: bool) -> Result<TuiTestResult> {
+    pub async fn run_scenario(
+        &self,
+        scenario: &TuiTestScenario,
+        save_as_png: bool,
+    ) -> Result<TuiTestResult> {
         info!("Running TUI scenario: {}", scenario.name);
         let start_time = std::time::Instant::now();
 
@@ -621,7 +649,8 @@ impl TuiTestAgent {
                     sleep(Duration::from_millis(*ms)).await;
                 }
                 TuiAction::CaptureScreen => {
-                    let screenshot_name = format!("{}_step_{}", scenario.name.replace(' ', "_"), step_idx + 1);
+                    let screenshot_name =
+                        format!("{}_step_{}", scenario.name.replace(' ', "_"), step_idx + 1);
                     let result = if save_as_png {
                         self.save_screenshot_png(&screenshot_name).await
                     } else {
@@ -631,45 +660,65 @@ impl TuiTestAgent {
                     match result {
                         Ok(path) => screenshots.push(path),
                         Err(e) => {
-                            errors.push(format!("Step {}: Failed to capture screen: {}", step_idx + 1, e));
+                            errors.push(format!(
+                                "Step {}: Failed to capture screen: {}",
+                                step_idx + 1,
+                                e
+                            ));
                         }
                     }
                 }
-                TuiAction::VerifyText(text) => {
-                    match self.verify_text_on_screen(text).await {
-                        Ok(found) => {
-                            if !found {
-                                errors.push(format!("Step {}: Expected text not found: '{}'", step_idx + 1, text));
-                                passed = false;
-                            }
-                        }
-                        Err(e) => {
-                            errors.push(format!("Step {}: Failed to verify text: {}", step_idx + 1, e));
+                TuiAction::VerifyText(text) => match self.verify_text_on_screen(text).await {
+                    Ok(found) => {
+                        if !found {
+                            errors.push(format!(
+                                "Step {}: Expected text not found: '{}'",
+                                step_idx + 1,
+                                text
+                            ));
                             passed = false;
                         }
                     }
-                }
-                TuiAction::VerifyNotText(text) => {
-                    match self.verify_text_on_screen(text).await {
-                        Ok(found) => {
-                            if found {
-                                errors.push(format!("Step {}: Unexpected text found: '{}'", step_idx + 1, text));
-                                passed = false;
-                            }
-                        }
-                        Err(e) => {
-                            errors.push(format!("Step {}: Failed to verify text absence: {}", step_idx + 1, e));
+                    Err(e) => {
+                        errors.push(format!(
+                            "Step {}: Failed to verify text: {}",
+                            step_idx + 1,
+                            e
+                        ));
+                        passed = false;
+                    }
+                },
+                TuiAction::VerifyNotText(text) => match self.verify_text_on_screen(text).await {
+                    Ok(found) => {
+                        if found {
+                            errors.push(format!(
+                                "Step {}: Unexpected text found: '{}'",
+                                step_idx + 1,
+                                text
+                            ));
                             passed = false;
                         }
                     }
-                }
+                    Err(e) => {
+                        errors.push(format!(
+                            "Step {}: Failed to verify text absence: {}",
+                            step_idx + 1,
+                            e
+                        ));
+                        passed = false;
+                    }
+                },
             }
 
             // Wait after each step
             sleep(Duration::from_millis(step.wait_ms)).await;
 
             // Check screen expectations
-            for expectation in scenario.expected_screens.iter().filter(|e| e.after_step == step_idx + 1) {
+            for expectation in scenario
+                .expected_screens
+                .iter()
+                .filter(|e| e.after_step == step_idx + 1)
+            {
                 let capture = self.capture_screen().await?;
 
                 for expected_text in &expectation.contains_text {
@@ -768,10 +817,10 @@ impl TuiTestAgent {
              Alternate Screen: {}\n\
              Content Length: {} chars\n\
              First 500 chars:\n{}\n",
-            screen.size().1,  // cols
-            screen.size().0,  // rows
-            screen.cursor_position().1,  // col
-            screen.cursor_position().0,  // row
+            screen.size().1,            // cols
+            screen.size().0,            // rows
+            screen.cursor_position().1, // col
+            screen.cursor_position().0, // row
             screen.alternate_screen(),
             screen.contents().len(),
             screen.contents().chars().take(500).collect::<String>()
@@ -781,25 +830,22 @@ impl TuiTestAgent {
     /// Analyze the current screen layout
     pub async fn analyze_layout(&self) -> Result<LayoutAnalysis> {
         let capture = self.capture_screen().await?;
-        self.layout_validator.analyze_layout(
-            &capture.content,
-            capture.width,
-            capture.height,
-        )
+        self.layout_validator
+            .analyze_layout(&capture.content, capture.width, capture.height)
     }
 
     /// Compare current screen with baseline for visual regression testing
-    pub async fn check_visual_regression(&self, test_name: &str) -> Result<super::visual_layout_validator::RegressionResult> {
+    pub async fn check_visual_regression(
+        &self,
+        test_name: &str,
+    ) -> Result<super::visual_layout_validator::RegressionResult> {
         let capture = self.capture_screen().await?;
 
         // Create or load baseline
         let baseline = capture.content.clone(); // For now, use current as baseline
 
-        self.layout_validator.compare_screenshots(
-            &baseline,
-            &capture.content,
-            test_name,
-        )
+        self.layout_validator
+            .compare_screenshots(&baseline, &capture.content, test_name)
     }
 
     /// Validate that expected UI components are present
@@ -808,9 +854,10 @@ impl TuiTestAgent {
         let mut missing = Vec::new();
 
         for expected in expected_components {
-            let found = layout.components.iter().any(|c| {
-                c.content.to_lowercase().contains(&expected.to_lowercase())
-            });
+            let found = layout
+                .components
+                .iter()
+                .any(|c| c.content.to_lowercase().contains(&expected.to_lowercase()));
 
             if !found {
                 missing.push(expected.to_string());
@@ -928,20 +975,13 @@ fn parse_key_event(key_str: &str) -> Result<KeyEvent> {
             let c = s.chars().nth(4).unwrap();
             Ok(KeyEvent::Alt(c))
         }
-        s if s.len() == 1 => {
-            Ok(KeyEvent::Char(s.chars().next().unwrap()))
-        }
+        s if s.len() == 1 => Ok(KeyEvent::Char(s.chars().next().unwrap())),
         _ => Err(anyhow::anyhow!("Unknown key event: {}", key_str)),
     }
 }
 
 /// Render terminal text to PNG image with ANSI color support
-fn render_terminal_to_png(
-    text: &str,
-    cols: u16,
-    rows: u16,
-    output_path: &PathBuf,
-) -> Result<()> {
+fn render_terminal_to_png(text: &str, cols: u16, rows: u16, output_path: &PathBuf) -> Result<()> {
     // Terminal character dimensions (monospace)
     const CHAR_WIDTH: u32 = 10;
     const CHAR_HEIGHT: u32 = 20;
@@ -957,8 +997,7 @@ fn render_terminal_to_png(
 
     // Load embedded monospace font data
     let font_data = include_bytes!("../../assets/fonts/DejaVuSansMono.ttf");
-    let font = FontRef::try_from_slice(font_data)
-        .context("Failed to load embedded font")?;
+    let font = FontRef::try_from_slice(font_data).context("Failed to load embedded font")?;
 
     let scale = PxScale::from(16.0);
 
@@ -1055,15 +1094,7 @@ fn render_line_with_ansi(
         // Render the character with current color
         if !ch.is_control() {
             let char_str = ch.to_string();
-            draw_text_mut(
-                img,
-                current_color,
-                x,
-                y,
-                scale,
-                font,
-                &char_str,
-            );
+            draw_text_mut(img, current_color, x, y, scale, font, &char_str);
             x += CHAR_WIDTH;
             char_count += 1;
         }
@@ -1074,26 +1105,26 @@ fn render_line_with_ansi(
 fn ansi_code_to_rgb(code: u8) -> Rgb<u8> {
     match code {
         0 => Rgb([200, 200, 200]),  // Reset/normal
-        30 => Rgb([0, 0, 0]),        // Black
-        31 => Rgb([205, 49, 49]),    // Red
-        32 => Rgb([13, 188, 121]),   // Green
-        33 => Rgb([229, 229, 16]),   // Yellow
-        34 => Rgb([36, 114, 200]),   // Blue
-        35 => Rgb([188, 63, 188]),   // Magenta
-        36 => Rgb([17, 168, 205]),   // Cyan
-        37 => Rgb([229, 229, 229]),  // White
+        30 => Rgb([0, 0, 0]),       // Black
+        31 => Rgb([205, 49, 49]),   // Red
+        32 => Rgb([13, 188, 121]),  // Green
+        33 => Rgb([229, 229, 16]),  // Yellow
+        34 => Rgb([36, 114, 200]),  // Blue
+        35 => Rgb([188, 63, 188]),  // Magenta
+        36 => Rgb([17, 168, 205]),  // Cyan
+        37 => Rgb([229, 229, 229]), // White
 
         // Bright variants
-        90 => Rgb([102, 102, 102]),  // Bright black (gray)
-        91 => Rgb([241, 76, 76]),    // Bright red
-        92 => Rgb([35, 209, 139]),   // Bright green
-        93 => Rgb([245, 245, 67]),   // Bright yellow
-        94 => Rgb([59, 142, 234]),   // Bright blue
-        95 => Rgb([214, 112, 214]),  // Bright magenta
-        96 => Rgb([41, 184, 219]),   // Bright cyan
-        97 => Rgb([255, 255, 255]),  // Bright white
+        90 => Rgb([102, 102, 102]), // Bright black (gray)
+        91 => Rgb([241, 76, 76]),   // Bright red
+        92 => Rgb([35, 209, 139]),  // Bright green
+        93 => Rgb([245, 245, 67]),  // Bright yellow
+        94 => Rgb([59, 142, 234]),  // Bright blue
+        95 => Rgb([214, 112, 214]), // Bright magenta
+        96 => Rgb([41, 184, 219]),  // Bright cyan
+        97 => Rgb([255, 255, 255]), // Bright white
 
-        _ => Rgb([200, 200, 200]),   // Default
+        _ => Rgb([200, 200, 200]), // Default
     }
 }
 
@@ -1149,16 +1180,13 @@ pub fn create_default_tui_scenarios() -> Vec<TuiTestScenario> {
                     description: "Capture after Tab".to_string(),
                 },
             ],
-            expected_screens: vec![
-                ScreenExpectation {
-                    after_step: 2,
-                    contains_text: vec![], // VT100 parser working - expect alternate screen buffer
-                    not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
-                    title: Some("Alternate Screen Buffer Captured".to_string()),
-                },
-            ],
+            expected_screens: vec![ScreenExpectation {
+                after_step: 2,
+                contains_text: vec![], // VT100 parser working - expect alternate screen buffer
+                not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
+                title: Some("Alternate Screen Buffer Captured".to_string()),
+            }],
         },
-
         // Help dialog test
         TuiTestScenario {
             name: "help_dialog".to_string(),
@@ -1190,16 +1218,13 @@ pub fn create_default_tui_scenarios() -> Vec<TuiTestScenario> {
                     description: "Capture after closing".to_string(),
                 },
             ],
-            expected_screens: vec![
-                ScreenExpectation {
-                    after_step: 3,
-                    contains_text: vec![], // VT100 capturing alternate screen buffer
-                    not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
-                    title: Some("F10 Key Interaction".to_string()),
-                },
-            ],
+            expected_screens: vec![ScreenExpectation {
+                after_step: 3,
+                contains_text: vec![], // VT100 capturing alternate screen buffer
+                not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
+                title: Some("F10 Key Interaction".to_string()),
+            }],
         },
-
         // Message input test
         TuiTestScenario {
             name: "message_input".to_string(),
@@ -1221,14 +1246,12 @@ pub fn create_default_tui_scenarios() -> Vec<TuiTestScenario> {
                     description: "Capture with typed message".to_string(),
                 },
             ],
-            expected_screens: vec![
-                ScreenExpectation {
-                    after_step: 3,
-                    contains_text: vec![], // VT100 capturing alternate screen buffer
-                    not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
-                    title: Some("Text Input Test".to_string()),
-                },
-            ],
+            expected_screens: vec![ScreenExpectation {
+                after_step: 3,
+                contains_text: vec![], // VT100 capturing alternate screen buffer
+                not_contains_text: vec!["Panic".to_string(), "thread 'main' panicked".to_string()],
+                title: Some("Text Input Test".to_string()),
+            }],
         },
     ]
 }
@@ -1250,8 +1273,14 @@ mod tests {
         assert!(matches!(parse_key_event("Tab").unwrap(), KeyEvent::Tab));
         assert!(matches!(parse_key_event("Enter").unwrap(), KeyEvent::Enter));
         assert!(matches!(parse_key_event("F10").unwrap(), KeyEvent::F(10)));
-        assert!(matches!(parse_key_event("Ctrl-C").unwrap(), KeyEvent::Ctrl('C')));
-        assert!(matches!(parse_key_event("Alt-R").unwrap(), KeyEvent::Alt('R')));
+        assert!(matches!(
+            parse_key_event("Ctrl-C").unwrap(),
+            KeyEvent::Ctrl('C')
+        ));
+        assert!(matches!(
+            parse_key_event("Alt-R").unwrap(),
+            KeyEvent::Alt('R')
+        ));
     }
 
     #[test]

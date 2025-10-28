@@ -85,7 +85,10 @@ impl AdvancedChatState {
         // this is NOT a fatal error. The application will use the default theme (VS Code dark)
         // and continue normally. This is intentional graceful degradation.
         if let Err(e) = state.load_theme_from_config() {
-            warn!("Failed to load theme from config, using default theme: {}", e);
+            warn!(
+                "Failed to load theme from config, using default theme: {}",
+                e
+            );
             // Note: The default theme is already initialized during ThemeManager::new()
             // so this is just a fallback for user preferences, not critical for functionality
         }
@@ -107,7 +110,10 @@ impl AdvancedChatState {
                             *active_id = Some(sess_id);
                         } else {
                             // Session doesn't exist, set to first session or None
-                            warn!("Persisted active session {} not found in loaded sessions", sess_id);
+                            warn!(
+                                "Persisted active session {} not found in loaded sessions",
+                                sess_id
+                            );
                             if let Some(&first_session_id) = sessions.keys().next() {
                                 *active_id = Some(first_session_id);
                                 info!("Set active session to first available session");
@@ -138,7 +144,7 @@ impl AdvancedChatState {
 
             state.add_message_to_session(
                 main_session_id,
-                ChatMessage::System(welcome_msg.to_string())
+                ChatMessage::System(welcome_msg.to_string()),
             )?;
         }
 
@@ -183,7 +189,7 @@ impl AdvancedChatState {
         // BUG-2008 fix: Reset history position when switching sessions
         // Otherwise, up arrow navigates through the PREVIOUS session's history
         if let Ok(mut pos) = self.history_position.write() {
-            *pos = None;  // Back to prompt, not in history
+            *pos = None; // Back to prompt, not in history
         }
 
         // Auto-save after session change
@@ -361,7 +367,7 @@ impl AdvancedChatState {
             self.set_active_session(session_id)?;
         } else {
             drop(sessions); // Release lock
-            // Still save state if not first session
+                            // Still save state if not first session
             self.save_state_async();
         }
 

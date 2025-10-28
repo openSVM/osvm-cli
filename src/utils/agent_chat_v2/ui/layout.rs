@@ -15,8 +15,8 @@ use super::super::state::AdvancedChatState;
 use super::super::types::AgentState;
 use super::handlers::show_context_menu;
 use super::handlers::*;
-use super::theme::{Decorations, Icons, ModernTheme};
 use super::text_area_wrapper::SendableTextArea;
+use super::theme::{Decorations, Icons, ModernTheme};
 
 /// Update input panel title to show history indicator
 fn update_input_title(siv: &mut Cursive, state: &AdvancedChatState) {
@@ -124,7 +124,8 @@ impl AdvancedChatUI {
                 "Hex color must be exactly 6 characters, got {} from '{}'",
                 hex_trimmed.len(),
                 hex
-            ).into());
+            )
+            .into());
         }
 
         // Use character iteration for UTF-8 safety (though hex should be ASCII)
@@ -136,7 +137,8 @@ impl AdvancedChatUI {
                 return Err(format!(
                     "Invalid hex digit '{}' at position {} in color '{}'",
                     ch, i, hex
-                ).into());
+                )
+                .into());
             }
         }
 
@@ -214,7 +216,10 @@ impl AdvancedChatUI {
 
             // If chat_list focus failed (already focused or doesn't exist), try input
             if let Err(e) = s.focus_name("input") {
-                log::warn!("Failed to navigate on Tab - both chat_list and input unavailable: {}", e);
+                log::warn!(
+                    "Failed to navigate on Tab - both chat_list and input unavailable: {}",
+                    e
+                );
             }
         });
 
@@ -286,9 +291,11 @@ impl AdvancedChatUI {
         // Our SendableTextArea wrapper now allows this to pass through
         siv.add_global_callback(cursive::event::Event::CtrlChar('m'), |s| {
             // Get content first (immutable access)
-            let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-                view.get_content().to_string()
-            }).unwrap_or_default();
+            let content = s
+                .call_on_name("input", |view: &mut SendableTextArea| {
+                    view.get_content().to_string()
+                })
+                .unwrap_or_default();
 
             if !content.trim().is_empty() {
                 let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
@@ -306,31 +313,36 @@ impl AdvancedChatUI {
 
         // Add Shift+Enter to send message (alternative shortcut for sending)
         // Note: Ctrl+E conflicts with cursive's default "end of line" binding
-        siv.add_global_callback(cursive::event::Event::Shift(cursive::event::Key::Enter), |s| {
-            log::info!("🔴 GLOBAL Shift+Enter handler triggered!");
-            // Get content first (immutable access)
-            let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-                view.get_content().to_string()
-            }).unwrap_or_default();
+        siv.add_global_callback(
+            cursive::event::Event::Shift(cursive::event::Key::Enter),
+            |s| {
+                log::info!("🔴 GLOBAL Shift+Enter handler triggered!");
+                // Get content first (immutable access)
+                let content = s
+                    .call_on_name("input", |view: &mut SendableTextArea| {
+                        view.get_content().to_string()
+                    })
+                    .unwrap_or_default();
 
-            log::info!("🔴 Found input field with content: '{}'", content);
-            if !content.trim().is_empty() {
-                log::info!("🔴 Content not empty, attempting to send...");
-                let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
-                if let Some(state) = state_opt {
-                    log::info!("🔴 Calling handle_user_input with content");
-                    handle_user_input(s, &content, state);
-                    // Clear input after successful send (mutable access)
-                    s.call_on_name("input", |view: &mut SendableTextArea| {
-                        view.set_content("");
-                    });
+                log::info!("🔴 Found input field with content: '{}'", content);
+                if !content.trim().is_empty() {
+                    log::info!("🔴 Content not empty, attempting to send...");
+                    let state_opt = s.user_data::<AdvancedChatState>().map(|st| st.clone());
+                    if let Some(state) = state_opt {
+                        log::info!("🔴 Calling handle_user_input with content");
+                        handle_user_input(s, &content, state);
+                        // Clear input after successful send (mutable access)
+                        s.call_on_name("input", |view: &mut SendableTextArea| {
+                            view.set_content("");
+                        });
+                    } else {
+                        log::error!("🔴 Failed to get state from user_data!");
+                    }
                 } else {
-                    log::error!("🔴 Failed to get state from user_data!");
+                    log::info!("🔴 Content is empty, not sending");
                 }
-            } else {
-                log::info!("🔴 Content is empty, not sending");
-            }
-        });
+            },
+        );
 
         log::info!("✅ Shift+Enter callback registered for sending messages");
 
@@ -517,7 +529,8 @@ impl AdvancedChatUI {
                             .map(|v| *v)
                             .unwrap_or(false);
 
-                        if suggestions_visible && s.find_name::<SendableTextArea>("input").is_some() {
+                        if suggestions_visible && s.find_name::<SendableTextArea>("input").is_some()
+                        {
                             insert_suggestion_at_cursor(s, (i - 1) as usize, state);
                         }
                     }

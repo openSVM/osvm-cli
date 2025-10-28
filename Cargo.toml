@@ -139,7 +139,6 @@ opt-level = 0
 debug = true
 
 [patch.crates-io]
-curve25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "3.2.0" }
 crunchy = { path = "vendor/crunchy" }
 
 # Custom scripts for development and deployment

@@ -61,14 +61,12 @@ Action: Return processed results
 async fn test_tool_plan_has_raw_ovsm_field() -> Result<()> {
     let plan = ToolPlan {
         reasoning: "Test reasoning".to_string(),
-        osvm_tools_to_use: vec![
-            PlannedTool {
-                server_id: "test_server".to_string(),
-                tool_name: "test_tool".to_string(),
-                args: json!({}),
-                reason: "Test tool".to_string(),
-            }
-        ],
+        osvm_tools_to_use: vec![PlannedTool {
+            server_id: "test_server".to_string(),
+            tool_name: "test_tool".to_string(),
+            args: json!({}),
+            reason: "Test tool".to_string(),
+        }],
         expected_outcome: "Test outcome".to_string(),
         raw_ovsm_plan: Some("CALL test_tool".to_string()),
     };
@@ -96,7 +94,9 @@ async fn test_tool_registration() -> Result<()> {
     let executor = OvsmExecutor::new(false);
 
     // Register tool
-    executor.register_tool("mock_tool".to_string(), Box::new(MockTool)).await?;
+    executor
+        .register_tool("mock_tool".to_string(), Box::new(MockTool))
+        .await?;
 
     println!("✓ Tool registration successful");
     Ok(())
@@ -116,7 +116,9 @@ async fn test_simple_plan_execution() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("simple_tool".to_string(), Box::new(SimpleTool)).await?;
+    executor
+        .register_tool("simple_tool".to_string(), Box::new(SimpleTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Execute simple tool
@@ -151,7 +153,7 @@ async fn test_branching_plan_execution() -> Result<()> {
     struct DataSizeTool;
     impl McpToolExecutor for DataSizeTool {
         fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
-            Ok(json!({"size": 150}))  // Large dataset
+            Ok(json!({"size": 150})) // Large dataset
         }
     }
 
@@ -170,9 +172,15 @@ async fn test_branching_plan_execution() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("get_data_size".to_string(), Box::new(DataSizeTool)).await?;
-    executor.register_tool("batch_process".to_string(), Box::new(BatchTool)).await?;
-    executor.register_tool("quick_process".to_string(), Box::new(QuickTool)).await?;
+    executor
+        .register_tool("get_data_size".to_string(), Box::new(DataSizeTool))
+        .await?;
+    executor
+        .register_tool("batch_process".to_string(), Box::new(BatchTool))
+        .await?;
+    executor
+        .register_tool("quick_process".to_string(), Box::new(QuickTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Process data based on size
@@ -193,7 +201,10 @@ Action: Return processed results
     let result = executor.execute_plan(plan).await?;
 
     // Verify branching occurred
-    assert!(result.branches_taken.len() > 0, "Should have taken at least one branch");
+    assert!(
+        result.branches_taken.len() > 0,
+        "Should have taken at least one branch"
+    );
     assert!(result.tools_called.contains(&"get_data_size".to_string()));
 
     // Since data_size=150 > 100, should take large_data branch
@@ -218,7 +229,9 @@ async fn test_ovsm_error_handling() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("error_tool".to_string(), Box::new(ErrorTool)).await?;
+    executor
+        .register_tool("error_tool".to_string(), Box::new(ErrorTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Test error handling
@@ -255,7 +268,9 @@ async fn test_execution_metadata() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("metadata_tool".to_string(), Box::new(MetadataTool)).await?;
+    executor
+        .register_tool("metadata_tool".to_string(), Box::new(MetadataTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Collect metadata
@@ -270,9 +285,15 @@ Action: Track execution details
     let result = executor.execute_plan(plan).await?;
 
     // Verify metadata collection
-    assert!(result.execution_time_ms >= 10, "Should track execution time");
+    assert!(
+        result.execution_time_ms >= 10,
+        "Should track execution time"
+    );
     assert_eq!(result.tools_called.len(), 2, "Should track tool calls");
-    assert!(result.confidence > 0 && result.confidence <= 100, "Confidence should be 0-100");
+    assert!(
+        result.confidence > 0 && result.confidence <= 100,
+        "Confidence should be 0-100"
+    );
 
     println!("✓ Metadata collection successful");
     println!("  Execution time: {}ms", result.execution_time_ms);
@@ -311,9 +332,15 @@ async fn test_multiple_decisions() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("get_count".to_string(), Box::new(CountTool)).await?;
-    executor.register_tool("check_quality".to_string(), Box::new(QualityTool)).await?;
-    executor.register_tool("process_data".to_string(), Box::new(ProcessTool)).await?;
+    executor
+        .register_tool("get_count".to_string(), Box::new(CountTool))
+        .await?;
+    executor
+        .register_tool("check_quality".to_string(), Box::new(QualityTool))
+        .await?;
+    executor
+        .register_tool("process_data".to_string(), Box::new(ProcessTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Multi-decision processing
@@ -336,7 +363,10 @@ Action: Complete multi-level decisions
 
     // Note: Nested DECISION blocks are currently limited (see NESTED_DECISION_ROADMAP.md)
     // The executor will take the first branch but skip nested decisions
-    assert!(result.branches_taken.len() >= 1, "Should take at least one branch");
+    assert!(
+        result.branches_taken.len() >= 1,
+        "Should take at least one branch"
+    );
     assert!(result.tools_called.contains(&"get_count".to_string()));
 
     println!("✓ Multiple decisions handled successfully");
@@ -390,8 +420,12 @@ async fn test_variable_state_management() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("get_value".to_string(), Box::new(ValueTool)).await?;
-    executor.register_tool("use_value".to_string(), Box::new(UseTool)).await?;
+    executor
+        .register_tool("get_value".to_string(), Box::new(ValueTool))
+        .await?;
+    executor
+        .register_tool("use_value".to_string(), Box::new(UseTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Variable state test
@@ -446,7 +480,9 @@ async fn test_execution_performance() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("fast_tool".to_string(), Box::new(FastTool)).await?;
+    executor
+        .register_tool("fast_tool".to_string(), Box::new(FastTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Performance test
@@ -467,7 +503,10 @@ Action: Measure overhead
     println!("✓ Performance test passed");
     println!("  Total time: {}ms", total_time.as_millis());
     println!("  Reported time: {}ms", result.execution_time_ms);
-    println!("  Overhead: ~{}ms", total_time.as_millis() as i64 - result.execution_time_ms as i64);
+    println!(
+        "  Overhead: ~{}ms",
+        total_time.as_millis() as i64 - result.execution_time_ms as i64
+    );
 
     Ok(())
 }
@@ -485,7 +524,9 @@ async fn test_while_loop() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("tick".to_string(), Box::new(TickTool)).await?;
+    executor
+        .register_tool("tick".to_string(), Box::new(TickTool))
+        .await?;
 
     let plan = r#"
 **Main Branch:**
@@ -503,7 +544,10 @@ RETURN $counter
 
     assert_eq!(result.value, json!(3));
     assert_eq!(result.tools_called.len(), 3);
-    println!("✓ WHILE loop executed {} iterations", result.tools_called.len());
+    println!(
+        "✓ WHILE loop executed {} iterations",
+        result.tools_called.len()
+    );
 
     Ok(())
 }
@@ -521,7 +565,9 @@ async fn test_for_loop() -> Result<()> {
     }
 
     let executor = OvsmExecutor::new(false);
-    executor.register_tool("process".to_string(), Box::new(ProcessTool)).await?;
+    executor
+        .register_tool("process".to_string(), Box::new(ProcessTool))
+        .await?;
 
     let plan = r#"
 **Main Branch:**
@@ -558,7 +604,9 @@ async fn test_concurrent_executions() -> Result<()> {
     }
 
     let executor = Arc::new(OvsmExecutor::new(false));
-    executor.register_tool("concurrent_tool".to_string(), Box::new(ConcurrentTool)).await?;
+    executor
+        .register_tool("concurrent_tool".to_string(), Box::new(ConcurrentTool))
+        .await?;
 
     let plan = r#"
 Expected Plan: Concurrent test
@@ -574,9 +622,7 @@ Action: Test concurrent safety
     for _ in 0..5 {
         let exec = executor.clone();
         let p = plan.to_string();
-        handles.push(tokio::spawn(async move {
-            exec.execute_plan(&p).await
-        }));
+        handles.push(tokio::spawn(async move { exec.execute_plan(&p).await }));
     }
 
     // Wait for all to complete

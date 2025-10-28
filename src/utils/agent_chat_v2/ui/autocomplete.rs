@@ -30,9 +30,9 @@ pub struct AutocompleteEngine {
 
 #[derive(Clone)]
 struct CommandSuggestion {
-    trigger: String,      // e.g., "/help"
-    description: String,  // e.g., "Show help information"
-    completion: String,   // Full text to insert
+    trigger: String,     // e.g., "/help"
+    description: String, // e.g., "Show help information"
+    completion: String,  // Full text to insert
 }
 
 #[derive(Clone)]
@@ -156,7 +156,8 @@ impl AutocompleteEngine {
         if current_word.starts_with('/') {
             for cmd in &self.commands {
                 if cmd.trigger.starts_with(&current_word) && cmd.trigger != current_word {
-                    self.suggestions.push(format!("{} - {}", cmd.trigger, cmd.description));
+                    self.suggestions
+                        .push(format!("{} - {}", cmd.trigger, cmd.description));
                 }
             }
         }
@@ -169,7 +170,8 @@ impl AutocompleteEngine {
             };
             for tool in &self.mcp_tools {
                 if tool.name.to_lowercase().contains(&search) {
-                    self.suggestions.push(format!("@{} ({})", tool.name, tool.server));
+                    self.suggestions
+                        .push(format!("@{} ({})", tool.name, tool.server));
                 }
             }
             // Limit to 5 suggestions
@@ -223,10 +225,18 @@ impl AutocompleteEngine {
         // Extract the completion text
         let completion = if suggestion.starts_with('/') {
             // Command suggestion - take just the command part
-            suggestion.split(" - ").next().unwrap_or(suggestion).to_string()
+            suggestion
+                .split(" - ")
+                .next()
+                .unwrap_or(suggestion)
+                .to_string()
         } else if suggestion.starts_with('@') {
             // Tool suggestion - take just the tool name
-            suggestion.split(" (").next().unwrap_or(suggestion).to_string()
+            suggestion
+                .split(" (")
+                .next()
+                .unwrap_or(suggestion)
+                .to_string()
         } else {
             // Template - use as is
             suggestion.clone()
@@ -263,21 +273,12 @@ pub fn create_autocomplete_view(suggestions: &[String]) -> impl View {
         // Highlight style
         let highlight_style = if i == 0 {
             // First item is selected
-            ColorStyle::new(
-                Color::Dark(BaseColor::Black),
-                Color::Light(BaseColor::Cyan),
-            )
+            ColorStyle::new(Color::Dark(BaseColor::Black), Color::Light(BaseColor::Cyan))
         } else {
-            ColorStyle::new(
-                Color::Light(BaseColor::White),
-                Color::Dark(BaseColor::Blue),
-            )
+            ColorStyle::new(Color::Light(BaseColor::White), Color::Dark(BaseColor::Blue))
         };
 
-        styled.append_styled(
-            format!(" {} ", suggestion),
-            highlight_style,
-        );
+        styled.append_styled(format!(" {} ", suggestion), highlight_style);
 
         layout.add_child(TextView::new(styled));
     }

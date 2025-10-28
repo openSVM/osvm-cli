@@ -14,10 +14,10 @@ pub struct TypewriterEffect {
     speed_multiplier: f32,
 
     // Advanced features
-    variable_speed: bool,        // Speed varies based on punctuation
-    cursor_visible: bool,         // Show blinking cursor
-    cursor_blink_phase: f32,     // For cursor animation
-    sound_enabled: bool,          // Typing sounds
+    variable_speed: bool,    // Speed varies based on punctuation
+    cursor_visible: bool,    // Show blinking cursor
+    cursor_blink_phase: f32, // For cursor animation
+    sound_enabled: bool,     // Typing sounds
 }
 
 impl TypewriterEffect {
@@ -57,9 +57,9 @@ impl TypewriterEffect {
         let base_delay = match ch {
             '.' | '!' | '?' => 300, // Long pause after sentence
             ',' | ';' | ':' => 150, // Medium pause after clause
-            ' ' => 20,               // Quick space
-            '\n' => 200,             // Pause at newline
-            _ => 30,                 // Normal character
+            ' ' => 20,              // Quick space
+            '\n' => 200,            // Pause at newline
+            _ => 30,                // Normal character
         };
 
         Duration::from_millis((base_delay as f32 / self.speed_multiplier) as u64)
@@ -301,7 +301,12 @@ impl MatrixRainEffect {
         }
 
         (0..count)
-            .map(|_| chars.chars().nth(rng.random_range(0..chars.len())).unwrap_or('█'))
+            .map(|_| {
+                chars
+                    .chars()
+                    .nth(rng.random_range(0..chars.len()))
+                    .unwrap_or('█')
+            })
             .collect()
     }
 }

@@ -21,7 +21,7 @@ sym1
 "#;
     let result = eval_lisp(source).unwrap();
     assert!(matches!(result, Value::String(_)));
-    
+
     // Check format
     if let Value::String(s) = result {
         assert!(s.starts_with("G__"));

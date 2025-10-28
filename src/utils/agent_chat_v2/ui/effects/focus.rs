@@ -1,7 +1,7 @@
 //! Focus management and visual indicators for active elements
 
-use cursive::theme::{Color, ColorStyle};
 use super::{EffectIntensity, VisualEffect};
+use cursive::theme::{Color, ColorStyle};
 
 /// Focus indicator with animated borders
 pub struct FocusIndicator {
@@ -13,12 +13,12 @@ pub struct FocusIndicator {
 
 #[derive(Clone, Copy)]
 pub enum BorderStyle {
-    Single,    // ┌─┐
-    Double,    // ╔═╗
-    Rounded,   // ╭─╮
-    Bold,      // ┏━┓
-    Dashed,    // ┌╌┐
-    Glowing,   // With animation
+    Single,  // ┌─┐
+    Double,  // ╔═╗
+    Rounded, // ╭─╮
+    Bold,    // ┏━┓
+    Dashed,  // ┌╌┐
+    Glowing, // With animation
 }
 
 impl FocusIndicator {
@@ -91,16 +91,10 @@ impl FocusIndicator {
         if self.is_focused {
             // Pulsing bright color
             let intensity = (self.animation_phase.sin() * 0.3 + 0.7) * 255.0;
-            ColorStyle::new(
-                Color::Rgb(0, intensity as u8, 255),
-                Color::Rgb(30, 30, 30),
-            )
+            ColorStyle::new(Color::Rgb(0, intensity as u8, 255), Color::Rgb(30, 30, 30))
         } else {
             // Dim unfocused color
-            ColorStyle::new(
-                Color::Rgb(100, 100, 100),
-                Color::Rgb(30, 30, 30),
-            )
+            ColorStyle::new(Color::Rgb(100, 100, 100), Color::Rgb(30, 30, 30))
         }
     }
 }
@@ -134,12 +128,7 @@ impl VisualEffect for FocusIndicator {
 
     fn render(&self) -> String {
         let chars = self.get_border_chars();
-        format!(
-            "{}{}{}",
-            chars.top_left,
-            chars.top,
-            chars.top_right
-        )
+        format!("{}{}{}", chars.top_left, chars.top, chars.top_right)
     }
 
     fn is_active(&self) -> bool {
@@ -276,7 +265,8 @@ impl VisualEffect for FocusTrail {
 
     fn render(&self) -> String {
         let trail = self.render_trail();
-        trail.iter()
+        trail
+            .iter()
             .map(|(_, _, ch)| ch.to_string())
             .collect::<Vec<_>>()
             .join("")

@@ -22,7 +22,10 @@ pub async fn handle_qa_command(
                     "chat" | "chat_ui" => TestCategory::Chat,
                     "agent" | "agent_cli" => TestCategory::All, // Run all for agent scenarios
                     _ => {
-                        eprintln!("Warning: Unknown scenario '{}', running all tests", scenario_name);
+                        eprintln!(
+                            "Warning: Unknown scenario '{}', running all tests",
+                            scenario_name
+                        );
                         TestCategory::All
                     }
                 }
@@ -49,10 +52,7 @@ pub async fn handle_qa_command(
             // Report results
             let passed = results.iter().filter(|r| r.passed).count();
             let failed = results.iter().filter(|r| !r.passed).count();
-            let bugs_found = results
-                .iter()
-                .map(|r| r.bugs_found.len())
-                .sum::<usize>();
+            let bugs_found = results.iter().map(|r| r.bugs_found.len()).sum::<usize>();
 
             println!("\n╔════════════════════════════════════════╗");
             println!("║         QA Test Results                ║");
@@ -165,7 +165,9 @@ pub async fn handle_qa_command(
                 println!("\n🧪 Running: {}", scenario.name);
                 println!("   Description: {}", scenario.description);
 
-                let result = agent.run_scenario(scenario, save_as_png && save_screenshots).await?;
+                let result = agent
+                    .run_scenario(scenario, save_as_png && save_screenshots)
+                    .await?;
 
                 if result.passed {
                     passed_tests += 1;
@@ -190,8 +192,15 @@ pub async fn handle_qa_command(
             println!("\n╔════════════════════════════════════════╗");
             println!("║     Visual TUI Test Results            ║");
             println!("╠════════════════════════════════════════╣");
-            println!("║ ✅ Passed:      {:>3}/{:<3}                ║", passed_tests, total_tests);
-            println!("║ ❌ Failed:      {:>3}/{:<3}                ║", total_tests - passed_tests, total_tests);
+            println!(
+                "║ ✅ Passed:      {:>3}/{:<3}                ║",
+                passed_tests, total_tests
+            );
+            println!(
+                "║ ❌ Failed:      {:>3}/{:<3}                ║",
+                total_tests - passed_tests,
+                total_tests
+            );
             println!("╚════════════════════════════════════════╝");
 
             if save_screenshots {

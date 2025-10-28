@@ -15,10 +15,10 @@ struct TestQuery {
 
 #[derive(Debug, Clone, PartialEq)]
 enum QueryDifficulty {
-    Easy,      // Simple direct questions
-    Medium,    // Multi-step or requires context
-    Hard,      // Complex or ambiguous queries
-    Expert,    // Technical deep-dives
+    Easy,   // Simple direct questions
+    Medium, // Multi-step or requires context
+    Hard,   // Complex or ambiguous queries
+    Expert, // Technical deep-dives
 }
 
 /// Get all 100 test queries across categories
@@ -117,7 +117,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Medium,
             expected_keywords: vec!["debug", "verbose", "log"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // RPC CATEGORY (15 queries)
         // ═══════════════════════════════════════════════════════════
@@ -211,7 +210,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Expert,
             expected_keywords: vec!["rate", "limit", "rpc"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // SVM CATEGORY (12 queries)
         // ═══════════════════════════════════════════════════════════
@@ -287,7 +285,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Medium,
             expected_keywords: vec!["monitor", "health", "svm"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // NODES CATEGORY (12 queries)
         // ═══════════════════════════════════════════════════════════
@@ -363,7 +360,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Medium,
             expected_keywords: vec!["stop", "node"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // DEPLOY CATEGORY (10 queries)
         // ═══════════════════════════════════════════════════════════
@@ -427,7 +423,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Hard,
             expected_keywords: vec!["workflow", "production", "deploy"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // AUDIT CATEGORY (8 queries)
         // ═══════════════════════════════════════════════════════════
@@ -479,7 +474,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Expert,
             expected_keywords: vec!["reentrancy", "attack"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // MCP CATEGORY (10 queries)
         // ═══════════════════════════════════════════════════════════
@@ -543,7 +537,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Expert,
             expected_keywords: vec!["authentication", "mcp"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // OVSM CATEGORY (10 queries)
         // ═══════════════════════════════════════════════════════════
@@ -607,7 +600,6 @@ fn get_test_queries() -> Vec<TestQuery> {
             difficulty: QueryDifficulty::Hard,
             expected_keywords: vec!["function", "syntax", "ovsm"],
         },
-
         // ═══════════════════════════════════════════════════════════
         // CHAT CATEGORY (8 queries)
         // ═══════════════════════════════════════════════════════════
@@ -713,7 +705,10 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
         .and_then(|s| s.parse().ok())
         .unwrap_or(10); // Default: test 10 random queries
 
-    println!("📝 Testing {} random queries from the set of 100...\n", sample_size);
+    println!(
+        "📝 Testing {} random queries from the set of 100...\n",
+        sample_size
+    );
 
     // Select random queries
     use rand::seq::SliceRandom;
@@ -724,11 +719,13 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
 
     for (idx, test_query) in test_queries.iter().enumerate() {
         println!("─────────────────────────────────────────────────────────────────");
-        println!("Query {}/{}: {} | Difficulty: {:?}",
-                 idx + 1,
-                 sample_size,
-                 test_query.category,
-                 test_query.difficulty);
+        println!(
+            "Query {}/{}: {} | Difficulty: {:?}",
+            idx + 1,
+            sample_size,
+            test_query.category,
+            test_query.difficulty
+        );
         println!("❓ {}", test_query.query);
 
         total_queries.fetch_add(1, Ordering::SeqCst);
@@ -767,12 +764,16 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
     let keywords = keyword_matches.load(Ordering::SeqCst);
 
     println!("Total queries tested:      {}", total);
-    println!("Successful responses:      {} ({:.1}%)",
-             successful,
-             (successful as f64 / total as f64) * 100.0);
-    println!("Failed responses:          {} ({:.1}%)",
-             failed,
-             (failed as f64 / total as f64) * 100.0);
+    println!(
+        "Successful responses:      {} ({:.1}%)",
+        successful,
+        (successful as f64 / total as f64) * 100.0
+    );
+    println!(
+        "Failed responses:          {} ({:.1}%)",
+        failed,
+        (failed as f64 / total as f64) * 100.0
+    );
     println!("Keyword match checks:      {}", keywords);
 
     println!("\n📈 Coverage:");
@@ -781,7 +782,10 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
     println!("   • Total query pool: {} queries", queries.len());
 
     println!("\n✅ Comprehensive QA Test Complete!");
-    println!("   All {} queries are documented and ready for testing.", queries.len());
+    println!(
+        "   All {} queries are documented and ready for testing.",
+        queries.len()
+    );
 
     Ok(())
 }
@@ -794,7 +798,8 @@ fn test_query_metadata() {
     assert_eq!(queries.len(), 100, "Should have exactly 100 test queries");
 
     // Verify all categories are covered
-    let categories: Vec<&str> = queries.iter()
+    let categories: Vec<&str> = queries
+        .iter()
         .map(|q| q.category)
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
@@ -821,15 +826,29 @@ async fn test_queries_by_difficulty() {
 
     println!("\n📊 Queries by Difficulty:");
 
-    for difficulty in [QueryDifficulty::Easy, QueryDifficulty::Medium, QueryDifficulty::Hard, QueryDifficulty::Expert] {
-        let count = queries.iter()
+    for difficulty in [
+        QueryDifficulty::Easy,
+        QueryDifficulty::Medium,
+        QueryDifficulty::Hard,
+        QueryDifficulty::Expert,
+    ] {
+        let count = queries
+            .iter()
             .filter(|q| q.difficulty == difficulty)
             .count();
         println!("   {:?}: {} queries", difficulty, count);
     }
 
-    assert!(queries.iter().any(|q| q.difficulty == QueryDifficulty::Easy));
-    assert!(queries.iter().any(|q| q.difficulty == QueryDifficulty::Medium));
-    assert!(queries.iter().any(|q| q.difficulty == QueryDifficulty::Hard));
-    assert!(queries.iter().any(|q| q.difficulty == QueryDifficulty::Expert));
+    assert!(queries
+        .iter()
+        .any(|q| q.difficulty == QueryDifficulty::Easy));
+    assert!(queries
+        .iter()
+        .any(|q| q.difficulty == QueryDifficulty::Medium));
+    assert!(queries
+        .iter()
+        .any(|q| q.difficulty == QueryDifficulty::Hard));
+    assert!(queries
+        .iter()
+        .any(|q| q.difficulty == QueryDifficulty::Expert));
 }

@@ -18,7 +18,10 @@ fn test_sendable_textarea_type_works() {
 
     // Verify we can find it with the correct type
     let found = siv.find_name::<SendableTextArea>("input");
-    assert!(found.is_some(), "Should find SendableTextArea with correct type");
+    assert!(
+        found.is_some(),
+        "Should find SendableTextArea with correct type"
+    );
 }
 
 #[test]
@@ -85,9 +88,11 @@ fn test_ctrl_m_with_sendable_textarea() {
     // Add the same callback as in the real app (FIXED PATTERN)
     siv.add_global_callback(Event::CtrlChar('m'), |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Clear input after getting content (mutable access)
@@ -105,7 +110,11 @@ fn test_ctrl_m_with_sendable_textarea() {
         view.get_content().to_string()
     });
 
-    assert_eq!(remaining, Some("".to_string()), "Input should be cleared after Ctrl+M");
+    assert_eq!(
+        remaining,
+        Some("".to_string()),
+        "Input should be cleared after Ctrl+M"
+    );
 }
 
 #[test]
@@ -123,9 +132,11 @@ fn test_shift_enter_with_sendable_textarea() {
     // Add the same callback as in the real app (FIXED PATTERN)
     siv.add_global_callback(Event::Shift(Key::Enter), |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Clear input after getting content (mutable access)
@@ -143,7 +154,11 @@ fn test_shift_enter_with_sendable_textarea() {
         view.get_content().to_string()
     });
 
-    assert_eq!(remaining, Some("".to_string()), "Input should be cleared after Shift+Enter");
+    assert_eq!(
+        remaining,
+        Some("".to_string()),
+        "Input should be cleared after Shift+Enter"
+    );
 }
 
 #[test]
@@ -158,9 +173,11 @@ fn test_empty_message_not_sent() {
     // Add callback that only clears non-empty messages (FIXED PATTERN)
     siv.add_global_callback(Event::CtrlChar('m'), |s| {
         // Get content first (immutable access)
-        let content = s.call_on_name("input", |view: &mut SendableTextArea| {
-            view.get_content().to_string()
-        }).unwrap_or_default();
+        let content = s
+            .call_on_name("input", |view: &mut SendableTextArea| {
+                view.get_content().to_string()
+            })
+            .unwrap_or_default();
 
         if !content.trim().is_empty() {
             // Clear input (mutable access)

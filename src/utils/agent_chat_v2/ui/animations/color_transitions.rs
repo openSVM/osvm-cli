@@ -277,7 +277,11 @@ impl GradientAnimation {
             return self.colors[self.colors.len() - 1];
         }
 
-        lerp_color(self.colors[segment], self.colors[segment + 1], segment_progress)
+        lerp_color(
+            self.colors[segment],
+            self.colors[segment + 1],
+            segment_progress,
+        )
     }
 
     pub fn render_gradient_bar(&self, width: usize) -> String {
@@ -337,11 +341,7 @@ mod tests {
 
     #[test]
     fn test_color_fade() {
-        let mut fade = ColorFade::new(
-            Color::Rgb(0, 0, 0),
-            Color::Rgb(255, 255, 255),
-            1.0,
-        );
+        let mut fade = ColorFade::new(Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255), 1.0);
 
         // Simulate 1 second of updates
         for _ in 0..10 {
@@ -365,10 +365,7 @@ mod tests {
 
     #[test]
     fn test_flash_effect() {
-        let mut flash = FlashEffect::new(
-            Color::Rgb(0, 0, 0),
-            Color::Rgb(255, 255, 255),
-        );
+        let mut flash = FlashEffect::new(Color::Rgb(0, 0, 0), Color::Rgb(255, 255, 255));
 
         flash.trigger();
         assert_eq!(flash.intensity, 1.0);

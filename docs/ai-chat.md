@@ -36,6 +36,18 @@ osvm chat --advanced
 osvm chat --test-mode
 ```
 
+### Plan-Only Mode (Generate Without Executing)
+
+```bash
+# Produce OVSM plans without running them
+osvm --plan-only "find recent whale transfers"
+
+# Combine with aliases (p/a) for rapid iteration
+osvm p --plan-only "map validator performance over last epoch"
+```
+
+Plan-only mode streams the AI-generated OVSM plan (including raw XML) while skipping tool/OVSM execution, making it ideal for rapid prompt tuning or large batch plan generation workflows.
+
 ### First Query
 
 ```bash

@@ -571,7 +571,7 @@ fn generate_2000_queries() -> Vec<TestQuery> {
             _ => "Get block height data",
         };
         queries.push(TestQuery {
-            query: format!("{} - {}", variation, i/10 + 1),
+            query: format!("{} - {}", variation, i / 10 + 1),
             category: "Rpc",
             difficulty: QueryDifficulty::Easy,
             expected_keywords: vec!["block", "height"],
@@ -805,7 +805,11 @@ fn generate_audit_queries(queries: &mut Vec<TestQuery>) {
         queries.push(TestQuery {
             query: format!("Security audit query (variant {})", i + 1),
             category: "Audit",
-            difficulty: if i < 50 { QueryDifficulty::Medium } else { QueryDifficulty::Hard },
+            difficulty: if i < 50 {
+                QueryDifficulty::Medium
+            } else {
+                QueryDifficulty::Hard
+            },
             expected_keywords: vec!["audit", "security"],
         });
     }
@@ -886,21 +890,32 @@ async fn test_2000_queries_generation() -> Result<(), Box<dyn std::error::Error>
     let mut sorted_cats: Vec<_> = category_counts.iter().collect();
     sorted_cats.sort_by_key(|(cat, _)| *cat);
     for (cat, count) in sorted_cats {
-        println!("     • {}: {} queries ({:.1}%)",
-                 cat, count, (*count as f64 / queries.len() as f64) * 100.0);
+        println!(
+            "     • {}: {} queries ({:.1}%)",
+            cat,
+            count,
+            (*count as f64 / queries.len() as f64) * 100.0
+        );
     }
 
     println!("\n   By Difficulty:");
     let mut sorted_diffs: Vec<_> = difficulty_counts.iter().collect();
     sorted_diffs.sort_by_key(|(diff, _)| *diff);
     for (diff, count) in sorted_diffs {
-        println!("     • {}: {} queries ({:.1}%)",
-                 diff, count, (*count as f64 / queries.len() as f64) * 100.0);
+        println!(
+            "     • {}: {} queries ({:.1}%)",
+            diff,
+            count,
+            (*count as f64 / queries.len() as f64) * 100.0
+        );
     }
 
     // Verify we have at least 2000 queries
-    assert!(queries.len() >= 2000,
-            "Should have at least 2000 queries, got {}", queries.len());
+    assert!(
+        queries.len() >= 2000,
+        "Should have at least 2000 queries, got {}",
+        queries.len()
+    );
 
     // Verify all categories present
     assert!(category_counts.contains_key("Basic"));
@@ -913,8 +928,11 @@ async fn test_2000_queries_generation() -> Result<(), Box<dyn std::error::Error>
     assert!(category_counts.contains_key("Ovsm"));
     assert!(category_counts.contains_key("Chat"));
 
-    println!("\n✅ SUCCESS: Generated {} queries across {} categories!",
-             queries.len(), category_counts.len());
+    println!(
+        "\n✅ SUCCESS: Generated {} queries across {} categories!",
+        queries.len(),
+        category_counts.len()
+    );
 
     Ok(())
 }
@@ -931,10 +949,12 @@ fn test_sample_queries() {
     for query in queries.iter() {
         let count = shown_per_category.entry(query.category).or_insert(0);
         if *count < 5 {
-            println!("   [{:8}] {:?}: {}",
-                     query.category,
-                     query.difficulty,
-                     &query.query[..query.query.len().min(60)]);
+            println!(
+                "   [{:8}] {:?}: {}",
+                query.category,
+                query.difficulty,
+                &query.query[..query.query.len().min(60)]
+            );
             *count += 1;
         }
     }

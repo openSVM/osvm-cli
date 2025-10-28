@@ -36,10 +36,8 @@ impl Tool for KeysTool {
 
         match &args[0] {
             Value::Object(map) => {
-                let keys: Vec<Value> = map.keys()
-                    .map(|k| Value::String(k.clone()))
-                    .collect();
-                Ok(Value::array(keys))  // Use helper
+                let keys: Vec<Value> = map.keys().map(|k| Value::String(k.clone())).collect();
+                Ok(Value::array(keys)) // Use helper
             }
             _ => Err(Error::InvalidArguments {
                 tool: "KEYS".to_string(),
@@ -72,7 +70,7 @@ impl Tool for ValuesTool {
         match &args[0] {
             Value::Object(map) => {
                 let values: Vec<Value> = map.values().cloned().collect();
-                Ok(Value::array(values))  // Use helper
+                Ok(Value::array(values)) // Use helper
             }
             _ => Err(Error::InvalidArguments {
                 tool: "VALUES".to_string(),
@@ -104,18 +102,22 @@ impl Tool for GetTool {
 
         let map = match &args[0] {
             Value::Object(m) => m,
-            _ => return Err(Error::InvalidArguments {
-                tool: "GET".to_string(),
-                reason: "First argument must be an object".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "GET".to_string(),
+                    reason: "First argument must be an object".to_string(),
+                })
+            }
         };
 
         let key = match &args[1] {
             Value::String(s) => s,
-            _ => return Err(Error::InvalidArguments {
-                tool: "GET".to_string(),
-                reason: "Second argument must be a string (key)".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "GET".to_string(),
+                    reason: "Second argument must be a string (key)".to_string(),
+                })
+            }
         };
 
         Ok(map.get(key).cloned().unwrap_or(Value::Null))
@@ -144,18 +146,22 @@ impl Tool for AssocTool {
 
         let map = match &args[0] {
             Value::Object(m) => (**m).clone(), // Deref Arc and clone HashMap
-            _ => return Err(Error::InvalidArguments {
-                tool: "ASSOC".to_string(),
-                reason: "First argument must be an object".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "ASSOC".to_string(),
+                    reason: "First argument must be an object".to_string(),
+                })
+            }
         };
 
         let key = match &args[1] {
             Value::String(s) => s.clone(),
-            _ => return Err(Error::InvalidArguments {
-                tool: "ASSOC".to_string(),
-                reason: "Second argument must be a string (key)".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "ASSOC".to_string(),
+                    reason: "Second argument must be a string (key)".to_string(),
+                })
+            }
         };
 
         let value = args[2].clone();
@@ -189,18 +195,22 @@ impl Tool for HasKeyTool {
 
         let map = match &args[0] {
             Value::Object(m) => m,
-            _ => return Err(Error::InvalidArguments {
-                tool: "HAS_KEY".to_string(),
-                reason: "First argument must be an object".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "HAS_KEY".to_string(),
+                    reason: "First argument must be an object".to_string(),
+                })
+            }
         };
 
         let key = match &args[1] {
             Value::String(s) => s,
-            _ => return Err(Error::InvalidArguments {
-                tool: "HAS_KEY".to_string(),
-                reason: "Second argument must be a string (key)".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "HAS_KEY".to_string(),
+                    reason: "Second argument must be a string (key)".to_string(),
+                })
+            }
         };
 
         Ok(Value::Bool(map.contains_key(key)))
@@ -228,19 +238,23 @@ impl Tool for MergeTool {
         }
 
         let map1 = match &args[0] {
-            Value::Object(m) => (**m).clone(),  // Deref Arc and clone HashMap
-            _ => return Err(Error::InvalidArguments {
-                tool: "MERGE".to_string(),
-                reason: "First argument must be an object".to_string(),
-            }),
+            Value::Object(m) => (**m).clone(), // Deref Arc and clone HashMap
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "MERGE".to_string(),
+                    reason: "First argument must be an object".to_string(),
+                })
+            }
         };
 
         let map2 = match &args[1] {
             Value::Object(m) => m,
-            _ => return Err(Error::InvalidArguments {
-                tool: "MERGE".to_string(),
-                reason: "Second argument must be an object".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "MERGE".to_string(),
+                    reason: "Second argument must be an object".to_string(),
+                })
+            }
         };
 
         let mut result = map1;
@@ -248,7 +262,7 @@ impl Tool for MergeTool {
             result.insert(k.clone(), v.clone());
         }
 
-        Ok(Value::object(result))  // Use helper to create Arc
+        Ok(Value::object(result)) // Use helper to create Arc
     }
 }
 
@@ -264,7 +278,7 @@ mod tests {
         map.insert("name".to_string(), Value::String("Alice".to_string()));
         map.insert("age".to_string(), Value::Int(30));
 
-        let obj = Value::object(map);  // Use helper
+        let obj = Value::object(map); // Use helper
         let result = tool.execute(&[obj]).unwrap();
 
         match result {
@@ -372,7 +386,8 @@ mod tests {
             Value::Object(m) => {
                 assert_eq!(m.len(), 3);
                 assert_eq!(m.get("age"), Some(&Value::Int(31))); // Overridden
-                assert_eq!(m.get("city"), Some(&Value::String("NYC".to_string()))); // Added
+                assert_eq!(m.get("city"), Some(&Value::String("NYC".to_string())));
+                // Added
             }
             _ => panic!("Expected object"),
         }

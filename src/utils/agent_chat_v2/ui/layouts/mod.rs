@@ -19,13 +19,13 @@ pub struct LayoutConfig {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum LayoutType {
-    Compact,      // < 80 cols: Single column, collapsible sections
-    Standard,     // 80-120 cols: Two column
-    Wide,         // > 120 cols: Three column with tools panel
-    UltraWide,    // > 160 cols: Four column with multiple panels
-    GoldenRatio,  // Golden ratio proportions
-    Fibonacci,    // Fibonacci sequence proportions
-    Custom,       // User-defined proportions
+    Compact,     // < 80 cols: Single column, collapsible sections
+    Standard,    // 80-120 cols: Two column
+    Wide,        // > 120 cols: Three column with tools panel
+    UltraWide,   // > 160 cols: Four column with multiple panels
+    GoldenRatio, // Golden ratio proportions
+    Fibonacci,   // Fibonacci sequence proportions
+    Custom,      // User-defined proportions
 }
 
 /// Main layout manager that handles responsive design
@@ -76,7 +76,7 @@ impl LayoutManager {
             LayoutType::GoldenRatio => {
                 // Use golden ratio for proportions
                 let sidebar = (width as f64 * 0.382) as usize; // 38.2%
-                let input = (height as f64 * 0.236) as usize;   // 23.6%
+                let input = (height as f64 * 0.236) as usize; // 23.6%
                 (sidebar, input, 1, 2)
             }
             LayoutType::Fibonacci => {
@@ -185,30 +185,22 @@ pub mod responsive {
             Box::new(TextView::new(""))
         } else if width < 20 {
             // Ultra-narrow: Icons only
-            Box::new(
-                ResizedView::with_fixed_width(
-                    width,
-                    ScrollView::new(content)
-                )
-            )
+            Box::new(ResizedView::with_fixed_width(
+                width,
+                ScrollView::new(content),
+            ))
         } else if width < 30 {
             // Narrow: Abbreviated content
-            Box::new(
-                ResizedView::with_fixed_width(
-                    width,
-                    Panel::new(ScrollView::new(content))
-                        .title("◂") // Collapsed indicator
-                )
-            )
+            Box::new(ResizedView::with_fixed_width(
+                width,
+                Panel::new(ScrollView::new(content)).title("◂"), // Collapsed indicator
+            ))
         } else {
             // Normal: Full content
-            Box::new(
-                ResizedView::with_fixed_width(
-                    width,
-                    Panel::new(ScrollView::new(content))
-                        .title("Sessions")
-                )
-            )
+            Box::new(ResizedView::with_fixed_width(
+                width,
+                Panel::new(ScrollView::new(content)).title("Sessions"),
+            ))
         }
     }
 
@@ -222,12 +214,10 @@ pub mod responsive {
             Box::new(ResizedView::with_fixed_height(height, content))
         } else {
             // Multi-line with scroll
-            Box::new(
-                ResizedView::with_fixed_height(
-                    height,
-                    ScrollView::new(content)
-                )
-            )
+            Box::new(ResizedView::with_fixed_height(
+                height,
+                ScrollView::new(content),
+            ))
         }
     }
 

@@ -32,8 +32,12 @@ impl SpinnerType {
             Self::Braille => vec!["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
             Self::Pulse => vec!["○", "◔", "◑", "◕", "●", "◕", "◑", "◔"],
             Self::Bounce => vec!["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
-            Self::Wave => vec!["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃"],
-            Self::Clock => vec!["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
+            Self::Wave => vec![
+                "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃",
+            ],
+            Self::Clock => vec![
+                "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛",
+            ],
             Self::Moon => vec!["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"],
             Self::Weather => vec!["☀️", "☀️", "☁️", "⛅", "☁️", "🌧️", "⛈️", "🌧️", "☁️", "⛅"],
             Self::BoxBounce => vec!["▌", "▀", "▐", "▄"],
@@ -131,10 +135,8 @@ impl MultiSpinner {
     }
 
     pub fn add(&mut self, label: String) -> usize {
-        self.spinners.push((
-            Spinner::new(SpinnerType::Dots, label),
-            false,
-        ));
+        self.spinners
+            .push((Spinner::new(SpinnerType::Dots, label), false));
         self.spinners.len() - 1
     }
 
@@ -252,12 +254,7 @@ impl OrbitalSpinner {
 
         format!(
             "  {}{} \n {} ⚛ {}\n  {} {}",
-            display[0],
-            display[1],
-            display[7],
-            display[2],
-            display[6],
-            display[3],
+            display[0], display[1], display[7], display[2], display[6], display[3],
         )
     }
 }
@@ -329,11 +326,7 @@ impl Animation for PulsingText {
         let intensity = self.get_intensity();
         let border = self.intensity_to_char(intensity);
 
-        format!(
-            "{0}{0} {1} {0}{0}",
-            border,
-            self.text
-        )
+        format!("{0}{0} {1} {0}{0}", border, self.text)
     }
 }
 

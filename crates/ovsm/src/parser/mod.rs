@@ -7,9 +7,19 @@ mod paren_fixer;
 mod sexpr_parser;
 
 pub use ast::{
-    Argument, BinaryOp, Expression, Program, ProgramMetadata, Statement, UnaryOp,
+    AccumulationClause,
+    Argument,
+    BinaryOp,
+    ConditionClause,
+    ExitClause,
+    Expression,
+    IterationClause,
     // Loop macro structures
-    LoopData, IterationClause, AccumulationClause, ConditionClause, ExitClause,
+    LoopData,
+    Program,
+    ProgramMetadata,
+    Statement,
+    UnaryOp,
 };
 pub use paren_fixer::ParenFixer;
 pub use sexpr_parser::SExprParser;

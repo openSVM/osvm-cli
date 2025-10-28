@@ -185,14 +185,18 @@ fn init_log_patterns() -> Vec<LogPattern> {
         },
         // Snapshot failures
         LogPattern {
-            regex: Regex::new(r"Snapshot download failed|Failed to download snapshot|snapshot.*error").unwrap(),
+            regex: Regex::new(
+                r"Snapshot download failed|Failed to download snapshot|snapshot.*error",
+            )
+            .unwrap(),
             issue_type: IssueType::SnapshotFailure,
             severity: Severity::Error,
             extractor: Box::new(|_| HashMap::new()),
         },
         // AccountsDB errors
         LogPattern {
-            regex: Regex::new(r"AccountsDb.*error|accounts.*corrupt|Failed to load accounts").unwrap(),
+            regex: Regex::new(r"AccountsDb.*error|accounts.*corrupt|Failed to load accounts")
+                .unwrap(),
             issue_type: IssueType::AccountsDbError,
             severity: Severity::Critical,
             extractor: Box::new(|_| HashMap::new()),

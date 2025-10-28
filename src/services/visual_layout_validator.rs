@@ -68,10 +68,10 @@ pub struct DetectedBorder {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum BorderStyle {
-    Single,   // ─│┌┐└┘
-    Double,   // ═║╔╗╚╝
-    Heavy,    // ━┃┏┓┗┛
-    Rounded,  // ─│╭╮╰╯
+    Single,  // ─│┌┐└┘
+    Double,  // ═║╔╗╚╝
+    Heavy,   // ━┃┏┓┗┛
+    Rounded, // ─│╭╮╰╯
     Mixed,
 }
 
@@ -90,7 +90,7 @@ pub struct LayoutMetrics {
     pub total_borders: usize,
     pub total_text_regions: usize,
     pub max_nesting_depth: usize,
-    pub symmetry_score: f32, // 0.0 - 1.0
+    pub symmetry_score: f32,  // 0.0 - 1.0
     pub alignment_score: f32, // 0.0 - 1.0
 }
 
@@ -140,7 +140,12 @@ impl VisualLayoutValidator {
     }
 
     /// Analyze terminal screen layout
-    pub fn analyze_layout(&self, screen_content: &str, width: u16, height: u16) -> Result<LayoutAnalysis> {
+    pub fn analyze_layout(
+        &self,
+        screen_content: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<LayoutAnalysis> {
         let components = self.detect_components(screen_content, width, height)?;
         let borders = self.detect_borders(screen_content, width, height)?;
         let text_regions = self.detect_text_regions(screen_content, width, height)?;
@@ -157,7 +162,12 @@ impl VisualLayoutValidator {
     }
 
     /// Detect UI components in screen content
-    fn detect_components(&self, content: &str, width: u16, height: u16) -> Result<Vec<DetectedComponent>> {
+    fn detect_components(
+        &self,
+        content: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<Vec<DetectedComponent>> {
         let mut components = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
@@ -178,7 +188,10 @@ impl VisualLayoutValidator {
             if self.looks_like_status_bar(last_line) {
                 components.push(DetectedComponent {
                     component_type: ComponentType::StatusBar,
-                    position: Position { row: height - 1, col: 0 },
+                    position: Position {
+                        row: height - 1,
+                        col: 0,
+                    },
                     size: Size { width, height: 1 },
                     content: last_line.trim().to_string(),
                 });
@@ -190,7 +203,10 @@ impl VisualLayoutValidator {
             if self.looks_like_input_field(line) {
                 components.push(DetectedComponent {
                     component_type: ComponentType::InputField,
-                    position: Position { row: idx as u16, col: 0 },
+                    position: Position {
+                        row: idx as u16,
+                        col: 0,
+                    },
                     size: Size { width, height: 1 },
                     content: line.trim().to_string(),
                 });
@@ -202,7 +218,10 @@ impl VisualLayoutValidator {
             components.push(DetectedComponent {
                 component_type: ComponentType::HelpDialog,
                 position: Position { row: 0, col: 0 },
-                size: Size { width: 0, height: 0 }, // Will be calculated
+                size: Size {
+                    width: 0,
+                    height: 0,
+                }, // Will be calculated
                 content: "Help dialog detected".to_string(),
             });
         }
@@ -212,7 +231,10 @@ impl VisualLayoutValidator {
             components.push(DetectedComponent {
                 component_type: ComponentType::SessionList,
                 position: Position { row: 0, col: 0 },
-                size: Size { width: 0, height: 0 },
+                size: Size {
+                    width: 0,
+                    height: 0,
+                },
                 content: "Session list detected".to_string(),
             });
         }
@@ -221,7 +243,12 @@ impl VisualLayoutValidator {
     }
 
     /// Detect borders (box drawing characters)
-    fn detect_borders(&self, content: &str, width: u16, height: u16) -> Result<Vec<DetectedBorder>> {
+    fn detect_borders(
+        &self,
+        content: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<Vec<DetectedBorder>> {
         let mut borders = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
@@ -237,8 +264,14 @@ impl VisualLayoutValidator {
                             // Border style changed, save previous border
                             borders.push(DetectedBorder {
                                 style: existing_style,
-                                position: Position { row: row as u16, col: start_col as u16 },
-                                size: Size { width: (col - start_col) as u16, height: 1 },
+                                position: Position {
+                                    row: row as u16,
+                                    col: start_col as u16,
+                                },
+                                size: Size {
+                                    width: (col - start_col) as u16,
+                                    height: 1,
+                                },
                             });
                             current_border = Some((col, style));
                         }
@@ -249,8 +282,14 @@ impl VisualLayoutValidator {
                     // Border ended
                     borders.push(DetectedBorder {
                         style,
-                        position: Position { row: row as u16, col: start_col as u16 },
-                        size: Size { width: (col - start_col) as u16, height: 1 },
+                        position: Position {
+                            row: row as u16,
+                            col: start_col as u16,
+                        },
+                        size: Size {
+                            width: (col - start_col) as u16,
+                            height: 1,
+                        },
                     });
                     current_border = None;
                 }
@@ -260,8 +299,14 @@ impl VisualLayoutValidator {
             if let Some((start_col, style)) = current_border {
                 borders.push(DetectedBorder {
                     style,
-                    position: Position { row: row as u16, col: start_col as u16 },
-                    size: Size { width: (line.len() - start_col) as u16, height: 1 },
+                    position: Position {
+                        row: row as u16,
+                        col: start_col as u16,
+                    },
+                    size: Size {
+                        width: (line.len() - start_col) as u16,
+                        height: 1,
+                    },
                 });
             }
         }
@@ -270,7 +315,12 @@ impl VisualLayoutValidator {
     }
 
     /// Detect text regions
-    fn detect_text_regions(&self, content: &str, width: u16, height: u16) -> Result<Vec<TextRegion>> {
+    fn detect_text_regions(
+        &self,
+        content: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<Vec<TextRegion>> {
         let mut regions = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
@@ -278,8 +328,14 @@ impl VisualLayoutValidator {
             let trimmed = line.trim();
             if !trimmed.is_empty() && !self.is_all_borders(line) {
                 regions.push(TextRegion {
-                    position: Position { row: row as u16, col: 0 },
-                    size: Size { width: trimmed.len() as u16, height: 1 },
+                    position: Position {
+                        row: row as u16,
+                        col: 0,
+                    },
+                    size: Size {
+                        width: trimmed.len() as u16,
+                        height: 1,
+                    },
                     content: trimmed.to_string(),
                     is_emphasized: self.has_emphasis(line),
                 });
@@ -319,7 +375,12 @@ impl VisualLayoutValidator {
     }
 
     /// Compare two screenshots for visual regression
-    pub fn compare_screenshots(&self, baseline: &str, current: &str, name: &str) -> Result<RegressionResult> {
+    pub fn compare_screenshots(
+        &self,
+        baseline: &str,
+        current: &str,
+        name: &str,
+    ) -> Result<RegressionResult> {
         let baseline_path = self.baseline_dir.join(format!("{}_baseline.txt", name));
         let current_path = self.baseline_dir.join(format!("{}_current.txt", name));
 
@@ -382,7 +443,8 @@ impl VisualLayoutValidator {
                         matching_lines += 1;
                     } else {
                         // Calculate line similarity
-                        let line_similarity = self.calculate_line_similarity(baseline_line, current_line);
+                        let line_similarity =
+                            self.calculate_line_similarity(baseline_line, current_line);
                         partial_matches += line_similarity;
                     }
                 }
@@ -425,7 +487,10 @@ impl VisualLayoutValidator {
                     if baseline_line != current_line {
                         differences.push(VisualDifference {
                             diff_type: DifferenceType::ContentChanged,
-                            position: Position { row: i as u16, col: 0 },
+                            position: Position {
+                                row: i as u16,
+                                col: 0,
+                            },
                             description: format!("Line {} changed", i + 1),
                         });
                     }
@@ -433,14 +498,20 @@ impl VisualLayoutValidator {
                 (Some(_), None) => {
                     differences.push(VisualDifference {
                         diff_type: DifferenceType::MissingComponent,
-                        position: Position { row: i as u16, col: 0 },
+                        position: Position {
+                            row: i as u16,
+                            col: 0,
+                        },
                         description: format!("Line {} missing in current", i + 1),
                     });
                 }
                 (None, Some(_)) => {
                     differences.push(VisualDifference {
                         diff_type: DifferenceType::ExtraComponent,
-                        position: Position { row: i as u16, col: 0 },
+                        position: Position {
+                            row: i as u16,
+                            col: 0,
+                        },
                         description: format!("Extra line {} in current", i + 1),
                     });
                 }
@@ -461,7 +532,10 @@ impl VisualLayoutValidator {
 
     fn looks_like_status_bar(&self, line: &str) -> bool {
         // Status bars often contain key hints or status info
-        line.contains("F10") || line.contains("Help") || line.contains("Quit") || line.contains("Session")
+        line.contains("F10")
+            || line.contains("Help")
+            || line.contains("Quit")
+            || line.contains("Session")
     }
 
     fn looks_like_input_field(&self, line: &str) -> bool {
@@ -470,20 +544,25 @@ impl VisualLayoutValidator {
     }
 
     fn is_border_char(&self, ch: char) -> bool {
-        matches!(ch,
+        matches!(
+            ch,
             '─' | '│' | '┌' | '┐' | '└' | '┘' |  // Single
             '═' | '║' | '╔' | '╗' | '╚' | '╝' |  // Double
             '━' | '┃' | '┏' | '┓' | '┗' | '┛' |  // Heavy
             '╭' | '╮' | '╰' | '╯' |              // Rounded
             '├' | '┤' | '┬' | '┴' | '┼' |        // Connectors
-            '╠' | '╣' | '╦' | '╩' | '╬'          // Double connectors
+            '╠' | '╣' | '╦' | '╩' | '╬' // Double connectors
         )
     }
 
     fn detect_border_style(&self, ch: char) -> BorderStyle {
         match ch {
-            '─' | '│' | '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' => BorderStyle::Single,
-            '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' => BorderStyle::Double,
+            '─' | '│' | '┌' | '┐' | '└' | '┘' | '├' | '┤' | '┬' | '┴' | '┼' => {
+                BorderStyle::Single
+            }
+            '═' | '║' | '╔' | '╗' | '╚' | '╝' | '╠' | '╣' | '╦' | '╩' | '╬' => {
+                BorderStyle::Double
+            }
             '━' | '┃' | '┏' | '┓' | '┗' | '┛' => BorderStyle::Heavy,
             '╭' | '╮' | '╰' | '╯' => BorderStyle::Rounded,
             _ => BorderStyle::Mixed,
@@ -491,7 +570,10 @@ impl VisualLayoutValidator {
     }
 
     fn is_all_borders(&self, line: &str) -> bool {
-        !line.is_empty() && line.chars().all(|ch| self.is_border_char(ch) || ch.is_whitespace())
+        !line.is_empty()
+            && line
+                .chars()
+                .all(|ch| self.is_border_char(ch) || ch.is_whitespace())
     }
 
     fn has_emphasis(&self, line: &str) -> bool {

@@ -18,9 +18,7 @@ pub fn build_database_command() -> Command {
         )
         .subcommand(Command::new("start").about("Start ClickHouse database server"))
         .subcommand(Command::new("stop").about("Stop ClickHouse database server"))
-        .subcommand(
-            Command::new("status").about("Check ClickHouse database server status"),
-        )
+        .subcommand(Command::new("status").about("Check ClickHouse database server status"))
         .subcommand(
             Command::new("query")
                 .about("Execute SQL query on ClickHouse database")

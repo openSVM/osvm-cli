@@ -145,9 +145,9 @@ impl StyledText {
     pub fn gradient(text: &str) -> StyledString {
         let mut styled = StyledString::new();
         let colors = vec![
-            Color::Rgb(86, 156, 214),  // #569cd6 - VS Code keyword blue
-            Color::Rgb(0, 122, 204),   // #007acc - VS Code bright blue
-            Color::Rgb(78, 201, 176),  // #4ec9b0 - VS Code cyan
+            Color::Rgb(86, 156, 214), // #569cd6 - VS Code keyword blue
+            Color::Rgb(0, 122, 204),  // #007acc - VS Code bright blue
+            Color::Rgb(78, 201, 176), // #4ec9b0 - VS Code cyan
         ];
 
         for (i, ch) in text.chars().enumerate() {

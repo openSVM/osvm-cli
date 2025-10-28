@@ -9,7 +9,9 @@ pub async fn handle_ai_query_with_planning(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Extract the actual query from the planning subcommand args
     let query_parts = if let Some(external_args) = sub_matches.get_many::<std::ffi::OsString>("") {
-        external_args.map(|os_str| os_str.to_string_lossy().to_string()).collect::<Vec<_>>()
+        external_args
+            .map(|os_str| os_str.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
     } else {
         // Fallback: parse from environment args
         std::env::args().skip(2).collect()
@@ -37,9 +39,10 @@ pub async fn handle_ai_query_with_planning(
 
     // Use streaming agent with planning enabled for OVSM integration
     let verbose = app_matches.get_count("verbose");
+    let plan_only = app_matches.get_flag("plan_only");
 
     // Route to streaming agent which includes OVSM planning capabilities
-    crate::utils::streaming_agent::execute_streaming_agent(&query, verbose)
+    crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, plan_only)
         .await
         .map_err(|e| format!("OVSM planning agent failed: {}", e).into())
 }
@@ -82,6 +85,7 @@ pub async fn handle_ai_query(
 
     // Get debug flag from global args
     let debug_mode = app_matches.get_flag("debug");
+    let plan_only = app_matches.get_flag("plan_only");
 
     // Check if this looks like a natural language query vs a typo/unknown command
     if !looks_like_natural_language_query(&query) {
@@ -100,6 +104,13 @@ pub async fn handle_ai_query(
         eprintln!();
         eprintln!("📚 Use 'osvm --help' to see all available commands");
         return Ok(());
+    }
+
+    if plan_only {
+        let verbose = app_matches.get_count("verbose");
+        return crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, true)
+            .await
+            .map_err(|e| format!("OVSM planning agent failed: {}", e).into());
     }
 
     // Make AI request
@@ -147,16 +158,31 @@ fn looks_like_natural_language_query(input: &str) -> bool {
         let first_word = words[0].to_lowercase();
         // Question words or verbs indicate natural language
         let nl_indicators = [
-            "show", "what", "how", "why", "where", "when", "who",
-            "list", "find", "get", "check", "analyze", "explain",
-            "tell", "give", "display", "calculate"
+            "show",
+            "what",
+            "how",
+            "why",
+            "where",
+            "when",
+            "who",
+            "list",
+            "find",
+            "get",
+            "check",
+            "analyze",
+            "explain",
+            "tell",
+            "give",
+            "display",
+            "calculate",
         ];
         return nl_indicators.contains(&first_word.as_str());
     }
 
     // 3+ words are likely natural language
     // But check for address-heavy queries (might be copy-paste errors)
-    let long_hex_count = words.iter()
+    let long_hex_count = words
+        .iter()
         .filter(|w| w.len() > 30 && w.chars().all(|c| c.is_alphanumeric()))
         .count();
 

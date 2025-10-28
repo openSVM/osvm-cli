@@ -15,14 +15,14 @@ pub struct SmoothProgressBar {
 
 #[derive(Clone)]
 pub enum ProgressStyle {
-    Classic,     // [=====>    ]
-    Blocks,      // █████░░░░░
-    Dots,        // ●●●●●○○○○○
-    Arrows,      // ▶▶▶▶▶▷▷▷▷▷
-    Gradient,    // ████▓▒░░░░
-    Segmented,   // [■■■□□]
-    Wave,        // ～～～～～
-    Neon,        // ████░░░░░░ with color
+    Classic,   // [=====>    ]
+    Blocks,    // █████░░░░░
+    Dots,      // ●●●●●○○○○○
+    Arrows,    // ▶▶▶▶▶▷▷▷▷▷
+    Gradient,  // ████▓▒░░░░
+    Segmented, // [■■■□□]
+    Wave,      // ～～～～～
+    Neon,      // ████░░░░░░ with color
 }
 
 impl SmoothProgressBar {
@@ -245,7 +245,7 @@ impl Animation for SmoothProgressBar {
     fn update(&mut self, delta: f32, quality: QualityLevel) {
         // Smooth interpolation speed based on quality
         let speed = match quality {
-            QualityLevel::Low => self.speed * 2.0,   // Faster updates
+            QualityLevel::Low => self.speed * 2.0, // Faster updates
             QualityLevel::Medium => self.speed * 1.5,
             QualityLevel::High => self.speed,
         };
@@ -262,11 +262,7 @@ impl Animation for SmoothProgressBar {
         }
 
         // Animate percentage display
-        self.animated_percentage = lerp(
-            self.animated_percentage,
-            self.current,
-            delta * speed
-        );
+        self.animated_percentage = lerp(self.animated_percentage, self.current, delta * speed);
     }
 
     fn is_complete(&self) -> bool {

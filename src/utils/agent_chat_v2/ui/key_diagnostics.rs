@@ -12,7 +12,8 @@ pub fn format_event(event: &Event) -> String {
             format!("Char('{}') - ASCII {}", c.escape_default(), *c as u32)
         }
         Event::CtrlChar(c) => {
-            format!("CtrlChar('{}') - ASCII {} - Ctrl+{}",
+            format!(
+                "CtrlChar('{}') - ASCII {} - Ctrl+{}",
                 c.escape_default(),
                 *c as u32,
                 match *c {
@@ -47,7 +48,7 @@ pub fn format_event(event: &Event) -> String {
                     ']' => "]",
                     '^' => "^",
                     '_' => "_ (Underscore)",
-                    _ => "Unknown"
+                    _ => "Unknown",
                 }
             )
         }
@@ -95,12 +96,15 @@ pub fn show_key_diagnostics(siv: &mut Cursive) {
         "to see which event code each key press generates.".to_string(),
         "".to_string(),
         "Close this dialog (Escape or click Close) and press your test keys.".to_string(),
-    ].join("\n");
+    ]
+    .join("\n");
 
     siv.add_layer(
         Dialog::around(TextView::new(diagnostics_text))
             .title("Key Event Diagnostics")
-            .button("Close", |s| { s.pop_layer(); })
+            .button("Close", |s| {
+                s.pop_layer();
+            }),
     );
 }
 

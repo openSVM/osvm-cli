@@ -94,12 +94,25 @@ async fn handle_connection(stream: TcpStream, server_cmd: String, server_id: Str
         .spawn()
         .context("Failed to spawn MCP server process")?;
 
-    info!("[{}] MCP server process spawned (PID: {})", server_id, child.id().unwrap_or(0));
+    info!(
+        "[{}] MCP server process spawned (PID: {})",
+        server_id,
+        child.id().unwrap_or(0)
+    );
 
     // Get stdio handles
-    let mut mcp_stdin = child.stdin.take().context("Failed to get MCP server stdin")?;
-    let mcp_stdout = child.stdout.take().context("Failed to get MCP server stdout")?;
-    let mcp_stderr = child.stderr.take().context("Failed to get MCP server stderr")?;
+    let mut mcp_stdin = child
+        .stdin
+        .take()
+        .context("Failed to get MCP server stdin")?;
+    let mcp_stdout = child
+        .stdout
+        .take()
+        .context("Failed to get MCP server stdout")?;
+    let mcp_stderr = child
+        .stderr
+        .take()
+        .context("Failed to get MCP server stderr")?;
 
     let mut mcp_stdout_reader = BufReader::new(mcp_stdout);
     let mut mcp_stderr_reader = BufReader::new(mcp_stderr);
@@ -180,9 +193,18 @@ async fn forward_host_to_mcp(
         );
 
         // Forward to MCP server via stdin (line-delimited)
-        mcp_stdin.write_all(&message).await.context("Failed to write to MCP server stdin")?;
-        mcp_stdin.write_all(b"\n").await.context("Failed to write newline to MCP server stdin")?;
-        mcp_stdin.flush().await.context("Failed to flush MCP server stdin")?;
+        mcp_stdin
+            .write_all(&message)
+            .await
+            .context("Failed to write to MCP server stdin")?;
+        mcp_stdin
+            .write_all(b"\n")
+            .await
+            .context("Failed to write newline to MCP server stdin")?;
+        mcp_stdin
+            .flush()
+            .await
+            .context("Failed to flush MCP server stdin")?;
 
         debug!("[{}] Message forwarded to MCP server", server_id);
     }
@@ -224,7 +246,10 @@ async fn forward_mcp_to_host(
 
         // Validate JSON (optional but helpful for debugging)
         if let Err(e) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            warn!("[{}] Invalid JSON from MCP server: {} (error: {})", server_id, trimmed, e);
+            warn!(
+                "[{}] Invalid JSON from MCP server: {} (error: {})",
+                server_id, trimmed, e
+            );
             // Continue anyway - host will handle the error
         }
 
@@ -260,7 +285,10 @@ async fn read_length_prefixed_message(
     }
 
     if len == 0 {
-        return Err(anyhow::anyhow!("[{}] Received zero-length message", server_id));
+        return Err(anyhow::anyhow!(
+            "[{}] Received zero-length message",
+            server_id
+        ));
     }
 
     debug!("[{}] Reading {} byte message from host", server_id, len);
@@ -292,9 +320,15 @@ async fn write_length_prefixed_message(
         .context("Failed to write message length prefix")?;
 
     // Write message payload
-    writer.write_all(data).await.context("Failed to write message payload")?;
+    writer
+        .write_all(data)
+        .await
+        .context("Failed to write message payload")?;
 
-    writer.flush().await.context("Failed to flush vsock writer")?;
+    writer
+        .flush()
+        .await
+        .context("Failed to flush vsock writer")?;
 
     Ok(())
 }

@@ -4,8 +4,8 @@
 //! parentheses in OVSM code, similar to error recovery in modern compilers.
 
 use crate::error::Result;
-use crate::Scanner;
 use crate::parser::SExprParser;
+use crate::Scanner;
 
 /// Attempts to automatically fix missing or mismatched parentheses
 pub struct ParenFixer {
@@ -178,10 +178,9 @@ impl ParenFixer {
         let mut close_count = 0;
         let mut in_string = false;
         let mut escape_next = false;
-        let mut in_comment = false;
 
         for line in &self.lines {
-            in_comment = false; // Comments are line-based
+            let mut in_comment = false; // Comments are line-based
 
             for ch in line.chars() {
                 // Handle escape sequences
@@ -360,7 +359,10 @@ impl ParenFixer {
 
         match fixed_result {
             Ok(fixed) => (fixed, report),
-            Err(_) => (self.source.clone(), Some("⚠️  Could not auto-correct parentheses".to_string())),
+            Err(_) => (
+                self.source.clone(),
+                Some("⚠️  Could not auto-correct parentheses".to_string()),
+            ),
         }
     }
 }

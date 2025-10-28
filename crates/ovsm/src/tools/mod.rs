@@ -130,7 +130,7 @@ impl ToolRegistry {
         if let Some(tool) = self.tools.get(name) {
             return Ok(tool.clone());
         }
-        
+
         // Try case-insensitive match
         let name_lower = name.to_lowercase();
         for (key, tool) in &self.tools {
@@ -138,7 +138,7 @@ impl ToolRegistry {
                 return Ok(tool.clone());
             }
         }
-        
+
         // No match found
         Err(crate::error::Error::UndefinedTool {
             name: name.to_string(),

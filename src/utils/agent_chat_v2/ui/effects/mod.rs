@@ -337,7 +337,7 @@ impl VisualEffect for SparkleEffect {
             // Update existing particles
             self.particles.retain_mut(|sparkle| {
                 sparkle.life -= delta * 2.0; // Fade out in 0.5 seconds
-                sparkle.y -= delta * 3.0;     // Float upward
+                sparkle.y -= delta * 3.0; // Float upward
                 sparkle.life > 0.0
             });
 

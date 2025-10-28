@@ -8,7 +8,6 @@
 /// 5. Advanced features (nested expressions, closures, recursion)
 /// 6. Real-world scenarios (pagination, filtering, aggregation)
 /// 7. Critical bug demonstrations (IF in WHILE loops)
-
 use ovsm::lexer::SExprScanner;
 use ovsm::parser::SExprParser;
 use ovsm::runtime::{LispEvaluator, Value};
@@ -135,8 +134,14 @@ fn test_modulo() {
 
 #[test]
 fn test_nested_arithmetic() {
-    assert_eq!(execute_lisp("(+ (* 2 3) (- 10 5))").unwrap(), Value::Int(11));
-    assert_eq!(execute_lisp("(* (+ 1 2) (- 10 6))").unwrap(), Value::Int(12));
+    assert_eq!(
+        execute_lisp("(+ (* 2 3) (- 10 5))").unwrap(),
+        Value::Int(11)
+    );
+    assert_eq!(
+        execute_lisp("(* (+ 1 2) (- 10 6))").unwrap(),
+        Value::Int(12)
+    );
 }
 
 // ============================================================================
@@ -188,15 +193,24 @@ fn test_greater_equal() {
 #[test]
 fn test_and_operator() {
     assert_eq!(execute_lisp("(and true true)").unwrap(), Value::Bool(true));
-    assert_eq!(execute_lisp("(and true false)").unwrap(), Value::Bool(false));
-    assert_eq!(execute_lisp("(and false true)").unwrap(), Value::Bool(false));
+    assert_eq!(
+        execute_lisp("(and true false)").unwrap(),
+        Value::Bool(false)
+    );
+    assert_eq!(
+        execute_lisp("(and false true)").unwrap(),
+        Value::Bool(false)
+    );
 }
 
 #[test]
 fn test_or_operator() {
     assert_eq!(execute_lisp("(or true false)").unwrap(), Value::Bool(true));
     assert_eq!(execute_lisp("(or false true)").unwrap(), Value::Bool(true));
-    assert_eq!(execute_lisp("(or false false)").unwrap(), Value::Bool(false));
+    assert_eq!(
+        execute_lisp("(or false false)").unwrap(),
+        Value::Bool(false)
+    );
 }
 
 #[test]

@@ -16,7 +16,13 @@ fn test_plan_generation_statistics() {
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         let output = Command::new("cargo")
-            .args(&["test", "--test", "chat_single_query_test", "--", "--nocapture"])
+            .args(&[
+                "test",
+                "--test",
+                "chat_single_query_test",
+                "--",
+                "--nocapture",
+            ])
             .env("RUST_LOG", "info")
             .output()
             .expect("Failed to execute test");
@@ -76,18 +82,29 @@ fn test_plan_generation_statistics() {
     println!("📊 STATISTICS SUMMARY");
     println!("{}", "=".repeat(60));
     println!("Total runs:                    {}", stats.total_runs);
-    println!("Successful runs:               {} ({:.1}%)",
-             stats.successful_runs,
-             (stats.successful_runs as f64 / stats.total_runs as f64) * 100.0);
-    println!("Runs with explicit plans:      {} ({:.1}%)",
-             stats.runs_with_explicit_plans,
-             (stats.runs_with_explicit_plans as f64 / stats.total_runs as f64) * 100.0);
-    println!("Runs with tool execution:      {} ({:.1}%)",
-             stats.runs_with_tool_execution,
-             (stats.runs_with_tool_execution as f64 / stats.total_runs as f64) * 100.0);
-    println!("Total tools executed:          {}", stats.total_tools_executed);
-    println!("Avg tools per run:             {:.1}",
-             stats.total_tools_executed as f64 / stats.total_runs as f64);
+    println!(
+        "Successful runs:               {} ({:.1}%)",
+        stats.successful_runs,
+        (stats.successful_runs as f64 / stats.total_runs as f64) * 100.0
+    );
+    println!(
+        "Runs with explicit plans:      {} ({:.1}%)",
+        stats.runs_with_explicit_plans,
+        (stats.runs_with_explicit_plans as f64 / stats.total_runs as f64) * 100.0
+    );
+    println!(
+        "Runs with tool execution:      {} ({:.1}%)",
+        stats.runs_with_tool_execution,
+        (stats.runs_with_tool_execution as f64 / stats.total_runs as f64) * 100.0
+    );
+    println!(
+        "Total tools executed:          {}",
+        stats.total_tools_executed
+    );
+    println!(
+        "Avg tools per run:             {:.1}",
+        stats.total_tools_executed as f64 / stats.total_runs as f64
+    );
     println!("{}", "=".repeat(60));
 
     // Assertions
@@ -124,7 +141,10 @@ fn test_plan_generation_statistics() {
     }
 
     println!("\n✅ STRESS TEST COMPLETE!");
-    println!("   Plan generation is working reliably with {:.0}% success rate", success_rate);
+    println!(
+        "   Plan generation is working reliably with {:.0}% success rate",
+        success_rate
+    );
 }
 
 #[derive(Default)]

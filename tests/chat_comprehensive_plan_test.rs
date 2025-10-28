@@ -9,23 +9,23 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
     let test_cases = vec![
         (
             "What is my SOL balance?",
-            vec!["get_account_stats", "get_balance"],  // Expected possible tools
-            "balance query"
+            vec!["get_account_stats", "get_balance"], // Expected possible tools
+            "balance query",
         ),
         (
             "Show me recent transactions for my account",
             vec!["get_transactions", "get_account_history"],
-            "transaction query"
+            "transaction query",
         ),
         (
             "What is the current network status?",
             vec!["get_network_status", "get_cluster_nodes", "get_health"],
-            "network query"
+            "network query",
         ),
         (
             "Get validator information",
             vec!["get_validator_info", "get_vote_accounts"],
-            "validator query"
+            "validator query",
         ),
     ];
 
@@ -42,14 +42,7 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
         // Run the query
         let output = std::process::Command::new("cargo")
             .args(&[
-                "run",
-                "--bin",
-                "osvm",
-                "--",
-                "chat",
-                "--test",
-                "--query",
-                query,
+                "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
             ])
             .env("RUST_LOG", "debug")
             .output()?;
@@ -94,8 +87,11 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
         println!("   • Tools executed: {:?}", tools_used);
 
         // Verify this query generated a plan
-        assert!(plans_in_test > 0,
-            "❌ FAIL: No plan generated for '{}' query", description);
+        assert!(
+            plans_in_test > 0,
+            "❌ FAIL: No plan generated for '{}' query",
+            description
+        );
 
         // Verify tools were used
         if tools_in_test > 0 {
@@ -103,7 +99,8 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
         }
 
         // Check if any expected tools were used
-        let used_expected = tools_used.iter()
+        let used_expected = tools_used
+            .iter()
             .any(|tool| expected_tools.iter().any(|exp| tool.contains(exp)));
 
         if used_expected {
@@ -123,14 +120,20 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
     println!("Test cases: {}", test_cases.len());
 
     // Final assertions
-    assert!(total_plans >= test_cases.len(),
-        "❌ FAIL: Should generate at least 1 plan per test case");
+    assert!(
+        total_plans >= test_cases.len(),
+        "❌ FAIL: Should generate at least 1 plan per test case"
+    );
 
-    assert!(total_tools_executed > 0,
-        "❌ FAIL: Should execute at least some tools");
+    assert!(
+        total_tools_executed > 0,
+        "❌ FAIL: Should execute at least some tools"
+    );
 
-    assert!(all_tools_seen.len() > 0,
-        "❌ FAIL: Should see at least one unique tool");
+    assert!(
+        all_tools_seen.len() > 0,
+        "❌ FAIL: Should see at least one unique tool"
+    );
 
     println!("\n✅ SUCCESS: Comprehensive plan generation test passed!");
     println!("   • {} different queries tested", test_cases.len());
@@ -155,14 +158,7 @@ async fn test_plan_generation_consistency() -> Result<(), Box<dyn std::error::Er
 
         let output = std::process::Command::new("cargo")
             .args(&[
-                "run",
-                "--bin",
-                "osvm",
-                "--",
-                "chat",
-                "--test",
-                "--query",
-                query,
+                "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
             ])
             .env("RUST_LOG", "debug")
             .output()?;
@@ -228,14 +224,7 @@ async fn test_complex_multi_tool_query() -> Result<(), Box<dyn std::error::Error
 
     let output = std::process::Command::new("cargo")
         .args(&[
-            "run",
-            "--bin",
-            "osvm",
-            "--",
-            "chat",
-            "--test",
-            "--query",
-            query,
+            "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
         ])
         .env("RUST_LOG", "debug")
         .output()?;
@@ -278,8 +267,10 @@ async fn test_complex_multi_tool_query() -> Result<(), Box<dyn std::error::Error
     // Should involve at least one tool
     assert!(total_tools > 0, "❌ FAIL: Plan should include tools");
 
-    println!("\n✅ SUCCESS: Complex query handled with {} plan(s) and {} tool(s)",
-             plans, total_tools);
+    println!(
+        "\n✅ SUCCESS: Complex query handled with {} plan(s) and {} tool(s)",
+        plans, total_tools
+    );
 
     Ok(())
 }

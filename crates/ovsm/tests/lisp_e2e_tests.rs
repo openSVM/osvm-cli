@@ -1,6 +1,5 @@
 /// End-to-end integration test for LISP syntax
 /// Demonstrates: Lexer → Parser → Evaluator working together
-
 use ovsm::lexer::SExprScanner;
 use ovsm::parser::SExprParser;
 use ovsm::runtime::{LispEvaluator, Value};
@@ -8,19 +7,19 @@ use ovsm::runtime::{LispEvaluator, Value};
 #[test]
 fn test_lisp_e2e_simple_arithmetic() {
     let source = "(+ 1 2 3)";
-    
+
     // Lex
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
-    
+
     // Parse
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
-    
+
     // Evaluate
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     assert_eq!(result, Value::Int(6));
 }
 
@@ -31,14 +30,14 @@ fn test_lisp_e2e_variables() {
         (define y 20)
         (+ x y)
     "#;
-    
+
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     assert_eq!(result, Value::Int(30));
 }
 
@@ -50,14 +49,14 @@ fn test_lisp_e2e_mutation() {
         (set! counter (+ counter 1))
         counter
     "#;
-    
+
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     assert_eq!(result, Value::Int(2));
 }
 
@@ -69,14 +68,14 @@ fn test_lisp_e2e_if_expression() {
             "large"
             "small")
     "#;
-    
+
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     assert_eq!(result, Value::String("large".to_string()));
 }
 
@@ -96,17 +95,17 @@ fn test_lisp_e2e_critical_if_in_while() {
         
         count
     "#;
-    
+
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
-    
+
     // This would fail to parse or execute incorrectly in Python-style
     // But works perfectly in LISP because parentheses are explicit!
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     // The while loop should execute once and set count to 1
     assert_eq!(result, Value::Int(1));
 }
@@ -119,14 +118,14 @@ fn test_while_simple() {
             (set! x (+ x 1)))
         x
     "#;
-    
+
     let mut scanner = SExprScanner::new(source);
     let tokens = scanner.scan_tokens().unwrap();
     let mut parser = SExprParser::new(tokens);
     let program = parser.parse().unwrap();
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
-    
+
     assert_eq!(result, Value::Int(3));
 }
 
@@ -205,11 +204,7 @@ fn test_filter_with_lambda() {
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
 
-    let expected = Value::array(vec![
-        Value::Int(2),
-        Value::Int(4),
-        Value::Int(6),
-    ]);
+    let expected = Value::array(vec![Value::Int(2), Value::Int(4), Value::Int(6)]);
 
     assert_eq!(result, expected);
 }
@@ -326,11 +321,7 @@ fn test_map_with_defun() {
     let mut evaluator = LispEvaluator::new();
     let result = evaluator.execute(&program).unwrap();
 
-    let expected = Value::array(vec![
-        Value::Int(11),
-        Value::Int(21),
-        Value::Int(31),
-    ]);
+    let expected = Value::array(vec![Value::Int(11), Value::Int(21), Value::Int(31)]);
 
     assert_eq!(result, expected);
 }
@@ -815,7 +806,9 @@ fn test_assertions_guard_against_invalid_input() {
     let err = result.unwrap_err();
     let err_msg = format!("{}", err);
     // Should catch the assertion error OR division by zero error
-    assert!(err_msg.to_lowercase().contains("division by zero") || err_msg.contains("Assertion failed"));
+    assert!(
+        err_msg.to_lowercase().contains("division by zero") || err_msg.contains("Assertion failed")
+    );
 }
 
 // ============================================================================

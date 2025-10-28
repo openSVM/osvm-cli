@@ -6,9 +6,7 @@ pub fn build_svm_command() -> Command {
         .about("Manage Solana Virtual Machines (SVMs)")
         .arg_required_else_help(true)
         .subcommand(Command::new("list").about("List all SVMs installed in the chain"))
-        .subcommand(
-            Command::new("dashboard").about("Launch interactive SVM monitoring dashboard"),
-        )
+        .subcommand(Command::new("dashboard").about("Launch interactive SVM monitoring dashboard"))
         .subcommand(
             Command::new("get")
                 .about("Get detailed information about a specific SVM")

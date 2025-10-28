@@ -1,13 +1,13 @@
 use crate::error::{Error, Result};
 use crate::parser::{
-    BinaryOp, Expression, Program, Statement, UnaryOp,
-    LoopData, IterationClause, AccumulationClause, ConditionClause, ExitClause,
+    AccumulationClause, BinaryOp, ConditionClause, ExitClause, Expression, IterationClause,
+    LoopData, Program, Statement, UnaryOp,
 };
 use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
-use std::sync::Arc;
-use sha2::{Sha256, Sha512, Digest};
 use base64::Engine;
+use sha2::{Digest, Sha256, Sha512};
+use std::sync::Arc;
 
 /// LISP-specific evaluator that handles special forms
 ///
@@ -260,7 +260,11 @@ impl LispEvaluator {
                 self.apply_unary_op(*op, val)
             }
 
-            Expression::Ternary { condition, then_expr, else_expr } => {
+            Expression::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => {
                 let cond_val = self.evaluate_expression(condition)?;
                 if cond_val.is_truthy() {
                     self.evaluate_expression(then_expr)
@@ -358,7 +362,10 @@ impl LispEvaluator {
             }
 
             // Function call form (for generalized references)
-            Expression::ToolCall { name, args: place_args } => {
+            Expression::ToolCall {
+                name,
+                args: place_args,
+            } => {
                 match name.as_str() {
                     // (setf (first list) value) - set first element
                     "first" | "car" => {
@@ -416,7 +423,11 @@ impl LispEvaluator {
 
         let var_name = match &args[0].value {
             Expression::Variable(name) => name.clone(),
-            _ => return Err(Error::ParseError("define requires variable name".to_string())),
+            _ => {
+                return Err(Error::ParseError(
+                    "define requires variable name".to_string(),
+                ))
+            }
         };
 
         let value = self.evaluate_expression(&args[1].value)?;
@@ -437,7 +448,11 @@ impl LispEvaluator {
         // Get function name
         let func_name = match &args[0].value {
             Expression::Variable(name) => name.clone(),
-            _ => return Err(Error::ParseError("defun requires function name".to_string())),
+            _ => {
+                return Err(Error::ParseError(
+                    "defun requires function name".to_string(),
+                ))
+            }
         };
 
         // Get parameters list (supports &rest)
@@ -470,7 +485,11 @@ impl LispEvaluator {
         // Get macro name
         let macro_name = match &args[0].value {
             Expression::Variable(name) => name.clone(),
-            _ => return Err(Error::ParseError("defmacro requires macro name".to_string())),
+            _ => {
+                return Err(Error::ParseError(
+                    "defmacro requires macro name".to_string(),
+                ))
+            }
         };
 
         // Get parameters list (supports &rest)
@@ -517,9 +536,11 @@ impl LispEvaluator {
                         Expression::ArrayLiteral(elements) if elements.len() == 2 => {
                             let var_name = match &elements[0] {
                                 Expression::Variable(n) => n.clone(),
-                                _ => return Err(Error::ParseError(
-                                    "let binding requires variable name".to_string(),
-                                )),
+                                _ => {
+                                    return Err(Error::ParseError(
+                                        "let binding requires variable name".to_string(),
+                                    ))
+                                }
                             };
                             result.push((var_name, &elements[1]));
                         }
@@ -584,9 +605,11 @@ impl LispEvaluator {
                         Expression::ArrayLiteral(elements) if elements.len() == 2 => {
                             let var_name = match &elements[0] {
                                 Expression::Variable(n) => n.clone(),
-                                _ => return Err(Error::ParseError(
-                                    "let* binding requires variable name".to_string(),
-                                )),
+                                _ => {
+                                    return Err(Error::ParseError(
+                                        "let* binding requires variable name".to_string(),
+                                    ))
+                                }
                             };
                             result.push((var_name, &elements[1]));
                         }
@@ -644,7 +667,8 @@ impl LispEvaluator {
             Expression::ArrayLiteral(defs) => defs,
             _ => {
                 return Err(Error::ParseError(
-                    "flet requires function definitions list: ((name (params) body)...)".to_string(),
+                    "flet requires function definitions list: ((name (params) body)...)"
+                        .to_string(),
                 ))
             }
         };
@@ -659,9 +683,11 @@ impl LispEvaluator {
                         // Extract name
                         let name = match &parts[0] {
                             Expression::Variable(n) => n.clone(),
-                            _ => return Err(Error::ParseError(
-                                "flet function definition requires name".to_string(),
-                            )),
+                            _ => {
+                                return Err(Error::ParseError(
+                                    "flet function definition requires name".to_string(),
+                                ))
+                            }
                         };
 
                         // Extract parameters
@@ -672,9 +698,10 @@ impl LispEvaluator {
 
                         functions.push((name, params, body));
                     } else {
-                        return Err(Error::ParseError(
-                            format!("flet function definition must have 3 parts (name params body), got {}", parts.len()),
-                        ))
+                        return Err(Error::ParseError(format!(
+                            "flet function definition must have 3 parts (name params body), got {}",
+                            parts.len()
+                        )));
                     }
                 }
                 _ => {
@@ -730,7 +757,8 @@ impl LispEvaluator {
             Expression::ArrayLiteral(defs) => defs,
             _ => {
                 return Err(Error::ParseError(
-                    "labels requires function definitions list: ((name (params) body)...)".to_string(),
+                    "labels requires function definitions list: ((name (params) body)...)"
+                        .to_string(),
                 ))
             }
         };
@@ -744,9 +772,11 @@ impl LispEvaluator {
                     // Extract name
                     let name = match &parts[0] {
                         Expression::Variable(n) => n.clone(),
-                        _ => return Err(Error::ParseError(
-                            "labels function definition requires name".to_string(),
-                        )),
+                        _ => {
+                            return Err(Error::ParseError(
+                                "labels function definition requires name".to_string(),
+                            ))
+                        }
                     };
 
                     // Extract parameters
@@ -829,9 +859,11 @@ impl LispEvaluator {
                     // Match pattern (can be single value or list of values)
                     let matches = match &clause[0] {
                         // Single value to match
-                        Expression::Variable(_) | Expression::IntLiteral(_) |
-                        Expression::FloatLiteral(_) | Expression::StringLiteral(_) |
-                        Expression::BoolLiteral(_) => {
+                        Expression::Variable(_)
+                        | Expression::IntLiteral(_)
+                        | Expression::FloatLiteral(_)
+                        | Expression::StringLiteral(_)
+                        | Expression::BoolLiteral(_) => {
                             let pattern_value = self.evaluate_expression(&clause[0])?;
                             self.values_equal(&test_value, &pattern_value)
                         }
@@ -894,9 +926,7 @@ impl LispEvaluator {
                     }
 
                     let type_match = match &clause[0] {
-                        Expression::Variable(type_name) => {
-                            self.type_matches(&test_type, type_name)
-                        }
+                        Expression::Variable(type_name) => self.type_matches(&test_type, type_name),
                         Expression::NullLiteral => {
                             // null literal in pattern position matches null type
                             test_type == "null"
@@ -920,7 +950,9 @@ impl LispEvaluator {
                         return self.evaluate_expression(&clause[1]);
                     }
                 }
-                Expression::ToolCall { args: clause_args, .. } if clause_args.len() == 2 => {
+                Expression::ToolCall {
+                    args: clause_args, ..
+                } if clause_args.len() == 2 => {
                     // Parenthesized syntax: (type result)
                     if let Expression::Variable(var) = &clause_args[0].value {
                         if var == "else" || var == "otherwise" || var == "t" {
@@ -929,9 +961,7 @@ impl LispEvaluator {
                     }
 
                     let type_match = match &clause_args[0].value {
-                        Expression::Variable(type_name) => {
-                            self.type_matches(&test_type, type_name)
-                        }
+                        Expression::Variable(type_name) => self.type_matches(&test_type, type_name),
                         Expression::NullLiteral => {
                             // null literal in pattern position matches null type
                             test_type == "null"
@@ -1053,7 +1083,8 @@ impl LispEvaluator {
             Expression::Variable(n) => n.clone(),
             _ => {
                 return Err(Error::ParseError(
-                    "for syntax: (for (var collection) body...), var must be a variable name".to_string(),
+                    "for syntax: (for (var collection) body...), var must be a variable name"
+                        .to_string(),
                 ))
             }
         };
@@ -1197,7 +1228,10 @@ impl LispEvaluator {
                     }
                     (&pair[0], &pair[1])
                 }
-                Expression::ToolCall { name: _, args: clause_args } => {
+                Expression::ToolCall {
+                    name: _,
+                    args: clause_args,
+                } => {
                     // S-expression form: (condition result)
                     if clause_args.len() != 2 {
                         return Err(Error::ParseError(
@@ -1404,7 +1438,10 @@ impl LispEvaluator {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "assert".to_string(),
-                reason: format!("Expected 2 arguments (condition, message), got {}", args.len()),
+                reason: format!(
+                    "Expected 2 arguments (condition, message), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1412,10 +1449,12 @@ impl LispEvaluator {
         let condition = self.evaluate_expression(&args[0].value)?;
         let is_true = match condition {
             Value::Bool(b) => b,
-            _ => return Err(Error::TypeError {
-                expected: "bool".to_string(),
-                got: format!("{:?}", condition),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "bool".to_string(),
+                    got: format!("{:?}", condition),
+                })
+            }
         };
 
         if !is_true {
@@ -1425,7 +1464,9 @@ impl LispEvaluator {
                 Value::String(s) => s,
                 _ => format!("{:?}", message),
             };
-            return Err(Error::AssertionFailed { message: message_str });
+            return Err(Error::AssertionFailed {
+                message: message_str,
+            });
         }
 
         Ok(Value::Null)
@@ -1436,7 +1477,10 @@ impl LispEvaluator {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "assert-type".to_string(),
-                reason: format!("Expected 2 arguments (value, predicate), got {}", args.len()),
+                reason: format!(
+                    "Expected 2 arguments (value, predicate), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1448,10 +1492,12 @@ impl LispEvaluator {
 
         let is_valid = match predicate_result {
             Value::Bool(b) => b,
-            _ => return Err(Error::TypeError {
-                expected: "bool (type predicate)".to_string(),
-                got: format!("{:?}", predicate_result),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "bool (type predicate)".to_string(),
+                    got: format!("{:?}", predicate_result),
+                })
+            }
         };
 
         if !is_valid {
@@ -1469,7 +1515,10 @@ impl LispEvaluator {
                 Value::Macro { .. } => "macro",
             };
             return Err(Error::AssertionFailed {
-                message: format!("Type assertion failed: expected different type, got {}", type_name),
+                message: format!(
+                    "Type assertion failed: expected different type, got {}",
+                    type_name
+                ),
             });
         }
 
@@ -1482,7 +1531,10 @@ impl LispEvaluator {
         if args.len() < 2 || args.len() > 3 {
             return Err(Error::InvalidArguments {
                 tool: "try".to_string(),
-                reason: format!("Expected 2-3 arguments (body, catch [, finally]), got {}", args.len()),
+                reason: format!(
+                    "Expected 2-3 arguments (body, catch [, finally]), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1494,23 +1546,29 @@ impl LispEvaluator {
         let catch_arg = &args[1];
         let (error_var, catch_body) = match &catch_arg.value {
             // Case 1: ToolCall form: (catch e handler) - for try-catch error handling
-            Expression::ToolCall { name, args: arguments } if name == "catch" => {
+            Expression::ToolCall {
+                name,
+                args: arguments,
+            } if name == "catch" => {
                 if arguments.len() != 2 {
                     return Err(Error::InvalidArguments {
                         tool: "try".to_string(),
-                        reason: "catch requires 2 arguments: error-var and handler-body".to_string(),
+                        reason: "catch requires 2 arguments: error-var and handler-body"
+                            .to_string(),
                     })?;
                 }
                 // Extract error variable name
                 let error_var = match &arguments[0].value {
                     Expression::Variable(name) => name.clone(),
-                    _ => return Err(Error::InvalidArguments {
-                        tool: "try".to_string(),
-                        reason: "catch first argument must be a variable name".to_string(),
-                    })?,
+                    _ => {
+                        return Err(Error::InvalidArguments {
+                            tool: "try".to_string(),
+                            reason: "catch first argument must be a variable name".to_string(),
+                        })?
+                    }
                 };
                 (error_var, &arguments[1].value)
-            },
+            }
             // Case 2: Catch expression form (from special parser)
             // Note: Catch has body as Vec<Expression>, use first expression
             Expression::Catch { tag, body } => {
@@ -1522,11 +1580,13 @@ impl LispEvaluator {
                 // Get first body expression or use null
                 let catch_expr = body.first().unwrap_or(&Expression::NullLiteral);
                 (error_var, catch_expr)
-            },
-            _ => return Err(Error::InvalidArguments {
-                tool: "try".to_string(),
-                reason: "Second argument must be (catch error-var handler)".to_string(),
-            })?,
+            }
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "try".to_string(),
+                    reason: "Second argument must be (catch error-var handler)".to_string(),
+                })?
+            }
         };
 
         // Execute catch block if try failed
@@ -1549,7 +1609,10 @@ impl LispEvaluator {
         if args.len() == 3 {
             let finally_arg = &args[2];
             match &finally_arg.value {
-                Expression::ToolCall { name, args: arguments } if name == "finally" => {
+                Expression::ToolCall {
+                    name,
+                    args: arguments,
+                } if name == "finally" => {
                     if arguments.len() != 1 {
                         return Err(Error::InvalidArguments {
                             tool: "try".to_string(),
@@ -1558,11 +1621,13 @@ impl LispEvaluator {
                     }
                     // Execute finally block (ignore errors)
                     let _ = self.evaluate_expression(&arguments[0].value);
-                },
-                _ => return Err(Error::InvalidArguments {
-                    tool: "try".to_string(),
-                    reason: "Third argument must be (finally cleanup)".to_string(),
-                })?,
+                }
+                _ => {
+                    return Err(Error::InvalidArguments {
+                        tool: "try".to_string(),
+                        reason: "Third argument must be (finally cleanup)".to_string(),
+                    })?
+                }
             }
         }
 
@@ -1584,7 +1649,9 @@ impl LispEvaluator {
             _ => format!("{:?}", message),
         };
 
-        Err(Error::AssertionFailed { message: message_str })
+        Err(Error::AssertionFailed {
+            message: message_str,
+        })
     }
 
     /// (split string delimiter) - Split string by delimiter
@@ -1592,7 +1659,10 @@ impl LispEvaluator {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "split".to_string(),
-                reason: format!("Expected 2 arguments (string, delimiter), got {}", args.len()),
+                reason: format!(
+                    "Expected 2 arguments (string, delimiter), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1601,18 +1671,22 @@ impl LispEvaluator {
 
         let string_val = match string {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", string),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", string),
+                })
+            }
         };
 
         let delimiter_val = match delimiter {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", delimiter),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", delimiter),
+                })
+            }
         };
 
         let parts: Vec<Value> = string_val
@@ -1628,7 +1702,10 @@ impl LispEvaluator {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "join".to_string(),
-                reason: format!("Expected 2 arguments (array, delimiter), got {}", args.len()),
+                reason: format!(
+                    "Expected 2 arguments (array, delimiter), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1637,18 +1714,22 @@ impl LispEvaluator {
 
         let array_val = match array {
             Value::Array(ref arr) => arr.clone(),
-            _ => return Err(Error::TypeError {
-                expected: "array".to_string(),
-                got: format!("{:?}", array),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "array".to_string(),
+                    got: format!("{:?}", array),
+                })
+            }
         };
 
         let delimiter_val = match delimiter {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", delimiter),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", delimiter),
+                })
+            }
         };
 
         let strings: Vec<String> = array_val
@@ -1667,7 +1748,10 @@ impl LispEvaluator {
         if args.len() != 3 {
             return Err(Error::InvalidArguments {
                 tool: "replace".to_string(),
-                reason: format!("Expected 3 arguments (string, old, new), got {}", args.len()),
+                reason: format!(
+                    "Expected 3 arguments (string, old, new), got {}",
+                    args.len()
+                ),
             })?;
         }
 
@@ -1677,26 +1761,32 @@ impl LispEvaluator {
 
         let string_val = match string {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", string),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", string),
+                })
+            }
         };
 
         let old_val = match old {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", old),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", old),
+                })
+            }
         };
 
         let new_val = match new {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", new),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", new),
+                })
+            }
         };
 
         Ok(Value::String(string_val.replace(&old_val, &new_val)))
@@ -1714,10 +1804,12 @@ impl LispEvaluator {
         let string = self.evaluate_expression(&args[0].value)?;
         let string_val = match string {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", string),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", string),
+                })
+            }
         };
 
         Ok(Value::String(string_val.trim().to_string()))
@@ -1735,10 +1827,12 @@ impl LispEvaluator {
         let string = self.evaluate_expression(&args[0].value)?;
         let string_val = match string {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", string),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", string),
+                })
+            }
         };
 
         Ok(Value::String(string_val.to_uppercase()))
@@ -1756,10 +1850,12 @@ impl LispEvaluator {
         let string = self.evaluate_expression(&args[0].value)?;
         let string_val = match string {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: format!("{:?}", string),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", string),
+                })
+            }
         };
 
         Ok(Value::String(string_val.to_lowercase()))
@@ -1783,10 +1879,12 @@ impl LispEvaluator {
         let num = match val {
             Value::Int(i) => i as f64,
             Value::Float(f) => f,
-            _ => return Err(Error::TypeError {
-                expected: "number (int or float)".to_string(),
-                got: format!("{:?}", val),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number (int or float)".to_string(),
+                    got: format!("{:?}", val),
+                })
+            }
         };
 
         if num < 0.0 {
@@ -1814,19 +1912,23 @@ impl LispEvaluator {
         let base = match base_val {
             Value::Int(i) => i as f64,
             Value::Float(f) => f,
-            _ => return Err(Error::TypeError {
-                expected: "number (int or float)".to_string(),
-                got: format!("{:?}", base_val),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number (int or float)".to_string(),
+                    got: format!("{:?}", base_val),
+                })
+            }
         };
 
         let exponent = match exp_val {
             Value::Int(i) => i as f64,
             Value::Float(f) => f,
-            _ => return Err(Error::TypeError {
-                expected: "number (int or float)".to_string(),
-                got: format!("{:?}", exp_val),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number (int or float)".to_string(),
+                    got: format!("{:?}", exp_val),
+                })
+            }
         };
 
         let result = base.powf(exponent);
@@ -1835,7 +1937,10 @@ impl LispEvaluator {
         if result.is_nan() {
             return Err(Error::InvalidArguments {
                 tool: "pow".to_string(),
-                reason: format!("Result is not a number (base={}, exponent={})", base, exponent),
+                reason: format!(
+                    "Result is not a number (base={}, exponent={})",
+                    base, exponent
+                ),
             })?;
         }
 
@@ -2013,10 +2118,12 @@ impl LispEvaluator {
         let len = match val {
             Value::Array(ref arr) => arr.len(),
             Value::String(ref s) => s.len(),
-            _ => return Err(Error::TypeError {
-                expected: "array or string".to_string(),
-                got: val.type_name(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "array or string".to_string(),
+                    got: val.type_name(),
+                })
+            }
         };
         Ok(Value::Int(len as i64))
     }
@@ -2032,12 +2139,10 @@ impl LispEvaluator {
 
         let val = self.evaluate_expression(&args[0].value)?;
         match val {
-            Value::Array(ref arr) => {
-                arr.last().cloned().ok_or(Error::IndexOutOfBounds {
-                    index: 0,
-                    length: 0,
-                })
-            }
+            Value::Array(ref arr) => arr.last().cloned().ok_or(Error::IndexOutOfBounds {
+                index: 0,
+                length: 0,
+            }),
             _ => Err(Error::TypeError {
                 expected: "array".to_string(),
                 got: val.type_name(),
@@ -2106,19 +2211,19 @@ impl LispEvaluator {
 
         let index = match index_val {
             Value::Int(i) => i as usize,
-            _ => return Err(Error::TypeError {
-                expected: "int".to_string(),
-                got: index_val.type_name(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: index_val.type_name(),
+                })
+            }
         };
 
         match val {
-            Value::Array(ref arr) => {
-                arr.get(index).cloned().ok_or(Error::IndexOutOfBounds {
-                    index,
-                    length: arr.len(),
-                })
-            }
+            Value::Array(ref arr) => arr.get(index).cloned().ok_or(Error::IndexOutOfBounds {
+                index,
+                length: arr.len(),
+            }),
             _ => Err(Error::TypeError {
                 expected: "array".to_string(),
                 got: val.type_name(),
@@ -2194,18 +2299,22 @@ impl LispEvaluator {
 
         let start = match start_val {
             Value::Int(n) => n,
-            _ => return Err(Error::TypeError {
-                expected: "int".to_string(),
-                got: start_val.type_name(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: start_val.type_name(),
+                })
+            }
         };
 
         let end = match end_val {
             Value::Int(n) => n,
-            _ => return Err(Error::TypeError {
-                expected: "int".to_string(),
-                got: end_val.type_name(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "int".to_string(),
+                    got: end_val.type_name(),
+                })
+            }
         };
 
         let values: Vec<Value> = (start..end).map(Value::Int).collect();
@@ -2226,10 +2335,12 @@ impl LispEvaluator {
             let val = self.evaluate_expression(&arg.value)?;
             let num = match val {
                 Value::Int(n) => n,
-                _ => return Err(Error::TypeError {
-                    expected: "int".to_string(),
-                    got: val.type_name(),
-                }),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "int".to_string(),
+                        got: val.type_name(),
+                    })
+                }
             };
             min_val = Some(min_val.map_or(num, |m| m.min(num)));
         }
@@ -2250,10 +2361,12 @@ impl LispEvaluator {
             let val = self.evaluate_expression(&arg.value)?;
             let num = match val {
                 Value::Int(n) => n,
-                _ => return Err(Error::TypeError {
-                    expected: "int".to_string(),
-                    got: val.type_name(),
-                }),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "int".to_string(),
+                        got: val.type_name(),
+                    })
+                }
             };
             max_val = Some(max_val.map_or(num, |m| m.max(num)));
         }
@@ -2290,10 +2403,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s.as_bytes().to_vec(),
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let encoded = bs58::encode(input).into_string();
@@ -2312,10 +2427,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let decoded = bs58::decode(input)
@@ -2340,10 +2457,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s.as_bytes().to_vec(),
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let encoded = base64::engine::general_purpose::STANDARD.encode(&input);
@@ -2362,10 +2481,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let decoded = base64::engine::general_purpose::STANDARD
@@ -2390,10 +2511,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s.as_bytes().to_vec(),
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let encoded = hex::encode(&input);
@@ -2412,14 +2535,16 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s,
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
-        let decoded = hex::decode(input)
-            .map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
+        let decoded =
+            hex::decode(input).map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
 
         let result = String::from_utf8(decoded)
             .map_err(|e| Error::ParseError(format!("Invalid UTF-8 in decoded hex: {}", e)))?;
@@ -2439,10 +2564,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s.as_bytes().to_vec(),
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let mut hasher = Sha256::new();
@@ -2465,10 +2592,12 @@ impl LispEvaluator {
         let val = self.evaluate_expression(&args[0].value)?;
         let input = match val {
             Value::String(s) => s.as_bytes().to_vec(),
-            _ => return Err(Error::TypeError {
-                expected: "string".to_string(),
-                got: val.type_name().to_string(),
-            }),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
         };
 
         let mut hasher = Sha512::new();
@@ -2542,7 +2671,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "map".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -2594,7 +2726,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "filter".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -2634,7 +2769,8 @@ impl LispEvaluator {
         if args.len() != 3 {
             return Err(Error::InvalidArguments {
                 tool: "reduce".to_string(),
-                reason: "Expected 3 arguments: collection, initial value, and reducer lambda".to_string(),
+                reason: "Expected 3 arguments: collection, initial value, and reducer lambda"
+                    .to_string(),
             });
         }
 
@@ -2653,7 +2789,10 @@ impl LispEvaluator {
                 if params.len() != 2 {
                     return Err(Error::InvalidArguments {
                         tool: "reduce".to_string(),
-                        reason: format!("Lambda must take exactly 2 parameters (accumulator, element), got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 2 parameters (accumulator, element), got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -2703,7 +2842,10 @@ impl LispEvaluator {
                 if params.len() != 2 {
                     return Err(Error::InvalidArguments {
                         tool: "sort".to_string(),
-                        reason: format!("Lambda must take exactly 2 parameters, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 2 parameters, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -2803,7 +2945,9 @@ impl LispEvaluator {
                         'A' | 'a' => {
                             // ~A - Aesthetic (any value)
                             if arg_index < format_args.len() {
-                                result.push_str(&self.value_to_format_string(&format_args[arg_index]));
+                                result.push_str(
+                                    &self.value_to_format_string(&format_args[arg_index]),
+                                );
                                 arg_index += 1;
                             }
                         }
@@ -2813,7 +2957,9 @@ impl LispEvaluator {
                                 if let Value::Int(n) = format_args[arg_index] {
                                     result.push_str(&n.to_string());
                                 } else {
-                                    result.push_str(&self.value_to_format_string(&format_args[arg_index]));
+                                    result.push_str(
+                                        &self.value_to_format_string(&format_args[arg_index]),
+                                    );
                                 }
                                 arg_index += 1;
                             }
@@ -2861,7 +3007,8 @@ impl LispEvaluator {
             Value::Bool(b) => b.to_string(),
             Value::Null => "null".to_string(),
             Value::Array(arr) => {
-                let items: Vec<String> = arr.iter().map(|v| self.value_to_format_string(v)).collect();
+                let items: Vec<String> =
+                    arr.iter().map(|v| self.value_to_format_string(v)).collect();
                 format!("[{}]", items.join(", "))
             }
             _ => format!("{}", val),
@@ -2890,7 +3037,12 @@ impl LispEvaluator {
         if start > array.len() || end > array.len() || start > end {
             return Err(Error::InvalidArguments {
                 tool: "slice".to_string(),
-                reason: format!("Invalid slice bounds: start={}, end={}, len={}", start, end, array.len()),
+                reason: format!(
+                    "Invalid slice bounds: start={}, end={}, len={}",
+                    start,
+                    end,
+                    array.len()
+                ),
             });
         }
 
@@ -2910,9 +3062,7 @@ impl LispEvaluator {
         let obj_val = self.evaluate_expression(&args[0].value)?;
         let obj = obj_val.as_object()?;
 
-        let keys: Vec<Value> = obj.keys()
-            .map(|k| Value::String(k.clone()))
-            .collect();
+        let keys: Vec<Value> = obj.keys().map(|k| Value::String(k.clone())).collect();
 
         Ok(Value::Array(Arc::new(keys)))
     }
@@ -2993,7 +3143,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "find".to_string(),
-                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Predicate must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3124,7 +3277,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "some".to_string(),
-                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Predicate must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3179,7 +3335,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "every".to_string(),
-                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Predicate must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3234,7 +3393,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "partition".to_string(),
-                        reason: format!("Predicate must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Predicate must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3456,11 +3618,15 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "group-by".to_string(),
-                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Key function must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
-                let mut groups: std::collections::HashMap<String, Vec<Value>> = std::collections::HashMap::new();
+                let mut groups: std::collections::HashMap<String, Vec<Value>> =
+                    std::collections::HashMap::new();
 
                 // Apply key function to each element
                 for elem in array.iter() {
@@ -3485,7 +3651,10 @@ impl LispEvaluator {
                         _ => format!("{:?}", key_val),
                     };
 
-                    groups.entry(key).or_insert_with(Vec::new).push(elem.clone());
+                    groups
+                        .entry(key)
+                        .or_insert_with(Vec::new)
+                        .push(elem.clone());
                 }
 
                 // Convert groups to object with arrays
@@ -3524,11 +3693,15 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "count-by".to_string(),
-                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Key function must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
-                let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+                let mut counts: std::collections::HashMap<String, i64> =
+                    std::collections::HashMap::new();
 
                 // Apply key function to each element
                 for elem in array.iter() {
@@ -3575,7 +3748,13 @@ impl LispEvaluator {
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
         // Check if this is a user-defined function first
         if let Ok(func_val) = self.env.get(name) {
-            if let Value::Function { params, body, closure, is_flet } = func_val {
+            if let Value::Function {
+                params,
+                body,
+                closure,
+                is_flet,
+            } = func_val
+            {
                 // This is a function call!
 
                 // Evaluate arguments - handle both positional and keyword arguments
@@ -3612,7 +3791,7 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body);  // Explicit deref
+                    let result = self.evaluate_expression(&*body); // Explicit deref
 
                     // Restore original environment
                     self.env = saved_env;
@@ -3626,7 +3805,7 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body);  // Explicit deref
+                    let result = self.evaluate_expression(&*body); // Explicit deref
 
                     // Exit function scope
                     self.env.exit_scope();
@@ -3945,7 +4124,8 @@ impl LispEvaluator {
             Expression::NullLiteral => Ok(Value::Null),
             Expression::Variable(name) => Ok(Value::String(name.clone())),
             Expression::ArrayLiteral(exprs) => {
-                let vals: Result<Vec<_>> = exprs.iter().map(|e| self.expression_to_value(e)).collect();
+                let vals: Result<Vec<_>> =
+                    exprs.iter().map(|e| self.expression_to_value(e)).collect();
                 Ok(Value::array(vals?))
             }
             _ => {
@@ -3962,7 +4142,9 @@ impl LispEvaluator {
             Value::Float(f) => Ok(Expression::FloatLiteral(*f)),
             Value::String(s) => {
                 // Try to interpret as variable name if it's an identifier
-                if s.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                if s.chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                {
                     Ok(Expression::Variable(s.clone()))
                 } else {
                     Ok(Expression::StringLiteral(s.clone()))
@@ -3971,7 +4153,8 @@ impl LispEvaluator {
             Value::Bool(b) => Ok(Expression::BoolLiteral(*b)),
             Value::Null => Ok(Expression::NullLiteral),
             Value::Array(arr) => {
-                let exprs: Result<Vec<_>> = arr.iter().map(|v| self.value_to_expression(v)).collect();
+                let exprs: Result<Vec<_>> =
+                    arr.iter().map(|v| self.value_to_expression(v)).collect();
                 Ok(Expression::ArrayLiteral(exprs?))
             }
             _ => Err(Error::TypeError {
@@ -3988,7 +4171,9 @@ impl LispEvaluator {
                 // Process the template, evaluating unquotes
                 self.process_quasiquote_template(inner)
             }
-            _ => Err(Error::ParseError("Expected quasiquote expression".to_string())),
+            _ => Err(Error::ParseError(
+                "Expected quasiquote expression".to_string(),
+            )),
         }
     }
 
@@ -4052,7 +4237,11 @@ impl LispEvaluator {
 
     /// Parse function/macro parameters with &rest support
     /// Returns parameter list (last param may be "&rest" followed by varargs name)
-    fn parse_function_parameters(&self, params_expr: &Expression, context: &str) -> Result<Vec<String>> {
+    fn parse_function_parameters(
+        &self,
+        params_expr: &Expression,
+        context: &str,
+    ) -> Result<Vec<String>> {
         // In S-expression syntax, parameter lists are parsed as ToolCalls or ArrayLiterals
         let param_exprs = match params_expr {
             Expression::ArrayLiteral(exprs) => exprs,
@@ -4064,7 +4253,12 @@ impl LispEvaluator {
                 }
                 return self.parse_params_from_list(&exprs, context);
             }
-            _ => return Err(Error::ParseError(format!("{}: requires parameter list", context))),
+            _ => {
+                return Err(Error::ParseError(format!(
+                    "{}: requires parameter list",
+                    context
+                )))
+            }
         };
 
         self.parse_params_from_list(param_exprs, context)
@@ -4073,112 +4267,146 @@ impl LispEvaluator {
     /// Helper to parse parameter list from expression vector
     /// Supports: required, &optional, &rest, &key parameters
     /// Format: ["req1", "req2", "&optional", "opt1", "default1", "&rest", "args", "&key", "key1", "default1"]
-    fn parse_params_from_list(&self, param_exprs: &[Expression], context: &str) -> Result<Vec<String>> {
-                let mut param_names = Vec::new();
-                let mut section = "required"; // required, optional, rest, key
-                let mut i = 0;
+    fn parse_params_from_list(
+        &self,
+        param_exprs: &[Expression],
+        context: &str,
+    ) -> Result<Vec<String>> {
+        let mut param_names = Vec::new();
+        let mut section = "required"; // required, optional, rest, key
+        let mut i = 0;
 
-                while i < param_exprs.len() {
-                    let param_expr = &param_exprs[i];
+        while i < param_exprs.len() {
+            let param_expr = &param_exprs[i];
 
-                    // Check for section markers
-                    if let Expression::Variable(name) = param_expr {
-                        match name.as_str() {
-                            "&optional" => {
-                                if section != "required" {
-                                    return Err(Error::ParseError(format!("{}: &optional must come before &rest and &key", context)));
-                                }
-                                section = "optional";
-                                param_names.push(name.clone());
-                                i += 1;
-                                continue;
-                            }
-                            "&rest" => {
-                                if section == "key" {
-                                    return Err(Error::ParseError(format!("{}: &rest must come before &key", context)));
-                                }
-                                if i == param_exprs.len() - 1 {
-                                    return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
-                                }
-                                section = "rest";
-                                param_names.push(name.clone());
-                                i += 1;
-                                // Next item must be the rest parameter name
-                                if let Expression::Variable(rest_name) = &param_exprs[i] {
-                                    param_names.push(rest_name.clone());
-                                    i += 1;
-                                    continue;
-                                } else {
-                                    return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
-                                }
-                            }
-                            "&key" => {
-                                section = "key";
-                                param_names.push(name.clone());
-                                i += 1;
-                                continue;
-                            }
-                            _ => {}
+            // Check for section markers
+            if let Expression::Variable(name) = param_expr {
+                match name.as_str() {
+                    "&optional" => {
+                        if section != "required" {
+                            return Err(Error::ParseError(format!(
+                                "{}: &optional must come before &rest and &key",
+                                context
+                            )));
+                        }
+                        section = "optional";
+                        param_names.push(name.clone());
+                        i += 1;
+                        continue;
+                    }
+                    "&rest" => {
+                        if section == "key" {
+                            return Err(Error::ParseError(format!(
+                                "{}: &rest must come before &key",
+                                context
+                            )));
+                        }
+                        if i == param_exprs.len() - 1 {
+                            return Err(Error::ParseError(format!(
+                                "{}: &rest must be followed by parameter name",
+                                context
+                            )));
+                        }
+                        section = "rest";
+                        param_names.push(name.clone());
+                        i += 1;
+                        // Next item must be the rest parameter name
+                        if let Expression::Variable(rest_name) = &param_exprs[i] {
+                            param_names.push(rest_name.clone());
+                            i += 1;
+                            continue;
+                        } else {
+                            return Err(Error::ParseError(format!(
+                                "{}: &rest must be followed by parameter name",
+                                context
+                            )));
                         }
                     }
-
-                    // Handle parameters based on current section
-                    match section {
-                        "required" => {
-                            if let Expression::Variable(name) = param_expr {
-                                param_names.push(name.clone());
-                            } else {
-                                return Err(Error::ParseError(format!("{}: required parameters must be identifiers", context)));
-                            }
-                        }
-                        "optional" | "key" => {
-                            // Can be either: variable (with null default) or (variable default-expr)
-                            match param_expr {
-                                Expression::Variable(name) => {
-                                    // Parameter without explicit default
-                                    param_names.push(name.clone());
-                                    param_names.push("null".to_string()); // Default to null
-                                }
-                                Expression::ArrayLiteral(list) => {
-                                    // (param-name default-value)
-                                    if list.len() != 2 {
-                                        return Err(Error::ParseError(format!("{}: {} parameter default must be (name default)", context, section)));
-                                    }
-                                    if let Expression::Variable(name) = &list[0] {
-                                        param_names.push(name.clone());
-                                        // Serialize default expression
-                                        let default_val = self.expression_to_value(&list[1])?;
-                                        param_names.push(self.serialize_default_value(&default_val)?);
-                                    } else {
-                                        return Err(Error::ParseError(format!("{}: {} parameter name must be identifier", context, section)));
-                                    }
-                                }
-                                Expression::ToolCall { name, args } => {
-                                    // Handle (param-name default-value) as ToolCall
-                                    if args.len() != 1 {
-                                        return Err(Error::ParseError(format!("{}: {} parameter default must be (name default)", context, section)));
-                                    }
-                                    param_names.push(name.clone());
-                                    // Serialize default expression
-                                    let default_val = self.expression_to_value(&args[0].value)?;
-                                    param_names.push(self.serialize_default_value(&default_val)?);
-                                }
-                                _ => {
-                                    return Err(Error::ParseError(format!("{}: {} parameters must be identifiers or (name default)", context, section)));
-                                }
-                            }
-                        }
-                        "rest" => {
-                            // Already handled in &rest case above
-                            return Err(Error::ParseError(format!("{}: unexpected parameter after &rest", context)));
-                        }
-                        _ => unreachable!(),
+                    "&key" => {
+                        section = "key";
+                        param_names.push(name.clone());
+                        i += 1;
+                        continue;
                     }
-
-                    i += 1;
+                    _ => {}
                 }
+            }
 
-                Ok(param_names)
+            // Handle parameters based on current section
+            match section {
+                "required" => {
+                    if let Expression::Variable(name) = param_expr {
+                        param_names.push(name.clone());
+                    } else {
+                        return Err(Error::ParseError(format!(
+                            "{}: required parameters must be identifiers",
+                            context
+                        )));
+                    }
+                }
+                "optional" | "key" => {
+                    // Can be either: variable (with null default) or (variable default-expr)
+                    match param_expr {
+                        Expression::Variable(name) => {
+                            // Parameter without explicit default
+                            param_names.push(name.clone());
+                            param_names.push("null".to_string()); // Default to null
+                        }
+                        Expression::ArrayLiteral(list) => {
+                            // (param-name default-value)
+                            if list.len() != 2 {
+                                return Err(Error::ParseError(format!(
+                                    "{}: {} parameter default must be (name default)",
+                                    context, section
+                                )));
+                            }
+                            if let Expression::Variable(name) = &list[0] {
+                                param_names.push(name.clone());
+                                // Serialize default expression
+                                let default_val = self.expression_to_value(&list[1])?;
+                                param_names.push(self.serialize_default_value(&default_val)?);
+                            } else {
+                                return Err(Error::ParseError(format!(
+                                    "{}: {} parameter name must be identifier",
+                                    context, section
+                                )));
+                            }
+                        }
+                        Expression::ToolCall { name, args } => {
+                            // Handle (param-name default-value) as ToolCall
+                            if args.len() != 1 {
+                                return Err(Error::ParseError(format!(
+                                    "{}: {} parameter default must be (name default)",
+                                    context, section
+                                )));
+                            }
+                            param_names.push(name.clone());
+                            // Serialize default expression
+                            let default_val = self.expression_to_value(&args[0].value)?;
+                            param_names.push(self.serialize_default_value(&default_val)?);
+                        }
+                        _ => {
+                            return Err(Error::ParseError(format!(
+                                "{}: {} parameters must be identifiers or (name default)",
+                                context, section
+                            )));
+                        }
+                    }
+                }
+                "rest" => {
+                    // Already handled in &rest case above
+                    return Err(Error::ParseError(format!(
+                        "{}: unexpected parameter after &rest",
+                        context
+                    )));
+                }
+                _ => unreachable!(),
+            }
+
+            i += 1;
+        }
+
+        Ok(param_names)
     }
 
     /// Serialize a default value for storage in parameter list
@@ -4186,11 +4414,17 @@ impl LispEvaluator {
         match value {
             Value::Int(n) => Ok(n.to_string()),
             Value::Float(f) => Ok(f.to_string()),
-            Value::String(s) => Ok(format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))),
+            Value::String(s) => Ok(format!(
+                "\"{}\"",
+                s.replace('\\', "\\\\").replace('"', "\\\"")
+            )),
             Value::Bool(b) => Ok(b.to_string()),
             Value::Null => Ok("null".to_string()),
             Value::Array(arr) => {
-                let items: Result<Vec<_>> = arr.iter().map(|v| self.serialize_default_value(v)).collect();
+                let items: Result<Vec<_>> = arr
+                    .iter()
+                    .map(|v| self.serialize_default_value(v))
+                    .collect();
                 Ok(format!("[{}]", items?.join(" ")))
             }
             Value::Object(obj) => {
@@ -4200,24 +4434,33 @@ impl LispEvaluator {
                 }
                 Ok(format!("{{{}}}", pairs.join(" ")))
             }
-            _ => Err(Error::ParseError(format!("Cannot use {} as default parameter value", value.type_name()))),
+            _ => Err(Error::ParseError(format!(
+                "Cannot use {} as default parameter value",
+                value.type_name()
+            ))),
         }
     }
 
     /// Bind function/macro parameters to arguments
     /// Supports: required, &optional, &rest, &key parameters
-    fn bind_function_parameters(&mut self, params: &[String], args: &[Value], context: &str) -> Result<()> {
+    fn bind_function_parameters(
+        &mut self,
+        params: &[String],
+        args: &[Value],
+        context: &str,
+    ) -> Result<()> {
         // Find section boundaries
         let optional_pos = params.iter().position(|p| p == "&optional");
         let rest_pos = params.iter().position(|p| p == "&rest");
         let key_pos = params.iter().position(|p| p == "&key");
 
         // Calculate section ranges
-        let required_end = optional_pos.or(rest_pos).or(key_pos).unwrap_or(params.len());
+        let required_end = optional_pos
+            .or(rest_pos)
+            .or(key_pos)
+            .unwrap_or(params.len());
         let optional_start = optional_pos.map(|p| p + 1);
-        let optional_end = optional_pos.and_then(|_op| {
-            rest_pos.or(key_pos).or(Some(params.len()))
-        });
+        let optional_end = optional_pos.and_then(|_op| rest_pos.or(key_pos).or(Some(params.len())));
         let rest_idx = rest_pos;
         let key_start = key_pos.map(|p| p + 1);
 
@@ -4229,7 +4472,11 @@ impl LispEvaluator {
         if args.len() < required_count {
             return Err(Error::InvalidArguments {
                 tool: context.to_string(),
-                reason: format!("Expected at least {} arguments, got {}", required_count, args.len()),
+                reason: format!(
+                    "Expected at least {} arguments, got {}",
+                    required_count,
+                    args.len()
+                ),
             });
         }
 
@@ -4249,7 +4496,8 @@ impl LispEvaluator {
 
                 if arg_idx < args.len() {
                     // Check if this arg is a keyword (starts with :)
-                    let is_keyword = matches!(&args[arg_idx], Value::String(s) if s.starts_with(':'));
+                    let is_keyword =
+                        matches!(&args[arg_idx], Value::String(s) if s.starts_with(':'));
 
                     if !is_keyword {
                         // Use provided argument
@@ -4275,7 +4523,10 @@ impl LispEvaluator {
             if rest_idx + 1 < params.len() {
                 Some(params[rest_idx + 1].clone())
             } else {
-                return Err(Error::ParseError(format!("{}: &rest must be followed by parameter name", context)));
+                return Err(Error::ParseError(format!(
+                    "{}: &rest must be followed by parameter name",
+                    context
+                )));
             }
         } else {
             None
@@ -4364,7 +4615,7 @@ impl LispEvaluator {
         }
         if default_str.starts_with('"') && default_str.ends_with('"') {
             // String literal
-            let s = &default_str[1..default_str.len()-1];
+            let s = &default_str[1..default_str.len() - 1];
             let unescaped = s.replace("\\\"", "\"").replace("\\\\", "\\");
             return Ok(Value::String(unescaped));
         }
@@ -4386,7 +4637,11 @@ impl LispEvaluator {
 
     /// Parse keyword arguments from args slice starting at start_idx
     /// Returns map of keyword names (with :) to their values
-    fn parse_keyword_args(&self, args: &[Value], start_idx: usize) -> Result<std::collections::HashMap<String, Value>> {
+    fn parse_keyword_args(
+        &self,
+        args: &[Value],
+        start_idx: usize,
+    ) -> Result<std::collections::HashMap<String, Value>> {
         use std::collections::HashMap;
         let mut keyword_args = HashMap::new();
         let mut i = start_idx;
@@ -4510,9 +4765,7 @@ impl LispEvaluator {
             }
 
             // Parenthesized list pattern (a b c) or function call pattern
-            Expression::ToolCall { name: _, args } => {
-                self.destructure_list_pattern(args, value)
-            }
+            Expression::ToolCall { name: _, args } => self.destructure_list_pattern(args, value),
 
             // Array literal pattern [a b c] (treated like list)
             Expression::ArrayLiteral(pattern_elements) => {
@@ -4717,7 +4970,14 @@ impl LispEvaluator {
     /// Generate iteration values from iteration clause
     fn generate_iteration_values(&mut self, iteration: &IterationClause) -> Result<Vec<Value>> {
         match iteration {
-            IterationClause::Numeric { var: _, from, to, by, downfrom, below } => {
+            IterationClause::Numeric {
+                var: _,
+                from,
+                to,
+                by,
+                downfrom,
+                below,
+            } => {
                 let from_val = self.evaluate_expression(from)?;
                 let to_val = self.evaluate_expression(to)?;
                 let by_val = if let Some(by_expr) = by {
@@ -4729,28 +4989,34 @@ impl LispEvaluator {
                 let start = match from_val {
                     Value::Int(n) => n,
                     Value::Float(f) => f as i64,
-                    _ => return Err(Error::TypeError {
-                        expected: "number".to_string(),
-                        got: format!("{:?}", from_val),
-                    }),
+                    _ => {
+                        return Err(Error::TypeError {
+                            expected: "number".to_string(),
+                            got: format!("{:?}", from_val),
+                        })
+                    }
                 };
 
                 let end = match to_val {
                     Value::Int(n) => n,
                     Value::Float(f) => f as i64,
-                    _ => return Err(Error::TypeError {
-                        expected: "number".to_string(),
-                        got: format!("{:?}", to_val),
-                    }),
+                    _ => {
+                        return Err(Error::TypeError {
+                            expected: "number".to_string(),
+                            got: format!("{:?}", to_val),
+                        })
+                    }
                 };
 
                 let step = match by_val {
                     Value::Int(n) => n,
                     Value::Float(f) => f as i64,
-                    _ => return Err(Error::TypeError {
-                        expected: "number".to_string(),
-                        got: format!("{:?}", by_val),
-                    }),
+                    _ => {
+                        return Err(Error::TypeError {
+                            expected: "number".to_string(),
+                            got: format!("{:?}", by_val),
+                        })
+                    }
                 };
 
                 if step == 0 {
@@ -4783,7 +5049,9 @@ impl LispEvaluator {
             IterationClause::Collection { collection, .. } => {
                 let coll = self.evaluate_expression(collection)?;
                 match coll {
-                    Value::Array(arr) => Ok(Arc::try_unwrap(arr).unwrap_or_else(|arc| (*arc).clone())),
+                    Value::Array(arr) => {
+                        Ok(Arc::try_unwrap(arr).unwrap_or_else(|arc| (*arc).clone()))
+                    }
                     Value::String(s) => {
                         // Iterate over characters
                         Ok(s.chars().map(|c| Value::String(c.to_string())).collect())
@@ -4873,7 +5141,7 @@ impl LispEvaluator {
                     Ok(Value::Array(Arc::new(vec)))
                 } else {
                     Err(Error::ParseError(
-                        "Internal error: collect accumulator should be array".to_string()
+                        "Internal error: collect accumulator should be array".to_string(),
                     ))
                 }
             }
@@ -4889,7 +5157,7 @@ impl LispEvaluator {
                         Ok(Value::Int(count + 1))
                     } else {
                         Err(Error::ParseError(
-                            "Internal error: count accumulator should be int".to_string()
+                            "Internal error: count accumulator should be int".to_string(),
                         ))
                     }
                 } else {

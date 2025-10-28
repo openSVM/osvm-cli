@@ -1,6 +1,5 @@
 /// Helper functions for calling real osvm.ai APIs
 /// This module provides utilities for integration testing against actual osvm.ai endpoints
-
 use serde_json::json;
 
 // Real osvm.ai API endpoints
@@ -73,12 +72,7 @@ pub async fn call_rpc_proxy(
         "params": params
     });
 
-    match client
-        .post(RPC_PROXY_URL)
-        .json(&request_body)
-        .send()
-        .await
-    {
+    match client.post(RPC_PROXY_URL).json(&request_body).send().await {
         Ok(response) => {
             let status = response.status().as_u16();
             match response.text().await {
