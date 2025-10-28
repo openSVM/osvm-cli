@@ -298,25 +298,28 @@ async fn execute_with_plan(
                 .to_string(),
             osvm_tools_to_use: Vec::new(),
             expected_outcome: "Direct AI response to the query".to_string(),
-            raw_ovsm_plan: None,  // No OVSM plan when tools are disabled
+            raw_ovsm_plan: None, // No OVSM plan when tools are disabled
         }
     } else {
-        // Try to get OSVM plan from AI
-        match ai_service.create_tool_plan(prompt, available_tools).await {
+        // Try to get OSVM plan from AI with validation
+        match ai_service.create_validated_tool_plan(prompt, available_tools, 3).await {
             Ok(plan) => {
                 if verbose > 1 {
                     eprintln!(
-                        "📝 OSVM Plan received with {} tools",
+                        "📝 OSVM Plan received and validated with {} tools",
                         plan.osvm_tools_to_use.len()
                     );
+                    if plan.raw_ovsm_plan.is_some() {
+                        eprintln!("   ✅ OVSM syntax validated successfully");
+                    }
                 }
                 plan
             }
             Err(e) => {
-                eprintln!("❌ Failed to get OSVM plan from AI service: {}", e);
+                eprintln!("❌ Failed to get validated OSVM plan from AI service: {}", e);
                 eprintln!("   Please ensure the AI service is configured and accessible.");
                 // Return empty plan on error - no fallback demos allowed
-                return Err(anyhow::anyhow!("Failed to create OSVM plan: {}", e));
+                return Err(anyhow::anyhow!("Failed to create validated OSVM plan: {}", e));
             }
         }
     };

@@ -16,9 +16,9 @@ use crate::services::{
     mcp_service::{McpService, McpTool},
     ovsm_service::OvsmService,
 };
+use ovsm::error::Result as OvsmResult;
 use ovsm::runtime::Value as OvsmValue;
 use ovsm::tools::{Tool, ToolRegistry};
-use ovsm::error::Result as OvsmResult;
 use std::sync::Arc;
 
 // Real Solana RPC endpoint
@@ -92,9 +92,8 @@ impl Tool for RpcBridgeTool {
 
         // Call RPC with the method name matching the tool name
         let result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                call_solana_rpc(&self.name, rpc_params).await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { call_solana_rpc(&self.name, rpc_params).await })
         });
 
         match result {
@@ -195,10 +194,70 @@ fn fix_ovsm_syntax(code: &str) -> String {
     fixed
 }
 
-/// Extract OVSM code from markdown-formatted AI response
+/// Extract OVSM code from AI response (supports XML and markdown formats)
 /// Looks for code blocks and extracts the actual OVSM code
 fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
-    eprintln!("DEBUG: extract_ovsm_code called with {} chars", raw_plan.len());
+    eprintln!(
+        "DEBUG: extract_ovsm_code called with {} chars",
+        raw_plan.len()
+    );
+
+    // Strategy 0: Extract from XML structure (preferred format)
+    // Handle both <ovsm_plan> and <ovsv_plan> (typo) tags
+    let has_xml_wrapper = raw_plan.contains("<ovsm_plan>") || raw_plan.contains("<ovsv_plan>");
+
+    if has_xml_wrapper {
+        // Look for <code> tag within XML structure
+        if let Some(code_start) = raw_plan.find("<code>") {
+            eprintln!("DEBUG: Found <code> XML tag at position {}", code_start);
+            let after_tag = &raw_plan[code_start + 6..]; // Skip "<code>"
+
+            // Look for closing tag or try to extract what we can
+            let extracted = if let Some(code_end) = after_tag.find("</code>") {
+                after_tag[..code_end].trim()
+            } else {
+                // No closing tag found - extract until </ovsm_plan> or </ovsv_plan> or end
+                let end_pos = after_tag
+                    .find("</ovsm_plan>")
+                    .or_else(|| after_tag.find("</ovsv_plan>"))
+                    .or_else(|| after_tag.find("</action>"))
+                    .unwrap_or(after_tag.len());
+                eprintln!(
+                    "DEBUG: No </code> tag found, extracting {} chars until plan end",
+                    end_pos
+                );
+                after_tag[..end_pos].trim()
+            };
+
+            eprintln!(
+                "DEBUG: Extracted XML code block ({} chars): {}",
+                extracted.len(),
+                &extracted[..extracted.len().min(100)]
+            );
+
+            // Validate it looks like LISP code
+            let is_lisp = extracted.contains("(define ")
+                || extracted.contains("(const ")
+                || extracted.contains("(while ")
+                || extracted.contains("(for ")
+                || extracted.contains("(if ")
+                || extracted.contains("(do ")
+                || extracted.contains("(set! ");
+
+            if is_lisp {
+                eprintln!("DEBUG: Valid LISP code found in XML format!");
+                // Clean up any trailing XML if present
+                let cleaned = extracted
+                    .split("</")
+                    .next()
+                    .unwrap_or(extracted) // Remove any trailing XML tags
+                    .trim();
+                return Some(fix_ovsm_syntax(cleaned));
+            } else {
+                eprintln!("DEBUG: Content in <code> tags doesn't look like LISP");
+            }
+        }
+    }
 
     // Strategy 1: Find code blocks with triple backticks
     let mut code_blocks = Vec::new();
@@ -219,16 +278,20 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         // Find the closing ```
         if let Some(code_end) = code_content.find("```") {
             let extracted = code_content[..code_end].trim();
-            eprintln!("DEBUG: Extracted block ({} chars): {}", extracted.len(), &extracted[..extracted.len().min(100)]);
+            eprintln!(
+                "DEBUG: Extracted block ({} chars): {}",
+                extracted.len(),
+                &extracted[..extracted.len().min(100)]
+            );
 
             // Only consider blocks that look like LISP code
-            let is_lisp = extracted.contains("(define ") ||
-               extracted.contains("(const ") ||
-               extracted.contains("(while ") ||
-               extracted.contains("(for ") ||
-               extracted.contains("(if ") ||
-               extracted.contains("(do ") ||
-               extracted.contains("(set! ");
+            let is_lisp = extracted.contains("(define ")
+                || extracted.contains("(const ")
+                || extracted.contains("(while ")
+                || extracted.contains("(for ")
+                || extracted.contains("(if ")
+                || extracted.contains("(do ")
+                || extracted.contains("(set! ");
 
             eprintln!("DEBUG: Is LISP? {}", is_lisp);
 
@@ -265,7 +328,15 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
             let code_start = after_main.trim_start();
 
             // Find the end of Main Branch section (next marker)
-            let end_markers = ["**Action:**", "Action:", "[Action]", "**Decision", "Decision Point:", "**Available Tools", "Available Tools:"];
+            let end_markers = [
+                "**Action:**",
+                "Action:",
+                "[Action]",
+                "**Decision",
+                "Decision Point:",
+                "**Available Tools",
+                "Available Tools:",
+            ];
             let mut min_end = code_start.len();
 
             for marker in &end_markers {
@@ -277,9 +348,13 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
             let ovsm_code = code_start[..min_end].trim();
 
             // Validate it looks like LISP code
-            if ovsm_code.contains("(define ") || ovsm_code.contains("(const ") ||
-               ovsm_code.contains("(while ") || ovsm_code.contains("(for ") ||
-               ovsm_code.contains("(if ") || ovsm_code.contains("(set! ") {
+            if ovsm_code.contains("(define ")
+                || ovsm_code.contains("(const ")
+                || ovsm_code.contains("(while ")
+                || ovsm_code.contains("(for ")
+                || ovsm_code.contains("(if ")
+                || ovsm_code.contains("(set! ")
+            {
                 return Some(fix_ovsm_syntax(ovsm_code));
             }
         }
@@ -307,8 +382,8 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
         .context("Failed to send RPC request")?;
 
     let response_text = response.text().await?;
-    let response_json: Value = serde_json::from_str(&response_text)
-        .context("Failed to parse RPC response")?;
+    let response_json: Value =
+        serde_json::from_str(&response_text).context("Failed to parse RPC response")?;
 
     // Extract result from JSON-RPC response
     if let Some(result) = response_json.get("result") {
@@ -321,13 +396,14 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
 }
 
 /// Execute agent command with real-time streaming output to terminal
-pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
+pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) -> Result<()> {
     let start_time = std::time::Instant::now();
 
     // Print header
-    println!("\n🤖 OSVM Agent - Streaming Mode");
+    println!("\n🤖 OSVM Agent - Autonomous Research Mode");
     println!("{}", "━".repeat(60));
-    println!("📝 Query: {}", query);
+    println!("📝 Research Question: {}", query);
+    println!("🔬 Mode: Iterative strategy refinement enabled");
     println!("{}", "━".repeat(60));
     println!();
 
@@ -350,13 +426,20 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
         match mcp_service.list_tools(server_id).await {
             Ok(tools) => {
                 if verbose > 0 {
-                    eprintln!("✓ Loaded {} tools from MCP server '{}'", tools.len(), server_id);
+                    eprintln!(
+                        "✓ Loaded {} tools from MCP server '{}'",
+                        tools.len(),
+                        server_id
+                    );
                 }
                 available_tools.insert(server_id.to_string(), tools);
             }
             Err(e) => {
                 if verbose > 0 {
-                    eprintln!("⚠️  Warning: Failed to load tools from '{}': {}", server_id, e);
+                    eprintln!(
+                        "⚠️  Warning: Failed to load tools from '{}': {}",
+                        server_id, e
+                    );
                 }
             }
         }
@@ -574,7 +657,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
     print!("🧠 AI Planning");
     std::io::stdout().flush()?;
 
-    let tool_plan = match ai_service.create_tool_plan(query, &available_tools).await {
+    let tool_plan = match ai_service.create_validated_tool_plan(query, &available_tools, 3).await {
         Ok(plan) => {
             println!(" ✅");
             plan
@@ -605,6 +688,17 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
 
     println!();
 
+    if plan_only {
+        println!("🛑 Plan-only mode enabled - skipping execution\n");
+        if let Some(ref raw_plan) = tool_plan.raw_ovsm_plan {
+            println!("🧾 Raw OVSM Plan:\n{}\n", raw_plan);
+        }
+        println!("{}", "━".repeat(60));
+        println!("✅ Plan generated. Re-run without --plan-only to execute.");
+        println!();
+        return Ok(());
+    }
+
     // Step 2: Execute OVSM Plan or Individual Tools
     let mut tool_results = Vec::new();
     let mut ovsm_result: Option<String>;
@@ -620,18 +714,74 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                 println!("{}\n", ovsm_code);
             }
 
-            // Create custom tool registry with ALL standard library tools + RPC bridges
+            // Create custom tool registry with ALL standard library tools + RPC bridges + MCP tools
             // ToolRegistry::new() already includes all built-in tools (COUNT, APPEND, LOG, etc.)
             let mut registry = ToolRegistry::new();
+
+            // Register MCP tools for OVSM script execution (CRITICAL: This was missing!)
+            use crate::utils::mcp_bridge::McpBridgeTool;
+            let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+            let mcp_tools = vec![
+                "get_account_transactions",
+                "get_transaction",
+                "batch_transactions",
+                "analyze_transaction",
+                "explain_transaction",
+                "get_account_stats",
+                "get_account_portfolio",
+                "get_solana_balance",
+                "get_account_token_stats",
+                "check_account_type",
+                "search_accounts",
+                "get_balance",
+                "get_block",
+                "get_recent_blocks",
+                "get_block_stats",
+                "get_token_info",
+                "get_token_metadata",
+                "get_nft_collections",
+                "get_trending_nfts",
+                "get_defi_overview",
+                "get_dex_analytics",
+                "get_defi_health",
+                "get_validator_analytics",
+                "universal_search",
+                "verify_wallet_signature",
+                "get_user_history",
+                "get_usage_stats",
+                "manage_api_keys",
+                "get_api_metrics",
+                "report_error",
+                "get_program_registry",
+                "get_program_info",
+                "solana_rpc_call",
+            ];
+            for tool in mcp_tools {
+                registry.register(McpBridgeTool::new(tool, Arc::clone(&mcp_arc)));
+                if verbose > 1 {
+                    println!("   Registered MCP tool: {}", tool);
+                }
+            }
 
             // Dynamically register RPC tools by scanning the OVSM code
             // Look for function calls like getSignaturesForAddress(...), getSlot(), etc.
             let rpc_methods = vec![
-                "getSignaturesForAddress", "getSlot", "getBlock", "getTransaction",
-                "getParsedTransaction",  // 🎯 Parses SPL Token transfers automatically!
-                "getAccountInfo", "getBalance", "getBlockTime", "getHealth",
-                "getVersion", "getBlockHeight", "getEpochInfo", "getSupply",
-                "getProgramAccounts", "getTokenAccountsByOwner", "getMultipleAccounts",
+                "getSignaturesForAddress",
+                "getSlot",
+                "getBlock",
+                "getTransaction",
+                "getParsedTransaction", // 🎯 Parses SPL Token transfers automatically!
+                "getAccountInfo",
+                "getBalance",
+                "getBlockTime",
+                "getHealth",
+                "getVersion",
+                "getBlockHeight",
+                "getEpochInfo",
+                "getSupply",
+                "getProgramAccounts",
+                "getTokenAccountsByOwner",
+                "getMultipleAccounts",
             ];
 
             for method in rpc_methods {
@@ -643,23 +793,47 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                 }
             }
 
-            // Initialize OVSM service with registry (already has stdlib + RPC tools)
+            // Initialize OVSM service with registry (now has stdlib + RPC + MCP tools)
             let mut ovsm_service = OvsmService::with_registry(registry, verbose > 0, verbose > 1);
 
             // ═══════════════════════════════════════════════════════════════
-            // TWO-LEVEL SELF-HEALING RETRY LOOP
+            // AUTONOMOUS RESEARCH AGENT WITH ITERATIVE STRATEGY REFINEMENT
             // ═══════════════════════════════════════════════════════════════
+            // OVSM is an autonomous research agent that iterates on its
+            // investigation strategy until the goal is achieved.
+            //
+            // Two-Level Self-Healing:
             // Level 1: Fix syntax errors (parse, tokenization, scoping)
-            // Level 2: Fix logic errors (wrong result, semantic mismatch)
+            // Level 2: Refine research strategy (pivot approach, dig deeper)
             // ═══════════════════════════════════════════════════════════════
 
             const MAX_RETRY_ATTEMPTS: u32 = 10;
 
             let mut current_code = ovsm_code.clone();
             let mut attempt = 1;
+            let mut strategy_iteration = 1; // Track research strategy iterations
+            let mut strategy_history: Vec<String> = Vec::new(); // Remember tried strategies
+            let mut accumulated_findings = String::new(); // Track findings across iterations
+            let mut confidence_score = 50u8; // Start at 50% confidence
+
+            println!("🤖 OVSM Autonomous Research Agent Starting...");
+            println!("   Goal: {}", tool_plan.expected_outcome);
+            println!("   Initial Confidence: {}%", confidence_score);
+            println!();
 
             loop {
-                println!("🔄 OVSM Execution Attempt #{}/{}", attempt, MAX_RETRY_ATTEMPTS);
+                // Show different message for strategy iterations vs syntax fixes
+                if strategy_iteration > 1 {
+                    println!(
+                        "🔬 Research Strategy Iteration #{} (Attempt #{}/{})",
+                        strategy_iteration, attempt, MAX_RETRY_ATTEMPTS
+                    );
+                } else {
+                    println!(
+                        "🔄 OVSM Execution Attempt #{}/{}",
+                        attempt, MAX_RETRY_ATTEMPTS
+                    );
+                }
 
                 let execution_start = std::time::Instant::now();
 
@@ -680,8 +854,24 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
 
                         if is_valid {
                             // ✅ SUCCESS - Result matches goal!
+                            confidence_score = 100;
+
                             if attempt > 1 {
-                                println!("🔧 Self-healing success! AI fixed {} issue(s)", attempt - 1);
+                                if strategy_iteration > 1 {
+                                    println!(
+                                        "🎯 Research complete! Took {} strategy iterations",
+                                        strategy_iteration
+                                    );
+                                    println!("   Final Confidence: 100%");
+                                    if !strategy_history.is_empty() {
+                                        println!("   Strategies tried: {}", strategy_history.len());
+                                    }
+                                } else {
+                                    println!(
+                                        "🔧 Self-healing success! AI fixed {} issue(s)",
+                                        attempt - 1
+                                    );
+                                }
                             }
 
                             if verbose > 0 {
@@ -692,53 +882,98 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                             ovsm_result = Some(formatted_result);
                             break;
                         } else {
-                            // ⚠️ SEMANTIC FAILURE - Code ran but wrong result
-                            println!("⚠️  Code executed but result doesn't match goal");
-                            println!("   Validation: {}", validation_msg);
+                            // ⚠️ SEMANTIC FAILURE - Need new research strategy
 
-                            if attempt >= MAX_RETRY_ATTEMPTS {
-                                println!("⛔ Max attempts reached. Returning best available result.\n");
+                            // Update confidence based on partial progress
+                            if formatted_result.len() > accumulated_findings.len() {
+                                confidence_score = confidence_score.saturating_add(10);
+                                accumulated_findings = formatted_result.clone();
+                                println!(
+                                    "📈 Partial progress detected - Confidence: {}%",
+                                    confidence_score
+                                );
+                            } else {
+                                confidence_score = confidence_score.saturating_sub(5);
+                                println!("📉 No progress - Confidence: {}%", confidence_score);
+                            }
+
+                            println!("🔍 Research incomplete - findings don't match goal");
+                            println!("   Current findings: {}", validation_msg);
+
+                            // Store current strategy in history
+                            strategy_history.push(format!(
+                                "Iteration {}: {}",
+                                strategy_iteration,
+                                &current_code[..current_code.len().min(100)]
+                            ));
+
+                            if attempt >= MAX_RETRY_ATTEMPTS || confidence_score < 20 {
+                                println!(
+                                    "⛔ Stopping: {} (Confidence: {}%)",
+                                    if confidence_score < 20 {
+                                        "Low confidence"
+                                    } else {
+                                        "Max iterations"
+                                    },
+                                    confidence_score
+                                );
                                 ovsm_result = Some(formatted_result);
                                 break;
                             }
 
-                            println!("🔧 Attempting logic refinement (Level 2)...");
-
-                            // Ask AI to fix the logic
-                            let semantic_prompt = ai_service.create_semantic_refinement_prompt(
-                                query,
-                                &tool_plan.expected_outcome,
-                                &current_code,
-                                &formatted_result,
-                                attempt,
+                            strategy_iteration += 1; // Increment strategy counter
+                            println!(
+                                "🧪 Devising new research strategy (Iteration #{})...",
+                                strategy_iteration
                             );
+                            println!("   Reason: Need to explore different angle based on current findings");
 
-                            match ai_service.create_tool_plan(&semantic_prompt, &available_tools).await {
+                            // Ask AI to fix the logic with strategy history
+                            let semantic_prompt = ai_service
+                                .create_semantic_refinement_prompt_with_history(
+                                    query,
+                                    &tool_plan.expected_outcome,
+                                    &current_code,
+                                    &formatted_result,
+                                    attempt,
+                                    &strategy_history,
+                                );
+
+                            match ai_service
+                                .create_validated_tool_plan(&semantic_prompt, &available_tools, 3)
+                                .await
+                            {
                                 Ok(refined_plan) => {
                                     if let Some(ref raw_plan) = refined_plan.raw_ovsm_plan {
                                         if let Some(refined_code) = extract_ovsm_code(raw_plan) {
-                                            println!("✨ AI revised the logic\n");
+                                            println!("✨ New research strategy generated!");
+                                            println!(
+                                                "   Strategy focus: {}",
+                                                refined_plan.expected_outcome
+                                            );
 
                                             if verbose > 1 {
-                                                println!("Refined code:");
+                                                println!("\nNew strategy code:");
                                                 println!("{}\n", refined_code);
                                             }
 
                                             current_code = refined_code;
                                             attempt += 1;
                                         } else {
-                                            println!("❌ Could not extract code from refined plan\n");
+                                            println!(
+                                                "❌ Could not extract strategy from refined plan\n"
+                                            );
                                             ovsm_result = Some(formatted_result);
                                             break;
                                         }
                                     } else {
-                                        println!("❌ No OVSM plan in refined response\n");
+                                        println!("❌ No OVSM strategy in refined response\n");
                                         ovsm_result = Some(formatted_result);
                                         break;
                                     }
                                 }
                                 Err(e) => {
-                                    println!("❌ Logic refinement failed: {}\n", e);
+                                    println!("❌ Strategy refinement failed: {}\n", e);
                                     ovsm_result = Some(formatted_result);
                                     break;
                                 }
@@ -771,7 +1006,10 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                             attempt,
                         );
 
-                        match ai_service.create_tool_plan(&syntax_prompt, &available_tools).await {
+                        match ai_service
+                            .create_validated_tool_plan(&syntax_prompt, &available_tools, 3)
+                            .await
+                        {
                             Ok(refined_plan) => {
                                 if let Some(ref raw_plan) = refined_plan.raw_ovsm_plan {
                                     if let Some(refined_code) = extract_ovsm_code(raw_plan) {
@@ -817,10 +1055,12 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
         ovsm_result = None;
 
         for (i, planned_tool) in tool_plan.osvm_tools_to_use.iter().enumerate() {
-            print!("⚙️  Executing tool [{}/{}]: {}",
-                   i + 1,
-                   tool_plan.osvm_tools_to_use.len(),
-                   planned_tool.tool_name);
+            print!(
+                "⚙️  Executing tool [{}/{}]: {}",
+                i + 1,
+                tool_plan.osvm_tools_to_use.len(),
+                planned_tool.tool_name
+            );
             std::io::stdout().flush()?;
 
             let tool_start = std::time::Instant::now();
@@ -861,9 +1101,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
         let tool_results_for_ai: Vec<(String, Value)> = tool_results
             .iter()
             .filter_map(|(tool, result, _error)| {
-                result
-                    .as_ref()
-                    .map(|r| (tool.tool_name.clone(), r.clone()))
+                result.as_ref().map(|r| (tool.tool_name.clone(), r.clone()))
             })
             .collect();
 
@@ -895,12 +1133,15 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8) -> Result<()> {
                 format_plan_execution_results(&tool_plan, &tool_results_for_ai)
             );
 
-            match ai_service.query_osvm_ai_with_options(
-                query,
-                Some(finalization_prompt),
-                Some(true), // ownPlan: true - tells server not to execute, just generate text
-                verbose > 1
-            ).await {
+            match ai_service
+                .query_osvm_ai_with_options(
+                    query,
+                    Some(finalization_prompt),
+                    Some(true), // ownPlan: true - tells server not to execute, just generate text
+                    verbose > 1,
+                )
+                .await
+            {
                 Ok(resp) => {
                     println!(" ✅");
                     resp
@@ -941,11 +1182,9 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
         // ===== REAL BLOCKCHAIN TOOLS (via RPC) =====
 
         // Get current slot - REAL RPC CALL
-        "getSlot" => {
-            match call_solana_rpc("getSlot", vec![]).await {
-                Ok(result) => (Some(result), None),
-                Err(e) => (None, Some(e.to_string())),
-            }
+        "getSlot" => match call_solana_rpc("getSlot", vec![]).await {
+            Ok(result) => (Some(result), None),
+            Err(e) => (None, Some(e.to_string())),
         },
 
         // Get block - REAL RPC CALL (fetches confirmed blocks)
@@ -962,13 +1201,14 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                                 "encoding": "json",
                                 "transactionDetails": "full",
                                 "maxSupportedTransactionVersion": 0
-                            })
+                            }),
                         ];
                         match call_solana_rpc("getBlock", params).await {
                             Ok(result) => (Some(result), None),
                             Err(_) => {
                                 // If that fails, try finalized
-                                let params2 = vec![json!({"commitment": "finalized", "encoding": "json"})];
+                                let params2 =
+                                    vec![json!({"commitment": "finalized", "encoding": "json"})];
                                 match call_solana_rpc("getBlock", params2).await {
                                     Ok(result) => (Some(result), None),
                                     Err(e) => (None, Some(e.to_string())),
@@ -978,10 +1218,10 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                     } else {
                         (None, Some("Failed to parse slot".to_string()))
                     }
-                },
+                }
                 Err(e) => (None, Some(format!("Failed to get slot: {}", e))),
             }
-        },
+        }
 
         // Get transaction - REAL RPC CALL
         "getTransaction" => {
@@ -991,7 +1231,8 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                     sig_str.to_string()
                 } else if let Some(sig_obj) = sig_val.as_object() {
                     // Handle case where signature is nested in object
-                    sig_obj.get("signature")
+                    sig_obj
+                        .get("signature")
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string()
@@ -1005,12 +1246,20 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
             // If no signature provided, fetch a recent one from the network
             let final_sig = if signature.is_empty() {
                 // Fallback: get a recent transaction signature from the network
-                match call_solana_rpc("getSignaturesForAddress",
-                    vec![json!("11111111111111111111111111111111"), json!({"limit": 1})]).await {
+                match call_solana_rpc(
+                    "getSignaturesForAddress",
+                    vec![
+                        json!("11111111111111111111111111111111"),
+                        json!({"limit": 1}),
+                    ],
+                )
+                .await
+                {
                     Ok(sigs) => {
                         if let Some(arr) = sigs.as_array() {
                             if let Some(first) = arr.first() {
-                                first.get("signature")
+                                first
+                                    .get("signature")
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("unknown")
                                     .to_string()
@@ -1033,7 +1282,7 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
 
             let params = vec![
                 json!(final_sig),
-                json!({"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0})
+                json!({"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}),
             ];
 
             match call_solana_rpc("getTransaction", params).await {
@@ -1047,11 +1296,13 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                     }
                 }
             }
-        },
+        }
 
         // Get account info - REAL RPC CALL
         "getAccountInfo" => {
-            let address = tool.args.get("address")
+            let address = tool
+                .args
+                .get("address")
                 .and_then(|v| v.as_str())
                 .unwrap_or("11111111111111111111111111111111");
 
@@ -1061,47 +1312,51 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                 Ok(result) => (Some(result), None),
                 Err(e) => (None, Some(e.to_string())),
             }
-        },
+        }
 
         // Get balance - REAL RPC CALL
         "get_balance" => {
-            let address = tool.args.get("address")
+            let address = tool
+                .args
+                .get("address")
                 .and_then(|v| v.as_str())
                 .unwrap_or("11111111111111111111111111111111");
 
             match call_solana_rpc("getBalance", vec![json!(address)]).await {
-                Ok(result) => (Some(json!({ "balance_lamports": result, "address": address })), None),
+                Ok(result) => (
+                    Some(json!({ "balance_lamports": result, "address": address })),
+                    None,
+                ),
                 Err(e) => (None, Some(e.to_string())),
             }
-        },
+        }
 
         // Get signatures for address - REAL RPC CALL
         "getSignaturesForAddress" => {
-            let address = tool.args.get("address")
+            let address = tool
+                .args
+                .get("address")
                 .and_then(|v| v.as_str())
                 .unwrap_or("11111111111111111111111111111111");
 
-            let limit = tool.args.get("limit")
+            let limit = tool
+                .args
+                .get("limit")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(10);
 
-            let params = vec![
-                json!(address),
-                json!({"limit": limit})
-            ];
+            let params = vec![json!(address), json!({"limit": limit})];
 
             match call_solana_rpc("getSignaturesForAddress", params).await {
                 Ok(result) => (Some(result), None),
                 Err(e) => (None, Some(e.to_string())),
             }
-        },
+        }
 
         // Get network status - REAL RPC CALL
-        "get_network_status" => {
-            match call_solana_rpc("getEpochInfo", vec![]).await {
-                Ok(result) => (Some(result), None),
-                Err(e) => (None, Some(e.to_string())),
-            }
+        "get_network_status" => match call_solana_rpc("getEpochInfo", vec![]).await {
+            Ok(result) => (Some(result), None),
+            Err(e) => (None, Some(e.to_string())),
         },
 
         // Deploy validator - local operation, no RPC needed
@@ -1126,7 +1381,9 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
         ),
         // Control Flow Tools
         "LOG" => {
-            let message = tool.args.get("message")
+            let message = tool
+                .args
+                .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Log message executed");
             (
@@ -1136,9 +1393,11 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                 })),
                 None,
             )
-        },
+        }
         "INPUT" => {
-            let prompt = tool.args.get("prompt")
+            let prompt = tool
+                .args
+                .get("prompt")
                 .and_then(|v| v.as_str())
                 .unwrap_or("User input");
             // Simulate user input (in real implementation would read from stdin)
@@ -1149,11 +1408,9 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                 })),
                 None,
             )
-        },
+        }
         "SLEEP" => {
-            let ms = tool.args.get("ms")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(1000);
+            let ms = tool.args.get("ms").and_then(|v| v.as_u64()).unwrap_or(1000);
             (
                 Some(serde_json::json!({
                     "status": "slept",
@@ -1161,7 +1418,7 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
                 })),
                 None,
             )
-        },
+        }
         "GUARD" => (
             Some(serde_json::json!({
                 "status": "validated",
@@ -1170,14 +1427,13 @@ async fn execute_tool(tool: &PlannedTool) -> (Option<Value>, Option<String>) {
             None,
         ),
         "ERROR" => {
-            let msg = tool.args.get("message")
+            let msg = tool
+                .args
+                .get("message")
                 .and_then(|v| v.as_str())
                 .unwrap_or("Error occurred");
-            (
-                None,
-                Some(msg.to_string()),
-            )
-        },
+            (None, Some(msg.to_string()))
+        }
         // Data Processing Tools
         "MAP" => (
             Some(serde_json::json!({
@@ -1354,7 +1610,10 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
     output.push_str("# 🎯 Plan Execution Summary\n\n");
 
     // Expected outcome
-    output.push_str(&format!("## Expected Outcome\n{}\n\n", tool_plan.expected_outcome));
+    output.push_str(&format!(
+        "## Expected Outcome\n{}\n\n",
+        tool_plan.expected_outcome
+    ));
 
     // Reasoning
     output.push_str(&format!("## Plan Reasoning\n{}\n\n", tool_plan.reasoning));
@@ -1374,7 +1633,7 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
                     if let Some(usd) = result.get("usd_value") {
                         output.push_str(&format!("- USD Value: ${}\n", usd));
                     }
-                },
+                }
                 "get_network_status" => {
                     if let Some(status) = result.get("status") {
                         output.push_str(&format!("- Network Status: {}\n", status));
@@ -1385,7 +1644,7 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
                     if let Some(tps) = result.get("tps") {
                         output.push_str(&format!("- TPS: {}\n", tps));
                     }
-                },
+                }
                 "deploy_validator" => {
                     if let Some(status) = result.get("status") {
                         output.push_str(&format!("- Status: {}\n", status));
@@ -1396,7 +1655,7 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
                     if let Some(network) = result.get("network") {
                         output.push_str(&format!("- Network: {}\n", network));
                     }
-                },
+                }
                 "LOG" | "INPUT" | "SLEEP" | "GUARD" => {
                     if let Some(msg) = result.get("message") {
                         output.push_str(&format!("- Message: {}\n", msg));
@@ -1404,11 +1663,13 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
                     if let Some(status) = result.get("status") {
                         output.push_str(&format!("- Status: {}\n", status));
                     }
-                },
+                }
                 _ => {
                     // Generic formatting
-                    output.push_str(&format!("- Result: {}\n",
-                        serde_json::to_string_pretty(result).unwrap_or_else(|_| "N/A".to_string())));
+                    output.push_str(&format!(
+                        "- Result: {}\n",
+                        serde_json::to_string_pretty(result).unwrap_or_else(|_| "N/A".to_string())
+                    ));
                 }
             }
             output.push_str("\n");
@@ -1418,14 +1679,21 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
     // Success message
     output.push_str("---\n");
     output.push_str("✅ **Plan Execution Completed Successfully**\n\n");
-    output.push_str(&format!("All {} tools executed as planned.\n\n", tool_results.len()));
+    output.push_str(&format!(
+        "All {} tools executed as planned.\n\n",
+        tool_results.len()
+    ));
 
     // Add summary with key findings (generic for any query)
     output.push_str("## 📊 Summary\n\n");
     for (tool_name, result) in tool_results {
         // Generic extraction for common result types
         if let Some(arr) = result.as_array() {
-            output.push_str(&format!("✓ **{}**: {} results found\n", tool_name, arr.len()));
+            output.push_str(&format!(
+                "✓ **{}**: {} results found\n",
+                tool_name,
+                arr.len()
+            ));
         } else if let Some(count) = result.get("count").and_then(|v| v.as_u64()) {
             output.push_str(&format!("✓ **{}**: {}\n", tool_name, count));
         } else if let Some(value) = result.get("value") {
@@ -1433,8 +1701,11 @@ fn format_plan_execution_results(tool_plan: &ToolPlan, tool_results: &[(String, 
         } else if result.is_object() {
             // For object results, try to extract a meaningful value
             if let Some(main_value) = result.get("result") {
-                output.push_str(&format!("✓ **{}**: {}\n", tool_name,
-                    serde_json::to_string(main_value).unwrap_or_else(|_| "✓ Executed".to_string())));
+                output.push_str(&format!(
+                    "✓ **{}**: {}\n",
+                    tool_name,
+                    serde_json::to_string(main_value).unwrap_or_else(|_| "✓ Executed".to_string())
+                ));
             } else {
                 output.push_str(&format!("✓ **{}**: ✓ Executed successfully\n", tool_name));
             }
@@ -1482,7 +1753,10 @@ fn print_tool_result(tool_name: &str, result: &Value) {
             }
         }
         _ => {
-            println!("   Result: {}", serde_json::to_string(result).unwrap_or_default());
+            println!(
+                "   Result: {}",
+                serde_json::to_string(result).unwrap_or_default()
+            );
         }
     }
 }
