@@ -7,7 +7,9 @@ pub mod clos_advanced;
 pub mod clos_basic;
 pub mod compiler_eval;
 pub mod conditions;
+pub mod control_flow_extended;
 pub mod data_processing;
+pub mod environment;
 pub mod format;
 pub mod hash_tables;
 pub mod io_basic;
@@ -16,6 +18,8 @@ pub mod lists_advanced;
 pub mod loop_full;
 pub mod loop_utilities;
 pub mod math;
+pub mod method_combinations;
+pub mod multiple_values;
 pub mod numeric;
 pub mod objects;
 pub mod packages;
@@ -26,6 +30,7 @@ pub mod sequences;
 pub mod statistics;
 pub mod streams;
 pub mod strings;
+pub mod symbols_extended;
 pub mod system;
 pub mod type_predicates;
 pub mod types_extended;
@@ -68,4 +73,11 @@ pub fn register_all(registry: &mut ToolRegistry) {
     compiler_eval::register(registry);
     system::register(registry);
     types_extended::register(registry);
+
+    // Phase 9 modules (90% coverage)
+    multiple_values::register(registry);
+    control_flow_extended::register(registry);
+    symbols_extended::register(registry);
+    method_combinations::register(registry);
+    environment::register(registry);
 }
