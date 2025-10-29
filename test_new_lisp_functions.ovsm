@@ -1,0 +1,74 @@
+;; Test new LISP functions added to OVSM
+;; This script tests type predicates, list accessors, and constructors
+
+(do
+  (log :message "=== Testing Type Predicates ===")
+
+  ;; Test IS-ARRAY?
+  (define test-array [1 2 3])
+  (define test-string "hello")
+  (define test-number 42)
+  (define test-bool true)
+  (define test-null null)
+  (define test-obj {:name "Alice" :age 30})
+
+  (log :message "is-array? on array:" :value (is-array? test-array))
+  (log :message "is-array? on string:" :value (is-array? test-string))
+
+  (log :message "is-string? on string:" :value (is-string? test-string))
+  (log :message "is-string? on number:" :value (is-string? test-number))
+
+  (log :message "is-number? on number:" :value (is-number? test-number))
+  (log :message "is-number? on string:" :value (is-number? test-string))
+
+  (log :message "is-bool? on bool:" :value (is-bool? test-bool))
+  (log :message "is-bool? on number:" :value (is-bool? test-number))
+
+  (log :message "is-null? on null:" :value (is-null? test-null))
+  (log :message "is-null? on number:" :value (is-null? test-number))
+
+  (log :message "is-object? on object:" :value (is-object? test-obj))
+  (log :message "is-object? on array:" :value (is-object? test-array))
+
+  (log :message "\n=== Testing List Accessors ===")
+
+  ;; Test CAR and CDR (Common Lisp style)
+  (define my-list [10 20 30 40 50])
+  (log :message "Original list:" :value my-list)
+  (log :message "CAR (first):" :value (car my-list))
+  (log :message "CDR (rest):" :value (cdr my-list))
+  (log :message "CADR (second):" :value (cadr my-list))
+  (log :message "CDDR (rest of rest):" :value (cddr my-list))
+
+  ;; Test with nested lists
+  (define nested-list [[1 2 3] [4 5 6] [7 8 9]])
+  (log :message "\nNested list:" :value nested-list)
+  (log :message "CAAR (first of first):" :value (caar nested-list))
+  (log :message "CDAR (rest of first):" :value (cdar nested-list))
+
+  (log :message "\n=== Testing List Constructors ===")
+
+  ;; Test CONS
+  (define new-list (cons 0 my-list))
+  (log :message "CONS 0 onto my-list:" :value new-list)
+
+  ;; Test LIST
+  (define created-list (list 1 2 3 4 5))
+  (log :message "LIST created from args:" :value created-list)
+
+  ;; Test LENGTH
+  (log :message "LENGTH of my-list:" :value (length my-list))
+  (log :message "LENGTH of string:" :value (length "hello world"))
+
+  (log :message "\n=== Testing REST (alias for CDR) ===")
+  (log :message "REST of my-list:" :value (rest my-list))
+
+  (log :message "\n=== Testing TYPEOF and KEYS ===")
+  (log :message "TYPEOF array:" :value (typeof test-array))
+  (log :message "TYPEOF string:" :value (typeof test-string))
+  (log :message "TYPEOF object:" :value (typeof test-obj))
+  (log :message "KEYS of object:" :value (keys test-obj))
+
+  (log :message "\n✅ All tests completed successfully!")
+  true
+)

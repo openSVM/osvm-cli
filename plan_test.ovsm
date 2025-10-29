@@ -1,0 +1,193 @@
+(do
+  ;; -----------------------------------------------------------------
+  ;; 1️⃣ Define constants and helper functions
+  ;; -----------------------------------------------------------------
+  (define TARGET "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+  (define START_TS 1748736000)   ;; 2025-06-01 00:00:00 UTC
+  (define END_TS   1756684799)   ;; 2025-08-31 23:59:59 UTC
+  (define PAGE_LIMIT 1000)
+
+  ;; Helper: find index of a value in an array, returns -1 if not found
+  (define find-index
+    (lambda (arr val)
+      (do
+        (define idx -1)
+        (for (i (range (COUNT arr)))
+          (when (== ([] arr i) val)
+            (set! idx i)
+            (return i)))   ;; early exit
+        idx)))
+
+  ;; -----------------------------------------------------------------
+  ;; 2️⃣ Fetch all transactions *to* TARGET within the summer 2025 window
+  ;; -----------------------------------------------------------------
+  (define all_txs [])
+  (define before null)
+  (define continue true)
+
+  (while continue
+    (define batch (get_account_transactions
+                    {:address TARGET :limit PAGE_LIMIT :before before}))
+    (if (== batch null)
+      (set! continue false)   ;; API error – stop looping
+      (do
+        ;; Append batch to master list
+        (set! all_txs (APPEND all_txs batch))
+
+        ;; Pagination control
+        (if (< (COUNT batch) PAGE_LIMIT)
+          (set! continue false)
+          (set! before (. ([] batch (- (COUNT batch) 1)) cursor))))))
+
+  ;; Filter only inbound txs within date range
+  (define inbound_txs [])
+  (for (tx all_txs)
+    (when (and
+            (== (. tx receiver) TARGET)
+            (>= (. tx blockTime) START_TS)
+            (<= (. tx blockTime) END_TS))
+      (set! inbound_txs (APPEND inbound_txs [tx]))))
+
+  ;; -----------------------------------------------------------------
+  ;; 3️⃣ Aggregate amounts and tx ids per sender
+  ;; -----------------------------------------------------------------
+  (define senders [])
+  (define totals [])
+  (define txids_list [])
+
+  (for (tx inbound_txs)
+    (define sender (. tx sender))
+    (define amount (. tx amount))   ;; lamports
+    (define sig (. tx signature))
+
+    (define idx (find-index senders sender))
+
+    (when (== idx -1)
+      ;; New sender – add new entries
+      (set! senders (APPEND senders [sender]))
+      (set! totals (APPEND totals [amount]))
+      (set! txids_list (APPEND txids_list [[sig]]))
+      (set! idx (COUNT senders))    ;; will be set to new length-1 after next step
+      (set! idx (- idx 1)))        ;; correct index
+
+    (when (>= idx 0)
+      ;; Existing sender – update totals and tx list
+      (set! totals (APPEND
+                     (slice totals 0 idx)
+                     [(+ ([] totals idx) amount)]
+                     (slice totals (+ idx 1) (COUNT totals))))
+      (set! txids_list (APPEND
+                         (slice txids_list
+DEBUG parse_ovsm_plan: called with 3028 chars
+DEBUG parse_ovsm_plan: first 200 chars: <ovsm_plan>
+  <meta>
+    <time_estimate>2-5 minutes</time_estimate>
+    <confidence>92%</confidence>
+  </meta>
+  
+  <code>
+(do
+  ;; -----------------------------------------------------------------
+  
+DEBUG parse_ovsm_plan: Found XML format with <ovsm_plan> tag!
+ ✅
+
+📋 Plan Details:
+   Reasoning: Analyzing request and creating execution plan
+   Expected Outcome: Analyzing request and creating execution plan
+
+📌 No specific tools needed - will provide direct response
+
+🛑 Plan-only mode enabled - skipping execution
+
+🧾 Raw OVSM Plan:
+<ovsm_plan>
+  <meta>
+    <time_estimate>2-5 minutes</time_estimate>
+    <confidence>92%</confidence>
+  </meta>
+  
+  <code>
+(do
+  ;; -----------------------------------------------------------------
+  ;; 1️⃣ Define constants and helper functions
+  ;; -----------------------------------------------------------------
+  (define TARGET "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+  (define START_TS 1748736000)   ;; 2025-06-01 00:00:00 UTC
+  (define END_TS   1756684799)   ;; 2025-08-31 23:59:59 UTC
+  (define PAGE_LIMIT 1000)
+
+  ;; Helper: find index of a value in an array, returns -1 if not found
+  (define find-index
+    (lambda (arr val)
+      (do
+        (define idx -1)
+        (for (i (range (COUNT arr)))
+          (when (== ([] arr i) val)
+            (set! idx i)
+            (return i)))   ;; early exit
+        idx)))
+
+  ;; -----------------------------------------------------------------
+  ;; 2️⃣ Fetch all transactions *to* TARGET within the summer 2025 window
+  ;; -----------------------------------------------------------------
+  (define all_txs [])
+  (define before null)
+  (define continue true)
+
+  (while continue
+    (define batch (get_account_transactions
+                    {:address TARGET :limit PAGE_LIMIT :before before}))
+    (if (== batch null)
+      (set! continue false)   ;; API error – stop looping
+      (do
+        ;; Append batch to master list
+        (set! all_txs (APPEND all_txs batch))
+
+        ;; Pagination control
+        (if (< (COUNT batch) PAGE_LIMIT)
+          (set! continue false)
+          (set! before (. ([] batch (- (COUNT batch) 1)) cursor))))))
+
+  ;; Filter only inbound txs within date range
+  (define inbound_txs [])
+  (for (tx all_txs)
+    (when (and
+            (== (. tx receiver) TARGET)
+            (>= (. tx blockTime) START_TS)
+            (<= (. tx blockTime) END_TS))
+      (set! inbound_txs (APPEND inbound_txs [tx]))))
+
+  ;; -----------------------------------------------------------------
+  ;; 3️⃣ Aggregate amounts and tx ids per sender
+  ;; -----------------------------------------------------------------
+  (define senders [])
+  (define totals [])
+  (define txids_list [])
+
+  (for (tx inbound_txs)
+    (define sender (. tx sender))
+    (define amount (. tx amount))   ;; lamports
+    (define sig (. tx signature))
+
+    (define idx (find-index senders sender))
+
+    (when (== idx -1)
+      ;; New sender – add new entries
+      (set! senders (APPEND senders [sender]))
+      (set! totals (APPEND totals [amount]))
+      (set! txids_list (APPEND txids_list [[sig]]))
+      (set! idx (COUNT senders))    ;; will be set to new length-1 after next step
+      (set! idx (- idx 1)))        ;; correct index
+
+    (when (>= idx 0)
+      ;; Existing sender – update totals and tx list
+      (set! totals (APPEND
+                     (slice totals 0 idx)
+                     [(+ ([] totals idx) amount)]
+                     (slice totals (+ idx 1) (COUNT totals))))
+      (set! txids_list (APPEND
+                         (slice txids_list
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Plan generated. Re-run without --plan-only to execute.

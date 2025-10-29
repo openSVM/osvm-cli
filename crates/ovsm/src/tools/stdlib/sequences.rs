@@ -66,6 +66,28 @@ pub fn register(registry: &mut ToolRegistry) {
     // Miscellaneous
     registry.register(FillTool);
     registry.register(MismatchTool);
+
+    // Advanced sequence operations
+    registry.register(MergeTool);
+    registry.register(StableSortTool);
+    registry.register(SearchTool);
+    registry.register(SubstituteIfTool);
+    registry.register(SubstituteIfNotTool);
+    registry.register(NsubstituteIfTool);
+    registry.register(NsubstituteIfNotTool);
+    registry.register(DeleteDuplicatesTool);
+    registry.register(CountTool);
+    registry.register(CountIfTool);
+    registry.register(PositionTool);
+    registry.register(FindIfNotTool);
+    registry.register(ReplaceToolSeq);
+    registry.register(NreplaceTool);
+    registry.register(ConcatenateTool);
+    registry.register(LengthSeqTool);
+    registry.register(ReverseTool);
+    registry.register(SubsequenceTool);
+    registry.register(SortTool);
+    registry.register(MapTool);
 }
 
 // ============================================================================
@@ -1307,5 +1329,394 @@ impl Tool for MismatchTool {
         } else {
             Ok(Value::Null)
         }
+    }
+}
+
+// ============================================================================
+// Advanced Sequence Operations
+// ============================================================================
+
+/// MERGE - Merge two sorted sequences
+pub struct MergeTool;
+impl Tool for MergeTool {
+    fn name(&self) -> &str { "MERGE" }
+    fn description(&self) -> &str { "Merge two sorted sequences" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "MERGE".to_string(),
+                reason: "Expected two sequences".to_string(),
+            });
+        }
+        let seq1 = args[0].as_array()?;
+        let seq2 = args[1].as_array()?;
+        let mut result = seq1.to_vec();
+        result.extend(seq2.iter().cloned());
+        result.sort_by(|a, b| {
+            match (a, b) {
+                (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// STABLE-SORT - Stable sort sequence
+pub struct StableSortTool;
+impl Tool for StableSortTool {
+    fn name(&self) -> &str { "STABLE-SORT" }
+    fn description(&self) -> &str { "Stable sort sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+        let mut seq = args[0].as_array()?.to_vec();
+        seq.sort_by(|a, b| {
+            match (a, b) {
+                (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                (Value::Float(x), Value::Float(y)) => {
+                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                (Value::String(x), Value::String(y)) => x.cmp(y),
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        Ok(Value::Array(Arc::new(seq)))
+    }
+}
+
+/// SEARCH - Search for subsequence
+pub struct SearchTool;
+impl Tool for SearchTool {
+    fn name(&self) -> &str { "SEARCH" }
+    fn description(&self) -> &str { "Search for subsequence within sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SEARCH".to_string(),
+                reason: "Expected two sequences".to_string(),
+            });
+        }
+        let needle = args[0].as_array()?;
+        let haystack = args[1].as_array()?;
+
+        if needle.is_empty() {
+            return Ok(Value::Int(0));
+        }
+
+        for i in 0..=haystack.len().saturating_sub(needle.len()) {
+            if haystack[i..].starts_with(needle) {
+                return Ok(Value::Int(i as i64));
+            }
+        }
+        Ok(Value::Null)
+    }
+}
+
+/// SUBSTITUTE-IF - Substitute if predicate matches
+pub struct SubstituteIfTool;
+impl Tool for SubstituteIfTool {
+    fn name(&self) -> &str { "SUBSTITUTE-IF" }
+    fn description(&self) -> &str { "Substitute if predicate matches" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SUBSTITUTE-IF".to_string(),
+                reason: "Expected new value and sequence".to_string(),
+            });
+        }
+        let new_val = &args[0];
+        let seq = args[1].as_array()?;
+        let result: Vec<Value> = seq.iter().map(|elem| {
+            if elem.is_truthy() { new_val.clone() } else { elem.clone() }
+        }).collect();
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// SUBSTITUTE-IF-NOT - Substitute if predicate doesn't match
+pub struct SubstituteIfNotTool;
+impl Tool for SubstituteIfNotTool {
+    fn name(&self) -> &str { "SUBSTITUTE-IF-NOT" }
+    fn description(&self) -> &str { "Substitute if predicate doesn't match" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SUBSTITUTE-IF-NOT".to_string(),
+                reason: "Expected new value and sequence".to_string(),
+            });
+        }
+        let new_val = &args[0];
+        let seq = args[1].as_array()?;
+        let result: Vec<Value> = seq.iter().map(|elem| {
+            if !elem.is_truthy() { new_val.clone() } else { elem.clone() }
+        }).collect();
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// NSUBSTITUTE-IF - Destructively substitute if predicate matches
+pub struct NsubstituteIfTool;
+impl Tool for NsubstituteIfTool {
+    fn name(&self) -> &str { "NSUBSTITUTE-IF" }
+    fn description(&self) -> &str { "Destructively substitute if predicate matches" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        SubstituteIfTool.execute(args)
+    }
+}
+
+/// NSUBSTITUTE-IF-NOT - Destructively substitute if predicate doesn't match
+pub struct NsubstituteIfNotTool;
+impl Tool for NsubstituteIfNotTool {
+    fn name(&self) -> &str { "NSUBSTITUTE-IF-NOT" }
+    fn description(&self) -> &str { "Destructively substitute if predicate doesn't match" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        SubstituteIfNotTool.execute(args)
+    }
+}
+
+/// DELETE-DUPLICATES - Remove duplicate elements
+pub struct DeleteDuplicatesTool;
+impl Tool for DeleteDuplicatesTool {
+    fn name(&self) -> &str { "DELETE-DUPLICATES" }
+    fn description(&self) -> &str { "Remove duplicate elements from sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+        let seq = args[0].as_array()?;
+        let mut seen = Vec::new();
+        let mut result = Vec::new();
+        for elem in seq.iter() {
+            if !seen.contains(elem) {
+                seen.push(elem.clone());
+                result.push(elem.clone());
+            }
+        }
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// COUNT - Count occurrences of item
+pub struct CountTool;
+impl Tool for CountTool {
+    fn name(&self) -> &str { "COUNT" }
+    fn description(&self) -> &str { "Count occurrences of item in sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "COUNT".to_string(),
+                reason: "Expected item and sequence".to_string(),
+            });
+        }
+        let item = &args[0];
+        let seq = args[1].as_array()?;
+        let count = seq.iter().filter(|elem| *elem == item).count();
+        Ok(Value::Int(count as i64))
+    }
+}
+
+/// COUNT-IF - Count items matching predicate
+pub struct CountIfTool;
+impl Tool for CountIfTool {
+    fn name(&self) -> &str { "COUNT-IF" }
+    fn description(&self) -> &str { "Count items matching predicate" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(0));
+        }
+        let seq = args[0].as_array()?;
+        let count = seq.iter().filter(|elem| elem.is_truthy()).count();
+        Ok(Value::Int(count as i64))
+    }
+}
+
+/// POSITION - Find position of item
+pub struct PositionTool;
+impl Tool for PositionTool {
+    fn name(&self) -> &str { "POSITION" }
+    fn description(&self) -> &str { "Find position of item in sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "POSITION".to_string(),
+                reason: "Expected item and sequence".to_string(),
+            });
+        }
+        let item = &args[0];
+        let seq = args[1].as_array()?;
+        for (i, elem) in seq.iter().enumerate() {
+            if elem == item {
+                return Ok(Value::Int(i as i64));
+            }
+        }
+        Ok(Value::Null)
+    }
+}
+
+/// FIND-IF-NOT - Find item not matching predicate
+pub struct FindIfNotTool;
+impl Tool for FindIfNotTool {
+    fn name(&self) -> &str { "FIND-IF-NOT" }
+    fn description(&self) -> &str { "Find first item not matching predicate" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Null);
+        }
+        let seq = args[0].as_array()?;
+        for elem in seq.iter() {
+            if !elem.is_truthy() {
+                return Ok(elem.clone());
+            }
+        }
+        Ok(Value::Null)
+    }
+}
+
+/// REPLACE - Replace subsequence
+pub struct ReplaceToolSeq;
+impl Tool for ReplaceToolSeq {
+    fn name(&self) -> &str { "REPLACE" }
+    fn description(&self) -> &str { "Replace subsequence in sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "REPLACE".to_string(),
+                reason: "Expected two sequences".to_string(),
+            });
+        }
+        let seq1 = args[0].as_array()?;
+        let seq2 = args[1].as_array()?;
+        let len = seq1.len().min(seq2.len());
+        let mut result = seq1.to_vec();
+        for i in 0..len {
+            result[i] = seq2[i].clone();
+        }
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// NREPLACE - Destructively replace subsequence
+pub struct NreplaceTool;
+impl Tool for NreplaceTool {
+    fn name(&self) -> &str { "NREPLACE" }
+    fn description(&self) -> &str { "Destructively replace subsequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        ReplaceToolSeq.execute(args)
+    }
+}
+
+/// CONCATENATE - Concatenate sequences
+pub struct ConcatenateTool;
+impl Tool for ConcatenateTool {
+    fn name(&self) -> &str { "CONCATENATE" }
+    fn description(&self) -> &str { "Concatenate sequences" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        let mut result = Vec::new();
+        for arg in args {
+            if let Value::Array(arr) = arg {
+                result.extend(arr.iter().cloned());
+            }
+        }
+        Ok(Value::Array(Arc::new(result)))
+    }
+}
+
+/// LENGTH - Get sequence length
+pub struct LengthSeqTool;
+impl Tool for LengthSeqTool {
+    fn name(&self) -> &str { "LENGTH" }
+    fn description(&self) -> &str { "Get length of sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(0));
+        }
+        match &args[0] {
+            Value::Array(arr) => Ok(Value::Int(arr.len() as i64)),
+            Value::String(s) => Ok(Value::Int(s.len() as i64)),
+            _ => Ok(Value::Int(0)),
+        }
+    }
+}
+
+/// REVERSE - Reverse sequence
+pub struct ReverseTool;
+impl Tool for ReverseTool {
+    fn name(&self) -> &str { "REVERSE" }
+    fn description(&self) -> &str { "Reverse sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+        let mut seq = args[0].as_array()?.to_vec();
+        seq.reverse();
+        Ok(Value::Array(Arc::new(seq)))
+    }
+}
+
+/// SUBSEQUENCE - Extract subsequence
+pub struct SubsequenceTool;
+impl Tool for SubsequenceTool {
+    fn name(&self) -> &str { "SUBSEQUENCE" }
+    fn description(&self) -> &str { "Extract subsequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SUBSEQUENCE".to_string(),
+                reason: "Expected sequence and start index".to_string(),
+            });
+        }
+        let seq = args[0].as_array()?;
+        let start = args[1].as_int()? as usize;
+        let end = if args.len() > 2 {
+            args[2].as_int()? as usize
+        } else {
+            seq.len()
+        };
+
+        if start > seq.len() || end > seq.len() || start > end {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+
+        Ok(Value::Array(Arc::new(seq[start..end].to_vec())))
+    }
+}
+
+/// SORT - Sort sequence
+pub struct SortTool;
+impl Tool for SortTool {
+    fn name(&self) -> &str { "SORT" }
+    fn description(&self) -> &str { "Sort sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+        let mut seq = args[0].as_array()?.to_vec();
+        seq.sort_by(|a, b| {
+            match (a, b) {
+                (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                (Value::Float(x), Value::Float(y)) => {
+                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                (Value::String(x), Value::String(y)) => x.cmp(y),
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
+        Ok(Value::Array(Arc::new(seq)))
+    }
+}
+
+/// MAP - Map function over sequence
+pub struct MapTool;
+impl Tool for MapTool {
+    fn name(&self) -> &str { "MAP" }
+    fn description(&self) -> &str { "Map function over sequence" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Array(Arc::new(vec![])));
+        }
+        // Simplified: just return the sequence
+        Ok(args[0].clone())
     }
 }

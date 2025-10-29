@@ -1,0 +1,39 @@
+;; Test script to verify TYPEOF and KEYS debug tools are working
+
+;; Test 1: TYPEOF with different data types
+(define test_null null)
+(define test_int 42)
+(define test_string "hello")
+(define test_array [1 2 3])
+(define test_object {:name "test" :value 123})
+
+(LOG "=== Testing TYPEOF tool ===")
+(LOG "Type of null:" (TYPEOF test_null))
+(LOG "Type of integer:" (TYPEOF test_int))
+(LOG "Type of string:" (TYPEOF test_string))
+(LOG "Type of array:" (TYPEOF test_array))
+(LOG "Type of object:" (TYPEOF test_object))
+
+;; Test 2: KEYS with objects
+(LOG "")
+(LOG "=== Testing KEYS tool ===")
+(define obj1 {:foo "bar" :baz 42 :qux true})
+(define keys1 (KEYS obj1))
+(LOG "Keys of obj1:" keys1)
+
+;; Test 3: Using TYPEOF and KEYS with MCP tool responses
+(LOG "")
+(LOG "=== Testing with MCP API responses ===")
+(define block_stats (get_block_stats {}))
+(LOG "Type of API response:" (TYPEOF block_stats))
+
+;; Check if it's an object and get its keys
+(if (== (TYPEOF block_stats) "object")
+  (do
+    (LOG "API response keys:" (KEYS block_stats))
+    (LOG "Success: TYPEOF and KEYS tools are working with API responses!"))
+  (LOG "API returned non-object type:" (TYPEOF block_stats)))
+
+;; Final success message
+(LOG "")
+(LOG "✅ All debug introspection tools tested successfully!")

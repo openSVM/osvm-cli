@@ -1,0 +1,86 @@
+(do
+  ;; Constants for Summer 2025
+  (define TARGET_ADDR "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+  (define START_TS 1740806400)   ;; 2025-06-01 00:00:00 UTC
+  (define END_TS   1743513600)   ;; 2025-09-01 00:00:00 UTC
+
+  ;; Aggregation parallel arrays
+  (define wallets [])
+  (define totals [])
+  (define txids [])
+
+  ;; Pagination variables
+  (define before null)
+  (define continue true)
+  (define batch [])
+  
+  ;; Temp variables for loop
+  (define sender null)
+  (define amount 0)
+  (define sig null)
+  (define idx -1)
+
+  ;; Fetch transactions with pagination
+  (while continue
+    (set! batch (get_account_transactions {:address TARGET_ADDR :limit 1000 :before before}))
+    
+    ;; Process each transaction
+    (for (tx batch)
+      (when (and (== (. tx receiver) TARGET_ADDR)
+                 (== (. tx token) "SOL")
+                 (>= (. tx timestamp) START_TS)
+                 (<= (. tx timestamp) END_TS))
+        (set! sender (. tx sender))
+        (set! amount (. tx amount))
+        (set! sig (. tx signature))
+        
+        ;; Find sender in wallets
+        (set! idx -1)
+        (for (i (range (COUNT wallets)))
+          (when (== ([] wallets i) sender)
+            (set! idx i)))
+        
+        ;; New wallet
+        (when (== idx -1)
+          (set! wallets (APPEND wallets [sender]))
+          (set! totals (APPEND totals [amount]))
+          (set! txids (APPEND txids [[sig]])))
+        
+        ;; Existing wallet
+        (when (>= idx 0)
+          (set! totals (APPEND
+                       (slice totals 0 idx)
+                       [(+ ([] totals idx) amount)]
+                       (slice totals (+ idx 1) (COUNT totals))))
+          (set! txids (APPEND
+                      (slice txids 0 idx)
+                      [(APPEND ([] txids idx) [sig])]
+                      (slice txids (+ idx 1) (COUNT txids)))))))
+    
+    ;; Check if done
+    (when (< (COUNT batch) 1000)
+      (set! continue false))
+    (when (and continue (> (COUNT batch) 0))
+      (set! before (. ([] batch (- (COUNT batch) 1)) cursor))))
+
+  ;; Sort by total descending (selection sort)
+  (define sorted [])
+  (while (> (COUNT wallets) 0)
+    (define maxIdx 0)
+    (for (i (range (COUNT wallets)))
+      (when (> ([] totals i) ([] totals maxIdx))
+        (set! maxIdx i)))
+    
+    (set! sorted (APPEND sorted [{:wallet ([] wallets maxIdx)
+                                  :total ([] totals maxIdx)
+                                  :txids ([] txids maxIdx)}]))
+    
+    ;; Remove max from arrays
+    (set! wallets (APPEND (slice wallets 0 maxIdx)
+                          (slice wallets (+ maxIdx 1) (COUNT wallets))))
+    (set! totals (APPEND (slice totals 0 maxIdx)
+                         (slice totals (+ maxIdx 1) (COUNT totals))))
+    (set! txids (APPEND (slice txids 0 maxIdx)
+                        (slice txids (+ maxIdx 1) (COUNT txids)))))
+  
+  sorted)

@@ -1,0 +1,147 @@
+
+🤖 OSVM Agent - Autonomous Research Mode
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📝 Research Question: find all wallets that sent SOL to 5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWq
+dwoX9q85 in summer 2025 and print total amounts and tx ids for each wallet sort by total amount
+🔬 Mode: Iterative strategy refinement enabled
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧠 AI Planning📤 OSVM AI Request:
+  question: 295 chars
+  systemPrompt: 18068 chars
+  ownPlan: Some(true)
+📥 OSVM AI Response (200 OK): <ovsm_plan>
+  <meta>
+    <time_estimate>2-4 minutes</time_estimate>
+    <confidence>92%</confidence>
+  </meta>
+  
+  <code>
+(do
+  ;; -------------------------------------------------
+  ;; 1. Define constants and helper variables
+  ;; -------------------------------------------------
+  (define TARGET "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWq")
+  ;; Unix timestamps for June 1, 2025 00:00:00 UTC and Aug 31, 2025 23:59:59 UTC
+  (define START_TS 1743696000)
+  (define END_TS   1746297599)
+
+  ;; -------------------------------------------------
+  ;; 2. Fetch transactions for the target address (up to 5000)
+  ;; -------------------------------------------------
+  (define rawTxs (get_account_transactions {:address TARGET :limit 5000}))
+  (if (== rawTxs null)
+    (do
+      (log :message "Failed to fetch transactions for target address.")
+      {:status "error" :message "No transaction data retrieved."})
+    (do
+      ;; -------------------------------------------------
+      ;; 3. Prepare aggregation containers
+      ;; -------------------------------------------------
+      (define wallets [])   ;; sender addresses
+      (define totals [])    ;; total SOL sent per sender
+      (define txids [])     ;; array of arrays of transaction signatures
+
+      ;; -------------------------------------------------
+      ;; 4. Process each transaction: filter inbound SOL in summer 2025, aggregate per sender
+      ;; -------------------------------------------------
+      (for (tx rawTxs)
+        (when (and (== (. tx receiver) TARGET)
+                   (>= (. tx timestamp) START_TS)
+                   (<= (. tx timestamp) END_TS))
+          (define sender (. tx sender))
+          (define amount (/ (. tx lamports) 1000000000.0))  ;; lamports → SOL
+          
+          ;; Find existing index for this sender
+          (define idx -1)
+          (for (i (range (COUNT wallets)))
+            (when (== ([] wallets i) sender)
+              (set! idx i)))
+          
+          (when (== idx -1)
+            ;; New sender – append to all parallel arrays
+            (set! wallets (APPEND wallets [sender]))
+            (set! totals  (APPEND totals  [amount]))
+            (set! txids  (APPEND txids  [[(. tx signature)]])))
+          
+          (when (>= idx 0)
+            ;; Existing sender – update total and tx list
+            (set! totals (APPEND
+                           (slice totals 0 idx)
+                           [(+ ([] totals idx) amount)]
+                           (
+ ✅
+
+📋 Plan Details:
+   Reasoning: Analyzing request and creating execution plan
+   Expected Outcome: Analyzing request and creating execution plan
+
+📌 No specific tools needed - will provide direct response
+
+🛑 Plan-only mode enabled - skipping execution
+
+🧾 Raw OVSM Plan:
+<ovsm_plan>
+  <meta>
+    <time_estimate>2-4 minutes</time_estimate>
+    <confidence>92%</confidence>
+  </meta>
+  
+  <code>
+(do
+  ;; -------------------------------------------------
+  ;; 1. Define constants and helper variables
+  ;; -------------------------------------------------
+  (define TARGET "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWq")
+  ;; Unix timestamps for June 1, 2025 00:00:00 UTC and Aug 31, 2025 23:59:59 UTC
+  (define START_TS 1743696000)
+  (define END_TS   1746297599)
+
+  ;; -------------------------------------------------
+  ;; 2. Fetch transactions for the target address (up to 5000)
+  ;; -------------------------------------------------
+  (define rawTxs (get_account_transactions {:address TARGET :limit 5000}))
+  (if (== rawTxs null)
+    (do
+      (log :message "Failed to fetch transactions for target address.")
+      {:status "error" :message "No transaction data retrieved."})
+    (do
+      ;; -------------------------------------------------
+      ;; 3. Prepare aggregation containers
+      ;; -------------------------------------------------
+      (define wallets [])   ;; sender addresses
+      (define totals [])    ;; total SOL sent per sender
+      (define txids [])     ;; array of arrays of transaction signatures
+
+      ;; -------------------------------------------------
+      ;; 4. Process each transaction: filter inbound SOL in summer 2025, aggregate per sender
+      ;; -------------------------------------------------
+      (for (tx rawTxs)
+        (when (and (== (. tx receiver) TARGET)
+                   (>= (. tx timestamp) START_TS)
+                   (<= (. tx timestamp) END_TS))
+          (define sender (. tx sender))
+          (define amount (/ (. tx lamports) 1000000000.0))  ;; lamports → SOL
+          
+          ;; Find existing index for this sender
+          (define idx -1)
+          (for (i (range (COUNT wallets)))
+            (when (== ([] wallets i) sender)
+              (set! idx i)))
+          
+          (when (== idx -1)
+            ;; New sender – append to all parallel arrays
+            (set! wallets (APPEND wallets [sender]))
+            (set! totals  (APPEND totals  [amount]))
+            (set! txids  (APPEND txids  [[(. tx signature)]])))
+          
+          (when (>= idx 0)
+            ;; Existing sender – update total and tx list
+            (set! totals (APPEND
+                           (slice totals 0 idx)
+                           [(+ ([] totals idx) amount)]
+                           (
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Plan generated. Re-run without --plan-only to execute.
+
