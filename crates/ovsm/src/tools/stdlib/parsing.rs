@@ -32,8 +32,8 @@ impl Tool for JsonParseTool {
 
         let json_str = args[0].as_string()?;
 
-        let parsed: serde_json::Value = serde_json::from_str(json_str)
-            .map_err(|e| Error::ToolExecutionError {
+        let parsed: serde_json::Value =
+            serde_json::from_str(json_str).map_err(|e| Error::ToolExecutionError {
                 tool: self.name().to_string(),
                 reason: format!("Failed to parse JSON: {}", e),
             })?;
@@ -56,9 +56,7 @@ fn json_to_ovsm(val: serde_json::Value) -> Value {
             }
         }
         serde_json::Value::String(s) => Value::String(s),
-        serde_json::Value::Array(arr) => {
-            Value::array(arr.into_iter().map(json_to_ovsm).collect())
-        }
+        serde_json::Value::Array(arr) => Value::array(arr.into_iter().map(json_to_ovsm).collect()),
         serde_json::Value::Object(obj) => {
             let mut map = HashMap::new();
             for (k, v) in obj {
@@ -111,15 +109,11 @@ fn ovsm_to_json(val: &Value) -> serde_json::Value {
         Value::Null => serde_json::Value::Null,
         Value::Bool(b) => serde_json::Value::Bool(*b),
         Value::Int(n) => serde_json::json!(*n),
-        Value::Float(f) => {
-            serde_json::Number::from_f64(*f)
-                .map(serde_json::Value::Number)
-                .unwrap_or(serde_json::Value::Null)
-        }
+        Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
         Value::String(s) => serde_json::Value::String(s.clone()),
-        Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(ovsm_to_json).collect())
-        }
+        Value::Array(arr) => serde_json::Value::Array(arr.iter().map(ovsm_to_json).collect()),
         Value::Object(obj) => {
             let mut map = serde_json::Map::new();
             for (k, v) in obj.iter() {
@@ -163,7 +157,9 @@ impl Tool for Base58DecodeTool {
                 reason: format!("Failed to decode Base58: {}", e),
             })?;
 
-        Ok(Value::array(decoded.into_iter().map(|b| Value::Int(b as i64)).collect()))
+        Ok(Value::array(
+            decoded.into_iter().map(|b| Value::Int(b as i64)).collect(),
+        ))
     }
 }
 
@@ -224,14 +220,17 @@ impl Tool for Base64DecodeTool {
 
         let encoded = args[0].as_string()?;
 
-        let decoded = general_purpose::STANDARD
-            .decode(encoded)
-            .map_err(|e| Error::ToolExecutionError {
-                tool: self.name().to_string(),
-                reason: format!("Failed to decode Base64: {}", e),
-            })?;
+        let decoded =
+            general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|e| Error::ToolExecutionError {
+                    tool: self.name().to_string(),
+                    reason: format!("Failed to decode Base64: {}", e),
+                })?;
 
-        Ok(Value::array(decoded.into_iter().map(|b| Value::Int(b as i64)).collect()))
+        Ok(Value::array(
+            decoded.into_iter().map(|b| Value::Int(b as i64)).collect(),
+        ))
     }
 }
 
@@ -293,13 +292,14 @@ impl Tool for HexDecodeTool {
         let hex_str = args[0].as_string()?;
         let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
 
-        let decoded = hex::decode(hex_str)
-            .map_err(|e| Error::ToolExecutionError {
-                tool: self.name().to_string(),
-                reason: format!("Failed to decode hex: {}", e),
-            })?;
+        let decoded = hex::decode(hex_str).map_err(|e| Error::ToolExecutionError {
+            tool: self.name().to_string(),
+            reason: format!("Failed to decode hex: {}", e),
+        })?;
 
-        Ok(Value::array(decoded.into_iter().map(|b| Value::Int(b as i64)).collect()))
+        Ok(Value::array(
+            decoded.into_iter().map(|b| Value::Int(b as i64)).collect(),
+        ))
     }
 }
 
@@ -366,14 +366,16 @@ impl Tool for UrlParseTool {
 
         let url_str = args[0].as_string()?;
 
-        let url = url::Url::parse(url_str)
-            .map_err(|e| Error::ToolExecutionError {
-                tool: self.name().to_string(),
-                reason: format!("Failed to parse URL: {}", e),
-            })?;
+        let url = url::Url::parse(url_str).map_err(|e| Error::ToolExecutionError {
+            tool: self.name().to_string(),
+            reason: format!("Failed to parse URL: {}", e),
+        })?;
 
         let mut result = HashMap::new();
-        result.insert("scheme".to_string(), Value::String(url.scheme().to_string()));
+        result.insert(
+            "scheme".to_string(),
+            Value::String(url.scheme().to_string()),
+        );
         result.insert(
             "host".to_string(),
             url.host_str()
@@ -434,11 +436,10 @@ impl Tool for ParseIntTool {
             10
         };
 
-        let parsed = i64::from_str_radix(s, base)
-            .map_err(|e| Error::ToolExecutionError {
-                tool: self.name().to_string(),
-                reason: format!("Failed to parse integer: {}", e),
-            })?;
+        let parsed = i64::from_str_radix(s, base).map_err(|e| Error::ToolExecutionError {
+            tool: self.name().to_string(),
+            reason: format!("Failed to parse integer: {}", e),
+        })?;
 
         Ok(Value::Int(parsed))
     }
@@ -465,12 +466,10 @@ impl Tool for ParseFloatTool {
 
         let s = args[0].as_string()?;
 
-        let parsed: f64 = s
-            .parse()
-            .map_err(|e| Error::ToolExecutionError {
-                tool: self.name().to_string(),
-                reason: format!("Failed to parse float: {}", e),
-            })?;
+        let parsed: f64 = s.parse().map_err(|e| Error::ToolExecutionError {
+            tool: self.name().to_string(),
+            reason: format!("Failed to parse float: {}", e),
+        })?;
 
         Ok(Value::Float(parsed))
     }
@@ -528,11 +527,10 @@ impl Tool for ParseCsvTool {
         let mut result = Vec::new();
 
         for record in reader.records() {
-            let record = record
-                .map_err(|e| Error::ToolExecutionError {
-                    tool: self.name().to_string(),
-                    reason: format!("Failed to read CSV record: {}", e),
-                })?;
+            let record = record.map_err(|e| Error::ToolExecutionError {
+                tool: self.name().to_string(),
+                reason: format!("Failed to read CSV record: {}", e),
+            })?;
 
             let mut obj = HashMap::new();
             for (i, field) in record.iter().enumerate() {

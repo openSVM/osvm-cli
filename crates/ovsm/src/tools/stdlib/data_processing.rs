@@ -30,6 +30,18 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(NthTool);
     registry.register(IndexOfTool);
     registry.register(TakeTool);
+
+    // Common Lisp list accessors
+    registry.register(CarTool);
+    registry.register(CdrTool);
+    registry.register(CadrTool);
+    registry.register(CddrTool);
+    registry.register(CaarTool);
+    registry.register(CdarTool);
+    registry.register(RestTool);
+    registry.register(ConsTool);
+    registry.register(ListTool);
+    registry.register(LengthTool);
 }
 
 /// Tool for applying a function to each element of a collection
@@ -855,5 +867,300 @@ mod tests {
 
         let last_tool = LastTool;
         assert_eq!(last_tool.execute(&[arr]).unwrap(), Value::Int(30));
+    }
+}
+
+// ============================================================================
+// Common Lisp List Accessors
+// ============================================================================
+
+/// CAR - get first element of list (same as FIRST)
+pub struct CarTool;
+
+impl Tool for CarTool {
+    fn name(&self) -> &str {
+        "CAR"
+    }
+
+    fn description(&self) -> &str {
+        "Get first element of list (Common Lisp)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CAR".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        collection
+            .first()
+            .cloned()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAR".to_string(),
+            })
+    }
+}
+
+/// CDR - get all elements except first (same as REST)
+pub struct CdrTool;
+
+impl Tool for CdrTool {
+    fn name(&self) -> &str {
+        "CDR"
+    }
+
+    fn description(&self) -> &str {
+        "Get all elements except first (Common Lisp)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CDR".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        if collection.is_empty() {
+            Ok(Value::array(vec![]))
+        } else {
+            Ok(Value::array(collection[1..].to_vec()))
+        }
+    }
+}
+
+/// REST - alias for CDR
+pub struct RestTool;
+
+impl Tool for RestTool {
+    fn name(&self) -> &str {
+        "REST"
+    }
+
+    fn description(&self) -> &str {
+        "Get all elements except first (alias for CDR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        CdrTool.execute(args)
+    }
+}
+
+/// CADR - get second element (car of cdr)
+pub struct CadrTool;
+
+impl Tool for CadrTool {
+    fn name(&self) -> &str {
+        "CADR"
+    }
+
+    fn description(&self) -> &str {
+        "Get second element of list (CAR of CDR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CADR".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        if collection.len() < 2 {
+            return Err(Error::IndexOutOfBounds {
+                index: 1,
+                length: collection.len(),
+            });
+        }
+        Ok(collection[1].clone())
+    }
+}
+
+/// CDDR - get all elements except first two
+pub struct CddrTool;
+
+impl Tool for CddrTool {
+    fn name(&self) -> &str {
+        "CDDR"
+    }
+
+    fn description(&self) -> &str {
+        "Get all elements except first two (CDR of CDR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CDDR".to_string(),
+                reason: "Expected array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        if collection.len() < 2 {
+            Ok(Value::array(vec![]))
+        } else {
+            Ok(Value::array(collection[2..].to_vec()))
+        }
+    }
+}
+
+/// CAAR - get first element of first element
+pub struct CaarTool;
+
+impl Tool for CaarTool {
+    fn name(&self) -> &str {
+        "CAAR"
+    }
+
+    fn description(&self) -> &str {
+        "Get first element of first element (CAR of CAR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CAAR".to_string(),
+                reason: "Expected nested array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        if collection.is_empty() {
+            return Err(Error::EmptyCollection {
+                operation: "CAAR".to_string(),
+            });
+        }
+
+        let first_elem = collection.first().unwrap().as_array()?;
+        first_elem
+            .first()
+            .cloned()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAAR".to_string(),
+            })
+    }
+}
+
+/// CDAR - get rest of first element
+pub struct CdarTool;
+
+impl Tool for CdarTool {
+    fn name(&self) -> &str {
+        "CDAR"
+    }
+
+    fn description(&self) -> &str {
+        "Get rest of first element (CDR of CAR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CDAR".to_string(),
+                reason: "Expected nested array argument".to_string(),
+            });
+        }
+
+        let collection = args[0].as_array()?;
+        if collection.is_empty() {
+            return Err(Error::EmptyCollection {
+                operation: "CDAR".to_string(),
+            });
+        }
+
+        let first_elem = collection.first().unwrap().as_array()?;
+        if first_elem.is_empty() {
+            Ok(Value::array(vec![]))
+        } else {
+            Ok(Value::array(first_elem[1..].to_vec()))
+        }
+    }
+}
+
+/// CONS - construct a new list by prepending an element
+pub struct ConsTool;
+
+impl Tool for ConsTool {
+    fn name(&self) -> &str {
+        "CONS"
+    }
+
+    fn description(&self) -> &str {
+        "Construct new list by prepending element"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "CONS".to_string(),
+                reason: "Expected element and list".to_string(),
+            });
+        }
+
+        let elem = &args[0];
+        let list = args[1].as_array()?;
+
+        let mut result = vec![elem.clone()];
+        result.extend(list.iter().cloned());
+        Ok(Value::array(result))
+    }
+}
+
+/// LIST - create a list from arguments
+pub struct ListTool;
+
+impl Tool for ListTool {
+    fn name(&self) -> &str {
+        "LIST"
+    }
+
+    fn description(&self) -> &str {
+        "Create a list from arguments"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        Ok(Value::array(args.to_vec()))
+    }
+}
+
+/// LENGTH - get length of collection
+pub struct LengthTool;
+
+impl Tool for LengthTool {
+    fn name(&self) -> &str {
+        "LENGTH"
+    }
+
+    fn description(&self) -> &str {
+        "Get length of array or string"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "LENGTH".to_string(),
+                reason: "Expected collection argument".to_string(),
+            });
+        }
+
+        let len = match &args[0] {
+            Value::Array(arr) => arr.len(),
+            Value::String(s) => s.len(),
+            Value::Object(obj) => obj.len(),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "array, string, or object".to_string(),
+                    got: args[0].type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(len as i64))
     }
 }

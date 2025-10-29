@@ -345,11 +345,12 @@ count
   (define content (. resp content))
   (define parsed null)
   
-  (when (and (is-array? content) (> (COUNT content) 0))
-    (define first-item ([] content 0))
-    (when (. first-item text)
+  ;; Check if content exists and has items (use COUNT and > 0 check)
+  (when (and content (> (COUNT content) 0))
+    (define first_item ([] content 0))
+    (when (. first_item text)
       ;; Parse the JSON string to get actual data
-      (set! parsed (parse-json {:json (. first-item text)}))))
+      (set! parsed (parse-json {:json (. first_item text)}))))
   
   ;; Step 3: Check parsed data for errors
   (define result null)
@@ -379,16 +380,18 @@ count
   (define parsed null)
   (define content (. resp content))
   
-  (when (and (is-array? content) (> (COUNT content) 0))
+  ;; Check if content exists and has items
+  (when (and content (> (COUNT content) 0))
     (define item ([] content 0))
     (when (. item text)
       (set! parsed (parse-json {:json (. item text)}))))
   
   ;; Step 3: Use parsed data
   (define result null)
-  (when (and parsed (. parsed data) (is-array? (. parsed data)))
-    (define blocks (. parsed data))
-    (when (> (COUNT blocks) 0)
+  (when parsed
+    (define data (. parsed data))
+    (when (and data (> (COUNT data) 0))
+      (define blocks data)
       (define block ([] blocks 0))
       (set! result (. block slot))))
   

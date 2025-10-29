@@ -302,7 +302,10 @@ async fn execute_with_plan(
         }
     } else {
         // Try to get OSVM plan from AI with validation
-        match ai_service.create_validated_tool_plan(prompt, available_tools, 3).await {
+        match ai_service
+            .create_validated_tool_plan(prompt, available_tools, 3)
+            .await
+        {
             Ok(plan) => {
                 if verbose > 1 {
                     eprintln!(
@@ -316,10 +319,16 @@ async fn execute_with_plan(
                 plan
             }
             Err(e) => {
-                eprintln!("❌ Failed to get validated OSVM plan from AI service: {}", e);
+                eprintln!(
+                    "❌ Failed to get validated OSVM plan from AI service: {}",
+                    e
+                );
                 eprintln!("   Please ensure the AI service is configured and accessible.");
                 // Return empty plan on error - no fallback demos allowed
-                return Err(anyhow::anyhow!("Failed to create validated OSVM plan: {}", e));
+                return Err(anyhow::anyhow!(
+                    "Failed to create validated OSVM plan: {}",
+                    e
+                ));
             }
         }
     };

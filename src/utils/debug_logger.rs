@@ -90,12 +90,14 @@ pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
             let val_type = match val {
                 OvsmValue::Array(arr) => format!("array[{}]", arr.len()),
                 OvsmValue::Object(_) => "object".to_string(),
-                OvsmValue::String(s) => format!("String({:?})", s.chars().take(50).collect::<String>()),
+                OvsmValue::String(s) => {
+                    format!("String({:?})", s.chars().take(50).collect::<String>())
+                }
                 _ => format!("{:?}", val).chars().take(50).collect(),
             };
             eprintln!("    .{} = {}", key, val_type);
         }
-        
+
         // Print content field details (useful for debugging MCP responses)
         if let Some(content) = obj.get("content") {
             eprintln!("📦 Content field details:");
@@ -107,13 +109,22 @@ pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
                         match item {
                             OvsmValue::String(s) => eprintln!("      [{}]: {}", i, s),
                             OvsmValue::Object(o) => {
-                                eprintln!("      [{}]: object with keys: {}", i, 
-                                    o.keys().cloned().collect::<Vec<_>>().join(", "));
+                                eprintln!(
+                                    "      [{}]: object with keys: {}",
+                                    i,
+                                    o.keys().cloned().collect::<Vec<_>>().join(", ")
+                                );
                                 // Print the actual error message fields
                                 if let Some(OvsmValue::String(text)) = o.get("text") {
-                                    eprintln!("          📄 text: {}", text.chars().take(500).collect::<String>());
+                                    eprintln!(
+                                        "          📄 text: {}",
+                                        text.chars().take(500).collect::<String>()
+                                    );
                                     if text.len() > 500 {
-                                        eprintln!("          ... ({} more chars)", text.len() - 500);
+                                        eprintln!(
+                                            "          ... ({} more chars)",
+                                            text.len() - 500
+                                        );
                                     }
                                 }
                                 if let Some(OvsmValue::String(type_str)) = o.get("type") {
@@ -125,13 +136,15 @@ pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
                     }
                 }
                 OvsmValue::Object(o) => {
-                    eprintln!("    Object with keys: {}", 
-                        o.keys().cloned().collect::<Vec<_>>().join(", "));
+                    eprintln!(
+                        "    Object with keys: {}",
+                        o.keys().cloned().collect::<Vec<_>>().join(", ")
+                    );
                 }
                 _ => eprintln!("    {:?}", content),
             }
         }
-        
+
         // If there's an isError field set to true, highlight it
         if let Some(OvsmValue::Bool(true)) = obj.get("isError") {
             eprintln!("⚠️  isError=true detected - this is an error response!");

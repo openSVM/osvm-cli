@@ -58,7 +58,8 @@ impl AdvancedChatState {
         // Use the proper AI service method to create tool plan with validation
         let tool_plan_result = tokio::time::timeout(
             Duration::from_secs(120), // Extended timeout for comprehensive AI responses
-            self.ai_service.create_validated_tool_plan(&input, &available_tools, 3),
+            self.ai_service
+                .create_validated_tool_plan(&input, &available_tools, 3),
         )
         .await;
 

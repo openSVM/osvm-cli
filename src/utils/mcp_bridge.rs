@@ -42,7 +42,7 @@ impl Tool for McpBridgeTool {
             println!("  [{}]: {} = {}", i, arg.type_name(), arg);
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-        
+
         // Lock the MCP service
         let service = self.mcp_service.clone();
         let mut svc = futures::executor::block_on(service.lock());
@@ -112,11 +112,18 @@ impl Tool for McpBridgeTool {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("📤 JSON Params ({} items):", params.len());
         for (i, param) in params.iter().enumerate() {
-            println!("  [{}]: {}", i, serde_json::to_string_pretty(param).unwrap_or_else(|_| "<invalid>".to_string()));
+            println!(
+                "  [{}]: {}",
+                i,
+                serde_json::to_string_pretty(param).unwrap_or_else(|_| "<invalid>".to_string())
+            );
         }
         println!("\n📤 Final Arguments for MCP:");
         if let Some(ref args) = arguments {
-            println!("{}", serde_json::to_string_pretty(args).unwrap_or_else(|_| "<invalid>".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(args).unwrap_or_else(|_| "<invalid>".to_string())
+            );
         } else {
             println!("  (none)");
         }

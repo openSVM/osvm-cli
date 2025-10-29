@@ -12,6 +12,12 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(NowTool);
     registry.register(TypeOfTool);
     registry.register(KeysTool);
+    registry.register(IsArrayTool);
+    registry.register(IsObjectTool);
+    registry.register(IsStringTool);
+    registry.register(IsNumberTool);
+    registry.register(IsBoolTool);
+    registry.register(IsNullTool);
 }
 
 /// Tool for logging messages to stdout (debugging purposes)
@@ -159,5 +165,128 @@ impl Tool for KeysTool {
             }
             _ => Ok(Value::Array(Arc::new(vec![]))),
         }
+    }
+}
+
+/// Type predicate: is-array?
+pub struct IsArrayTool;
+
+impl Tool for IsArrayTool {
+    fn name(&self) -> &str {
+        "IS-ARRAY?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is an array"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(matches!(&args[0], Value::Array(_))))
+    }
+}
+
+/// Type predicate: is-object?
+pub struct IsObjectTool;
+
+impl Tool for IsObjectTool {
+    fn name(&self) -> &str {
+        "IS-OBJECT?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is an object"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(matches!(&args[0], Value::Object(_))))
+    }
+}
+
+/// Type predicate: is-string?
+pub struct IsStringTool;
+
+impl Tool for IsStringTool {
+    fn name(&self) -> &str {
+        "IS-STRING?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is a string"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(matches!(&args[0], Value::String(_))))
+    }
+}
+
+/// Type predicate: is-number?
+pub struct IsNumberTool;
+
+impl Tool for IsNumberTool {
+    fn name(&self) -> &str {
+        "IS-NUMBER?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is a number (int or float)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(matches!(
+            &args[0],
+            Value::Int(_) | Value::Float(_)
+        )))
+    }
+}
+
+/// Type predicate: is-bool?
+pub struct IsBoolTool;
+
+impl Tool for IsBoolTool {
+    fn name(&self) -> &str {
+        "IS-BOOL?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is a boolean"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(false));
+        }
+        Ok(Value::Bool(matches!(&args[0], Value::Bool(_))))
+    }
+}
+
+/// Type predicate: is-null?
+pub struct IsNullTool;
+
+impl Tool for IsNullTool {
+    fn name(&self) -> &str {
+        "IS-NULL?"
+    }
+
+    fn description(&self) -> &str {
+        "Check if value is null"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Bool(true));
+        }
+        Ok(Value::Bool(matches!(&args[0], Value::Null)))
     }
 }

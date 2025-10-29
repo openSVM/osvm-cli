@@ -657,7 +657,10 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     print!("🧠 AI Planning");
     std::io::stdout().flush()?;
 
-    let tool_plan = match ai_service.create_validated_tool_plan(query, &available_tools, 3).await {
+    let tool_plan = match ai_service
+        .create_validated_tool_plan(query, &available_tools, 3)
+        .await
+    {
         Ok(plan) => {
             println!(" ✅");
             plan

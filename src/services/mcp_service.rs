@@ -2103,7 +2103,7 @@ impl McpService {
         println!("📍 Tool Name: {}", tool_name);
         println!("📍 use_ephemeral_vms: {}", self.use_ephemeral_vms);
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-        
+
         let config = self
             .servers
             .get(server_id)
@@ -2159,7 +2159,10 @@ impl McpService {
         }
 
         // Priority 4: Direct execution based on transport type
-        println!("🔀 Taking Priority 4: Direct execution via transport = {:?}\n", config.transport_type);
+        println!(
+            "🔀 Taking Priority 4: Direct execution via transport = {:?}\n",
+            config.transport_type
+        );
         match config.transport_type {
             McpTransportType::Http | McpTransportType::Websocket => {
                 self.call_tool_http(server_id, tool_name, arguments, config)
@@ -2341,18 +2344,29 @@ impl McpService {
         println!("📍 Tool Name: {}", tool_name);
         println!("\n📦 Arguments Sent:");
         if let Some(ref args) = arguments {
-            println!("{}", serde_json::to_string_pretty(args).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(args)
+                    .unwrap_or_else(|_| "Failed to serialize".to_string())
+            );
         } else {
             println!("  (no arguments)");
         }
         println!("\n📤 Full Request:");
-        println!("{}", serde_json::to_string_pretty(&request).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&request)
+                .unwrap_or_else(|_| "Failed to serialize".to_string())
+        );
         println!("\n🌐 Endpoint: {}/api/mcp", config.url);
-        
+
         if let Some(auth) = &config.auth {
             println!("🔐 Auth Type: {}", auth.auth_type);
             if auth.token.is_some() {
-                println!("🔐 Auth Token: <present, {} chars>", auth.token.as_ref().unwrap().len());
+                println!(
+                    "🔐 Auth Token: <present, {} chars>",
+                    auth.token.as_ref().unwrap().len()
+                );
             }
         } else {
             println!("🔐 Auth: None");
@@ -2394,20 +2408,27 @@ impl McpService {
 
         let elapsed = start_time.elapsed();
         let status = response.status();
-        
+
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("📥 MCP RESPONSE DEBUG TRACE");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("⏱️  Response Time: {:?}", elapsed);
-        println!("📊 HTTP Status: {} {}", status.as_u16(), status.canonical_reason().unwrap_or(""));
+        println!(
+            "📊 HTTP Status: {} {}",
+            status.as_u16(),
+            status.canonical_reason().unwrap_or("")
+        );
         println!("📊 Success: {}", status.is_success());
 
         if !response.status().is_success() {
-            let error_body = response.text().await.unwrap_or_else(|_| "<failed to read body>".to_string());
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "<failed to read body>".to_string());
             println!("❌ Error Response Body:");
             println!("{}", error_body);
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            
+
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
             return Err(anyhow::anyhow!(
                 "MCP server returned error status: {} - Body: {}",
@@ -2416,13 +2437,20 @@ impl McpService {
             ));
         }
 
-        let response_text = response.text().await.context("Failed to read response body")?;
-        
+        let response_text = response
+            .text()
+            .await
+            .context("Failed to read response body")?;
+
         println!("📦 Raw Response Body ({} bytes):", response_text.len());
         if response_text.len() < 2000 {
             println!("{}", response_text);
         } else {
-            println!("{}... (truncated, {} total bytes)", &response_text[..2000], response_text.len());
+            println!(
+                "{}... (truncated, {} total bytes)",
+                &response_text[..2000],
+                response_text.len()
+            );
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
@@ -2431,7 +2459,7 @@ impl McpService {
 
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
-            
+
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             println!("❌ MCP PROTOCOL ERROR");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -2439,10 +2467,13 @@ impl McpService {
             println!("Error Message: {}", error.message);
             if let Some(data) = &error.data {
                 println!("Error Data:");
-                println!("{}", serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data)));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data))
+                );
             }
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            
+
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
                 error.code,
@@ -2457,7 +2488,10 @@ impl McpService {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("✅ MCP SUCCESS RESULT");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result)));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result))
+        );
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
@@ -2492,7 +2526,11 @@ impl McpService {
         println!("📍 Tool Name: {}", tool_name);
         println!("\n📦 Arguments Sent:");
         if let Some(ref args) = arguments {
-            println!("{}", serde_json::to_string_pretty(args).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(args)
+                    .unwrap_or_else(|_| "Failed to serialize".to_string())
+            );
         } else {
             println!("  (no arguments)");
         }
@@ -2565,11 +2603,15 @@ impl McpService {
         };
 
         let init_request_str = serde_json::to_string(&init_request)?;
-        
+
         println!("📤 Sending Initialize Request:");
-        println!("{}", serde_json::to_string_pretty(&init_request).unwrap_or_else(|_| init_request_str.clone()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&init_request)
+                .unwrap_or_else(|_| init_request_str.clone())
+        );
         println!();
-        
+
         stdin.write_all(init_request_str.as_bytes())?;
         stdin.write_all(b"\n")?;
         stdin.flush()?;
@@ -2601,11 +2643,15 @@ impl McpService {
         };
 
         let call_request_str = serde_json::to_string(&call_request)?;
-        
+
         println!("📤 Sending Tool Call Request:");
-        println!("{}", serde_json::to_string_pretty(&call_request).unwrap_or_else(|_| call_request_str.clone()));
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&call_request)
+                .unwrap_or_else(|_| call_request_str.clone())
+        );
         println!();
-        
+
         stdin.write_all(call_request_str.as_bytes())?;
         stdin.write_all(b"\n")?;
         stdin.flush()?;
@@ -2625,7 +2671,11 @@ impl McpService {
         if call_response_str.len() < 5000 {
             println!("{}", call_response_str);
         } else {
-            println!("{}... (truncated, {} total bytes)", &call_response_str[..5000], call_response_str.len());
+            println!(
+                "{}... (truncated, {} total bytes)",
+                &call_response_str[..5000],
+                call_response_str.len()
+            );
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
@@ -2643,10 +2693,13 @@ impl McpService {
             println!("Error Message: {}", error.message);
             if let Some(data) = &error.data {
                 println!("Error Data:");
-                println!("{}", serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data)));
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data))
+                );
             }
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
-            
+
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
                 error.code,
@@ -2661,11 +2714,16 @@ impl McpService {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         println!("✅ MCP STDIO SUCCESS RESULT");
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        let result_str = serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result));
+        let result_str =
+            serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result));
         if result_str.len() < 5000 {
             println!("{}", result_str);
         } else {
-            println!("{}... (truncated, {} total bytes)", &result_str[..5000], result_str.len());
+            println!(
+                "{}... (truncated, {} total bytes)",
+                &result_str[..5000],
+                result_str.len()
+            );
         }
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 

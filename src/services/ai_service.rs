@@ -471,27 +471,34 @@ impl AiService {
         debug_mode: bool,
     ) -> Result<String> {
         // Wrap with timeout retry logic
-        let mut response = self.with_timeout_retry(
-            || self.query_osvm_ai_internal(question, system_prompt.clone(), only_plan, debug_mode),
-            4,
-            debug_mode,
-        )
-        .await?;
-        
+        let mut response = self
+            .with_timeout_retry(
+                || {
+                    self.query_osvm_ai_internal(
+                        question,
+                        system_prompt.clone(),
+                        only_plan,
+                        debug_mode,
+                    )
+                },
+                4,
+                debug_mode,
+            )
+            .await?;
+
         // Check for truncation and handle continuation if needed
         if self.is_response_truncated(&response) {
             if debug_mode {
-                println!("⚠️ Response appears truncated ({} chars). Requesting continuation...", response.len());
+                println!(
+                    "⚠️ Response appears truncated ({} chars). Requesting continuation...",
+                    response.len()
+                );
             }
-            response = self.handle_truncated_response(
-                question,
-                system_prompt,
-                only_plan,
-                response,
-                debug_mode
-            ).await?;
+            response = self
+                .handle_truncated_response(question, system_prompt, only_plan, response, debug_mode)
+                .await?;
         }
-        
+
         Ok(response)
     }
 
@@ -1498,35 +1505,40 @@ impl AiService {
         // Check response length is suspiciously close to truncation limits
         let length = response.len();
         let near_3kb = length >= 2900 && length <= 3100;
-        
+
         // Check for missing closing tags in XML-formatted responses
-        let has_unclosed_xml = (response.contains("<ovsm_plan>") || response.contains("<ovsv_plan>"))
+        let has_unclosed_xml = (response.contains("<ovsm_plan>")
+            || response.contains("<ovsv_plan>"))
             && !response.contains("</ovsm_plan>")
             && !response.contains("</ovsv_plan>");
-            
+
         let has_unclosed_code = response.contains("<code>") && !response.contains("</code>");
-        
+
         // Check for unclosed code blocks (markdown)
         let code_blocks = response.matches("```").count();
         let has_unclosed_markdown = code_blocks % 2 != 0;
-        
+
         // Check for severely unbalanced parentheses (LISP code)
         let open_parens = response.matches('(').count();
         let close_parens = response.matches(')').count();
         let severely_unbalanced = open_parens > close_parens + 5; // Allow small imbalance
-        
+
         // Detect if response ends mid-sentence or mid-tag
         let ends_abruptly = response.trim_end().ends_with(',')
             || response.trim_end().ends_with('-')
             || response.trim_end().ends_with('(')
             || response.trim_end().ends_with('<')
             || response.trim_end().ends_with("define");
-            
+
         // Return true if any strong truncation indicator is present
-        near_3kb || has_unclosed_xml || has_unclosed_code || has_unclosed_markdown || 
-        (severely_unbalanced && length > 1000) || ends_abruptly
+        near_3kb
+            || has_unclosed_xml
+            || has_unclosed_code
+            || has_unclosed_markdown
+            || (severely_unbalanced && length > 1000)
+            || ends_abruptly
     }
-    
+
     /// Handle truncated response by requesting continuation
     ///
     /// This method detects truncation and requests the AI to continue
@@ -1543,53 +1555,63 @@ impl AiService {
         let mut full_response = partial_response.clone();
         let mut continuation_count = 0;
         const MAX_CONTINUATIONS: u32 = 5; // Prevent infinite loops
-        
+
         while continuation_count < MAX_CONTINUATIONS && self.is_response_truncated(&full_response) {
             continuation_count += 1;
-            
+
             if debug_mode {
-                println!("📝 Requesting continuation #{} (current length: {} chars)", 
-                    continuation_count, full_response.len());
+                println!(
+                    "📝 Requesting continuation #{} (current length: {} chars)",
+                    continuation_count,
+                    full_response.len()
+                );
             }
-            
+
             // Create continuation prompt
             let continuation_prompt = self.create_continuation_prompt(
                 original_question,
                 &full_response,
                 continuation_count,
             );
-            
+
             // Request continuation
-            let continuation = self.with_timeout_retry(
-                || self.query_osvm_ai_internal(
-                    &continuation_prompt,
-                    system_prompt.clone(),
-                    only_plan,
-                    debug_mode
-                ),
-                2, // Fewer retries for continuations
-                debug_mode,
-            )
-            .await?;
-            
+            let continuation = self
+                .with_timeout_retry(
+                    || {
+                        self.query_osvm_ai_internal(
+                            &continuation_prompt,
+                            system_prompt.clone(),
+                            only_plan,
+                            debug_mode,
+                        )
+                    },
+                    2, // Fewer retries for continuations
+                    debug_mode,
+                )
+                .await?;
+
             // Append continuation to full response
             full_response = self.merge_continuation(&full_response, &continuation);
-            
+
             if debug_mode {
-                println!("✅ Continuation #{} added ({} chars, total: {} chars)",
-                    continuation_count, continuation.len(), full_response.len());
+                println!(
+                    "✅ Continuation #{} added ({} chars, total: {} chars)",
+                    continuation_count,
+                    continuation.len(),
+                    full_response.len()
+                );
             }
         }
-        
+
         if continuation_count >= MAX_CONTINUATIONS && self.is_response_truncated(&full_response) {
             if debug_mode {
                 println!("⚠️ Max continuations reached but response still appears truncated");
             }
         }
-        
+
         Ok(full_response)
     }
-    
+
     /// Create a continuation prompt for truncated responses
     fn create_continuation_prompt(
         &self,
@@ -1603,7 +1625,7 @@ impl AiService {
         } else {
             partial_response
         };
-        
+
         format!(
             r#"Your previous OVSM code was truncated. Continue ONLY the code, not the entire response.
 
@@ -1624,7 +1646,7 @@ Continue the code now:"#,
             last_200_chars
         )
     }
-    
+
     /// Merge a continuation with the partial response
     ///
     /// This method intelligently merges the continuation, handling cases where
@@ -1637,24 +1659,25 @@ Continue the code now:"#,
             .trim_start_matches("Continuing:")
             .trim_start_matches("...")
             .trim_start();
-        
+
         // Look for overlap between end of partial and start of continuation
         // (AI might repeat last few tokens for context)
         let overlap_window = 50; // Check last 50 chars for overlap
         if partial.len() > overlap_window {
             let partial_end = &partial[partial.len() - overlap_window..];
-            
+
             // Find if continuation starts with any substring of partial_end
             for i in 0..overlap_window {
                 let potential_overlap = &partial_end[i..];
                 if cleaned_continuation.starts_with(potential_overlap) {
                     // Found overlap, skip it in continuation
-                    let continuation_without_overlap = &cleaned_continuation[potential_overlap.len()..];
+                    let continuation_without_overlap =
+                        &cleaned_continuation[potential_overlap.len()..];
                     return format!("{}{}", partial, continuation_without_overlap);
                 }
             }
         }
-        
+
         // No overlap found, just concatenate
         format!("{}{}", partial, cleaned_continuation)
     }
@@ -1999,7 +2022,7 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
         // If we get here, result looks reasonable
         (true, "Result appears to match expected outcome".to_string())
     }
-    
+
     /// Validate OVSM code syntax using the parser
     ///
     /// This method parses the OVSM code to check for syntax errors before execution.
@@ -2013,19 +2036,21 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
     pub fn validate_ovsm_syntax(&self, code: &str) -> Result<()> {
         // Extract LISP code from various formats
         let lisp_code = self.extract_ovsm_lisp_code(code);
-        
+
         // Try to parse the code using OVSM parser
         let mut scanner = OvsmScanner::new(&lisp_code);
-        let tokens = scanner.scan_tokens()
+        let tokens = scanner
+            .scan_tokens()
             .map_err(|e| anyhow::anyhow!("Tokenization error: {}", e))?;
-        
+
         let mut parser = OvsmParser::new(tokens);
-        let _program = parser.parse()
+        let _program = parser
+            .parse()
             .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
-        
+
         Ok(())
     }
-    
+
     /// Extract LISP code from various OVSM plan formats
     ///
     /// Handles:
@@ -2046,7 +2071,7 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                 return plan_text[code_start + 6..code_end].trim().to_string();
             }
         }
-        
+
         // Try to extract from markdown code blocks
         if let Some(code_start) = plan_text.find("```lisp") {
             let start = code_start + 7;
@@ -2062,12 +2087,12 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                 }
             }
         }
-        
+
         // Try to extract from Main Branch section (structured plans)
         if plan_text.contains("**Main Branch:**") {
             let mut collected_code = Vec::new();
             let mut in_code_block = false;
-            
+
             for line in plan_text.lines() {
                 if line.trim().starts_with("```") {
                     in_code_block = !in_code_block;
@@ -2077,21 +2102,21 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                     collected_code.push(line);
                 }
             }
-            
+
             if !collected_code.is_empty() {
                 return collected_code.join("\n");
             }
         }
-        
+
         // If it looks like raw LISP (starts with parenthesis), return as-is
         if plan_text.trim().starts_with('(') {
             return plan_text.trim().to_string();
         }
-        
+
         // Default: return the original text
         plan_text.trim().to_string()
     }
-    
+
     /// Generate a validated OVSM plan with automatic error correction
     ///
     /// This method generates an OVSM plan and validates it, automatically
@@ -2112,10 +2137,10 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
     ) -> Result<ToolPlan> {
         let mut attempt = 0;
         let mut last_error: Option<String> = None;
-        
+
         loop {
             attempt += 1;
-            
+
             // Generate or regenerate the plan
             let plan = if attempt == 1 {
                 // First attempt: normal plan generation
@@ -2129,16 +2154,19 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                     error_msg,
                     attempt - 1,
                 );
-                
+
                 // Generate corrected plan
-                let (_, ovsm_system_prompt) = self.build_ovsm_planning_prompt(user_request, available_tools)?;
-                let corrected_response = self.query_osvm_ai_with_options(
-                    &refinement_prompt,
-                    Some(ovsm_system_prompt),
-                    Some(true),
-                    true,
-                ).await?;
-                
+                let (_, ovsm_system_prompt) =
+                    self.build_ovsm_planning_prompt(user_request, available_tools)?;
+                let corrected_response = self
+                    .query_osvm_ai_with_options(
+                        &refinement_prompt,
+                        Some(ovsm_system_prompt),
+                        Some(true),
+                        true,
+                    )
+                    .await?;
+
                 // Parse the corrected plan
                 self.parse_ovsm_plan(&corrected_response)
                     .or_else(|_| self.parse_osvm_plan_xml(&corrected_response))
@@ -2149,7 +2177,7 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                         raw_ovsm_plan: Some(corrected_response),
                     })
             };
-            
+
             // If we have raw OVSM plan code, validate it
             if let Some(ref raw_plan) = plan.raw_ovsm_plan {
                 match self.validate_ovsm_syntax(raw_plan) {
@@ -2158,15 +2186,20 @@ Remember: This is **Research Strategy Iteration #{}** - make it meaningfully dif
                         return Ok(plan);
                     }
                     Err(e) => {
-                        debug_warn!("OVSM validation failed on attempt {}/{}: {}", attempt, max_retries, e);
+                        debug_warn!(
+                            "OVSM validation failed on attempt {}/{}: {}",
+                            attempt,
+                            max_retries,
+                            e
+                        );
                         last_error = Some(e.to_string());
-                        
+
                         if attempt >= max_retries {
                             debug_error!("Max validation retries exceeded");
                             // Return the plan anyway, let runtime handle errors
                             return Ok(plan);
                         }
-                        
+
                         // Continue loop for retry
                     }
                 }
