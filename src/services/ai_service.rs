@@ -2530,6 +2530,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_openai_service_request_format() {
+        // Clear environment variables that might interfere with the test
+        std::env::remove_var("OPENAI_MODEL");
+
         let mut server = Server::new_async().await;
 
         // Mock the API to capture what we're sending to OpenAI
