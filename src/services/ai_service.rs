@@ -182,8 +182,24 @@ impl AiService {
                 }
             }
             None => {
-                // CRITICAL: Always use localhost:3000 backend - user's special AI
-                ("http://localhost:3000/api/getAnswer".to_string(), false)
+                // Check environment variables first
+                if let Some(url) = env::var("OPENAI_URL").ok().filter(|u| !u.trim().is_empty()) {
+                    // Environment variable provided, check for key
+                    if url.contains("openai.com") || url.contains("api.openai.com") || url.contains("/v1/chat/completions") {
+                        if env::var("OPENAI_KEY").ok().filter(|k| !k.trim().is_empty()).is_some() {
+                            (url, true)
+                        } else {
+                            eprintln!("⚠️  OPENAI_URL set but no OPENAI_KEY found, falling back to localhost:3000");
+                            ("http://localhost:3000/api/getAnswer".to_string(), false)
+                        }
+                    } else {
+                        // Non-OpenAI URL in env var
+                        (url, false)
+                    }
+                } else {
+                    // No environment variable - use localhost:3000 backend
+                    ("http://localhost:3000/api/getAnswer".to_string(), false)
+                }
             }
         };
 
@@ -584,19 +600,47 @@ impl AiService {
     }
 
     async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
+        self.query_openai_with_system(question, None, debug_mode).await
+    }
+
+    async fn query_openai_with_system(
+        &self,
+        question: &str,
+        system_prompt: Option<&str>,
+        debug_mode: bool,
+    ) -> Result<String> {
         let api_key = self.api_key.as_ref().ok_or_else(|| {
             anyhow::anyhow!(
                 "OpenAI API key not available. Please set OPENAI_KEY environment variable."
             )
         })?;
 
+        let mut messages = Vec::new();
+
+        // Add system message if provided
+        if let Some(system) = system_prompt {
+            messages.push(OpenAiMessage {
+                role: "system".to_string(),
+                content: system.to_string(),
+            });
+        }
+
+        // Add user message
+        messages.push(OpenAiMessage {
+            role: "user".to_string(),
+            content: question.to_string(),
+        });
+
+        // Allow model override via environment variable (e.g., for Ollama: llama2, codellama, etc.)
+        let model = env::var("OPENAI_MODEL")
+            .ok()
+            .filter(|m| !m.trim().is_empty())
+            .unwrap_or_else(|| "gpt-3.5-turbo".to_string());
+
         let request_body = OpenAiRequest {
-            model: "gpt-3.5-turbo".to_string(),
-            messages: vec![OpenAiMessage {
-                role: "user".to_string(),
-                content: question.to_string(),
-            }],
-            max_tokens: 1000,
+            model,
+            messages,
+            max_tokens: 4000, // Increased for OVSM plans
             temperature: 0.7,
         };
 
@@ -654,7 +698,8 @@ impl AiService {
         // For OSVM AI, use ownPlan parameter to get plan directly
         let ai_response = if self.use_openai {
             // OpenAI: send system prompt in messages
-            self.query_with_debug(&planning_prompt, false).await?
+            debug_print!("Sending OVSM plan request to OpenAI-compatible endpoint with system prompt");
+            self.query_openai_with_system(&planning_prompt, Some(&ovsm_system_prompt), true).await?
         } else {
             // OSVM AI: use ownPlan=true to get structured plan
             debug_print!("Sending OVSM plan request with custom system prompt");
@@ -2548,10 +2593,10 @@ mod tests {
         std::env::remove_var("OPENAI_URL");
         std::env::remove_var("OPENAI_KEY");
 
-        // Test fallback to osvm.ai
+        // Test fallback to localhost:3000 (user's special AI backend)
         let ai_service_fallback = AiService::new();
         assert!(!ai_service_fallback.use_openai);
-        assert_eq!(ai_service_fallback.api_url, "https://osvm.ai/api/getAnswer");
+        assert_eq!(ai_service_fallback.api_url, "http://localhost:3000/api/getAnswer");
         assert_eq!(ai_service_fallback.api_key, None);
     }
 }
