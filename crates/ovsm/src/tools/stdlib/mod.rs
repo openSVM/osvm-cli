@@ -3,6 +3,7 @@
 pub mod advanced_math;
 pub mod arrays;
 pub mod characters;
+pub mod clos_advanced;
 pub mod clos_basic;
 pub mod conditions;
 pub mod data_processing;
@@ -17,6 +18,7 @@ pub mod objects;
 pub mod packages;
 pub mod parsing;
 pub mod pathnames;
+pub mod reader_printer;
 pub mod sequences;
 pub mod statistics;
 pub mod streams;
@@ -53,5 +55,7 @@ pub fn register_all(registry: &mut ToolRegistry) {
     loop_utilities::register(registry);
     conditions::register(registry);
     clos_basic::register(registry);
+    clos_advanced::register(registry);
     packages::register(registry);
+    reader_printer::register(registry);
 }
