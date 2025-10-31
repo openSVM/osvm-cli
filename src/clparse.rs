@@ -20,6 +20,7 @@ mod plan;
 mod qa;
 mod realtime;
 mod rpc;
+mod settings;
 mod snapshot;
 mod svm;
 mod tutorial;
@@ -278,5 +279,6 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(audit::build_audit_command())
         .subcommand(qa::build_qa_command())
         .subcommand(ovsm::build_ovsm_command())
+        .subcommand(settings::build_settings_command())
         .get_matches()
 }

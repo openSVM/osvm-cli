@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = IsolationConfig::create_default_config();
-        assert_eq!(config.default_execution_mode, ExecutionMode::Unikernel);
+        assert_eq!(config.default_execution_mode, ExecutionMode::MicroVM); // MicroVM is now the default
         assert!(config.mcp_servers.contains_key("solana"));
         assert!(config.mcp_servers.contains_key("github"));
     }

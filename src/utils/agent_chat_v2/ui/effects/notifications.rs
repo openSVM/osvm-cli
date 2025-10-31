@@ -20,6 +20,7 @@ pub struct ToastNotification {
     position: ToastPosition,
     lifetime: Duration,
     created_at: Instant,
+    elapsed: f32, // Accumulated time for delta-based updates
     fade_phase: f32,
     slide_offset: f32,
 }
@@ -42,6 +43,7 @@ impl ToastNotification {
             position: ToastPosition::TopRight,
             lifetime: Duration::from_secs(3),
             created_at: Instant::now(),
+            elapsed: 0.0,
             fade_phase: 0.0,
             slide_offset: -20.0, // Start off-screen
         }
@@ -101,8 +103,8 @@ impl ToastNotification {
 
 impl VisualEffect for ToastNotification {
     fn update(&mut self, delta: f32) {
-        let elapsed = self.created_at.elapsed();
-        let progress = elapsed.as_secs_f32() / self.lifetime.as_secs_f32();
+        self.elapsed += delta;
+        let progress = self.elapsed / self.lifetime.as_secs_f32();
 
         // Slide in animation (first 0.3s)
         if progress < 0.1 {
@@ -126,11 +128,12 @@ impl VisualEffect for ToastNotification {
     }
 
     fn is_active(&self) -> bool {
-        self.created_at.elapsed() < self.lifetime + Duration::from_millis(200) // Extra time for fade out
+        self.elapsed < self.lifetime.as_secs_f32() + 0.2 // Extra time for fade out
     }
 
     fn reset(&mut self) {
         self.created_at = Instant::now();
+        self.elapsed = 0.0;
         self.fade_phase = 0.0;
         self.slide_offset = -20.0;
     }
@@ -431,6 +434,17 @@ mod tests {
         assert!(rendered.contains("Operation successful!"));
     }
 
+    /// Test notification lifecycle using delta-based timing
+    ///
+    /// TIMING ASSUMPTIONS:
+    /// - Default notification lifetime: 3 seconds (see ToastNotification::new, line 44)
+    /// - Delta time per update: 0.1 seconds
+    /// - Total iterations: 100
+    /// - Total simulated time: 100 * 0.1 = 10 seconds
+    /// - Expected behavior: All notifications expire after 3s, so after 10s they should be gone
+    ///
+    /// NOTE: This test uses delta-based timing (accumulated elapsed time) rather than
+    /// wall-clock time to ensure deterministic behavior in test environments.
     #[test]
     fn test_notification_stack() {
         let mut stack = NotificationStack::new();
@@ -446,12 +460,13 @@ mod tests {
 
         assert_eq!(stack.notifications.len(), 2);
 
-        // Update for lifetime
+        // Update for 10 seconds (100 iterations * 0.1s each)
+        // This exceeds the 3s lifetime, so notifications should expire
         for _ in 0..100 {
             stack.update(0.1);
         }
 
-        // Should be expired
+        // Both notifications should be expired and removed
         assert!(stack.notifications.is_empty() || stack.notifications.len() < 2);
     }
 }

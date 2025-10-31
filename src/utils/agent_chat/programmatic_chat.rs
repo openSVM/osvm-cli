@@ -115,22 +115,26 @@ impl ProgrammaticChatState {
             "help" | "/help" => {
                 let response = self.generate_help_response();
                 self.add_agent_response(response).await;
+                self.set_agent_state(AgentState::Idle).await;
                 return Ok(());
             }
             "clear" | "/clear" => {
                 self.clear_history().await;
                 self.add_system_message("Chat history cleared".to_string())
                     .await;
+                self.set_agent_state(AgentState::Idle).await;
                 return Ok(());
             }
             "tools" | "/tools" => {
                 let response = self.generate_tools_response().await?;
                 self.add_agent_response(response).await;
+                self.set_agent_state(AgentState::Idle).await;
                 return Ok(());
             }
             "status" | "/status" => {
                 let response = self.generate_status_response().await?;
                 self.add_agent_response(response).await;
+                self.set_agent_state(AgentState::Idle).await;
                 return Ok(());
             }
             _ => {}

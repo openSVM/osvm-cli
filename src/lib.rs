@@ -22,6 +22,7 @@
 #![allow(clippy::all)]
 #![allow(unused)]
 
+pub mod ai_config;
 pub mod clparse;
 pub mod commands;
 pub mod config;

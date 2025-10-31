@@ -14,6 +14,7 @@ pub mod ovsm_handler;
 pub mod qa_handler;
 pub mod realtime;
 pub mod rpc_manager;
+pub mod settings;
 pub mod snapshot;
 pub mod svm_handler;
 pub mod tutorial;

@@ -15,7 +15,9 @@ impl GoldenRatioCalculator {
     /// Split a dimension into golden ratio proportions
     /// Returns (smaller, larger) where larger/smaller ≈ 1.618
     pub fn split(total: usize) -> (usize, usize) {
-        let smaller = (total as f64 / GOLDEN_RATIO) as usize;
+        // For golden ratio: total = smaller + larger, and larger/smaller = phi
+        // Therefore: total = smaller * (1 + phi), so smaller = total / (1 + phi)
+        let smaller = (total as f64 / (GOLDEN_RATIO + 1.0)) as usize;
         let larger = total - smaller;
         (smaller, larger)
     }
@@ -166,5 +168,56 @@ mod tests {
         let segments = GoldenRatioCalculator::split_multiple(100, 3);
         assert_eq!(segments.len(), 3);
         assert_eq!(segments.iter().sum::<usize>(), 100);
+    }
+
+    // Property-based test: Golden ratio formula holds for any valid input
+    #[cfg(test)]
+    mod property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// Property: For any total > 0, smaller + larger = total
+            #[test]
+            fn prop_golden_split_sums_to_total(total in 1usize..10000) {
+                let (smaller, larger) = GoldenRatioCalculator::split(total);
+                prop_assert_eq!(smaller + larger, total,
+                    "smaller ({}) + larger ({}) must equal total ({})",
+                    smaller, larger, total);
+            }
+
+            /// Property: For any total > 50, larger/smaller ≈ φ (within 10% tolerance)
+            ///
+            /// NOTE: Integer quantization causes cyclical error patterns. Empirical analysis:
+            /// - total=50: 0.84% error (sweet spot)
+            /// - total=51: 4.09% error
+            /// - total=52: 7.34% error (WORST CASE in 50-100 range)
+            /// - total=57: 5.95% error (proptest found this)
+            /// - total=100,150,200: 0.84% error (sweet spots repeat)
+            /// - total=1000: 0.41% error (converges as numbers grow)
+            ///
+            /// For UI layout dimensions (50-1000 pixels), 10% tolerance accommodates the
+            /// worst-case quantization while still catching major formula bugs.
+            #[test]
+            fn prop_golden_ratio_is_accurate(total in 50usize..10000) {
+                let (smaller, larger) = GoldenRatioCalculator::split(total);
+                let ratio = larger as f64 / smaller as f64;
+                let error = (ratio - GOLDEN_RATIO).abs() / GOLDEN_RATIO;
+                prop_assert!(error < 0.10,
+                    "Ratio {} should be within 10% of golden ratio {}, got {}% error\n\
+                     (Note: Integer quantization causes cyclical error patterns up to ~7% in range 50-100)",
+                    ratio, GOLDEN_RATIO, error * 100.0);
+            }
+
+            /// Property: Split is monotonic (larger total → larger parts)
+            #[test]
+            fn prop_split_is_monotonic(total1 in 10usize..5000, delta in 1usize..5000) {
+                let total2 = total1 + delta;
+                let (small1, large1) = GoldenRatioCalculator::split(total1);
+                let (small2, large2) = GoldenRatioCalculator::split(total2);
+                prop_assert!(small2 >= small1);
+                prop_assert!(large2 >= large1);
+            }
+        }
     }
 }

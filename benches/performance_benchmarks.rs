@@ -47,6 +47,7 @@ fn bench_tool_plan_creation(c: &mut Criterion) {
                         reasoning: "Test reasoning".to_string(),
                         osvm_tools_to_use: tools,
                         expected_outcome: "Test outcome".to_string(),
+                        raw_ovsm_plan: None,
                     })
                 })
             },
@@ -70,6 +71,7 @@ fn bench_tool_plan_serialization(c: &mut Criterion) {
         reasoning: "Test reasoning with some more detailed information".to_string(),
         osvm_tools_to_use: tools,
         expected_outcome: "Expected outcome description".to_string(),
+        raw_ovsm_plan: Some("(define x 10) (+ x 20)".to_string()),
     };
 
     c.bench_function("tool_plan_serialization", |b| {

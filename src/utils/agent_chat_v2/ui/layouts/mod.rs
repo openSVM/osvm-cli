@@ -52,11 +52,11 @@ impl LayoutManager {
         // Determine layout type
         let layout_type = match (width, height) {
             (w, h) if w < 60 || h < 20 => LayoutType::Compact,
-            (w, _) if w < 80 => LayoutType::Standard,
-            (w, _) if w < 120 => LayoutType::Wide,
             (w, h) if w >= 160 && h >= 40 => LayoutType::UltraWide,
-            (w, h) if w >= 100 && h >= 30 => LayoutType::GoldenRatio,
-            _ => LayoutType::Standard,
+            (w, h) if w >= 120 && h >= 40 => LayoutType::GoldenRatio,
+            (w, _) if w >= 120 => LayoutType::Wide,
+            (w, _) if w >= 80 => LayoutType::Standard,
+            _ => LayoutType::Compact,
         };
 
         // Calculate dimensions based on layout type

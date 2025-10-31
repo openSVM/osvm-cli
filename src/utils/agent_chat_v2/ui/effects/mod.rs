@@ -28,6 +28,7 @@ pub struct ShakeEffect {
     intensity: f32,
     duration: Duration,
     start_time: Instant,
+    elapsed: f32, // Accumulated time in seconds for delta-based updates
     frequency: f32,
     is_active: bool,
 }
@@ -45,6 +46,7 @@ impl ShakeEffect {
             intensity: amplitude,
             duration: Duration::from_millis(300),
             start_time: Instant::now(),
+            elapsed: 0.0,
             frequency: freq,
             is_active: false,
         }
@@ -52,6 +54,7 @@ impl ShakeEffect {
 
     pub fn trigger(&mut self) {
         self.start_time = Instant::now();
+        self.elapsed = 0.0;
         self.is_active = true;
     }
 
@@ -60,8 +63,7 @@ impl ShakeEffect {
             return 0;
         }
 
-        let elapsed = self.start_time.elapsed().as_secs_f32();
-        let progress = elapsed / self.duration.as_secs_f32();
+        let progress = self.elapsed / self.duration.as_secs_f32();
 
         if progress >= 1.0 {
             // Don't modify state in a getter - let update() handle it
@@ -70,7 +72,7 @@ impl ShakeEffect {
 
         // Dampen over time
         let damping = 1.0 - progress;
-        let offset = (elapsed * self.frequency * std::f32::consts::PI * 2.0).sin()
+        let offset = (self.elapsed * self.frequency * std::f32::consts::PI * 2.0).sin()
             * self.intensity
             * damping;
 
@@ -79,9 +81,12 @@ impl ShakeEffect {
 }
 
 impl VisualEffect for ShakeEffect {
-    fn update(&mut self, _delta: f32) {
-        if self.is_active && self.start_time.elapsed() >= self.duration {
-            self.is_active = false;
+    fn update(&mut self, delta: f32) {
+        if self.is_active {
+            self.elapsed += delta;
+            if self.elapsed >= self.duration.as_secs_f32() {
+                self.is_active = false;
+            }
         }
     }
 

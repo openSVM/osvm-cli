@@ -372,11 +372,72 @@ mod tests {
         let mut spring = SpringAnimation::new(0.0, 10.0, 0.5);
         spring.set_target(100.0);
 
-        for _ in 0..300 {
+        // Update for longer to allow underdamped spring to settle
+        // Damping ratio ζ = 0.079 (underdamped), settling time ≈ 16s
+        // Use 1250 iterations to provide safety margin (20 seconds total)
+        for _ in 0..1250 {
             spring.update(0.016); // 60 FPS
         }
 
         // Spring animations with low stiffness take time to settle
+        // After ~20 seconds (1250 * 0.016), should be close to target
         assert!((spring.position - 100.0).abs() < 5.0);
+    }
+
+    // Property-based test: Spring physics behaves correctly
+    #[cfg(test)]
+    mod spring_property_tests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            /// Property: Spring eventually reaches target (within tolerance)
+            ///
+            /// NOTE: Very low damping ratios (damping < 0.3 with low stiffness) can take
+            /// >60s to settle. We use a generous 15.0 tolerance to account for extreme cases
+            /// while still catching major physics bugs.
+            #[test]
+            fn prop_spring_reaches_target(
+                initial in -100.0f32..100.0,
+                target in -100.0f32..100.0,
+                stiffness in 10.0f32..50.0,  // Start at 10 to avoid extremely slow springs
+                damping in 0.5f32..2.0        // Start at 0.5 for reasonable settling times
+            ) {
+                let mut spring = SpringAnimation::new(initial, stiffness, damping);
+                spring.set_target(target);
+
+                // Run for sufficient time (40 seconds at 60 FPS = 2400 iterations)
+                // This gives even underdamped springs time to settle
+                for _ in 0..2400 {
+                    spring.update(0.016);
+                }
+
+                let error = (spring.position - target).abs();
+                prop_assert!(error < 15.0,
+                    "Spring should reach target {} from {} (stiffness={}, damping={}), got {} (error: {})",
+                    target, initial, stiffness, damping, spring.position, error);
+            }
+
+            /// Property: Spring energy decreases over time (damping works)
+            #[test]
+            fn prop_spring_energy_decreases(
+                stiffness in 5.0f32..50.0,
+                damping in 0.5f32..2.0
+            ) {
+                let mut spring = SpringAnimation::new(0.0, stiffness, damping);
+                spring.set_target(100.0);
+
+                // Measure energy at two points
+                for _ in 0..100 { spring.update(0.016); }
+                let energy1 = spring.velocity.abs();
+
+                for _ in 0..500 { spring.update(0.016); }
+                let energy2 = spring.velocity.abs();
+
+                // Energy should decrease (or be minimal)
+                prop_assert!(energy2 <= energy1 + 1.0,
+                    "Spring velocity should decrease: {} -> {}", energy1, energy2);
+            }
+        }
     }
 }

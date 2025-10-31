@@ -712,7 +712,7 @@ impl PluginInstaller {
 
     /// Install plugin from GitHub repository
     pub async fn install_from_github(&self, repo_url: &str) -> Result<String> {
-        let repo_name = self.extract_repo_name(repo_url)?;
+        let repo_name = Self::extract_repo_name(repo_url)?;
         let plugin_dir = self.plugins_dir.join(&repo_name);
 
         if plugin_dir.exists() {
@@ -812,8 +812,20 @@ impl PluginInstaller {
         Ok(plugins)
     }
 
-    /// Extract repository name from URL
-    fn extract_repo_name(&self, url: &str) -> Result<String> {
+    /// Extract repository name from URL (public utility method)
+    ///
+    /// # Examples
+    /// ```
+    /// # use anyhow::Result;
+    /// # fn main() -> Result<()> {
+    /// use osvm::utils::plugins::PluginInstaller;
+    ///
+    /// let name = PluginInstaller::extract_repo_name("https://github.com/user/repo.git")?;
+    /// assert_eq!(name, "repo");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn extract_repo_name(url: &str) -> Result<String> {
         let url = url.trim_end_matches('/');
         if let Some(name) = url.split('/').last() {
             let name = name.trim_end_matches(".git");
@@ -865,19 +877,31 @@ mod tests {
 
     #[test]
     fn test_plugin_installer() {
-        let installer = PluginInstaller::new().unwrap();
+        // Test the static extract_repo_name method
+        assert_eq!(
+            PluginInstaller::extract_repo_name("https://github.com/user/repo.git").unwrap(),
+            "repo"
+        );
+        assert_eq!(
+            PluginInstaller::extract_repo_name("https://github.com/user/repo").unwrap(),
+            "repo"
+        );
 
+        // Test edge cases
         assert_eq!(
-            installer
-                .extract_repo_name("https://github.com/user/repo.git")
-                .unwrap(),
+            PluginInstaller::extract_repo_name("https://github.com/org/my-plugin").unwrap(),
+            "my-plugin"
+        );
+        assert_eq!(
+            PluginInstaller::extract_repo_name("git@github.com:user/repo.git").unwrap(),
             "repo"
         );
         assert_eq!(
-            installer
-                .extract_repo_name("https://github.com/user/repo")
-                .unwrap(),
+            PluginInstaller::extract_repo_name("https://github.com/user/repo/").unwrap(),
             "repo"
         );
+
+        // Test error case - trailing slash with .git results in empty name
+        assert!(PluginInstaller::extract_repo_name("https://github.com/user/.git").is_err());
     }
 }

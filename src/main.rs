@@ -23,6 +23,7 @@ fn pubkey_of_checked(matches: &clap::ArgMatches, name: &str) -> Option<Pubkey> {
 
 #[cfg(feature = "remote-wallet")]
 use {solana_remote_wallet::remote_wallet::RemoteWalletManager, std::sync::Arc};
+pub mod ai_config;
 pub mod clparse;
 pub mod commands;
 pub mod config; // Added
@@ -50,6 +51,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "mcp"
             | "mount"
             | "snapshot"
+            | "settings"
             | "db"
             | "realtime"
             | "chat"
@@ -289,6 +291,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Handle audit command early to avoid config loading that might trigger self-repair
     if sub_command == "audit" {
         return commands::audit_handler::handle_audit_command(&app_matches, sub_matches).await;
+    }
+
+    // Handle settings command early - no config loading needed
+    if sub_command == "settings" {
+        return commands::settings::handle_settings_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
     }
 
     // Handle QA command early to avoid config loading that might trigger self-repair
