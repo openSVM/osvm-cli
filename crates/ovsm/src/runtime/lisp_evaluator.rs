@@ -171,6 +171,7 @@ impl LispEvaluator {
                     "macroexpand" => self.eval_macroexpand(args),
                     "eval" => self.eval_eval(args),
                     "length" => self.eval_length(args),
+                    "count" => self.eval_length(args), // Alias for length - commonly expected
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
                     "min" => self.eval_min(args),

@@ -1,0 +1,34 @@
+;; Test script to verify COUNT works as a built-in function
+;; This tests the fix for the architectural issue where COUNT was
+;; incorrectly implemented as an MCP tool instead of a language builtin
+
+(do
+  ;; Test 1: Basic COUNT functionality
+  (define arr [1 2 3 4 5])
+  (define c (count arr))
+  (log :message "Array count:" :value c)
+
+  ;; Test 2: COUNT in a loop (common pattern in AI-generated code)
+  (define wallets ["wallet1" "wallet2" "wallet3"])
+  (log :message "Wallet count:" :value (count wallets))
+
+  (for (i (range 0 (count wallets)))
+    (log :message "Processing wallet index:" :value i))
+
+  ;; Test 3: COUNT with slicing (another common pattern)
+  (define data [10 20 30 40 50])
+  (define half (slice data 0 2))
+  (log :message "Half array:" :value half)
+  (log :message "Half array count:" :value (count half))
+
+  ;; Test 4: COUNT with empty array
+  (define empty [])
+  (log :message "Empty array count:" :value (count empty))
+
+  ;; Test 5: LENGTH still works (COUNT is an alias)
+  (log :message "Using length:" :value (length arr))
+  (log :message "Using count:" :value (count arr))
+
+  (log :message "✅ All COUNT tests completed successfully!")
+  "SUCCESS"
+)

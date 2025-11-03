@@ -6,42 +6,50 @@ use crate::tools::{Tool, ToolRegistry};
 
 /// Register data processing tools
 pub fn register(registry: &mut ToolRegistry) {
-    registry.register(MapTool);
-    registry.register(FilterTool);
-    registry.register(ReduceTool);
-    registry.register(SumTool);
-    registry.register(CountTool);
-    registry.register(FlattenTool);
-    registry.register(UniqueTool);
-    registry.register(SortTool);
-    registry.register(ReverseTool);
-    registry.register(FirstTool);
-    registry.register(LastTool);
-    registry.register(AppendTool);
-    registry.register(PrependTool);
-    registry.register(SliceTool);
-    registry.register(TopNTool);
-    registry.register(BottomNTool);
-    registry.register(AnyTool);
-    registry.register(AllTool);
-    registry.register(FindTool);
-    registry.register(JoinTool);
-    registry.register(SplitTool);
-    registry.register(NthTool);
-    registry.register(IndexOfTool);
-    registry.register(TakeTool);
+    // IMPORTANT: All basic list/array operations are now built-in language functions
+    // in lisp_evaluator.rs. MCP tools should only be for external integrations.
 
-    // Common Lisp list accessors
-    registry.register(CarTool);
-    registry.register(CdrTool);
-    registry.register(CadrTool);
-    registry.register(CddrTool);
-    registry.register(CaarTool);
-    registry.register(CdarTool);
-    registry.register(RestTool);
-    registry.register(ConsTool);
-    registry.register(ListTool);
-    registry.register(LengthTool);
+    // Commented out - these are all language builtins now:
+    // registry.register(MapTool);      // Built-in: map
+    // registry.register(FilterTool);   // Built-in: filter
+    // registry.register(ReduceTool);   // Built-in: reduce
+    // registry.register(SumTool);      // Should be built-in
+    // registry.register(CountTool);    // Built-in: count (alias for length)
+    // registry.register(FlattenTool);  // Built-in: flatten
+    // registry.register(UniqueTool);   // Built-in: distinct
+    // registry.register(SortTool);     // Built-in: sort
+    // registry.register(ReverseTool);  // Built-in: reverse
+    // registry.register(FirstTool);    // Built-in: first
+    // registry.register(LastTool);     // Built-in: last
+    // registry.register(AppendTool);   // Built-in: append
+    // registry.register(PrependTool);  // Use cons
+    // registry.register(SliceTool);    // Built-in: slice
+    // registry.register(TopNTool);     // Built-in: take
+    // registry.register(BottomNTool);  // Built-in: drop + take
+    // registry.register(AnyTool);      // Built-in: some
+    // registry.register(AllTool);      // Built-in: every
+    // registry.register(FindTool);     // Built-in: find
+    // registry.register(JoinTool);     // Built-in: join
+    // registry.register(SplitTool);    // Built-in: split
+    // registry.register(NthTool);      // Built-in: nth
+    // registry.register(IndexOfTool);  // Should be built-in
+    // registry.register(TakeTool);     // Built-in: take
+
+    // Common Lisp list accessors - also built-in
+    // registry.register(CarTool);      // Built-in: car
+    // registry.register(CdrTool);      // Use rest
+    // registry.register(CadrTool);     // Compose car/cdr
+    // registry.register(CddrTool);     // Compose cdr/cdr
+    // registry.register(CaarTool);     // Compose car/car
+    // registry.register(CdarTool);     // Compose cdr/car
+    // registry.register(RestTool);     // Built-in: rest
+    // registry.register(ConsTool);     // Built-in: cons
+    // registry.register(ListTool);     // Use array literal []
+    // registry.register(LengthTool);   // Built-in: length
+
+    // NOTE: This module should be refactored to only include actual
+    // external tools that can't be implemented as language primitives.
+    // For now, all tools are disabled to prevent conflicts with built-ins.
 }
 
 /// Tool for applying a function to each element of a collection
