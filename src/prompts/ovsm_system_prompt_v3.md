@@ -356,7 +356,7 @@ count
 ```ovsm
 (do
   ;; Step 1: Call MCP tool
-  (define resp (get_account_transactions {:address TARGET :limit 2000}))
+  (define resp (get_account_transactions {:address TARGET :limit 1000}))  ;; Max limit is 1000 for RPC endpoints
   
   ;; Step 2: Extract content array and parse JSON text
   (define content (. resp content))
@@ -454,7 +454,7 @@ count
 - Check what the tool returns and use it directly - NO EXTRA UNWRAPPING!
 
 **Common MCP return types:**
-- `get_account_transactions` → Array of transactions `[...]`
+- `get_account_transactions` → Array of transactions `[...]` (max limit: 1000)
 - `get_token_info` → Single token object `{:name ...}`
 - `get_account_stats` → Account statistics object `{:address ...}`
 - `batch_transactions` → Array of transactions `[...]`
