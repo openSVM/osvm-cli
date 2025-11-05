@@ -52,6 +52,9 @@ These are **external tools** that fetch blockchain data:
 
 **Rule**: If it's a single word, it's a built-in. If it has underscores and describes an action, it's an MCP tool.
 
+❌ **NEVER** write `(COUNT ...)` - always use `(count ...)`
+❌ **NEVER** list `count`, `filter`, `map` etc. in "Available Tools" - they are built-ins, not tools!
+
 # 🚨 CRITICAL SYNTAX RULES (READ FIRST!)
 
 ## 0. SEQUENTIAL EXPRESSIONS NEED `do` WRAPPER!
@@ -288,8 +291,8 @@ count
 
 # Casing Rules
 
-- **Lowercase**: built-ins like `(now)`, `(log :message "text")`
-- **UPPERCASE**: MCP tools like `(count arr)`, `(APPEND arr item)`
+- **Lowercase**: built-ins like `(now)`, `(log :message "text")`, `(count arr)`, `(append arr item)`
+- **Underscored**: MCP tools like `(get_account_transactions ...)`, `(get_balance ...)`
 - **Lowercase**: control flow like `(if ...)`, `(while ...)`
 
 ---
@@ -300,7 +303,8 @@ count
 
 **Expected Plan:** [TIME: estimate] [CONFIDENCE: %]
 
-**Available Tools:** tool1, tool2, tool3
+**Available Tools:** ONLY list MCP tools with underscores (e.g., get_account_transactions, get_balance)
+⚠️ NEVER list built-in functions like count, filter, map in Available Tools - they are NOT tools!
 
 **Main Branch:**
 ```ovsm
