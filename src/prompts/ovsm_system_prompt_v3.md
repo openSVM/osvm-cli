@@ -152,7 +152,7 @@ These are **external tools** that fetch blockchain data:
 **Operators go FIRST, then operands!**
 
 ❌ `(x + 1)` → ✅ `(+ x 1)`
-❌ `(countarr - 1)` → ✅ `(- (count arr) 1)`
+❌ `(count arr - 1)` → ✅ `(- (count arr) 1)`
 
 ## 6. FUNCTION DEFINITIONS - USE LAMBDA!
 **NEVER use shorthand function syntax! Always use lambda explicitly.**
