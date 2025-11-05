@@ -40,7 +40,7 @@ fn default_provider() -> String {
 }
 
 fn default_api_url() -> String {
-    "http://localhost:3000/api/getAnswer".to_string()
+    "https://osvm.ai/api/getAnswer".to_string()
 }
 
 fn default_model() -> String {
@@ -220,7 +220,7 @@ mod tests {
     fn test_default_config() {
         let config = AiConfig::default();
         assert_eq!(config.provider, "local");
-        assert_eq!(config.api_url, "http://localhost:3000/api/getAnswer");
+        assert_eq!(config.api_url, "https://osvm.ai/api/getAnswer");
         assert_eq!(config.temperature, 0.7);
     }
 
