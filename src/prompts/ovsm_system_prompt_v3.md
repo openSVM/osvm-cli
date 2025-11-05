@@ -190,6 +190,37 @@ These are **external tools** that fetch blockchain data:
 - Pattern: `(define name (lambda (params) body))`
 - Never: `(define (name params) body)` ← This will fail to parse!
 
+## 🚨 CRITICAL: Lambda Body Syntax Rules
+
+**Lambda bodies MUST be a single expression OR wrapped in a `do` block!**
+
+❌ **WRONG - Multiple expressions without `do` or `let`:**
+```ovsm
+(lambda (tx)
+  (define transfers (. tx transfers))   ;; Expression 1
+  (and transfers ...))                  ;; Expression 2 - SYNTAX ERROR!
+```
+
+✅ **CORRECT - Use `let` for local bindings (recommended):**
+```ovsm
+(lambda (tx)
+  (let ((transfers (. tx transfers)))   ;; Local binding
+    (and transfers ...)))               ;; Single body expression
+```
+
+✅ **CORRECT - Use `do` block for multiple statements:**
+```ovsm
+(lambda (tx)
+  (do
+    (define transfers (. tx transfers))  ;; Statement 1
+    (and transfers ...)))                ;; Statement 2
+```
+
+**Why this matters:**
+- Lambda bodies are expressions, not statement blocks
+- Using `define` without `do`/`let` creates invalid syntax
+- Error: "Expected `)`, found `(`" indicates missing `do`/`let`
+
 ---
 
 # LISP Quick Reference
@@ -524,29 +555,29 @@ Remember: MCP tools return data PRE-UNWRAPPED as arrays or objects - use directl
   ;; 4. Filter for inbound SOL transfers
   (define inbound (filter txs
     (lambda (tx)
-      (define transfers (. tx transfers))
-      (and transfers
-           (> (count (filter transfers
-                      (lambda (t)
-                        (and (== (. t account) TARGET)
-                             (> (. t change) 0)))))
-              0)))))
+      (let ((transfers (. tx transfers)))
+        (and transfers
+             (> (count (filter transfers
+                        (lambda (t)
+                          (and (== (. t account) TARGET)
+                               (> (. t change) 0)))))
+                0))))))
 
   ;; 5. Group by sender (find sender from transfers with negative change)
   (define find-sender (lambda (tx)
-    (define sender-transfer (first (filter (. tx transfers)
-                                           (lambda (t) (< (. t change) 0)))))
-    (if sender-transfer (. sender-transfer account) "unknown")))
+    (let ((sender-transfer (first (filter (. tx transfers)
+                                          (lambda (t) (< (. t change) 0))))))
+      (if sender-transfer (. sender-transfer account) "unknown"))))
 
   (define grouped (group-by inbound find-sender))
 
   ;; 6. Aggregate: sum amounts and collect transaction IDs
   (define find-amount (lambda (tx)
-    (define target-transfer (first (filter (. tx transfers)
-                                           (lambda (t)
-                                             (and (== (. t account) TARGET)
-                                                  (> (. t change) 0))))))
-    (if target-transfer (. target-transfer change) 0)))
+    (let ((target-transfer (first (filter (. tx transfers)
+                                          (lambda (t)
+                                            (and (== (. t account) TARGET)
+                                                 (> (. t change) 0))))))
+      (if target-transfer (. target-transfer change) 0))))
 
   (define aggregated (aggregate grouped
     (lambda (wallet txlist)
