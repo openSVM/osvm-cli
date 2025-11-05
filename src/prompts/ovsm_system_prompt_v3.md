@@ -41,12 +41,19 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 These are **part of the OVSM language** and execute locally:
 - **Data**: `count`, `length`, `append`, `slice`, `first`, `rest`, `nth`
 - **JSON**: `parse-json`, `json-stringify` (BUILT-IN, NOT MCP TOOLS!)
-- **Aggregation**: `group-by`, `aggregate`, `sort-by`, `filter`, `map`, `reduce`
+- **Aggregation**: `group-by`, `aggregate`, `filter`, `map`, `reduce`
+- **Sorting**: `sort-by` (with lambda comparator and `:desc/:asc` keywords)
 - **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`
 - **Logic**: `and`, `or`, `not`, `if`, `when`, `while`, `for`
 - **Object**: `.` (property access), `[]` (array index)
 
 **ALWAYS USE LOWERCASE** for built-in functions: `count` not `COUNT`!
+
+**⚠️ SORTING: ALWAYS use `sort-by` (NOT `sort`)** for sorting complex objects:
+```ovsm
+✅ CORRECT: (sort-by arr (lambda (x) (. x total)) :desc)
+❌ WRONG:   (sort arr (lambda (x) (. x total)))  ;; sort doesn't support lambdas!
+```
 
 ## MCP Tools (NETWORK CALLS)
 These are **external tools** that fetch blockchain data:
