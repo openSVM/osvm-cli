@@ -636,6 +636,40 @@ Sort collection by key extraction function.
                       (slice totals (+ idx 1) (COUNT totals)))))
 ```
 
+## ⚠️ CRITICAL: Prevent Context Overflow - Return Compact Results!
+
+**IMPORTANT:** When querying blockchain data, you may receive hundreds of MB of raw transactions.
+**NEVER** return raw transaction data directly - it will exceed the AI context limit!
+
+### ✅ ALWAYS: Filter Spam and Return Compact Results
+```ovsm
+;; Filter out spam transactions (< 0.001 SOL = 1,000,000 lamports)
+(define MIN_AMOUNT 1000000)  ;; 0.001 SOL in lamports
+
+;; After aggregating, filter out spam wallets
+(define filtered (filter sorted_results
+  (lambda (w) (>= (. w total) MIN_AMOUNT))))
+
+;; Return ALL legitimate wallets in COMPACT format
+(define summary
+  {:total_wallets (count filtered)
+   :total_sol (/ (reduce filtered 0 (lambda (sum w) (+ sum (. w total)))) 1e9)
+   :wallets (map filtered (lambda (w)
+     {:address (. w wallet)
+      :sol (/ (. w total) 1e9)
+      :txs (count (. w txids))}))  ;; Compact: no tx IDs unless requested
+   :filtered_spam_count (- (count sorted_results) (count filtered))})
+
+summary  ;; Compact format: ~50 bytes per wallet instead of 10KB
+```
+
+### ❌ NEVER: Include Unnecessary Data
+```ovsm
+;; DO NOT include full transaction IDs for every wallet (adds 50+ bytes each)
+;; DO NOT include raw transaction objects (hundreds of KB)
+;; DO NOT include amounts < 0.001 SOL (spam/dust)
+```
+
 ## Base58 Encoding (Solana Addresses)
 
 ### base58-decode
