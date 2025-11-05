@@ -50,7 +50,13 @@ impl Tool for LoopForBeingTool {
     fn name(&self) -> &str { "LOOP-FOR-BEING" }
     fn description(&self) -> &str { "Iterate over hash tables or packages" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (collection)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -75,7 +81,10 @@ impl Tool for LoopMinimizeTool {
     fn description(&self) -> &str { "Accumulate minimum value" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            return Ok(Value::Int(i64::MAX));
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (value)".to_string(),
+            });
         }
         let mut min = match &args[0] {
             Value::Int(n) => Value::Int(*n),

@@ -208,7 +208,7 @@ impl LispEvaluator {
                     "every" => self.eval_every(args),
                     "find" => self.eval_find(args),
                     "flatten" => self.eval_flatten(args),
-                    "group-by" => self.eval_group_by(args),
+                    // "group-by" already handled above on line 186
                     "partition" => self.eval_partition(args),
                     "pluck" => self.eval_pluck(args),
                     "reverse" => self.eval_reverse(args),
@@ -3166,7 +3166,10 @@ impl LispEvaluator {
 
         // Parse JSON string into serde_json::Value
         let json_value: serde_json::Value = serde_json::from_str(&json_str)
-            .map_err(|e| Error::RuntimeError(format!("Failed to parse JSON: {}", e)))?;
+            .map_err(|e| Error::ToolExecutionError {
+                tool: "json-parse".to_string(),
+                reason: format!("Failed to parse JSON: {}", e),
+            })?;
 
         // Convert serde_json::Value to OVSM Value
         Ok(self.json_to_value(json_value))
@@ -3194,7 +3197,7 @@ impl LispEvaluator {
                     .clone();
                 let pretty = obj
                     .get("pretty")
-                    .and_then(|v| v.as_bool())
+                    .and_then(|v| v.as_bool().ok())
                     .unwrap_or(false);
                 (val, pretty)
             }
@@ -3213,9 +3216,12 @@ impl LispEvaluator {
         } else {
             serde_json::to_string(&json_value)
         }
-        .map_err(|e| Error::RuntimeError(format!("Failed to stringify JSON: {}", e)))?;
+        .map_err(|e| Error::ToolExecutionError {
+            tool: "json-stringify".to_string(),
+            reason: format!("Failed to stringify JSON: {}", e),
+        })?;
 
-        Ok(Value::String(Arc::new(json_str)))
+        Ok(Value::String(json_str))
     }
 
     /// Helper: Convert serde_json::Value to OVSM Value
@@ -3233,7 +3239,7 @@ impl LispEvaluator {
                     Value::Float(n.as_f64().unwrap_or(0.0))
                 }
             }
-            JV::String(s) => Value::String(Arc::new(s)),
+            JV::String(s) => Value::String(s),
             JV::Array(arr) => {
                 Value::Array(Arc::new(arr.into_iter().map(|v| self.json_to_value(v)).collect()))
             }
@@ -3274,10 +3280,33 @@ impl LispEvaluator {
                 }
                 JV::Object(json_obj)
             }
-            Value::Lambda(_) => {
-                return Err(Error::RuntimeError(
-                    "Cannot convert lambda to JSON".to_string(),
-                ))
+            Value::Function { .. } => {
+                return Err(Error::InvalidOperation {
+                    op: "json-conversion".to_string(),
+                    left_type: "function".to_string(),
+                    right_type: "json".to_string(),
+                })
+            }
+            Value::Range { .. } => {
+                return Err(Error::InvalidOperation {
+                    op: "json-conversion".to_string(),
+                    left_type: "range".to_string(),
+                    right_type: "json".to_string(),
+                })
+            }
+            Value::Multiple(_) => {
+                return Err(Error::InvalidOperation {
+                    op: "json-conversion".to_string(),
+                    left_type: "multiple-values".to_string(),
+                    right_type: "json".to_string(),
+                })
+            }
+            Value::Macro { .. } => {
+                return Err(Error::InvalidOperation {
+                    op: "json-conversion".to_string(),
+                    left_type: "macro".to_string(),
+                    right_type: "json".to_string(),
+                })
             }
         })
     }

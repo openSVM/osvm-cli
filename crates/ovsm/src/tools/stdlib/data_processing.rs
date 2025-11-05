@@ -5,7 +5,7 @@ use crate::runtime::Value;
 use crate::tools::{Tool, ToolRegistry};
 
 /// Register data processing tools
-pub fn register(registry: &mut ToolRegistry) {
+pub fn register(_registry: &mut ToolRegistry) {
     // IMPORTANT: All basic list/array operations are now built-in language functions
     // in lisp_evaluator.rs. MCP tools should only be for external integrations.
 

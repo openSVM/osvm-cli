@@ -320,6 +320,9 @@ impl Tool for LoopWhileTool {
 // REGISTRATION
 // ============================================================================
 
+/// Register all loop utility tools with the tool registry
+///
+/// This function registers all LOOP clause accumulation and iteration utilities.
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(LoopCollectTool);
     registry.register(LoopAppendTool);

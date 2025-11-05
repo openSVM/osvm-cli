@@ -20,6 +20,7 @@ impl Tool for MakeRandomStateTool {
     fn name(&self) -> &str { "MAKE-RANDOM-STATE" }
     fn description(&self) -> &str { "Create new random state" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept optional seed or state to copy
         // Returns a new random state object
         Ok(Value::Int(42)) // Simplified: return seed value
     }
@@ -55,10 +56,19 @@ impl Tool for RandomFloatTool {
     fn name(&self) -> &str { "RANDOM-FLOAT" }
     fn description(&self) -> &str { "Generate random float between 0.0 and limit" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let limit = match args.get(0) {
-            Some(Value::Float(f)) => *f,
-            Some(Value::Int(n)) => *n as f64,
-            _ => 1.0,
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (limit)".to_string(),
+            });
+        }
+        let limit = match &args[0] {
+            Value::Float(f) => *f,
+            Value::Int(n) => *n as f64,
+            _ => return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Limit must be a number".to_string(),
+            }),
         };
 
         // Simplified: return pseudo-random value
@@ -72,9 +82,18 @@ impl Tool for RandomIntegerTool {
     fn name(&self) -> &str { "RANDOM-INTEGER" }
     fn description(&self) -> &str { "Generate random integer between 0 and limit" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let limit = match args.get(0) {
-            Some(Value::Int(n)) => *n,
-            _ => 100,
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (limit)".to_string(),
+            });
+        }
+        let limit = match &args[0] {
+            Value::Int(n) => *n,
+            _ => return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Limit must be an integer".to_string(),
+            }),
         };
 
         // Simplified: return pseudo-random value
@@ -89,7 +108,10 @@ impl Tool for RandomElementTool {
     fn description(&self) -> &str { "Get random element from sequence" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (sequence)".to_string(),
+            });
         }
 
         match &args[0] {
@@ -101,7 +123,10 @@ impl Tool for RandomElementTool {
                     Ok(arr[arr.len() / 2].clone())
                 }
             }
-            _ => Ok(Value::Null),
+            _ => Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Argument must be an array".to_string(),
+            }),
         }
     }
 }
@@ -113,7 +138,10 @@ impl Tool for ShuffleTool {
     fn description(&self) -> &str { "Randomly permute sequence" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            return Ok(Value::Array(Arc::new(vec![])));
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (sequence)".to_string(),
+            });
         }
 
         match &args[0] {
@@ -123,7 +151,10 @@ impl Tool for ShuffleTool {
                 shuffled.reverse();
                 Ok(Value::Array(Arc::new(shuffled)))
             }
-            v => Ok(v.clone()),
+            _ => Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Argument must be an array".to_string(),
+            }),
         }
     }
 }

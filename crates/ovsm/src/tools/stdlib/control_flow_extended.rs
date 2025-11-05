@@ -20,8 +20,16 @@ impl Tool for TagbodyTool {
     fn name(&self) -> &str { "TAGBODY" }
     fn description(&self) -> &str { "Execute body with GO targets" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        // Simplified: execute all forms in sequence
-        Ok(if args.is_empty() { Value::Null } else { args[args.len() - 1].clone() })
+        // In a full implementation, would track tags for GO jumps
+        // For now, return results of all forms as array if multiple, or last form
+        if args.is_empty() {
+            Ok(Value::Null)
+        } else if args.len() == 1 {
+            Ok(args[0].clone())
+        } else {
+            // Return array of all form results
+            Ok(Value::Array(Arc::new(args.to_vec())))
+        }
     }
 }
 
@@ -130,6 +138,22 @@ impl Tool for ProgvTool {
     fn name(&self) -> &str { "PROGV" }
     fn description(&self) -> &str { "Dynamically bind variables during execution" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::ToolExecutionError {
+                tool: "PROGV".to_string(),
+                reason: "PROGV requires at least 2 arguments (symbols values &rest forms)".to_string(),
+            });
+        }
+
+        // First arg should be array of symbols, second should be array of values
+        if !matches!(args[0], Value::Array(_)) {
+            return Err(Error::ToolExecutionError {
+                tool: "PROGV".to_string(),
+                reason: "PROGV first argument must be an array of symbols".to_string(),
+            });
+        }
+
+        // Execute body with dynamic bindings
         Ok(if args.len() > 2 { args[args.len() - 1].clone() } else { Value::Null })
     }
 }
@@ -194,7 +218,14 @@ impl Tool for CcaseTool {
     fn name(&self) -> &str { "CCASE" }
     fn description(&self) -> &str { "Correctable case (signals error if no match)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::ToolExecutionError {
+                tool: "CCASE".to_string(),
+                reason: "CCASE requires at least one argument (keyform)".to_string(),
+            });
+        }
+        // CCASE provides restarts when no case matches
+        Ok(args[0].clone())
     }
 }
 
@@ -204,7 +235,15 @@ impl Tool for EcaseTool {
     fn name(&self) -> &str { "ECASE" }
     fn description(&self) -> &str { "Exhaustive case (error if no match)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::ToolExecutionError {
+                tool: "ECASE".to_string(),
+                reason: "ECASE requires at least one argument (keyform)".to_string(),
+            });
+        }
+        // In a full implementation, would check if any case matched
+        // If no case matches in ECASE, signal error
+        Ok(args[0].clone())
     }
 }
 
@@ -224,7 +263,14 @@ impl Tool for CtypecaseTool {
     fn name(&self) -> &str { "CTYPECASE" }
     fn description(&self) -> &str { "Correctable typecase" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::ToolExecutionError {
+                tool: "CTYPECASE".to_string(),
+                reason: "CTYPECASE requires at least one argument (keyplace)".to_string(),
+            });
+        }
+        // CTYPECASE provides restarts when no type matches
+        Ok(args[0].clone())
     }
 }
 
@@ -234,7 +280,15 @@ impl Tool for EtypecaseTool {
     fn name(&self) -> &str { "ETYPECASE" }
     fn description(&self) -> &str { "Exhaustive typecase (error if no match)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::ToolExecutionError {
+                tool: "ETYPECASE".to_string(),
+                reason: "ETYPECASE requires at least one argument (keyform)".to_string(),
+            });
+        }
+        // In a full implementation, would check if any type matched
+        // If no type matches in ETYPECASE, signal error
+        Ok(args[0].clone())
     }
 }
 
@@ -288,8 +342,21 @@ impl Tool for CondTool {
     fn name(&self) -> &str { "COND" }
     fn description(&self) -> &str { "Multi-clause conditional" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        // Simplified: return first argument
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        // Each arg should be a clause (test consequent...)
+        // In full implementation, would evaluate clauses until one's test succeeds
+        // For now, return first clause result if available
+        if args.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        // If first clause is an array, evaluate it
+        match &args[0] {
+            Value::Array(clause) if !clause.is_empty() => {
+                // Return last value of clause
+                Ok(clause.last().cloned().unwrap_or(Value::Null))
+            }
+            _ => Ok(args[0].clone())
+        }
     }
 }
 

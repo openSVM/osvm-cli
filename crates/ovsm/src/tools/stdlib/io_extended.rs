@@ -18,7 +18,13 @@ pub struct ReadByteTool;
 impl Tool for ReadByteTool {
     fn name(&self) -> &str { "READ-BYTE" }
     fn description(&self) -> &str { "Read single byte from binary stream" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         // Simplified: return 0
         Ok(Value::Int(0))
     }
@@ -79,7 +85,13 @@ pub struct FileLengthTool;
 impl Tool for FileLengthTool {
     fn name(&self) -> &str { "FILE-LENGTH" }
     fn description(&self) -> &str { "Get length of file" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::Int(0))
     }
 }
@@ -90,12 +102,19 @@ impl Tool for FileStringLengthTool {
     fn name(&self) -> &str { "FILE-STRING-LENGTH" }
     fn description(&self) -> &str { "Get length string would have in file" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.len() >= 2 {
-            if let Value::String(s) = &args[1] {
-                return Ok(Value::Int(s.len() as i64));
-            }
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 2 arguments (stream, string)".to_string(),
+            });
         }
-        Ok(Value::Int(0))
+        if let Value::String(s) = &args[1] {
+            return Ok(Value::Int(s.len() as i64));
+        }
+        Err(Error::InvalidArguments {
+            tool: self.name().to_string(),
+            reason: "Second argument must be a string".to_string(),
+        })
     }
 }
 
@@ -108,7 +127,13 @@ pub struct StreamElementTypeTool;
 impl Tool for StreamElementTypeTool {
     fn name(&self) -> &str { "STREAM-ELEMENT-TYPE" }
     fn description(&self) -> &str { "Get element type of stream" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::String("CHARACTER".to_string()))
     }
 }
@@ -118,7 +143,13 @@ pub struct InputStreamPTool;
 impl Tool for InputStreamPTool {
     fn name(&self) -> &str { "INPUT-STREAM-P" }
     fn description(&self) -> &str { "Check if stream is input stream" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }
@@ -128,7 +159,13 @@ pub struct OutputStreamPTool;
 impl Tool for OutputStreamPTool {
     fn name(&self) -> &str { "OUTPUT-STREAM-P" }
     fn description(&self) -> &str { "Check if stream is output stream" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }
@@ -138,7 +175,13 @@ pub struct InteractiveStreamPTool;
 impl Tool for InteractiveStreamPTool {
     fn name(&self) -> &str { "INTERACTIVE-STREAM-P" }
     fn description(&self) -> &str { "Check if stream is interactive" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::Bool(false))
     }
 }
@@ -148,7 +191,13 @@ pub struct OpenStreamPTool;
 impl Tool for OpenStreamPTool {
     fn name(&self) -> &str { "OPEN-STREAM-P" }
     fn description(&self) -> &str { "Check if stream is open" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (stream)".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }

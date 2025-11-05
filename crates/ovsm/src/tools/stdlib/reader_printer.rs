@@ -20,7 +20,12 @@ impl Tool for ReadFromStringTool {
     fn name(&self) -> &str { "READ-FROM-STRING" }
     fn description(&self) -> &str { "Read Lisp expression from string" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { return Ok(Value::Null); }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "READ-FROM-STRING".to_string(),
+                reason: "Expected string argument".to_string(),
+            });
+        }
         // Simplified: just return the string as-is
         Ok(args[0].clone())
     }
@@ -115,7 +120,13 @@ pub struct GetMacroCharacterTool;
 impl Tool for GetMacroCharacterTool {
     fn name(&self) -> &str { "GET-MACRO-CHARACTER" }
     fn description(&self) -> &str { "Get reader macro function for character" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "GET-MACRO-CHARACTER".to_string(),
+                reason: "Expected character argument".to_string(),
+            });
+        }
         Ok(Value::Null)
     }
 }
@@ -126,7 +137,13 @@ impl Tool for SetMacroCharacterTool {
     fn name(&self) -> &str { "SET-MACRO-CHARACTER" }
     fn description(&self) -> &str { "Set reader macro function for character" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.len() >= 2 { args[1].clone() } else { Value::Null })
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SET-MACRO-CHARACTER".to_string(),
+                reason: "Expected character and function arguments".to_string(),
+            });
+        }
+        Ok(args[1].clone())
     }
 }
 
@@ -190,7 +207,12 @@ impl Tool for WriteToStringTool {
     fn name(&self) -> &str { "WRITE-TO-STRING" }
     fn description(&self) -> &str { "Write object to string" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { return Ok(Value::String(String::new())); }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "WRITE-TO-STRING".to_string(),
+                reason: "Expected value to write".to_string(),
+            });
+        }
         match &args[0] {
             Value::String(s) => Ok(Value::String(s.clone())),
             Value::Int(n) => Ok(Value::String(n.to_string())),
@@ -210,7 +232,12 @@ impl Tool for Prin1ToStringTool {
     fn name(&self) -> &str { "PRIN1-TO-STRING" }
     fn description(&self) -> &str { "Print object to string (readable)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { return Ok(Value::String(String::new())); }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "PRIN1-TO-STRING".to_string(),
+                reason: "Expected value to print".to_string(),
+            });
+        }
         match &args[0] {
             Value::String(s) => Ok(Value::String(format!("\"{}\"", s))),
             Value::Int(n) => Ok(Value::String(n.to_string())),
@@ -230,7 +257,12 @@ impl Tool for PrincToStringTool {
     fn name(&self) -> &str { "PRINC-TO-STRING" }
     fn description(&self) -> &str { "Print object to string (aesthetic)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { return Ok(Value::String(String::new())); }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "PRINC-TO-STRING".to_string(),
+                reason: "Expected value to print".to_string(),
+            });
+        }
         match &args[0] {
             Value::String(s) => Ok(Value::String(s.clone())),
             Value::Int(n) => Ok(Value::String(n.to_string())),

@@ -20,7 +20,13 @@ impl Tool for ReadTimeEvalTool {
     fn name(&self) -> &str { "#." }
     fn description(&self) -> &str { "Evaluate form at read time" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "#.".to_string(),
+                reason: "Expected form to evaluate".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -30,7 +36,13 @@ impl Tool for LoadTimeEvalTool {
     fn name(&self) -> &str { "#," }
     fn description(&self) -> &str { "Evaluate form at load time" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "#,".to_string(),
+                reason: "Expected form to evaluate".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -44,7 +56,14 @@ impl Tool for GetDispatchMacroCharacterTool {
     fn name(&self) -> &str { "GET-DISPATCH-MACRO-CHARACTER" }
     fn description(&self) -> &str { "Get dispatch macro character function" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(Value::Null)
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "GET-DISPATCH-MACRO-CHARACTER".to_string(),
+                reason: "Expected dispatch character and sub-character".to_string(),
+            });
+        }
+        // Placeholder: return empty array wrapped in Arc
+        Ok(Value::Array(Arc::new(vec![])))
     }
 }
 
@@ -54,6 +73,12 @@ impl Tool for SetDispatchMacroCharacterTool {
     fn name(&self) -> &str { "SET-DISPATCH-MACRO-CHARACTER" }
     fn description(&self) -> &str { "Set dispatch macro character function" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 3 {
+            return Err(Error::InvalidArguments {
+                tool: "SET-DISPATCH-MACRO-CHARACTER".to_string(),
+                reason: "Expected dispatch character, sub-character, and function".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }
@@ -64,6 +89,12 @@ impl Tool for MakeDispatchMacroCharacterTool {
     fn name(&self) -> &str { "MAKE-DISPATCH-MACRO-CHARACTER" }
     fn description(&self) -> &str { "Make character a dispatch macro character" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "MAKE-DISPATCH-MACRO-CHARACTER".to_string(),
+                reason: "Expected character argument".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }
@@ -126,7 +157,10 @@ impl Tool for CopyReadtableTool {
     fn name(&self) -> &str { "COPY-READTABLE" }
     fn description(&self) -> &str { "Copy readtable" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(Value::Null)
+        let _ = args; // Placeholder implementation - should accept optional from-readtable and to-readtable args
+        // Return an Arc-wrapped object representing the readtable
+        let readtable = std::collections::HashMap::new();
+        Ok(Value::Object(Arc::new(readtable)))
     }
 }
 
@@ -136,7 +170,14 @@ impl Tool for ReadtablepTool {
     fn name(&self) -> &str { "READTABLEP" }
     fn description(&self) -> &str { "Check if object is readtable" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(Value::Bool(false))
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "READTABLEP".to_string(),
+                reason: "Expected object argument".to_string(),
+            });
+        }
+        // Check if argument is an object (readtables are represented as objects)
+        Ok(Value::Bool(matches!(args[0], Value::Object(_))))
     }
 }
 

@@ -17,8 +17,20 @@ impl Tool for DefclassTool {
     fn name(&self) -> &str { "DEFCLASS" }
     fn description(&self) -> &str { "Define a class" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { Ok(Value::String("ANONYMOUS-CLASS".to_string())) }
-        else { Ok(args[0].clone()) }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "DEFCLASS".to_string(),
+                reason: "requires at least 1 argument (class-name)".to_string(),
+            });
+        }
+        // Validate class name is a string or symbol
+        match &args[0] {
+            Value::String(_) => Ok(args[0].clone()),
+            _ => Err(Error::TypeError {
+                expected: "String (class name)".to_string(),
+                got: format!("{:?}", args[0]),
+            }),
+        }
     }
 }
 
@@ -27,7 +39,13 @@ pub struct MakeInstanceTool;
 impl Tool for MakeInstanceTool {
     fn name(&self) -> &str { "MAKE-INSTANCE" }
     fn description(&self) -> &str { "Create class instance" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "MAKE-INSTANCE".to_string(),
+                reason: "requires at least 1 argument (class)".to_string(),
+            });
+        }
         Ok(Value::Object(Arc::new(HashMap::new())))
     }
 }
@@ -38,7 +56,12 @@ impl Tool for ClassOfTool {
     fn name(&self) -> &str { "CLASS-OF" }
     fn description(&self) -> &str { "Get class of object" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() { return Ok(Value::String("NULL".to_string())); }
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CLASS-OF".to_string(),
+                reason: "requires at least 1 argument (object)".to_string(),
+            });
+        }
         let class = match &args[0] {
             Value::Int(_) => "INTEGER",
             Value::Float(_) => "FLOAT",
@@ -55,23 +78,50 @@ impl Tool for ClassOfTool {
 
 macro_rules! simple_clos_tool {
     ($name:ident, $str:expr, $desc:expr) => {
+        #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
             fn name(&self) -> &str { $str }
             fn description(&self) -> &str { $desc }
             fn execute(&self, args: &[Value]) -> Result<Value> {
-                Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+                if args.is_empty() {
+                    return Err(Error::InvalidArguments {
+                        tool: $str.to_string(),
+                        reason: "requires at least 1 argument".to_string(),
+                    });
+                }
+                Ok(args[0].clone())
+            }
+        }
+    };
+}
+
+macro_rules! simple_clos_tool_2args {
+    ($name:ident, $str:expr, $desc:expr) => {
+        #[doc = $desc]
+        pub struct $name;
+        impl Tool for $name {
+            fn name(&self) -> &str { $str }
+            fn description(&self) -> &str { $desc }
+            fn execute(&self, args: &[Value]) -> Result<Value> {
+                if args.len() < 2 {
+                    return Err(Error::InvalidArguments {
+                        tool: $str.to_string(),
+                        reason: "requires at least 2 arguments".to_string(),
+                    });
+                }
+                Ok(args[0].clone())
             }
         }
     };
 }
 
 // Slot access
-simple_clos_tool!(SlotValueTool, "SLOT-VALUE", "Get slot value");
-simple_clos_tool!(SetfSlotValueTool, "SETF-SLOT-VALUE", "Set slot value");
-simple_clos_tool!(SlotBoundpTool, "SLOT-BOUNDP", "Check if slot bound");
-simple_clos_tool!(SlotMakunboundTool, "SLOT-MAKUNBOUND", "Unbind slot");
-simple_clos_tool!(SlotExistsPTool, "SLOT-EXISTS-P", "Check if slot exists");
+simple_clos_tool_2args!(SlotValueTool, "SLOT-VALUE", "Get slot value");
+simple_clos_tool_2args!(SetfSlotValueTool, "SETF-SLOT-VALUE", "Set slot value");
+simple_clos_tool_2args!(SlotBoundpTool, "SLOT-BOUNDP", "Check if slot bound");
+simple_clos_tool_2args!(SlotMakunboundTool, "SLOT-MAKUNBOUND", "Unbind slot");
+simple_clos_tool_2args!(SlotExistsPTool, "SLOT-EXISTS-P", "Check if slot exists");
 
 // Generic functions
 simple_clos_tool!(DefgenericTool, "DEFGENERIC", "Define generic function");
@@ -109,6 +159,10 @@ simple_clos_tool!(StandardGenericFunctionTool, "STANDARD-GENERIC-FUNCTION", "Sta
 simple_clos_tool!(StandardMethodTool, "STANDARD-METHOD", "Standard method");
 simple_clos_tool!(SlotDefinitionTool, "SLOT-DEFINITION", "Slot definition object");
 
+/// Registers all CLOS (Common Lisp Object System) tools with the tool registry.
+///
+/// This includes class definition, instance creation, slot access, generic functions,
+/// method combination, class hierarchy operations, and initialization utilities.
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(DefclassTool);
     registry.register(MakeInstanceTool);

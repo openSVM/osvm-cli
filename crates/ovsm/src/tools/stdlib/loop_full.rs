@@ -232,6 +232,12 @@ impl Tool for LoopMaximizeTool {
     fn name(&self) -> &str { "LOOP-MAXIMIZE" }
     fn description(&self) -> &str { "MAXIMIZE value in LOOP" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (value)".to_string(),
+            });
+        }
         let mut max = i64::MIN;
         for arg in args {
             if let Value::Int(n) = arg {
@@ -248,6 +254,12 @@ impl Tool for LoopMinimizeTool {
     fn name(&self) -> &str { "LOOP-MINIMIZE" }
     fn description(&self) -> &str { "MINIMIZE value in LOOP" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (value)".to_string(),
+            });
+        }
         let mut min = i64::MAX;
         for arg in args {
             if let Value::Int(n) = arg {

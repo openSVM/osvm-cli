@@ -44,6 +44,7 @@ impl Tool for MethodCombinationTypeTool {
     fn name(&self) -> &str { "METHOD-COMBINATION-TYPE" }
     fn description(&self) -> &str { "Get type of method combination" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method combination object
         Ok(Value::String("STANDARD".to_string()))
     }
 }
@@ -163,6 +164,12 @@ impl Tool for MaxMethodCombinationTool {
     fn name(&self) -> &str { "MAX-METHOD-COMBINATION" }
     fn description(&self) -> &str { "MAX method combination (return maximum result)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (method result)".to_string(),
+            });
+        }
         let mut max = Value::Int(i64::MIN);
         for arg in args {
             match (arg, &max) {
@@ -183,6 +190,12 @@ impl Tool for MinMethodCombinationTool {
     fn name(&self) -> &str { "MIN-METHOD-COMBINATION" }
     fn description(&self) -> &str { "MIN method combination (return minimum result)" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 1 argument (method result)".to_string(),
+            });
+        }
         let mut min = Value::Int(i64::MAX);
         for arg in args {
             match (arg, &min) {
@@ -239,6 +252,7 @@ impl Tool for MethodQualifiersTool {
     fn name(&self) -> &str { "METHOD-QUALIFIERS" }
     fn description(&self) -> &str { "Get qualifiers of a method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method object
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -249,6 +263,7 @@ impl Tool for PrimaryMethodPTool {
     fn name(&self) -> &str { "PRIMARY-METHOD-P" }
     fn description(&self) -> &str { "Check if method is primary method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method object
         Ok(Value::Bool(true))
     }
 }
@@ -259,6 +274,7 @@ impl Tool for BeforeMethodPTool {
     fn name(&self) -> &str { "BEFORE-METHOD-P" }
     fn description(&self) -> &str { "Check if method is :before method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method object
         Ok(Value::Bool(false))
     }
 }
@@ -269,6 +285,7 @@ impl Tool for AfterMethodPTool {
     fn name(&self) -> &str { "AFTER-METHOD-P" }
     fn description(&self) -> &str { "Check if method is :after method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method object
         Ok(Value::Bool(false))
     }
 }
@@ -279,6 +296,7 @@ impl Tool for AroundMethodPTool {
     fn name(&self) -> &str { "AROUND-METHOD-P" }
     fn description(&self) -> &str { "Check if method is :around method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept method object
         Ok(Value::Bool(false))
     }
 }
@@ -299,6 +317,7 @@ impl Tool for NextMethodPTool {
     fn name(&self) -> &str { "NEXT-METHOD-P" }
     fn description(&self) -> &str { "Check if next method exists" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::Bool(false))
     }
 }

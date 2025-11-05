@@ -85,7 +85,10 @@ impl Tool for MismatchTool {
     fn description(&self) -> &str { "Find first position where sequences differ" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: "MISMATCH".to_string(),
+                reason: "Expected two sequence arguments".to_string(),
+            });
         }
 
         match (&args[0], &args[1]) {
@@ -101,7 +104,10 @@ impl Tool for MismatchTool {
                     Ok(Value::Null)
                 }
             }
-            _ => Ok(Value::Null),
+            _ => Err(Error::InvalidArguments {
+                tool: "MISMATCH".to_string(),
+                reason: "Expected array arguments".to_string(),
+            }),
         }
     }
 }
@@ -113,7 +119,10 @@ impl Tool for SearchSubsequenceTool {
     fn description(&self) -> &str { "Search for subsequence in sequence" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: "SEARCH-SUBSEQUENCE".to_string(),
+                reason: "Expected subsequence and sequence arguments".to_string(),
+            });
         }
 
         match (&args[0], &args[1]) {
@@ -129,7 +138,10 @@ impl Tool for SearchSubsequenceTool {
                 }
                 Ok(Value::Null)
             }
-            _ => Ok(Value::Null),
+            _ => Err(Error::InvalidArguments {
+                tool: "SEARCH-SUBSEQUENCE".to_string(),
+                reason: "Expected array arguments".to_string(),
+            }),
         }
     }
 }
@@ -216,7 +228,10 @@ impl Tool for VectorPushTool {
     fn description(&self) -> &str { "Push element onto vector with fill pointer" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: "VECTOR-PUSH".to_string(),
+                reason: "Expected element and vector arguments".to_string(),
+            });
         }
 
         match &args[1] {
@@ -225,7 +240,10 @@ impl Tool for VectorPushTool {
                 new_arr.push(args[0].clone());
                 Ok(Value::Array(Arc::new(new_arr)))
             }
-            _ => Ok(args[1].clone()),
+            _ => Err(Error::InvalidArguments {
+                tool: "VECTOR-PUSH".to_string(),
+                reason: "Expected array as second argument".to_string(),
+            }),
         }
     }
 }
@@ -237,12 +255,27 @@ impl Tool for VectorPopTool {
     fn description(&self) -> &str { "Pop element from vector with fill pointer" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: "VECTOR-POP".to_string(),
+                reason: "Expected vector argument".to_string(),
+            });
         }
 
         match &args[0] {
-            Value::Array(arr) => Ok(arr.last().cloned().unwrap_or(Value::Null)),
-            _ => Ok(Value::Null),
+            Value::Array(arr) => {
+                if arr.is_empty() {
+                    Err(Error::InvalidArguments {
+                        tool: "VECTOR-POP".to_string(),
+                        reason: "Cannot pop from empty vector".to_string(),
+                    })
+                } else {
+                    Ok(arr.last().cloned().unwrap_or(Value::Null))
+                }
+            }
+            _ => Err(Error::InvalidArguments {
+                tool: "VECTOR-POP".to_string(),
+                reason: "Expected array argument".to_string(),
+            }),
         }
     }
 }
@@ -254,7 +287,10 @@ impl Tool for VectorPushExtendTool {
     fn description(&self) -> &str { "Push element, extending vector if necessary" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: "VECTOR-PUSH-EXTEND".to_string(),
+                reason: "Expected element and vector arguments".to_string(),
+            });
         }
 
         match &args[1] {
@@ -263,7 +299,10 @@ impl Tool for VectorPushExtendTool {
                 new_arr.push(args[0].clone());
                 Ok(Value::Array(Arc::new(new_arr)))
             }
-            _ => Ok(args[1].clone()),
+            _ => Err(Error::InvalidArguments {
+                tool: "VECTOR-PUSH-EXTEND".to_string(),
+                reason: "Expected array as second argument".to_string(),
+            }),
         }
     }
 }

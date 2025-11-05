@@ -36,7 +36,13 @@ pub struct DeletePackageTool;
 impl Tool for DeletePackageTool {
     fn name(&self) -> &str { "DELETE-PACKAGE" }
     fn description(&self) -> &str { "Delete package" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Bool(true))
     }
 }
@@ -64,6 +70,7 @@ impl Tool for PackageNameTool {
 
 macro_rules! simple_package_tool {
     ($name:ident, $str:expr, $desc:expr) => {
+        #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
             fn name(&self) -> &str { $str }
@@ -146,7 +153,13 @@ pub struct PackageLockedPTool;
 impl Tool for PackageLockedPTool {
     fn name(&self) -> &str { "PACKAGE-LOCKED-P" }
     fn description(&self) -> &str { "Check if package is locked" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Bool(false))
     }
 }
@@ -176,7 +189,13 @@ pub struct PackageImplementedByListTool;
 impl Tool for PackageImplementedByListTool {
     fn name(&self) -> &str { "PACKAGE-IMPLEMENTED-BY-LIST" }
     fn description(&self) -> &str { "Get list of packages implementing this package" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -186,7 +205,13 @@ pub struct PackageImplementsListTool;
 impl Tool for PackageImplementsListTool {
     fn name(&self) -> &str { "PACKAGE-IMPLEMENTS-LIST" }
     fn description(&self) -> &str { "Get list of packages this package implements" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -207,6 +232,7 @@ impl Tool for RemovePackageLocalNicknameTool {
     fn name(&self) -> &str { "REMOVE-PACKAGE-LOCAL-NICKNAME" }
     fn description(&self) -> &str { "Remove package-local nickname" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept nickname and package
         Ok(Value::Bool(true))
     }
 }
@@ -216,7 +242,13 @@ pub struct PackageLocalNicknamesTool;
 impl Tool for PackageLocalNicknamesTool {
     fn name(&self) -> &str { "PACKAGE-LOCAL-NICKNAMES" }
     fn description(&self) -> &str { "Get package-local nicknames" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -226,7 +258,13 @@ pub struct PackageLocallyNickedByListTool;
 impl Tool for PackageLocallyNickedByListTool {
     fn name(&self) -> &str { "PACKAGE-LOCALLY-NICKNAMED-BY-LIST" }
     fn description(&self) -> &str { "Get packages using this as local nickname" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -256,7 +294,13 @@ pub struct DisablePackageLocksTool;
 impl Tool for DisablePackageLocksTool {
     fn name(&self) -> &str { "DISABLE-PACKAGE-LOCKS" }
     fn description(&self) -> &str { "Disable package lock checking" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Null)
     }
 }
@@ -266,7 +310,13 @@ pub struct EnablePackageLocksTool;
 impl Tool for EnablePackageLocksTool {
     fn name(&self) -> &str { "ENABLE-PACKAGE-LOCKS" }
     fn description(&self) -> &str { "Enable package lock checking" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Null)
     }
 }
@@ -276,7 +326,13 @@ pub struct PackageDocumentationTool;
 impl Tool for PackageDocumentationTool {
     fn name(&self) -> &str { "PACKAGE-DOCUMENTATION" }
     fn description(&self) -> &str { "Get package documentation string" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Null)
     }
 }
@@ -311,7 +367,13 @@ pub struct PackageAproposTool;
 impl Tool for PackageAproposTool {
     fn name(&self) -> &str { "PACKAGE-APROPOS" }
     fn description(&self) -> &str { "Find symbols in package matching string" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (search string)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -321,7 +383,13 @@ pub struct PackageAproposListTool;
 impl Tool for PackageAproposListTool {
     fn name(&self) -> &str { "PACKAGE-APROPOS-LIST" }
     fn description(&self) -> &str { "Get list of symbols matching string" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (search string)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -331,11 +399,18 @@ pub struct PackageInheritedSymbolsTool;
 impl Tool for PackageInheritedSymbolsTool {
     fn name(&self) -> &str { "PACKAGE-INHERITED-SYMBOLS" }
     fn description(&self) -> &str { "Get symbols inherited from other packages" }
-    fn execute(&self, _args: &[Value]) -> Result<Value> {
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (package)".to_string(),
+            });
+        }
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
 
+/// Register all package system tools with the tool registry
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(MakePackageTool);
     registry.register(DefpackageTool);

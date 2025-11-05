@@ -435,12 +435,15 @@ impl Tool for WithOpenStreamTool {
     }
 
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        // In OVSM, just return the stream (no actual closing needed)
         if args.is_empty() {
-            Ok(Value::Null)
-        } else {
-            Ok(args[0].clone())
+            return Err(Error::InvalidArguments {
+                tool: "WITH-OPEN-STREAM".to_string(),
+                reason: "Expected stream and body arguments".to_string(),
+            });
         }
+        // In OVSM, just return the stream (no actual closing needed)
+        // Return result as an Arc-wrapped array for consistency
+        Ok(Value::Array(Arc::new(vec![args[0].clone()])))
     }
 }
 
@@ -618,6 +621,14 @@ impl Tool for StreamLineColumnTool {
 // REGISTRATION
 // ============================================================================
 
+/// Register all stream-related tools with the tool registry
+///
+/// This function registers all 25 stream operation tools including:
+/// - Stream creation (3 functions)
+/// - Stream properties (5 functions)
+/// - Stream operations (5 functions)
+/// - Binary I/O (4 functions)
+/// - Stream utilities (8 functions)
 pub fn register(registry: &mut ToolRegistry) {
     // Stream creation
     registry.register(MakeStringInputStreamTool);

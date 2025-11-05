@@ -106,11 +106,17 @@ impl Tool for NthValueTool {
     fn description(&self) -> &str { "Get nth value from multiple values" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 2 arguments (index, values)".to_string(),
+            });
         }
         let n = match &args[0] {
             Value::Int(i) => *i as usize,
-            _ => return Ok(Value::Null),
+            _ => return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "First argument must be an integer index".to_string(),
+            }),
         };
         match &args[1] {
             Value::Array(arr) => Ok(arr.get(n).cloned().unwrap_or(Value::Null)),
@@ -177,7 +183,10 @@ impl Tool for GetfTool {
     fn description(&self) -> &str { "Get property value from property list" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected at least 2 arguments (plist, key)".to_string(),
+            });
         }
         match &args[0] {
             Value::Array(plist) => {
@@ -215,7 +224,10 @@ impl Tool for GetPropertiesTool {
     fn description(&self) -> &str { "Get first property matching indicator list" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(Value::Array(Arc::new(vec![Value::Null, Value::Null, Value::Null])));
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 2 arguments (plist, indicators)".to_string(),
+            });
         }
         // Simplified: return null indicator, value, and tail
         Ok(Value::Array(Arc::new(vec![

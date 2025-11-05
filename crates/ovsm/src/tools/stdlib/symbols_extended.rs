@@ -21,6 +21,12 @@ impl Tool for GetTool {
     fn description(&self) -> &str { "Get symbol property value" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         // args: symbol, indicator, default
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "GET".to_string(),
+                reason: "Expected at least 2 arguments: symbol and indicator".to_string(),
+            });
+        }
         Ok(args.get(2).cloned().unwrap_or(Value::Null))
     }
 }
@@ -31,6 +37,7 @@ impl Tool for SymbolPlistTool {
     fn name(&self) -> &str { "SYMBOL-PLIST" }
     fn description(&self) -> &str { "Get symbol property list" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept symbol
         Ok(Value::Array(Arc::new(vec![])))
     }
 }
@@ -41,6 +48,7 @@ impl Tool for RempropTool {
     fn name(&self) -> &str { "REMPROP" }
     fn description(&self) -> &str { "Remove property from symbol" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept symbol and property indicator
         Ok(Value::Bool(true))
     }
 }
@@ -113,6 +121,7 @@ impl Tool for SymbolPackageTool {
     fn name(&self) -> &str { "SYMBOL-PACKAGE" }
     fn description(&self) -> &str { "Get symbol's home package" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept symbol
         Ok(Value::String("COMMON-LISP-USER".to_string()))
     }
 }
@@ -273,6 +282,7 @@ impl Tool for UninternTool {
     fn name(&self) -> &str { "UNINTERN" }
     fn description(&self) -> &str { "Remove symbol from package" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept symbol and optional package
         Ok(Value::Bool(true))
     }
 }

@@ -81,6 +81,21 @@ impl Tool for VariableInformationTool {
     fn name(&self) -> &str { "VARIABLE-INFORMATION" }
     fn description(&self) -> &str { "Get variable binding information" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "VARIABLE-INFORMATION".to_string(),
+                reason: "Expected at least 1 argument: variable name".to_string(),
+            });
+        }
+
+        // Validate variable name is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "VARIABLE-INFORMATION".to_string(),
+                reason: "variable name must be a string".to_string(),
+            });
+        }
+
         // Returns (binding-type local-p declarations)
         Ok(Value::Array(Arc::new(vec![
             Value::String("LEXICAL".to_string()),
@@ -96,6 +111,21 @@ impl Tool for FunctionInformationTool {
     fn name(&self) -> &str { "FUNCTION-INFORMATION" }
     fn description(&self) -> &str { "Get function binding information" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "FUNCTION-INFORMATION".to_string(),
+                reason: "Expected at least 1 argument: function name".to_string(),
+            });
+        }
+
+        // Validate function name is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "FUNCTION-INFORMATION".to_string(),
+                reason: "function name must be a string".to_string(),
+            });
+        }
+
         // Returns (binding-type local-p declarations)
         Ok(Value::Array(Arc::new(vec![
             Value::String("FUNCTION".to_string()),
@@ -111,6 +141,21 @@ impl Tool for DeclarationInformationTool {
     fn name(&self) -> &str { "DECLARATION-INFORMATION" }
     fn description(&self) -> &str { "Get declaration information from environment" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "DECLARATION-INFORMATION".to_string(),
+                reason: "Expected at least 1 argument: declaration name".to_string(),
+            });
+        }
+
+        // Validate declaration name is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "DECLARATION-INFORMATION".to_string(),
+                reason: "declaration name must be a string".to_string(),
+            });
+        }
+
         Ok(Value::Null)
     }
 }
@@ -121,6 +166,21 @@ impl Tool for AugmentEnvironmentTool {
     fn name(&self) -> &str { "AUGMENT-ENVIRONMENT" }
     fn description(&self) -> &str { "Create environment with additional bindings" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "AUGMENT-ENVIRONMENT".to_string(),
+                reason: "Expected at least 1 argument: base environment".to_string(),
+            });
+        }
+
+        // Validate base environment is an object
+        if !matches!(args[0], Value::Object(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "AUGMENT-ENVIRONMENT".to_string(),
+                reason: "base environment must be an object".to_string(),
+            });
+        }
+
         // Returns new environment (represented as object)
         Ok(Value::Object(Arc::new(HashMap::new())))
     }
@@ -132,8 +192,15 @@ impl Tool for ParseMacroTool {
     fn name(&self) -> &str { "PARSE-MACRO" }
     fn description(&self) -> &str { "Parse macro lambda list" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "PARSE-MACRO".to_string(),
+                reason: "Expected 1 argument: macro lambda list".to_string(),
+            });
+        }
+
         // Returns parsed form
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(args[0].clone())
     }
 }
 
@@ -143,7 +210,14 @@ impl Tool for EncloseTool {
     fn name(&self) -> &str { "ENCLOSE" }
     fn description(&self) -> &str { "Create lexical closure in environment" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "ENCLOSE".to_string(),
+                reason: "Expected at least 1 argument: lambda expression".to_string(),
+            });
+        }
+
+        Ok(args[0].clone())
     }
 }
 
@@ -157,7 +231,22 @@ impl Tool for DefineDeclarationTool {
     fn name(&self) -> &str { "DEFINE-DECLARATION" }
     fn description(&self) -> &str { "Define new declaration type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "DEFINE-DECLARATION".to_string(),
+                reason: "Expected at least 1 argument: declaration name".to_string(),
+            });
+        }
+
+        // Validate declaration name is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "DEFINE-DECLARATION".to_string(),
+                reason: "declaration name must be a string".to_string(),
+            });
+        }
+
+        Ok(args[0].clone())
     }
 }
 
@@ -167,6 +256,7 @@ impl Tool for GetEnvironmentTool {
     fn name(&self) -> &str { "GET-ENVIRONMENT" }
     fn description(&self) -> &str { "Get current lexical environment" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - returns current environment
         Ok(Value::Object(Arc::new(HashMap::new())))
     }
 }

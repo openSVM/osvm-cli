@@ -63,6 +63,7 @@ impl Tool for SignalTool {
 // Simple macro-like tools (these would be macros in full CL)
 macro_rules! simple_condition_tool {
     ($name:ident, $str:expr, $desc:expr) => {
+        #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
             fn name(&self) -> &str { $str }
@@ -82,11 +83,13 @@ simple_condition_tool!(RestartCaseTool, "RESTART-CASE", "Define restarts");
 simple_condition_tool!(RestartBindTool, "RESTART-BIND", "Bind restarts");
 simple_condition_tool!(InvokeRestartTool, "INVOKE-RESTART", "Invoke named restart");
 simple_condition_tool!(FindRestartTool, "FIND-RESTART", "Find restart by name");
-simple_condition_tool!(ComputeRestartsTool, "COMPUTE-RESTARTS", "List available restarts");
+// Replaced with manual implementation below for Arc usage
+// simple_condition_tool!(ComputeRestartsTool, "COMPUTE-RESTARTS", "List available restarts");
 simple_condition_tool!(MakeConditionTool, "MAKE-CONDITION", "Create condition object");
 simple_condition_tool!(ConditionTypeTool, "CONDITION-TYPE", "Get condition type");
 simple_condition_tool!(SimpleConditionFormatControlTool, "SIMPLE-CONDITION-FORMAT-CONTROL", "Get format string");
-simple_condition_tool!(SimpleConditionFormatArgumentsTool, "SIMPLE-CONDITION-FORMAT-ARGUMENTS", "Get format args");
+// Replaced with manual implementation below for Arc usage
+// simple_condition_tool!(SimpleConditionFormatArgumentsTool, "SIMPLE-CONDITION-FORMAT-ARGUMENTS", "Get format args");
 
 // Standard condition types
 simple_condition_tool!(SimpleErrorTool, "SIMPLE-ERROR", "Basic error type");
@@ -113,6 +116,46 @@ simple_condition_tool!(AbortTool, "ABORT", "Abort to toplevel");
 simple_condition_tool!(ContinueTool, "CONTINUE", "Continue from error");
 simple_condition_tool!(StorValueTool, "STORE-VALUE", "Store value restart");
 simple_condition_tool!(UseValueTool, "USE-VALUE", "Use value restart");
+
+// Manual implementations for tools that need Arc
+/// COMPUTE-RESTARTS - List available restarts
+pub struct ComputeRestartsTool;
+impl Tool for ComputeRestartsTool {
+    fn name(&self) -> &str { "COMPUTE-RESTARTS" }
+    fn description(&self) -> &str { "List available restarts" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        // Return array of available restart names
+        let restarts = vec![
+            Value::String("ABORT".to_string()),
+            Value::String("CONTINUE".to_string()),
+            Value::String("STORE-VALUE".to_string()),
+            Value::String("USE-VALUE".to_string()),
+        ];
+        Ok(if args.is_empty() {
+            Value::Array(Arc::new(restarts))
+        } else {
+            args[0].clone()
+        })
+    }
+}
+
+/// SIMPLE-CONDITION-FORMAT-ARGUMENTS - Get format args
+pub struct SimpleConditionFormatArgumentsTool;
+impl Tool for SimpleConditionFormatArgumentsTool {
+    fn name(&self) -> &str { "SIMPLE-CONDITION-FORMAT-ARGUMENTS" }
+    fn description(&self) -> &str { "Get format args" }
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        // Extract format arguments from condition
+        // Return as array if multiple arguments, single value otherwise
+        Ok(if args.is_empty() {
+            Value::Array(Arc::new(vec![]))
+        } else if args.len() == 1 {
+            args[0].clone()
+        } else {
+            Value::Array(Arc::new(args.to_vec()))
+        })
+    }
+}
 
 // ============================================================
 // EXTENDED CONDITION OPERATIONS (15 new functions)
@@ -153,10 +196,23 @@ impl Tool for AssertTool {
     fn name(&self) -> &str { "ASSERT" }
     fn description(&self) -> &str { "Runtime assertion with correctable error" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if args.is_empty() || !args[0].is_truthy() {
+        if args.is_empty() {
             return Err(Error::ToolExecutionError {
                 tool: "ASSERT".to_string(),
-                reason: "Assertion failed".to_string(),
+                reason: "ASSERT requires at least one argument (test expression)".to_string(),
+            });
+        }
+
+        if !args[0].is_truthy() {
+            let reason = if args.len() > 1 {
+                format!("Assertion failed: {}", args[1])
+            } else {
+                "Assertion failed".to_string()
+            };
+
+            return Err(Error::ToolExecutionError {
+                tool: "ASSERT".to_string(),
+                reason,
             });
         }
         Ok(Value::Null)
@@ -169,8 +225,16 @@ impl Tool for CheckTypeTool {
     fn name(&self) -> &str { "CHECK-TYPE" }
     fn description(&self) -> &str { "Check type with correctable error" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        // Simplified: always return success
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.len() < 2 {
+            return Err(Error::ToolExecutionError {
+                tool: "CHECK-TYPE".to_string(),
+                reason: "CHECK-TYPE requires two arguments (place type-specifier)".to_string(),
+            });
+        }
+
+        // In a full implementation, would validate type
+        // For now, return the value if type check passes
+        Ok(args[0].clone())
     }
 }
 
@@ -321,6 +385,9 @@ impl Tool for StorageConditionTool {
     }
 }
 
+/// Register all condition system tools with the tool registry
+///
+/// This function registers all condition handling, error signaling, and restart mechanism tools.
 pub fn register(registry: &mut ToolRegistry) {
     registry.register(ErrorTool);
     registry.register(CerrorTool);

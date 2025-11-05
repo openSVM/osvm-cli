@@ -237,6 +237,7 @@ impl Tool for IntegerTypeTool {
     fn name(&self) -> &str { "INTEGER-TYPE" }
     fn description(&self) -> &str { "Integer type with optional range" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept optional min and max
         Ok(Value::String("INTEGER".to_string()))
     }
 }
@@ -247,6 +248,7 @@ impl Tool for FloatTypeTool {
     fn name(&self) -> &str { "FLOAT-TYPE" }
     fn description(&self) -> &str { "Float type with optional range" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept optional min and max
         Ok(Value::String("FLOAT".to_string()))
     }
 }
@@ -257,6 +259,7 @@ impl Tool for RationalTypeTool {
     fn name(&self) -> &str { "RATIONAL-TYPE" }
     fn description(&self) -> &str { "Rational number type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::String("RATIONAL".to_string()))
     }
 }
@@ -267,6 +270,7 @@ impl Tool for RealTypeTool {
     fn name(&self) -> &str { "REAL-TYPE" }
     fn description(&self) -> &str { "Real number type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::String("REAL".to_string()))
     }
 }
@@ -277,6 +281,7 @@ impl Tool for ComplexTypeTool {
     fn name(&self) -> &str { "COMPLEX-TYPE" }
     fn description(&self) -> &str { "Complex number type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::String("COMPLEX".to_string()))
     }
 }
@@ -291,6 +296,7 @@ impl Tool for ArrayTypeTool {
     fn name(&self) -> &str { "ARRAY-TYPE" }
     fn description(&self) -> &str { "Array type with optional dimensions" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept optional dimensions
         Ok(Value::String("ARRAY".to_string()))
     }
 }
@@ -301,6 +307,7 @@ impl Tool for SimpleArrayTypeTool {
     fn name(&self) -> &str { "SIMPLE-ARRAY-TYPE" }
     fn description(&self) -> &str { "Simple array type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::String("SIMPLE-ARRAY".to_string()))
     }
 }
@@ -311,6 +318,7 @@ impl Tool for VectorTypeTool {
     fn name(&self) -> &str { "VECTOR-TYPE" }
     fn description(&self) -> &str { "Vector type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::String("VECTOR".to_string()))
     }
 }

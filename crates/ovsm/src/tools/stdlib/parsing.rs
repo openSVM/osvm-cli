@@ -4,7 +4,6 @@ use crate::error::{Error, Result};
 use crate::runtime::Value;
 use crate::tools::{Tool, ToolRegistry};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 // ============================================================================
 // JSON PARSING
@@ -129,6 +128,7 @@ fn ovsm_to_json(val: &Value) -> serde_json::Value {
 // BASE58 (Solana addresses)
 // ============================================================================
 
+/// Decode a Base58 string to a byte array
 pub struct Base58DecodeTool;
 
 impl Tool for Base58DecodeTool {
@@ -163,6 +163,7 @@ impl Tool for Base58DecodeTool {
     }
 }
 
+/// Encode a byte array to a Base58 string
 pub struct Base58EncodeTool;
 
 impl Tool for Base58EncodeTool {
@@ -197,6 +198,7 @@ impl Tool for Base58EncodeTool {
 // BASE64
 // ============================================================================
 
+/// Decode a Base64 string to a byte array
 pub struct Base64DecodeTool;
 
 impl Tool for Base64DecodeTool {
@@ -234,6 +236,7 @@ impl Tool for Base64DecodeTool {
     }
 }
 
+/// Encode a byte array to a Base64 string
 pub struct Base64EncodeTool;
 
 impl Tool for Base64EncodeTool {
@@ -270,6 +273,7 @@ impl Tool for Base64EncodeTool {
 // HEX
 // ============================================================================
 
+/// Decode a hexadecimal string to a byte array
 pub struct HexDecodeTool;
 
 impl Tool for HexDecodeTool {
@@ -303,6 +307,7 @@ impl Tool for HexDecodeTool {
     }
 }
 
+/// Encode a byte array to a hexadecimal string
 pub struct HexEncodeTool;
 
 impl Tool for HexEncodeTool {
@@ -345,6 +350,7 @@ impl Tool for HexEncodeTool {
 // URL PARSING
 // ============================================================================
 
+/// Parse a URL string into components
 pub struct UrlParseTool;
 
 impl Tool for UrlParseTool {
@@ -410,6 +416,7 @@ impl Tool for UrlParseTool {
 // NUMBER PARSING
 // ============================================================================
 
+/// Parse a string to an integer
 pub struct ParseIntTool;
 
 impl Tool for ParseIntTool {
@@ -445,6 +452,7 @@ impl Tool for ParseIntTool {
     }
 }
 
+/// Parse a string to a floating point number
 pub struct ParseFloatTool;
 
 impl Tool for ParseFloatTool {
@@ -479,6 +487,7 @@ impl Tool for ParseFloatTool {
 // CSV PARSING
 // ============================================================================
 
+/// Parse a CSV string into an array of objects
 pub struct ParseCsvTool;
 
 impl Tool for ParseCsvTool {
@@ -549,6 +558,7 @@ impl Tool for ParseCsvTool {
 // REGISTRATION
 // ============================================================================
 
+/// Register all parsing tools with the tool registry
 pub fn register(registry: &mut ToolRegistry) {
     // JSON
     registry.register(JsonParseTool);

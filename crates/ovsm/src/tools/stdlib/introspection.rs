@@ -21,10 +21,21 @@ impl Tool for AproposTool {
     fn description(&self) -> &str { "Find and print symbols matching string" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            println!("No symbols match.");
-        } else {
-            println!("Matching symbols for: {}", args[0]);
+            return Err(Error::InvalidArguments {
+                tool: "APROPOS".to_string(),
+                reason: "Expected 1 argument: search string".to_string(),
+            });
         }
+
+        // Validate search string is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "APROPOS".to_string(),
+                reason: "search string must be a string".to_string(),
+            });
+        }
+
+        println!("Matching symbols for: {}", args[0]);
         Ok(Value::Null)
     }
 }
@@ -35,6 +46,21 @@ impl Tool for AproposListTool {
     fn name(&self) -> &str { "APROPOS-LIST" }
     fn description(&self) -> &str { "Get list of symbols matching string" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "APROPOS-LIST".to_string(),
+                reason: "Expected 1 argument: search string".to_string(),
+            });
+        }
+
+        // Validate search string is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "APROPOS-LIST".to_string(),
+                reason: "search string must be a string".to_string(),
+            });
+        }
+
         // Returns list of matching symbols
         Ok(Value::Array(Arc::new(vec![])))
     }
@@ -51,21 +77,24 @@ impl Tool for DescribeTool {
     fn description(&self) -> &str { "Print description of object" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            println!("NIL");
-        } else {
-            match &args[0] {
-                Value::Null => println!("NIL\n  Type: NULL"),
-                Value::Bool(b) => println!("{}\n  Type: BOOLEAN", b),
-                Value::Int(n) => println!("{}\n  Type: INTEGER\n  Value: {}", n, n),
-                Value::Float(f) => println!("{}\n  Type: FLOAT\n  Value: {}", f, f),
-                Value::String(s) => println!("\"{}\"\n  Type: STRING\n  Length: {}", s, s.len()),
-                Value::Array(arr) => println!("Array\n  Type: ARRAY\n  Length: {}", arr.len()),
-                Value::Object(_) => println!("Object\n  Type: OBJECT"),
-                Value::Range { .. } => println!("Range\n  Type: RANGE"),
-                Value::Function { .. } => println!("Function\n  Type: FUNCTION"),
-                Value::Multiple(_) => println!("Multiple Values\n  Type: MULTIPLE"),
-                Value::Macro { .. } => println!("Macro\n  Type: MACRO"),
-            }
+            return Err(Error::InvalidArguments {
+                tool: "DESCRIBE".to_string(),
+                reason: "Expected 1 argument: object to describe".to_string(),
+            });
+        }
+
+        match &args[0] {
+            Value::Null => println!("NIL\n  Type: NULL"),
+            Value::Bool(b) => println!("{}\n  Type: BOOLEAN", b),
+            Value::Int(n) => println!("{}\n  Type: INTEGER\n  Value: {}", n, n),
+            Value::Float(f) => println!("{}\n  Type: FLOAT\n  Value: {}", f, f),
+            Value::String(s) => println!("\"{}\"\n  Type: STRING\n  Length: {}", s, s.len()),
+            Value::Array(arr) => println!("Array\n  Type: ARRAY\n  Length: {}", arr.len()),
+            Value::Object(_) => println!("Object\n  Type: OBJECT"),
+            Value::Range { .. } => println!("Range\n  Type: RANGE"),
+            Value::Function { .. } => println!("Function\n  Type: FUNCTION"),
+            Value::Multiple(_) => println!("Multiple Values\n  Type: MULTIPLE"),
+            Value::Macro { .. } => println!("Macro\n  Type: MACRO"),
         }
         Ok(Value::Null)
     }
@@ -77,22 +106,27 @@ impl Tool for DescribeObjectTool {
     fn name(&self) -> &str { "DESCRIBE-OBJECT" }
     fn description(&self) -> &str { "Describe object with full details" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if !args.is_empty() {
-            println!("Object: {}", args[0]);
-            println!("Type: {}", match &args[0] {
-                Value::Null => "NULL",
-                Value::Bool(_) => "BOOLEAN",
-                Value::Int(_) => "INTEGER",
-                Value::Float(_) => "FLOAT",
-                Value::String(_) => "STRING",
-                Value::Array(_) => "ARRAY",
-                Value::Object(_) => "OBJECT",
-                Value::Range { .. } => "RANGE",
-                Value::Function { .. } => "FUNCTION",
-                Value::Multiple(_) => "MULTIPLE",
-                Value::Macro { .. } => "MACRO",
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "DESCRIBE-OBJECT".to_string(),
+                reason: "Expected 1 argument: object to describe".to_string(),
             });
         }
+
+        println!("Object: {}", args[0]);
+        println!("Type: {}", match &args[0] {
+            Value::Null => "NULL",
+            Value::Bool(_) => "BOOLEAN",
+            Value::Int(_) => "INTEGER",
+            Value::Float(_) => "FLOAT",
+            Value::String(_) => "STRING",
+            Value::Array(_) => "ARRAY",
+            Value::Object(_) => "OBJECT",
+            Value::Range { .. } => "RANGE",
+            Value::Function { .. } => "FUNCTION",
+            Value::Multiple(_) => "MULTIPLE",
+            Value::Macro { .. } => "MACRO",
+        });
         Ok(Value::Null)
     }
 }
@@ -107,23 +141,28 @@ impl Tool for InspectTool {
     fn name(&self) -> &str { "INSPECT" }
     fn description(&self) -> &str { "Interactively inspect object" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        if !args.is_empty() {
-            println!("=== INSPECT ===");
-            println!("Value: {}", args[0]);
-            println!("Type: {}", match &args[0] {
-                Value::Null => "NULL",
-                Value::Bool(_) => "BOOLEAN",
-                Value::Int(_) => "INTEGER",
-                Value::Float(_) => "FLOAT",
-                Value::String(_) => "STRING",
-                Value::Array(_) => "ARRAY",
-                Value::Object(_) => "OBJECT",
-                Value::Range { .. } => "RANGE",
-                Value::Function { .. } => "FUNCTION",
-                Value::Multiple(_) => "MULTIPLE",
-                Value::Macro { .. } => "MACRO",
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "INSPECT".to_string(),
+                reason: "Expected 1 argument: object to inspect".to_string(),
             });
         }
+
+        println!("=== INSPECT ===");
+        println!("Value: {}", args[0]);
+        println!("Type: {}", match &args[0] {
+            Value::Null => "NULL",
+            Value::Bool(_) => "BOOLEAN",
+            Value::Int(_) => "INTEGER",
+            Value::Float(_) => "FLOAT",
+            Value::String(_) => "STRING",
+            Value::Array(_) => "ARRAY",
+            Value::Object(_) => "OBJECT",
+            Value::Range { .. } => "RANGE",
+            Value::Function { .. } => "FUNCTION",
+            Value::Multiple(_) => "MULTIPLE",
+            Value::Macro { .. } => "MACRO",
+        });
         Ok(Value::Null)
     }
 }
@@ -166,7 +205,22 @@ impl Tool for FindClassTool {
     fn name(&self) -> &str { "FIND-CLASS" }
     fn description(&self) -> &str { "Find class by name" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "FIND-CLASS".to_string(),
+                reason: "Expected 1 argument: class name".to_string(),
+            });
+        }
+
+        // Validate class name is a string
+        if !matches!(args[0], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "FIND-CLASS".to_string(),
+                reason: "class name must be a string".to_string(),
+            });
+        }
+
+        Ok(args[0].clone())
     }
 }
 
@@ -176,11 +230,14 @@ impl Tool for ClassNameTool {
     fn name(&self) -> &str { "CLASS-NAME" }
     fn description(&self) -> &str { "Get name of class" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() {
-            Value::String("ANONYMOUS".to_string())
-        } else {
-            args[0].clone()
-        })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CLASS-NAME".to_string(),
+                reason: "Expected 1 argument: class object".to_string(),
+            });
+        }
+
+        Ok(args[0].clone())
     }
 }
 
@@ -194,6 +251,29 @@ impl Tool for SlotValueTool {
     fn name(&self) -> &str { "SLOT-VALUE" }
     fn description(&self) -> &str { "Get value of object slot" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-VALUE".to_string(),
+                reason: "Expected 2 arguments: object and slot name".to_string(),
+            });
+        }
+
+        // Validate object is an object type
+        if !matches!(args[0], Value::Object(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-VALUE".to_string(),
+                reason: "first argument must be an object".to_string(),
+            });
+        }
+
+        // Validate slot name is a string
+        if !matches!(args[1], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-VALUE".to_string(),
+                reason: "slot name must be a string".to_string(),
+            });
+        }
+
         Ok(Value::Null)
     }
 }
@@ -204,6 +284,29 @@ impl Tool for SlotBoundpTool {
     fn name(&self) -> &str { "SLOT-BOUNDP" }
     fn description(&self) -> &str { "Check if slot is bound" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-BOUNDP".to_string(),
+                reason: "Expected 2 arguments: object and slot name".to_string(),
+            });
+        }
+
+        // Validate object is an object type
+        if !matches!(args[0], Value::Object(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-BOUNDP".to_string(),
+                reason: "first argument must be an object".to_string(),
+            });
+        }
+
+        // Validate slot name is a string
+        if !matches!(args[1], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-BOUNDP".to_string(),
+                reason: "slot name must be a string".to_string(),
+            });
+        }
+
         Ok(Value::Bool(false))
     }
 }
@@ -214,7 +317,30 @@ impl Tool for SlotMakunboundTool {
     fn name(&self) -> &str { "SLOT-MAKUNBOUND" }
     fn description(&self) -> &str { "Make slot unbound" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-MAKUNBOUND".to_string(),
+                reason: "Expected 2 arguments: object and slot name".to_string(),
+            });
+        }
+
+        // Validate object is an object type
+        if !matches!(args[0], Value::Object(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-MAKUNBOUND".to_string(),
+                reason: "first argument must be an object".to_string(),
+            });
+        }
+
+        // Validate slot name is a string
+        if !matches!(args[1], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-MAKUNBOUND".to_string(),
+                reason: "slot name must be a string".to_string(),
+            });
+        }
+
+        Ok(args[0].clone())
     }
 }
 
@@ -224,6 +350,29 @@ impl Tool for SlotExistsPTool {
     fn name(&self) -> &str { "SLOT-EXISTS-P" }
     fn description(&self) -> &str { "Check if slot exists in object" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-EXISTS-P".to_string(),
+                reason: "Expected 2 arguments: object and slot name".to_string(),
+            });
+        }
+
+        // Validate object is an object type
+        if !matches!(args[0], Value::Object(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-EXISTS-P".to_string(),
+                reason: "first argument must be an object".to_string(),
+            });
+        }
+
+        // Validate slot name is a string
+        if !matches!(args[1], Value::String(_)) {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-EXISTS-P".to_string(),
+                reason: "slot name must be a string".to_string(),
+            });
+        }
+
         Ok(Value::Bool(false))
     }
 }
@@ -234,6 +383,13 @@ impl Tool for ClassSlotsTool {
     fn name(&self) -> &str { "CLASS-SLOTS" }
     fn description(&self) -> &str { "Get list of slots in class" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "CLASS-SLOTS".to_string(),
+                reason: "Expected 1 argument: class object".to_string(),
+            });
+        }
+
         Ok(Value::Array(Arc::new(vec![])))
     }
 }

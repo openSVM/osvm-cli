@@ -6,6 +6,7 @@
 use crate::error::{Error, Result};
 use crate::runtime::Value;
 use crate::tools::{Tool, ToolRegistry};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -215,14 +216,35 @@ impl Tool for SleepTool {
         }
 
         let seconds = match &args[0] {
-            Value::Int(n) => *n as u64,
-            Value::Float(f) => *f as u64,
-            _ => 0,
+            Value::Int(n) if *n >= 0 => *n as u64,
+            Value::Float(f) if *f >= 0.0 => *f as u64,
+            Value::Int(n) => {
+                return Err(Error::InvalidArguments {
+                    tool: "SLEEP".to_string(),
+                    reason: format!("Sleep duration must be non-negative, got {}", n),
+                });
+            }
+            Value::Float(f) => {
+                return Err(Error::InvalidArguments {
+                    tool: "SLEEP".to_string(),
+                    reason: format!("Sleep duration must be non-negative, got {}", f),
+                });
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: args[0].type_name(),
+                });
+            }
         };
 
-        // Don't actually sleep in the interpreter
-        // Just acknowledge the request
-        Ok(Value::Null)
+        // Return information about the sleep without actually blocking
+        // This allows the interpreter to continue functioning
+        let mut result = HashMap::new();
+        result.insert("operation".to_string(), Value::String("sleep".to_string()));
+        result.insert("duration".to_string(), Value::Int(seconds as i64));
+        result.insert("unit".to_string(), Value::String("seconds".to_string()));
+        Ok(Value::Object(Arc::new(result)))
     }
 }
 

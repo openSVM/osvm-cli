@@ -6,7 +6,6 @@
 use crate::error::{Error, Result};
 use crate::runtime::Value;
 use crate::tools::{Tool, ToolRegistry};
-use std::sync::Arc;
 
 // Printer control functions (15 total)
 
@@ -33,6 +32,7 @@ impl Tool for PprintNewlineTool {
     fn name(&self) -> &str { "PPRINT-NEWLINE" }
     fn description(&self) -> &str { "Insert conditional newline in pretty printing" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept kind: :linear, :fill, :miser, :mandatory
         // Kind: :linear, :fill, :miser, :mandatory
         println!();
         Ok(Value::Null)
@@ -45,6 +45,7 @@ impl Tool for PprintIndentTool {
     fn name(&self) -> &str { "PPRINT-INDENT" }
     fn description(&self) -> &str { "Set indentation for pretty printing" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept kind: :block or :current, plus number
         // Kind: :block or :current, plus number
         Ok(Value::Null)
     }
@@ -56,6 +57,7 @@ impl Tool for PprintTabTool {
     fn name(&self) -> &str { "PPRINT-TAB" }
     fn description(&self) -> &str { "Tab to column in pretty printing" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept column number
         Ok(Value::Null)
     }
 }
@@ -77,7 +79,10 @@ impl Tool for PprintPopTool {
     fn description(&self) -> &str { "Pop element from pretty print list" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
-            return Ok(Value::Null);
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (list)".to_string(),
+            });
         }
         match &args[0] {
             Value::Array(arr) => Ok(arr.first().cloned().unwrap_or(Value::Null)),
@@ -92,7 +97,16 @@ impl Tool for PprintExitIfListExhaustedTool {
     fn name(&self) -> &str { "PPRINT-EXIT-IF-LIST-EXHAUSTED" }
     fn description(&self) -> &str { "Exit pretty print block if list exhausted" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(Value::Bool(args.is_empty()))
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: self.name().to_string(),
+                reason: "Expected 1 argument (list)".to_string(),
+            });
+        }
+        Ok(Value::Bool(match &args[0] {
+            Value::Array(arr) => arr.is_empty(),
+            _ => false,
+        }))
     }
 }
 
@@ -106,6 +120,7 @@ impl Tool for SetPprintDispatchTool {
     fn name(&self) -> &str { "SET-PPRINT-DISPATCH" }
     fn description(&self) -> &str { "Set pretty print dispatch for type" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept type and dispatch function
         Ok(Value::Null)
     }
 }
@@ -116,6 +131,7 @@ impl Tool for PprintDispatchTool {
     fn name(&self) -> &str { "PPRINT-DISPATCH" }
     fn description(&self) -> &str { "Get pretty print dispatch for object" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept object
         Ok(Value::Null)
     }
 }
@@ -126,6 +142,7 @@ impl Tool for CopyPprintDispatchTool {
     fn name(&self) -> &str { "COPY-PPRINT-DISPATCH" }
     fn description(&self) -> &str { "Copy pretty print dispatch table" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation - should accept dispatch table
         Ok(Value::Null)
     }
 }

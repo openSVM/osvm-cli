@@ -31,7 +31,13 @@ impl Tool for GenericFunctionNameTool {
     fn name(&self) -> &str { "GENERIC-FUNCTION-NAME" }
     fn description(&self) -> &str { "Get name of generic function" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "GENERIC-FUNCTION-NAME".to_string(),
+                reason: "requires at least 1 argument (generic function)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -125,7 +131,13 @@ impl Tool for MethodGenericFunctionTool {
     fn name(&self) -> &str { "METHOD-GENERIC-FUNCTION" }
     fn description(&self) -> &str { "Get generic function of a method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "METHOD-GENERIC-FUNCTION".to_string(),
+                reason: "requires at least 1 argument (method)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -135,7 +147,13 @@ impl Tool for MethodFunctionTool {
     fn name(&self) -> &str { "METHOD-FUNCTION" }
     fn description(&self) -> &str { "Get function implementation of a method" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "METHOD-FUNCTION".to_string(),
+                reason: "requires at least 1 argument (method)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -149,7 +167,13 @@ impl Tool for AddMethodTool {
     fn name(&self) -> &str { "ADD-METHOD" }
     fn description(&self) -> &str { "Add method to generic function" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "ADD-METHOD".to_string(),
+                reason: "requires at least 2 arguments (generic-function method)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -159,7 +183,13 @@ impl Tool for RemoveMethodTool {
     fn name(&self) -> &str { "REMOVE-METHOD" }
     fn description(&self) -> &str { "Remove method from generic function" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "REMOVE-METHOD".to_string(),
+                reason: "requires at least 2 arguments (generic-function method)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -287,7 +317,13 @@ impl Tool for SlotDefinitionNameTool {
     fn name(&self) -> &str { "SLOT-DEFINITION-NAME" }
     fn description(&self) -> &str { "Get name of slot definition" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "SLOT-DEFINITION-NAME".to_string(),
+                reason: "requires at least 1 argument (slot-definition)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 
@@ -367,6 +403,7 @@ impl Tool for SlotDefinitionLocationTool {
     fn name(&self) -> &str { "SLOT-DEFINITION-LOCATION" }
     fn description(&self) -> &str { "Get storage location of slot" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        let _ = args; // Placeholder implementation
         Ok(Value::Int(0))
     }
 }
@@ -485,7 +522,13 @@ impl Tool for SetFuncallableInstanceFunctionTool {
     fn name(&self) -> &str { "SET-FUNCALLABLE-INSTANCE-FUNCTION" }
     fn description(&self) -> &str { "Set function of funcallable instance" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.len() >= 2 { args[0].clone() } else { Value::Null })
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "SET-FUNCALLABLE-INSTANCE-FUNCTION".to_string(),
+                reason: "requires at least 2 arguments (instance function)".to_string(),
+            });
+        }
+        Ok(args[0].clone())
     }
 }
 

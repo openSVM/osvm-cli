@@ -20,9 +20,27 @@ impl Tool for MakeBitArrayTool {
     fn name(&self) -> &str { "MAKE-BIT-ARRAY" }
     fn description(&self) -> &str { "Create bit array of specified size" }
     fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "MAKE-BIT-ARRAY".to_string(),
+                reason: "Expected 1 argument: size".to_string(),
+            });
+        }
+
         let size = match args.get(0) {
-            Some(Value::Int(n)) => *n as usize,
-            _ => 0,
+            Some(Value::Int(n)) if *n >= 0 => *n as usize,
+            Some(Value::Int(n)) => {
+                return Err(Error::InvalidArguments {
+                    tool: "MAKE-BIT-ARRAY".to_string(),
+                    reason: format!("Size must be non-negative, got {}", n),
+                });
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: args[0].type_name(),
+                });
+            }
         };
 
         let bits = vec![Value::Int(0); size];
