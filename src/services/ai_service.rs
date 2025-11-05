@@ -1783,7 +1783,7 @@ Focus on what matters to the user.
 {}
 
 **Common OVSM Errors to Check:**
-1. ❌ Infix notation: `(COUNT arr - 1)` → ✅ Use prefix: `(- (COUNT arr) 1)`
+1. ❌ Infix notation: `(count arr - 1)` → ✅ Use prefix: `(- (count arr) 1)`
 2. ❌ Field assignment: `(set! (. obj field) value)` → ✅ Use merge or parallel arrays
 3. ❌ Define in loop: Variables defined inside when/if/while → ✅ Define at top
 4. ❌ Missing parens: Incomplete expressions → ✅ Balance all parentheses

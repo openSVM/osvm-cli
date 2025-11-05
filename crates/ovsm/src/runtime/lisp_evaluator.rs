@@ -7,6 +7,7 @@ use crate::runtime::{Environment, Value};
 use crate::tools::ToolRegistry;
 use base64::Engine;
 use sha2::{Digest, Sha256, Sha512};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// LISP-specific evaluator that handles special forms
@@ -172,7 +173,6 @@ impl LispEvaluator {
                     "eval" => self.eval_eval(args),
                     "length" => self.eval_length(args),
                     "count" => self.eval_length(args), // Alias for length - commonly expected
-                    "COUNT" => self.eval_length(args), // Also handle uppercase
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
                     "min" => self.eval_min(args),
@@ -197,7 +197,6 @@ impl LispEvaluator {
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
-                    "APPEND" => self.eval_append(args), // Also handle uppercase
                     // JSON operations (built-ins, not MCP tools!)
                     "parse-json" => self.eval_parse_json(args),
                     "json-stringify" => self.eval_json_stringify(args),
