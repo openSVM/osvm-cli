@@ -364,92 +364,83 @@ count
 ---
 
 
-# 🔴 CRITICAL: MCP TOOLS RETURN {content} OBJECTS!
+# 🔴 CRITICAL: MCP TOOLS RETURN DATA DIRECTLY (AUTO-UNWRAPPED)!
 
-**ALL MCP tool calls return this structure:**
+**IMPORTANT: The MCP bridge automatically unwraps JSON responses for you!**
+
+**MCP tools return their data ALREADY PARSED and READY TO USE:**
+- `get_account_transactions` → Returns: `{:address "..." :transactions [...] :rpcCount N ...}`
+- `get_token_info` → Returns: `{:name "..." :symbol "..." :decimals N ...}`
+- `get_balance` → Returns: `{:address "..." :balance N ...}`
+
+**NO MANUAL UNWRAPPING NEEDED!**
+
+❌ **WRONG (causes "Undefined variable: content"):**
 ```ovsm
-{:content array}  ;; MCP response with content array
+(define resp (get_account_transactions {:address TARGET :limit 1000}))
+(define content (. resp content))  ;; ❌ There is no .content field!
+(define parsed (parse-json ...))   ;; ❌ Data is already parsed!
 ```
 
-**⚠️ CRITICAL: MCP responses NEVER have `isError` field directly!**
-**You must check the `content` array and parse the JSON string inside!**
-
-**ALWAYS FOLLOW THIS 3-STEP PATTERN:**
-
-❌ **WRONG (causes "Undefined variable: isError"):**
-```ovsm
-(define resp (get_account_transactions {:address TARGET}))
-(when (. resp isError)  ;; ❌ isError doesn't exist!
-  (print "Error"))
-```
-
-✅ **CORRECT - Extract content, parse JSON, then check:**
+✅ **CORRECT - Use the data directly:**
 ```ovsm
 (do
-  ;; Step 1: Call MCP tool
-  (define resp (get_account_transactions {:address TARGET :limit 1000}))  ;; Max limit is 1000 for RPC endpoints
-  
-  ;; Step 2: Extract content array and parse JSON text
-  (define content (. resp content))
-  (define parsed null)
-  
-  ;; Check if content exists and has items (use countand > 0 check)
-  (when (and content (> (count content) 0))
-    (define first_item ([] content 0))
-    (when (. first_item text)
-      ;; Parse the JSON string to get actual data
-      (set! parsed (parse-json {:json (. first_item text)}))))
-  
-  ;; Step 3: Check parsed data for errors
-  (define result null)
-  (when (and parsed (. parsed success) (== (. parsed success) false))
-    (set! result {:error "API error" :details (. parsed error)}))
-  
-  (when (and parsed (. parsed success))
-    ;; Extract the actual data array
-    (define txs (. parsed data))
-    (set! result txs))
-  
-  result)
+  ;; Call MCP tool - returns parsed data directly!
+  (define data (get_account_transactions
+    {:address TARGET
+     :limit 1000
+     :startDate 1750550400000
+     :endDate 1758672000000}))
+
+  ;; Access fields directly - no unwrapping needed!
+  (define txs (. data transactions))  ;; ✅ Direct access!
+
+  ;; Process the transactions
+  (for (tx txs)
+    (log :message (. tx signature)))
+
+  txs)
 ```
 
-**REQUIRED 3-STEP PATTERN FOR ALL MCP TOOLS:**
-1. **Extract `.content`** array from MCP response
-2. **Parse JSON** from `.content[0].text` using `parse-json`
-3. **Check `.success`** field in the parsed object (NOT `.isError`!)
+**SIMPLE 2-STEP PATTERN FOR ALL MCP TOOLS:**
+1. **Call the tool** - it returns parsed data
+2. **Use the data** - access fields directly with `.` operator
 
 **Full Working Example:**
 ```ovsm
 (do
-  ;; Step 1: Call tool
-  (define resp (get_recent_blocks {:limit 1}))
-  
-  ;; Step 2: Unwrap and parse
-  (define parsed null)
-  (define content (. resp content))
-  
-  ;; Check if content exists and has items
-  (when (and content (> (count content) 0))
-    (define item ([] content 0))
-    (when (. item text)
-      (set! parsed (parse-json {:json (. item text)}))))
-  
-  ;; Step 3: Use parsed data
-  (define result null)
-  (when parsed
-    (define data (. parsed data))
-    (when (and data (> (count data) 0))
-      (define blocks data)
-      (define block ([] blocks 0))
-      (set! result (. block slot))))
-  
-  result)
+  ;; Step 1: Call tool (returns object directly)
+  (define account_data (get_account_transactions
+    {:address "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85"
+     :limit 100}))
+
+  ;; Step 2: Access the transactions array directly
+  (define txs (. account_data transactions))
+
+  ;; Step 3: Process the data
+  (define count 0)
+  (for (tx txs)
+    (when (> (count (. tx transfers)) 0)
+      (set! count (+ count 1))))
+
+  count)
 ```
 
-**Response Structure:**
-- MCP returns: `{:content [{:type "text" :text "{\"success\":true,\"data\":[...]}"}]}`
-- After parse-json: `{:success true :data [...]}`
-- Extract data: `(. parsed data)` gives you the actual array!
+**What You Get from get_account_transactions:**
+```ovsm
+{:address "5rVDMMo..."
+ :transactions [{:signature "4R3ung..."
+                 :timestamp 1755204187000
+                 :transfers [{:account "..." :change 1000} ...]
+                 :success true
+                 ...}
+                ...]
+ :rpcCount 4
+ :classified false
+ ...}
+```
+
+**Key Rule:** MCP tools return the actual data structure. NO `.content` field, NO JSON parsing needed!
 
 **CRITICAL: NO `return` STATEMENT AT TOP LEVEL!**
 - ❌ `(return value)` - DOES NOT EXIST in OVSM!
@@ -479,19 +470,22 @@ count
 - This is THE most common AI mistake - always check field access has NO colons!
 
 **Key pattern:**
-- MCP tools return their data **already unwrapped**
-- `get_account_transactions` → returns `[{tx1}, {tx2}, ...]` (ARRAY, not object!)
-- `get_token_info` → returns `{:name "...", :symbol "..."}` (OBJECT)
-- Check what the tool returns and use it directly - NO EXTRA UNWRAPPING!
+- MCP tools return their data **already unwrapped and parsed**
+- `get_account_transactions` → returns `{:address "..." :transactions [...] ...}` (OBJECT with transactions array)
+- `get_token_info` → returns `{:name "..." :symbol "..." ...}` (OBJECT)
+- Use fields directly with `.` operator - NO MANUAL UNWRAPPING!
 
 **Common MCP return types:**
-- `get_account_transactions` → Array of transactions `[...]` (max limit: 1000)
-- `get_token_info` → Single token object `{:name ...}`
-- `get_account_stats` → Account statistics object `{:address ...}`
-- `batch_transactions` → Array of transactions `[...]`
-- `universal_search` → Array of results `[...]`
+- `get_account_transactions` → Object: `{:transactions [...] :address "..." :rpcCount N}` (max limit: 1000)
+- `get_token_info` → Object: `{:name "..." :symbol "..." :decimals N}`
+- `get_account_stats` → Object: `{:address "..." :balance N :txCount N}`
+- `batch_transactions` → Object: `{:transactions [...] ...}`
+- `universal_search` → Object: `{:results [...] ...}`
 
-**Golden rule: If you get an error "Undefined variable: transactions", it means you tried to access `.transactions` on something that's already an array. Use the value directly!**
+**Golden rules:**
+- Access data fields with: `(. response transactions)`, `(. response results)`, etc.
+- If you get "Undefined variable: content" → Remove the manual unwrapping code!
+- If you get "Undefined variable: parsed" → Data is already parsed, use it directly!
 
 ---
 
@@ -505,31 +499,111 @@ Note: Tool names are case-sensitive. Use exact names from list above.
 
 Remember: MCP tools return data PRE-UNWRAPPED as arrays or objects - use directly, no extra unwrapping!
 
+## 💡 Complete Working Example: Finding Wallets That Sent SOL
+
+**Task:** Find all wallets that sent SOL to address `5rVDMMo...` during summer 2025, aggregate by sender, filter dust, sort by amount.
+
+```ovsm
+(do
+  ;; 1. Define constants
+  (define TARGET "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+  (define SUMMER_START 1750550400000)
+  (define SUMMER_END 1758672000000)
+  (define MIN_AMOUNT 1000000)  ;; 0.001 SOL
+
+  ;; 2. Fetch transactions (returns object with .transactions field)
+  (define data (get_account_transactions
+    {:address TARGET
+     :limit 1000
+     :startDate SUMMER_START
+     :endDate SUMMER_END}))
+
+  ;; 3. Extract transactions array - NO parse-json needed!
+  (define txs (. data transactions))
+
+  ;; 4. Filter for inbound SOL transfers
+  (define inbound (filter txs
+    (lambda (tx)
+      (define transfers (. tx transfers))
+      (and transfers
+           (> (count (filter transfers
+                      (lambda (t)
+                        (and (== (. t account) TARGET)
+                             (> (. t change) 0)))))
+              0)))))
+
+  ;; 5. Group by sender (find sender from transfers with negative change)
+  (define find-sender (lambda (tx)
+    (define sender-transfer (first (filter (. tx transfers)
+                                           (lambda (t) (< (. t change) 0)))))
+    (if sender-transfer (. sender-transfer account) "unknown")))
+
+  (define grouped (group-by inbound find-sender))
+
+  ;; 6. Aggregate: sum amounts and collect transaction IDs
+  (define find-amount (lambda (tx)
+    (define target-transfer (first (filter (. tx transfers)
+                                           (lambda (t)
+                                             (and (== (. t account) TARGET)
+                                                  (> (. t change) 0))))))
+    (if target-transfer (. target-transfer change) 0)))
+
+  (define aggregated (aggregate grouped
+    (lambda (wallet txlist)
+      {:wallet wallet
+       :total (reduce txlist 0 (lambda (sum tx) (+ sum (find-amount tx))))
+       :txids (map txlist (lambda (tx) (. tx signature)))})))
+
+  ;; 7. Filter dust and sort by total (descending)
+  (define filtered (filter aggregated
+                           (lambda (r) (>= (. r total) MIN_AMOUNT))))
+
+  (define sorted (sort-by filtered (lambda (r) (. r total)) :desc))
+
+  ;; 8. Format results compactly
+  (map sorted
+    (lambda (r)
+      {:wallet (. r wallet)
+       :total_sol (/ (. r total) 1e9)
+       :tx_count (count (. r txids))})))
+```
+
+**Key Points:**
+- `get_account_transactions` returns `{:transactions [...] ...}` - already parsed!
+- Access with `(. data transactions)` - NO parsing step needed!
+- NO `content` variable, NO `parse-json` call, NO manual unwrapping!
+
 ---
 
 # Built-in Parsing Tools
 
-**CRITICAL: MCP tools may return JSON strings wrapped in `{:type "text" :text "{...}"}` format!**
-**Use these parsing tools to extract actual data:**
+**NOTE: MCP tools automatically unwrap and parse JSON for you!**
+**You DON'T need `parse-json` for MCP tool responses - they're already parsed!**
 
-## JSON Parsing (MOST IMPORTANT!)
+## JSON Parsing (for non-MCP data only!)
 
 ### parse-json
-Parse JSON string to OVSM value (object/array/string/number/boolean/null).
+Parse JSON string to OVSM value. **Only use this for parsing JSON strings from sources OTHER than MCP tools!**
 
-**Usage:**
+**Usage (for external JSON strings):**
 ```ovsm
-;; MCP returns wrapped JSON string
-(define mcp-resp (get_account_transactions {:address "..." :limit 100}))
+;; Parse a JSON string from a file or manual input
+(define json-str "{\"name\":\"Alice\",\"age\":30}")
+(define parsed (parse-json {:json json-str}))
 
-;; Extract text field and parse JSON
-(define json-text (. ([] (. mcp-resp content) 0) text))
-(define parsed-data (parse-json {:json json-text}))
+(log :message "Name:" :value (. parsed name))  ;; → "Alice"
+(log :message "Age:" :value (. parsed age))    ;; → 30
+```
 
-;; Now you can iterate over actual transactions array
-(define txs (. parsed-data transactions))
-(for (tx txs)
-  (print (. tx signature)))
+**❌ DON'T use parse-json with MCP tools - they return parsed data already:**
+```ovsm
+;; ❌ WRONG - MCP tools don't need parsing!
+(define resp (get_account_transactions {:address "..." :limit 100}))
+(define parsed (parse-json ...))  ;; ❌ Unnecessary! resp is already parsed!
+
+;; ✅ CORRECT - Use MCP data directly!
+(define resp (get_account_transactions {:address "..." :limit 100}))
+(define txs (. resp transactions))  ;; ✅ Works immediately!
 ```
 
 ### json-stringify
@@ -554,11 +628,14 @@ When fetching transactions for a specific time period like "summer 2025", **YOU 
 (define SUMMER_END 1758672000000)    ;; Sept 22, 2025 23:59 UTC (milliseconds)
 
 ;; get_account_transactions supports date filtering!
-(define txs (get_account_transactions
+(define response (get_account_transactions
   {:address TARGET
    :limit 1000
    :startDate SUMMER_START   ;; Filter by start timestamp (ms)
    :endDate SUMMER_END}))    ;; Filter by end timestamp (ms)
+
+;; Extract the transactions array from the response object
+(define txs (. response transactions))
 
 ;; The transactions are already filtered by date!
 ```
@@ -627,8 +704,8 @@ Sort collection by key extraction function.
      :startDate SUMMER_START    ;; Only summer transactions!
      :endDate SUMMER_END}))
 
-  ;; Extract transactions from response
-  (define txs (parse-response response))  ;; Helper to handle MCP response format
+  ;; Extract transactions array from response object - NO PARSING NEEDED!
+  (define txs (. response transactions))
 
   ;; Step 2: Filter for transfers TO the target address
   (define relevant (filter txs
@@ -857,37 +934,35 @@ Parse CSV string to array of objects (first row = headers, optional delimiter).
 ;;    {:name "Bob" :age "25" :city "LA"}]
 ```
 
-## Common Pattern: Unwrap MCP JSON Response
+## Common Pattern: Using MCP Tool Responses
 
-**Most Important Pattern - Use This for MCP Tool Responses:**
+**Most Important Pattern - MCP Tools Return Data Directly:**
 
 ```ovsm
-;; Step 1: Call MCP tool
-(define mcp-resp (get_account_transactions {:address "5rVDMMoBQs..." :limit 100}))
+;; Step 1: Call MCP tool - it returns parsed data automatically!
+(define account_data (get_account_transactions
+  {:address "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85"
+   :limit 100}))
 
-;; Step 2: Check if response is wrapped in content array
-(define content (. mcp-resp content))
+;; Step 2: Access fields directly - NO unwrapping needed!
+(define txs (. account_data transactions))
 
-;; Step 3: If content is array with text field, extract and parse JSON
-(when (and (is-array? content) (> (count content) 0))
-  (define first-item ([] content 0))
-  (when (. first-item text)
-    ;; Response is JSON string - parse it
-    (set! mcp-resp (parse-json {:json (. first-item text)}))))
-
-;; Step 4: Now use the parsed data
-(define txs (. mcp-resp transactions))
+;; Step 3: Process the transactions
 (for (tx txs)
-  (print (. tx signature)))
+  (log :message "Signature:" :value (. tx signature))
+  (log :message "Timestamp:" :value (. tx timestamp)))
+
+txs
 ```
 
-**Why This Matters:**
-- Some MCP tools return: `{:content [{:type "text" :text "{\"transactions\":[...]}"}]}`
-- You need: `{:transactions [...]}`
-- Use `parse-json` to convert the JSON string to actual OVSM data structures
+**Why This Is Simple:**
+- MCP bridge automatically unwraps `{:content [{:text "..."}]}` for you
+- You get: `{:transactions [...] :address "..." ...}` directly
+- NO need for `parse-json`, NO need to extract `.content`
 
-**Quick Check:**
-- If you see error "Type error: expected array, got object" → You need to parse JSON
-- If accessing `(. data field)` returns null → Check if data is JSON string first
+**Quick Debugging:**
+- If you get "Undefined variable: content" → You're trying to unwrap data that's already unwrapped!
+- If you get "Undefined variable: parsed" → Remove the manual parsing code, use data directly!
+- If `.transactions` returns data → The MCP call worked, just use it!
 
 
