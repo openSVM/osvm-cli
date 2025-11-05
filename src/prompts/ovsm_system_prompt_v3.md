@@ -636,29 +636,72 @@ Sort collection by key extraction function.
                       (slice totals (+ idx 1) (COUNT totals)))))
 ```
 
+## 📌 Spam Filtering Decision Logic (DEFAULT BEHAVIOR)
+
+### When to AUTO-FILTER spam (DEFAULT):
+```plaintext
+User says: "find all wallets that sent SOL to X"
+User says: "show transactions for wallet Y"
+User says: "analyze trading activity"
+User says: "get wallet balances"
+→ Filter out < 0.001 SOL automatically
+```
+
+### When to INCLUDE spam (explicit request):
+```plaintext
+User says: "find all wallets including dust"
+User says: "show all transactions including spam"
+User says: "include tiny amounts"
+User says: "no filter" or "unfiltered"
+User says: "all amounts"
+→ Include everything, no filtering
+```
+
+### When to use CUSTOM threshold:
+```plaintext
+User says: "at least 0.01 SOL"
+User says: "minimum 1 SOL"
+User says: "over 100 SOL"
+→ Use specified threshold instead of 0.001 SOL
+```
+
 ## ⚠️ CRITICAL: Prevent Context Overflow - Return Compact Results!
 
 **IMPORTANT:** When querying blockchain data, you may receive hundreds of MB of raw transactions.
 **NEVER** return raw transaction data directly - it will exceed the AI context limit!
 
-### ✅ ALWAYS: Filter Spam and Return Compact Results
+### 🎯 DEFAULT SPAM FILTERING RULES
+- **DEFAULT BEHAVIOR**: Always filter out spam (< 0.001 SOL) automatically
+- **Include spam ONLY if user says**: "include spam", "include dust", "all amounts", "including tiny", "no filter", "unfiltered"
+- **Adjust threshold if user specifies**: "at least 0.01 SOL", "minimum 1 SOL", etc.
+
+### ✅ DEFAULT: Filter Spam Automatically
 ```ovsm
-;; Filter out spam transactions (< 0.001 SOL = 1,000,000 lamports)
-(define MIN_AMOUNT 1000000)  ;; 0.001 SOL in lamports
+;; DEFAULT - Filter spam unless user explicitly wants it
+(define MIN_AMOUNT 1000000)  ;; 0.001 SOL in lamports (DEFAULT THRESHOLD)
 
-;; After aggregating, filter out spam wallets
-(define filtered (filter sorted_results
-  (lambda (w) (>= (. w total) MIN_AMOUNT))))
+;; Check if user wants spam (look for keywords)
+;; Only set to true if user said: "include spam/dust/all amounts"
+(define include_spam false)  ;; DEFAULT: false
 
-;; Return ALL legitimate wallets in COMPACT format
+;; Apply filtering based on user intent
+(define filtered
+  (if include_spam
+    sorted_results  ;; User wants spam, no filter
+    (filter sorted_results  ;; DEFAULT: filter spam
+      (lambda (w) (>= (. w total) MIN_AMOUNT)))))
+
+;; Return ALL wallets in COMPACT format
 (define summary
   {:total_wallets (count filtered)
    :total_sol (/ (reduce filtered 0 (lambda (sum w) (+ sum (. w total)))) 1e9)
+   :filtered_dust (not include_spam)  ;; Shows if we filtered
+   :min_threshold_sol (if include_spam 0 0.001)
    :wallets (map filtered (lambda (w)
      {:address (. w wallet)
       :sol (/ (. w total) 1e9)
       :txs (count (. w txids))}))  ;; Compact: no tx IDs unless requested
-   :filtered_spam_count (- (count sorted_results) (count filtered))})
+   :spam_filtered_count (if include_spam 0 (- (count sorted_results) (count filtered)))})
 
 summary  ;; Compact format: ~50 bytes per wallet instead of 10KB
 ```
@@ -667,7 +710,7 @@ summary  ;; Compact format: ~50 bytes per wallet instead of 10KB
 ```ovsm
 ;; DO NOT include full transaction IDs for every wallet (adds 50+ bytes each)
 ;; DO NOT include raw transaction objects (hundreds of KB)
-;; DO NOT include amounts < 0.001 SOL (spam/dust)
+;; DO NOT include spam/dust BY DEFAULT (user must explicitly request it)
 ```
 
 ## Base58 Encoding (Solana Addresses)
