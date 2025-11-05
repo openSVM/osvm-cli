@@ -30,6 +30,28 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 **If your code gets truncated, the ENTIRE plan fails!**
 **Brevity is MORE important than completeness!**
 
+# 🔴 CRITICAL: Built-in Functions vs MCP Tools
+
+## Built-in Language Functions (NO NETWORK CALLS)
+These are **part of the OVSM language** and execute locally:
+- **Data**: `count`, `length`, `append`, `slice`, `first`, `rest`, `nth`
+- **JSON**: `parse-json`, `json-stringify` (BUILT-IN, NOT MCP TOOLS!)
+- **Aggregation**: `group-by`, `aggregate`, `sort-by`, `filter`, `map`, `reduce`
+- **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`
+- **Logic**: `and`, `or`, `not`, `if`, `when`, `while`, `for`
+- **Object**: `.` (property access), `[]` (array index)
+
+**ALWAYS USE LOWERCASE** for built-in functions: `count` not `COUNT`!
+
+## MCP Tools (NETWORK CALLS)
+These are **external tools** that fetch blockchain data:
+- `get_account_transactions` - Fetch transactions for an address
+- `get_transaction` - Get specific transaction details
+- `get_balance` - Get SOL balance
+- Other multi-word descriptive names with underscores
+
+**Rule**: If it's a single word, it's a built-in. If it has underscores and describes an action, it's an MCP tool.
+
 # 🚨 CRITICAL SYNTAX RULES (READ FIRST!)
 
 ## 0. SEQUENTIAL EXPRESSIONS NEED `do` WRAPPER!
@@ -103,7 +125,7 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 
   ;; Find index of existing wallet
   (define idx -1)
-  (for (i (range (COUNT wallets)))
+  (for (i (range (count wallets)))
     (when (== ([] wallets i) sender)
       (set! idx i)))
 
@@ -118,7 +140,7 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
     (set! totals (APPEND
       (slice totals 0 idx)
       [(+ ([] totals idx) (. tx amount))]
-      (slice totals (+ idx 1) (COUNT totals))))))
+      (slice totals (+ idx 1) (counttotals))))))
 ```
 
 ## 4. OBJECT SYNTAX
@@ -130,7 +152,7 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 **Operators go FIRST, then operands!**
 
 ❌ `(x + 1)` → ✅ `(+ x 1)`
-❌ `(COUNT arr - 1)` → ✅ `(- (COUNT arr) 1)`
+❌ `(countarr - 1)` → ✅ `(- (countarr) 1)`
 
 ## 6. FUNCTION DEFINITIONS - USE LAMBDA!
 **NEVER use shorthand function syntax! Always use lambda explicitly.**
@@ -139,7 +161,7 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 ```ovsm
 (define (find-index arr val)
   (do
-    (for (i (range (COUNT arr)))
+    (for (i (range (countarr)))
       (when (== ([] arr i) val)
         (return i)))
     -1))
@@ -150,7 +172,7 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 (define find-index
   (lambda (arr val)
     (do
-      (for (i (range (COUNT arr)))
+      (for (i (range (countarr)))
         (when (== ([] arr i) val)
           (return i)))
       -1)))
@@ -221,11 +243,11 @@ filtered
   (set! batch (getTool {:limit 1000 :before before}))
   (set! results (APPEND results batch))
 
-  (when (< (COUNT batch) 1000)
+  (when (< (countbatch) 1000)
     (set! continue false))
 
-  (when (and continue (> (COUNT batch) 0))
-    (set! before (. ([] batch (- (COUNT batch) 1)) cursor))))
+  (when (and continue (> (countbatch) 0))
+    (set! before (. ([] batch (- (countbatch) 1)) cursor))))
 
 results
 ```
@@ -267,7 +289,7 @@ count
 # Casing Rules
 
 - **Lowercase**: built-ins like `(now)`, `(log :message "text")`
-- **UPPERCASE**: MCP tools like `(COUNT arr)`, `(APPEND arr item)`
+- **UPPERCASE**: MCP tools like `(countarr)`, `(APPEND arr item)`
 - **Lowercase**: control flow like `(if ...)`, `(while ...)`
 
 ---
@@ -362,8 +384,8 @@ count
   (define content (. resp content))
   (define parsed null)
   
-  ;; Check if content exists and has items (use COUNT and > 0 check)
-  (when (and content (> (COUNT content) 0))
+  ;; Check if content exists and has items (use countand > 0 check)
+  (when (and content (> (countcontent) 0))
     (define first_item ([] content 0))
     (when (. first_item text)
       ;; Parse the JSON string to get actual data
@@ -398,7 +420,7 @@ count
   (define content (. resp content))
   
   ;; Check if content exists and has items
-  (when (and content (> (COUNT content) 0))
+  (when (and content (> (countcontent) 0))
     (define item ([] content 0))
     (when (. item text)
       (set! parsed (parse-json {:json (. item text)}))))
@@ -407,7 +429,7 @@ count
   (define result null)
   (when parsed
     (define data (. parsed data))
-    (when (and data (> (COUNT data) 0))
+    (when (and data (> (countdata) 0))
       (define blocks data)
       (define block ([] blocks 0))
       (set! result (. block slot))))
@@ -628,12 +650,12 @@ Sort collection by key extraction function.
 (for (tx txs)
   ;; Manual index finding - O(n²) complexity!
   (define idx -1)
-  (for (i (range (COUNT wallets)))
+  (for (i (range (count wallets)))
     (when (== ([] wallets i) sender) (set! idx i)))
   ;; Manual array slicing - creates many intermediate arrays!
   (set! totals (APPEND (slice totals 0 idx)
                       [(+ ([] totals idx) amount)]
-                      (slice totals (+ idx 1) (COUNT totals)))))
+                      (slice totals (+ idx 1) (counttotals)))))
 ```
 
 ## 📌 Spam Filtering Decision Logic (DEFAULT BEHAVIOR)
@@ -838,7 +860,7 @@ Parse CSV string to array of objects (first row = headers, optional delimiter).
 (define content (. mcp-resp content))
 
 ;; Step 3: If content is array with text field, extract and parse JSON
-(when (and (is-array? content) (> (COUNT content) 0))
+(when (and (is-array? content) (> (countcontent) 0))
   (define first-item ([] content 0))
   (when (. first-item text)
     ;; Response is JSON string - parse it

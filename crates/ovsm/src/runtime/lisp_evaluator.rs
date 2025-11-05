@@ -198,6 +198,9 @@ impl LispEvaluator {
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
                     "APPEND" => self.eval_append(args), // Also handle uppercase
+                    // JSON operations (built-ins, not MCP tools!)
+                    "parse-json" => self.eval_parse_json(args),
+                    "json-stringify" => self.eval_json_stringify(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -3122,6 +3125,162 @@ impl LispEvaluator {
         };
 
         Ok(obj.get(key).cloned().unwrap_or(Value::Null))
+    }
+
+    // ========================================
+    // JSON Operations (Built-in Functions)
+    // ========================================
+
+    /// parse-json - Parse a JSON string into OVSM values
+    /// Usage: (parse-json {:json "{"a": 1, "b": [2,3]}"})
+    fn eval_parse_json(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "parse-json".to_string(),
+                reason: "Expected 1 argument: {:json string}".to_string(),
+            });
+        }
+
+        // Support both object form {:json "..."} and direct string
+        let json_str = match self.evaluate_expression(&args[0].value)? {
+            Value::Object(obj) => {
+                // Object form: (parse-json {:json "..."})
+                obj.get("json")
+                    .ok_or_else(|| Error::InvalidArguments {
+                        tool: "parse-json".to_string(),
+                        reason: "Object must have 'json' field".to_string(),
+                    })?
+                    .as_string()?
+                    .to_string()
+            }
+            Value::String(s) => {
+                // Direct string form: (parse-json "...")
+                s.to_string()
+            }
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "parse-json".to_string(),
+                    reason: "Expected object with json field or string".to_string(),
+                })
+            }
+        };
+
+        // Parse JSON string into serde_json::Value
+        let json_value: serde_json::Value = serde_json::from_str(&json_str)
+            .map_err(|e| Error::RuntimeError(format!("Failed to parse JSON: {}", e)))?;
+
+        // Convert serde_json::Value to OVSM Value
+        Ok(self.json_to_value(json_value))
+    }
+
+    /// json-stringify - Convert OVSM value to JSON string
+    /// Usage: (json-stringify {:value data :pretty true})
+    fn eval_json_stringify(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "json-stringify".to_string(),
+                reason: "Expected 1 argument: {:value data} or direct value".to_string(),
+            });
+        }
+
+        let (value, pretty) = match self.evaluate_expression(&args[0].value)? {
+            Value::Object(obj) => {
+                // Object form: (json-stringify {:value ... :pretty true})
+                let val = obj
+                    .get("value")
+                    .ok_or_else(|| Error::InvalidArguments {
+                        tool: "json-stringify".to_string(),
+                        reason: "Object must have 'value' field".to_string(),
+                    })?
+                    .clone();
+                let pretty = obj
+                    .get("pretty")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                (val, pretty)
+            }
+            v => {
+                // Direct form: (json-stringify data)
+                (v, false)
+            }
+        };
+
+        // Convert OVSM Value to serde_json::Value
+        let json_value = self.value_to_json(value)?;
+
+        // Stringify with optional pretty printing
+        let json_str = if pretty {
+            serde_json::to_string_pretty(&json_value)
+        } else {
+            serde_json::to_string(&json_value)
+        }
+        .map_err(|e| Error::RuntimeError(format!("Failed to stringify JSON: {}", e)))?;
+
+        Ok(Value::String(Arc::new(json_str)))
+    }
+
+    /// Helper: Convert serde_json::Value to OVSM Value
+    fn json_to_value(&self, json: serde_json::Value) -> Value {
+        use serde_json::Value as JV;
+        match json {
+            JV::Null => Value::Null,
+            JV::Bool(b) => Value::Bool(b),
+            JV::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Value::Int(i)
+                } else if let Some(f) = n.as_f64() {
+                    Value::Float(f)
+                } else {
+                    Value::Float(n.as_f64().unwrap_or(0.0))
+                }
+            }
+            JV::String(s) => Value::String(Arc::new(s)),
+            JV::Array(arr) => {
+                Value::Array(Arc::new(arr.into_iter().map(|v| self.json_to_value(v)).collect()))
+            }
+            JV::Object(map) => {
+                let mut obj = HashMap::new();
+                for (k, v) in map {
+                    obj.insert(k, self.json_to_value(v));
+                }
+                Value::Object(Arc::new(obj))
+            }
+        }
+    }
+
+    /// Helper: Convert OVSM Value to serde_json::Value
+    fn value_to_json(&self, value: Value) -> Result<serde_json::Value> {
+        use serde_json::Value as JV;
+        Ok(match value {
+            Value::Null => JV::Null,
+            Value::Bool(b) => JV::Bool(b),
+            Value::Int(i) => JV::Number(serde_json::Number::from(i)),
+            Value::Float(f) => {
+                serde_json::Number::from_f64(f)
+                    .map(JV::Number)
+                    .unwrap_or(JV::Null)
+            }
+            Value::String(s) => JV::String(s.to_string()),
+            Value::Array(arr) => {
+                let mut json_arr = Vec::new();
+                for item in arr.iter() {
+                    json_arr.push(self.value_to_json(item.clone())?);
+                }
+                JV::Array(json_arr)
+            }
+            Value::Object(obj) => {
+                let mut json_obj = serde_json::Map::new();
+                for (k, v) in obj.iter() {
+                    json_obj.insert(k.clone(), self.value_to_json(v.clone())?);
+                }
+                JV::Object(json_obj)
+            }
+            Value::Lambda(_) => {
+                return Err(Error::RuntimeError(
+                    "Cannot convert lambda to JSON".to_string(),
+                ))
+            }
+        })
     }
 
     // ========================================
