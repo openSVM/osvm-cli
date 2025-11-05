@@ -358,6 +358,10 @@ count
 - Code MUST start with `(do` when you have multiple statements
 - Code MUST be complete, executable OVSM LISP
 - Do NOT truncate or abbreviate the code
+- **ALWAYS use markdown format with headers** (Expected Plan, Main Branch, Action)
+- ❌ **NEVER use OVSM data structure format** like `{:expected-plan "..." :main-branch (do ...)}`
+- ❌ **NEVER return raw OVSM code** without the markdown headers
+- ✅ **ALWAYS include** `**Expected Plan:**`, `**Main Branch:**`, and `**Action:**` sections
 
 ---
 
