@@ -1,7 +1,7 @@
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
-use crate::utils::debug_logger::VerbosityLevel;
+use crate::utils::debug_logger::{VerbosityLevel, get_verbosity};
 use crate::utils::prompt_templates::{
     AnalysisVector as TemplateAnalysisVector, PromptTemplateManager, TemplateCategory,
 };
@@ -156,12 +156,8 @@ impl AiService {
     }
 
     pub fn with_api_url_and_debug(custom_api_url: Option<String>, debug_mode: bool) -> Self {
-        // Set debug verbosity based on debug mode
-        if debug_mode {
-            crate::utils::debug_logger::set_verbosity(VerbosityLevel::Detailed);
-        } else {
-            crate::utils::debug_logger::set_verbosity(VerbosityLevel::Silent);
-        }
+        // Don't override global verbosity - it should be controlled by CLI flags
+        // The debug_mode parameter controls AI-specific logging only
 
         debug_print!("Initializing AI service with debug mode: {}", debug_mode);
 
@@ -515,7 +511,7 @@ impl AiService {
             own_plan: only_plan,
         };
 
-        if debug_mode {
+        if debug_mode && get_verbosity() >= VerbosityLevel::Detailed {
             println!("📤 OSVM AI Request:");
             println!("  question: {} chars", question.len());
             println!(
@@ -543,7 +539,7 @@ impl AiService {
         let status = response.status();
         let response_text = response.text().await?;
 
-        if debug_mode {
+        if debug_mode && get_verbosity() >= VerbosityLevel::Detailed {
             println!("📥 OSVM AI Response ({}): {}", status, response_text);
         }
 
@@ -887,22 +883,25 @@ impl AiService {
     }
 
     fn parse_ovsm_plan(&self, plan_text: &str) -> Result<ToolPlan> {
-
-        eprintln!(
-            "DEBUG parse_ovsm_plan: called with {} chars",
-            plan_text.len()
-        );
-        eprintln!(
-            "DEBUG parse_ovsm_plan: first 200 chars: {}",
-            &plan_text[..plan_text.len().min(200)]
-        );
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            eprintln!(
+                "DEBUG parse_ovsm_plan: called with {} chars",
+                plan_text.len()
+            );
+            eprintln!(
+                "DEBUG parse_ovsm_plan: first 200 chars: {}",
+                &plan_text[..plan_text.len().min(200)]
+            );
+        }
 
         // PRIORITY 1: Check for XML format first (new preferred format)
         if plan_text.contains("<ovsm_plan") || plan_text.contains("<ovsv_plan") {
-            if plan_text.contains("<ovsv_plan") {
-                eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsv_plan> tag! Normalizing to <ovsm_plan>.");
-            } else {
-                eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsm_plan> tag!");
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                if plan_text.contains("<ovsv_plan") {
+                    eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsv_plan> tag! Normalizing to <ovsm_plan>.");
+                } else {
+                    eprintln!("DEBUG parse_ovsm_plan: Found XML format with <ovsm_plan> tag!");
+                }
             }
             return self.parse_osvm_plan_xml(plan_text);
         }
@@ -912,15 +911,21 @@ impl AiService {
         let has_main_branch = plan_text.contains("Main Branch") && plan_text.contains("```");
 
         if has_time_marker && has_main_branch {
-            eprintln!(
-                "DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!"
-            );
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!(
+                    "DEBUG parse_ovsm_plan: Found simplified format with TIME marker and Main Branch!"
+                );
+            }
             // This is a valid OVSM plan in simplified format - continue parsing
         } else if !plan_text.contains("Expected Plan") {
-            eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
+            }
             anyhow::bail!("No OVSM plan structure found");
         } else {
-            eprintln!("DEBUG parse_ovsm_plan: Found Expected Plan marker!");
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!("DEBUG parse_ovsm_plan: Found Expected Plan marker!");
+            }
         }
 
         // Extract reasoning from Main Branch or overview

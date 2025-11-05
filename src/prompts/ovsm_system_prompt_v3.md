@@ -52,7 +52,8 @@ These are **part of the OVSM language** and execute locally:
 These are **external tools** that fetch blockchain data:
 - `get_account_transactions` - Fetch transactions for an address
 - `get_transaction` - Get specific transaction details
-- `get_balance` - Get SOL balance
+- `get_solana_balance` - Get SOL balance and token holdings
+- `get_account_portfolio` - Get complete account portfolio with SOL balance
 - Other multi-word descriptive names with underscores
 
 **Rule**: If it's a single word, it's a built-in. If it has underscores and describes an action, it's an MCP tool.
@@ -406,7 +407,13 @@ count
 **MCP tools return their data ALREADY PARSED and READY TO USE:**
 - `get_account_transactions` → Returns: `{:address "..." :transactions [...] :rpcCount N ...}`
 - `get_token_info` → Returns: `{:name "..." :symbol "..." :decimals N ...}`
-- `get_balance` → Returns: `{:address "..." :balance N ...}`
+- `get_solana_balance` → Returns: `{:address "..." :native {:balance N :price N :symbol "SOL" :decimals 9} :tokens [...] :totalValue N}`
+- `get_account_portfolio` → Returns: `{:address "..." :native {:balance N :price N :symbol "SOL" :decimals 9} :tokens [...] :totalValue N}`
+
+**⚠️ CRITICAL: `native.balance` is ALREADY IN SOL (not lamports)!**
+**Access it directly: `(. response native)` then `(. native balance)`**
+**To convert TO lamports: multiply by 1,000,000,000**
+**DO NOT divide - the balance is already in human-readable SOL units!**
 
 **NO MANUAL UNWRAPPING NEEDED!**
 
@@ -435,6 +442,27 @@ count
     (log :message (. tx signature)))
 
   txs)
+```
+
+✅ **CORRECT - Get SOL balance with proper field access:**
+```ovsm
+(do
+  ;; Get SOL balance - returns {address, native: {balance, price}, tokens, totalValue}
+  (define portfolio (get_solana_balance {:address TARGET}))
+
+  ;; ⚠️ IMPORTANT: Access native directly (NO .data wrapper!)
+  (define native (. portfolio native))
+  (define balance_sol (. native balance))
+  (define price_usd (. native price))
+
+  ;; Convert to lamports if needed (multiply by 1 billion)
+  (define balance_lamports (* balance_sol 1000000000.0))
+
+  {:address TARGET
+   :balance_sol balance_sol
+   :balance_lamports balance_lamports
+   :price_usd price_usd
+   :value_usd (* balance_sol price_usd)})
 ```
 
 **SIMPLE 2-STEP PATTERN FOR ALL MCP TOOLS:**

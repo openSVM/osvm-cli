@@ -15,7 +15,7 @@ pub enum VerbosityLevel {
 }
 
 lazy_static::lazy_static! {
-    static ref VERBOSITY: Mutex<VerbosityLevel> = Mutex::new(VerbosityLevel::Normal);
+    static ref VERBOSITY: Mutex<VerbosityLevel> = Mutex::new(VerbosityLevel::Silent);
 }
 
 /// Set the global verbosity level
@@ -68,6 +68,11 @@ macro_rules! debug_success {
 
 /// Log the type and structure of an OVSM value
 pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
+    // Only log at Verbose level
+    if get_verbosity() < VerbosityLevel::Verbose {
+        return;
+    }
+
     let type_str = match value {
         OvsmValue::Null => "null",
         OvsmValue::Bool(_) => "bool",

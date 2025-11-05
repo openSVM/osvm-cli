@@ -1,6 +1,6 @@
 //! MCP Bridge Tool - dynamically calls any configured MCP tool
 use crate::services::mcp_service::{McpService, McpTool};
-use crate::utils::debug_logger::log_ovsm_value;
+use crate::utils::debug_logger::{log_ovsm_value, get_verbosity, VerbosityLevel};
 use ovsm::error::Result as OvsmResult;
 use ovsm::runtime::Value as OvsmValue;
 use ovsm::tools::Tool;
@@ -31,17 +31,19 @@ impl Tool for McpBridgeTool {
     }
 
     fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
-        // 🔍 DETAILED DEBUG LOGGING AT BRIDGE LEVEL
-        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🌉 MCP BRIDGE TOOL CALL");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("📍 Tool Name: {}", self.name);
-        println!("📍 Args Count: {}", args.len());
-        println!("\n📦 Arguments Received (OVSM Values):");
-        for (i, arg) in args.iter().enumerate() {
-            println!("  [{}]: {} = {}", i, arg.type_name(), arg);
+        // 🔍 DETAILED DEBUG LOGGING AT BRIDGE LEVEL (only at Verbose level)
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("🌉 MCP BRIDGE TOOL CALL");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("📍 Tool Name: {}", self.name);
+            println!("📍 Args Count: {}", args.len());
+            println!("\n📦 Arguments Received (OVSM Values):");
+            for (i, arg) in args.iter().enumerate() {
+                println!("  [{}]: {} = {}", i, arg.type_name(), arg);
+            }
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         // Lock the MCP service
         let service = self.mcp_service.clone();
@@ -107,27 +109,29 @@ impl Tool for McpBridgeTool {
             Some(JsonValue::Array(params.clone()))
         };
 
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🔄 CONVERTED TO JSON-RPC");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("📤 JSON Params ({} items):", params.len());
-        for (i, param) in params.iter().enumerate() {
-            println!(
-                "  [{}]: {}",
-                i,
-                serde_json::to_string_pretty(param).unwrap_or_else(|_| "<invalid>".to_string())
-            );
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("🔄 CONVERTED TO JSON-RPC");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            println!("📤 JSON Params ({} items):", params.len());
+            for (i, param) in params.iter().enumerate() {
+                println!(
+                    "  [{}]: {}",
+                    i,
+                    serde_json::to_string_pretty(param).unwrap_or_else(|_| "<invalid>".to_string())
+                );
+            }
+            println!("\n📤 Final Arguments for MCP:");
+            if let Some(ref args) = arguments {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(args).unwrap_or_else(|_| "<invalid>".to_string())
+                );
+            } else {
+                println!("  (none)");
+            }
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
-        println!("\n📤 Final Arguments for MCP:");
-        if let Some(ref args) = arguments {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(args).unwrap_or_else(|_| "<invalid>".to_string())
-            );
-        } else {
-            println!("  (none)");
-        }
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         // Execute the tool with correct server ID
         let result_json = futures::executor::block_on(

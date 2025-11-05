@@ -16,6 +16,7 @@ use crate::services::{
     mcp_service::{McpService, McpTool},
     ovsm_service::OvsmService,
 };
+use crate::utils::debug_logger::{get_verbosity, VerbosityLevel};
 use ovsm::error::Result as OvsmResult;
 use ovsm::runtime::Value as OvsmValue;
 use ovsm::tools::{Tool, ToolRegistry};
@@ -197,10 +198,12 @@ fn fix_ovsm_syntax(code: &str) -> String {
 /// Extract OVSM code from AI response (supports XML and markdown formats)
 /// Looks for code blocks and extracts the actual OVSM code
 fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
-    eprintln!(
-        "DEBUG: extract_ovsm_code called with {} chars",
-        raw_plan.len()
-    );
+    if get_verbosity() >= VerbosityLevel::Verbose {
+        eprintln!(
+            "DEBUG: extract_ovsm_code called with {} chars",
+            raw_plan.len()
+        );
+    }
 
     // Strategy 0: Extract from XML structure (preferred format)
     // Handle both <ovsm_plan> and <ovsv_plan> (typo) tags
@@ -209,7 +212,9 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
     if has_xml_wrapper {
         // Look for <code> tag within XML structure
         if let Some(code_start) = raw_plan.find("<code>") {
-            eprintln!("DEBUG: Found <code> XML tag at position {}", code_start);
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!("DEBUG: Found <code> XML tag at position {}", code_start);
+            }
             let after_tag = &raw_plan[code_start + 6..]; // Skip "<code>"
 
             // Look for closing tag or try to extract what we can
@@ -222,18 +227,22 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
                     .or_else(|| after_tag.find("</ovsv_plan>"))
                     .or_else(|| after_tag.find("</action>"))
                     .unwrap_or(after_tag.len());
-                eprintln!(
-                    "DEBUG: No </code> tag found, extracting {} chars until plan end",
-                    end_pos
-                );
+                if get_verbosity() >= VerbosityLevel::Verbose {
+                    eprintln!(
+                        "DEBUG: No </code> tag found, extracting {} chars until plan end",
+                        end_pos
+                    );
+                }
                 after_tag[..end_pos].trim()
             };
 
-            eprintln!(
-                "DEBUG: Extracted XML code block ({} chars): {}",
-                extracted.len(),
-                &extracted[..extracted.len().min(100)]
-            );
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!(
+                    "DEBUG: Extracted XML code block ({} chars): {}",
+                    extracted.len(),
+                    &extracted[..extracted.len().min(100)]
+                );
+            }
 
             // Validate it looks like LISP code
             let is_lisp = extracted.contains("(define ")
@@ -245,7 +254,9 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
                 || extracted.contains("(set! ");
 
             if is_lisp {
-                eprintln!("DEBUG: Valid LISP code found in XML format!");
+                if get_verbosity() >= VerbosityLevel::Verbose {
+                    eprintln!("DEBUG: Valid LISP code found in XML format!");
+                }
                 // Clean up any trailing XML if present
                 let cleaned = extracted
                     .split("</")
@@ -254,7 +265,9 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
                     .trim();
                 return Some(fix_ovsm_syntax(cleaned));
             } else {
-                eprintln!("DEBUG: Content in <code> tags doesn't look like LISP");
+                if get_verbosity() >= VerbosityLevel::Verbose {
+                    eprintln!("DEBUG: Content in <code> tags doesn't look like LISP");
+                }
             }
         }
     }
@@ -264,7 +277,9 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
 
     let mut search_start = 0;
     while let Some(code_start) = raw_plan[search_start..].find("```") {
-        eprintln!("DEBUG: Found ``` at position {}", search_start + code_start);
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            eprintln!("DEBUG: Found ``` at position {}", search_start + code_start);
+        }
         let absolute_start = search_start + code_start;
         let after_start = &raw_plan[absolute_start + 3..];
 
@@ -278,11 +293,13 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         // Find the closing ```
         if let Some(code_end) = code_content.find("```") {
             let extracted = code_content[..code_end].trim();
-            eprintln!(
-                "DEBUG: Extracted block ({} chars): {}",
-                extracted.len(),
-                &extracted[..extracted.len().min(100)]
-            );
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!(
+                    "DEBUG: Extracted block ({} chars): {}",
+                    extracted.len(),
+                    &extracted[..extracted.len().min(100)]
+                );
+            }
 
             // Only consider blocks that look like LISP code
             let is_lisp = extracted.contains("(define ")
@@ -293,10 +310,14 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
                 || extracted.contains("(do ")
                 || extracted.contains("(set! ");
 
-            eprintln!("DEBUG: Is LISP? {}", is_lisp);
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                eprintln!("DEBUG: Is LISP? {}", is_lisp);
+            }
 
             if is_lisp {
-                eprintln!("DEBUG: Adding to code_blocks!");
+                if get_verbosity() >= VerbosityLevel::Verbose {
+                    eprintln!("DEBUG: Adding to code_blocks!");
+                }
                 code_blocks.push(extracted.to_string());
             }
 
@@ -306,15 +327,21 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
         }
     }
 
-    eprintln!("DEBUG: Found {} code blocks total", code_blocks.len());
+    if get_verbosity() >= VerbosityLevel::Verbose {
+        eprintln!("DEBUG: Found {} code blocks total", code_blocks.len());
+    }
 
     // If we found code blocks, return the largest one
     if let Some(largest) = code_blocks.iter().max_by_key(|s| s.len()) {
-        eprintln!("DEBUG: Returning largest block ({} chars)", largest.len());
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            eprintln!("DEBUG: Returning largest block ({} chars)", largest.len());
+        }
         return Some(fix_ovsm_syntax(largest));
     }
 
-    eprintln!("DEBUG: No code blocks found in triple-backticks, trying Main Branch extraction...");
+    if get_verbosity() >= VerbosityLevel::Verbose {
+        eprintln!("DEBUG: No code blocks found in triple-backticks, trying Main Branch extraction...");
+    }
 
     // Strategy 2: Extract from Main Branch: section (with or without bold markers)
     // This handles cases where AI returns OVSM without code blocks
@@ -399,13 +426,15 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
 pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) -> Result<()> {
     let start_time = std::time::Instant::now();
 
-    // Print header
-    println!("\n🤖 OSVM Agent - Autonomous Research Mode");
-    println!("{}", "━".repeat(60));
-    println!("📝 Research Question: {}", query);
-    println!("🔬 Mode: Iterative strategy refinement enabled");
-    println!("{}", "━".repeat(60));
-    println!();
+    // Print minimal header (only at Detailed verbosity)
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        println!("\n🤖 OSVM Agent - Autonomous Research Mode");
+        println!("{}", "━".repeat(60));
+        println!("📝 Research Question: {}", query);
+        println!("🔬 Mode: Iterative strategy refinement enabled");
+        println!("{}", "━".repeat(60));
+        println!();
+    }
 
     // Initialize services
     let ai_service = AiService::new_with_debug(verbose > 1);
@@ -654,15 +683,19 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     }
 
     // Step 1: AI Planning
-    print!("🧠 AI Planning");
-    std::io::stdout().flush()?;
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        print!("🧠 AI Planning");
+        std::io::stdout().flush()?;
+    }
 
     let tool_plan = match ai_service
         .create_validated_tool_plan(query, &available_tools, 3)
         .await
     {
         Ok(plan) => {
-            println!(" ✅");
+            if get_verbosity() >= VerbosityLevel::Detailed {
+                println!(" ✅");
+            }
             plan
         }
         Err(e) => {
@@ -673,20 +706,24 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     };
 
     // Display plan details
-    println!("\n📋 Plan Details:");
-    println!("   Reasoning: {}", tool_plan.reasoning);
-    println!("   Expected Outcome: {}", tool_plan.expected_outcome);
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        println!("\n📋 Plan Details:");
+        println!("   Reasoning: {}", tool_plan.reasoning);
+        println!("   Expected Outcome: {}", tool_plan.expected_outcome);
+    }
 
-    if !tool_plan.osvm_tools_to_use.is_empty() {
-        println!("\n🔧 Tools to Execute:");
-        for (i, tool) in tool_plan.osvm_tools_to_use.iter().enumerate() {
-            println!("   {}. {} (from {})", i + 1, tool.tool_name, tool.server_id);
-            if verbose > 0 {
-                println!("      Reason: {}", tool.reason);
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        if !tool_plan.osvm_tools_to_use.is_empty() {
+            println!("\n🔧 Tools to Execute:");
+            for (i, tool) in tool_plan.osvm_tools_to_use.iter().enumerate() {
+                println!("   {}. {} (from {})", i + 1, tool.tool_name, tool.server_id);
+                if verbose > 0 {
+                    println!("      Reason: {}", tool.reason);
+                }
             }
+        } else {
+            println!("\n📌 No specific tools needed - will provide direct response");
         }
-    } else {
-        println!("\n📌 No specific tools needed - will provide direct response");
     }
 
     println!();
@@ -708,7 +745,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
 
     // Check if we have a raw OVSM plan to execute
     if let Some(ref raw_plan) = tool_plan.raw_ovsm_plan {
-        println!("🔧 Executing OVSM Plan...\n");
+        if get_verbosity() >= VerbosityLevel::Detailed {
+            println!("🔧 Executing OVSM Plan...\n");
+        }
 
         // Extract clean OVSM code from the markdown-formatted response
         if let Some(ovsm_code) = extract_ovsm_code(raw_plan) {
@@ -819,23 +858,28 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             let mut accumulated_findings = String::new(); // Track findings across iterations
             let mut confidence_score = 50u8; // Start at 50% confidence
 
-            println!("🤖 OVSM Autonomous Research Agent Starting...");
-            println!("   Goal: {}", tool_plan.expected_outcome);
-            println!("   Initial Confidence: {}%", confidence_score);
-            println!();
+            if get_verbosity() >= VerbosityLevel::Detailed {
+                println!("🤖 OVSM Autonomous Research Agent Starting...");
+                println!("   Goal: {}", tool_plan.expected_outcome);
+                println!("   Initial Confidence: {}%", confidence_score);
+                println!();
+            }
 
             loop {
                 // Show different message for strategy iterations vs syntax fixes
-                if strategy_iteration > 1 {
-                    println!(
-                        "🔬 Research Strategy Iteration #{} (Attempt #{}/{})",
-                        strategy_iteration, attempt, MAX_RETRY_ATTEMPTS
-                    );
-                } else {
-                    println!(
-                        "🔄 OVSM Execution Attempt #{}/{}",
-                        attempt, MAX_RETRY_ATTEMPTS
-                    );
+                if get_verbosity() >= VerbosityLevel::Detailed {
+                    if strategy_iteration > 1 {
+                        println!(
+                            "🔬 Research Strategy Iteration #{} (Attempt #{}/{})",
+                            strategy_iteration, attempt, MAX_RETRY_ATTEMPTS
+                        );
+                    } else {
+                        println!(
+                            "🔄 OVSM Execution Attempt #{}/{}",
+                            attempt, MAX_RETRY_ATTEMPTS
+                        );
+                    }
+                    println!();
                 }
 
                 let execution_start = std::time::Instant::now();
@@ -844,7 +888,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                 match ovsm_service.execute_code(&current_code) {
                     Ok(result) => {
                         let elapsed = execution_start.elapsed().as_millis();
-                        println!("✅ OVSM execution completed in {}ms", elapsed);
+                        if get_verbosity() >= VerbosityLevel::Detailed {
+                            println!("✅ OVSM execution completed in {}ms", elapsed);
+                        }
 
                         let formatted_result = ovsm_service.format_value(&result);
 
@@ -1092,8 +1138,10 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     println!();
 
     // Step 3: Generate Response
-    print!("💬 Generating Final Response");
-    std::io::stdout().flush()?;
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        print!("💬 Generating Final Response");
+        std::io::stdout().flush()?;
+    }
 
     let final_response = if let Some(ref ovsm_res) = ovsm_result {
         // Use OVSM execution result - format it nicely with AI
@@ -1125,7 +1173,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             .await
         {
             Ok(resp) => {
-                println!(" ✅");
+                if get_verbosity() >= VerbosityLevel::Detailed {
+                    println!(" ✅");
+                }
                 resp
             }
             Err(e) => {
@@ -1148,7 +1198,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             // No tools - direct response (no execution happened)
             match ai_service.query_with_debug(query, verbose > 1).await {
                 Ok(resp) => {
-                    println!(" ✅");
+                    if get_verbosity() >= VerbosityLevel::Detailed {
+                        println!(" ✅");
+                    }
                     resp
                 }
                 Err(e) => {
@@ -1182,7 +1234,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                 .await
             {
                 Ok(resp) => {
-                    println!(" ✅");
+                    if get_verbosity() >= VerbosityLevel::Detailed {
+                        println!(" ✅");
+                    }
                     resp
                 }
                 Err(e) => {
@@ -1198,18 +1252,24 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     println!();
 
     // Step 4: Display Results
-    println!("{}", "━".repeat(60));
-    println!("📊 Result:");
-    println!("{}", "━".repeat(60));
-    println!();
+    if get_verbosity() >= VerbosityLevel::Detailed {
+        println!("{}", "━".repeat(60));
+        println!("📊 Result:");
+        println!("{}", "━".repeat(60));
+        println!();
+    }
     println!("{}", final_response);
     println!();
 
-    // Display execution statistics
+    // Display execution statistics with timestamp
     let elapsed_ms = start_time.elapsed().as_millis();
-    println!("{}", "━".repeat(60));
-    println!("⏱️  Execution Time: {}ms", elapsed_ms);
-    println!("✨ Done!");
+
+    // Get current time in hh:mm dd/mm/yy format
+    use chrono::Local;
+    let now = Local::now();
+    let timestamp = now.format("%H:%M %d/%m/%y");
+
+    println!("Execution Time: {}ms | {}", elapsed_ms, timestamp);
     println!();
 
     Ok(())
