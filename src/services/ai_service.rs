@@ -1691,16 +1691,25 @@ Continue the code now:"#,
         // Look for overlap between end of partial and start of continuation
         // (AI might repeat last few tokens for context)
         let overlap_window = 50; // Check last 50 chars for overlap
-        if partial.len() > overlap_window {
-            let partial_end = &partial[partial.len() - overlap_window..];
 
-            // Find if continuation starts with any substring of partial_end
-            for i in 0..overlap_window {
-                let potential_overlap = &partial_end[i..];
-                if cleaned_continuation.starts_with(potential_overlap) {
+        // Use character count instead of byte length to avoid UTF-8 boundary issues
+        let partial_char_count = partial.chars().count();
+        if partial_char_count > overlap_window {
+            // Get the last overlap_window characters (not bytes!)
+            let partial_end: String = partial.chars()
+                .skip(partial_char_count - overlap_window)
+                .collect();
+
+            // Try to find overlap by checking progressively smaller substrings
+            // Use character-aware iteration
+            for skip in 0..partial_end.chars().count() {
+                let potential_overlap: String = partial_end.chars()
+                    .skip(skip)
+                    .collect();
+
+                if cleaned_continuation.starts_with(&potential_overlap) {
                     // Found overlap, skip it in continuation
-                    let continuation_without_overlap =
-                        &cleaned_continuation[potential_overlap.len()..];
+                    let continuation_without_overlap = &cleaned_continuation[potential_overlap.len()..];
                     return format!("{}{}", partial, continuation_without_overlap);
                 }
             }
