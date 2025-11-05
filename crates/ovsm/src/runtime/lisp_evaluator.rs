@@ -172,6 +172,7 @@ impl LispEvaluator {
                     "eval" => self.eval_eval(args),
                     "length" => self.eval_length(args),
                     "count" => self.eval_length(args), // Alias for length - commonly expected
+                    "COUNT" => self.eval_length(args), // Also handle uppercase
                     "last" => self.eval_last(args),
                     "range" => self.eval_range(args),
                     "min" => self.eval_min(args),
@@ -182,6 +183,9 @@ impl LispEvaluator {
                     "filter" => self.eval_filter(args),
                     "reduce" => self.eval_reduce(args),
                     "sort" => self.eval_sort(args),
+                    "group-by" => self.eval_group_by(args),
+                    "aggregate" => self.eval_aggregate(args),
+                    "sort-by" => self.eval_sort_by(args),
                     "str" => self.eval_str(args),
                     "format" => self.eval_format(args),
                     "slice" => self.eval_slice(args),
@@ -193,6 +197,7 @@ impl LispEvaluator {
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
+                    "APPEND" => self.eval_append(args), // Also handle uppercase
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -3669,6 +3674,140 @@ impl LispEvaluator {
             _ => Err(Error::TypeError {
                 expected: "function".to_string(),
                 got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (aggregate groups agg-fn) - Aggregate grouped data with aggregation function
+    fn eval_aggregate(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "aggregate".to_string(),
+                reason: "Expected 2 arguments: groups and aggregation-fn".to_string(),
+            });
+        }
+
+        // Evaluate groups (should be object from group-by)
+        let groups = self.evaluate_expression(&args[0].value)?;
+        let groups_obj = groups.as_object()?;
+
+        // Get aggregation function
+        let agg_fn = self.evaluate_expression(&args[1].value)?;
+
+        match agg_fn {
+            Value::Function { params, body, .. } => {
+                if params.len() != 2 {
+                    return Err(Error::InvalidArguments {
+                        tool: "aggregate".to_string(),
+                        reason: format!("Aggregation function must take exactly 2 parameters (key, values), got {}", params.len()),
+                    });
+                }
+
+                // Aggregate each group
+                let mut result = Vec::new();
+
+                for (key, values) in groups_obj.iter() {
+                    // Create scope for aggregation function
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), Value::String(key.clone()));
+                    self.env.define(params[1].clone(), values.clone());
+
+                    // Evaluate aggregation function
+                    let aggregated = self.evaluate_expression(&body)?;
+
+                    self.env.exit_scope();
+
+                    result.push(aggregated);
+                }
+
+                Ok(Value::Array(Arc::new(result)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: agg_fn.type_name(),
+            }),
+        }
+    }
+
+    /// (sort-by collection key-fn) - Sort collection by key function result
+    fn eval_sort_by(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(Error::InvalidArguments {
+                tool: "sort-by".to_string(),
+                reason: "Expected 2-3 arguments: collection, key-fn, and optional :desc flag".to_string(),
+            });
+        }
+
+        // Evaluate collection
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        // Get key function
+        let key_fn = self.evaluate_expression(&args[1].value)?;
+
+        // Check for :desc flag
+        let descending = if args.len() == 3 {
+            let flag = self.evaluate_expression(&args[2].value)?;
+            match flag {
+                Value::String(s) if s == ":desc" => true,
+                Value::Bool(b) => b,
+                _ => false,
+            }
+        } else {
+            false
+        };
+
+        match key_fn {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "sort-by".to_string(),
+                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                // Create vector of (element, key) pairs
+                let mut pairs = Vec::new();
+
+                for elem in array.iter() {
+                    // Create scope for key function
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), elem.clone());
+
+                    // Evaluate key function to get sort key
+                    let key = self.evaluate_expression(&body)?;
+
+                    self.env.exit_scope();
+
+                    pairs.push((elem.clone(), key));
+                }
+
+                // Sort by keys
+                pairs.sort_by(|a, b| {
+                    let cmp = match (&a.1, &b.1) {
+                        (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                        (Value::Float(x), Value::Float(y)) => {
+                            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
+                        }
+                        (Value::String(x), Value::String(y)) => x.cmp(y),
+                        _ => std::cmp::Ordering::Equal,
+                    };
+
+                    if descending {
+                        cmp.reverse()
+                    } else {
+                        cmp
+                    }
+                });
+
+                // Extract sorted elements
+                let sorted: Vec<Value> = pairs.into_iter().map(|(elem, _)| elem).collect();
+
+                Ok(Value::Array(Arc::new(sorted)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: key_fn.type_name(),
             }),
         }
     }

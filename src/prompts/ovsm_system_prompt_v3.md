@@ -510,6 +510,132 @@ Convert OVSM value to JSON string (optional pretty printing).
 ;; → "{\n  \"name\": \"Alice\",\n  \"age\": 30\n}"
 ```
 
+## Efficient Transaction Fetching with Timestamp Filtering
+
+### 🚨 CRITICAL: Always Use Timestamp Filtering for Date Ranges
+
+When fetching transactions for a specific time period like "summer 2025", **YOU MUST** use the `startDate` and `endDate` parameters in `get_account_transactions`. This filters transactions directly at the API level, avoiding massive data transfers.
+
+#### ✅ CORRECT - Use get_account_transactions with date parameters:
+```ovsm
+;; Fetch ONLY summer 2025 transactions efficiently
+(define SUMMER_START 1750550400000)  ;; June 21, 2025 00:00 UTC (milliseconds)
+(define SUMMER_END 1758672000000)    ;; Sept 22, 2025 23:59 UTC (milliseconds)
+
+;; get_account_transactions supports date filtering!
+(define txs (get_account_transactions
+  {:address TARGET
+   :limit 1000
+   :startDate SUMMER_START   ;; Filter by start timestamp (ms)
+   :endDate SUMMER_END}))    ;; Filter by end timestamp (ms)
+
+;; The transactions are already filtered by date!
+```
+
+#### ❌ WRONG - DO NOT fetch all then filter:
+```ovsm
+;; NEVER DO THIS - Fetches ALL transactions (huge waste!)
+(define all_txs (get_account_transactions {:address TARGET :limit 1000}))
+;; Filtering afterwards is extremely inefficient!
+(define filtered (filter all_txs (lambda (tx)
+  (and (>= (. tx timestamp) SUMMER_START)
+       (< (. tx timestamp) SUMMER_END)))))
+```
+
+**Key Rule:** If the query mentions dates, time periods, or seasons (summer, winter, June, etc.), **ALWAYS** use `startDate` and `endDate` parameters in `get_account_transactions`. The API handles the filtering efficiently server-side.
+
+## Efficient Transaction Aggregation Patterns
+
+### IMPORTANT: Use Built-in Aggregation Functions
+
+The language provides efficient built-in functions for data aggregation. **ALWAYS** use these instead of manual loops and array slicing.
+
+#### group-by
+Group collection elements by a key function.
+
+**Usage:**
+```ovsm
+;; Group transactions by sender wallet
+(define grouped (group-by txs (lambda (tx) (. tx sender))))
+;; Returns object: {"wallet1": [tx1, tx2], "wallet2": [tx3], ...}
+```
+
+#### aggregate
+Aggregate grouped data with a custom function.
+
+**Usage:**
+```ovsm
+;; Sum amounts and collect tx IDs for each group
+(define aggregated (aggregate grouped
+  (lambda (wallet txs)
+    {:wallet wallet
+     :total (reduce txs 0 (lambda (sum tx) (+ sum (. tx amount))))
+     :txids (map txs (lambda (tx) (. tx signature)))})))
+```
+
+#### sort-by
+Sort collection by key extraction function.
+
+**Usage:**
+```ovsm
+;; Sort by total amount (descending)
+(define sorted (sort-by results (lambda (r) (. r total)) :desc))
+```
+
+### ✅ CORRECT - Efficient Batch-Reduce-Finalize Pattern:
+```ovsm
+(do
+  ;; Step 1: Fetch ONLY transactions in time range (efficient!)
+  (define SUMMER_START 1750550400000)  ;; June 21, 2025 (milliseconds)
+  (define SUMMER_END 1758672000000)    ;; Sept 22, 2025 (milliseconds)
+
+  ;; Use date filtering parameters - API filters server-side!
+  (define response (get_account_transactions
+    {:address TARGET
+     :limit 1000
+     :startDate SUMMER_START    ;; Only summer transactions!
+     :endDate SUMMER_END}))
+
+  ;; Extract transactions from response
+  (define txs (parse-response response))  ;; Helper to handle MCP response format
+
+  ;; Step 2: Filter for transfers TO the target address
+  (define relevant (filter txs
+    (lambda (tx)
+      (and (. tx transfers)
+           (> (find-transfer (. tx transfers) TARGET) 0)))))  ;; Received SOL
+
+  ;; Step 3: Group by sender (reduce phase)
+  (define grouped (group-by relevant (lambda (tx) (find-sender tx))))
+
+  ;; Step 4: Aggregate each group
+  (define aggregated (aggregate grouped
+    (lambda (wallet txs)
+      {:wallet wallet
+       :total (reduce txs 0 (lambda (sum tx) (+ sum (find-amount tx))))
+       :txids (map txs (lambda (tx) (. tx signature)))})))
+
+  ;; Step 5: Sort by total (finalize)
+  (define results (sort-by (values aggregated) (lambda (r) (. r total)) :desc))
+
+  results)
+```
+
+### ❌ AVOID - Inefficient Manual Aggregation:
+```ovsm
+;; DO NOT USE THIS PATTERN - Very inefficient!
+(define wallets []) (define totals []) (define txids [])
+(for (tx txs)
+  ;; Manual index finding - O(n²) complexity!
+  (define idx -1)
+  (for (i (range (COUNT wallets)))
+    (when (== ([] wallets i) sender) (set! idx i)))
+  ;; Manual array slicing - creates many intermediate arrays!
+  (set! totals (APPEND (slice totals 0 idx)
+                      [(+ ([] totals idx) amount)]
+                      (slice totals (+ idx 1) (COUNT totals)))))
+```
+
 ## Base58 Encoding (Solana Addresses)
 
 ### base58-decode
