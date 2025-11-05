@@ -140,7 +140,7 @@ These are **external tools** that fetch blockchain data:
     (set! totals (APPEND
       (slice totals 0 idx)
       [(+ ([] totals idx) (. tx amount))]
-      (slice totals (+ idx 1) (counttotals))))))
+      (slice totals (+ idx 1) (count totals))))))
 ```
 
 ## 4. OBJECT SYNTAX
@@ -152,7 +152,7 @@ These are **external tools** that fetch blockchain data:
 **Operators go FIRST, then operands!**
 
 ❌ `(x + 1)` → ✅ `(+ x 1)`
-❌ `(countarr - 1)` → ✅ `(- (countarr) 1)`
+❌ `(countarr - 1)` → ✅ `(- (count arr) 1)`
 
 ## 6. FUNCTION DEFINITIONS - USE LAMBDA!
 **NEVER use shorthand function syntax! Always use lambda explicitly.**
@@ -161,7 +161,7 @@ These are **external tools** that fetch blockchain data:
 ```ovsm
 (define (find-index arr val)
   (do
-    (for (i (range (countarr)))
+    (for (i (range (count arr)))
       (when (== ([] arr i) val)
         (return i)))
     -1))
@@ -172,7 +172,7 @@ These are **external tools** that fetch blockchain data:
 (define find-index
   (lambda (arr val)
     (do
-      (for (i (range (countarr)))
+      (for (i (range (count arr)))
         (when (== ([] arr i) val)
           (return i)))
       -1)))
@@ -243,11 +243,11 @@ filtered
   (set! batch (getTool {:limit 1000 :before before}))
   (set! results (APPEND results batch))
 
-  (when (< (countbatch) 1000)
+  (when (< (count batch) 1000)
     (set! continue false))
 
-  (when (and continue (> (countbatch) 0))
-    (set! before (. ([] batch (- (countbatch) 1)) cursor))))
+  (when (and continue (> (count batch) 0))
+    (set! before (. ([] batch (- (count batch) 1)) cursor))))
 
 results
 ```
@@ -289,7 +289,7 @@ count
 # Casing Rules
 
 - **Lowercase**: built-ins like `(now)`, `(log :message "text")`
-- **UPPERCASE**: MCP tools like `(countarr)`, `(APPEND arr item)`
+- **UPPERCASE**: MCP tools like `(count arr)`, `(APPEND arr item)`
 - **Lowercase**: control flow like `(if ...)`, `(while ...)`
 
 ---
@@ -385,7 +385,7 @@ count
   (define parsed null)
   
   ;; Check if content exists and has items (use countand > 0 check)
-  (when (and content (> (countcontent) 0))
+  (when (and content (> (count content) 0))
     (define first_item ([] content 0))
     (when (. first_item text)
       ;; Parse the JSON string to get actual data
@@ -420,7 +420,7 @@ count
   (define content (. resp content))
   
   ;; Check if content exists and has items
-  (when (and content (> (countcontent) 0))
+  (when (and content (> (count content) 0))
     (define item ([] content 0))
     (when (. item text)
       (set! parsed (parse-json {:json (. item text)}))))
@@ -429,7 +429,7 @@ count
   (define result null)
   (when parsed
     (define data (. parsed data))
-    (when (and data (> (countdata) 0))
+    (when (and data (> (count data) 0))
       (define blocks data)
       (define block ([] blocks 0))
       (set! result (. block slot))))
@@ -655,7 +655,7 @@ Sort collection by key extraction function.
   ;; Manual array slicing - creates many intermediate arrays!
   (set! totals (APPEND (slice totals 0 idx)
                       [(+ ([] totals idx) amount)]
-                      (slice totals (+ idx 1) (counttotals)))))
+                      (slice totals (+ idx 1) (count totals)))))
 ```
 
 ## 📌 Spam Filtering Decision Logic (DEFAULT BEHAVIOR)
@@ -860,7 +860,7 @@ Parse CSV string to array of objects (first row = headers, optional delimiter).
 (define content (. mcp-resp content))
 
 ;; Step 3: If content is array with text field, extract and parse JSON
-(when (and (is-array? content) (> (countcontent) 0))
+(when (and (is-array? content) (> (count content) 0))
   (define first-item ([] content 0))
   (when (. first-item text)
     ;; Response is JSON string - parse it
