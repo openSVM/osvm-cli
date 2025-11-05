@@ -595,11 +595,12 @@ Remember: MCP tools return data PRE-UNWRAPPED as arrays or objects - use directl
 
   (define sorted (sort-by filtered (lambda (r) (. r total)) :desc))
 
-  ;; 8. Format results compactly
+  ;; 8. Format results compactly (show both lamports and SOL)
   (map sorted
     (lambda (r)
       {:wallet (. r wallet)
-       :total_sol (/ (. r total) 1e9)
+       :total_lamports (. r total)              ;; Exact value in lamports
+       :total_sol (/ (. r total) 1000000000.0)  ;; Human-readable SOL (use .0!)
        :tx_count (count (. r txids))})))
 ```
 
@@ -607,6 +608,81 @@ Remember: MCP tools return data PRE-UNWRAPPED as arrays or objects - use directl
 - `get_account_transactions` returns `{:transactions [...] ...}` - already parsed!
 - Access with `(. data transactions)` - NO parsing step needed!
 - NO `content` variable, NO `parse-json` call, NO manual unwrapping!
+
+---
+
+## 💰 CRITICAL: SOL and Lamports Conversion
+
+**Solana uses lamports as the base unit:** 1 SOL = 1,000,000,000 lamports (1 billion)
+
+### ⚠️ IMPORTANT: Always Show BOTH Lamports AND SOL
+
+**BEST PRACTICE - Show both values for clarity:**
+```ovsm
+;; ✅ CORRECT - Include both lamports and SOL
+(map sorted
+  (lambda (r)
+    {:wallet (. r wallet)
+     :total_lamports (. r total)              ;; Raw lamports (always accurate)
+     :total_sol (/ (. r total) 1000000000.0)  ;; Use float literal for decimal result
+     :tx_count (count (. r txids))}))
+```
+
+### 🔢 Lamports to SOL Conversion Rules
+
+**Rule 1: Always use float division for SOL amounts**
+```ovsm
+❌ WRONG - Integer division (loses precision):
+:total_sol (/ (. r total) 1000000000)    ;; Returns integer!
+:total_sol (/ (. r total) 1e9)           ;; May return integer!
+
+✅ CORRECT - Float division (preserves decimals):
+:total_sol (/ (. r total) 1000000000.0)  ;; Returns proper decimal
+```
+
+**Rule 2: Show lamports for small amounts**
+```ovsm
+;; For amounts < 0.01 SOL, lamports are clearer
+(if (< total_lamports 10000000)  ;; Less than 0.01 SOL
+    {:amount_lamports total_lamports}
+    {:amount_sol (/ total_lamports 1000000000.0)})
+```
+
+**Rule 3: Always include lamports in detailed output**
+```ovsm
+;; ✅ BEST PRACTICE - Show both!
+{:wallet wallet
+ :total_lamports total         ;; Exact value, no loss
+ :total_sol (/ total 1000000000.0)  ;; Human-readable
+ :tx_count (count txids)}
+```
+
+### 📊 Common Lamport Values
+
+- 1 lamport = 0.000000001 SOL (9 decimal places)
+- 1,000 lamports = 0.000001 SOL (1 microSOL)
+- 1,000,000 lamports = 0.001 SOL (dust threshold)
+- 1,000,000,000 lamports = 1 SOL
+
+### 🎯 Example: Proper SOL Formatting
+
+```ovsm
+;; Filter dust (< 0.001 SOL = 1,000,000 lamports)
+(define MIN_LAMPORTS 1000000)
+
+;; Return both lamports and SOL
+(map sorted
+  (lambda (r)
+    {:wallet (. r wallet)
+     :total_lamports (. r total)              ;; e.g., 8123456789
+     :total_sol (/ (. r total) 1000000000.0)  ;; e.g., 8.123456789
+     :txids (. r txids)}))
+```
+
+**Why show both:**
+- Lamports = exact value, no rounding errors
+- SOL = human-readable, easier to understand
+- Users can verify the conversion
 
 ---
 

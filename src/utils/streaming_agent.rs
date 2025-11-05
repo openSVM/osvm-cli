@@ -1096,9 +1096,45 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
     std::io::stdout().flush()?;
 
     let final_response = if let Some(ref ovsm_res) = ovsm_result {
-        // Use OVSM execution result
-        println!(" ✅");
-        format!("✅ OVSM Plan Executed Successfully\n\n{}", ovsm_res)
+        // Use OVSM execution result - format it nicely with AI
+        let finalization_prompt = format!(
+            "You are finalizing the answer to this user query: \"{}\"\n\n\
+             An OVSM plan was executed successfully and returned the following data:\n\n\
+             {}\n\n\
+             Your task is to:\n\
+             1. Parse and understand the returned data structure\n\
+             2. Format it in a clear, human-readable way (use tables, lists, or structured text)\n\
+             3. Directly answer the user's question based on the data\n\
+             4. Include relevant statistics (totals, counts, ranges) if applicable\n\
+             5. DO NOT generate any new plans or code\n\
+             6. DO NOT suggest additional steps or actions\n\
+             7. Just present the final answer clearly and concisely\n\n\
+             Expected outcome: {}",
+            query,
+            ovsm_res,
+            tool_plan.expected_outcome
+        );
+
+        match ai_service
+            .query_osvm_ai_with_options(
+                query,
+                Some(finalization_prompt),
+                Some(true), // ownPlan: true - tells server not to execute, just generate text
+                verbose > 1,
+            )
+            .await
+        {
+            Ok(resp) => {
+                println!(" ✅");
+                resp
+            }
+            Err(e) => {
+                println!(" ⚠️");
+                eprintln!("⚠️  Failed to format results, showing raw data: {}", e);
+                // Fallback to raw OVSM result if formatting fails
+                format!("✅ OVSM Plan Executed Successfully\n\n{}", ovsm_res)
+            }
+        }
     } else {
         // Fallback to tool results
         let tool_results_for_ai: Vec<(String, Value)> = tool_results
