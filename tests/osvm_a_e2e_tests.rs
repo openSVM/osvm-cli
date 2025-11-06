@@ -59,15 +59,8 @@ fn test_osvm_a_basic_wallet_balance_query() {
     );
 
     // Command should either produce output or not crash
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
-    assert!(
-        !combined.is_empty(),
-        "Command should produce some output"
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
+    assert!(!combined.is_empty(), "Command should produce some output");
 }
 
 // ============================================================================
@@ -90,11 +83,7 @@ fn test_osvm_a_transaction_history_analysis() {
     ]);
 
     // Should not crash
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
     assert!(
         !combined.is_empty() || output.status.success(),
         "Command should execute without crashing"
@@ -150,11 +139,7 @@ fn test_osvm_a_program_interaction_analysis() {
     ]);
 
     // Should complete without panicking
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
     assert!(
         !combined.contains("thread 'main' panicked"),
         "Command should not panic during program analysis"
@@ -203,11 +188,7 @@ fn test_osvm_a_dex_trading_volume_analysis() {
     ]);
 
     // Should complete successfully or with planned execution
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
 
     // Verify no unexpected errors
     assert!(
@@ -237,11 +218,7 @@ fn test_osvm_a_complex_multi_condition_query() {
     ]);
 
     // Verify command completed without crashing
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
     assert!(!combined.is_empty(), "Command should produce output");
 }
 
@@ -264,11 +241,7 @@ fn test_osvm_a_nft_collection_activity() {
     ]);
 
     // Should complete without crashing on NFT-specific query
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
 
     assert!(
         !combined.is_empty(),
@@ -296,11 +269,7 @@ fn test_osvm_a_sorting_and_aggregation_query() {
     ]);
 
     // Should handle sorting/aggregation directives
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
 
     assert!(
         !combined.contains("invalid") || combined.contains("plan") || combined.contains("agent"),
@@ -330,10 +299,6 @@ fn test_osvm_a_planning_mode_full_pipeline() {
     ]);
 
     // Verify command completed without crashing
-    let combined = format!(
-        "{}{}",
-        output_stdout(&output),
-        output_stderr(&output)
-    );
+    let combined = format!("{}{}", output_stdout(&output), output_stderr(&output));
     assert!(!combined.is_empty(), "Command should produce output");
 }

@@ -315,6 +315,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return commands::ovsm_handler::handle_ovsm_command(sub_matches).await;
     }
 
+    // Handle snapshot command early - it doesn't need keypair or Solana config
+    if sub_command == "snapshot" {
+        return commands::snapshot::execute_snapshot_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
     // Handle RPC early - it generates its own keypairs and doesn't need default config
     if sub_command == "rpc" {
         return commands::rpc_manager::handle_rpc_manager(sub_matches)

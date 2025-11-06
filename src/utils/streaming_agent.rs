@@ -340,7 +340,9 @@ fn extract_ovsm_code(raw_plan: &str) -> Option<String> {
     }
 
     if get_verbosity() >= VerbosityLevel::Verbose {
-        eprintln!("DEBUG: No code blocks found in triple-backticks, trying Main Branch extraction...");
+        eprintln!(
+            "DEBUG: No code blocks found in triple-backticks, trying Main Branch extraction..."
+        );
     }
 
     // Strategy 2: Extract from Main Branch: section (with or without bold markers)
@@ -1158,9 +1160,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
              6. DO NOT suggest additional steps or actions\n\
              7. Just present the final answer clearly and concisely\n\n\
              Expected outcome: {}",
-            query,
-            ovsm_res,
-            tool_plan.expected_outcome
+            query, ovsm_res, tool_plan.expected_outcome
         );
 
         match ai_service

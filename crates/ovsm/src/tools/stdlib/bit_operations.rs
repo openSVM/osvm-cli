@@ -17,8 +17,12 @@ use std::sync::Arc;
 /// MAKE-BIT-ARRAY - Create bit array
 pub struct MakeBitArrayTool;
 impl Tool for MakeBitArrayTool {
-    fn name(&self) -> &str { "MAKE-BIT-ARRAY" }
-    fn description(&self) -> &str { "Create bit array of specified size" }
+    fn name(&self) -> &str {
+        "MAKE-BIT-ARRAY"
+    }
+    fn description(&self) -> &str {
+        "Create bit array of specified size"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -51,8 +55,12 @@ impl Tool for MakeBitArrayTool {
 /// BIT - Access bit in bit array
 pub struct BitTool;
 impl Tool for BitTool {
-    fn name(&self) -> &str { "BIT" }
-    fn description(&self) -> &str { "Access bit at index in bit array" }
+    fn name(&self) -> &str {
+        "BIT"
+    }
+    fn description(&self) -> &str {
+        "Access bit at index in bit array"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Int(0));
@@ -73,8 +81,12 @@ impl Tool for BitTool {
 /// SBIT - Access simple bit in simple bit array
 pub struct SbitTool;
 impl Tool for SbitTool {
-    fn name(&self) -> &str { "SBIT" }
-    fn description(&self) -> &str { "Access bit in simple bit array" }
+    fn name(&self) -> &str {
+        "SBIT"
+    }
+    fn description(&self) -> &str {
+        "Access bit in simple bit array"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Int(0));
@@ -95,8 +107,12 @@ impl Tool for SbitTool {
 /// BIT-AND - Bitwise AND on bit arrays
 pub struct BitAndTool;
 impl Tool for BitAndTool {
-    fn name(&self) -> &str { "BIT-AND" }
-    fn description(&self) -> &str { "Bitwise AND on bit arrays" }
+    fn name(&self) -> &str {
+        "BIT-AND"
+    }
+    fn description(&self) -> &str {
+        "Bitwise AND on bit arrays"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -104,12 +120,14 @@ impl Tool for BitAndTool {
 
         match (&args[0], &args[1]) {
             (Value::Array(arr1), Value::Array(arr2)) => {
-                let result: Vec<Value> = arr1.iter().zip(arr2.iter()).map(|(a, b)| {
-                    match (a, b) {
+                let result: Vec<Value> = arr1
+                    .iter()
+                    .zip(arr2.iter())
+                    .map(|(a, b)| match (a, b) {
                         (Value::Int(x), Value::Int(y)) => Value::Int(x & y),
                         _ => Value::Int(0),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             _ => Ok(Value::Array(Arc::new(vec![]))),
@@ -120,8 +138,12 @@ impl Tool for BitAndTool {
 /// BIT-IOR - Bitwise OR on bit arrays
 pub struct BitIorTool;
 impl Tool for BitIorTool {
-    fn name(&self) -> &str { "BIT-IOR" }
-    fn description(&self) -> &str { "Bitwise inclusive OR on bit arrays" }
+    fn name(&self) -> &str {
+        "BIT-IOR"
+    }
+    fn description(&self) -> &str {
+        "Bitwise inclusive OR on bit arrays"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -129,12 +151,14 @@ impl Tool for BitIorTool {
 
         match (&args[0], &args[1]) {
             (Value::Array(arr1), Value::Array(arr2)) => {
-                let result: Vec<Value> = arr1.iter().zip(arr2.iter()).map(|(a, b)| {
-                    match (a, b) {
+                let result: Vec<Value> = arr1
+                    .iter()
+                    .zip(arr2.iter())
+                    .map(|(a, b)| match (a, b) {
                         (Value::Int(x), Value::Int(y)) => Value::Int(x | y),
                         _ => Value::Int(0),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             _ => Ok(Value::Array(Arc::new(vec![]))),
@@ -145,8 +169,12 @@ impl Tool for BitIorTool {
 /// BIT-XOR - Bitwise XOR on bit arrays
 pub struct BitXorTool;
 impl Tool for BitXorTool {
-    fn name(&self) -> &str { "BIT-XOR" }
-    fn description(&self) -> &str { "Bitwise exclusive OR on bit arrays" }
+    fn name(&self) -> &str {
+        "BIT-XOR"
+    }
+    fn description(&self) -> &str {
+        "Bitwise exclusive OR on bit arrays"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -154,12 +182,14 @@ impl Tool for BitXorTool {
 
         match (&args[0], &args[1]) {
             (Value::Array(arr1), Value::Array(arr2)) => {
-                let result: Vec<Value> = arr1.iter().zip(arr2.iter()).map(|(a, b)| {
-                    match (a, b) {
+                let result: Vec<Value> = arr1
+                    .iter()
+                    .zip(arr2.iter())
+                    .map(|(a, b)| match (a, b) {
                         (Value::Int(x), Value::Int(y)) => Value::Int(x ^ y),
                         _ => Value::Int(0),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             _ => Ok(Value::Array(Arc::new(vec![]))),
@@ -170,8 +200,12 @@ impl Tool for BitXorTool {
 /// BIT-NOT - Bitwise NOT on bit array
 pub struct BitNotTool;
 impl Tool for BitNotTool {
-    fn name(&self) -> &str { "BIT-NOT" }
-    fn description(&self) -> &str { "Bitwise NOT on bit array" }
+    fn name(&self) -> &str {
+        "BIT-NOT"
+    }
+    fn description(&self) -> &str {
+        "Bitwise NOT on bit array"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -179,14 +213,15 @@ impl Tool for BitNotTool {
 
         match &args[0] {
             Value::Array(arr) => {
-                let result: Vec<Value> = arr.iter().map(|v| {
-                    match v {
+                let result: Vec<Value> = arr
+                    .iter()
+                    .map(|v| match v {
                         Value::Int(0) => Value::Int(1),
                         Value::Int(1) => Value::Int(0),
                         Value::Int(n) => Value::Int(!n),
                         _ => Value::Int(0),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             _ => Ok(Value::Array(Arc::new(vec![]))),
@@ -197,14 +232,18 @@ impl Tool for BitNotTool {
 /// BIT-VECTOR-P - Check if bit vector
 pub struct BitVectorPTool;
 impl Tool for BitVectorPTool {
-    fn name(&self) -> &str { "BIT-VECTOR-P" }
-    fn description(&self) -> &str { "Check if object is bit vector" }
+    fn name(&self) -> &str {
+        "BIT-VECTOR-P"
+    }
+    fn description(&self) -> &str {
+        "Check if object is bit vector"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         match args.get(0) {
             Some(Value::Array(arr)) => {
-                let is_bit_vector = arr.iter().all(|v| {
-                    matches!(v, Value::Int(0) | Value::Int(1))
-                });
+                let is_bit_vector = arr
+                    .iter()
+                    .all(|v| matches!(v, Value::Int(0) | Value::Int(1)));
                 Ok(Value::Bool(is_bit_vector))
             }
             _ => Ok(Value::Bool(false)),

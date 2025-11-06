@@ -117,20 +117,22 @@ impl Tool for EltTool {
         let index = args[1].as_int()? as usize;
 
         match &args[0] {
-            Value::Array(arr) => arr.get(index).cloned().ok_or_else(|| {
-                Error::IndexOutOfBounds {
+            Value::Array(arr) => arr
+                .get(index)
+                .cloned()
+                .ok_or_else(|| Error::IndexOutOfBounds {
                     index,
                     length: arr.len(),
-                }
-            }),
+                }),
             Value::String(s) => {
                 let chars: Vec<char> = s.chars().collect();
-                chars.get(index).map(|c| Value::String(c.to_string())).ok_or_else(|| {
-                    Error::IndexOutOfBounds {
+                chars
+                    .get(index)
+                    .map(|c| Value::String(c.to_string()))
+                    .ok_or_else(|| Error::IndexOutOfBounds {
                         index,
                         length: chars.len(),
-                    }
-                })
+                    })
             }
             _ => Err(Error::TypeError {
                 expected: "sequence (array or string)".to_string(),
@@ -235,10 +237,12 @@ impl Tool for AppendTool {
             match arg {
                 Value::Array(arr) => result.extend(arr.iter().cloned()),
                 Value::Null => {}
-                _ => return Err(Error::TypeError {
-                    expected: "list".to_string(),
-                    got: arg.type_name(),
-                }),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "list".to_string(),
+                        got: arg.type_name(),
+                    })
+                }
             }
         }
 
@@ -555,10 +559,7 @@ impl Tool for RemoveTool {
         let item = &args[0];
         let seq = args[1].as_array()?;
 
-        let result: Vec<Value> = seq.iter()
-            .filter(|elem| *elem != item)
-            .cloned()
-            .collect();
+        let result: Vec<Value> = seq.iter().filter(|elem| *elem != item).cloned().collect();
 
         Ok(Value::Array(Arc::new(result)))
     }
@@ -586,7 +587,8 @@ impl Tool for RemoveIfTool {
 
         let seq = args[1].as_array()?;
 
-        let result: Vec<Value> = seq.iter()
+        let result: Vec<Value> = seq
+            .iter()
             .filter(|elem| !elem.is_truthy())
             .cloned()
             .collect();
@@ -617,7 +619,8 @@ impl Tool for RemoveIfNotTool {
 
         let seq = args[1].as_array()?;
 
-        let result: Vec<Value> = seq.iter()
+        let result: Vec<Value> = seq
+            .iter()
             .filter(|elem| elem.is_truthy())
             .cloned()
             .collect();
@@ -725,7 +728,8 @@ impl Tool for SubstTool {
             if tree == old {
                 new.clone()
             } else if let Value::Array(arr) = tree {
-                let result: Vec<Value> = arr.iter()
+                let result: Vec<Value> = arr
+                    .iter()
                     .map(|elem| subst_recursive(new, old, elem))
                     .collect();
                 Value::Array(Arc::new(result))
@@ -765,7 +769,8 @@ impl Tool for SubstIfTool {
             if tree.is_truthy() {
                 new.clone()
             } else if let Value::Array(arr) = tree {
-                let result: Vec<Value> = arr.iter()
+                let result: Vec<Value> = arr
+                    .iter()
                     .map(|elem| subst_if_recursive(new, elem))
                     .collect();
                 Value::Array(Arc::new(result))
@@ -857,7 +862,8 @@ impl Tool for IntersectionTool {
         let list1 = args[0].as_array()?;
         let list2 = args[1].as_array()?;
 
-        let result: Vec<Value> = list1.iter()
+        let result: Vec<Value> = list1
+            .iter()
             .filter(|elem| list2.contains(elem))
             .cloned()
             .collect();
@@ -889,7 +895,8 @@ impl Tool for SetDifferenceTool {
         let list1 = args[0].as_array()?;
         let list2 = args[1].as_array()?;
 
-        let result: Vec<Value> = list1.iter()
+        let result: Vec<Value> = list1
+            .iter()
             .filter(|elem| !list2.contains(elem))
             .cloned()
             .collect();
@@ -1066,7 +1073,9 @@ impl Tool for PairlisTool {
         let keys = args[0].as_array()?;
         let values = args[1].as_array()?;
 
-        let pairs: Vec<Value> = keys.iter().zip(values.iter())
+        let pairs: Vec<Value> = keys
+            .iter()
+            .zip(values.iter())
             .map(|(k, v)| Value::Array(Arc::new(vec![k.clone(), v.clone()])))
             .collect();
 
@@ -1339,8 +1348,12 @@ impl Tool for MismatchTool {
 /// MERGE - Merge two sorted sequences
 pub struct MergeTool;
 impl Tool for MergeTool {
-    fn name(&self) -> &str { "MERGE" }
-    fn description(&self) -> &str { "Merge two sorted sequences" }
+    fn name(&self) -> &str {
+        "MERGE"
+    }
+    fn description(&self) -> &str {
+        "Merge two sorted sequences"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1352,11 +1365,9 @@ impl Tool for MergeTool {
         let seq2 = args[1].as_array()?;
         let mut result = seq1.to_vec();
         result.extend(seq2.iter().cloned());
-        result.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
-            }
+        result.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
         Ok(Value::Array(Arc::new(result)))
     }
@@ -1365,22 +1376,24 @@ impl Tool for MergeTool {
 /// STABLE-SORT - Stable sort sequence
 pub struct StableSortTool;
 impl Tool for StableSortTool {
-    fn name(&self) -> &str { "STABLE-SORT" }
-    fn description(&self) -> &str { "Stable sort sequence" }
+    fn name(&self) -> &str {
+        "STABLE-SORT"
+    }
+    fn description(&self) -> &str {
+        "Stable sort sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
         }
         let mut seq = args[0].as_array()?.to_vec();
-        seq.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                (Value::Float(x), Value::Float(y)) => {
-                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::String(x), Value::String(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
+        seq.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Float(x), Value::Float(y)) => {
+                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
             }
+            (Value::String(x), Value::String(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
         Ok(Value::Array(Arc::new(seq)))
     }
@@ -1389,8 +1402,12 @@ impl Tool for StableSortTool {
 /// SEARCH - Search for subsequence
 pub struct SearchTool;
 impl Tool for SearchTool {
-    fn name(&self) -> &str { "SEARCH" }
-    fn description(&self) -> &str { "Search for subsequence within sequence" }
+    fn name(&self) -> &str {
+        "SEARCH"
+    }
+    fn description(&self) -> &str {
+        "Search for subsequence within sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1417,8 +1434,12 @@ impl Tool for SearchTool {
 /// SUBSTITUTE-IF - Substitute if predicate matches
 pub struct SubstituteIfTool;
 impl Tool for SubstituteIfTool {
-    fn name(&self) -> &str { "SUBSTITUTE-IF" }
-    fn description(&self) -> &str { "Substitute if predicate matches" }
+    fn name(&self) -> &str {
+        "SUBSTITUTE-IF"
+    }
+    fn description(&self) -> &str {
+        "Substitute if predicate matches"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1428,9 +1449,16 @@ impl Tool for SubstituteIfTool {
         }
         let new_val = &args[0];
         let seq = args[1].as_array()?;
-        let result: Vec<Value> = seq.iter().map(|elem| {
-            if elem.is_truthy() { new_val.clone() } else { elem.clone() }
-        }).collect();
+        let result: Vec<Value> = seq
+            .iter()
+            .map(|elem| {
+                if elem.is_truthy() {
+                    new_val.clone()
+                } else {
+                    elem.clone()
+                }
+            })
+            .collect();
         Ok(Value::Array(Arc::new(result)))
     }
 }
@@ -1438,8 +1466,12 @@ impl Tool for SubstituteIfTool {
 /// SUBSTITUTE-IF-NOT - Substitute if predicate doesn't match
 pub struct SubstituteIfNotTool;
 impl Tool for SubstituteIfNotTool {
-    fn name(&self) -> &str { "SUBSTITUTE-IF-NOT" }
-    fn description(&self) -> &str { "Substitute if predicate doesn't match" }
+    fn name(&self) -> &str {
+        "SUBSTITUTE-IF-NOT"
+    }
+    fn description(&self) -> &str {
+        "Substitute if predicate doesn't match"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1449,9 +1481,16 @@ impl Tool for SubstituteIfNotTool {
         }
         let new_val = &args[0];
         let seq = args[1].as_array()?;
-        let result: Vec<Value> = seq.iter().map(|elem| {
-            if !elem.is_truthy() { new_val.clone() } else { elem.clone() }
-        }).collect();
+        let result: Vec<Value> = seq
+            .iter()
+            .map(|elem| {
+                if !elem.is_truthy() {
+                    new_val.clone()
+                } else {
+                    elem.clone()
+                }
+            })
+            .collect();
         Ok(Value::Array(Arc::new(result)))
     }
 }
@@ -1459,8 +1498,12 @@ impl Tool for SubstituteIfNotTool {
 /// NSUBSTITUTE-IF - Destructively substitute if predicate matches
 pub struct NsubstituteIfTool;
 impl Tool for NsubstituteIfTool {
-    fn name(&self) -> &str { "NSUBSTITUTE-IF" }
-    fn description(&self) -> &str { "Destructively substitute if predicate matches" }
+    fn name(&self) -> &str {
+        "NSUBSTITUTE-IF"
+    }
+    fn description(&self) -> &str {
+        "Destructively substitute if predicate matches"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         SubstituteIfTool.execute(args)
     }
@@ -1469,8 +1512,12 @@ impl Tool for NsubstituteIfTool {
 /// NSUBSTITUTE-IF-NOT - Destructively substitute if predicate doesn't match
 pub struct NsubstituteIfNotTool;
 impl Tool for NsubstituteIfNotTool {
-    fn name(&self) -> &str { "NSUBSTITUTE-IF-NOT" }
-    fn description(&self) -> &str { "Destructively substitute if predicate doesn't match" }
+    fn name(&self) -> &str {
+        "NSUBSTITUTE-IF-NOT"
+    }
+    fn description(&self) -> &str {
+        "Destructively substitute if predicate doesn't match"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         SubstituteIfNotTool.execute(args)
     }
@@ -1479,8 +1526,12 @@ impl Tool for NsubstituteIfNotTool {
 /// DELETE-DUPLICATES - Remove duplicate elements
 pub struct DeleteDuplicatesTool;
 impl Tool for DeleteDuplicatesTool {
-    fn name(&self) -> &str { "DELETE-DUPLICATES" }
-    fn description(&self) -> &str { "Remove duplicate elements from sequence" }
+    fn name(&self) -> &str {
+        "DELETE-DUPLICATES"
+    }
+    fn description(&self) -> &str {
+        "Remove duplicate elements from sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -1501,8 +1552,12 @@ impl Tool for DeleteDuplicatesTool {
 /// COUNT - Count occurrences of item
 pub struct CountTool;
 impl Tool for CountTool {
-    fn name(&self) -> &str { "COUNT" }
-    fn description(&self) -> &str { "Count occurrences of item in sequence" }
+    fn name(&self) -> &str {
+        "COUNT"
+    }
+    fn description(&self) -> &str {
+        "Count occurrences of item in sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1520,8 +1575,12 @@ impl Tool for CountTool {
 /// COUNT-IF - Count items matching predicate
 pub struct CountIfTool;
 impl Tool for CountIfTool {
-    fn name(&self) -> &str { "COUNT-IF" }
-    fn description(&self) -> &str { "Count items matching predicate" }
+    fn name(&self) -> &str {
+        "COUNT-IF"
+    }
+    fn description(&self) -> &str {
+        "Count items matching predicate"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Int(0));
@@ -1535,8 +1594,12 @@ impl Tool for CountIfTool {
 /// POSITION - Find position of item
 pub struct PositionTool;
 impl Tool for PositionTool {
-    fn name(&self) -> &str { "POSITION" }
-    fn description(&self) -> &str { "Find position of item in sequence" }
+    fn name(&self) -> &str {
+        "POSITION"
+    }
+    fn description(&self) -> &str {
+        "Find position of item in sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1558,8 +1621,12 @@ impl Tool for PositionTool {
 /// FIND-IF-NOT - Find item not matching predicate
 pub struct FindIfNotTool;
 impl Tool for FindIfNotTool {
-    fn name(&self) -> &str { "FIND-IF-NOT" }
-    fn description(&self) -> &str { "Find first item not matching predicate" }
+    fn name(&self) -> &str {
+        "FIND-IF-NOT"
+    }
+    fn description(&self) -> &str {
+        "Find first item not matching predicate"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Null);
@@ -1577,8 +1644,12 @@ impl Tool for FindIfNotTool {
 /// REPLACE - Replace subsequence
 pub struct ReplaceToolSeq;
 impl Tool for ReplaceToolSeq {
-    fn name(&self) -> &str { "REPLACE" }
-    fn description(&self) -> &str { "Replace subsequence in sequence" }
+    fn name(&self) -> &str {
+        "REPLACE"
+    }
+    fn description(&self) -> &str {
+        "Replace subsequence in sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1600,8 +1671,12 @@ impl Tool for ReplaceToolSeq {
 /// NREPLACE - Destructively replace subsequence
 pub struct NreplaceTool;
 impl Tool for NreplaceTool {
-    fn name(&self) -> &str { "NREPLACE" }
-    fn description(&self) -> &str { "Destructively replace subsequence" }
+    fn name(&self) -> &str {
+        "NREPLACE"
+    }
+    fn description(&self) -> &str {
+        "Destructively replace subsequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         ReplaceToolSeq.execute(args)
     }
@@ -1610,8 +1685,12 @@ impl Tool for NreplaceTool {
 /// CONCATENATE - Concatenate sequences
 pub struct ConcatenateTool;
 impl Tool for ConcatenateTool {
-    fn name(&self) -> &str { "CONCATENATE" }
-    fn description(&self) -> &str { "Concatenate sequences" }
+    fn name(&self) -> &str {
+        "CONCATENATE"
+    }
+    fn description(&self) -> &str {
+        "Concatenate sequences"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let mut result = Vec::new();
         for arg in args {
@@ -1626,8 +1705,12 @@ impl Tool for ConcatenateTool {
 /// LENGTH - Get sequence length
 pub struct LengthSeqTool;
 impl Tool for LengthSeqTool {
-    fn name(&self) -> &str { "LENGTH" }
-    fn description(&self) -> &str { "Get length of sequence" }
+    fn name(&self) -> &str {
+        "LENGTH"
+    }
+    fn description(&self) -> &str {
+        "Get length of sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Int(0));
@@ -1643,8 +1726,12 @@ impl Tool for LengthSeqTool {
 /// REVERSE - Reverse sequence
 pub struct ReverseTool;
 impl Tool for ReverseTool {
-    fn name(&self) -> &str { "REVERSE" }
-    fn description(&self) -> &str { "Reverse sequence" }
+    fn name(&self) -> &str {
+        "REVERSE"
+    }
+    fn description(&self) -> &str {
+        "Reverse sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -1658,8 +1745,12 @@ impl Tool for ReverseTool {
 /// SUBSEQUENCE - Extract subsequence
 pub struct SubsequenceTool;
 impl Tool for SubsequenceTool {
-    fn name(&self) -> &str { "SUBSEQUENCE" }
-    fn description(&self) -> &str { "Extract subsequence" }
+    fn name(&self) -> &str {
+        "SUBSEQUENCE"
+    }
+    fn description(&self) -> &str {
+        "Extract subsequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -1686,22 +1777,24 @@ impl Tool for SubsequenceTool {
 /// SORT - Sort sequence
 pub struct SortTool;
 impl Tool for SortTool {
-    fn name(&self) -> &str { "SORT" }
-    fn description(&self) -> &str { "Sort sequence" }
+    fn name(&self) -> &str {
+        "SORT"
+    }
+    fn description(&self) -> &str {
+        "Sort sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
         }
         let mut seq = args[0].as_array()?.to_vec();
-        seq.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                (Value::Float(x), Value::Float(y)) => {
-                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::String(x), Value::String(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
+        seq.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Float(x), Value::Float(y)) => {
+                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
             }
+            (Value::String(x), Value::String(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
         Ok(Value::Array(Arc::new(seq)))
     }
@@ -1710,8 +1803,12 @@ impl Tool for SortTool {
 /// MAP - Map function over sequence
 pub struct MapTool;
 impl Tool for MapTool {
-    fn name(&self) -> &str { "MAP" }
-    fn description(&self) -> &str { "Map function over sequence" }
+    fn name(&self) -> &str {
+        "MAP"
+    }
+    fn description(&self) -> &str {
+        "Map function over sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));

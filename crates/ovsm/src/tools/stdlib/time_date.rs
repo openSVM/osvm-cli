@@ -19,8 +19,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// GET-UNIVERSAL-TIME - Get current universal time
 pub struct GetUniversalTimeTool;
 impl Tool for GetUniversalTimeTool {
-    fn name(&self) -> &str { "GET-UNIVERSAL-TIME" }
-    fn description(&self) -> &str { "Get current time as universal time" }
+    fn name(&self) -> &str {
+        "GET-UNIVERSAL-TIME"
+    }
+    fn description(&self) -> &str {
+        "Get current time as universal time"
+    }
     fn execute(&self, _args: &[Value]) -> Result<Value> {
         // Universal time = seconds since 1900-01-01 00:00:00
         // Unix epoch = 1970-01-01 00:00:00 = 2208988800 seconds after 1900
@@ -38,21 +42,25 @@ impl Tool for GetUniversalTimeTool {
 /// GET-DECODED-TIME - Get current time as decoded components
 pub struct GetDecodedTimeTool;
 impl Tool for GetDecodedTimeTool {
-    fn name(&self) -> &str { "GET-DECODED-TIME" }
-    fn description(&self) -> &str { "Get current time as decoded components" }
+    fn name(&self) -> &str {
+        "GET-DECODED-TIME"
+    }
+    fn description(&self) -> &str {
+        "Get current time as decoded components"
+    }
     fn execute(&self, _args: &[Value]) -> Result<Value> {
         // Returns: second, minute, hour, date, month, year, day-of-week, dst-p, timezone
         // Simplified implementation
         Ok(Value::Array(Arc::new(vec![
-            Value::Int(0),   // second
-            Value::Int(0),   // minute
-            Value::Int(0),   // hour
-            Value::Int(1),   // date
-            Value::Int(1),   // month
-            Value::Int(2025), // year
-            Value::Int(0),   // day-of-week (Monday=0)
+            Value::Int(0),      // second
+            Value::Int(0),      // minute
+            Value::Int(0),      // hour
+            Value::Int(1),      // date
+            Value::Int(1),      // month
+            Value::Int(2025),   // year
+            Value::Int(0),      // day-of-week (Monday=0)
             Value::Bool(false), // daylight saving time
-            Value::Int(0),   // timezone offset
+            Value::Int(0),      // timezone offset
         ])))
     }
 }
@@ -60,8 +68,12 @@ impl Tool for GetDecodedTimeTool {
 /// DECODE-UNIVERSAL-TIME - Decode universal time to components
 pub struct DecodeUniversalTimeTool;
 impl Tool for DecodeUniversalTimeTool {
-    fn name(&self) -> &str { "DECODE-UNIVERSAL-TIME" }
-    fn description(&self) -> &str { "Decode universal time to components" }
+    fn name(&self) -> &str {
+        "DECODE-UNIVERSAL-TIME"
+    }
+    fn description(&self) -> &str {
+        "Decode universal time to components"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -72,15 +84,15 @@ impl Tool for DecodeUniversalTimeTool {
 
         // Returns: second, minute, hour, date, month, year, day-of-week, dst-p, timezone
         Ok(Value::Array(Arc::new(vec![
-            Value::Int(0),   // second
-            Value::Int(0),   // minute
-            Value::Int(0),   // hour
-            Value::Int(1),   // date
-            Value::Int(1),   // month
-            Value::Int(2025), // year
-            Value::Int(0),   // day-of-week
+            Value::Int(0),      // second
+            Value::Int(0),      // minute
+            Value::Int(0),      // hour
+            Value::Int(1),      // date
+            Value::Int(1),      // month
+            Value::Int(2025),   // year
+            Value::Int(0),      // day-of-week
             Value::Bool(false), // dst
-            Value::Int(0),   // timezone
+            Value::Int(0),      // timezone
         ])))
     }
 }
@@ -88,8 +100,12 @@ impl Tool for DecodeUniversalTimeTool {
 /// ENCODE-UNIVERSAL-TIME - Encode components to universal time
 pub struct EncodeUniversalTimeTool;
 impl Tool for EncodeUniversalTimeTool {
-    fn name(&self) -> &str { "ENCODE-UNIVERSAL-TIME" }
-    fn description(&self) -> &str { "Encode time components to universal time" }
+    fn name(&self) -> &str {
+        "ENCODE-UNIVERSAL-TIME"
+    }
+    fn description(&self) -> &str {
+        "Encode time components to universal time"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 6 {
             return Err(Error::InvalidArguments {
@@ -111,8 +127,12 @@ impl Tool for EncodeUniversalTimeTool {
 /// TIME-ADD - Add duration to time
 pub struct TimeAddTool;
 impl Tool for TimeAddTool {
-    fn name(&self) -> &str { "TIME-ADD" }
-    fn description(&self) -> &str { "Add duration to universal time" }
+    fn name(&self) -> &str {
+        "TIME-ADD"
+    }
+    fn description(&self) -> &str {
+        "Add duration to universal time"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -134,8 +154,12 @@ impl Tool for TimeAddTool {
 /// TIME-SUBTRACT - Subtract times or duration
 pub struct TimeSubtractTool;
 impl Tool for TimeSubtractTool {
-    fn name(&self) -> &str { "TIME-SUBTRACT" }
-    fn description(&self) -> &str { "Subtract times or duration from time" }
+    fn name(&self) -> &str {
+        "TIME-SUBTRACT"
+    }
+    fn description(&self) -> &str {
+        "Subtract times or duration from time"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -157,8 +181,12 @@ impl Tool for TimeSubtractTool {
 /// TIME< - Compare times (less than)
 pub struct TimeLessThanTool;
 impl Tool for TimeLessThanTool {
-    fn name(&self) -> &str { "TIME<" }
-    fn description(&self) -> &str { "Compare if time1 < time2" }
+    fn name(&self) -> &str {
+        "TIME<"
+    }
+    fn description(&self) -> &str {
+        "Compare if time1 < time2"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Bool(false));
@@ -174,8 +202,12 @@ impl Tool for TimeLessThanTool {
 /// TIME<= - Compare times (less than or equal)
 pub struct TimeLessEqualTool;
 impl Tool for TimeLessEqualTool {
-    fn name(&self) -> &str { "TIME<=" }
-    fn description(&self) -> &str { "Compare if time1 <= time2" }
+    fn name(&self) -> &str {
+        "TIME<="
+    }
+    fn description(&self) -> &str {
+        "Compare if time1 <= time2"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Bool(false));
@@ -191,8 +223,12 @@ impl Tool for TimeLessEqualTool {
 /// TIME= - Compare times (equal)
 pub struct TimeEqualTool;
 impl Tool for TimeEqualTool {
-    fn name(&self) -> &str { "TIME=" }
-    fn description(&self) -> &str { "Compare if time1 = time2" }
+    fn name(&self) -> &str {
+        "TIME="
+    }
+    fn description(&self) -> &str {
+        "Compare if time1 = time2"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Bool(false));
@@ -208,8 +244,12 @@ impl Tool for TimeEqualTool {
 /// SLEEP - Sleep for duration
 pub struct SleepTool;
 impl Tool for SleepTool {
-    fn name(&self) -> &str { "SLEEP" }
-    fn description(&self) -> &str { "Sleep for specified seconds" }
+    fn name(&self) -> &str {
+        "SLEEP"
+    }
+    fn description(&self) -> &str {
+        "Sleep for specified seconds"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Null);

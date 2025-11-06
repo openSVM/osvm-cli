@@ -311,9 +311,9 @@ impl Tool for TreeEqualTool {
                 }
                 (Value::Object(obj1), Value::Object(obj2)) => {
                     obj1.len() == obj2.len()
-                        && obj1.iter().all(|(k, v1)| {
-                            obj2.get(k).map_or(false, |v2| deep_equal(v1, v2))
-                        })
+                        && obj1
+                            .iter()
+                            .all(|(k, v1)| obj2.get(k).map_or(false, |v2| deep_equal(v1, v2)))
                 }
                 (a, b) => a == b,
             }
@@ -358,7 +358,10 @@ impl Tool for SublisTool {
 
             // Recursively process subtrees
             if let Value::Array(arr) = tree {
-                let result: Vec<Value> = arr.iter().map(|elem| sublis_recursive(alist, elem)).collect();
+                let result: Vec<Value> = arr
+                    .iter()
+                    .map(|elem| sublis_recursive(alist, elem))
+                    .collect();
                 Value::Array(Arc::new(result))
             } else {
                 tree.clone()
@@ -614,7 +617,10 @@ impl Tool for ListTuplePTool {
         }
 
         // In OVSM, all arrays are proper lists (no circular structures)
-        Ok(Value::Bool(matches!(&args[0], Value::Array(_) | Value::Null)))
+        Ok(Value::Bool(matches!(
+            &args[0],
+            Value::Array(_) | Value::Null
+        )))
     }
 }
 
@@ -645,15 +651,13 @@ impl Tool for StableSortTool {
         let list = args[0].as_array()?;
         let mut sorted = list.to_vec();
 
-        sorted.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                (Value::Float(x), Value::Float(y)) => {
-                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::String(x), Value::String(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
+        sorted.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Float(x), Value::Float(y)) => {
+                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
             }
+            (Value::String(x), Value::String(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
 
         Ok(Value::Array(Arc::new(sorted)))
@@ -684,15 +688,13 @@ impl Tool for SortByTool {
 
         // Simple sort - just sort by the values themselves
         let mut sorted = list.to_vec();
-        sorted.sort_by(|a, b| {
-            match (a, b) {
-                (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                (Value::Float(x), Value::Float(y)) => {
-                    x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                }
-                (Value::String(x), Value::String(y)) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal,
+        sorted.sort_by(|a, b| match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x.cmp(y),
+            (Value::Float(x), Value::Float(y)) => {
+                x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
             }
+            (Value::String(x), Value::String(y)) => x.cmp(y),
+            _ => std::cmp::Ordering::Equal,
         });
 
         Ok(Value::Array(Arc::new(sorted)))

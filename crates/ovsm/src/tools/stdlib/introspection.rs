@@ -17,8 +17,12 @@ use std::sync::Arc;
 /// APROPOS - Find symbols matching string
 pub struct AproposTool;
 impl Tool for AproposTool {
-    fn name(&self) -> &str { "APROPOS" }
-    fn description(&self) -> &str { "Find and print symbols matching string" }
+    fn name(&self) -> &str {
+        "APROPOS"
+    }
+    fn description(&self) -> &str {
+        "Find and print symbols matching string"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -43,8 +47,12 @@ impl Tool for AproposTool {
 /// APROPOS-LIST - Get list of symbols matching string
 pub struct AproposListTool;
 impl Tool for AproposListTool {
-    fn name(&self) -> &str { "APROPOS-LIST" }
-    fn description(&self) -> &str { "Get list of symbols matching string" }
+    fn name(&self) -> &str {
+        "APROPOS-LIST"
+    }
+    fn description(&self) -> &str {
+        "Get list of symbols matching string"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -73,8 +81,12 @@ impl Tool for AproposListTool {
 /// DESCRIBE - Describe object
 pub struct DescribeTool;
 impl Tool for DescribeTool {
-    fn name(&self) -> &str { "DESCRIBE" }
-    fn description(&self) -> &str { "Print description of object" }
+    fn name(&self) -> &str {
+        "DESCRIBE"
+    }
+    fn description(&self) -> &str {
+        "Print description of object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -103,8 +115,12 @@ impl Tool for DescribeTool {
 /// DESCRIBE-OBJECT - Describe object with details
 pub struct DescribeObjectTool;
 impl Tool for DescribeObjectTool {
-    fn name(&self) -> &str { "DESCRIBE-OBJECT" }
-    fn description(&self) -> &str { "Describe object with full details" }
+    fn name(&self) -> &str {
+        "DESCRIBE-OBJECT"
+    }
+    fn description(&self) -> &str {
+        "Describe object with full details"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -114,19 +130,22 @@ impl Tool for DescribeObjectTool {
         }
 
         println!("Object: {}", args[0]);
-        println!("Type: {}", match &args[0] {
-            Value::Null => "NULL",
-            Value::Bool(_) => "BOOLEAN",
-            Value::Int(_) => "INTEGER",
-            Value::Float(_) => "FLOAT",
-            Value::String(_) => "STRING",
-            Value::Array(_) => "ARRAY",
-            Value::Object(_) => "OBJECT",
-            Value::Range { .. } => "RANGE",
-            Value::Function { .. } => "FUNCTION",
-            Value::Multiple(_) => "MULTIPLE",
-            Value::Macro { .. } => "MACRO",
-        });
+        println!(
+            "Type: {}",
+            match &args[0] {
+                Value::Null => "NULL",
+                Value::Bool(_) => "BOOLEAN",
+                Value::Int(_) => "INTEGER",
+                Value::Float(_) => "FLOAT",
+                Value::String(_) => "STRING",
+                Value::Array(_) => "ARRAY",
+                Value::Object(_) => "OBJECT",
+                Value::Range { .. } => "RANGE",
+                Value::Function { .. } => "FUNCTION",
+                Value::Multiple(_) => "MULTIPLE",
+                Value::Macro { .. } => "MACRO",
+            }
+        );
         Ok(Value::Null)
     }
 }
@@ -138,8 +157,12 @@ impl Tool for DescribeObjectTool {
 /// INSPECT - Interactively inspect object
 pub struct InspectTool;
 impl Tool for InspectTool {
-    fn name(&self) -> &str { "INSPECT" }
-    fn description(&self) -> &str { "Interactively inspect object" }
+    fn name(&self) -> &str {
+        "INSPECT"
+    }
+    fn description(&self) -> &str {
+        "Interactively inspect object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -150,19 +173,22 @@ impl Tool for InspectTool {
 
         println!("=== INSPECT ===");
         println!("Value: {}", args[0]);
-        println!("Type: {}", match &args[0] {
-            Value::Null => "NULL",
-            Value::Bool(_) => "BOOLEAN",
-            Value::Int(_) => "INTEGER",
-            Value::Float(_) => "FLOAT",
-            Value::String(_) => "STRING",
-            Value::Array(_) => "ARRAY",
-            Value::Object(_) => "OBJECT",
-            Value::Range { .. } => "RANGE",
-            Value::Function { .. } => "FUNCTION",
-            Value::Multiple(_) => "MULTIPLE",
-            Value::Macro { .. } => "MACRO",
-        });
+        println!(
+            "Type: {}",
+            match &args[0] {
+                Value::Null => "NULL",
+                Value::Bool(_) => "BOOLEAN",
+                Value::Int(_) => "INTEGER",
+                Value::Float(_) => "FLOAT",
+                Value::String(_) => "STRING",
+                Value::Array(_) => "ARRAY",
+                Value::Object(_) => "OBJECT",
+                Value::Range { .. } => "RANGE",
+                Value::Function { .. } => "FUNCTION",
+                Value::Multiple(_) => "MULTIPLE",
+                Value::Macro { .. } => "MACRO",
+            }
+        );
         Ok(Value::Null)
     }
 }
@@ -174,8 +200,12 @@ impl Tool for InspectTool {
 /// CLASS-OF - Get class of object
 pub struct ClassOfTool;
 impl Tool for ClassOfTool {
-    fn name(&self) -> &str { "CLASS-OF" }
-    fn description(&self) -> &str { "Get class of object" }
+    fn name(&self) -> &str {
+        "CLASS-OF"
+    }
+    fn description(&self) -> &str {
+        "Get class of object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::String("NULL".to_string()));
@@ -202,8 +232,12 @@ impl Tool for ClassOfTool {
 /// FIND-CLASS - Find class by name
 pub struct FindClassTool;
 impl Tool for FindClassTool {
-    fn name(&self) -> &str { "FIND-CLASS" }
-    fn description(&self) -> &str { "Find class by name" }
+    fn name(&self) -> &str {
+        "FIND-CLASS"
+    }
+    fn description(&self) -> &str {
+        "Find class by name"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -227,8 +261,12 @@ impl Tool for FindClassTool {
 /// CLASS-NAME - Get name of class
 pub struct ClassNameTool;
 impl Tool for ClassNameTool {
-    fn name(&self) -> &str { "CLASS-NAME" }
-    fn description(&self) -> &str { "Get name of class" }
+    fn name(&self) -> &str {
+        "CLASS-NAME"
+    }
+    fn description(&self) -> &str {
+        "Get name of class"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -248,8 +286,12 @@ impl Tool for ClassNameTool {
 /// SLOT-VALUE - Get slot value
 pub struct SlotValueTool;
 impl Tool for SlotValueTool {
-    fn name(&self) -> &str { "SLOT-VALUE" }
-    fn description(&self) -> &str { "Get value of object slot" }
+    fn name(&self) -> &str {
+        "SLOT-VALUE"
+    }
+    fn description(&self) -> &str {
+        "Get value of object slot"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -281,8 +323,12 @@ impl Tool for SlotValueTool {
 /// SLOT-BOUNDP - Check if slot is bound
 pub struct SlotBoundpTool;
 impl Tool for SlotBoundpTool {
-    fn name(&self) -> &str { "SLOT-BOUNDP" }
-    fn description(&self) -> &str { "Check if slot is bound" }
+    fn name(&self) -> &str {
+        "SLOT-BOUNDP"
+    }
+    fn description(&self) -> &str {
+        "Check if slot is bound"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -314,8 +360,12 @@ impl Tool for SlotBoundpTool {
 /// SLOT-MAKUNBOUND - Make slot unbound
 pub struct SlotMakunboundTool;
 impl Tool for SlotMakunboundTool {
-    fn name(&self) -> &str { "SLOT-MAKUNBOUND" }
-    fn description(&self) -> &str { "Make slot unbound" }
+    fn name(&self) -> &str {
+        "SLOT-MAKUNBOUND"
+    }
+    fn description(&self) -> &str {
+        "Make slot unbound"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -347,8 +397,12 @@ impl Tool for SlotMakunboundTool {
 /// SLOT-EXISTS-P - Check if slot exists
 pub struct SlotExistsPTool;
 impl Tool for SlotExistsPTool {
-    fn name(&self) -> &str { "SLOT-EXISTS-P" }
-    fn description(&self) -> &str { "Check if slot exists in object" }
+    fn name(&self) -> &str {
+        "SLOT-EXISTS-P"
+    }
+    fn description(&self) -> &str {
+        "Check if slot exists in object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -380,8 +434,12 @@ impl Tool for SlotExistsPTool {
 /// CLASS-SLOTS - Get list of class slots
 pub struct ClassSlotsTool;
 impl Tool for ClassSlotsTool {
-    fn name(&self) -> &str { "CLASS-SLOTS" }
-    fn description(&self) -> &str { "Get list of slots in class" }
+    fn name(&self) -> &str {
+        "CLASS-SLOTS"
+    }
+    fn description(&self) -> &str {
+        "Get list of slots in class"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {

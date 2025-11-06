@@ -13,10 +13,18 @@ use std::sync::Arc;
 /// ERROR - Signal error
 pub struct ErrorTool;
 impl Tool for ErrorTool {
-    fn name(&self) -> &str { "ERROR" }
-    fn description(&self) -> &str { "Signal an error condition" }
+    fn name(&self) -> &str {
+        "ERROR"
+    }
+    fn description(&self) -> &str {
+        "Signal an error condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let msg = if args.is_empty() { "Error" } else { args[0].as_string()? };
+        let msg = if args.is_empty() {
+            "Error"
+        } else {
+            args[0].as_string()?
+        };
         Err(Error::ToolExecutionError {
             tool: "ERROR".to_string(),
             reason: msg.to_string(),
@@ -27,10 +35,18 @@ impl Tool for ErrorTool {
 /// CERROR - Continuable error
 pub struct CerrorTool;
 impl Tool for CerrorTool {
-    fn name(&self) -> &str { "CERROR" }
-    fn description(&self) -> &str { "Signal continuable error" }
+    fn name(&self) -> &str {
+        "CERROR"
+    }
+    fn description(&self) -> &str {
+        "Signal continuable error"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let msg = if args.is_empty() { "Continuable error" } else { args[0].as_string()? };
+        let msg = if args.is_empty() {
+            "Continuable error"
+        } else {
+            args[0].as_string()?
+        };
         Ok(Value::String(format!("CERROR: {}", msg)))
     }
 }
@@ -38,10 +54,18 @@ impl Tool for CerrorTool {
 /// WARN - Signal warning
 pub struct WarnTool;
 impl Tool for WarnTool {
-    fn name(&self) -> &str { "WARN" }
-    fn description(&self) -> &str { "Signal warning" }
+    fn name(&self) -> &str {
+        "WARN"
+    }
+    fn description(&self) -> &str {
+        "Signal warning"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let msg = if args.is_empty() { "Warning" } else { args[0].as_string()? };
+        let msg = if args.is_empty() {
+            "Warning"
+        } else {
+            args[0].as_string()?
+        };
         eprintln!("WARNING: {}", msg);
         Ok(Value::Null)
     }
@@ -50,8 +74,12 @@ impl Tool for WarnTool {
 /// SIGNAL - Signal condition
 pub struct SignalTool;
 impl Tool for SignalTool {
-    fn name(&self) -> &str { "SIGNAL" }
-    fn description(&self) -> &str { "Signal condition" }
+    fn name(&self) -> &str {
+        "SIGNAL"
+    }
+    fn description(&self) -> &str {
+        "Signal condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if !args.is_empty() {
             eprintln!("SIGNAL: {}", args[0]);
@@ -66,28 +94,52 @@ macro_rules! simple_condition_tool {
         #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
-            fn name(&self) -> &str { $str }
-            fn description(&self) -> &str { $desc }
+            fn name(&self) -> &str {
+                $str
+            }
+            fn description(&self) -> &str {
+                $desc
+            }
             fn execute(&self, args: &[Value]) -> Result<Value> {
-                Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+                Ok(if args.is_empty() {
+                    Value::Null
+                } else {
+                    args[0].clone()
+                })
             }
         }
     };
 }
 
 simple_condition_tool!(HandlerBindTool, "HANDLER-BIND", "Bind condition handlers");
-simple_condition_tool!(HandlerCaseTool, "HANDLER-CASE", "Handle conditions with cases");
+simple_condition_tool!(
+    HandlerCaseTool,
+    "HANDLER-CASE",
+    "Handle conditions with cases"
+);
 simple_condition_tool!(IgnoreErrorsTool, "IGNORE-ERRORS", "Suppress errors");
-simple_condition_tool!(WithSimpleRestartTool, "WITH-SIMPLE-RESTART", "Provide simple restart");
+simple_condition_tool!(
+    WithSimpleRestartTool,
+    "WITH-SIMPLE-RESTART",
+    "Provide simple restart"
+);
 simple_condition_tool!(RestartCaseTool, "RESTART-CASE", "Define restarts");
 simple_condition_tool!(RestartBindTool, "RESTART-BIND", "Bind restarts");
 simple_condition_tool!(InvokeRestartTool, "INVOKE-RESTART", "Invoke named restart");
 simple_condition_tool!(FindRestartTool, "FIND-RESTART", "Find restart by name");
 // Replaced with manual implementation below for Arc usage
 // simple_condition_tool!(ComputeRestartsTool, "COMPUTE-RESTARTS", "List available restarts");
-simple_condition_tool!(MakeConditionTool, "MAKE-CONDITION", "Create condition object");
+simple_condition_tool!(
+    MakeConditionTool,
+    "MAKE-CONDITION",
+    "Create condition object"
+);
 simple_condition_tool!(ConditionTypeTool, "CONDITION-TYPE", "Get condition type");
-simple_condition_tool!(SimpleConditionFormatControlTool, "SIMPLE-CONDITION-FORMAT-CONTROL", "Get format string");
+simple_condition_tool!(
+    SimpleConditionFormatControlTool,
+    "SIMPLE-CONDITION-FORMAT-CONTROL",
+    "Get format string"
+);
 // Replaced with manual implementation below for Arc usage
 // simple_condition_tool!(SimpleConditionFormatArgumentsTool, "SIMPLE-CONDITION-FORMAT-ARGUMENTS", "Get format args");
 
@@ -101,8 +153,16 @@ simple_condition_tool!(StreamErrorTool, "STREAM-ERROR", "Stream operation error"
 simple_condition_tool!(FileErrorTool, "FILE-ERROR", "File operation error");
 simple_condition_tool!(ArithmeticErrorTool, "ARITHMETIC-ERROR", "Math error");
 simple_condition_tool!(DivisionByZeroTool, "DIVISION-BY-ZERO", "Division by zero");
-simple_condition_tool!(FloatingPointOverflowTool, "FLOATING-POINT-OVERFLOW", "Float overflow");
-simple_condition_tool!(FloatingPointUnderflowTool, "FLOATING-POINT-UNDERFLOW", "Float underflow");
+simple_condition_tool!(
+    FloatingPointOverflowTool,
+    "FLOATING-POINT-OVERFLOW",
+    "Float overflow"
+);
+simple_condition_tool!(
+    FloatingPointUnderflowTool,
+    "FLOATING-POINT-UNDERFLOW",
+    "Float underflow"
+);
 
 // Condition predicates
 simple_condition_tool!(ConditionPTool, "CONDITION-P", "Check if condition");
@@ -111,7 +171,11 @@ simple_condition_tool!(WarningPTool, "WARNING-P", "Check if warning");
 
 // Restart utilities
 simple_condition_tool!(RestartNameTool, "RESTART-NAME", "Get restart name");
-simple_condition_tool!(InvokeRestartInteractivelyTool, "INVOKE-RESTART-INTERACTIVELY", "Invoke restart interactively");
+simple_condition_tool!(
+    InvokeRestartInteractivelyTool,
+    "INVOKE-RESTART-INTERACTIVELY",
+    "Invoke restart interactively"
+);
 simple_condition_tool!(AbortTool, "ABORT", "Abort to toplevel");
 simple_condition_tool!(ContinueTool, "CONTINUE", "Continue from error");
 simple_condition_tool!(StorValueTool, "STORE-VALUE", "Store value restart");
@@ -121,8 +185,12 @@ simple_condition_tool!(UseValueTool, "USE-VALUE", "Use value restart");
 /// COMPUTE-RESTARTS - List available restarts
 pub struct ComputeRestartsTool;
 impl Tool for ComputeRestartsTool {
-    fn name(&self) -> &str { "COMPUTE-RESTARTS" }
-    fn description(&self) -> &str { "List available restarts" }
+    fn name(&self) -> &str {
+        "COMPUTE-RESTARTS"
+    }
+    fn description(&self) -> &str {
+        "List available restarts"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         // Return array of available restart names
         let restarts = vec![
@@ -142,8 +210,12 @@ impl Tool for ComputeRestartsTool {
 /// SIMPLE-CONDITION-FORMAT-ARGUMENTS - Get format args
 pub struct SimpleConditionFormatArgumentsTool;
 impl Tool for SimpleConditionFormatArgumentsTool {
-    fn name(&self) -> &str { "SIMPLE-CONDITION-FORMAT-ARGUMENTS" }
-    fn description(&self) -> &str { "Get format args" }
+    fn name(&self) -> &str {
+        "SIMPLE-CONDITION-FORMAT-ARGUMENTS"
+    }
+    fn description(&self) -> &str {
+        "Get format args"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         // Extract format arguments from condition
         // Return as array if multiple arguments, single value otherwise
@@ -164,8 +236,12 @@ impl Tool for SimpleConditionFormatArgumentsTool {
 /// MUFFLE-WARNING - Suppress warning signal
 pub struct MuffleWarningTool;
 impl Tool for MuffleWarningTool {
-    fn name(&self) -> &str { "MUFFLE-WARNING" }
-    fn description(&self) -> &str { "Suppress warning from being displayed" }
+    fn name(&self) -> &str {
+        "MUFFLE-WARNING"
+    }
+    fn description(&self) -> &str {
+        "Suppress warning from being displayed"
+    }
     fn execute(&self, _args: &[Value]) -> Result<Value> {
         Ok(Value::Null)
     }
@@ -174,8 +250,12 @@ impl Tool for MuffleWarningTool {
 /// BREAK - Enter debugger
 pub struct BreakTool;
 impl Tool for BreakTool {
-    fn name(&self) -> &str { "BREAK" }
-    fn description(&self) -> &str { "Enter interactive debugger" }
+    fn name(&self) -> &str {
+        "BREAK"
+    }
+    fn description(&self) -> &str {
+        "Enter interactive debugger"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let msg = if args.is_empty() {
             "Break"
@@ -193,8 +273,12 @@ impl Tool for BreakTool {
 /// ASSERT - Runtime assertion
 pub struct AssertTool;
 impl Tool for AssertTool {
-    fn name(&self) -> &str { "ASSERT" }
-    fn description(&self) -> &str { "Runtime assertion with correctable error" }
+    fn name(&self) -> &str {
+        "ASSERT"
+    }
+    fn description(&self) -> &str {
+        "Runtime assertion with correctable error"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::ToolExecutionError {
@@ -222,8 +306,12 @@ impl Tool for AssertTool {
 /// CHECK-TYPE - Type checking with restart
 pub struct CheckTypeTool;
 impl Tool for CheckTypeTool {
-    fn name(&self) -> &str { "CHECK-TYPE" }
-    fn description(&self) -> &str { "Check type with correctable error" }
+    fn name(&self) -> &str {
+        "CHECK-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Check type with correctable error"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::ToolExecutionError {
@@ -241,38 +329,66 @@ impl Tool for CheckTypeTool {
 /// DEFINE-CONDITION - Define condition type
 pub struct DefineConditionTool;
 impl Tool for DefineConditionTool {
-    fn name(&self) -> &str { "DEFINE-CONDITION" }
-    fn description(&self) -> &str { "Define new condition type" }
+    fn name(&self) -> &str {
+        "DEFINE-CONDITION"
+    }
+    fn description(&self) -> &str {
+        "Define new condition type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// WITH-CONDITION-RESTARTS - Associate restarts with condition
 pub struct WithConditionRestartsTool;
 impl Tool for WithConditionRestartsTool {
-    fn name(&self) -> &str { "WITH-CONDITION-RESTARTS" }
-    fn description(&self) -> &str { "Associate restarts with condition" }
+    fn name(&self) -> &str {
+        "WITH-CONDITION-RESTARTS"
+    }
+    fn description(&self) -> &str {
+        "Associate restarts with condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.len() > 2 { args[args.len() - 1].clone() } else { Value::Null })
+        Ok(if args.len() > 2 {
+            args[args.len() - 1].clone()
+        } else {
+            Value::Null
+        })
     }
 }
 
 /// RESTART-CASE-ASSOCIATE - Associate restart with condition
 pub struct RestartCaseAssociateTool;
 impl Tool for RestartCaseAssociateTool {
-    fn name(&self) -> &str { "RESTART-CASE-ASSOCIATE" }
-    fn description(&self) -> &str { "Associate restart with condition in RESTART-CASE" }
+    fn name(&self) -> &str {
+        "RESTART-CASE-ASSOCIATE"
+    }
+    fn description(&self) -> &str {
+        "Associate restart with condition in RESTART-CASE"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// SIGNAL-CONDITION - Signal pre-constructed condition
 pub struct SignalConditionTool;
 impl Tool for SignalConditionTool {
-    fn name(&self) -> &str { "SIGNAL-CONDITION" }
-    fn description(&self) -> &str { "Signal already-constructed condition object" }
+    fn name(&self) -> &str {
+        "SIGNAL-CONDITION"
+    }
+    fn description(&self) -> &str {
+        "Signal already-constructed condition object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if !args.is_empty() {
             eprintln!("CONDITION: {}", args[0]);
@@ -284,8 +400,12 @@ impl Tool for SignalConditionTool {
 /// INVOKE-DEBUGGER - Invoke debugger explicitly
 pub struct InvokeDebuggerTool;
 impl Tool for InvokeDebuggerTool {
-    fn name(&self) -> &str { "INVOKE-DEBUGGER" }
-    fn description(&self) -> &str { "Explicitly invoke debugger with condition" }
+    fn name(&self) -> &str {
+        "INVOKE-DEBUGGER"
+    }
+    fn description(&self) -> &str {
+        "Explicitly invoke debugger with condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let msg = if args.is_empty() {
             "Debugger invoked"
@@ -303,8 +423,12 @@ impl Tool for InvokeDebuggerTool {
 /// SIMPLE-CONDITION-P - Check if simple condition
 pub struct SimpleConditionPTool;
 impl Tool for SimpleConditionPTool {
-    fn name(&self) -> &str { "SIMPLE-CONDITION-P" }
-    fn description(&self) -> &str { "Check if condition is simple condition" }
+    fn name(&self) -> &str {
+        "SIMPLE-CONDITION-P"
+    }
+    fn description(&self) -> &str {
+        "Check if condition is simple condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         Ok(Value::Bool(!args.is_empty()))
     }
@@ -313,8 +437,12 @@ impl Tool for SimpleConditionPTool {
 /// SERIOUS-CONDITION-P - Check if serious condition
 pub struct SeriousConditionPTool;
 impl Tool for SeriousConditionPTool {
-    fn name(&self) -> &str { "SERIOUS-CONDITION-P" }
-    fn description(&self) -> &str { "Check if condition is serious" }
+    fn name(&self) -> &str {
+        "SERIOUS-CONDITION-P"
+    }
+    fn description(&self) -> &str {
+        "Check if condition is serious"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         Ok(Value::Bool(!args.is_empty()))
     }
@@ -323,18 +451,30 @@ impl Tool for SeriousConditionPTool {
 /// CELL-ERROR-NAME - Get unbound variable name
 pub struct CellErrorNameTool;
 impl Tool for CellErrorNameTool {
-    fn name(&self) -> &str { "CELL-ERROR-NAME" }
-    fn description(&self) -> &str { "Get name from cell-error condition" }
+    fn name(&self) -> &str {
+        "CELL-ERROR-NAME"
+    }
+    fn description(&self) -> &str {
+        "Get name from cell-error condition"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// UNBOUND-VARIABLE - Signal unbound variable error
 pub struct UnboundVariableTool;
 impl Tool for UnboundVariableTool {
-    fn name(&self) -> &str { "UNBOUND-VARIABLE" }
-    fn description(&self) -> &str { "Unbound variable error type" }
+    fn name(&self) -> &str {
+        "UNBOUND-VARIABLE"
+    }
+    fn description(&self) -> &str {
+        "Unbound variable error type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let name = if args.is_empty() {
             "UNKNOWN"
@@ -354,8 +494,12 @@ impl Tool for UnboundVariableTool {
 /// UNDEFINED-FUNCTION - Signal undefined function error
 pub struct UndefinedFunctionTool;
 impl Tool for UndefinedFunctionTool {
-    fn name(&self) -> &str { "UNDEFINED-FUNCTION" }
-    fn description(&self) -> &str { "Undefined function error type" }
+    fn name(&self) -> &str {
+        "UNDEFINED-FUNCTION"
+    }
+    fn description(&self) -> &str {
+        "Undefined function error type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let name = if args.is_empty() {
             "UNKNOWN"
@@ -375,8 +519,12 @@ impl Tool for UndefinedFunctionTool {
 /// STORAGE-CONDITION - Storage exhaustion condition
 pub struct StorageConditionTool;
 impl Tool for StorageConditionTool {
-    fn name(&self) -> &str { "STORAGE-CONDITION" }
-    fn description(&self) -> &str { "Storage exhaustion condition type" }
+    fn name(&self) -> &str {
+        "STORAGE-CONDITION"
+    }
+    fn description(&self) -> &str {
+        "Storage exhaustion condition type"
+    }
     fn execute(&self, _args: &[Value]) -> Result<Value> {
         Err(Error::ToolExecutionError {
             tool: "STORAGE-CONDITION".to_string(),

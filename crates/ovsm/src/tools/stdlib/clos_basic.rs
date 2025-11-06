@@ -14,8 +14,12 @@ use std::sync::Arc;
 /// DEFCLASS - Define class (returns class name)
 pub struct DefclassTool;
 impl Tool for DefclassTool {
-    fn name(&self) -> &str { "DEFCLASS" }
-    fn description(&self) -> &str { "Define a class" }
+    fn name(&self) -> &str {
+        "DEFCLASS"
+    }
+    fn description(&self) -> &str {
+        "Define a class"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -37,8 +41,12 @@ impl Tool for DefclassTool {
 /// MAKE-INSTANCE - Create instance
 pub struct MakeInstanceTool;
 impl Tool for MakeInstanceTool {
-    fn name(&self) -> &str { "MAKE-INSTANCE" }
-    fn description(&self) -> &str { "Create class instance" }
+    fn name(&self) -> &str {
+        "MAKE-INSTANCE"
+    }
+    fn description(&self) -> &str {
+        "Create class instance"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -53,8 +61,12 @@ impl Tool for MakeInstanceTool {
 /// CLASS-OF - Get class of object
 pub struct ClassOfTool;
 impl Tool for ClassOfTool {
-    fn name(&self) -> &str { "CLASS-OF" }
-    fn description(&self) -> &str { "Get class of object" }
+    fn name(&self) -> &str {
+        "CLASS-OF"
+    }
+    fn description(&self) -> &str {
+        "Get class of object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -81,8 +93,12 @@ macro_rules! simple_clos_tool {
         #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
-            fn name(&self) -> &str { $str }
-            fn description(&self) -> &str { $desc }
+            fn name(&self) -> &str {
+                $str
+            }
+            fn description(&self) -> &str {
+                $desc
+            }
             fn execute(&self, args: &[Value]) -> Result<Value> {
                 if args.is_empty() {
                     return Err(Error::InvalidArguments {
@@ -101,8 +117,12 @@ macro_rules! simple_clos_tool_2args {
         #[doc = $desc]
         pub struct $name;
         impl Tool for $name {
-            fn name(&self) -> &str { $str }
-            fn description(&self) -> &str { $desc }
+            fn name(&self) -> &str {
+                $str
+            }
+            fn description(&self) -> &str {
+                $desc
+            }
             fn execute(&self, args: &[Value]) -> Result<Value> {
                 if args.len() < 2 {
                     return Err(Error::InvalidArguments {
@@ -127,10 +147,18 @@ simple_clos_tool_2args!(SlotExistsPTool, "SLOT-EXISTS-P", "Check if slot exists"
 simple_clos_tool!(DefgenericTool, "DEFGENERIC", "Define generic function");
 simple_clos_tool!(DefmethodTool, "DEFMETHOD", "Define method");
 simple_clos_tool!(CallNextMethodTool, "CALL-NEXT-METHOD", "Call next method");
-simple_clos_tool!(NextMethodPTool, "NEXT-METHOD-P", "Check if next method exists");
+simple_clos_tool!(
+    NextMethodPTool,
+    "NEXT-METHOD-P",
+    "Check if next method exists"
+);
 
 // Method combination
-simple_clos_tool!(MethodCombinationTool, "METHOD-COMBINATION", "Define method combination");
+simple_clos_tool!(
+    MethodCombinationTool,
+    "METHOD-COMBINATION",
+    "Define method combination"
+);
 simple_clos_tool!(CallMethodTool, "CALL-METHOD", "Call specific method");
 
 // Class hierarchy
@@ -144,20 +172,48 @@ simple_clos_tool!(SubclasspTool, "SUBCLASSP", "Check subclass relation");
 simple_clos_tool!(SubtypepTool, "SUBTYPEP", "Check subtype relation");
 
 // Initialization
-simple_clos_tool!(InitializeInstanceTool, "INITIALIZE-INSTANCE", "Initialize new instance");
-simple_clos_tool!(ReinitializeInstanceTool, "REINITIALIZE-INSTANCE", "Reinitialize instance");
-simple_clos_tool!(SharedInitializeTool, "SHARED-INITIALIZE", "Shared initialization");
+simple_clos_tool!(
+    InitializeInstanceTool,
+    "INITIALIZE-INSTANCE",
+    "Initialize new instance"
+);
+simple_clos_tool!(
+    ReinitializeInstanceTool,
+    "REINITIALIZE-INSTANCE",
+    "Reinitialize instance"
+);
+simple_clos_tool!(
+    SharedInitializeTool,
+    "SHARED-INITIALIZE",
+    "Shared initialization"
+);
 
 // Change class
 simple_clos_tool!(ChangeClassTool, "CHANGE-CLASS", "Change object's class");
-simple_clos_tool!(UpdateInstanceForDifferentClassTool, "UPDATE-INSTANCE-FOR-DIFFERENT-CLASS", "Update after class change");
+simple_clos_tool!(
+    UpdateInstanceForDifferentClassTool,
+    "UPDATE-INSTANCE-FOR-DIFFERENT-CLASS",
+    "Update after class change"
+);
 
 // Additional CLOS utilities
 simple_clos_tool!(StandardClassTool, "STANDARD-CLASS", "Standard class type");
-simple_clos_tool!(StandardObjectTool, "STANDARD-OBJECT", "Standard object type");
-simple_clos_tool!(StandardGenericFunctionTool, "STANDARD-GENERIC-FUNCTION", "Standard generic function");
+simple_clos_tool!(
+    StandardObjectTool,
+    "STANDARD-OBJECT",
+    "Standard object type"
+);
+simple_clos_tool!(
+    StandardGenericFunctionTool,
+    "STANDARD-GENERIC-FUNCTION",
+    "Standard generic function"
+);
 simple_clos_tool!(StandardMethodTool, "STANDARD-METHOD", "Standard method");
-simple_clos_tool!(SlotDefinitionTool, "SLOT-DEFINITION", "Slot definition object");
+simple_clos_tool!(
+    SlotDefinitionTool,
+    "SLOT-DEFINITION",
+    "Slot definition object"
+);
 
 /// Registers all CLOS (Common Lisp Object System) tools with the tool registry.
 ///

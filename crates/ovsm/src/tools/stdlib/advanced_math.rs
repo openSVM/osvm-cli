@@ -993,11 +993,7 @@ impl Tool for AshTool {
         let n = args[0].as_int()?;
         let count = args[1].as_int()?;
 
-        let result = if count >= 0 {
-            n << count
-        } else {
-            n >> -count
-        };
+        let result = if count >= 0 { n << count } else { n >> -count };
 
         Ok(Value::Int(result))
     }
@@ -1062,11 +1058,23 @@ impl Tool for SignumTool {
 
         match &args[0] {
             Value::Int(n) => {
-                let sign = if *n < 0 { -1 } else if *n > 0 { 1 } else { 0 };
+                let sign = if *n < 0 {
+                    -1
+                } else if *n > 0 {
+                    1
+                } else {
+                    0
+                };
                 Ok(Value::Int(sign))
             }
             Value::Float(f) => {
-                let sign = if *f < 0.0 { -1.0 } else if *f > 0.0 { 1.0 } else { 0.0 };
+                let sign = if *f < 0.0 {
+                    -1.0
+                } else if *f > 0.0 {
+                    1.0
+                } else {
+                    0.0
+                };
                 Ok(Value::Float(sign))
             }
             _ => Err(Error::TypeError {

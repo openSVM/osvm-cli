@@ -632,9 +632,7 @@ impl Tool for EqualpTool {
         }
 
         let result = match (&args[0], &args[1]) {
-            (Value::String(s1), Value::String(s2)) => {
-                s1.to_lowercase() == s2.to_lowercase()
-            }
+            (Value::String(s1), Value::String(s2)) => s1.to_lowercase() == s2.to_lowercase(),
             _ => args[0] == args[1],
         };
 

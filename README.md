@@ -46,17 +46,28 @@ Traditional Chat          OSVM AI Chat (NEW!)
 
 ### Installation (5 Minutes)
 
+**Linux:**
 ```bash
-# Clone the repository
+# Clone and build
 git clone https://github.com/opensvm/osvm-cli.git
 cd osvm-cli
-
-# Build and install
 cargo build --release
 sudo cp target/release/osvm /usr/bin/osvm
 
-# Verify installation
-osvm --version  # Should show 0.9.3
+# Verify
+osvm --version
+```
+
+**macOS (via Docker):**
+```bash
+# Clone and run via Docker
+git clone https://github.com/opensvm/osvm-cli.git
+cd osvm-cli
+./scripts/docker-run-macos.sh --version
+
+# Use any command
+./scripts/docker-run-macos.sh snapshot --help
+./scripts/docker-run-macos.sh ovsm eval '(+ 1 2 3)'
 ```
 
 ### 🆕 Try the AI-Powered Chat (NEW!)

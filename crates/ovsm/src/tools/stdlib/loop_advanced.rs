@@ -17,38 +17,66 @@ use std::sync::Arc;
 /// LOOP-DESTRUCTURING - Destructure in LOOP iteration
 pub struct LoopDestructuringTool;
 impl Tool for LoopDestructuringTool {
-    fn name(&self) -> &str { "LOOP-DESTRUCTURING" }
-    fn description(&self) -> &str { "Destructure values in LOOP" }
+    fn name(&self) -> &str {
+        "LOOP-DESTRUCTURING"
+    }
+    fn description(&self) -> &str {
+        "Destructure values in LOOP"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Array(Arc::new(vec![])) } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Array(Arc::new(vec![]))
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// LOOP-FOR-ON - Iterate on CDR of list
 pub struct LoopForOnTool;
 impl Tool for LoopForOnTool {
-    fn name(&self) -> &str { "LOOP-FOR-ON" }
-    fn description(&self) -> &str { "Iterate on successive CDRs" }
+    fn name(&self) -> &str {
+        "LOOP-FOR-ON"
+    }
+    fn description(&self) -> &str {
+        "Iterate on successive CDRs"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// LOOP-FOR-EQUALS-THEN - Iterate with explicit update
 pub struct LoopForEqualsThenTool;
 impl Tool for LoopForEqualsThenTool {
-    fn name(&self) -> &str { "LOOP-FOR-EQUALS-THEN" }
-    fn description(&self) -> &str { "Iterate with = THEN update form" }
+    fn name(&self) -> &str {
+        "LOOP-FOR-EQUALS-THEN"
+    }
+    fn description(&self) -> &str {
+        "Iterate with = THEN update form"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// LOOP-FOR-BEING - Hash table and package iteration
 pub struct LoopForBeingTool;
 impl Tool for LoopForBeingTool {
-    fn name(&self) -> &str { "LOOP-FOR-BEING" }
-    fn description(&self) -> &str { "Iterate over hash tables or packages" }
+    fn name(&self) -> &str {
+        "LOOP-FOR-BEING"
+    }
+    fn description(&self) -> &str {
+        "Iterate over hash tables or packages"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -67,18 +95,30 @@ impl Tool for LoopForBeingTool {
 /// LOOP-INTO - Accumulate into named variable
 pub struct LoopIntoTool;
 impl Tool for LoopIntoTool {
-    fn name(&self) -> &str { "LOOP-INTO" }
-    fn description(&self) -> &str { "Accumulate into named variable" }
+    fn name(&self) -> &str {
+        "LOOP-INTO"
+    }
+    fn description(&self) -> &str {
+        "Accumulate into named variable"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// LOOP-MINIMIZE - Find minimum value
 pub struct LoopMinimizeTool;
 impl Tool for LoopMinimizeTool {
-    fn name(&self) -> &str { "LOOP-MINIMIZE" }
-    fn description(&self) -> &str { "Accumulate minimum value" }
+    fn name(&self) -> &str {
+        "LOOP-MINIMIZE"
+    }
+    fn description(&self) -> &str {
+        "Accumulate minimum value"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -95,7 +135,9 @@ impl Tool for LoopMinimizeTool {
             match (arg, &min) {
                 (Value::Int(a), Value::Int(b)) if a < b => min = Value::Int(*a),
                 (Value::Float(a), Value::Float(b)) if a < b => min = Value::Float(*a),
-                (Value::Int(a), Value::Float(b)) if (*a as f64) < *b => min = Value::Float(*a as f64),
+                (Value::Int(a), Value::Float(b)) if (*a as f64) < *b => {
+                    min = Value::Float(*a as f64)
+                }
                 (Value::Float(a), Value::Int(b)) if *a < (*b as f64) => min = Value::Float(*a),
                 _ => {}
             }
@@ -107,8 +149,12 @@ impl Tool for LoopMinimizeTool {
 /// LOOP-APPEND - Append lists
 pub struct LoopAppendTool;
 impl Tool for LoopAppendTool {
-    fn name(&self) -> &str { "LOOP-APPEND" }
-    fn description(&self) -> &str { "Append accumulated lists" }
+    fn name(&self) -> &str {
+        "LOOP-APPEND"
+    }
+    fn description(&self) -> &str {
+        "Append accumulated lists"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let mut result = vec![];
         for arg in args {
@@ -124,8 +170,12 @@ impl Tool for LoopAppendTool {
 /// LOOP-NCONC - Destructively concatenate lists
 pub struct LoopNconcTool;
 impl Tool for LoopNconcTool {
-    fn name(&self) -> &str { "LOOP-NCONC" }
-    fn description(&self) -> &str { "Destructively concatenate lists" }
+    fn name(&self) -> &str {
+        "LOOP-NCONC"
+    }
+    fn description(&self) -> &str {
+        "Destructively concatenate lists"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let mut result = vec![];
         for arg in args {
@@ -145,16 +195,28 @@ impl Tool for LoopNconcTool {
 /// LOOP-IF-IT - IF with IT binding
 pub struct LoopIfItTool;
 impl Tool for LoopIfItTool {
-    fn name(&self) -> &str { "LOOP-IF-IT" }
-    fn description(&self) -> &str { "IF clause with IT variable" }
+    fn name(&self) -> &str {
+        "LOOP-IF-IT"
+    }
+    fn description(&self) -> &str {
+        "IF clause with IT variable"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Null);
         }
         if args[0].is_truthy() {
-            Ok(if args.len() > 1 { args[1].clone() } else { args[0].clone() })
+            Ok(if args.len() > 1 {
+                args[1].clone()
+            } else {
+                args[0].clone()
+            })
         } else {
-            Ok(if args.len() > 2 { args[2].clone() } else { Value::Null })
+            Ok(if args.len() > 2 {
+                args[2].clone()
+            } else {
+                Value::Null
+            })
         }
     }
 }
@@ -162,8 +224,12 @@ impl Tool for LoopIfItTool {
 /// LOOP-THEREIS - Test and return
 pub struct LoopThereisTool;
 impl Tool for LoopThereisTool {
-    fn name(&self) -> &str { "LOOP-THEREIS" }
-    fn description(&self) -> &str { "Test condition and return if true" }
+    fn name(&self) -> &str {
+        "LOOP-THEREIS"
+    }
+    fn description(&self) -> &str {
+        "Test condition and return if true"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         for arg in args {
             if arg.is_truthy() {
@@ -177,8 +243,12 @@ impl Tool for LoopThereisTool {
 /// LOOP-ALWAYS - Test all conditions
 pub struct LoopAlwaysTool;
 impl Tool for LoopAlwaysTool {
-    fn name(&self) -> &str { "LOOP-ALWAYS" }
-    fn description(&self) -> &str { "Return true if all conditions true" }
+    fn name(&self) -> &str {
+        "LOOP-ALWAYS"
+    }
+    fn description(&self) -> &str {
+        "Return true if all conditions true"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         for arg in args {
             if !arg.is_truthy() {
@@ -192,8 +262,12 @@ impl Tool for LoopAlwaysTool {
 /// LOOP-NEVER - Test no conditions true
 pub struct LoopNeverTool;
 impl Tool for LoopNeverTool {
-    fn name(&self) -> &str { "LOOP-NEVER" }
-    fn description(&self) -> &str { "Return true if no conditions true" }
+    fn name(&self) -> &str {
+        "LOOP-NEVER"
+    }
+    fn description(&self) -> &str {
+        "Return true if no conditions true"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         for arg in args {
             if arg.is_truthy() {
@@ -211,28 +285,48 @@ impl Tool for LoopNeverTool {
 /// LOOP-NAMED - Named LOOP for RETURN-FROM
 pub struct LoopNamedTool;
 impl Tool for LoopNamedTool {
-    fn name(&self) -> &str { "LOOP-NAMED" }
-    fn description(&self) -> &str { "Name LOOP for RETURN-FROM" }
+    fn name(&self) -> &str {
+        "LOOP-NAMED"
+    }
+    fn description(&self) -> &str {
+        "Name LOOP for RETURN-FROM"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[args.len() - 1].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[args.len() - 1].clone()
+        })
     }
 }
 
 /// LOOP-INITIALLY - Execute before LOOP body
 pub struct LoopInitiallyTool;
 impl Tool for LoopInitiallyTool {
-    fn name(&self) -> &str { "LOOP-INITIALLY" }
-    fn description(&self) -> &str { "Execute forms before loop starts" }
+    fn name(&self) -> &str {
+        "LOOP-INITIALLY"
+    }
+    fn description(&self) -> &str {
+        "Execute forms before loop starts"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[args.len() - 1].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[args.len() - 1].clone()
+        })
     }
 }
 
 /// LOOP-REPEAT - Repeat fixed number of times
 pub struct LoopRepeatTool;
 impl Tool for LoopRepeatTool {
-    fn name(&self) -> &str { "LOOP-REPEAT" }
-    fn description(&self) -> &str { "Repeat loop N times" }
+    fn name(&self) -> &str {
+        "LOOP-REPEAT"
+    }
+    fn description(&self) -> &str {
+        "Repeat loop N times"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Int(0));
