@@ -428,6 +428,9 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
 pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) -> Result<()> {
     let start_time = std::time::Instant::now();
 
+    // Clear schema cache from previous runs to ensure fresh data
+    crate::utils::debug_logger::clear_schema_cache();
+
     // Print minimal header (only at Detailed verbosity)
     if get_verbosity() >= VerbosityLevel::Detailed {
         println!("\n🤖 OSVM Agent - Autonomous Research Mode");
@@ -1033,7 +1036,14 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                     }
                     Err(e) => {
                         // ═══ LEVEL 1: SYNTAX ERROR ═══
-                        let error_msg = e.to_string();
+                        // Try to get enhanced error message with available fields
+                        let error_msg = if let Some(ovsm_err) = e.downcast_ref::<ovsm::error::Error>() {
+                            // OVSM error - use enhanced_message() to show available fields
+                            ovsm_err.enhanced_message()
+                        } else {
+                            // Other error type - use default string representation
+                            e.to_string()
+                        };
                         println!("❌ Syntax/execution error: {}\n", error_msg);
 
                         if attempt >= MAX_RETRY_ATTEMPTS {

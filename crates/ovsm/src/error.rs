@@ -47,6 +47,9 @@ pub enum Error {
     UndefinedVariable {
         /// Variable name
         name: String,
+        /// Available fields (if accessing object field) - not shown in base error message
+        #[doc(hidden)]
+        available_fields: Option<Vec<String>>,
     },
 
     /// Reference to undefined tool
@@ -286,6 +289,26 @@ impl Error {
             Error::IndexOutOfBounds { .. } => ErrorSeverity::Warning,
 
             _ => ErrorSeverity::Recoverable,
+        }
+    }
+
+    /// Get enhanced error message with available fields (for UndefinedVariable errors)
+    pub fn enhanced_message(&self) -> String {
+        match self {
+            Error::UndefinedVariable { name, available_fields } => {
+                let base = format!("Undefined variable: {}", name);
+                if let Some(fields) = available_fields {
+                    if !fields.is_empty() {
+                        return format!(
+                            "{}. Parent object has fields: [{}]",
+                            base,
+                            fields.join(", ")
+                        );
+                    }
+                }
+                base
+            }
+            _ => self.to_string(),
         }
     }
 }

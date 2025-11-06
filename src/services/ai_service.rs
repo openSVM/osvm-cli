@@ -1787,6 +1787,42 @@ Focus on what matters to the user.
         error_message: &str,
         attempt_number: u32,
     ) -> String {
+        // Extract attempted field names from error and code to avoid repetition
+        let attempted_fields = Self::extract_attempted_fields(broken_code, error_message);
+        let field_warning = if !attempted_fields.is_empty() {
+            format!(
+                "\n**⚠️ FAILED FIELD NAMES (DO NOT TRY AGAIN):**\nYou already tried: {}\nThese fields DO NOT EXIST or are NULL. Use different approach!\n",
+                attempted_fields.join(", ")
+            )
+        } else {
+            String::new()
+        };
+
+        // Get actual schemas from MCP tool responses
+        let cached_schemas = crate::utils::debug_logger::get_cached_schemas();
+
+        // Enhanced error context: if error mentions undefined field, show what fields ARE available
+        let enhanced_error = if error_message.contains("Undefined variable:") {
+            let missing_field = if let Some(start) = error_message.find("Undefined variable: ") {
+                let rest = &error_message[start + 20..];
+                if let Some(end) = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+                    Some(&rest[..end])
+                } else {
+                    Some(rest.trim())
+                }
+            } else {
+                None
+            };
+
+            if let Some(field) = missing_field {
+                format!("{}\n\n❌ Field `{}` does NOT EXIST!\n✅ Check the schemas below to see what fields ARE available.", error_message, field)
+            } else {
+                error_message.to_string()
+            }
+        } else {
+            error_message.to_string()
+        };
+
         format!(
             r#"The previous OVSM plan had an error. Please analyze and fix it.
 
@@ -1798,7 +1834,15 @@ Focus on what matters to the user.
 ```
 
 **Error Message:**
-{}
+{}{}{}
+
+**🔍 DEBUGGING STRATEGY:**
+If you're getting "Undefined variable" errors repeatedly:
+1. The field name you're trying to access DOES NOT EXIST in the API response
+2. Check the ACTUAL API RESPONSE SCHEMAS section below - it shows REAL fields from THIS session
+3. Use ONLY the fields shown in the schemas - DO NOT guess field names
+4. Try a different MCP tool if the current one doesn't provide what you need
+5. If no tool provides the data, explain that to the user instead of guessing
 
 **Common OVSM Errors to Check:**
 1. ❌ Infix notation: `(count arr - 1)` → ✅ Use prefix: `(- (count arr) 1)`
@@ -1806,16 +1850,57 @@ Focus on what matters to the user.
 3. ❌ Define in loop: Variables defined inside when/if/while → ✅ Define at top
 4. ❌ Missing parens: Incomplete expressions → ✅ Balance all parentheses
 5. ❌ Wrong tool names: Undefined MCP tools → ✅ Check available tools
+6. ❌ Undefined variables: Using `(. obj field)` when field doesn't exist → ✅ Check if field exists first with `(null? (. obj field))`
+7. ❌ Math on null: `(* value null)` → ✅ Use conditional: `(if (null? price) 0 (* value price))`
+8. ❌ Accessing nested null: `(. (. obj null_field) subfield)` → ✅ Check parent exists first
 
 **Please provide a CORRECTED OVSM plan with:**
 - Fixed syntax errors
 - Proper LISP prefix notation
 - All variables defined at the top
 - Correct tool names from available MCP tools
+- Null-safe field access using `null?` checks
+- Conditional logic to handle missing or null API data
 
 Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available Tools, Main Branch, Action)."#,
-            original_query, attempt_number, broken_code, error_message
+            original_query, attempt_number, broken_code, enhanced_error, field_warning, cached_schemas
         )
+    }
+
+    /// Extract field names that were attempted but failed
+    ///
+    /// Parses code and error messages to find field names that don't exist,
+    /// preventing the AI from repeatedly trying the same invalid fields.
+    fn extract_attempted_fields(code: &str, error: &str) -> Vec<String> {
+        let mut fields = Vec::new();
+
+        // Extract from "Undefined variable: fieldname" errors
+        if let Some(start) = error.find("Undefined variable: ") {
+            let rest = &error[start + 20..];
+            if let Some(end) = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+                fields.push(rest[..end].to_string());
+            } else {
+                fields.push(rest.trim().to_string());
+            }
+        }
+
+        // Extract from ". obj field" patterns in code (simple regex-free approach)
+        for line in code.lines() {
+            if line.contains("(. ") {
+                // Simple pattern matching for (. obj field)
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                for i in 0..parts.len().saturating_sub(2) {
+                    if parts[i] == "(." && !parts[i+2].starts_with(')') {
+                        let field = parts[i+2].trim_end_matches(')').trim_end_matches(']');
+                        if !field.is_empty() && !fields.contains(&field.to_string()) {
+                            fields.push(field.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        fields
     }
 
     /// Check if an OVSM error is retryable (can be fixed by AI)
@@ -1828,7 +1913,7 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
     /// # Returns
     /// true if the error can potentially be fixed by regenerating code
     pub fn is_retryable_ovsm_error(error_message: &str) -> bool {
-        // Parse errors, syntax errors, and type errors are retryable
+        // Parse errors, syntax errors, type errors, and runtime errors are retryable
         error_message.contains("Parse error")
             || error_message.contains("Tokenization error")
             || error_message.contains("Expected identifier")
@@ -1844,6 +1929,9 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
             || error_message.contains("expected object")
             || error_message.contains("expected string")
             || error_message.contains("expected number")
+            || error_message.contains("Invalid operation")  // Catches "multiply on types int and null"
+            || error_message.contains("Execution error")    // General runtime errors
+            || error_message.contains("Invalid arguments")  // Tool arg mismatches
     }
 
     /// Create a semantic refinement prompt when code runs but doesn't achieve goal

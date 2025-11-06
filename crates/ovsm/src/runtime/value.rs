@@ -237,8 +237,15 @@ impl Value {
             Value::Object(obj) => obj
                 .get(field)
                 .cloned()
-                .ok_or_else(|| Error::UndefinedVariable {
-                    name: field.to_string(),
+                .ok_or_else(|| {
+                    // Collect available fields to help debugging
+                    let mut available: Vec<String> = obj.keys().cloned().collect();
+                    available.sort(); // Sort for consistent output
+                    eprintln!("🔍 DEBUG: Field '{}' not found. Available fields: {:?}", field, available);
+                    Error::UndefinedVariable {
+                        name: field.to_string(),
+                        available_fields: Some(available),
+                    }
                 }),
             _ => Err(Error::TypeError {
                 expected: "object".to_string(),
