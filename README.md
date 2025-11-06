@@ -264,6 +264,7 @@ osvm ovsm examples
 - **[OVSM_LISP_SYNTAX_SPEC.md](OVSM_LISP_SYNTAX_SPEC.md)** - Complete language specification
 - **[crates/ovsm/USAGE_GUIDE.md](crates/ovsm/USAGE_GUIDE.md)** - How to write OVSM scripts
 - **[examples/ovsm_scripts/](examples/ovsm_scripts/)** - Example scripts
+- **[docs/browser-automation.md](docs/browser-automation.md)** - Browser automation guide
 
 ---
 
@@ -276,6 +277,7 @@ osvm ovsm examples
 ### 🤖 **AI & Automation**
 - **Interactive Chat** with code execution
 - **OVSM LISP** interpreter (90% Common Lisp coverage)
+- **Browser Automation** (Playwright integration) 🆕
 - **Natural Language** to code translation
 - **Automatic Validation** and timeout protection
 - **Macros**, **Closures**, **Pattern Matching**

@@ -2,6 +2,7 @@
 //!
 //! Provides the framework for built-in and custom tools.
 
+pub mod browser;
 pub mod stdlib;
 
 use crate::error::Result;
@@ -107,6 +108,9 @@ impl ToolRegistry {
 
         // Register all standard library tools
         stdlib::register_all(&mut registry);
+
+        // Register browser automation tools
+        let _ = browser::register_browser_tools(&mut registry);
 
         registry
     }
