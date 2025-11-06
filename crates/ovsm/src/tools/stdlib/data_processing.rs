@@ -808,76 +808,6 @@ impl Tool for TakeTool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_sum_tool() {
-        let tool = SumTool;
-        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
-        let result = tool.execute(&[arr]).unwrap();
-        assert_eq!(result, Value::Int(6));
-    }
-
-    #[test]
-    fn test_count_tool() {
-        let tool = CountTool;
-        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
-        let result = tool.execute(&[arr]).unwrap();
-        assert_eq!(result, Value::Int(3));
-    }
-
-    #[test]
-    fn test_flatten_tool() {
-        let tool = FlattenTool;
-        let nested = Value::array(vec![
-            Value::array(vec![Value::Int(1), Value::Int(2)]),
-            Value::array(vec![Value::Int(3), Value::Int(4)]),
-        ]);
-        let result = tool.execute(&[nested]).unwrap();
-        let expected = vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4)];
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_unique_tool() {
-        let tool = UniqueTool;
-        let arr = Value::array(vec![
-            Value::Int(1),
-            Value::Int(2),
-            Value::Int(2),
-            Value::Int(3),
-        ]);
-        let result = tool.execute(&[arr]).unwrap();
-        let expected = vec![Value::Int(1), Value::Int(2), Value::Int(3)];
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_reverse_tool() {
-        let tool = ReverseTool;
-        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
-        let result = tool.execute(&[arr]).unwrap();
-        let expected = vec![Value::Int(3), Value::Int(2), Value::Int(1)];
-        assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_first_last_tools() {
-        let arr = Value::array(vec![Value::Int(10), Value::Int(20), Value::Int(30)]);
-
-        let first_tool = FirstTool;
-        assert_eq!(
-            first_tool.execute(std::slice::from_ref(&arr)).unwrap(),
-            Value::Int(10)
-        );
-
-        let last_tool = LastTool;
-        assert_eq!(last_tool.execute(&[arr]).unwrap(), Value::Int(30));
-    }
-}
-
 // ============================================================================
 // Common Lisp List Accessors
 // ============================================================================
@@ -1170,5 +1100,75 @@ impl Tool for LengthTool {
         };
 
         Ok(Value::Int(len as i64))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sum_tool() {
+        let tool = SumTool;
+        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let result = tool.execute(&[arr]).unwrap();
+        assert_eq!(result, Value::Int(6));
+    }
+
+    #[test]
+    fn test_count_tool() {
+        let tool = CountTool;
+        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let result = tool.execute(&[arr]).unwrap();
+        assert_eq!(result, Value::Int(3));
+    }
+
+    #[test]
+    fn test_flatten_tool() {
+        let tool = FlattenTool;
+        let nested = Value::array(vec![
+            Value::array(vec![Value::Int(1), Value::Int(2)]),
+            Value::array(vec![Value::Int(3), Value::Int(4)]),
+        ]);
+        let result = tool.execute(&[nested]).unwrap();
+        let expected = vec![Value::Int(1), Value::Int(2), Value::Int(3), Value::Int(4)];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_unique_tool() {
+        let tool = UniqueTool;
+        let arr = Value::array(vec![
+            Value::Int(1),
+            Value::Int(2),
+            Value::Int(2),
+            Value::Int(3),
+        ]);
+        let result = tool.execute(&[arr]).unwrap();
+        let expected = vec![Value::Int(1), Value::Int(2), Value::Int(3)];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_reverse_tool() {
+        let tool = ReverseTool;
+        let arr = Value::array(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
+        let result = tool.execute(&[arr]).unwrap();
+        let expected = vec![Value::Int(3), Value::Int(2), Value::Int(1)];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_first_last_tools() {
+        let arr = Value::array(vec![Value::Int(10), Value::Int(20), Value::Int(30)]);
+
+        let first_tool = FirstTool;
+        assert_eq!(
+            first_tool.execute(std::slice::from_ref(&arr)).unwrap(),
+            Value::Int(10)
+        );
+
+        let last_tool = LastTool;
+        assert_eq!(last_tool.execute(&[arr]).unwrap(), Value::Int(30));
     }
 }

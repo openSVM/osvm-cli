@@ -531,7 +531,7 @@ impl Tool for DescribePackageTool {
         "Describe package structure and contents"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(name)) => Ok(Value::String(format!(
                 "Package: {}\nNicknames: none\nUse list: (COMMON-LISP)\nUsed by: none\nSymbols: 0",
                 name

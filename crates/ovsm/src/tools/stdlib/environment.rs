@@ -343,7 +343,7 @@ impl Tool for EnvironmentPTool {
         "Check if object is environment"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::Object(_)) => Ok(Value::Bool(true)),
             _ => Ok(Value::Bool(false)),
         }

@@ -851,7 +851,7 @@ impl Tool for SearchTool {
         let needle = args[0].as_string()?;
         let haystack = args[1].as_string()?;
 
-        match haystack.find(&needle) {
+        match haystack.find(needle) {
             Some(idx) => Ok(Value::Int(idx as i64)),
             None => Ok(Value::Null),
         }
@@ -955,7 +955,7 @@ impl Tool for ReplaceTool {
         let old = args[1].as_string()?;
         let new = args[2].as_string()?;
 
-        Ok(Value::String(s.replacen(&old, &new, 1)))
+        Ok(Value::String(s.replacen(old, new, 1)))
     }
 }
 
@@ -983,7 +983,7 @@ impl Tool for ReplaceAllTool {
         let old = args[1].as_string()?;
         let new = args[2].as_string()?;
 
-        Ok(Value::String(s.replace(&old, &new)))
+        Ok(Value::String(s.replace(old, new)))
     }
 }
 

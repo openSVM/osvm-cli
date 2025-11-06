@@ -93,7 +93,7 @@ impl Tool for GensymTool {
         "Generate unique uninterned symbol"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let prefix = match args.get(0) {
+        let prefix = match args.first() {
             Some(Value::String(s)) => s.clone(),
             _ => "G".to_string(),
         };
@@ -115,7 +115,7 @@ impl Tool for GentempTool {
         "Generate unique interned symbol"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let prefix = match args.get(0) {
+        let prefix = match args.first() {
             Some(Value::String(s)) => s.clone(),
             _ => "T".to_string(),
         };
@@ -140,7 +140,7 @@ impl Tool for SymbolNameTool {
         "Get symbol name as string"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => Ok(Value::String(s.clone())),
             _ => Ok(Value::String("UNKNOWN".to_string())),
         }
@@ -194,7 +194,7 @@ impl Tool for SymbolpTool {
         "Check if object is a symbol"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(_)) => Ok(Value::Bool(true)),
             _ => Ok(Value::Bool(false)),
         }
@@ -211,7 +211,7 @@ impl Tool for KeywordpTool {
         "Check if symbol is a keyword"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => Ok(Value::Bool(s.starts_with(':'))),
             _ => Ok(Value::Bool(false)),
         }
@@ -242,7 +242,7 @@ impl Tool for ConstantSymbolPTool {
         "Check if symbol is a constant"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => {
                 // Keywords and T, NIL are constants
                 Ok(Value::Bool(s.starts_with(':') || s == "T" || s == "NIL"))
@@ -306,7 +306,7 @@ impl Tool for MakeKeywordTool {
         "Convert symbol to keyword"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => {
                 if s.starts_with(':') {
                     Ok(Value::String(s.clone()))
@@ -329,7 +329,7 @@ impl Tool for KeywordicateTool {
         "Ensure value is a keyword"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => {
                 if s.starts_with(':') {
                     Ok(Value::String(s.clone()))
@@ -357,7 +357,7 @@ impl Tool for InternTool {
         "Intern symbol in package"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::String(s)) => Ok(Value::String(s.clone())),
             _ => Ok(Value::Null),
         }
@@ -390,7 +390,7 @@ impl Tool for FindSymbolTool {
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         // Returns (symbol, status)
-        match args.get(0) {
+        match args.first() {
             Some(s @ Value::String(_)) => Ok(Value::Array(Arc::new(vec![
                 s.clone(),
                 Value::String(":INTERNAL".to_string()),

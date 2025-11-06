@@ -4913,13 +4913,11 @@ impl LispEvaluator {
         }
 
         // If we don't have &rest or &key, check for exact arg count
-        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() {
-            if args.len() != required_count {
-                return Err(Error::InvalidArguments {
-                    tool: context.to_string(),
-                    reason: format!("Expected {} arguments, got {}", required_count, args.len()),
-                });
-            }
+        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() && args.len() != required_count {
+            return Err(Error::InvalidArguments {
+                tool: context.to_string(),
+                reason: format!("Expected {} arguments, got {}", required_count, args.len()),
+            });
         }
 
         Ok(())

@@ -31,7 +31,7 @@ impl Tool for MakeBitArrayTool {
             });
         }
 
-        let size = match args.get(0) {
+        let size = match args.first() {
             Some(Value::Int(n)) if *n >= 0 => *n as usize,
             Some(Value::Int(n)) => {
                 return Err(Error::InvalidArguments {
@@ -239,7 +239,7 @@ impl Tool for BitVectorPTool {
         "Check if object is bit vector"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::Array(arr)) => {
                 let is_bit_vector = arr
                     .iter()

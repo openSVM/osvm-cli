@@ -158,7 +158,7 @@ impl Tool for ArefTool {
         array
             .get(index)
             .cloned()
-            .ok_or_else(|| Error::IndexOutOfBounds {
+            .ok_or(Error::IndexOutOfBounds {
                 index,
                 length: array.len(),
             })
