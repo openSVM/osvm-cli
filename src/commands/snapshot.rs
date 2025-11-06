@@ -181,8 +181,8 @@ fn get_snapshot_dir(matches: &ArgMatches) -> Result<PathBuf> {
 }
 
 fn get_output_config(matches: &ArgMatches) -> Result<OutputConfig> {
-    // Check environment variable for NO_COLOR or flag
-    let colorized = std::env::var("NO_COLOR").is_err();
+    // Check both --no-color flag and NO_COLOR environment variable
+    let colorized = !matches.get_flag("no-color") && std::env::var("NO_COLOR").is_err();
     
     Ok(OutputConfig {
         format: if matches.get_flag("json") {
