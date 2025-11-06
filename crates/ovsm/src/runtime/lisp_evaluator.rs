@@ -71,7 +71,7 @@ impl LispEvaluator {
 
             Statement::Assignment { name, value } => {
                 let val = self.evaluate_expression(value)?;
-                self.env.set(&name, val.clone())?;
+                self.env.set(name, val.clone())?;
                 Ok(val)
             }
 
@@ -235,8 +235,7 @@ impl LispEvaluator {
                 if name.starts_with(':') {
                     Ok(Value::String(name.clone()))
                 } else {
-                    let result = self.env.get(name);
-                    result
+                    self.env.get(name)
                 }
             }
 
@@ -2069,8 +2068,8 @@ impl LispEvaluator {
 
         // Execute body expressions in sequence, return last
         let mut result = Value::Null;
-        for i in 2..args.len() {
-            result = self.evaluate_expression(&args[i].value)?;
+        for arg in &args[2..] {
+            result = self.evaluate_expression(&arg.value)?;
         }
 
         self.env.exit_scope();
@@ -2954,7 +2953,7 @@ impl LispEvaluator {
                             // ~A - Aesthetic (any value)
                             if arg_index < format_args.len() {
                                 result.push_str(
-                                    &self.value_to_format_string(&format_args[arg_index]),
+                                    &Self::value_to_format_string(&format_args[arg_index]),
                                 );
                                 arg_index += 1;
                             }
@@ -2966,7 +2965,7 @@ impl LispEvaluator {
                                     result.push_str(&n.to_string());
                                 } else {
                                     result.push_str(
-                                        &self.value_to_format_string(&format_args[arg_index]),
+                                        &Self::value_to_format_string(&format_args[arg_index]),
                                     );
                                 }
                                 arg_index += 1;
@@ -3007,7 +3006,7 @@ impl LispEvaluator {
     }
 
     /// Helper to convert value to string for format
-    fn value_to_format_string(&self, val: &Value) -> String {
+    fn value_to_format_string(val: &Value) -> String {
         match val {
             Value::String(s) => s.clone(),
             Value::Int(n) => n.to_string(),
@@ -3016,7 +3015,7 @@ impl LispEvaluator {
             Value::Null => "null".to_string(),
             Value::Array(arr) => {
                 let items: Vec<String> =
-                    arr.iter().map(|v| self.value_to_format_string(v)).collect();
+                    arr.iter().map(Self::value_to_format_string).collect();
                 format!("[{}]", items.join(", "))
             }
             _ => format!("{}", val),
@@ -3117,11 +3116,9 @@ impl LispEvaluator {
         let key_str = key_val.as_string()?;
 
         // Strip leading colon from keywords (e.g., ":age" -> "age")
-        let key = if key_str.starts_with(':') {
-            &key_str[1..]
-        } else {
-            key_str
-        };
+        let key = key_str
+            .strip_prefix(':')
+            .unwrap_or(key_str);
 
         Ok(obj.get(key).cloned().unwrap_or(Value::Null))
     }
@@ -3172,7 +3169,7 @@ impl LispEvaluator {
             })?;
 
         // Convert serde_json::Value to OVSM Value
-        Ok(self.json_to_value(json_value))
+        Ok(Self::json_to_value(json_value))
     }
 
     /// json-stringify - Convert OVSM value to JSON string
@@ -3208,7 +3205,7 @@ impl LispEvaluator {
         };
 
         // Convert OVSM Value to serde_json::Value
-        let json_value = self.value_to_json(value)?;
+        let json_value = Self::value_to_json(value)?;
 
         // Stringify with optional pretty printing
         let json_str = if pretty {
@@ -3225,7 +3222,7 @@ impl LispEvaluator {
     }
 
     /// Helper: Convert serde_json::Value to OVSM Value
-    fn json_to_value(&self, json: serde_json::Value) -> Value {
+    fn json_to_value( json: serde_json::Value) -> Value {
         use serde_json::Value as JV;
         match json {
             JV::Null => Value::Null,
@@ -3241,12 +3238,12 @@ impl LispEvaluator {
             }
             JV::String(s) => Value::String(s),
             JV::Array(arr) => Value::Array(Arc::new(
-                arr.into_iter().map(|v| self.json_to_value(v)).collect(),
+                arr.into_iter().map(Self::json_to_value).collect(),
             )),
             JV::Object(map) => {
                 let mut obj = HashMap::new();
                 for (k, v) in map {
-                    obj.insert(k, self.json_to_value(v));
+                    obj.insert(k, Self::json_to_value(v));
                 }
                 Value::Object(Arc::new(obj))
             }
@@ -3254,7 +3251,7 @@ impl LispEvaluator {
     }
 
     /// Helper: Convert OVSM Value to serde_json::Value
-    fn value_to_json(&self, value: Value) -> Result<serde_json::Value> {
+    fn value_to_json(value: Value) -> Result<serde_json::Value> {
         use serde_json::Value as JV;
         Ok(match value {
             Value::Null => JV::Null,
@@ -3267,14 +3264,14 @@ impl LispEvaluator {
             Value::Array(arr) => {
                 let mut json_arr = Vec::new();
                 for item in arr.iter() {
-                    json_arr.push(self.value_to_json(item.clone())?);
+                    json_arr.push(Self::value_to_json(item.clone())?);
                 }
                 JV::Array(json_arr)
             }
             Value::Object(obj) => {
                 let mut json_obj = serde_json::Map::new();
                 for (k, v) in obj.iter() {
-                    json_obj.insert(k.clone(), self.value_to_json(v.clone())?);
+                    json_obj.insert(k.clone(), Self::value_to_json(v.clone())?);
                 }
                 JV::Object(json_obj)
             }
@@ -3764,11 +3761,9 @@ impl LispEvaluator {
         let prop_name = prop_val.as_string()?;
 
         // Strip leading colon from keywords
-        let prop = if prop_name.starts_with(':') {
-            &prop_name[1..]
-        } else {
-            prop_name
-        };
+        let prop = prop_name
+            .strip_prefix(':')
+            .unwrap_or(prop_name);
 
         let mut result = Vec::new();
 
@@ -3844,7 +3839,7 @@ impl LispEvaluator {
 
                     groups
                         .entry(key)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(elem.clone());
                 }
 
@@ -4077,20 +4072,19 @@ impl LispEvaluator {
     /// Evaluate a regular tool call
     fn eval_tool_call(&mut self, name: &str, args: &[crate::parser::Argument]) -> Result<Value> {
         // Check if this is a user-defined function first
-        if let Ok(func_val) = self.env.get(name) {
-            if let Value::Function {
-                params,
-                body,
-                closure,
-                is_flet,
-            } = func_val
-            {
-                // This is a function call!
+        if let Ok(Value::Function {
+            params,
+            body,
+            closure,
+            is_flet,
+        }) = self.env.get(name)
+        {
+            // This is a function call!
 
-                // Evaluate arguments - handle both positional and keyword arguments
-                let mut evaluated_args = Vec::new();
-                for arg in args {
-                    // If this is a keyword argument, include the keyword name with colon prefix
+            // Evaluate arguments - handle both positional and keyword arguments
+            let mut evaluated_args = Vec::new();
+            for arg in args {
+                // If this is a keyword argument, include the keyword name with colon prefix
                     if let Some(ref keyword_name) = arg.name {
                         // Ensure keyword has colon prefix
                         let kw = if keyword_name.starts_with(':') {
@@ -4121,7 +4115,7 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body); // Explicit deref
+                    let result = self.evaluate_expression(&body);
 
                     // Restore original environment
                     self.env = saved_env;
@@ -4135,14 +4129,13 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body); // Explicit deref
+                    let result = self.evaluate_expression(&body);
 
                     // Exit function scope
                     self.env.exit_scope();
 
                     return result;
                 }
-            }
         }
 
         // Not a function, try tool registry
@@ -4401,11 +4394,9 @@ impl LispEvaluator {
         match expr {
             Expression::ToolCall { name, args } => {
                 // Check if this is a macro
-                if let Ok(value) = self.env.get(name) {
-                    if let Value::Macro { params, body, .. } = value {
-                        // This is a macro! Expand it
-                        return Ok(Some(self.expand_macro(&params, &body, args)?));
-                    }
+                if let Ok(Value::Macro { params, body, .. }) = self.env.get(name) {
+                    // This is a macro! Expand it
+                    return Ok(Some(self.expand_macro(&params, &body, args)?));
                 }
                 Ok(None)
             }
@@ -4428,7 +4419,7 @@ impl LispEvaluator {
         // Convert args to expression values first
         let mut arg_values = Vec::new();
         for arg in args {
-            arg_values.push(self.expression_to_value(&arg.value)?);
+            arg_values.push(Self::expression_to_value(&arg.value)?);
         }
         self.bind_function_parameters(params, &arg_values, "macro")?;
 
@@ -4439,11 +4430,11 @@ impl LispEvaluator {
         self.env = old_env;
 
         // Convert result back to an expression
-        self.value_to_expression(&result_value)
+        Self::value_to_expression(&result_value)
     }
 
     /// Convert an expression to a value (for macro parameter binding)
-    fn expression_to_value(&self, expr: &Expression) -> Result<Value> {
+    fn expression_to_value( expr: &Expression) -> Result<Value> {
         // This is a simplified version - in full CL, expressions would be first-class
         // For now, we store them as strings or structured data
         match expr {
@@ -4455,7 +4446,7 @@ impl LispEvaluator {
             Expression::Variable(name) => Ok(Value::String(name.clone())),
             Expression::ArrayLiteral(exprs) => {
                 let vals: Result<Vec<_>> =
-                    exprs.iter().map(|e| self.expression_to_value(e)).collect();
+                    exprs.iter().map(Self::expression_to_value).collect();
                 Ok(Value::array(vals?))
             }
             _ => {
@@ -4466,7 +4457,7 @@ impl LispEvaluator {
     }
 
     /// Convert a value back to an expression (for macro expansion result)
-    fn value_to_expression(&self, value: &Value) -> Result<Expression> {
+    fn value_to_expression( value: &Value) -> Result<Expression> {
         match value {
             Value::Int(n) => Ok(Expression::IntLiteral(*n)),
             Value::Float(f) => Ok(Expression::FloatLiteral(*f)),
@@ -4484,7 +4475,7 @@ impl LispEvaluator {
             Value::Null => Ok(Expression::NullLiteral),
             Value::Array(arr) => {
                 let exprs: Result<Vec<_>> =
-                    arr.iter().map(|v| self.value_to_expression(v)).collect();
+                    arr.iter().map(Self::value_to_expression).collect();
                 Ok(Expression::ArrayLiteral(exprs?))
             }
             _ => Err(Error::TypeError {
@@ -4561,7 +4552,7 @@ impl LispEvaluator {
                 Ok(Value::array(result))
             }
             // For other expressions, convert to values literally
-            _ => self.expression_to_value(expr),
+            _ => Self::expression_to_value(expr),
         }
     }
 
@@ -4693,8 +4684,8 @@ impl LispEvaluator {
                             if let Expression::Variable(name) = &list[0] {
                                 param_names.push(name.clone());
                                 // Serialize default expression
-                                let default_val = self.expression_to_value(&list[1])?;
-                                param_names.push(self.serialize_default_value(&default_val)?);
+                                let default_val = Self::expression_to_value(&list[1])?;
+                                param_names.push(Self::serialize_default_value(&default_val)?);
                             } else {
                                 return Err(Error::ParseError(format!(
                                     "{}: {} parameter name must be identifier",
@@ -4712,8 +4703,8 @@ impl LispEvaluator {
                             }
                             param_names.push(name.clone());
                             // Serialize default expression
-                            let default_val = self.expression_to_value(&args[0].value)?;
-                            param_names.push(self.serialize_default_value(&default_val)?);
+                            let default_val = Self::expression_to_value(&args[0].value)?;
+                            param_names.push(Self::serialize_default_value(&default_val)?);
                         }
                         _ => {
                             return Err(Error::ParseError(format!(
@@ -4740,7 +4731,7 @@ impl LispEvaluator {
     }
 
     /// Serialize a default value for storage in parameter list
-    fn serialize_default_value(&self, value: &Value) -> Result<String> {
+    fn serialize_default_value(value: &Value) -> Result<String> {
         match value {
             Value::Int(n) => Ok(n.to_string()),
             Value::Float(f) => Ok(f.to_string()),
@@ -4753,14 +4744,14 @@ impl LispEvaluator {
             Value::Array(arr) => {
                 let items: Result<Vec<_>> = arr
                     .iter()
-                    .map(|v| self.serialize_default_value(v))
+                    .map(Self::serialize_default_value)
                     .collect();
                 Ok(format!("[{}]", items?.join(" ")))
             }
             Value::Object(obj) => {
                 let mut pairs = Vec::new();
                 for (k, v) in obj.iter() {
-                    pairs.push(format!(":{}  {}", k, self.serialize_default_value(v)?));
+                    pairs.push(format!(":{}  {}", k, Self::serialize_default_value(v)?));
                 }
                 Ok(format!("{{{}}}", pairs.join(" ")))
             }
@@ -4913,13 +4904,11 @@ impl LispEvaluator {
         }
 
         // If we don't have &rest or &key, check for exact arg count
-        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() {
-            if args.len() != required_count {
-                return Err(Error::InvalidArguments {
-                    tool: context.to_string(),
-                    reason: format!("Expected {} arguments, got {}", required_count, args.len()),
-                });
-            }
+        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() && args.len() != required_count {
+            return Err(Error::InvalidArguments {
+                tool: context.to_string(),
+                reason: format!("Expected {} arguments, got {}", required_count, args.len()),
+            });
         }
 
         Ok(())

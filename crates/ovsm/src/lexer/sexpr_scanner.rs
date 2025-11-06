@@ -283,8 +283,8 @@ impl SExprScanner {
             "nil" | "null" => TokenKind::Null,
             _ => {
                 // Check if it's a keyword argument (starts with :)
-                if text.starts_with(':') {
-                    TokenKind::Identifier(text[1..].to_string()) // Remove the :
+                if let Some(stripped) = text.strip_prefix(':') {
+                    TokenKind::Identifier(stripped.to_string()) // Remove the :
                 } else {
                     // Otherwise it's an identifier or symbol
                     TokenKind::Identifier(text)

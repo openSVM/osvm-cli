@@ -34,7 +34,7 @@ pub async fn handle_nodes_command(
             let json_output = node_sub_matches.contains_id("json");
 
             match nodes::list_all_nodes(
-                &rpc_client,
+                rpc_client,
                 network,
                 svm,
                 node_type,
@@ -57,7 +57,7 @@ pub async fn handle_nodes_command(
         }
         "dashboard" => {
             // Launch node monitoring dashboard
-            match nodes::run_dashboard(&rpc_client, config.commitment_config, config.verbose) {
+            match nodes::run_dashboard(rpc_client, config.commitment_config, config.verbose) {
                 Ok(_) => println!("Node dashboard closed"),
                 Err(e) => {
                     eprintln!("Error running node dashboard: {}", e);
@@ -94,7 +94,7 @@ pub async fn handle_nodes_command(
                 .unwrap();
             let json_output = node_sub_matches.contains_id("json");
 
-            match nodes::get_node_info(&rpc_client, node_id, config.commitment_config) {
+            match nodes::get_node_info(rpc_client, node_id, config.commitment_config) {
                 Ok(info) => {
                     if json_output {
                         println!("{}", serde_json::to_string_pretty(&info).unwrap());
@@ -195,7 +195,7 @@ pub async fn handle_nodes_command(
                 .with_name(name)
                 .with_host(host);
 
-            match nodes::deploy_node(&rpc_client, deploy_config).await {
+            match nodes::deploy_node(rpc_client, deploy_config).await {
                 Ok(node_info) => {
                     println!("Node deployed successfully: {:?}", node_info);
                 }

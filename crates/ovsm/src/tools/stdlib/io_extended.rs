@@ -62,11 +62,8 @@ impl Tool for ReadSequenceTool {
         "Read sequence from stream"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() {
-            Value::Int(0)
-        } else {
-            Value::Int(0)
-        })
+        let _ = args; // Suppress unused warning
+        Ok(Value::Int(0))
     }
 }
 

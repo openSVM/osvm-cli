@@ -252,7 +252,7 @@ impl Tool for FillPointerTool {
         "Get or set array fill pointer"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::Array(arr)) => Ok(Value::Int(arr.len() as i64)),
             _ => Ok(Value::Null),
         }

@@ -655,14 +655,9 @@ impl SExprParser {
 
         while !self.check(&TokenKind::RightParen) {
             if let TokenKind::Identifier(name) = &self.peek().kind {
-                // Handle &optional, &rest, &key markers
-                if name == "&optional" || name == "&rest" || name == "&key" {
-                    params.push(name.clone());
-                    self.advance();
-                } else {
-                    params.push(name.clone());
-                    self.advance();
-                }
+                // Handle &optional, &rest, &key markers and regular params
+                params.push(name.clone());
+                self.advance();
             } else if self.check(&TokenKind::LeftParen) {
                 // Handle (param-name default-value) form
                 self.advance(); // consume (
@@ -1058,7 +1053,7 @@ impl SExprParser {
             Ok(self.advance())
         } else {
             let token = self.peek();
-            let message = self.build_error_message(&kind, &token);
+            let message = self.build_error_message(&kind, token);
 
             Err(Error::SyntaxError {
                 line: token.line,
