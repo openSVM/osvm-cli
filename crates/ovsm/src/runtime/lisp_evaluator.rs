@@ -3165,8 +3165,8 @@ impl LispEvaluator {
         };
 
         // Parse JSON string into serde_json::Value
-        let json_value: serde_json::Value = serde_json::from_str(&json_str)
-            .map_err(|e| Error::ToolExecutionError {
+        let json_value: serde_json::Value =
+            serde_json::from_str(&json_str).map_err(|e| Error::ToolExecutionError {
                 tool: "json-parse".to_string(),
                 reason: format!("Failed to parse JSON: {}", e),
             })?;
@@ -3240,9 +3240,9 @@ impl LispEvaluator {
                 }
             }
             JV::String(s) => Value::String(s),
-            JV::Array(arr) => {
-                Value::Array(Arc::new(arr.into_iter().map(|v| self.json_to_value(v)).collect()))
-            }
+            JV::Array(arr) => Value::Array(Arc::new(
+                arr.into_iter().map(|v| self.json_to_value(v)).collect(),
+            )),
             JV::Object(map) => {
                 let mut obj = HashMap::new();
                 for (k, v) in map {
@@ -3260,11 +3260,9 @@ impl LispEvaluator {
             Value::Null => JV::Null,
             Value::Bool(b) => JV::Bool(b),
             Value::Int(i) => JV::Number(serde_json::Number::from(i)),
-            Value::Float(f) => {
-                serde_json::Number::from_f64(f)
-                    .map(JV::Number)
-                    .unwrap_or(JV::Null)
-            }
+            Value::Float(f) => serde_json::Number::from_f64(f)
+                .map(JV::Number)
+                .unwrap_or(JV::Null),
             Value::String(s) => JV::String(s.to_string()),
             Value::Array(arr) => {
                 let mut json_arr = Vec::new();
@@ -3896,7 +3894,8 @@ impl LispEvaluator {
                 for (key, values) in groups_obj.iter() {
                     // Create scope for aggregation function
                     self.env.enter_scope();
-                    self.env.define(params[0].clone(), Value::String(key.clone()));
+                    self.env
+                        .define(params[0].clone(), Value::String(key.clone()));
                     self.env.define(params[1].clone(), values.clone());
 
                     // Evaluate aggregation function
@@ -3921,7 +3920,8 @@ impl LispEvaluator {
         if args.len() < 2 || args.len() > 3 {
             return Err(Error::InvalidArguments {
                 tool: "sort-by".to_string(),
-                reason: "Expected 2-3 arguments: collection, key-fn, and optional :desc flag".to_string(),
+                reason: "Expected 2-3 arguments: collection, key-fn, and optional :desc flag"
+                    .to_string(),
             });
         }
 
@@ -3949,7 +3949,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "sort-by".to_string(),
-                        reason: format!("Key function must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Key function must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 

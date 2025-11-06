@@ -155,10 +155,13 @@ impl Tool for ArefTool {
         let array = args[0].as_array()?;
         let index = args[1].as_int()? as usize;
 
-        array.get(index).cloned().ok_or_else(|| Error::IndexOutOfBounds {
-            index,
-            length: array.len(),
-        })
+        array
+            .get(index)
+            .cloned()
+            .ok_or_else(|| Error::IndexOutOfBounds {
+                index,
+                length: array.len(),
+            })
     }
 }
 
@@ -545,9 +548,12 @@ impl Tool for CaadrTool {
         }
 
         let second = list[1].as_array()?;
-        second.first().cloned().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAADR".to_string(),
-        })
+        second
+            .first()
+            .cloned()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAADR".to_string(),
+            })
     }
 }
 
@@ -670,18 +676,30 @@ impl Tool for CaaaarTool {
             });
         }
 
-        let l1 = args[0].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAAAAR".to_string(),
-        })?;
-        let l2 = l1.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAAAAR".to_string(),
-        })?;
-        let l3 = l2.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAAAAR".to_string(),
-        })?;
-        let l4 = l3.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAAAAR".to_string(),
-        })?;
+        let l1 = args[0]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAAAAR".to_string(),
+            })?;
+        let l2 = l1
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAAAAR".to_string(),
+            })?;
+        let l3 = l2
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAAAAR".to_string(),
+            })?;
+        let l4 = l3
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAAAAR".to_string(),
+            })?;
 
         Ok(l4.clone())
     }
@@ -707,15 +725,24 @@ impl Tool for CdaaarTool {
             });
         }
 
-        let l1 = args[0].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CDAAAR".to_string(),
-        })?;
-        let l2 = l1.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CDAAAR".to_string(),
-        })?;
-        let l3 = l2.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CDAAAR".to_string(),
-        })?;
+        let l1 = args[0]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CDAAAR".to_string(),
+            })?;
+        let l2 = l1
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CDAAAR".to_string(),
+            })?;
+        let l3 = l2
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CDAAAR".to_string(),
+            })?;
         let l4 = l3.as_array()?;
 
         if l4.is_empty() {
@@ -746,12 +773,18 @@ impl Tool for CadaarTool {
             });
         }
 
-        let l1 = args[0].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CADAAR".to_string(),
-        })?;
-        let l2 = l1.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CADAAR".to_string(),
-        })?;
+        let l1 = args[0]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CADAAR".to_string(),
+            })?;
+        let l2 = l1
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CADAAR".to_string(),
+            })?;
         let l3 = l2.as_array()?;
 
         if l3.len() < 2 {
@@ -785,12 +818,18 @@ impl Tool for CddaarTool {
             });
         }
 
-        let l1 = args[0].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CDDAAR".to_string(),
-        })?;
-        let l2 = l1.as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CDDAAR".to_string(),
-        })?;
+        let l1 = args[0]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CDDAAR".to_string(),
+            })?;
+        let l2 = l1
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CDDAAR".to_string(),
+            })?;
         let l3 = l2.as_array()?;
 
         if l3.len() < 2 {
@@ -821,9 +860,12 @@ impl Tool for CaadarTool {
             });
         }
 
-        let l1 = args[0].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAADAR".to_string(),
-        })?;
+        let l1 = args[0]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAADAR".to_string(),
+            })?;
         let l2 = l1.as_array()?;
 
         if l2.len() < 2 {
@@ -833,9 +875,12 @@ impl Tool for CaadarTool {
             });
         }
 
-        let l3 = l2[1].as_array()?.first().ok_or_else(|| Error::EmptyCollection {
-            operation: "CAADAR".to_string(),
-        })?;
+        let l3 = l2[1]
+            .as_array()?
+            .first()
+            .ok_or_else(|| Error::EmptyCollection {
+                operation: "CAADAR".to_string(),
+            })?;
 
         Ok(l3.clone())
     }

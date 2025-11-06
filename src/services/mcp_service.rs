@@ -7,7 +7,7 @@ use crate::services::unikernel_runtime::{UnikernelConfig, UnikernelRuntime};
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
-use crate::utils::debug_logger::{VerbosityLevel, get_verbosity};
+use crate::utils::debug_logger::{get_verbosity, VerbosityLevel};
 use crate::utils::input_sanitization;
 use crate::utils::path_security::create_secure_socket_dir;
 use crate::{debug_error, debug_print, debug_success, debug_warn};

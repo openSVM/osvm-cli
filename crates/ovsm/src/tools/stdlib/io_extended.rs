@@ -16,8 +16,12 @@ use crate::tools::{Tool, ToolRegistry};
 /// READ-BYTE - Read byte from stream
 pub struct ReadByteTool;
 impl Tool for ReadByteTool {
-    fn name(&self) -> &str { "READ-BYTE" }
-    fn description(&self) -> &str { "Read single byte from binary stream" }
+    fn name(&self) -> &str {
+        "READ-BYTE"
+    }
+    fn description(&self) -> &str {
+        "Read single byte from binary stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -33,30 +37,54 @@ impl Tool for ReadByteTool {
 /// WRITE-BYTE - Write byte to stream
 pub struct WriteByteTool;
 impl Tool for WriteByteTool {
-    fn name(&self) -> &str { "WRITE-BYTE" }
-    fn description(&self) -> &str { "Write single byte to binary stream" }
+    fn name(&self) -> &str {
+        "WRITE-BYTE"
+    }
+    fn description(&self) -> &str {
+        "Write single byte to binary stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// READ-SEQUENCE - Read sequence from stream
 pub struct ReadSequenceTool;
 impl Tool for ReadSequenceTool {
-    fn name(&self) -> &str { "READ-SEQUENCE" }
-    fn description(&self) -> &str { "Read sequence from stream" }
+    fn name(&self) -> &str {
+        "READ-SEQUENCE"
+    }
+    fn description(&self) -> &str {
+        "Read sequence from stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Int(0) } else { Value::Int(0) })
+        Ok(if args.is_empty() {
+            Value::Int(0)
+        } else {
+            Value::Int(0)
+        })
     }
 }
 
 /// WRITE-SEQUENCE - Write sequence to stream
 pub struct WriteSequenceTool;
 impl Tool for WriteSequenceTool {
-    fn name(&self) -> &str { "WRITE-SEQUENCE" }
-    fn description(&self) -> &str { "Write sequence to stream" }
+    fn name(&self) -> &str {
+        "WRITE-SEQUENCE"
+    }
+    fn description(&self) -> &str {
+        "Write sequence to stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
@@ -67,8 +95,12 @@ impl Tool for WriteSequenceTool {
 /// FILE-POSITION - Get or set file position
 pub struct FilePositionTool;
 impl Tool for FilePositionTool {
-    fn name(&self) -> &str { "FILE-POSITION" }
-    fn description(&self) -> &str { "Get or set file position in stream" }
+    fn name(&self) -> &str {
+        "FILE-POSITION"
+    }
+    fn description(&self) -> &str {
+        "Get or set file position in stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() >= 2 {
             // Setting position
@@ -83,8 +115,12 @@ impl Tool for FilePositionTool {
 /// FILE-LENGTH - Get file length
 pub struct FileLengthTool;
 impl Tool for FileLengthTool {
-    fn name(&self) -> &str { "FILE-LENGTH" }
-    fn description(&self) -> &str { "Get length of file" }
+    fn name(&self) -> &str {
+        "FILE-LENGTH"
+    }
+    fn description(&self) -> &str {
+        "Get length of file"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -99,8 +135,12 @@ impl Tool for FileLengthTool {
 /// FILE-STRING-LENGTH - Get string length in file
 pub struct FileStringLengthTool;
 impl Tool for FileStringLengthTool {
-    fn name(&self) -> &str { "FILE-STRING-LENGTH" }
-    fn description(&self) -> &str { "Get length string would have in file" }
+    fn name(&self) -> &str {
+        "FILE-STRING-LENGTH"
+    }
+    fn description(&self) -> &str {
+        "Get length string would have in file"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -125,8 +165,12 @@ impl Tool for FileStringLengthTool {
 /// STREAM-ELEMENT-TYPE - Get stream element type
 pub struct StreamElementTypeTool;
 impl Tool for StreamElementTypeTool {
-    fn name(&self) -> &str { "STREAM-ELEMENT-TYPE" }
-    fn description(&self) -> &str { "Get element type of stream" }
+    fn name(&self) -> &str {
+        "STREAM-ELEMENT-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Get element type of stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -141,8 +185,12 @@ impl Tool for StreamElementTypeTool {
 /// INPUT-STREAM-P - Check if input stream
 pub struct InputStreamPTool;
 impl Tool for InputStreamPTool {
-    fn name(&self) -> &str { "INPUT-STREAM-P" }
-    fn description(&self) -> &str { "Check if stream is input stream" }
+    fn name(&self) -> &str {
+        "INPUT-STREAM-P"
+    }
+    fn description(&self) -> &str {
+        "Check if stream is input stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -157,8 +205,12 @@ impl Tool for InputStreamPTool {
 /// OUTPUT-STREAM-P - Check if output stream
 pub struct OutputStreamPTool;
 impl Tool for OutputStreamPTool {
-    fn name(&self) -> &str { "OUTPUT-STREAM-P" }
-    fn description(&self) -> &str { "Check if stream is output stream" }
+    fn name(&self) -> &str {
+        "OUTPUT-STREAM-P"
+    }
+    fn description(&self) -> &str {
+        "Check if stream is output stream"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -173,8 +225,12 @@ impl Tool for OutputStreamPTool {
 /// INTERACTIVE-STREAM-P - Check if interactive stream
 pub struct InteractiveStreamPTool;
 impl Tool for InteractiveStreamPTool {
-    fn name(&self) -> &str { "INTERACTIVE-STREAM-P" }
-    fn description(&self) -> &str { "Check if stream is interactive" }
+    fn name(&self) -> &str {
+        "INTERACTIVE-STREAM-P"
+    }
+    fn description(&self) -> &str {
+        "Check if stream is interactive"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -189,8 +245,12 @@ impl Tool for InteractiveStreamPTool {
 /// OPEN-STREAM-P - Check if stream is open
 pub struct OpenStreamPTool;
 impl Tool for OpenStreamPTool {
-    fn name(&self) -> &str { "OPEN-STREAM-P" }
-    fn description(&self) -> &str { "Check if stream is open" }
+    fn name(&self) -> &str {
+        "OPEN-STREAM-P"
+    }
+    fn description(&self) -> &str {
+        "Check if stream is open"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {

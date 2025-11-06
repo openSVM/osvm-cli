@@ -17,8 +17,12 @@ use std::sync::Arc;
 /// SORT-BY-KEY - Sort with key function
 pub struct SortByKeyTool;
 impl Tool for SortByKeyTool {
-    fn name(&self) -> &str { "SORT-BY-KEY" }
-    fn description(&self) -> &str { "Sort sequence using key function" }
+    fn name(&self) -> &str {
+        "SORT-BY-KEY"
+    }
+    fn description(&self) -> &str {
+        "Sort sequence using key function"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -27,15 +31,13 @@ impl Tool for SortByKeyTool {
         match &args[0] {
             Value::Array(arr) => {
                 let mut sorted = arr.to_vec();
-                sorted.sort_by(|a, b| {
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                        (Value::Float(x), Value::Float(y)) => {
-                            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                        }
-                        (Value::String(x), Value::String(y)) => x.cmp(y),
-                        _ => std::cmp::Ordering::Equal,
+                sorted.sort_by(|a, b| match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                    (Value::Float(x), Value::Float(y)) => {
+                        x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
                     }
+                    (Value::String(x), Value::String(y)) => x.cmp(y),
+                    _ => std::cmp::Ordering::Equal,
                 });
                 Ok(Value::Array(Arc::new(sorted)))
             }
@@ -47,8 +49,12 @@ impl Tool for SortByKeyTool {
 /// STABLE-SORT-BY-KEY - Stable sort with key
 pub struct StableSortByKeyTool;
 impl Tool for StableSortByKeyTool {
-    fn name(&self) -> &str { "STABLE-SORT-BY-KEY" }
-    fn description(&self) -> &str { "Stable sort sequence using key function" }
+    fn name(&self) -> &str {
+        "STABLE-SORT-BY-KEY"
+    }
+    fn description(&self) -> &str {
+        "Stable sort sequence using key function"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::Array(Arc::new(vec![])));
@@ -57,15 +63,13 @@ impl Tool for StableSortByKeyTool {
         match &args[0] {
             Value::Array(arr) => {
                 let mut sorted = arr.to_vec();
-                sorted.sort_by(|a, b| {
-                    match (a, b) {
-                        (Value::Int(x), Value::Int(y)) => x.cmp(y),
-                        (Value::Float(x), Value::Float(y)) => {
-                            x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
-                        }
-                        (Value::String(x), Value::String(y)) => x.cmp(y),
-                        _ => std::cmp::Ordering::Equal,
+                sorted.sort_by(|a, b| match (a, b) {
+                    (Value::Int(x), Value::Int(y)) => x.cmp(y),
+                    (Value::Float(x), Value::Float(y)) => {
+                        x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal)
                     }
+                    (Value::String(x), Value::String(y)) => x.cmp(y),
+                    _ => std::cmp::Ordering::Equal,
                 });
                 Ok(Value::Array(Arc::new(sorted)))
             }
@@ -81,8 +85,12 @@ impl Tool for StableSortByKeyTool {
 /// MISMATCH - Find first position where sequences differ
 pub struct MismatchTool;
 impl Tool for MismatchTool {
-    fn name(&self) -> &str { "MISMATCH" }
-    fn description(&self) -> &str { "Find first position where sequences differ" }
+    fn name(&self) -> &str {
+        "MISMATCH"
+    }
+    fn description(&self) -> &str {
+        "Find first position where sequences differ"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -115,8 +123,12 @@ impl Tool for MismatchTool {
 /// SEARCH-SUBSEQUENCE - Search for subsequence
 pub struct SearchSubsequenceTool;
 impl Tool for SearchSubsequenceTool {
-    fn name(&self) -> &str { "SEARCH-SUBSEQUENCE" }
-    fn description(&self) -> &str { "Search for subsequence in sequence" }
+    fn name(&self) -> &str {
+        "SEARCH-SUBSEQUENCE"
+    }
+    fn description(&self) -> &str {
+        "Search for subsequence in sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -153,23 +165,34 @@ impl Tool for SearchSubsequenceTool {
 /// SUBSTITUTE-IF-NOT - Substitute where predicate false
 pub struct SubstituteIfNotTool;
 impl Tool for SubstituteIfNotTool {
-    fn name(&self) -> &str { "SUBSTITUTE-IF-NOT" }
-    fn description(&self) -> &str { "Substitute where predicate is false" }
+    fn name(&self) -> &str {
+        "SUBSTITUTE-IF-NOT"
+    }
+    fn description(&self) -> &str {
+        "Substitute where predicate is false"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(if args.is_empty() { Value::Null } else { args[0].clone() });
+            return Ok(if args.is_empty() {
+                Value::Null
+            } else {
+                args[0].clone()
+            });
         }
 
         match &args[1] {
             Value::Array(arr) => {
                 let new_val = &args[0];
-                let result: Vec<Value> = arr.iter().map(|v| {
-                    if !v.is_truthy() {
-                        new_val.clone()
-                    } else {
-                        v.clone()
-                    }
-                }).collect();
+                let result: Vec<Value> = arr
+                    .iter()
+                    .map(|v| {
+                        if !v.is_truthy() {
+                            new_val.clone()
+                        } else {
+                            v.clone()
+                        }
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             v => Ok(v.clone()),
@@ -180,23 +203,34 @@ impl Tool for SubstituteIfNotTool {
 /// NSUBSTITUTE-IF-NOT - Destructive substitute where predicate false
 pub struct NsubstituteIfNotTool;
 impl Tool for NsubstituteIfNotTool {
-    fn name(&self) -> &str { "NSUBSTITUTE-IF-NOT" }
-    fn description(&self) -> &str { "Destructively substitute where predicate is false" }
+    fn name(&self) -> &str {
+        "NSUBSTITUTE-IF-NOT"
+    }
+    fn description(&self) -> &str {
+        "Destructively substitute where predicate is false"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Ok(if args.is_empty() { Value::Null } else { args[0].clone() });
+            return Ok(if args.is_empty() {
+                Value::Null
+            } else {
+                args[0].clone()
+            });
         }
 
         match &args[1] {
             Value::Array(arr) => {
                 let new_val = &args[0];
-                let result: Vec<Value> = arr.iter().map(|v| {
-                    if !v.is_truthy() {
-                        new_val.clone()
-                    } else {
-                        v.clone()
-                    }
-                }).collect();
+                let result: Vec<Value> = arr
+                    .iter()
+                    .map(|v| {
+                        if !v.is_truthy() {
+                            new_val.clone()
+                        } else {
+                            v.clone()
+                        }
+                    })
+                    .collect();
                 Ok(Value::Array(Arc::new(result)))
             }
             v => Ok(v.clone()),
@@ -211,8 +245,12 @@ impl Tool for NsubstituteIfNotTool {
 /// FILL-POINTER - Get or set fill pointer
 pub struct FillPointerTool;
 impl Tool for FillPointerTool {
-    fn name(&self) -> &str { "FILL-POINTER" }
-    fn description(&self) -> &str { "Get or set array fill pointer" }
+    fn name(&self) -> &str {
+        "FILL-POINTER"
+    }
+    fn description(&self) -> &str {
+        "Get or set array fill pointer"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         match args.get(0) {
             Some(Value::Array(arr)) => Ok(Value::Int(arr.len() as i64)),
@@ -224,8 +262,12 @@ impl Tool for FillPointerTool {
 /// VECTOR-PUSH - Push element, advance fill pointer
 pub struct VectorPushTool;
 impl Tool for VectorPushTool {
-    fn name(&self) -> &str { "VECTOR-PUSH" }
-    fn description(&self) -> &str { "Push element onto vector with fill pointer" }
+    fn name(&self) -> &str {
+        "VECTOR-PUSH"
+    }
+    fn description(&self) -> &str {
+        "Push element onto vector with fill pointer"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -251,8 +293,12 @@ impl Tool for VectorPushTool {
 /// VECTOR-POP - Pop element, decrement fill pointer
 pub struct VectorPopTool;
 impl Tool for VectorPopTool {
-    fn name(&self) -> &str { "VECTOR-POP" }
-    fn description(&self) -> &str { "Pop element from vector with fill pointer" }
+    fn name(&self) -> &str {
+        "VECTOR-POP"
+    }
+    fn description(&self) -> &str {
+        "Pop element from vector with fill pointer"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -283,8 +329,12 @@ impl Tool for VectorPopTool {
 /// VECTOR-PUSH-EXTEND - Push element, extend if needed
 pub struct VectorPushExtendTool;
 impl Tool for VectorPushExtendTool {
-    fn name(&self) -> &str { "VECTOR-PUSH-EXTEND" }
-    fn description(&self) -> &str { "Push element, extending vector if necessary" }
+    fn name(&self) -> &str {
+        "VECTOR-PUSH-EXTEND"
+    }
+    fn description(&self) -> &str {
+        "Push element, extending vector if necessary"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {

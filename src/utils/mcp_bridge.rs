@@ -1,6 +1,6 @@
 //! MCP Bridge Tool - dynamically calls any configured MCP tool
 use crate::services::mcp_service::{McpService, McpTool};
-use crate::utils::debug_logger::{log_ovsm_value, get_verbosity, VerbosityLevel};
+use crate::utils::debug_logger::{get_verbosity, log_ovsm_value, VerbosityLevel};
 use ovsm::error::Result as OvsmResult;
 use ovsm::runtime::Value as OvsmValue;
 use ovsm::tools::Tool;

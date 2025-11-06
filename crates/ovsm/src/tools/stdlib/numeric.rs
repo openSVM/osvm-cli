@@ -478,10 +478,8 @@ impl Tool for CoerceTool {
             "LIST" | "ARRAY" => match &args[0] {
                 Value::Array(_) => Ok(args[0].clone()),
                 Value::String(s) => {
-                    let chars: Vec<Value> = s
-                        .chars()
-                        .map(|c| Value::String(c.to_string()))
-                        .collect();
+                    let chars: Vec<Value> =
+                        s.chars().map(|c| Value::String(c.to_string())).collect();
                     Ok(Value::array(chars))
                 }
                 _ => Err(Error::TypeError {
@@ -677,11 +675,7 @@ impl Tool for IncfTool {
             });
         }
 
-        let delta = if args.len() > 1 {
-            args[1].as_int()?
-        } else {
-            1
-        };
+        let delta = if args.len() > 1 { args[1].as_int()? } else { 1 };
 
         match &args[0] {
             Value::Int(n) => Ok(Value::Int(n + delta)),
@@ -714,11 +708,7 @@ impl Tool for DecfTool {
             });
         }
 
-        let delta = if args.len() > 1 {
-            args[1].as_int()?
-        } else {
-            1
-        };
+        let delta = if args.len() > 1 { args[1].as_int()? } else { 1 };
 
         match &args[0] {
             Value::Int(n) => Ok(Value::Int(n - delta)),

@@ -240,7 +240,9 @@ impl Tool for PathnameDeviceTool {
             if let Some(prefix) = path.components().next() {
                 use std::path::Component;
                 if let Component::Prefix(prefix) = prefix {
-                    return Ok(Value::String(prefix.as_os_str().to_string_lossy().to_string()));
+                    return Ok(Value::String(
+                        prefix.as_os_str().to_string_lossy().to_string(),
+                    ));
                 }
             }
         }

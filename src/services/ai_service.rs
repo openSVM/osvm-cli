@@ -1,7 +1,7 @@
 use crate::utils::circuit_breaker::{
     AnalysisVector as CircuitAnalysisVector, EndpointId, GranularCircuitBreaker,
 };
-use crate::utils::debug_logger::{VerbosityLevel, get_verbosity};
+use crate::utils::debug_logger::{get_verbosity, VerbosityLevel};
 use crate::utils::prompt_templates::{
     AnalysisVector as TemplateAnalysisVector, PromptTemplateManager, TemplateCategory,
 };
@@ -579,7 +579,8 @@ impl AiService {
     }
 
     async fn query_openai(&self, question: &str, debug_mode: bool) -> Result<String> {
-        self.query_openai_with_system(question, None, debug_mode).await
+        self.query_openai_with_system(question, None, debug_mode)
+            .await
     }
 
     async fn query_openai_with_system(
@@ -677,8 +678,11 @@ impl AiService {
         // For OSVM AI, use ownPlan parameter to get plan directly
         let ai_response = if self.use_openai {
             // OpenAI: send system prompt in messages
-            debug_print!("Sending OVSM plan request to OpenAI-compatible endpoint with system prompt");
-            self.query_openai_with_system(&planning_prompt, Some(&ovsm_system_prompt), true).await?
+            debug_print!(
+                "Sending OVSM plan request to OpenAI-compatible endpoint with system prompt"
+            );
+            self.query_openai_with_system(&planning_prompt, Some(&ovsm_system_prompt), true)
+                .await?
         } else {
             // OSVM AI: use ownPlan=true to get structured plan
             debug_print!("Sending OVSM plan request with custom system prompt");
@@ -1701,20 +1705,20 @@ Continue the code now:"#,
         let partial_char_count = partial.chars().count();
         if partial_char_count > overlap_window {
             // Get the last overlap_window characters (not bytes!)
-            let partial_end: String = partial.chars()
+            let partial_end: String = partial
+                .chars()
                 .skip(partial_char_count - overlap_window)
                 .collect();
 
             // Try to find overlap by checking progressively smaller substrings
             // Use character-aware iteration
             for skip in 0..partial_end.chars().count() {
-                let potential_overlap: String = partial_end.chars()
-                    .skip(skip)
-                    .collect();
+                let potential_overlap: String = partial_end.chars().skip(skip).collect();
 
                 if cleaned_continuation.starts_with(&potential_overlap) {
                     // Found overlap, skip it in continuation
-                    let continuation_without_overlap = &cleaned_continuation[potential_overlap.len()..];
+                    let continuation_without_overlap =
+                        &cleaned_continuation[potential_overlap.len()..];
                     return format!("{}{}", partial, continuation_without_overlap);
                 }
             }
@@ -2619,8 +2623,13 @@ mod tests {
         assert!(!local_config.is_openai_compatible());
 
         // Test with_api_url direct configuration
-        let ai_service = AiService::with_api_url(Some("http://localhost:11434/v1/chat/completions".to_string()));
+        let ai_service = AiService::with_api_url(Some(
+            "http://localhost:11434/v1/chat/completions".to_string(),
+        ));
         assert!(ai_service.use_openai);
-        assert_eq!(ai_service.api_url, "http://localhost:11434/v1/chat/completions");
+        assert_eq!(
+            ai_service.api_url,
+            "http://localhost:11434/v1/chat/completions"
+        );
     }
 }

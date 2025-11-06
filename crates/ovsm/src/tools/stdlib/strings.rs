@@ -790,9 +790,7 @@ impl Tool for CharUpcaseTool {
             reason: "Empty string".to_string(),
         })?;
 
-        Ok(Value::String(
-            ch.to_uppercase().next().unwrap().to_string(),
-        ))
+        Ok(Value::String(ch.to_uppercase().next().unwrap().to_string()))
     }
 }
 
@@ -822,9 +820,7 @@ impl Tool for CharDowncaseTool {
             reason: "Empty string".to_string(),
         })?;
 
-        Ok(Value::String(
-            ch.to_lowercase().next().unwrap().to_string(),
-        ))
+        Ok(Value::String(ch.to_lowercase().next().unwrap().to_string()))
     }
 }
 
@@ -884,10 +880,13 @@ impl Tool for PositionTool {
 
         let needle = args[0].as_string()?;
         let haystack = args[1].as_string()?;
-        let ch = needle.chars().next().ok_or_else(|| Error::InvalidArguments {
-            tool: "POSITION".to_string(),
-            reason: "Empty search string".to_string(),
-        })?;
+        let ch = needle
+            .chars()
+            .next()
+            .ok_or_else(|| Error::InvalidArguments {
+                tool: "POSITION".to_string(),
+                reason: "Empty search string".to_string(),
+            })?;
 
         match haystack.find(ch) {
             Some(idx) => Ok(Value::Int(idx as i64)),
@@ -1382,10 +1381,7 @@ impl Tool for StringToListTool {
         }
 
         let s = args[0].as_string()?;
-        let chars: Vec<Value> = s
-            .chars()
-            .map(|c| Value::String(c.to_string()))
-            .collect();
+        let chars: Vec<Value> = s.chars().map(|c| Value::String(c.to_string())).collect();
 
         Ok(Value::Array(Arc::new(chars)))
     }

@@ -183,7 +183,7 @@ fn get_snapshot_dir(matches: &ArgMatches) -> Result<PathBuf> {
 fn get_output_config(matches: &ArgMatches) -> Result<OutputConfig> {
     // Check both --no-color flag and NO_COLOR environment variable
     let colorized = !matches.get_flag("no-color") && std::env::var("NO_COLOR").is_err();
-    
+
     Ok(OutputConfig {
         format: if matches.get_flag("json") {
             crate::services::snapshot_service::OutputFormat::Json

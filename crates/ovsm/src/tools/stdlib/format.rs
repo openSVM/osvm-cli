@@ -57,11 +57,7 @@ impl Tool for FormatTool {
             args[1].as_string()?
         };
 
-        let format_args = if args.len() > 1 {
-            &args[1..]
-        } else {
-            &[]
-        };
+        let format_args = if args.len() > 1 { &args[1..] } else { &[] };
 
         let result = parse_format(format_string, format_args)?;
         Ok(Value::String(result))

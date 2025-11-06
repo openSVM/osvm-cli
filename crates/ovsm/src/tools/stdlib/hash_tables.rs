@@ -387,9 +387,7 @@ impl Tool for HashTablePairsTool {
         let hash_table = args[0].as_object()?;
         let pairs: Vec<Value> = hash_table
             .iter()
-            .map(|(k, v)| {
-                Value::Array(Arc::new(vec![Value::String(k.clone()), v.clone()]))
-            })
+            .map(|(k, v)| Value::Array(Arc::new(vec![Value::String(k.clone()), v.clone()])))
             .collect();
 
         Ok(Value::Array(Arc::new(pairs)))
@@ -478,9 +476,7 @@ impl Tool for HashTableToAlistTool {
         let hash_table = args[0].as_object()?;
         let alist: Vec<Value> = hash_table
             .iter()
-            .map(|(k, v)| {
-                Value::Array(Arc::new(vec![Value::String(k.clone()), v.clone()]))
-            })
+            .map(|(k, v)| Value::Array(Arc::new(vec![Value::String(k.clone()), v.clone()])))
             .collect();
 
         Ok(Value::Array(Arc::new(alist)))
@@ -545,7 +541,8 @@ impl Tool for CopyHashTableTool {
         }
 
         let hash_table = args[0].as_object()?;
-        let new_map = hash_table.iter()
+        let new_map = hash_table
+            .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<HashMap<String, Value>>();
 
@@ -761,7 +758,8 @@ impl Tool for HashTableUpdateTool {
         let key = args[1].as_string()?.to_string();
         let value = &args[2];
 
-        let mut new_map = hash_table.iter()
+        let mut new_map = hash_table
+            .iter()
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect::<HashMap<String, Value>>();
         new_map.insert(key, value.clone());

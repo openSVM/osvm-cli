@@ -17,18 +17,30 @@ use std::sync::Arc;
 /// DEFTYPE - Define new type
 pub struct DeftypeTool;
 impl Tool for DeftypeTool {
-    fn name(&self) -> &str { "DEFTYPE" }
-    fn description(&self) -> &str { "Define new type" }
+    fn name(&self) -> &str {
+        "DEFTYPE"
+    }
+    fn description(&self) -> &str {
+        "Define new type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// TYPE-OF - Get type of value
 pub struct TypeOfTool;
 impl Tool for TypeOfTool {
-    fn name(&self) -> &str { "TYPE-OF" }
-    fn description(&self) -> &str { "Get type of value" }
+    fn name(&self) -> &str {
+        "TYPE-OF"
+    }
+    fn description(&self) -> &str {
+        "Get type of value"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Ok(Value::String("NULL".to_string()));
@@ -50,11 +62,18 @@ impl Tool for TypeOfTool {
 /// TYPEP - Check if value is of type
 pub struct TypepTool;
 impl Tool for TypepTool {
-    fn name(&self) -> &str { "TYPEP" }
-    fn description(&self) -> &str { "Check if value is of specified type" }
+    fn name(&self) -> &str {
+        "TYPEP"
+    }
+    fn description(&self) -> &str {
+        "Check if value is of specified type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Err(Error::InvalidArguments { tool: "UNKNOWN".to_string(), reason: "TYPEP requires value and type".to_string() });
+            return Err(Error::InvalidArguments {
+                tool: "UNKNOWN".to_string(),
+                reason: "TYPEP requires value and type".to_string(),
+            });
         }
         let value = &args[0];
         let type_spec = match &args[1] {
@@ -81,8 +100,12 @@ impl Tool for TypepTool {
 /// SUBTYPEP - Check subtype relationship
 pub struct SubtypepTool;
 impl Tool for SubtypepTool {
-    fn name(&self) -> &str { "SUBTYPEP" }
-    fn description(&self) -> &str { "Check if type1 is subtype of type2" }
+    fn name(&self) -> &str {
+        "SUBTYPEP"
+    }
+    fn description(&self) -> &str {
+        "Check if type1 is subtype of type2"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Ok(Value::Bool(false));
@@ -95,11 +118,18 @@ impl Tool for SubtypepTool {
 /// COERCE - Coerce value to type
 pub struct CoerceTool;
 impl Tool for CoerceTool {
-    fn name(&self) -> &str { "COERCE" }
-    fn description(&self) -> &str { "Coerce value to specified type" }
+    fn name(&self) -> &str {
+        "COERCE"
+    }
+    fn description(&self) -> &str {
+        "Coerce value to specified type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
-            return Err(Error::InvalidArguments { tool: "UNKNOWN".to_string(), reason: "COERCE requires value and type".to_string() });
+            return Err(Error::InvalidArguments {
+                tool: "UNKNOWN".to_string(),
+                reason: "COERCE requires value and type".to_string(),
+            });
         }
         let value = &args[0];
         let type_spec = match &args[1] {
@@ -108,40 +138,49 @@ impl Tool for CoerceTool {
         };
 
         match type_spec.as_str() {
-            "INTEGER" | "INT" => {
-                match value {
-                    Value::Int(n) => Ok(Value::Int(*n)),
-                    Value::Float(f) => Ok(Value::Int(*f as i64)),
-                    Value::String(s) => {
-                        s.parse::<i64>()
-                            .map(Value::Int)
-                            .map_err(|_| Error::TypeError { expected: "valid argument".to_string(), got: "invalid".to_string() })
-                    }
-                    _ => Err(Error::TypeError { expected: "valid argument".to_string(), got: "invalid".to_string() }),
+            "INTEGER" | "INT" => match value {
+                Value::Int(n) => Ok(Value::Int(*n)),
+                Value::Float(f) => Ok(Value::Int(*f as i64)),
+                Value::String(s) => {
+                    s.parse::<i64>()
+                        .map(Value::Int)
+                        .map_err(|_| Error::TypeError {
+                            expected: "valid argument".to_string(),
+                            got: "invalid".to_string(),
+                        })
                 }
-            }
-            "FLOAT" => {
-                match value {
-                    Value::Float(f) => Ok(Value::Float(*f)),
-                    Value::Int(n) => Ok(Value::Float(*n as f64)),
-                    Value::String(s) => {
-                        s.parse::<f64>()
-                            .map(Value::Float)
-                            .map_err(|_| Error::TypeError { expected: "valid argument".to_string(), got: "invalid".to_string() })
-                    }
-                    _ => Err(Error::TypeError { expected: "valid argument".to_string(), got: "invalid".to_string() }),
+                _ => Err(Error::TypeError {
+                    expected: "valid argument".to_string(),
+                    got: "invalid".to_string(),
+                }),
+            },
+            "FLOAT" => match value {
+                Value::Float(f) => Ok(Value::Float(*f)),
+                Value::Int(n) => Ok(Value::Float(*n as f64)),
+                Value::String(s) => {
+                    s.parse::<f64>()
+                        .map(Value::Float)
+                        .map_err(|_| Error::TypeError {
+                            expected: "valid argument".to_string(),
+                            got: "invalid".to_string(),
+                        })
                 }
-            }
-            "STRING" => {
-                Ok(Value::String(format!("{}", match value {
+                _ => Err(Error::TypeError {
+                    expected: "valid argument".to_string(),
+                    got: "invalid".to_string(),
+                }),
+            },
+            "STRING" => Ok(Value::String(format!(
+                "{}",
+                match value {
                     Value::String(s) => s.clone(),
                     Value::Int(n) => n.to_string(),
                     Value::Float(f) => f.to_string(),
                     Value::Bool(b) => b.to_string(),
                     Value::Null => "null".to_string(),
                     _ => "?".to_string(),
-                })))
-            }
+                }
+            ))),
             _ => Ok(value.clone()),
         }
     }
@@ -154,18 +193,30 @@ impl Tool for CoerceTool {
 /// SATISFIES - Type satisfying predicate
 pub struct SatisfiesTool;
 impl Tool for SatisfiesTool {
-    fn name(&self) -> &str { "SATISFIES" }
-    fn description(&self) -> &str { "Type satisfying predicate" }
+    fn name(&self) -> &str {
+        "SATISFIES"
+    }
+    fn description(&self) -> &str {
+        "Type satisfying predicate"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Bool(true) } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Bool(true)
+        } else {
+            args[0].clone()
+        })
     }
 }
 
 /// MEMBER - Member type specifier
 pub struct MemberTypeTool;
 impl Tool for MemberTypeTool {
-    fn name(&self) -> &str { "MEMBER" }
-    fn description(&self) -> &str { "Member type specifier" }
+    fn name(&self) -> &str {
+        "MEMBER"
+    }
+    fn description(&self) -> &str {
+        "Member type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         Ok(Value::Array(Arc::new(args.to_vec())))
     }
@@ -174,10 +225,16 @@ impl Tool for MemberTypeTool {
 /// AND - Intersection type
 pub struct AndTypeTool;
 impl Tool for AndTypeTool {
-    fn name(&self) -> &str { "AND" }
-    fn description(&self) -> &str { "Intersection type specifier" }
+    fn name(&self) -> &str {
+        "AND"
+    }
+    fn description(&self) -> &str {
+        "Intersection type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Bool(true) } else {
+        Ok(if args.is_empty() {
+            Value::Bool(true)
+        } else {
             Value::Bool(args.iter().all(|v| v.is_truthy()))
         })
     }
@@ -186,10 +243,16 @@ impl Tool for AndTypeTool {
 /// OR - Union type
 pub struct OrTypeTool;
 impl Tool for OrTypeTool {
-    fn name(&self) -> &str { "OR" }
-    fn description(&self) -> &str { "Union type specifier" }
+    fn name(&self) -> &str {
+        "OR"
+    }
+    fn description(&self) -> &str {
+        "Union type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Bool(false) } else {
+        Ok(if args.is_empty() {
+            Value::Bool(false)
+        } else {
             Value::Bool(args.iter().any(|v| v.is_truthy()))
         })
     }
@@ -198,10 +261,16 @@ impl Tool for OrTypeTool {
 /// NOT - Complement type
 pub struct NotTypeTool;
 impl Tool for NotTypeTool {
-    fn name(&self) -> &str { "NOT" }
-    fn description(&self) -> &str { "Complement type specifier" }
+    fn name(&self) -> &str {
+        "NOT"
+    }
+    fn description(&self) -> &str {
+        "Complement type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Bool(true) } else {
+        Ok(if args.is_empty() {
+            Value::Bool(true)
+        } else {
             Value::Bool(!args[0].is_truthy())
         })
     }
@@ -210,8 +279,12 @@ impl Tool for NotTypeTool {
 /// VALUES - Multiple values type
 pub struct ValuesTool;
 impl Tool for ValuesTool {
-    fn name(&self) -> &str { "VALUES" }
-    fn description(&self) -> &str { "Multiple values type specifier" }
+    fn name(&self) -> &str {
+        "VALUES"
+    }
+    fn description(&self) -> &str {
+        "Multiple values type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         Ok(Value::Array(Arc::new(args.to_vec())))
     }
@@ -220,10 +293,18 @@ impl Tool for ValuesTool {
 /// EQL - EQL type specifier
 pub struct EqlTypeTool;
 impl Tool for EqlTypeTool {
-    fn name(&self) -> &str { "EQL" }
-    fn description(&self) -> &str { "EQL type specifier" }
+    fn name(&self) -> &str {
+        "EQL"
+    }
+    fn description(&self) -> &str {
+        "EQL type specifier"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Null } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Null
+        } else {
+            args[0].clone()
+        })
     }
 }
 
@@ -234,8 +315,12 @@ impl Tool for EqlTypeTool {
 /// INTEGER-TYPE - Integer type with range
 pub struct IntegerTypeTool;
 impl Tool for IntegerTypeTool {
-    fn name(&self) -> &str { "INTEGER-TYPE" }
-    fn description(&self) -> &str { "Integer type with optional range" }
+    fn name(&self) -> &str {
+        "INTEGER-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Integer type with optional range"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation - should accept optional min and max
         Ok(Value::String("INTEGER".to_string()))
@@ -245,8 +330,12 @@ impl Tool for IntegerTypeTool {
 /// FLOAT-TYPE - Float type with range
 pub struct FloatTypeTool;
 impl Tool for FloatTypeTool {
-    fn name(&self) -> &str { "FLOAT-TYPE" }
-    fn description(&self) -> &str { "Float type with optional range" }
+    fn name(&self) -> &str {
+        "FLOAT-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Float type with optional range"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation - should accept optional min and max
         Ok(Value::String("FLOAT".to_string()))
@@ -256,8 +345,12 @@ impl Tool for FloatTypeTool {
 /// RATIONAL-TYPE - Rational number type
 pub struct RationalTypeTool;
 impl Tool for RationalTypeTool {
-    fn name(&self) -> &str { "RATIONAL-TYPE" }
-    fn description(&self) -> &str { "Rational number type" }
+    fn name(&self) -> &str {
+        "RATIONAL-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Rational number type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation
         Ok(Value::String("RATIONAL".to_string()))
@@ -267,8 +360,12 @@ impl Tool for RationalTypeTool {
 /// REAL-TYPE - Real number type
 pub struct RealTypeTool;
 impl Tool for RealTypeTool {
-    fn name(&self) -> &str { "REAL-TYPE" }
-    fn description(&self) -> &str { "Real number type" }
+    fn name(&self) -> &str {
+        "REAL-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Real number type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation
         Ok(Value::String("REAL".to_string()))
@@ -278,8 +375,12 @@ impl Tool for RealTypeTool {
 /// COMPLEX-TYPE - Complex number type
 pub struct ComplexTypeTool;
 impl Tool for ComplexTypeTool {
-    fn name(&self) -> &str { "COMPLEX-TYPE" }
-    fn description(&self) -> &str { "Complex number type" }
+    fn name(&self) -> &str {
+        "COMPLEX-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Complex number type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation
         Ok(Value::String("COMPLEX".to_string()))
@@ -293,8 +394,12 @@ impl Tool for ComplexTypeTool {
 /// ARRAY-TYPE - Array type with dimensions
 pub struct ArrayTypeTool;
 impl Tool for ArrayTypeTool {
-    fn name(&self) -> &str { "ARRAY-TYPE" }
-    fn description(&self) -> &str { "Array type with optional dimensions" }
+    fn name(&self) -> &str {
+        "ARRAY-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Array type with optional dimensions"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation - should accept optional dimensions
         Ok(Value::String("ARRAY".to_string()))
@@ -304,8 +409,12 @@ impl Tool for ArrayTypeTool {
 /// SIMPLE-ARRAY-TYPE - Simple array type
 pub struct SimpleArrayTypeTool;
 impl Tool for SimpleArrayTypeTool {
-    fn name(&self) -> &str { "SIMPLE-ARRAY-TYPE" }
-    fn description(&self) -> &str { "Simple array type" }
+    fn name(&self) -> &str {
+        "SIMPLE-ARRAY-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Simple array type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation
         Ok(Value::String("SIMPLE-ARRAY".to_string()))
@@ -315,8 +424,12 @@ impl Tool for SimpleArrayTypeTool {
 /// VECTOR-TYPE - Vector type
 pub struct VectorTypeTool;
 impl Tool for VectorTypeTool {
-    fn name(&self) -> &str { "VECTOR-TYPE" }
-    fn description(&self) -> &str { "Vector type" }
+    fn name(&self) -> &str {
+        "VECTOR-TYPE"
+    }
+    fn description(&self) -> &str {
+        "Vector type"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation
         Ok(Value::String("VECTOR".to_string()))

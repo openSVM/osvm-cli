@@ -354,10 +354,13 @@ impl Tool for ReadCharTool {
         let input = args[0].as_string()?;
 
         // Get first character
-        let ch = input.chars().next().ok_or_else(|| Error::InvalidArguments {
-            tool: "READ-CHAR".to_string(),
-            reason: "String is empty".to_string(),
-        })?;
+        let ch = input
+            .chars()
+            .next()
+            .ok_or_else(|| Error::InvalidArguments {
+                tool: "READ-CHAR".to_string(),
+                reason: "String is empty".to_string(),
+            })?;
 
         Ok(Value::String(ch.to_string()))
     }
@@ -416,12 +419,11 @@ impl Tool for WithOpenFileTool {
         let content = match mode {
             "r" | "read" => {
                 // Read mode
-                let content = std::fs::read_to_string(filename).map_err(|e| {
-                    Error::InvalidArguments {
+                let content =
+                    std::fs::read_to_string(filename).map_err(|e| Error::InvalidArguments {
                         tool: "WITH-OPEN-FILE".to_string(),
                         reason: format!("Failed to read file: {}", e),
-                    }
-                })?;
+                    })?;
                 Ok(Value::String(content))
             }
             "w" | "write" => {

@@ -124,8 +124,7 @@ impl AiConfig {
                 .with_context(|| format!("Failed to create directory {}", parent.display()))?;
         }
 
-        let yaml = serde_yaml::to_string(self)
-            .context("Failed to serialize AI config to YAML")?;
+        let yaml = serde_yaml::to_string(self).context("Failed to serialize AI config to YAML")?;
 
         fs::write(path, yaml)
             .with_context(|| format!("Failed to write AI config to {}", path.display()))?;
@@ -206,7 +205,10 @@ impl AiConfig {
                 max_tokens: 4000,
                 timeout_secs: 120,
             }),
-            _ => anyhow::bail!("Unknown preset: {}. Available: openai, ollama, local, anthropic", name),
+            _ => anyhow::bail!(
+                "Unknown preset: {}. Available: openai, ollama, local, anthropic",
+                name
+            ),
         }
     }
 }

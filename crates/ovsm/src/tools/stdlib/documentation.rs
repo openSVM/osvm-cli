@@ -16,8 +16,12 @@ use crate::tools::{Tool, ToolRegistry};
 /// DOCUMENTATION - Get documentation string
 pub struct DocumentationTool;
 impl Tool for DocumentationTool {
-    fn name(&self) -> &str { "DOCUMENTATION" }
-    fn description(&self) -> &str { "Get documentation string for object" }
+    fn name(&self) -> &str {
+        "DOCUMENTATION"
+    }
+    fn description(&self) -> &str {
+        "Get documentation string for object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 2 {
             return Err(Error::InvalidArguments {
@@ -30,7 +34,8 @@ impl Tool for DocumentationTool {
         if !matches!(args[1], Value::String(_)) {
             return Err(Error::InvalidArguments {
                 tool: "DOCUMENTATION".to_string(),
-                reason: "doc-type (arg 2) must be a string (FUNCTION, VARIABLE, TYPE, etc.)".to_string(),
+                reason: "doc-type (arg 2) must be a string (FUNCTION, VARIABLE, TYPE, etc.)"
+                    .to_string(),
             });
         }
 
@@ -43,13 +48,18 @@ impl Tool for DocumentationTool {
 /// SET-DOCUMENTATION - Set documentation string
 pub struct SetDocumentationTool;
 impl Tool for SetDocumentationTool {
-    fn name(&self) -> &str { "SET-DOCUMENTATION" }
-    fn description(&self) -> &str { "Set documentation string for object" }
+    fn name(&self) -> &str {
+        "SET-DOCUMENTATION"
+    }
+    fn description(&self) -> &str {
+        "Set documentation string for object"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.len() < 3 {
             return Err(Error::InvalidArguments {
                 tool: "SET-DOCUMENTATION".to_string(),
-                reason: "Expected 3 arguments: object, doc-type, and documentation string".to_string(),
+                reason: "Expected 3 arguments: object, doc-type, and documentation string"
+                    .to_string(),
             });
         }
 
@@ -77,8 +87,12 @@ impl Tool for SetDocumentationTool {
 /// FUNCTION-DOCUMENTATION - Get function documentation
 pub struct FunctionDocumentationTool;
 impl Tool for FunctionDocumentationTool {
-    fn name(&self) -> &str { "FUNCTION-DOCUMENTATION" }
-    fn description(&self) -> &str { "Get function documentation" }
+    fn name(&self) -> &str {
+        "FUNCTION-DOCUMENTATION"
+    }
+    fn description(&self) -> &str {
+        "Get function documentation"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -102,8 +116,12 @@ impl Tool for FunctionDocumentationTool {
 /// VARIABLE-DOCUMENTATION - Get variable documentation
 pub struct VariableDocumentationTool;
 impl Tool for VariableDocumentationTool {
-    fn name(&self) -> &str { "VARIABLE-DOCUMENTATION" }
-    fn description(&self) -> &str { "Get variable documentation" }
+    fn name(&self) -> &str {
+        "VARIABLE-DOCUMENTATION"
+    }
+    fn description(&self) -> &str {
+        "Get variable documentation"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -127,8 +145,12 @@ impl Tool for VariableDocumentationTool {
 /// TYPE-DOCUMENTATION - Get type documentation
 pub struct TypeDocumentationTool;
 impl Tool for TypeDocumentationTool {
-    fn name(&self) -> &str { "TYPE-DOCUMENTATION" }
-    fn description(&self) -> &str { "Get type documentation" }
+    fn name(&self) -> &str {
+        "TYPE-DOCUMENTATION"
+    }
+    fn description(&self) -> &str {
+        "Get type documentation"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {

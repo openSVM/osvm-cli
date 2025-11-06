@@ -17,11 +17,15 @@ use std::sync::Arc;
 /// MAKE-RANDOM-STATE - Create random state
 pub struct MakeRandomStateTool;
 impl Tool for MakeRandomStateTool {
-    fn name(&self) -> &str { "MAKE-RANDOM-STATE" }
-    fn description(&self) -> &str { "Create new random state" }
+    fn name(&self) -> &str {
+        "MAKE-RANDOM-STATE"
+    }
+    fn description(&self) -> &str {
+        "Create new random state"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         let _ = args; // Placeholder implementation - should accept optional seed or state to copy
-        // Returns a new random state object
+                      // Returns a new random state object
         Ok(Value::Int(42)) // Simplified: return seed value
     }
 }
@@ -29,8 +33,12 @@ impl Tool for MakeRandomStateTool {
 /// RANDOM-STATE-P - Check if random state
 pub struct RandomStatePTool;
 impl Tool for RandomStatePTool {
-    fn name(&self) -> &str { "RANDOM-STATE-P" }
-    fn description(&self) -> &str { "Check if object is random state" }
+    fn name(&self) -> &str {
+        "RANDOM-STATE-P"
+    }
+    fn description(&self) -> &str {
+        "Check if object is random state"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         Ok(Value::Bool(matches!(args.get(0), Some(Value::Int(_)))))
     }
@@ -39,10 +47,18 @@ impl Tool for RandomStatePTool {
 /// *RANDOM-STATE* - Current random state
 pub struct RandomStateTool;
 impl Tool for RandomStateTool {
-    fn name(&self) -> &str { "*RANDOM-STATE*" }
-    fn description(&self) -> &str { "Current random state" }
+    fn name(&self) -> &str {
+        "*RANDOM-STATE*"
+    }
+    fn description(&self) -> &str {
+        "Current random state"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Int(0) } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Int(0)
+        } else {
+            args[0].clone()
+        })
     }
 }
 
@@ -53,8 +69,12 @@ impl Tool for RandomStateTool {
 /// RANDOM-FLOAT - Generate random float in range
 pub struct RandomFloatTool;
 impl Tool for RandomFloatTool {
-    fn name(&self) -> &str { "RANDOM-FLOAT" }
-    fn description(&self) -> &str { "Generate random float between 0.0 and limit" }
+    fn name(&self) -> &str {
+        "RANDOM-FLOAT"
+    }
+    fn description(&self) -> &str {
+        "Generate random float between 0.0 and limit"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -65,10 +85,12 @@ impl Tool for RandomFloatTool {
         let limit = match &args[0] {
             Value::Float(f) => *f,
             Value::Int(n) => *n as f64,
-            _ => return Err(Error::InvalidArguments {
-                tool: self.name().to_string(),
-                reason: "Limit must be a number".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: self.name().to_string(),
+                    reason: "Limit must be a number".to_string(),
+                })
+            }
         };
 
         // Simplified: return pseudo-random value
@@ -79,8 +101,12 @@ impl Tool for RandomFloatTool {
 /// RANDOM-INTEGER - Generate random integer in range
 pub struct RandomIntegerTool;
 impl Tool for RandomIntegerTool {
-    fn name(&self) -> &str { "RANDOM-INTEGER" }
-    fn description(&self) -> &str { "Generate random integer between 0 and limit" }
+    fn name(&self) -> &str {
+        "RANDOM-INTEGER"
+    }
+    fn description(&self) -> &str {
+        "Generate random integer between 0 and limit"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -90,10 +116,12 @@ impl Tool for RandomIntegerTool {
         }
         let limit = match &args[0] {
             Value::Int(n) => *n,
-            _ => return Err(Error::InvalidArguments {
-                tool: self.name().to_string(),
-                reason: "Limit must be an integer".to_string(),
-            }),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: self.name().to_string(),
+                    reason: "Limit must be an integer".to_string(),
+                })
+            }
         };
 
         // Simplified: return pseudo-random value
@@ -104,8 +132,12 @@ impl Tool for RandomIntegerTool {
 /// RANDOM-ELEMENT - Get random element from sequence
 pub struct RandomElementTool;
 impl Tool for RandomElementTool {
-    fn name(&self) -> &str { "RANDOM-ELEMENT" }
-    fn description(&self) -> &str { "Get random element from sequence" }
+    fn name(&self) -> &str {
+        "RANDOM-ELEMENT"
+    }
+    fn description(&self) -> &str {
+        "Get random element from sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -134,8 +166,12 @@ impl Tool for RandomElementTool {
 /// SHUFFLE - Randomly permute sequence
 pub struct ShuffleTool;
 impl Tool for ShuffleTool {
-    fn name(&self) -> &str { "SHUFFLE" }
-    fn description(&self) -> &str { "Randomly permute sequence" }
+    fn name(&self) -> &str {
+        "SHUFFLE"
+    }
+    fn description(&self) -> &str {
+        "Randomly permute sequence"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::InvalidArguments {
@@ -162,10 +198,18 @@ impl Tool for ShuffleTool {
 /// SEED-RANDOM-STATE - Seed random state
 pub struct SeedRandomStateTool;
 impl Tool for SeedRandomStateTool {
-    fn name(&self) -> &str { "SEED-RANDOM-STATE" }
-    fn description(&self) -> &str { "Seed random state with value" }
+    fn name(&self) -> &str {
+        "SEED-RANDOM-STATE"
+    }
+    fn description(&self) -> &str {
+        "Seed random state with value"
+    }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() { Value::Int(0) } else { args[0].clone() })
+        Ok(if args.is_empty() {
+            Value::Int(0)
+        } else {
+            args[0].clone()
+        })
     }
 }
 
