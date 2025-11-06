@@ -1,0 +1,77 @@
+;; OVSM Browser Automation Example
+;; Demonstrates headless browser control using Playwright tools
+;;
+;; This example shows a complete workflow:
+;; 1. Navigate to a website
+;; 2. Wait for content to load
+;; 3. Take screenshots
+;; 4. Interact with form elements
+;; 5. Extract data with JavaScript
+;; 6. Capture page snapshots
+
+;; === Basic Navigation ===
+(log :message "=== Browser Automation Demo ===" :level "info")
+
+;; Navigate to a website
+(define url "https://solana.com")
+(log :message "Navigating to:" :value url)
+(browser_navigate url)
+
+;; === Wait for Dynamic Content ===
+;; Wait for page to load (selector, timeout_ms)
+(browser_wait_for ".hero-section" 5000)
+(log :message "Page loaded successfully")
+
+;; === Screenshot Capture ===
+;; Take a screenshot with auto-generated filename
+(define screenshot1 (browser_screenshot))
+(log :message "Screenshot 1:" :value screenshot1)
+
+;; Take a screenshot with custom filename
+(define screenshot2 (browser_screenshot "/tmp/solana-homepage.png"))
+(log :message "Screenshot 2:" :value screenshot2)
+
+;; === JavaScript Evaluation ===
+;; Get page title using JavaScript
+(define title_script "document.title")
+(define title_result (browser_evaluate title_script))
+(log :message "Page title result:" :value title_result)
+
+;; Get page URL
+(define url_result (browser_evaluate "window.location.href"))
+(log :message "Current URL:" :value url_result)
+
+;; === Form Interaction ===
+;; Type text into a search box
+(log :message "Interacting with form elements")
+(browser_type "#search-input" "validators")
+
+;; Click a button
+(browser_click "#search-button")
+
+;; Wait for search results
+(browser_wait_for ".search-results" 3000)
+
+;; === Page Snapshot ===
+;; Capture accessibility tree structure
+(define snapshot (browser_snapshot))
+(log :message "Page snapshot captured:" :value snapshot)
+
+;; === Multiple Operations ===
+;; You can chain multiple operations
+(do
+  (browser_navigate "https://docs.solana.com")
+  (browser_wait_for "main" 5000)
+  (browser_screenshot "/tmp/solana-docs.png")
+  (log :message "Visited documentation page"))
+
+;; === Error Handling ===
+;; Always wait before interacting to avoid errors
+(browser_navigate "https://example.com")
+(browser_wait_for "body" 10000)
+(browser_click "a")  ; Click first link
+
+(log :message "Browser automation workflow complete!" :level "success")
+
+;; Return final status
+"Browser automation demo completed successfully"

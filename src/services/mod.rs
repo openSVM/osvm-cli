@@ -3,6 +3,7 @@ pub mod activity_logger;
 pub mod ai_service;
 pub mod audit_service;
 pub mod blockchain_indexer;
+pub mod browser_service; // Browser automation service using MCP/Playwright
 pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;
 pub mod ephemeral_microvm;

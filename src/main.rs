@@ -57,11 +57,12 @@ fn is_known_command(sub_command: &str) -> bool {
             | "chat"
             | "agent"
             | "plan"
-            | "p"     // Short alias for plan
-            | "a"     // Short alias for agent
+            | "p"       // Short alias for plan
+            | "a"       // Short alias for agent
             | "v"
             | "ver"
             | "version"
+            | "browser" // Browser automation command
     )
 }
 
@@ -298,6 +299,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return commands::settings::handle_settings_command(sub_matches)
             .await
             .map_err(|e| e.into());
+    }
+
+    // Handle browser command early - no Solana config needed, only Playwright
+    if sub_command == "browser" {
+        return commands::browser_handler::handle_browser_command(&app_matches, sub_matches).await;
     }
 
     // Handle QA command early to avoid config loading that might trigger self-repair
