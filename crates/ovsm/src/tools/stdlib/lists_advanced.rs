@@ -216,7 +216,7 @@ impl Tool for TailpTool {
         }
 
         let offset = list.len() - sublist.len();
-        Ok(Value::Bool(&list[offset..] == &sublist[..]))
+        Ok(Value::Bool(list[offset..] == sublist[..]))
     }
 }
 
@@ -313,7 +313,7 @@ impl Tool for TreeEqualTool {
                     obj1.len() == obj2.len()
                         && obj1
                             .iter()
-                            .all(|(k, v1)| obj2.get(k).map_or(false, |v2| deep_equal(v1, v2)))
+                            .all(|(k, v1)| obj2.get(k).is_some_and(|v2| deep_equal(v1, v2)))
                 }
                 (a, b) => a == b,
             }

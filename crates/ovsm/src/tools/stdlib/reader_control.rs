@@ -247,12 +247,10 @@ impl Tool for ReadtableCaseTool {
         "Get or set readtable case mode"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(if args.is_empty() {
-            Value::String(":UPCASE".to_string())
-        } else if args.len() == 1 {
-            Value::String(":UPCASE".to_string())
-        } else {
+        Ok(if args.len() >= 2 {
             args[1].clone()
+        } else {
+            Value::String(":UPCASE".to_string())
         })
     }
 }
