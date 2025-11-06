@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["default_api_url","default_max_tokens","default_model","default_provider","default_temperature","default_timeout"],"struct":["AiConfig"]};

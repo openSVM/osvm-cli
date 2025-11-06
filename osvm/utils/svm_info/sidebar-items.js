@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["SvmError"],"fn":["display_svm_info","display_svm_list","get_svm_info","list_all_svms"],"struct":["NetworkInfo","RpcNodeInfo","SvmInfo","SystemRequirements"]};

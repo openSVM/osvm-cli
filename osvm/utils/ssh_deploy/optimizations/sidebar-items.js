@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["apply_sysctl_settings","apply_system_optimizations","configure_file_limits","configure_firewall","set_cpu_performance","setup_log_rotation"]};

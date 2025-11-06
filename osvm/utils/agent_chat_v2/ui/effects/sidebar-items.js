@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EffectIntensity"],"mod":["focus","micro_interactions","notifications"],"struct":["AttentionDirector","GlowEffect","RippleEffect","ShakeEffect","Sparkle","SparkleEffect"],"trait":["VisualEffect"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ExecutionMode"],"fn":["default_memory_mb","default_server_memory_mb","default_server_vcpus","default_unikernel_dir","default_vcpus"],"struct":["IsolationConfig","MicroVmResourceConfig","MountConfig","ServerConfig","ToolConfig"]};

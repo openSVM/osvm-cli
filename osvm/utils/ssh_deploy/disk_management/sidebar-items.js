@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["create_mount_directories","disk_exists","format_and_mount_disk","get_disk_size","setup_disk_storage","validate_disk_requirements"]};

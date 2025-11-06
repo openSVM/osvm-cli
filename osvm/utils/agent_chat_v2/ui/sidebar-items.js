@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["accessibility","animations","autocomplete","components","cursor_management","display","effects","error_handling","handlers","input_validation","key_diagnostics","layout","layouts","loading","message_rendering","onboarding","search","text_area_wrapper","theme","themes","toast","ux_orchestrator","visual_feedback"]};

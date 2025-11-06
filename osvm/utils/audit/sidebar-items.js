@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnalysisVector","AuditSeverity"],"fn":["safe_regex_new"],"struct":["AIAnalysis","AICircuitBreaker","AIEnhancedFinding","AuditCoordinator","AuditFinding","AuditReport","AuditSummary","CodeSnippet","DeepLogicAnalysis","FindingLocation","GroupedFinding","OpenAIClient","SystemInfo","TempDir"]};

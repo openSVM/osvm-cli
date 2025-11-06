@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init_secure_logger","with_logger"],"static":["SENSITIVE_PATTERNS"],"struct":["GLOBAL_LOGGER","SecureLogger"]};

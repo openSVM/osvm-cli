@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnalysisVector","TemplateCategory","VariableType"],"struct":["PromptTemplate","PromptTemplateManager","TemplateCollection","TemplateVariable"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PackageManager","PackageManagerError"],"fn":["execute_command","get_build_dependencies","map_package_name"],"trait":["PackageManagerOps"]};

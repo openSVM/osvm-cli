@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ChatError"],"fn":["show_quick_error","show_quick_info","show_quick_success","show_quick_warning"]};

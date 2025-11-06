@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_EPHEMERAL_CPUS","DEFAULT_EPHEMERAL_MEMORY_MB","DEFAULT_TOOL_TIMEOUT_SECS","GUEST_VM_IP","MAX_CONCURRENT_VMS","TCP_TOOL_PORT"],"static":["NEXT_VSOCK_CID"],"struct":["ChatVmOrchestrator","EphemeralVmConfig","EphemeralVmHandle","EphemeralVmManager"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clone_sonic_repository","configure_sonic_network","deploy_sonic","install_sonic_dependencies","start_sonic_node"]};

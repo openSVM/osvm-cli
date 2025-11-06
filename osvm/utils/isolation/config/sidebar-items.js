@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ContainerRuntime","FirewallAction","HypervisorType","IsolationType","NetworkAccess","NetworkProtocol","TEEType","TrafficDirection","UnikernelRuntime"],"fn":["default_cert_validity","default_true"],"struct":["FirewallRule","IsolationConfig","NetworkConfig","PortRange","ResourceLimits","SecurityConfig"]};

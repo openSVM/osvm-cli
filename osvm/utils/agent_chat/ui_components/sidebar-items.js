@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["render_input_bar","render_task_status","show_enhanced_status_bar","show_enhanced_status_bar_in_place","show_task_details_below_input","show_task_details_in_place","show_welcome_box","wrap_text"]};

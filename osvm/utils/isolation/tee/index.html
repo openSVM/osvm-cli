@@ -1,0 +1,78 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Trusted Execution Environment (TEE) Support"><title>osvm::utils::isolation::tee - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="osvm" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module tee</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../osvm/index.html">osvm</a><span class="version">0.9.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module tee</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#supported-tee-technologies" title="Supported TEE Technologies">Supported TEE Technologies</a></li><li><a href="#security-properties" title="Security Properties">Security Properties</a></li><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li><li><a href="#comparison-to-isolation-levels" title="Comparison to Isolation Levels">Comparison to Isolation Levels</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In osvm::<wbr>utils::<wbr>isolation</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">osvm</a>::<wbr><a href="../../index.html">utils</a>::<wbr><a href="../index.html">isolation</a></div><h1>Module <span>tee</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/osvm/utils/isolation/tee.rs.html#1-631">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Trusted Execution Environment (TEE) Support</p>
+<p>This module provides integration with hardware-based secure enclaves for protecting
+sensitive cryptographic operations, particularly validator signing keys.</p>
+<h2 id="supported-tee-technologies"><a class="doc-anchor" href="#supported-tee-technologies">§</a>Supported TEE Technologies</h2>
+<ul>
+<li><strong>Intel SGX (Software Guard Extensions)</strong>: x86 CPU enclaves</li>
+<li><strong>AMD SEV (Secure Encrypted Virtualization)</strong>: VM memory encryption</li>
+<li><strong>ARM TrustZone</strong>: ARM secure world (future)</li>
+</ul>
+<h2 id="security-properties"><a class="doc-anchor" href="#security-properties">§</a>Security Properties</h2>
+<p>TEEs provide:</p>
+<ul>
+<li><strong>Memory Encryption</strong>: Hardware-encrypted memory (AES-128)</li>
+<li><strong>Isolation</strong>: Code/data invisible to OS and hypervisor</li>
+<li><strong>Remote Attestation</strong>: Cryptographic proof of code integrity</li>
+<li><strong>Sealed Storage</strong>: Encrypt data tied to specific enclave</li>
+</ul>
+<h2 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h2><div class="example-wrap"><pre class="language-text"><code>┌──────────────────────────────────────────────────────────┐
+│  Physical Hardware (Intel/AMD CPU)                       │
+│                                                          │
+│  ┌─────────────────────────────────────────────────────┐│
+│  │  Operating System (Untrusted)                       ││
+│  │  • Cannot read enclave memory                       ││
+│  │  • Cannot tamper with enclave code                  ││
+│  └─────────────────────────────────────────────────────┘│
+│                          │                               │
+│  ┌───────────────────────▼────────────────────────────┐ │
+│  │  TEE Runtime (SGX SDK / SEV)                       │ │
+│  │  • Manages enclave lifecycle                       │ │
+│  │  • Handles attestation                             │ │
+│  └───────────────────────┬────────────────────────────┘ │
+│                          │                               │
+│  ┌───────────────────────▼────────────────────────────┐ │
+│  │  Secure Enclave (Hardware Protected)               │ │
+│  │  ┌──────────────────────────────────────────────┐  │ │
+│  │  │  Validator Keys                              │  │ │
+│  │  │  • Private keys never leave enclave          │  │ │
+│  │  │  • Signing operations done inside            │  │ │
+│  │  │  • Memory encrypted by CPU                   │  │ │
+│  │  └──────────────────────────────────────────────┘  │ │
+│  └─────────────────────────────────────────────────────┘ │
+│                                                          │
+│  Security Guarantee: Even root cannot extract keys      │
+└──────────────────────────────────────────────────────────┘</code></pre></div><h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ol>
+<li>
+<p><strong>Validator Key Protection</strong>: Keep validator signing keys in SGX enclave</p>
+<ul>
+<li>Attacker compromises validator OS → keys still safe</li>
+<li>Even root user cannot extract keys</li>
+<li>Signing happens inside enclave only</li>
+</ul>
+</li>
+<li>
+<p><strong>Secure Key Generation</strong>: Generate keys inside enclave</p>
+<ul>
+<li>Keys never exist in unencrypted form outside</li>
+<li>Sealed to specific enclave</li>
+</ul>
+</li>
+<li>
+<p><strong>Remote Attestation</strong>: Prove validator is running correct code</p>
+<ul>
+<li>Cryptographic proof of enclave integrity</li>
+<li>Can verify from anywhere</li>
+</ul>
+</li>
+</ol>
+<h2 id="comparison-to-isolation-levels"><a class="doc-anchor" href="#comparison-to-isolation-levels">§</a>Comparison to Isolation Levels</h2><div><table><thead><tr><th>Level</th><th>Memory Protection</th><th>OS Trust</th><th>Key Safety</th></tr></thead><tbody>
+<tr><td>Process</td><td>Page tables</td><td>Required</td><td>Low</td></tr>
+<tr><td>Container</td><td>Namespaces</td><td>Required</td><td>Low</td></tr>
+<tr><td>MicroVM</td><td>Hardware (KVM)</td><td>Not required</td><td>Medium</td></tr>
+<tr><td>Unikernel</td><td>Hardware</td><td>Not required</td><td>Medium</td></tr>
+<tr><td><strong>TEE</strong></td><td><strong>Hardware (CPU)</strong></td><td><strong>Not required</strong></td><td><strong>High</strong></td></tr>
+</tbody></table>
+</div>
+<p>TEE is the highest security level - even compromised OS/hypervisor cannot access keys.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AttestationReport.html" title="struct osvm::utils::isolation::tee::AttestationReport">Attestation<wbr>Report</a></dt><dd>Attestation report proving enclave integrity</dd><dt><a class="struct" href="struct.Enclave.html" title="struct osvm::utils::isolation::tee::Enclave">Enclave</a></dt><dd>Secure enclave instance</dd><dt><a class="struct" href="struct.KeyHandle.html" title="struct osvm::utils::isolation::tee::KeyHandle">KeyHandle</a></dt><dd>Handle to key stored in enclave</dd><dt><a class="struct" href="struct.TeeConfig.html" title="struct osvm::utils::isolation::tee::TeeConfig">TeeConfig</a></dt><dd>TEE configuration</dd><dt><a class="struct" href="struct.TeeManager.html" title="struct osvm::utils::isolation::tee::TeeManager">TeeManager</a></dt><dd>TEE Manager - manages secure enclaves</dd><dt><a class="struct" href="struct.TeeStats.html" title="struct osvm::utils::isolation::tee::TeeStats">TeeStats</a></dt><dd>TEE statistics</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.EnclaveState.html" title="enum osvm::utils::isolation::tee::EnclaveState">Enclave<wbr>State</a></dt><dd>Enclave state</dd><dt><a class="enum" href="enum.TeeType.html" title="enum osvm::utils::isolation::tee::TeeType">TeeType</a></dt><dd>TEE technology type</dd></dl></section></div></main></body></html>

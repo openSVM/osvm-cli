@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_window_resize","run_advanced_agent_chat","run_advanced_demo_mode","run_advanced_ui_sync","start_periodic_updates"],"mod":["agent","persistence","session","state","types","ui","utils"]};

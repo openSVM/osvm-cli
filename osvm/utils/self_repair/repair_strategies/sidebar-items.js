@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["RepairOperation","RepairStrategyError","TransactionState"],"struct":["Checkpoint","RepairTransaction"]};

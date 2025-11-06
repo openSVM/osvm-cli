@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SENSITIVE_DIRECTORIES","SYSTEM_DIRECTORIES"],"fn":["create_dir_with_perms","create_secure_socket_dir","expand_tilde","generate_socket_name","safe_path_validation","validate_not_sensitive","validate_permissions"],"struct":["ValidatedPath"]};

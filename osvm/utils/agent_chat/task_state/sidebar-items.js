@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SPINNER_FRAMES"],"enum":["InputMode","TodoPriority"],"struct":["TaskState","TodoItem"]};

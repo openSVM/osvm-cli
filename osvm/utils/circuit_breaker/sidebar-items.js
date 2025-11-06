@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["AnalysisVector","CircuitState"],"struct":["CircuitBreakerConfig","CircuitBreakerInstance","CircuitBreakerReport","CircuitStats","EndpointId","GranularCircuitBreaker"]};

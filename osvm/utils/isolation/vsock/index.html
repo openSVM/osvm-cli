@@ -1,0 +1,55 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="vsock - Virtual Socket for VM-to-VM Communication"><title>osvm::utils::isolation::vsock - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="osvm" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module vsock</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../osvm/index.html">osvm</a><span class="version">0.9.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module vsock</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#what-is-vsock" title="What is vsock?">What is vsock?</a></li><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li><li><a href="#comparison" title="Comparison">Comparison</a></li><li><a href="#protocol-support" title="Protocol Support">Protocol Support</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In osvm::<wbr>utils::<wbr>isolation</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">osvm</a>::<wbr><a href="../../index.html">utils</a>::<wbr><a href="../index.html">isolation</a></div><h1>Module <span>vsock</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/osvm/utils/isolation/vsock.rs.html#1-680">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>vsock - Virtual Socket for VM-to-VM Communication</p>
+<p>This module implements virtio-vsock, a socket-based communication mechanism for
+fast, secure communication between virtual machines on the same host.</p>
+<h2 id="what-is-vsock"><a class="doc-anchor" href="#what-is-vsock">§</a>What is vsock?</h2>
+<p>vsock (Virtual Socket) is a socket address family designed for communication between
+virtual machines and the host. It provides:</p>
+<ul>
+<li><strong>Ultra-low latency</strong>: 0.1-0.5ms (10x faster than localhost TCP)</li>
+<li><strong>No network stack overhead</strong>: Direct memory-to-memory transfer</li>
+<li><strong>No network exposure</strong>: Can’t be accessed from outside the host</li>
+<li><strong>Simple API</strong>: Works like regular sockets (listen, accept, connect, send, recv)</li>
+</ul>
+<h2 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h2><div class="example-wrap"><pre class="language-text"><code>┌─────────────────────────────────────────────────────────────┐
+│  Physical Host                                              │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │  vsock Host (CID 2)                                    ││
+│  │  /var/run/osvm/vsock/*.sock                            ││
+│  └────────────────────────────────────────────────────────┘│
+│         ↕ (virtio-vsock)      ↕ (virtio-vsock)            │
+│  ┌──────────────┐       ┌──────────────┐                  │
+│  │ VM 1         │       │ VM 2         │                  │
+│  │ CID: 3       │←─────→│ CID: 4       │                  │
+│  │ Port: 5000   │ vsock │ Port: 5001   │                  │
+│  │              │       │              │                  │
+│  │ RPC Node     │       │ Validator    │                  │
+│  └──────────────┘       └──────────────┘                  │
+│                                                             │
+│  Communication: VM1:5000 → VM2:5001                        │
+│  Latency: ~0.1-0.5ms (vs 1-5ms for localhost TCP)         │
+│  Throughput: ~10 Gbps (limited by memory bandwidth)       │
+└─────────────────────────────────────────────────────────────┘</code></pre></div><h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ul>
+<li><strong>RPC → Validator</strong>: Fast transaction forwarding</li>
+<li><strong>Validator → Validator</strong>: Consensus communication</li>
+<li><strong>MCP → OSVM Core</strong>: Tool execution and status updates</li>
+<li><strong>Load Balancer → RPC</strong>: Internal request routing</li>
+</ul>
+<h2 id="comparison"><a class="doc-anchor" href="#comparison">§</a>Comparison</h2><div><table><thead><tr><th>Communication</th><th>Latency</th><th>Throughput</th><th>Security</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>vsock</td><td>0.1-0.5ms</td><td>10 Gbps</td><td>Internal</td><td>VM-to-VM</td></tr>
+<tr><td>localhost TCP</td><td>1-5ms</td><td>10 Gbps</td><td>Internal</td><td>Same host</td></tr>
+<tr><td>mTLS (LAN)</td><td>5-50ms</td><td>1 Gbps</td><td>External</td><td>Cross-host</td></tr>
+<tr><td>mTLS (WAN)</td><td>50-500ms</td><td>100 Mbps</td><td>External</td><td>Internet</td></tr>
+</tbody></table>
+</div><h2 id="protocol-support"><a class="doc-anchor" href="#protocol-support">§</a>Protocol Support</h2>
+<p>vsock can carry any protocol that works over sockets:</p>
+<ul>
+<li>Raw bytes (our custom protocol)</li>
+<li>HTTP/1.1</li>
+<li>HTTP/2</li>
+<li>gRPC</li>
+<li>WebSocket</li>
+<li>Any TCP-based protocol</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.VsockAddr.html" title="struct osvm::utils::isolation::vsock::VsockAddr">Vsock<wbr>Addr</a></dt><dd>vsock address (CID + Port)</dd><dt><a class="struct" href="struct.VsockConnection.html" title="struct osvm::utils::isolation::vsock::VsockConnection">Vsock<wbr>Connection</a></dt><dd>vsock Connection</dd><dt><a class="struct" href="struct.VsockListener.html" title="struct osvm::utils::isolation::vsock::VsockListener">Vsock<wbr>Listener</a></dt><dd>vsock Listener</dd><dt><a class="struct" href="struct.VsockManager.html" title="struct osvm::utils::isolation::vsock::VsockManager">Vsock<wbr>Manager</a></dt><dd>vsock Manager - manages vsock connections between components</dd><dt><a class="struct" href="struct.VsockStats.html" title="struct osvm::utils::isolation::vsock::VsockStats">Vsock<wbr>Stats</a></dt><dd>vsock statistics</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.CID_ANY.html" title="constant osvm::utils::isolation::vsock::CID_ANY">CID_ANY</a></dt><dt><a class="constant" href="constant.CID_HOST.html" title="constant osvm::utils::isolation::vsock::CID_HOST">CID_<wbr>HOST</a></dt><dt><a class="constant" href="constant.CID_HYPERVISOR.html" title="constant osvm::utils::isolation::vsock::CID_HYPERVISOR">CID_<wbr>HYPERVISOR</a></dt><dd>Reserved CIDs</dd><dt><a class="constant" href="constant.CID_LOCAL.html" title="constant osvm::utils::isolation::vsock::CID_LOCAL">CID_<wbr>LOCAL</a></dt><dt><a class="constant" href="constant.FIRST_ALLOCATABLE_PORT.html" title="constant osvm::utils::isolation::vsock::FIRST_ALLOCATABLE_PORT">FIRST_<wbr>ALLOCATABLE_<wbr>PORT</a></dt><dd>First port available for allocation (above well-known ports)</dd><dt><a class="constant" href="constant.FIRST_GUEST_CID.html" title="constant osvm::utils::isolation::vsock::FIRST_GUEST_CID">FIRST_<wbr>GUEST_<wbr>CID</a></dt><dd>First CID available for guest VMs</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.Cid.html" title="type osvm::utils::isolation::vsock::Cid">Cid</a></dt><dd>vsock Context ID (CID)</dd><dt><a class="type" href="type.Port.html" title="type osvm::utils::isolation::vsock::Port">Port</a></dt><dd>vsock Port</dd></dl></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TipContext"],"fn":["get_welcome_flag_path","has_seen_welcome","mark_welcome_seen","show_all_tips","show_contextual_tip","show_random_tip","show_tips_hint","show_welcome_dialog","show_welcome_dialog_if_first_time"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_osvm_installed","clear_screen","create_progress_bar","create_tutorial_steps","execute_command_safe","execute_tutorial_step","get_user_choice","run_interactive_tutorial","show_completion_certificate","show_step_header","show_welcome_banner","wait_for_enter"],"struct":["TutorialProgress","TutorialStep"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["cmd_start","cmd_status","cmd_stop","execute_realtime_command","get_pid_file_path","is_daemon_running","run_polling_mode","run_realtime_daemon","validate_daemon_argument","validate_path_argument"],"struct":["RealtimeArgs"]};

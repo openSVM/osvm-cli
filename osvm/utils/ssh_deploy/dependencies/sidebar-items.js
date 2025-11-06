@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["install_common_dependencies","install_dependencies","install_docker_if_needed","install_nodejs_if_needed","install_rust_if_needed","install_svm_specific_dependencies"]};

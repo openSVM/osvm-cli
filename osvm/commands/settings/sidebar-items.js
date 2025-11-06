@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_ai_settings","handle_settings_command","set_ai_key","set_ai_model","set_ai_url","set_preset","show_ai_settings","show_all_settings"]};

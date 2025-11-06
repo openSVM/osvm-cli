@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["start_simple_devnet_proxy","test_devnet_connection"]};

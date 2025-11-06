@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Firecracker MicroVM Runtime"><title>osvm::utils::isolation::runtime::firecracker - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../../../" data-static-root-path="../../../../../static.files/" data-current-crate="osvm" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module firecracker</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../../osvm/index.html">osvm</a><span class="version">0.9.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module firecracker</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#features" title="Features">Features</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#comparison" title="Comparison">Comparison</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In osvm::<wbr>utils::<wbr>isolation::<wbr>runtime</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../../index.html">osvm</a>::<wbr><a href="../../../index.html">utils</a>::<wbr><a href="../../index.html">isolation</a>::<wbr><a href="../index.html">runtime</a></div><h1>Module <span>firecracker</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../../src/osvm/utils/isolation/runtime/firecracker.rs.html#1-698">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Firecracker MicroVM Runtime</p>
+<p>This module provides integration with Firecracker, a lightweight virtual machine monitor (VMM)
+designed for running secure, multi-tenant container and function workloads.</p>
+<h2 id="features"><a class="doc-anchor" href="#features">§</a>Features</h2>
+<ul>
+<li><strong>Fast Boot</strong>: ~125ms boot time (2-3x slower than unikernels, but 200-500x faster than VMs)</li>
+<li><strong>Low Overhead</strong>: 5-50MB memory per instance (vs 1-10MB unikernels, 512MB-2GB VMs)</li>
+<li><strong>Full OS Support</strong>: Can run any Linux kernel (more flexible than unikernels)</li>
+<li><strong>Hardware Isolation</strong>: KVM-based virtualization with separate address spaces</li>
+<li><strong>Production Ready</strong>: Used by AWS Lambda for millions of function invocations</li>
+</ul>
+<h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ul>
+<li>RPC nodes (need full networking stack and file I/O)</li>
+<li>Validators (need OS-level features but require isolation)</li>
+<li>Components that need more than unikernel provides but less than full VM</li>
+</ul>
+<h2 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h2><div class="example-wrap"><pre class="language-text"><code>┌──────────────────────────────────────────────────┐
+│  Host Linux                                      │
+│  ┌────────────────────────────────────────────┐ │
+│  │  KVM Hypervisor                            │ │
+│  └────────────────────────────────────────────┘ │
+│              │                                   │
+│  ┌───────────▼─────────────────────┐            │
+│  │  Firecracker VMM                │            │
+│  │  - Minimal device model         │            │
+│  │  - virtio-block (disk)          │            │
+│  │  - virtio-net (network)         │            │
+│  │  - virtio-vsock (VM-to-VM)      │            │
+│  └───────────┬─────────────────────┘            │
+│              │                                   │
+│  ┌───────────▼─────────────────────┐            │
+│  │  Guest Linux (minimal)          │            │
+│  │  ┌────────────────────────────┐ │            │
+│  │  │  RPC Node / Validator      │ │            │
+│  │  │  - Solana binary           │ │            │
+│  │  │  - Config files            │ │            │
+│  │  │  - Persistent storage      │ │            │
+│  │  └────────────────────────────┘ │            │
+│  └─────────────────────────────────┘            │
+│                                                  │
+│  Boot time: ~125ms                              │
+│  Memory: 5-50MB (configurable)                  │
+│  Attack surface: ~5M lines (minimal Linux)      │
+└──────────────────────────────────────────────────┘</code></pre></div><h2 id="comparison"><a class="doc-anchor" href="#comparison">§</a>Comparison</h2><div><table><thead><tr><th>Metric</th><th>Unikernel</th><th>Firecracker</th><th>Traditional VM</th></tr></thead><tbody>
+<tr><td>Boot Time</td><td>50-100ms</td><td>125ms</td><td>30-60s</td></tr>
+<tr><td>Memory</td><td>5-10MB</td><td>5-50MB</td><td>512MB-2GB</td></tr>
+<tr><td>OS Support</td><td>Limited</td><td>Full Linux</td><td>Full OS</td></tr>
+<tr><td>Device Support</td><td>Minimal</td><td>virtio</td><td>Full hardware</td></tr>
+<tr><td>Use Case</td><td>Simple services</td><td>Complex apps</td><td>Legacy apps</td></tr>
+</tbody></table>
+</div></div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.FirecrackerConfig.html" title="struct osvm::utils::isolation::runtime::firecracker::FirecrackerConfig">Firecracker<wbr>Config</a></dt><dd>Firecracker runtime configuration</dd><dt><a class="struct" href="struct.FirecrackerInstance.html" title="struct osvm::utils::isolation::runtime::firecracker::FirecrackerInstance">Firecracker<wbr>Instance</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>A running Firecracker MicroVM instance</dd><dt><a class="struct" href="struct.FirecrackerRuntime.html" title="struct osvm::utils::isolation::runtime::firecracker::FirecrackerRuntime">Firecracker<wbr>Runtime</a></dt><dd>Firecracker runtime implementation</dd><dt><a class="struct" href="struct.NetworkConfig.html" title="struct osvm::utils::isolation::runtime::firecracker::NetworkConfig">Network<wbr>Config</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dt><a class="struct" href="struct.VmConfig.html" title="struct osvm::utils::isolation::runtime::firecracker::VmConfig">VmConfig</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>MicroVM configuration</dd><dt><a class="struct" href="struct.VsockConfig.html" title="struct osvm::utils::isolation::runtime::firecracker::VsockConfig">Vsock<wbr>Config</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.VmState.html" title="enum osvm::utils::isolation::runtime::firecracker::VmState">VmState</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt></dl></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["format_event","install_key_logger","show_key_diagnostics"]};

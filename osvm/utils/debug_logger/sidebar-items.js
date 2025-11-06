@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["VerbosityLevel"],"fn":["get_verbosity","log_ovsm_value","set_verbosity"],"struct":["KeysTool","TypeOfTool","VERBOSITY"]};

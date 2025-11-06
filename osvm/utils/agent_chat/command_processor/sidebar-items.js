@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CommandResult"],"fn":["clear_command","exit_command","get_help_text","help_command","screenshot_command"],"struct":["CommandContext","CommandProcessor"],"type":["CommandHandler"]};

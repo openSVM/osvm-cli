@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DashboardError"],"fn":["quick_dashboard","run_dashboard"],"struct":["DashboardManager"]};

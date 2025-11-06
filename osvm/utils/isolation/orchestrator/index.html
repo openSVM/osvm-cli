@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="OSVM Core Orchestration Layer"><title>osvm::utils::isolation::orchestrator - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="osvm" data-themes="" data-resource-suffix="" data-rustdoc-version="1.91.0 (f8297e351 2025-10-28)" data-channel="1.91.0" data-search-js="search-e256b49e.js" data-stringdex-js="stringdex-c3e638e9.js" data-settings-js="settings-c38705f0.js" ><script src="../../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module orchestrator</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../osvm/index.html">osvm</a><span class="version">0.9.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module orchestrator</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#responsibilities" title="Responsibilities">Responsibilities</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In osvm::<wbr>utils::<wbr>isolation</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">osvm</a>::<wbr><a href="../../index.html">utils</a>::<wbr><a href="../index.html">isolation</a></div><h1>Module <span>orchestrator</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/osvm/utils/isolation/orchestrator.rs.html#1-1120">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>OSVM Core Orchestration Layer</p>
+<p>This module provides the central control plane for managing all OSVM components.
+It handles component lifecycle, health monitoring, service discovery, and policy enforcement.</p>
+<h2 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h2><div class="example-wrap"><pre class="language-text"><code>┌─────────────────────────────────────────────────────────────┐
+│  OSVM Core Orchestrator                                     │
+│                                                             │
+│  ┌────────────────────────────────────────────────────────┐│
+│  │  Component Manager                                     ││
+│  │  • Lifecycle (start, stop, restart, hot-swap)         ││
+│  │  • Service Discovery (register, lookup)               ││
+│  │  • Health Monitoring (periodic checks)                ││
+│  └────────────────────────────────────────────────────────┘│
+│                         │                                   │
+│  ┌──────────────────────▼──────────────────────────────┐   │
+│  │  Resource Allocator                                  │   │
+│  │  • CID allocation (vsock)                            │   │
+│  │  • Port allocation                                   │   │
+│  │  • Certificate issuance                              │   │
+│  └──────────────────────┬──────────────────────────────┘   │
+│                         │                                   │
+│  ┌──────────────────────▼──────────────────────────────┐   │
+│  │  Policy Engine                                       │   │
+│  │  • Network policies (who can talk to whom)          │   │
+│  │  • Resource policies (CPU, memory limits)           │   │
+│  │  • Security policies (isolation levels)             │   │
+│  └──────────────────────┬──────────────────────────────┘   │
+│                         │                                   │
+│  ┌──────────────────────▼──────────────────────────────┐   │
+│  │  Runtime Manager                                     │   │
+│  │  • Process Runtime (dev/test)                        │   │
+│  │  • Firecracker Runtime (production)                  │   │
+│  │  • HermitCore Runtime (minimal services)            │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+           │                │                │
+      ┌────▼────┐      ┌────▼────┐     ┌────▼────┐
+      │ RPC 1   │      │ RPC 2   │     │Validator│
+      │ (CID 3) │      │ (CID 4) │     │ (CID 5) │
+      └─────────┘      └─────────┘     └─────────┘</code></pre></div><h2 id="responsibilities"><a class="doc-anchor" href="#responsibilities">§</a>Responsibilities</h2>
+<ol>
+<li><strong>Component Lifecycle</strong>: Start, stop, restart, hot-swap components</li>
+<li><strong>Service Discovery</strong>: Components register and find each other</li>
+<li><strong>Health Monitoring</strong>: Periodic health checks with automatic remediation</li>
+<li><strong>Resource Allocation</strong>: CIDs, ports, certificates, network policies</li>
+<li><strong>Policy Enforcement</strong>: Security, networking, and resource policies</li>
+<li><strong>Automated Operations</strong>: Auto-scaling, failover, load balancing</li>
+</ol>
+<h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ul>
+<li><strong>Deploy RPC Node</strong>: Orchestrator allocates resources, starts MicroVM, registers service</li>
+<li><strong>Update Validator</strong>: Hot-swap with zero downtime</li>
+<li><strong>Scale RPC Fleet</strong>: Auto-scale based on load</li>
+<li><strong>Handle Failure</strong>: Detect unhealthy component, restart or replace</li>
+<li><strong>Enforce Policies</strong>: Block unauthorized communication, enforce resource limits</li>
+</ul>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.HealthState.html" title="struct osvm::utils::isolation::orchestrator::HealthState">Health<wbr>State</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Health state for a component</dd><dt><a class="struct" href="struct.Orchestrator.html" title="struct osvm::utils::isolation::orchestrator::Orchestrator">Orchestrator</a></dt><dd>OSVM Core Orchestrator - central control plane</dd><dt><a class="struct" href="struct.OrchestratorConfig.html" title="struct osvm::utils::isolation::orchestrator::OrchestratorConfig">Orchestrator<wbr>Config</a></dt><dd>Orchestrator configuration</dd><dt><a class="struct" href="struct.OrchestratorStats.html" title="struct osvm::utils::isolation::orchestrator::OrchestratorStats">Orchestrator<wbr>Stats</a></dt><dd>Orchestrator statistics</dd><dt><a class="struct" href="struct.ServiceEndpoint.html" title="struct osvm::utils::isolation::orchestrator::ServiceEndpoint">Service<wbr>Endpoint</a></dt><dd>Service endpoint for service discovery</dd></dl></section></div></main></body></html>

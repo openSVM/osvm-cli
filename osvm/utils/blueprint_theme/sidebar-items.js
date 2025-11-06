@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AnimationSettings","BlueprintTheme","BlueprintThemeManager","ButtonStyles","CardStyles","CliColorScheme","CodeBlockStyles","ColorPalette","ComponentStyles","FontSizes","FontWeights","FormStyles","LayoutSettings","LineHeights","NavigationStyles","TableStyles","Typography"]};

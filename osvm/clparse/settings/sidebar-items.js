@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["build_settings_command"]};

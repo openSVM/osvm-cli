@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clear_current_line","clear_inline_suggestion","clear_screen","clear_suggestions_display","close_input_border","move_cursor","print_input_prompt","redraw_input_line","restore_cursor","save_cursor","show_available_tools","show_input_border","show_navigable_suggestions","show_realtime_suggestions","show_realtime_suggestions_fixed"]};

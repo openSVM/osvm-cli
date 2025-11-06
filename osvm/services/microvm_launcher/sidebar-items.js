@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_POOL_SIZE","MAX_RESPONSE_SIZE","VSOCK_MCP_PORT","VSOCK_TIMEOUT_SECS"],"fn":["get_default_osvm_config","is_running_in_microvm"],"struct":["McpServerMicroVmConfig","McpServerMicroVmHandle","MicroVmLauncher","MountPoint","OsvmMicroVmConfig","OsvmMicroVmHandle","VsockConnectionPool"]};

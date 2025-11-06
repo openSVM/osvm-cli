@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["handle_ai_query","handle_ai_query_with_planning","looks_like_natural_language_query","sanitize_user_input"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["EasingFunction"],"struct":["BreathingColor","ColorFade","FlashEffect","GradientAnimation","RainbowCycle"]};

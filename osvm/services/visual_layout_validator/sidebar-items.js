@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BorderStyle","ComponentType","DifferenceType"],"struct":["DetectedBorder","DetectedComponent","LayoutAnalysis","LayoutMetrics","Position","RegressionResult","Size","TextRegion","VisualDifference","VisualLayoutValidator"]};

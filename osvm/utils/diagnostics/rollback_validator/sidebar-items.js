@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["display_rollback_results","validate_rollback_success"],"struct":["RollbackValidationResult","RollbackValidator"]};

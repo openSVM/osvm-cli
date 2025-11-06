@@ -1,0 +1,1 @@
+rd_("dosvmnosvm_bootstraposnapshot_reader")

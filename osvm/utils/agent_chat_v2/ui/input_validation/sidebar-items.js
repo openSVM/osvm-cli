@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ValidationResult"],"fn":["contains_sensitive_pattern","get_sensitive_warning","is_command","parse_command","sanitize_input","truncate_for_display","validate_input"]};

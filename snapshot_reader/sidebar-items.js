@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main","read_account_file"],"struct":["AccountInfo"]};
