@@ -3,6 +3,7 @@
 pub mod ai_query;
 pub mod audit_handler;
 pub mod balance;
+pub mod browser_handler; // Browser automation command handler
 pub mod database;
 pub mod deploy_handler;
 pub mod doctor_handler;

@@ -3,10 +3,11 @@ use {
     solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
-// Import all modularized command builders (full refactoring - 19 commands)
+// Import all modularized command builders (full refactoring - 20 commands)
 mod agent;
 mod audit;
 mod balance;
+mod browser; // Browser automation command
 mod chat;
 mod database;
 mod deploy;
@@ -60,6 +61,7 @@ COMMAND CATEGORIES:
     chat                 Advanced multi-session chat interface
     agent                Execute single AI-powered command
     plan                 Create AI-powered execution plans
+    browser              Headless browser automation (Playwright)
 
   Data Management:
     snapshot             Analyze and manage Solana snapshots
@@ -84,6 +86,7 @@ QUICK START:
   osvm agent \"<prompt>\"      Execute single AI command
   osvm doctor                 Check system health
   osvm mcp setup              Set up Solana MCP integration
+  osvm browser status         Check browser automation status
 
   # Isolation control:
   OSVM_SKIP_MICROVM=1 osvm   Skip microVM for development
@@ -280,5 +283,6 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(qa::build_qa_command())
         .subcommand(ovsm::build_ovsm_command())
         .subcommand(settings::build_settings_command())
+        .subcommand(browser::browser_command()) // Browser automation command
         .get_matches()
 }
