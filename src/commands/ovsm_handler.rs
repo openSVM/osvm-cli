@@ -19,47 +19,58 @@ pub async fn handle_ovsm_command(
             use crate::utils::rpc_bridge::create_rpc_registry;
 
             let mut registry = create_rpc_registry();
-            // Register MCP tools for OVSM script execution
+
+            // Dynamically register MCP tools from configured servers
             let mut mcp_service = McpService::new_with_debug(debug);
             let _ = mcp_service.load_config();
             let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
-            let mcp_tools = vec![
-                "get_account_transactions",
-                "get_transaction",
-                "batch_transactions",
-                "analyze_transaction",
-                "explain_transaction",
-                "get_account_stats",
-                "get_account_portfolio",
-                "get_solana_balance",
-                "get_account_token_stats",
-                "check_account_type",
-                "search_accounts",
-                "get_balance",
-                "get_block",
-                "get_recent_blocks",
-                "get_block_stats",
-                "get_token_info",
-                "get_token_metadata",
-                "get_nft_collections",
-                "get_trending_nfts",
-                "get_defi_overview",
-                "get_dex_analytics",
-                "get_defi_health",
-                "get_validator_analytics",
-                "universal_search",
-                "verify_wallet_signature",
-                "get_user_history",
-                "get_usage_stats",
-                "manage_api_keys",
-                "get_api_metrics",
-                "report_error",
-                "get_program_registry",
-                "get_program_info",
-                "solana_rpc_call",
-            ];
-            for tool in mcp_tools {
-                registry.register(McpBridgeTool::new(tool, Arc::clone(&mcp_arc)));
+
+            // Discover and register tools from all configured MCP servers
+            {
+                let mut svc = mcp_arc.lock().await;
+                let mut total_tools = 0;
+
+                // Get all configured servers
+                let servers: Vec<String> = svc.list_servers()
+                    .iter()
+                    .map(|(id, _)| (*id).clone())
+                    .collect();
+
+                for server_id in servers {
+                    // Initialize server
+                    if let Err(e) = svc.initialize_server(&server_id).await {
+                        if debug {
+                            eprintln!("⚠️  Failed to initialize MCP server '{}': {}", server_id, e);
+                        }
+                        continue;
+                    }
+
+                    // List tools from this server
+                    match svc.list_tools(&server_id).await {
+                        Ok(tools) => {
+                            if debug {
+                                println!("📦 Discovered {} tools from MCP server '{}'", tools.len(), server_id);
+                            }
+                            total_tools += tools.len();
+
+                            // Register each tool
+                            drop(svc); // Release lock before registering
+                            for tool in tools {
+                                registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
+                            }
+                            svc = mcp_arc.lock().await; // Re-acquire lock
+                        }
+                        Err(e) => {
+                            if debug {
+                                eprintln!("⚠️  Failed to list tools from '{}': {}", server_id, e);
+                            }
+                        }
+                    }
+                }
+
+                if debug && total_tools > 0 {
+                    println!("✅ Registered {} MCP tools total\n", total_tools);
+                }
             }
             let mut service = OvsmService::with_registry(registry, verbose, debug);
 

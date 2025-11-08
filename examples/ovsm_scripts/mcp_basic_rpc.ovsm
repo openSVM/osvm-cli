@@ -24,7 +24,8 @@
 ;; 4. Get balance for a known wallet
 (log :message "\n4. Checking wallet balance...")
 (define wallet "GBBbhHigLDyfxV71A24vGM2JLFukdChaNDTXGED1mF5r")
-(define balance (getBalance :address wallet))
+(define balance-result (getBalance wallet))
+(define balance (. balance-result value))
 (log :message "Balance (lamports):" :value balance)
 (log :message "Balance (SOL):" :value (/ balance 1000000000.0))
 

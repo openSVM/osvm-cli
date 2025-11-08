@@ -273,6 +273,7 @@ pub fn create_rpc_registry() -> ToolRegistry {
         "getParsedTransaction",
         "getSlot",
         "getBlock",
+        "getBlockHeight",
         "getTransaction",
         "getAccountInfo",
         "getBalance",
