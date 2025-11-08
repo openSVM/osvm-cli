@@ -40,7 +40,24 @@ osvm mcp list  # Verify it's registered
 
 ## Available Examples
 
-### 1. Basic RPC Operations (`mcp_basic_rpc.ovsm`)
+### 1. Comprehensive Demo (`mcp_comprehensive_demo.ovsm`) ⭐ START HERE
+
+**Complete demonstration of all 8 tool categories:**
+- Account tools (stats, portfolio, type checking)
+- Transaction tools (details, analysis, explanations)
+- Block tools (current block, stats, recent blocks)
+- DeFi analytics (TVL, volume, protocols)
+- Token tools (metadata, info, holders)
+- Search tools (universal search)
+- Direct RPC access (90+ Solana methods)
+- Utility tools (program registry)
+
+**Run:**
+```bash
+osvm ovsm run examples/ovsm_scripts/mcp_comprehensive_demo.ovsm --debug
+```
+
+### 2. Basic RPC Operations (`mcp_basic_rpc.ovsm`)
 
 Demonstrates fundamental blockchain queries:
 - `getSlot()` - Current slot number
@@ -54,7 +71,7 @@ Demonstrates fundamental blockchain queries:
 osvm ovsm run examples/ovsm_scripts/mcp_basic_rpc.ovsm
 ```
 
-### 2. Wallet Activity Dashboard (`mcp_wallet_analysis.ovsm`)
+### 3. Wallet Activity Dashboard (`mcp_wallet_analysis.ovsm`)
 
 Comprehensive wallet analysis showing:
 - Transaction success/failure rates
@@ -67,7 +84,7 @@ Comprehensive wallet analysis showing:
 osvm ovsm run examples/ovsm_scripts/mcp_wallet_analysis.ovsm
 ```
 
-### 3. Pumpfun 1-Minute Counter (`pumpfun_1min_lisp.ovsm`)
+### 4. Pumpfun 1-Minute Counter (`pumpfun_1min_lisp.ovsm`)
 
 Production example counting Pumpfun transactions in the last minute:
 - Pagination with cursor-based fetching
@@ -79,9 +96,20 @@ Production example counting Pumpfun transactions in the last minute:
 osvm ovsm run examples/ovsm_scripts/pumpfun_1min_lisp.ovsm
 ```
 
-## Available MCP Tools
+## Complete Tool Documentation
 
-When osvm-mcp is running, these tools are available in OVSM scripts:
+**📖 See [MCP_TOOLS_REFERENCE.md](./MCP_TOOLS_REFERENCE.md) for complete documentation of all 75+ tools!**
+
+The reference includes:
+- All 31 specialized osvm-mcp tools with examples
+- 90+ Solana RPC methods via `solana_rpc_call`
+- Parameter formats and return values
+- Best practices and troubleshooting
+- Complete code examples for each tool
+
+## Quick Tool Overview
+
+When osvm-mcp is running, these tool categories are available:
 
 ### Basic RPC
 - `(getSlot)` - Get current slot
