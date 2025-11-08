@@ -1,6 +1,6 @@
 [package]
 name = "ovsm"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 authors = ["OSVM Team <rin@opensvm.com>"]
 description = "OVSM (Open Versatile Seeker Mind) language interpreter for blockchain automation and scripting"
