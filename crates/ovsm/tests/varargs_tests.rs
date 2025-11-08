@@ -164,14 +164,14 @@ fn test_varargs_rest_without_name() {
 #[test]
 fn test_varargs_with_accumulator() {
     let source = r#"
-(defun product (&rest numbers)
+(defun multiply-all (&rest numbers)
   (do
     (define result 1)
     (for (n numbers)
       (set! result (* result n)))
     result))
 
-(product 2 3 4)
+(multiply-all 2 3 4)
 "#;
     let result = eval_lisp(source).unwrap();
     assert_eq!(result, Value::Int(24));

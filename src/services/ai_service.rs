@@ -173,11 +173,16 @@ impl AiService {
         };
 
         // Override with custom URL if provided (for compatibility)
-        let api_url = custom_api_url.unwrap_or(ai_config.api_url.clone());
+        let api_url = custom_api_url.clone().unwrap_or(ai_config.api_url.clone());
         let api_key = ai_config.api_key.clone();
 
         // Determine if this is OpenAI-compatible
-        let use_openai = ai_config.is_openai_compatible();
+        // If custom URL provided, check it directly; otherwise use config
+        let use_openai = if custom_api_url.is_some() {
+            api_url.contains("/v1/chat/completions") || api_url.contains("openai.com")
+        } else {
+            ai_config.is_openai_compatible()
+        };
 
         // Warn if OpenAI-compatible but no key
         if use_openai && api_key.is_none() && debug_mode {
