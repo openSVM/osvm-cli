@@ -1,0 +1,78 @@
+;; Wallet Activity Analysis using MCP
+;; Creates a comprehensive dashboard of wallet activity
+;;
+;; Run with: osvm ovsm run examples/ovsm_scripts/mcp_wallet_analysis.ovsm
+;; Requires: osvm-mcp server running
+
+(log :message "=== WALLET ACTIVITY DASHBOARD ===\n")
+
+;; Configuration
+(define wallet "GBBbhHigLDyfxV71A24vGM2JLFukdChaNDTXGED1mF5r")
+(define lookback 50)
+
+(log :message "Analyzing wallet:" :value wallet)
+(log :message "Sample size:" :value lookback)
+(log :message "")
+
+;; Fetch recent activity
+(define signatures (getSignaturesForAddress :address wallet :limit lookback))
+(define total-txs (length signatures))
+
+(log :message "Total transactions found:" :value total-txs)
+
+;; Calculate statistics
+(define successful
+  (filter (lambda (sig) (null? (. sig err))) signatures))
+(define success-count (length successful))
+
+(define failed
+  (filter (lambda (sig) (not (null? (. sig err)))) signatures))
+(define fail-count (length failed))
+
+;; Success rate
+(define success-rate
+  (if (> total-txs 0)
+      (* (/ success-count total-txs) 100.0)
+      0.0))
+
+(log :message "Successful transactions:" :value success-count)
+(log :message "Failed transactions:" :value fail-count)
+(log :message "Success rate:" :value success-rate)
+
+;; Time-based analysis
+(define current-time (now))
+(define hour-ago (- current-time 3600))
+(define day-ago (- current-time 86400))
+
+(define last-hour
+  (filter
+    (lambda (sig) (>= (. sig blockTime) hour-ago))
+    signatures))
+
+(define last-day
+  (filter
+    (lambda (sig) (>= (. sig blockTime) day-ago))
+    signatures))
+
+(log :message "\nTime-based Activity:")
+(log :message "Last hour:" :value (length last-hour))
+(log :message "Last day:" :value (length last-day))
+(log :message "Hourly rate (24h avg):" :value (/ (length last-day) 24.0))
+
+;; Build dashboard object
+(define dashboard {
+  :wallet wallet
+  :total_transactions total-txs
+  :successful success-count
+  :failed fail-count
+  :success_rate success-rate
+  :last_hour_count (length last-hour)
+  :last_day_count (length last-day)
+  :hourly_rate (/ (length last-day) 24.0)
+  :sample_size lookback
+})
+
+(log :message "\n✅ Analysis complete!")
+(log :message "Dashboard object:" :value dashboard)
+
+dashboard

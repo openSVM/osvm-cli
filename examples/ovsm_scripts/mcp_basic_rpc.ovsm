@@ -1,0 +1,45 @@
+;; Basic MCP RPC Integration Examples
+;; Demonstrates simple blockchain RPC calls through osvm-mcp
+;;
+;; Run with: osvm ovsm run examples/ovsm_scripts/mcp_basic_rpc.ovsm
+;; Requires: osvm-mcp server running on localhost:3000
+
+(log :message "=== BASIC MCP RPC EXAMPLES ===\n")
+
+;; 1. Get current slot
+(log :message "1. Getting current slot...")
+(define current-slot (getSlot))
+(log :message "Current Slot:" :value current-slot)
+
+;; 2. Get block height
+(log :message "\n2. Getting block height...")
+(define block-height (getBlockHeight))
+(log :message "Block Height:" :value block-height)
+
+;; 3. Get version info
+(log :message "\n3. Getting Solana version...")
+(define version-info (getVersion))
+(log :message "Version:" :value version-info)
+
+;; 4. Get balance for a known wallet
+(log :message "\n4. Checking wallet balance...")
+(define wallet "GBBbhHigLDyfxV71A24vGM2JLFukdChaNDTXGED1mF5r")
+(define balance (getBalance :address wallet))
+(log :message "Balance (lamports):" :value balance)
+(log :message "Balance (SOL):" :value (/ balance 1000000000.0))
+
+;; 5. Get recent signatures
+(log :message "\n5. Fetching recent transaction signatures...")
+(define sigs (getSignaturesForAddress :address wallet :limit 5))
+(define sig-count (length sigs))
+(log :message "Found signatures:" :value sig-count)
+
+(if (> sig-count 0)
+    (do
+      (define first-sig (first sigs))
+      (log :message "Most recent signature:" :value (. first-sig signature))
+      (log :message "Slot:" :value (. first-sig slot))
+      (log :message "Block Time:" :value (. first-sig blockTime)))
+    (log :message "No signatures found"))
+
+(log :message "\n✅ All basic RPC calls completed successfully!")
