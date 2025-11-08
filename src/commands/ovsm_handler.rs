@@ -74,7 +74,13 @@ pub async fn handle_ovsm_command(
                     }
                 }
                 Err(e) => {
-                    eprintln!("❌ Execution failed: {}", e);
+                    // Use enhanced error message if it's an OVSM error with available fields
+                    let error_msg = if let Some(ovsm_err) = e.downcast_ref::<ovsm::error::Error>() {
+                        ovsm_err.enhanced_message()
+                    } else {
+                        e.to_string()
+                    };
+                    eprintln!("❌ Execution failed: {}", error_msg);
                     std::process::exit(1);
                 }
             }

@@ -110,6 +110,7 @@ impl Environment {
                 None => {
                     return Err(Error::UndefinedVariable {
                         name: name.to_string(),
+                        available_fields: None,
                     })
                 }
             }

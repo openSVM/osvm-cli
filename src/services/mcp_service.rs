@@ -457,9 +457,12 @@ impl McpService {
                     .map(|h| h.join(".osvm/mcp-servers/dune-analytics").to_string_lossy().to_string())
                     .unwrap_or_else(|| "~/.osvm/mcp-servers/dune-analytics".to_string());
 
+                // URL format for stdio: "command arg1 arg2..."
+                let url = format!("node {}", dune_mcp_path.to_string_lossy());
+
                 let dune_mcp_config = McpServerConfig {
                     name: "Dune Analytics".to_string(),
-                    url: dune_mcp_path.to_string_lossy().to_string(),
+                    url,
                     transport_type: McpTransportType::Stdio,
                     auth: None,
                     enabled: true,

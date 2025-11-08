@@ -100,7 +100,7 @@ impl OvsmService {
         let result = self
             .evaluator
             .execute(&program)
-            .map_err(|e| anyhow::anyhow!("Execution error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Execution error: {}", e.enhanced_message()))?;
 
         if self.verbose {
             println!("✨ Execution completed successfully");
