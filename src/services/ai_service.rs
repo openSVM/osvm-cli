@@ -1805,7 +1805,8 @@ Focus on what matters to the user.
         let enhanced_error = if error_message.contains("Undefined variable:") {
             let missing_field = if let Some(start) = error_message.find("Undefined variable: ") {
                 let rest = &error_message[start + 20..];
-                if let Some(end) = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
+                if let Some(end) = rest.find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+                {
                     Some(&rest[..end])
                 } else {
                     Some(rest.trim())
@@ -1863,7 +1864,12 @@ If you're getting "Undefined variable" errors repeatedly:
 - Conditional logic to handle missing or null API data
 
 Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available Tools, Main Branch, Action)."#,
-            original_query, attempt_number, broken_code, enhanced_error, field_warning, cached_schemas
+            original_query,
+            attempt_number,
+            broken_code,
+            enhanced_error,
+            field_warning,
+            cached_schemas
         )
     }
 
@@ -1890,8 +1896,8 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
                 // Simple pattern matching for (. obj field)
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 for i in 0..parts.len().saturating_sub(2) {
-                    if parts[i] == "(." && !parts[i+2].starts_with(')') {
-                        let field = parts[i+2].trim_end_matches(')').trim_end_matches(']');
+                    if parts[i] == "(." && !parts[i + 2].starts_with(')') {
+                        let field = parts[i + 2].trim_end_matches(')').trim_end_matches(']');
                         if !field.is_empty() && !fields.contains(&field.to_string()) {
                             fields.push(field.to_string());
                         }
@@ -1931,7 +1937,7 @@ Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available To
             || error_message.contains("expected number")
             || error_message.contains("Invalid operation")  // Catches "multiply on types int and null"
             || error_message.contains("Execution error")    // General runtime errors
-            || error_message.contains("Invalid arguments")  // Tool arg mismatches
+            || error_message.contains("Invalid arguments") // Tool arg mismatches
     }
 
     /// Create a semantic refinement prompt when code runs but doesn't achieve goal

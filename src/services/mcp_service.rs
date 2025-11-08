@@ -454,7 +454,11 @@ impl McpService {
 
             if dune_mcp_path.exists() {
                 let local_path = dirs::home_dir()
-                    .map(|h| h.join(".osvm/mcp-servers/dune-analytics").to_string_lossy().to_string())
+                    .map(|h| {
+                        h.join(".osvm/mcp-servers/dune-analytics")
+                            .to_string_lossy()
+                            .to_string()
+                    })
                     .unwrap_or_else(|| "~/.osvm/mcp-servers/dune-analytics".to_string());
 
                 // URL format for stdio: "command arg1 arg2..."
@@ -471,7 +475,8 @@ impl McpService {
                     local_path: Some(local_path),
                 };
 
-                self.servers.insert("dune-analytics".to_string(), dune_mcp_config);
+                self.servers
+                    .insert("dune-analytics".to_string(), dune_mcp_config);
 
                 if self.debug_mode {
                     debug_success!("Added dune-analytics as default MCP server");
@@ -2673,14 +2678,12 @@ impl McpService {
             }
         }
 
-        let mut child = command
-            .spawn()
-            .with_context(|| {
-                format!(
-                    "Failed to spawn stdio MCP server process: program='{}' args={:?}",
-                    program, args
-                )
-            })?;
+        let mut child = command.spawn().with_context(|| {
+            format!(
+                "Failed to spawn stdio MCP server process: program='{}' args={:?}",
+                program, args
+            )
+        })?;
 
         let mut stdin = child
             .stdin

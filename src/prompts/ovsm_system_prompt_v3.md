@@ -82,14 +82,53 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 ## Built-in Language Functions (NO NETWORK CALLS)
 These are **part of the OVSM language** and execute locally:
 - **Data**: `count`, `length`, `append`, `slice`, `first`, `rest`, `nth`
+  - **Aliases**: `head` (=first), `tail` (=rest) - Haskell-style
 - **Object Introspection**: `keys`, `get`, `merge` ← **USE THESE FOR MCP RESPONSES!**
 - **JSON**: `parse-json`, `json-stringify` (BUILT-IN, NOT MCP TOOLS!)
 - **Aggregation**: `group-by`, `aggregate`, `filter`, `map`, `reduce`
+- **Collection operations**: `distinct`, `unique`, `take`, `drop`, `zip`, `partition`, `flatten`
+  - **Aliases**: `unique` (=distinct) - SQL-style
+- **Predicates**: `some`, `every`, `any`, `all`
+  - **Aliases**: `any` (=some), `all` (=every) - JavaScript-style
 - **Sorting**: `sort-by` (with lambda comparator and `:desc/:asc` keywords)
-- **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`
+- **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`, `abs`, `sqrt`, `floor`, `ceil`, `round`
 - **Logic**: `and`, `or`, `not`, `if`, `when`, `while`, `for`
 - **Null checking**: `null?` ← **USE THIS WITH `get`!**
 - **Object**: `.` (property access - ONLY if you're sure field exists), `[]` (array index)
+- **Type Conversions**: `int`, `integer`, `float`, `bool` - Convert between types
+  - `(int "42")` → `42` - String to integer (Python/JS style)
+  - `(float "3.14")` → `3.14` - String to float
+  - `(bool "true")` → `true` - String to boolean (accepts: true/false, yes/no, 1/0, t/f, y/n)
+  - `(int 3.14)` → `3` - Float to int (truncates)
+  - `(float 42)` → `42.0` - Int to float
+  - `(bool 0)` → `false`, `(bool 1)` → `true` - Number to boolean (0 is false, non-zero is true)
+
+### ✅ STRING FUNCTIONS (AVAILABLE - Use These!)
+OVSM has comprehensive string manipulation:
+- **Concatenation**: `concatenate`, `string-append`, `concat` - Join strings together
+  - `(concatenate "hello" " " "world")` → `"hello world"`
+  - `(string-append "a" "b" "c")` → `"abc"`
+  - `(concat "x" "y" "z")` → `"xyz"`
+- **Splitting/Joining**: `split`, `join` - Split strings by delimiter or join arrays
+  - `(split "a,b,c" ",")` → `["a" "b" "c"]`
+  - `(join ["a" "b" "c"] ", ")` → `"a, b, c"`
+- **Formatting**: `format`, `sprintf` - Format strings with {} placeholders
+  - `(format "Hello {}" "World")` → `"Hello World"`
+  - `(sprintf "{} has {} messages" "Alice" 5)` → `"Alice has 5 messages"`
+- **String testing**: `string-contains`, `includes`, `starts-with`, `ends-with`
+  - `(string-contains "hello world" "world")` → `true`
+  - `(starts-with "hello" "hel")` → `true`
+  - `(ends-with "world" "ld")` → `true`
+- **Substring**: `substring`, `subseq` - Extract part of string
+  - `(substring "hello" 1 4)` → `"ell"`
+- **Case conversion**: `string-upcase`, `string-downcase`, `string-capitalize`
+- **Trimming**: `string-trim`, `string-left-trim`, `string-right-trim`
+- **Search**: `search`, `position` - Find substring/character position
+- **Replace**: `replace`, `replace-all` - Replace substring occurrences
+- **Length**: `string-length`, `length`, `count` - Get string length
+- **Character access**: `char-at`, `char-at-index` - Get character at index
+- **Conversion**: `str`, `to-string` - Convert value to string
+- **Type checking**: `stringp`, `typeof`, `type-of` - Check value type
 
 **ALWAYS USE LOWERCASE** for built-in functions: `count` not `COUNT`!
 

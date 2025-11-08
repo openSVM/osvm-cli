@@ -371,7 +371,7 @@ mod tests {
         let tokens = scanner.scan_tokens().unwrap();
 
         // Should parse without errors
-        assert!(tokens.len() > 0);
+        assert!(!tokens.is_empty());
         assert_eq!(tokens[0].kind, TokenKind::LeftParen);
     }
 

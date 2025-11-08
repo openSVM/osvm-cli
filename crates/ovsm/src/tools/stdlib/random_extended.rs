@@ -40,7 +40,7 @@ impl Tool for RandomStatePTool {
         "Check if object is random state"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        Ok(Value::Bool(matches!(args.get(0), Some(Value::Int(_)))))
+        Ok(Value::Bool(matches!(args.first(), Some(Value::Int(_)))))
     }
 }
 

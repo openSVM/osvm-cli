@@ -234,19 +234,19 @@ impl Value {
     /// Gets a field value from an object by name
     pub fn get_field(&self, field: &str) -> Result<Value> {
         match self {
-            Value::Object(obj) => obj
-                .get(field)
-                .cloned()
-                .ok_or_else(|| {
-                    // Collect available fields to help debugging
-                    let mut available: Vec<String> = obj.keys().cloned().collect();
-                    available.sort(); // Sort for consistent output
-                    eprintln!("🔍 DEBUG: Field '{}' not found. Available fields: {:?}", field, available);
-                    Error::UndefinedVariable {
-                        name: field.to_string(),
-                        available_fields: Some(available),
-                    }
-                }),
+            Value::Object(obj) => obj.get(field).cloned().ok_or_else(|| {
+                // Collect available fields to help debugging
+                let mut available: Vec<String> = obj.keys().cloned().collect();
+                available.sort(); // Sort for consistent output
+                eprintln!(
+                    "🔍 DEBUG: Field '{}' not found. Available fields: {:?}",
+                    field, available
+                );
+                Error::UndefinedVariable {
+                    name: field.to_string(),
+                    available_fields: Some(available),
+                }
+            }),
             _ => Err(Error::TypeError {
                 expected: "object".to_string(),
                 got: self.type_name(),

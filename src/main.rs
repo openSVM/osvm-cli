@@ -1,3 +1,5 @@
+// Allow unused code in CLI during active development
+// Most warnings are from experimental features and development scaffolding
 #![allow(unused)]
 
 use {

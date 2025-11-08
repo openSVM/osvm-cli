@@ -72,6 +72,26 @@ pub fn register(registry: &mut ToolRegistry) {
     registry.register(StringConcatenateTool);
     registry.register(StringToListTool);
     registry.register(ListToStringTool);
+
+    // Commonly expected functions (AI hallucination prevention)
+    registry.register(StringSplitTool);
+    registry.register(SplitTool);
+    registry.register(StringJoinTool);
+    registry.register(JoinTool);
+    registry.register(StringAppendTool);
+    registry.register(FormatTool);
+    registry.register(SprintfTool);
+    registry.register(ConcatTool);
+    registry.register(StrTool);
+    registry.register(ToStringTool);
+    registry.register(StringContainsTool);
+    registry.register(IncludesTool);
+    registry.register(StringStartsWithTool);
+    registry.register(StartsWithTool);
+    registry.register(StringEndsWithTool);
+    registry.register(EndsWithTool);
+    registry.register(StringLengthTool);
+    registry.register(CharAtIndexTool);
 }
 
 // ============================================================================
@@ -851,7 +871,7 @@ impl Tool for SearchTool {
         let needle = args[0].as_string()?;
         let haystack = args[1].as_string()?;
 
-        match haystack.find(&needle) {
+        match haystack.find(needle) {
             Some(idx) => Ok(Value::Int(idx as i64)),
             None => Ok(Value::Null),
         }
@@ -955,7 +975,7 @@ impl Tool for ReplaceTool {
         let old = args[1].as_string()?;
         let new = args[2].as_string()?;
 
-        Ok(Value::String(s.replacen(&old, &new, 1)))
+        Ok(Value::String(s.replacen(old, new, 1)))
     }
 }
 
@@ -983,7 +1003,7 @@ impl Tool for ReplaceAllTool {
         let old = args[1].as_string()?;
         let new = args[2].as_string()?;
 
-        Ok(Value::String(s.replace(&old, &new)))
+        Ok(Value::String(s.replace(old, new)))
     }
 }
 
@@ -1416,5 +1436,436 @@ impl Tool for ListToStringTool {
         }
 
         Ok(Value::String(result))
+    }
+}
+
+// ============================================================================
+// COMMONLY EXPECTED STRING FUNCTIONS (AI hallucination prevention)
+// ============================================================================
+
+/// STRING-SPLIT - Split string by delimiter into array
+pub struct StringSplitTool;
+
+impl Tool for StringSplitTool {
+    fn name(&self) -> &str {
+        "STRING-SPLIT"
+    }
+
+    fn description(&self) -> &str {
+        "Split string by delimiter into array of strings"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-SPLIT".to_string(),
+                reason: "Expected string and delimiter arguments".to_string(),
+            });
+        }
+
+        let s = args[0].as_string()?;
+        let delimiter = args[1].as_string()?;
+
+        let parts: Vec<Value> = if delimiter.is_empty() {
+            // Split into individual characters
+            s.chars().map(|c| Value::String(c.to_string())).collect()
+        } else {
+            s.split(&delimiter)
+                .map(|part| Value::String(part.to_string()))
+                .collect()
+        };
+
+        Ok(Value::Array(Arc::new(parts)))
+    }
+}
+
+/// SPLIT - Alias for STRING-SPLIT
+pub struct SplitTool;
+
+impl Tool for SplitTool {
+    fn name(&self) -> &str {
+        "SPLIT"
+    }
+
+    fn description(&self) -> &str {
+        "Split string by delimiter (alias for STRING-SPLIT)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StringSplitTool.execute(args)
+    }
+}
+
+/// STRING-JOIN - Join array of strings with delimiter
+pub struct StringJoinTool;
+
+impl Tool for StringJoinTool {
+    fn name(&self) -> &str {
+        "STRING-JOIN"
+    }
+
+    fn description(&self) -> &str {
+        "Join array of strings with delimiter"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-JOIN".to_string(),
+                reason: "Expected array and delimiter arguments".to_string(),
+            });
+        }
+
+        let arr = args[0].as_array()?;
+        let delimiter = args[1].as_string()?;
+
+        let strings: Result<Vec<String>> = arr
+            .iter()
+            .map(|v| v.as_string().map(|s| s.to_string()))
+            .collect();
+
+        let strings = strings?;
+        Ok(Value::String(strings.join(delimiter)))
+    }
+}
+
+/// JOIN - Alias for STRING-JOIN
+pub struct JoinTool;
+
+impl Tool for JoinTool {
+    fn name(&self) -> &str {
+        "JOIN"
+    }
+
+    fn description(&self) -> &str {
+        "Join array of strings with delimiter (alias for STRING-JOIN)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StringJoinTool.execute(args)
+    }
+}
+
+/// STRING-APPEND - Convenient alias for CONCATENATE
+pub struct StringAppendTool;
+
+impl Tool for StringAppendTool {
+    fn name(&self) -> &str {
+        "STRING-APPEND"
+    }
+
+    fn description(&self) -> &str {
+        "Append strings together (alias for CONCATENATE)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        ConcatenateTool.execute(args)
+    }
+}
+
+/// FORMAT - Basic string formatting with placeholders
+pub struct FormatTool;
+
+impl Tool for FormatTool {
+    fn name(&self) -> &str {
+        "FORMAT"
+    }
+
+    fn description(&self) -> &str {
+        "Format string with placeholders: (format \"Hello {}!\" \"World\") => \"Hello World!\""
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "FORMAT".to_string(),
+                reason: "Expected format string".to_string(),
+            });
+        }
+
+        let format_str = args[0].as_string()?;
+        let mut result = format_str.to_string();
+
+        // Replace {} placeholders with arguments
+        for arg in args[1..].iter() {
+            let arg_str = match arg {
+                Value::String(s) => s.clone(),
+                Value::Int(n) => n.to_string(),
+                Value::Float(f) => f.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "null".to_string(),
+                Value::Array(_) => format!("{:?}", arg),
+                Value::Object(_) => format!("{:?}", arg),
+                Value::Function { .. } => "<function>".to_string(),
+                Value::Range { .. } => format!("{:?}", arg),
+                Value::Multiple(_) => format!("{:?}", arg),
+                Value::Macro { .. } => "<macro>".to_string(),
+            };
+
+            // Replace first occurrence of {}
+            if let Some(pos) = result.find("{}") {
+                result.replace_range(pos..pos + 2, &arg_str);
+            } else {
+                // No more placeholders, we're done
+                break;
+            }
+        }
+
+        Ok(Value::String(result))
+    }
+}
+
+/// SPRINTF - Alias for FORMAT (commonly expected name)
+pub struct SprintfTool;
+
+impl Tool for SprintfTool {
+    fn name(&self) -> &str {
+        "SPRINTF"
+    }
+
+    fn description(&self) -> &str {
+        "Format string (alias for FORMAT)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        FormatTool.execute(args)
+    }
+}
+
+/// CONCAT - Alias for CONCATENATE (shorter name)
+pub struct ConcatTool;
+
+impl Tool for ConcatTool {
+    fn name(&self) -> &str {
+        "CONCAT"
+    }
+
+    fn description(&self) -> &str {
+        "Concatenate strings (alias for CONCATENATE)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        ConcatenateTool.execute(args)
+    }
+}
+
+/// STR - Convert value to string
+pub struct StrTool;
+
+impl Tool for StrTool {
+    fn name(&self) -> &str {
+        "STR"
+    }
+
+    fn description(&self) -> &str {
+        "Convert value to string"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::String(String::new()));
+        }
+
+        let s = match &args[0] {
+            Value::String(s) => s.clone(),
+            Value::Int(n) => n.to_string(),
+            Value::Float(f) => f.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Null => "null".to_string(),
+            v => format!("{:?}", v),
+        };
+
+        Ok(Value::String(s))
+    }
+}
+
+/// TO-STRING - Alias for STR
+pub struct ToStringTool;
+
+impl Tool for ToStringTool {
+    fn name(&self) -> &str {
+        "TO-STRING"
+    }
+
+    fn description(&self) -> &str {
+        "Convert value to string (alias for STR)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StrTool.execute(args)
+    }
+}
+
+/// STRING-CONTAINS - Check if string contains substring
+pub struct StringContainsTool;
+
+impl Tool for StringContainsTool {
+    fn name(&self) -> &str {
+        "STRING-CONTAINS"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string contains substring"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-CONTAINS".to_string(),
+                reason: "Expected string and substring arguments".to_string(),
+            });
+        }
+
+        let haystack = args[0].as_string()?;
+        let needle = args[1].as_string()?;
+
+        Ok(Value::Bool(haystack.contains(needle)))
+    }
+}
+
+/// INCLUDES - Alias for STRING-CONTAINS
+pub struct IncludesTool;
+
+impl Tool for IncludesTool {
+    fn name(&self) -> &str {
+        "INCLUDES"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string contains substring (alias for STRING-CONTAINS)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StringContainsTool.execute(args)
+    }
+}
+
+/// STRING-STARTS-WITH - Check if string starts with prefix
+pub struct StringStartsWithTool;
+
+impl Tool for StringStartsWithTool {
+    fn name(&self) -> &str {
+        "STRING-STARTS-WITH"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string starts with prefix"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-STARTS-WITH".to_string(),
+                reason: "Expected string and prefix arguments".to_string(),
+            });
+        }
+
+        let s = args[0].as_string()?;
+        let prefix = args[1].as_string()?;
+
+        Ok(Value::Bool(s.starts_with(prefix)))
+    }
+}
+
+/// STARTS-WITH - Alias for STRING-STARTS-WITH
+pub struct StartsWithTool;
+
+impl Tool for StartsWithTool {
+    fn name(&self) -> &str {
+        "STARTS-WITH"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string starts with prefix (alias for STRING-STARTS-WITH)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StringStartsWithTool.execute(args)
+    }
+}
+
+/// STRING-ENDS-WITH - Check if string ends with suffix
+pub struct StringEndsWithTool;
+
+impl Tool for StringEndsWithTool {
+    fn name(&self) -> &str {
+        "STRING-ENDS-WITH"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string ends with suffix"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-ENDS-WITH".to_string(),
+                reason: "Expected string and suffix arguments".to_string(),
+            });
+        }
+
+        let s = args[0].as_string()?;
+        let suffix = args[1].as_string()?;
+
+        Ok(Value::Bool(s.ends_with(&suffix)))
+    }
+}
+
+/// ENDS-WITH - Alias for STRING-ENDS-WITH
+pub struct EndsWithTool;
+
+impl Tool for EndsWithTool {
+    fn name(&self) -> &str {
+        "ENDS-WITH"
+    }
+
+    fn description(&self) -> &str {
+        "Check if string ends with suffix (alias for STRING-ENDS-WITH)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        StringEndsWithTool.execute(args)
+    }
+}
+
+/// STRING-LENGTH - Get length of string
+pub struct StringLengthTool;
+
+impl Tool for StringLengthTool {
+    fn name(&self) -> &str {
+        "STRING-LENGTH"
+    }
+
+    fn description(&self) -> &str {
+        "Get length of string"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "STRING-LENGTH".to_string(),
+                reason: "Expected string argument".to_string(),
+            });
+        }
+
+        let s = args[0].as_string()?;
+        Ok(Value::Int(s.len() as i64))
+    }
+}
+
+/// CHAR-AT-INDEX - Alias for CHAR-AT
+pub struct CharAtIndexTool;
+
+impl Tool for CharAtIndexTool {
+    fn name(&self) -> &str {
+        "CHAR-AT-INDEX"
+    }
+
+    fn description(&self) -> &str {
+        "Get character at index (alias for CHAR-AT)"
+    }
+
+    fn execute(&self, args: &[Value]) -> Result<Value> {
+        CharAtTool.execute(args)
     }
 }

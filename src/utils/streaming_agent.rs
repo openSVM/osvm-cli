@@ -1037,13 +1037,14 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                     Err(e) => {
                         // ═══ LEVEL 1: SYNTAX ERROR ═══
                         // Try to get enhanced error message with available fields
-                        let error_msg = if let Some(ovsm_err) = e.downcast_ref::<ovsm::error::Error>() {
-                            // OVSM error - use enhanced_message() to show available fields
-                            ovsm_err.enhanced_message()
-                        } else {
-                            // Other error type - use default string representation
-                            e.to_string()
-                        };
+                        let error_msg =
+                            if let Some(ovsm_err) = e.downcast_ref::<ovsm::error::Error>() {
+                                // OVSM error - use enhanced_message() to show available fields
+                                ovsm_err.enhanced_message()
+                            } else {
+                                // Other error type - use default string representation
+                                e.to_string()
+                            };
                         println!("❌ Syntax/execution error: {}\n", error_msg);
 
                         if attempt >= MAX_RETRY_ATTEMPTS {

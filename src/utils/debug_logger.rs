@@ -45,8 +45,11 @@ pub fn get_cached_schemas() -> String {
             return String::new();
         }
 
-        let mut result = String::from("\n\n## 🔍 ACTUAL API RESPONSE SCHEMAS (from this session):\n\n");
-        result.push_str("These are the REAL schemas from tools you called. Use ONLY these fields:\n\n");
+        let mut result =
+            String::from("\n\n## 🔍 ACTUAL API RESPONSE SCHEMAS (from this session):\n\n");
+        result.push_str(
+            "These are the REAL schemas from tools you called. Use ONLY these fields:\n\n",
+        );
 
         for (tool, schema) in cache.iter() {
             result.push_str(&format!("### {}\n```\n{}\n```\n\n", tool, schema));
@@ -91,7 +94,10 @@ fn extract_schema(value: &OvsmValue, depth: usize) -> String {
                 } else {
                     ""
                 };
-                fields.push(format!("\n{}{}: {}{}", indent, key, field_schema, nullability));
+                fields.push(format!(
+                    "\n{}{}: {}{}",
+                    indent, key, field_schema, nullability
+                ));
             }
             format!("{{{}}}\n{}", fields.join(""), indent.trim_end())
         }
@@ -168,9 +174,18 @@ pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
             let (val_type, is_null) = match val {
                 OvsmValue::Null => ("❌ NULL".to_string(), true),
                 OvsmValue::Array(arr) => (format!("array[{}]", arr.len()), false),
-                OvsmValue::Object(o) => (format!("object{{{}}}", o.keys().cloned().collect::<Vec<_>>().join(", ")), false),
+                OvsmValue::Object(o) => (
+                    format!(
+                        "object{{{}}}",
+                        o.keys().cloned().collect::<Vec<_>>().join(", ")
+                    ),
+                    false,
+                ),
                 OvsmValue::String(s) if s.is_empty() => ("String(empty)".to_string(), false),
-                OvsmValue::String(s) => (format!("String({:?})", s.chars().take(30).collect::<String>()), false),
+                OvsmValue::String(s) => (
+                    format!("String({:?})", s.chars().take(30).collect::<String>()),
+                    false,
+                ),
                 OvsmValue::Bool(b) => (format!("Bool({})", b), false),
                 OvsmValue::Int(i) => (format!("Int({})", i), false),
                 OvsmValue::Float(f) => (format!("Float({})", f), false),
@@ -193,7 +208,10 @@ pub fn log_ovsm_value(name: &str, value: &OvsmValue) {
                         OvsmValue::Null => ("❌ NULL".to_string(), true),
                         OvsmValue::Array(arr) => (format!("array[{}]", arr.len()), false),
                         OvsmValue::Object(_) => ("object{{...}}".to_string(), false),
-                        OvsmValue::String(s) => (format!("String({:?})", s.chars().take(15).collect::<String>()), false),
+                        OvsmValue::String(s) => (
+                            format!("String({:?})", s.chars().take(15).collect::<String>()),
+                            false,
+                        ),
                         OvsmValue::Bool(b) => (format!("Bool({})", b), false),
                         OvsmValue::Int(i) => (format!("Int({})", i), false),
                         OvsmValue::Float(f) => (format!("Float({})", f), false),

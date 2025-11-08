@@ -1058,7 +1058,7 @@ impl SExprParser {
             Ok(self.advance())
         } else {
             let token = self.peek();
-            let message = self.build_error_message(&kind, &token);
+            let message = self.build_error_message(&kind, token);
 
             Err(Error::SyntaxError {
                 line: token.line,

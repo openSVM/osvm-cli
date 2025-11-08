@@ -71,7 +71,7 @@ impl LispEvaluator {
 
             Statement::Assignment { name, value } => {
                 let val = self.evaluate_expression(value)?;
-                self.env.set(&name, val.clone())?;
+                self.env.set(name, val.clone())?;
                 Ok(val)
             }
 
@@ -136,6 +136,26 @@ impl LispEvaluator {
                     "array?" => self.eval_array_check(args),
                     "object?" => self.eval_object_check(args),
                     "function?" => self.eval_function_check(args),
+                    // Number predicates (Common LISP style)
+                    "even?" => self.eval_even(args), // (even? 4) -> true
+                    "evenp" => self.eval_even(args), // Common LISP: evenp
+                    "odd?" => self.eval_odd(args),   // (odd? 3) -> true
+                    "oddp" => self.eval_odd(args),   // Common LISP: oddp
+                    "positive?" => self.eval_positive(args), // (positive? 5) -> true
+                    "positivep" => self.eval_positive(args), // Common LISP
+                    "negative?" => self.eval_negative(args), // (negative? -5) -> true
+                    "negativep" => self.eval_negative(args), // Common LISP
+                    "zero?" => self.eval_zero(args), // (zero? 0) -> true
+                    "zerop" => self.eval_zero(args), // Common LISP: zerop
+                    // Type conversions (AI compatibility - Python/JS style)
+                    "int" => self.eval_to_int(args), // Python: int("42") -> 42
+                    "integer" => self.eval_to_int(args), // Alias
+                    "parse-int" => self.eval_to_int(args), // JS: parseInt("42")
+                    "parseint" => self.eval_to_int(args), // JS: parseInt (lowercase)
+                    "float" => self.eval_to_float(args), // Python: float("3.14") -> 3.14
+                    "parse-float" => self.eval_to_float(args), // JS: parseFloat("3.14")
+                    "parsefloat" => self.eval_to_float(args), // JS: parseFloat (lowercase)
+                    "bool" => self.eval_to_bool(args), // Python: bool("true") -> True
                     // Assertions
                     "assert" => self.eval_assert(args),
                     "assert-type" => self.eval_assert_type(args),
@@ -177,8 +197,24 @@ impl LispEvaluator {
                     "range" => self.eval_range(args),
                     "min" => self.eval_min(args),
                     "max" => self.eval_max(args),
+                    // Statistical functions (Python/NumPy style)
+                    "mean" => self.eval_mean(args),         // Average
+                    "average" => self.eval_mean(args),      // Alias
+                    "avg" => self.eval_mean(args),          // SQL-style
+                    "median" => self.eval_median(args),     // Median value
+                    "mode" => self.eval_mode(args),         // Most common value
+                    "product" => self.eval_product(args),   // Product of numbers
+                    "std" => self.eval_stddev(args),        // Standard deviation
+                    "stddev" => self.eval_stddev(args),     // Alias
+                    "variance" => self.eval_variance(args), // Variance
+                    // Math utilities
+                    "sign" => self.eval_sign(args), // Sign of number (-1, 0, 1)
+                    "clamp" => self.eval_clamp(args), // Clamp between min/max
+                    "random" => self.eval_random(args), // Random number
                     "now" => self.eval_now(args),
                     "log" => self.eval_log(args),
+                    "print" => self.eval_print(args), // Python/JS-style output
+                    "println" => self.eval_println(args), // Python/JS-style output with newline
                     "map" => self.eval_map(args),
                     "filter" => self.eval_filter(args),
                     "reduce" => self.eval_reduce(args),
@@ -190,10 +226,19 @@ impl LispEvaluator {
                     "format" => self.eval_format(args),
                     "slice" => self.eval_slice(args),
                     "keys" => self.eval_keys(args),
+                    "object-values" => self.eval_object_values(args), // Python: dict.values()
+                    "object-entries" => self.eval_object_entries(args), // Python: dict.items()
+                    "entries" => self.eval_object_entries(args),      // JS: Object.entries()
+                    "items" => self.eval_object_entries(args),        // Python: dict.items()
                     "merge" => self.eval_merge(args),
                     "get" => self.eval_get(args),
                     "first" => self.eval_first(args),
+                    "head" => self.eval_first(args), // Alias for first (Haskell-style)
                     "rest" => self.eval_rest(args),
+                    "tail" => self.eval_rest(args), // Alias for rest (Haskell-style)
+                    "init" => self.eval_init(args), // All but last (Haskell-style)
+                    "shift" => self.eval_shift(args), // Remove first element (JS-style)
+                    "unshift" => self.eval_unshift(args), // Add to front (JS-style)
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
@@ -204,17 +249,65 @@ impl LispEvaluator {
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
                     "distinct" => self.eval_distinct(args),
+                    "unique" => self.eval_distinct(args), // Alias for distinct (SQL-style)
                     "drop" => self.eval_drop(args),
                     "every" => self.eval_every(args),
+                    "all" => self.eval_every(args), // Alias for every (JavaScript-style)
                     "find" => self.eval_find(args),
+                    "find-index" => self.eval_find_index(args), // Find index matching predicate
+                    "indexof" => self.eval_indexof(args),       // JS-style indexOf
+                    "index-of" => self.eval_indexof(args),      // Lisp-style index-of
+                    "contains" => self.eval_contains(args),     // Python-style contains
+                    "elem" => self.eval_contains(args),         // Haskell-style elem
+                    "remove" => self.eval_remove(args),         // Remove element by value
+                    "insert-at" => self.eval_insert_at(args),   // Insert at index
                     "flatten" => self.eval_flatten(args),
                     // "group-by" already handled above on line 186
                     "partition" => self.eval_partition(args),
                     "pluck" => self.eval_pluck(args),
                     "reverse" => self.eval_reverse(args),
+                    "repeat" => self.eval_repeat(args), // Python: "x"*3, JS: "x".repeat(3)
                     "some" => self.eval_some(args),
+                    "any" => self.eval_some(args), // Alias for some (JavaScript-style)
                     "take" => self.eval_take(args),
                     "zip" => self.eval_zip(args),
+                    // String predicates (Python str methods)
+                    "isdigit?" => self.eval_isdigit(args),
+                    "is-digit?" => self.eval_isdigit(args),
+                    "isalpha?" => self.eval_isalpha(args),
+                    "is-alpha?" => self.eval_isalpha(args),
+                    "isalnum?" => self.eval_isalnum(args),
+                    "is-alnum?" => self.eval_isalnum(args),
+                    "isspace?" => self.eval_isspace(args),
+                    "is-space?" => self.eval_isspace(args),
+                    "blank?" => self.eval_blank(args),
+                    // Functional programming utilities
+                    "apply" => self.eval_apply(args),
+                    "compose" => self.eval_compose(args),
+                    "pipe" => self.eval_pipe(args),
+                    "partial" => self.eval_partial(args),
+                    // Regex operations
+                    "regex-match" => self.eval_regex_match(args),
+                    "regex-replace" => self.eval_regex_replace(args),
+                    "regex-split" => self.eval_regex_split(args),
+                    "regex-find-all" => self.eval_regex_find_all(args),
+
+                    // HIGH PRIORITY ALIASES - Python/JavaScript compatibility
+                    "len" => self.eval_length(args), // Python len()
+                    "includes" => self.eval_contains(args), // JavaScript includes()
+                    "toLowerCase" | "tolowercase" => self.eval_to_lower_case(args), // JavaScript
+                    "toUpperCase" | "touppercase" => self.eval_to_upper_case(args), // JavaScript
+                    "charAt" | "charat" => self.eval_char_at(args), // JavaScript charAt()
+                    "chr" => self.eval_chr(args),    // Python chr()
+                    "ord" => self.eval_ord(args),    // Python ord()
+                    "substring" => self.eval_substring(args), // JavaScript substring()
+
+                    // MEDIUM PRIORITY ALIASES - LISP/Haskell compatibility
+                    "cdr" => self.eval_rest(args), // LISP cdr
+                    "foldl" | "fold-left" => self.eval_reduce(args), // Haskell foldl
+                    "foldr" | "fold-right" => self.eval_reduce(args), // Haskell foldr
+                    "lastIndexOf" | "lastindexof" => self.eval_last_index_of(args), // JavaScript
+
                     _ => {
                         // Not a special form, delegate to base evaluator
                         // This would call regular tools
@@ -235,8 +328,8 @@ impl LispEvaluator {
                 if name.starts_with(':') {
                     Ok(Value::String(name.clone()))
                 } else {
-                    let result = self.env.get(name);
-                    result
+                    
+                    self.env.get(name)
                 }
             }
 
@@ -2658,6 +2751,369 @@ impl LispEvaluator {
         Ok(Value::Null)
     }
 
+    /// (print value ...) - Print values (Python/JS style)
+    fn eval_print(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        let mut output = String::new();
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                output.push(' ');
+            }
+            let val = self.evaluate_expression(&arg.value)?;
+            output.push_str(&val.to_string());
+        }
+        print!("{}", output);
+        std::io::Write::flush(&mut std::io::stdout()).ok();
+        Ok(Value::Null)
+    }
+
+    /// (println value ...) - Print values with newline (Python/JS style)
+    fn eval_println(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        let mut output = String::new();
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                output.push(' ');
+            }
+            let val = self.evaluate_expression(&arg.value)?;
+            output.push_str(&val.to_string());
+        }
+        println!("{}", output);
+        Ok(Value::Null)
+    }
+
+    /// (indexOf collection element) - Find index of element in collection
+    fn eval_indexof(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "indexOf".to_string(),
+                reason: "Expected 2 arguments: collection and element".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let needle = self.evaluate_expression(&args[1].value)?;
+
+        match collection {
+            Value::Array(ref arr) => {
+                for (i, item) in arr.iter().enumerate() {
+                    if item == &needle {
+                        return Ok(Value::Int(i as i64));
+                    }
+                }
+                Ok(Value::Int(-1)) // Not found
+            }
+            Value::String(ref s) => {
+                let needle_str = needle.as_string()?;
+                match s.find(needle_str) {
+                    Some(idx) => Ok(Value::Int(idx as i64)),
+                    None => Ok(Value::Int(-1)),
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
+
+    /// (contains collection element) - Check if collection contains element
+    fn eval_contains(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "contains".to_string(),
+                reason: "Expected 2 arguments: collection and element".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let needle = self.evaluate_expression(&args[1].value)?;
+
+        match collection {
+            Value::Array(ref arr) => Ok(Value::Bool(arr.iter().any(|item| item == &needle))),
+            Value::String(ref s) => {
+                let needle_str = needle.as_string()?;
+                Ok(Value::Bool(s.contains(needle_str)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
+
+    /// (init array) - All elements except last (Haskell-style)
+    fn eval_init(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "init".to_string(),
+                reason: "Expected 1 argument: array".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+
+        match collection {
+            Value::Array(ref arr) => {
+                if arr.is_empty() {
+                    return Ok(Value::Array(Arc::new(vec![])));
+                }
+                let init_arr = arr[..arr.len() - 1].to_vec();
+                Ok(Value::Array(Arc::new(init_arr)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
+
+    /// (shift array) - Remove and return first element (JS-style)
+    fn eval_shift(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "shift".to_string(),
+                reason: "Expected 1 argument: array".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+
+        match collection {
+            Value::Array(ref arr) => {
+                if arr.is_empty() {
+                    return Ok(Value::Null);
+                }
+                Ok(arr[0].clone())
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
+
+    /// (unshift array element) - Add element to front (JS-style)
+    fn eval_unshift(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "unshift".to_string(),
+                reason: "Expected 2 arguments: array and element".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let element = self.evaluate_expression(&args[1].value)?;
+
+        match collection {
+            Value::Array(ref arr) => {
+                let mut new_arr = vec![element];
+                new_arr.extend_from_slice(arr);
+                Ok(Value::Array(Arc::new(new_arr)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
+
+    /// (int value) - Convert to integer (Python/JS style)
+    /// Supports: int("42") -> 42, int(3.14) -> 3, int(true) -> 1
+    fn eval_to_int(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "int".to_string(),
+                reason: "Expected 1 argument: value to convert".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+
+        match value {
+            Value::Int(n) => Ok(Value::Int(n)),
+            Value::Float(f) => Ok(Value::Int(f as i64)),
+            Value::String(ref s) => {
+                s.trim()
+                    .parse::<i64>()
+                    .map(Value::Int)
+                    .map_err(|_| Error::TypeError {
+                        expected: "valid integer string".to_string(),
+                        got: format!("'{}'", s),
+                    })
+            }
+            Value::Bool(b) => Ok(Value::Int(if b { 1 } else { 0 })),
+            _ => Err(Error::TypeError {
+                expected: "int, float, string, or bool".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (float value) - Convert to float (Python/JS style)
+    /// Supports: float("3.14") -> 3.14, float(42) -> 42.0, float(true) -> 1.0
+    fn eval_to_float(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "float".to_string(),
+                reason: "Expected 1 argument: value to convert".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+
+        match value {
+            Value::Float(f) => Ok(Value::Float(f)),
+            Value::Int(n) => Ok(Value::Float(n as f64)),
+            Value::String(ref s) => {
+                s.trim()
+                    .parse::<f64>()
+                    .map(Value::Float)
+                    .map_err(|_| Error::TypeError {
+                        expected: "valid float string".to_string(),
+                        got: format!("'{}'", s),
+                    })
+            }
+            Value::Bool(b) => Ok(Value::Float(if b { 1.0 } else { 0.0 })),
+            _ => Err(Error::TypeError {
+                expected: "int, float, string, or bool".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (bool value) - Convert to boolean (Python/JS style)
+    /// Supports: bool("true") -> true, bool(0) -> false, bool("") -> false
+    fn eval_to_bool(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "bool".to_string(),
+                reason: "Expected 1 argument: value to convert".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+
+        match value {
+            Value::Bool(b) => Ok(Value::Bool(b)),
+            Value::Int(n) => Ok(Value::Bool(n != 0)),
+            Value::Float(f) => Ok(Value::Bool(f != 0.0)),
+            Value::String(ref s) => {
+                let trimmed = s.trim().to_lowercase();
+                match trimmed.as_str() {
+                    "true" | "t" | "yes" | "y" | "1" => Ok(Value::Bool(true)),
+                    "false" | "f" | "no" | "n" | "0" | "" => Ok(Value::Bool(false)),
+                    _ => Err(Error::TypeError {
+                        expected: "boolean string (true/false/yes/no/1/0)".to_string(),
+                        got: format!("'{}'", s),
+                    }),
+                }
+            }
+            Value::Null => Ok(Value::Bool(false)),
+            Value::Array(ref arr) => Ok(Value::Bool(!arr.is_empty())),
+            Value::Object(ref obj) => Ok(Value::Bool(!obj.is_empty())),
+            _ => Ok(Value::Bool(true)), // Functions, ranges, etc. are truthy
+        }
+    }
+
+    /// (even? n) - Check if number is even (Common LISP: evenp)
+    fn eval_even(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "even?".to_string(),
+                reason: "Expected 1 argument: number to check".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Bool(n % 2 == 0)),
+            Value::Float(f) => Ok(Value::Bool((f as i64) % 2 == 0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (odd? n) - Check if number is odd (Common LISP: oddp)
+    fn eval_odd(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "odd?".to_string(),
+                reason: "Expected 1 argument: number to check".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Bool(n % 2 != 0)),
+            Value::Float(f) => Ok(Value::Bool((f as i64) % 2 != 0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (positive? n) - Check if number is positive (Common LISP: plusp/positivep)
+    fn eval_positive(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "positive?".to_string(),
+                reason: "Expected 1 argument: number to check".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Bool(n > 0)),
+            Value::Float(f) => Ok(Value::Bool(f > 0.0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (negative? n) - Check if number is negative (Common LISP: minusp/negativep)
+    fn eval_negative(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "negative?".to_string(),
+                reason: "Expected 1 argument: number to check".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Bool(n < 0)),
+            Value::Float(f) => Ok(Value::Bool(f < 0.0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (zero? n) - Check if number is zero (Common LISP: zerop)
+    fn eval_zero(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "zero?".to_string(),
+                reason: "Expected 1 argument: number to check".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Bool(n == 0)),
+            Value::Float(f) => Ok(Value::Bool(f.abs() < f64::EPSILON)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
     /// (map collection lambda) - Map function over collection
     fn eval_map(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 2 {
@@ -3075,6 +3531,43 @@ impl LispEvaluator {
         Ok(Value::Array(Arc::new(keys)))
     }
 
+    /// (object-values obj) - Get all values from object (Python: dict.values())
+    fn eval_object_values(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "object-values".to_string(),
+                reason: "Expected 1 argument: object".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        let values: Vec<Value> = obj.values().cloned().collect();
+
+        Ok(Value::Array(Arc::new(values)))
+    }
+
+    /// (object-entries obj) - Get key-value pairs (Python: dict.items(), JS: Object.entries())
+    fn eval_object_entries(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "object-entries".to_string(),
+                reason: "Expected 1 argument: object".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        let entries: Vec<Value> = obj
+            .iter()
+            .map(|(k, v)| Value::Array(Arc::new(vec![Value::String(k.clone()), v.clone()])))
+            .collect();
+
+        Ok(Value::Array(Arc::new(entries)))
+    }
+
     /// merge(obj1, obj2, ...) - Merge objects left-to-right (later values override earlier)
     fn eval_merge(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.is_empty() {
@@ -3434,17 +3927,60 @@ impl LispEvaluator {
         if args.len() != 1 {
             return Err(Error::InvalidArguments {
                 tool: "reverse".to_string(),
-                reason: "Expected 1 argument: collection".to_string(),
+                reason: "Expected 1 argument: collection or string".to_string(),
             });
         }
 
         let collection = self.evaluate_expression(&args[0].value)?;
-        let array = collection.as_array()?;
 
-        let mut result = array.to_vec();
-        result.reverse();
+        // Handle both arrays and strings
+        match collection {
+            Value::Array(ref arr) => {
+                let mut result = arr.to_vec();
+                result.reverse();
+                Ok(Value::Array(Arc::new(result)))
+            }
+            Value::String(ref s) => {
+                let reversed: String = s.chars().rev().collect();
+                Ok(Value::String(reversed))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: collection.type_name(),
+            }),
+        }
+    }
 
-        Ok(Value::Array(Arc::new(result)))
+    /// (repeat value n) - Repeat string or array N times (Python: "x"*3, JS: "x".repeat(3))
+    fn eval_repeat(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "repeat".to_string(),
+                reason: "Expected 2 arguments: value and count".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let count_val = self.evaluate_expression(&args[1].value)?;
+        let count = count_val.as_int()? as usize;
+
+        match value {
+            Value::String(ref s) => {
+                let repeated = s.repeat(count);
+                Ok(Value::String(repeated))
+            }
+            Value::Array(ref arr) => {
+                let mut result = Vec::with_capacity(arr.len() * count);
+                for _ in 0..count {
+                    result.extend_from_slice(arr);
+                }
+                Ok(Value::Array(Arc::new(result)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "string or array".to_string(),
+                got: value.type_name(),
+            }),
+        }
     }
 
     /// (some collection predicate) - Check if any element matches
@@ -3844,7 +4380,7 @@ impl LispEvaluator {
 
                     groups
                         .entry(key)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(elem.clone());
                 }
 
@@ -4121,7 +4657,7 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body); // Explicit deref
+                    let result = self.evaluate_expression(&body); // Explicit deref
 
                     // Restore original environment
                     self.env = saved_env;
@@ -4135,7 +4671,7 @@ impl LispEvaluator {
                     self.bind_function_parameters(&params, &evaluated_args, name)?;
 
                     // Evaluate function body
-                    let result = self.evaluate_expression(&*body); // Explicit deref
+                    let result = self.evaluate_expression(&body); // Explicit deref
 
                     // Exit function scope
                     self.env.exit_scope();
@@ -4913,14 +5449,13 @@ impl LispEvaluator {
         }
 
         // If we don't have &rest or &key, check for exact arg count
-        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none() {
-            if args.len() != required_count {
+        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none()
+            && args.len() != required_count {
                 return Err(Error::InvalidArguments {
                     tool: context.to_string(),
                     reason: format!("Expected {} arguments, got {}", required_count, args.len()),
                 });
             }
-        }
 
         Ok(())
     }
@@ -5494,6 +6029,837 @@ impl LispEvaluator {
                     Ok(current)
                 }
             }
+        }
+    }
+    // ============================================================================
+    // STATISTICAL FUNCTIONS (NumPy/Pandas style)
+    // ============================================================================
+
+    /// (mean collection) - Calculate mean/average
+    fn eval_mean(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "mean".to_string(),
+                reason: "Expected 1 argument: collection of numbers".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        if array.is_empty() {
+            return Ok(Value::Float(0.0));
+        }
+
+        let mut sum = 0.0;
+        for val in array.iter() {
+            sum += val.as_float()?;
+        }
+
+        Ok(Value::Float(sum / array.len() as f64))
+    }
+
+    /// (median collection) - Calculate median value
+    fn eval_median(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "median".to_string(),
+                reason: "Expected 1 argument: collection of numbers".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        if array.is_empty() {
+            return Ok(Value::Float(0.0));
+        }
+
+        let mut numbers: Vec<f64> = array
+            .iter()
+            .map(|v| v.as_float())
+            .collect::<Result<Vec<_>>>()?;
+
+        numbers.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mid = numbers.len() / 2;
+        if numbers.len().is_multiple_of(2) {
+            Ok(Value::Float((numbers[mid - 1] + numbers[mid]) / 2.0))
+        } else {
+            Ok(Value::Float(numbers[mid]))
+        }
+    }
+
+    /// (mode collection) - Find most common value
+    fn eval_mode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "mode".to_string(),
+                reason: "Expected 1 argument: collection".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        if array.is_empty() {
+            return Ok(Value::Null);
+        }
+
+        let mut counts = std::collections::HashMap::new();
+        for val in array.iter() {
+            *counts.entry(format!("{:?}", val)).or_insert(0) += 1;
+        }
+
+        let (_, max_count) = counts
+            .iter()
+            .max_by_key(|(_, &count)| count)
+            .ok_or_else(|| Error::TypeError {
+                expected: "non-empty collection".to_string(),
+                got: "empty".to_string(),
+            })?;
+
+        // Return first value with max count
+        for val in array.iter() {
+            if counts.get(&format!("{:?}", val)) == Some(max_count) {
+                return Ok(val.clone());
+            }
+        }
+
+        Ok(Value::Null)
+    }
+
+    /// (product collection) - Calculate product of numbers
+    fn eval_product(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "product".to_string(),
+                reason: "Expected 1 argument: collection of numbers".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        let mut product = 1.0;
+        let mut is_int = true;
+
+        for val in array.iter() {
+            match val {
+                Value::Int(n) => product *= *n as f64,
+                Value::Float(f) => {
+                    product *= f;
+                    is_int = false;
+                }
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "number".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            }
+        }
+
+        if is_int && product.fract() == 0.0 {
+            Ok(Value::Int(product as i64))
+        } else {
+            Ok(Value::Float(product))
+        }
+    }
+
+    /// (variance collection) - Calculate variance
+    fn eval_variance(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "variance".to_string(),
+                reason: "Expected 1 argument: collection of numbers".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+
+        if array.len() < 2 {
+            return Ok(Value::Float(0.0));
+        }
+
+        // Calculate mean
+        let mut sum = 0.0;
+        for val in array.iter() {
+            sum += val.as_float()?;
+        }
+        let mean = sum / array.len() as f64;
+
+        // Calculate variance
+        let mut variance = 0.0;
+        for val in array.iter() {
+            let diff = val.as_float()? - mean;
+            variance += diff * diff;
+        }
+        variance /= array.len() as f64;
+
+        Ok(Value::Float(variance))
+    }
+
+    /// (stddev collection) - Calculate standard deviation
+    fn eval_stddev(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        let variance = self.eval_variance(args)?;
+        let var_val = variance.as_float()?;
+        Ok(Value::Float(var_val.sqrt()))
+    }
+
+    // ============================================================================
+    // MATH UTILITIES
+    // ============================================================================
+
+    /// (sign n) - Return sign of number (-1, 0, 1)
+    fn eval_sign(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "sign".to_string(),
+                reason: "Expected 1 argument: number".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        match value {
+            Value::Int(n) => Ok(Value::Int(if n > 0 {
+                1
+            } else if n < 0 {
+                -1
+            } else {
+                0
+            })),
+            Value::Float(f) => Ok(Value::Int(if f > 0.0 {
+                1
+            } else if f < 0.0 {
+                -1
+            } else {
+                0
+            })),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: value.type_name(),
+            }),
+        }
+    }
+
+    /// (clamp value min max) - Clamp value between min and max
+    fn eval_clamp(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "clamp".to_string(),
+                reason: "Expected 3 arguments: value, min, max".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let min_val = self.evaluate_expression(&args[1].value)?;
+        let max_val = self.evaluate_expression(&args[2].value)?;
+
+        match (&value, &min_val, &max_val) {
+            (Value::Int(v), Value::Int(min), Value::Int(max)) => Ok(Value::Int(*v.clamp(min, max))),
+            (Value::Float(v), Value::Float(min), Value::Float(max)) => {
+                Ok(Value::Float(v.clamp(*min, *max)))
+            }
+            _ => {
+                let v = value.as_float()?;
+                let min = min_val.as_float()?;
+                let max = max_val.as_float()?;
+                Ok(Value::Float(v.clamp(min, max)))
+            }
+        }
+    }
+
+    /// (random) - Generate random number between 0 and 1
+    fn eval_random(&mut self, _args: &[crate::parser::Argument]) -> Result<Value> {
+        use std::collections::hash_map::RandomState;
+        use std::hash::BuildHasher;
+
+        // Simple pseudo-random using current time + hashstate
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+
+        let state = RandomState::new();
+        
+        
+
+        let hash = state.hash_one(now);
+        let random = (hash as f64) / (u64::MAX as f64);
+
+        Ok(Value::Float(random))
+    }
+
+    // ============================================================================
+    // STRING PREDICATES (Python str methods)
+    // ============================================================================
+
+    /// (isdigit? s) - Check if all characters are digits
+    fn eval_isdigit(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "isdigit?".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::Bool(
+            !s.is_empty() && s.chars().all(|c| c.is_numeric()),
+        ))
+    }
+
+    /// (isalpha? s) - Check if all characters are alphabetic
+    fn eval_isalpha(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "isalpha?".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::Bool(
+            !s.is_empty() && s.chars().all(|c| c.is_alphabetic()),
+        ))
+    }
+
+    /// (isalnum? s) - Check if all characters are alphanumeric
+    fn eval_isalnum(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "isalnum?".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::Bool(
+            !s.is_empty() && s.chars().all(|c| c.is_alphanumeric()),
+        ))
+    }
+
+    /// (isspace? s) - Check if all characters are whitespace
+    fn eval_isspace(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "isspace?".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::Bool(
+            !s.is_empty() && s.chars().all(|c| c.is_whitespace()),
+        ))
+    }
+
+    /// (blank? s) - Check if string is empty or only whitespace
+    fn eval_blank(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "blank?".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::Bool(s.trim().is_empty()))
+    }
+
+    // ============================================================================
+    // ARRAY ADVANCED OPERATIONS
+    // ============================================================================
+
+    /// (find-index collection predicate) - Find index of first matching element
+    fn eval_find_index(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "find-index".to_string(),
+                reason: "Expected 2 arguments: collection and predicate".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let array = collection.as_array()?;
+        let func = self.evaluate_expression(&args[1].value)?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                for (i, elem) in array.iter().enumerate() {
+                    self.env.enter_scope();
+                    if !params.is_empty() {
+                        let _ = self.env.set(&params[0], elem.clone());
+                    }
+
+                    let result = self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+
+                    if let Value::Bool(true) = result {
+                        return Ok(Value::Int(i as i64));
+                    }
+                }
+                Ok(Value::Int(-1)) // Not found
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (remove collection element) - Remove all occurrences of element
+    fn eval_remove(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "remove".to_string(),
+                reason: "Expected 2 arguments: collection and element".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let element = self.evaluate_expression(&args[1].value)?;
+        let array = collection.as_array()?;
+
+        let result: Vec<Value> = array.iter().filter(|&v| v != &element).cloned().collect();
+
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    /// (insert-at collection index element) - Insert element at index
+    fn eval_insert_at(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "insert-at".to_string(),
+                reason: "Expected 3 arguments: collection, index, element".to_string(),
+            });
+        }
+
+        let collection = self.evaluate_expression(&args[0].value)?;
+        let index_val = self.evaluate_expression(&args[1].value)?;
+        let element = self.evaluate_expression(&args[2].value)?;
+
+        let array = collection.as_array()?;
+        let index = index_val.as_int()? as usize;
+
+        let mut result = array.to_vec();
+        if index > result.len() {
+            return Err(Error::TypeError {
+                expected: format!("index 0-{}", result.len()),
+                got: format!("{}", index),
+            });
+        }
+
+        result.insert(index, element);
+        Ok(Value::Array(Arc::new(result)))
+    }
+
+    // ============================================================================
+    // FUNCTIONAL PROGRAMMING UTILITIES
+    // ============================================================================
+
+    /// (apply function list) - Apply function to argument list
+    fn eval_apply(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "apply".to_string(),
+                reason: "Expected 2 arguments: function and argument list".to_string(),
+            });
+        }
+
+        let func = self.evaluate_expression(&args[0].value)?;
+        let arg_list = self.evaluate_expression(&args[1].value)?;
+        let array = arg_list.as_array()?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                self.env.enter_scope();
+
+                for (i, param) in params.iter().enumerate() {
+                    if i < array.len() {
+                        let _ = self.env.set(param, array[i].clone());
+                    }
+                }
+
+                let result = self.evaluate_expression(&body)?;
+                self.env.exit_scope();
+
+                Ok(result)
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (compose f g) - Function composition: (compose f g)(x) = f(g(x))
+    fn eval_compose(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "compose".to_string(),
+                reason: "Expected 2 arguments: two functions to compose".to_string(),
+            });
+        }
+
+        let _f = self.evaluate_expression(&args[0].value)?;
+        let _g = self.evaluate_expression(&args[1].value)?;
+
+        // For now, return a placeholder - full implementation would require storing closures
+        Err(Error::TypeError {
+            expected: "compose not yet fully implemented".to_string(),
+            got: "use nested calls instead".to_string(),
+        })
+    }
+
+    /// (pipe value ...functions) - Apply functions in sequence (Unix pipe-style)
+    fn eval_pipe(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "pipe".to_string(),
+                reason: "Expected at least 2 arguments: initial value and functions".to_string(),
+            });
+        }
+
+        let mut result = self.evaluate_expression(&args[0].value)?;
+
+        for arg in &args[1..] {
+            let func = self.evaluate_expression(&arg.value)?;
+
+            match func {
+                Value::Function { params, body, .. } => {
+                    self.env.enter_scope();
+                    if !params.is_empty() {
+                        let _ = self.env.set(&params[0], result.clone());
+                    }
+                    result = self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+                }
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "function".to_string(),
+                        got: func.type_name(),
+                    })
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// (partial function ...args) - Partial function application
+    fn eval_partial(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "partial".to_string(),
+                reason: "Expected at least 2 arguments: function and partial arguments".to_string(),
+            });
+        }
+
+        // For now, return placeholder - full implementation requires closure storage
+        Err(Error::TypeError {
+            expected: "partial not yet fully implemented".to_string(),
+            got: "use lambda instead".to_string(),
+        })
+    }
+
+    // ============================================================================
+    // REGEX OPERATIONS
+    // ============================================================================
+
+    /// (regex-match pattern string) - Check if string matches regex pattern
+    fn eval_regex_match(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "regex-match".to_string(),
+                reason: "Expected 2 arguments: pattern and string".to_string(),
+            });
+        }
+
+        let pattern_val = self.evaluate_expression(&args[0].value)?;
+        let pattern = pattern_val.as_string()?.to_string();
+        let text_val = self.evaluate_expression(&args[1].value)?;
+        let text = text_val.as_string()?.to_string();
+
+        match regex::Regex::new(&pattern) {
+            Ok(re) => Ok(Value::Bool(re.is_match(&text))),
+            Err(e) => Err(Error::TypeError {
+                expected: "valid regex pattern".to_string(),
+                got: format!("invalid regex: {}", e),
+            }),
+        }
+    }
+
+    /// (regex-replace pattern string replacement) - Replace matches with replacement
+    fn eval_regex_replace(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "regex-replace".to_string(),
+                reason: "Expected 3 arguments: pattern, string, replacement".to_string(),
+            });
+        }
+
+        let pattern_val = self.evaluate_expression(&args[0].value)?;
+        let pattern = pattern_val.as_string()?.to_string();
+        let text_val = self.evaluate_expression(&args[1].value)?;
+        let text = text_val.as_string()?.to_string();
+        let repl_val = self.evaluate_expression(&args[2].value)?;
+        let replacement = repl_val.as_string()?.to_string();
+
+        match regex::Regex::new(&pattern) {
+            Ok(re) => {
+                let result = re.replace_all(&text, replacement.as_str()).to_string();
+                Ok(Value::String(result))
+            }
+            Err(e) => Err(Error::TypeError {
+                expected: "valid regex pattern".to_string(),
+                got: format!("invalid regex: {}", e),
+            }),
+        }
+    }
+
+    /// (regex-split pattern string) - Split string by regex pattern
+    fn eval_regex_split(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "regex-split".to_string(),
+                reason: "Expected 2 arguments: pattern and string".to_string(),
+            });
+        }
+
+        let pattern_val = self.evaluate_expression(&args[0].value)?;
+        let pattern = pattern_val.as_string()?.to_string();
+        let text_val = self.evaluate_expression(&args[1].value)?;
+        let text = text_val.as_string()?.to_string();
+
+        match regex::Regex::new(&pattern) {
+            Ok(re) => {
+                let parts: Vec<Value> = re
+                    .split(&text)
+                    .map(|s| Value::String(s.to_string()))
+                    .collect();
+                Ok(Value::Array(Arc::new(parts)))
+            }
+            Err(e) => Err(Error::TypeError {
+                expected: "valid regex pattern".to_string(),
+                got: format!("invalid regex: {}", e),
+            }),
+        }
+    }
+
+    /// (regex-find-all pattern string) - Find all matches
+    fn eval_regex_find_all(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "regex-find-all".to_string(),
+                reason: "Expected 2 arguments: pattern and string".to_string(),
+            });
+        }
+        let pattern_val = self.evaluate_expression(&args[0].value)?;
+        let pattern = pattern_val.as_string()?.to_string();
+        let text_val = self.evaluate_expression(&args[1].value)?;
+        let text = text_val.as_string()?.to_string();
+
+        match regex::Regex::new(&pattern) {
+            Ok(re) => {
+                let matches: Vec<Value> = re
+                    .find_iter(&text)
+                    .map(|m| Value::String(m.as_str().to_string()))
+                    .collect();
+                Ok(Value::Array(Arc::new(matches)))
+            }
+            Err(e) => Err(Error::TypeError {
+                expected: "valid regex pattern".to_string(),
+                got: format!("invalid regex: {}", e),
+            }),
+        }
+    }
+
+    // =========================================================================
+    // HIGH PRIORITY ALIASES - Python/JavaScript Compatibility
+    // =========================================================================
+
+    /// (toLowerCase string) - Convert string to lowercase (JavaScript style)
+    fn eval_to_lower_case(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "toLowerCase".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::String(s.to_lowercase()))
+    }
+
+    /// (toUpperCase string) - Convert string to uppercase (JavaScript style)
+    fn eval_to_upper_case(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "toUpperCase".to_string(),
+                reason: "Expected 1 argument: string".to_string(),
+            });
+        }
+
+        let value = self.evaluate_expression(&args[0].value)?;
+        let s = value.as_string()?;
+        Ok(Value::String(s.to_uppercase()))
+    }
+
+    /// (charAt string index) - Get character at index (JavaScript style)
+    fn eval_char_at(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "charAt".to_string(),
+                reason: "Expected 2 arguments: string and index".to_string(),
+            });
+        }
+
+        let string_val = self.evaluate_expression(&args[0].value)?;
+        let s = string_val.as_string()?;
+
+        let index_val = self.evaluate_expression(&args[1].value)?;
+        let index = index_val.as_int()? as usize;
+
+        // Get character at index (handle multi-byte UTF-8)
+        let ch = s.chars().nth(index);
+
+        if let Some(ch) = ch {
+            Ok(Value::String(ch.to_string()))
+        } else {
+            // JavaScript returns empty string for out-of-bounds
+            Ok(Value::String(String::new()))
+        }
+    }
+
+    /// (chr code) - Convert character code to character (Python style)
+    fn eval_chr(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "chr".to_string(),
+                reason: "Expected 1 argument: character code (integer)".to_string(),
+            });
+        }
+
+        let code_val = self.evaluate_expression(&args[0].value)?;
+        let code = code_val.as_int()?;
+
+        // Validate Unicode range
+        let ch = char::from_u32(code as u32).ok_or_else(|| Error::TypeError {
+            expected: "valid Unicode code point (0-0x10FFFF)".to_string(),
+            got: format!("{}", code),
+        })?;
+
+        Ok(Value::String(ch.to_string()))
+    }
+
+    /// (ord character) - Convert character to code (Python style)
+    fn eval_ord(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "ord".to_string(),
+                reason: "Expected 1 argument: character (string of length 1)".to_string(),
+            });
+        }
+
+        let char_val = self.evaluate_expression(&args[0].value)?;
+        let s = char_val.as_string()?;
+
+        if s.chars().count() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "ord".to_string(),
+                reason: format!(
+                    "Expected single character, got string of length {}",
+                    s.chars().count()
+                ),
+            });
+        }
+
+        let ch = s.chars().next().unwrap();
+        Ok(Value::Int(ch as i64))
+    }
+
+    /// (substring string start [end]) - Extract substring (JavaScript style)
+    fn eval_substring(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 {
+            return Err(Error::InvalidArguments {
+                tool: "substring".to_string(),
+                reason: "Expected 2-3 arguments: string, start, [end]".to_string(),
+            });
+        }
+
+        let string_val = self.evaluate_expression(&args[0].value)?;
+        let s = string_val.as_string()?;
+
+        let start_val = self.evaluate_expression(&args[1].value)?;
+        let start = start_val.as_int()? as usize;
+
+        let chars: Vec<char> = s.chars().collect();
+        let len = chars.len();
+
+        // Clamp start to string length
+        let start = start.min(len);
+
+        let end = if args.len() >= 3 {
+            let end_val = self.evaluate_expression(&args[2].value)?;
+            (end_val.as_int()? as usize).min(len)
+        } else {
+            len
+        };
+
+        // JavaScript substring swaps start/end if start > end
+        let (start, end) = if start > end {
+            (end, start)
+        } else {
+            (start, end)
+        };
+
+        let result: String = chars[start..end].iter().collect();
+        Ok(Value::String(result))
+    }
+
+    /// (lastIndexOf collection item) - Find last occurrence of item (JavaScript style)
+    fn eval_last_index_of(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "lastIndexOf".to_string(),
+                reason: "Expected 2 arguments: collection and item".to_string(),
+            });
+        }
+
+        let collection_val = self.evaluate_expression(&args[0].value)?;
+        let item_val = self.evaluate_expression(&args[1].value)?;
+
+        match collection_val {
+            Value::Array(ref arr) => {
+                // Search from end to beginning
+                for (i, val) in arr.iter().enumerate().rev() {
+                    if self.values_equal(val, &item_val) {
+                        return Ok(Value::Int(i as i64));
+                    }
+                }
+                Ok(Value::Int(-1)) // Not found
+            }
+            Value::String(ref s) => {
+                let search = item_val.as_string()?;
+                if let Some(pos) = s.rfind(search) {
+                    Ok(Value::Int(pos as i64))
+                } else {
+                    Ok(Value::Int(-1))
+                }
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: collection_val.type_name(),
+            }),
         }
     }
 }

@@ -295,7 +295,10 @@ impl Error {
     /// Get enhanced error message with available fields (for UndefinedVariable errors)
     pub fn enhanced_message(&self) -> String {
         match self {
-            Error::UndefinedVariable { name, available_fields } => {
+            Error::UndefinedVariable {
+                name,
+                available_fields,
+            } => {
                 let base = format!("Undefined variable: {}", name);
                 if let Some(fields) = available_fields {
                     if !fields.is_empty() {
