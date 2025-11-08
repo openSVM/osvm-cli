@@ -2656,12 +2656,24 @@ impl McpService {
 
         let start_time = std::time::Instant::now();
 
-        // Create the process
-        let mut child = Command::new(program)
+        // Create the process with working directory set to server's local_path
+        // This allows dotenv.config() to find .env files in the server directory
+        let mut command = Command::new(program);
+        command
             .args(&args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        // Set working directory if local_path is available
+        if let Some(ref local_path) = config.local_path {
+            command.current_dir(local_path);
+            if get_verbosity() >= VerbosityLevel::Verbose {
+                println!("   Working Directory: {}", local_path);
+            }
+        }
+
+        let mut child = command
             .spawn()
             .with_context(|| {
                 format!(
