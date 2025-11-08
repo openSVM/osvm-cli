@@ -25,6 +25,23 @@ use std::sync::Arc;
 // Real Solana RPC endpoint
 const SOLANA_RPC_URL: &str = "https://opensvm.com/api/proxy/rpc";
 
+/// Error context extracted from error messages
+#[derive(Debug)]
+struct ErrorContext {
+    failing_expression: String,
+    error_type: String,
+}
+
+/// Detailed error information parsed from error message
+#[derive(Debug, Default)]
+struct ErrorDetails {
+    error_type: String,
+    variable_name: Option<String>,
+    expected_type: Option<String>,
+    actual_type: Option<String>,
+    available_fields: Option<Vec<String>>,
+}
+
 /// Generic RPC Bridge Tool - Dynamically calls ANY Solana RPC method
 /// The tool name becomes the RPC method name automatically
 struct RpcBridgeTool {
@@ -172,6 +189,190 @@ fn json_to_ovsm_value(val: &Value) -> OvsmValue {
             OvsmValue::Object(Arc::new(map))
         }
     }
+}
+
+/// Parse error message into detailed components for better debugging
+fn parse_error_details(error_msg: &str) -> ErrorDetails {
+    let mut details = ErrorDetails {
+        error_type: "Unknown".to_string(),
+        ..Default::default()
+    };
+
+    // Pattern 1: "Type error: expected X, got Y"
+    if error_msg.contains("Type error:") {
+        details.error_type = "Type Mismatch".to_string();
+
+        if let Some(start) = error_msg.find("expected ") {
+            let rest = &error_msg[start + 9..];
+            if let Some(end) = rest.find(',') {
+                details.expected_type = Some(rest[..end].to_string());
+            }
+        }
+
+        if let Some(start) = error_msg.find(" got ") {
+            let rest = &error_msg[start + 5..];
+            let actual = rest.split_whitespace().next().unwrap_or("unknown");
+            details.actual_type = Some(actual.to_string());
+        }
+    }
+
+    // Pattern 2: "Undefined variable: name. Parent object has fields: [...]"
+    else if error_msg.contains("Undefined variable:") {
+        details.error_type = "Undefined Variable".to_string();
+
+        if let Some(start) = error_msg.find("Undefined variable: ") {
+            let rest = &error_msg[start + 20..];
+            if let Some(end) = rest.find('.') {
+                details.variable_name = Some(rest[..end].trim().to_string());
+            } else {
+                details.variable_name = Some(rest.split_whitespace().next().unwrap_or("unknown").to_string());
+            }
+        }
+
+        // Extract available fields
+        if let Some(start) = error_msg.find("Parent object has fields: [") {
+            let rest = &error_msg[start + 27..];
+            if let Some(end) = rest.find(']') {
+                let fields_str = &rest[..end];
+                let fields: Vec<String> = fields_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                details.available_fields = Some(fields);
+            }
+        }
+    }
+
+    // Pattern 3: "Undefined tool: toolname"
+    else if error_msg.contains("Undefined tool:") {
+        details.error_type = "Undefined Tool".to_string();
+
+        if let Some(start) = error_msg.find("Undefined tool: ") {
+            let rest = &error_msg[start + 16..];
+            details.variable_name = Some(rest.split_whitespace().next().unwrap_or("unknown").to_string());
+        }
+    }
+
+    // Pattern 4: "Invalid operation: X on types Y and Z"
+    else if error_msg.contains("Invalid operation:") {
+        details.error_type = "Invalid Operation".to_string();
+
+        if let Some(start) = error_msg.find("Invalid operation: ") {
+            let rest = &error_msg[start + 19..];
+            if let Some(end) = rest.find(" on types") {
+                details.variable_name = Some(rest[..end].to_string());
+            }
+        }
+    }
+
+    // Pattern 5: "Execution error: ..."
+    else if error_msg.starts_with("Execution error:") {
+        details.error_type = "Runtime Error".to_string();
+    }
+
+    details
+}
+
+/// Extract error context from error message to highlight failing code
+fn extract_error_context(error_msg: &str, code: &str) -> Option<ErrorContext> {
+    // Try to extract specific expressions from common error patterns
+
+    // Pattern 1: "Invalid operation: multiply on types int and null"
+    if error_msg.contains("Invalid operation:") {
+        if let Some(op_start) = error_msg.find("Invalid operation: ") {
+            let after_op = &error_msg[op_start + 19..];
+            if let Some(op_end) = after_op.find(" on types") {
+                let operation = &after_op[..op_end];
+                // Try to find expressions with this operation in code
+                let op_symbol = match operation {
+                    "multiply" => "*",
+                    "add" => "+",
+                    "subtract" => "-",
+                    "divide" => "/",
+                    _ => operation,
+                };
+
+                // Find first occurrence of this operation in code
+                for line in code.lines() {
+                    if line.contains(&format!("({}  ", op_symbol)) || line.contains(&format!("({} ", op_symbol)) {
+                        // Extract the s-expression
+                        if let Some(expr) = extract_sexpr_at(line, op_symbol) {
+                            return Some(ErrorContext {
+                                failing_expression: expr,
+                                error_type: error_msg.to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pattern 2: "Type error: expected object, got array"
+    if error_msg.contains("Type error: expected object, got array") {
+        // Look for (get var "field") or (. var field) patterns
+        for line in code.lines() {
+            if line.contains("(get ") && !line.contains("get_") {
+                if let Some(start) = line.find("(get ") {
+                    if let Some(expr) = extract_sexpr_at(&line[start..], "get") {
+                        return Some(ErrorContext {
+                            failing_expression: format!("({})", expr),
+                            error_type: "accessing array as object".to_string(),
+                        });
+                    }
+                }
+            }
+            if line.contains("(. ") {
+                if let Some(start) = line.find("(. ") {
+                    if let Some(expr) = extract_sexpr_at(&line[start..], ".") {
+                        return Some(ErrorContext {
+                            failing_expression: format!("({})", expr),
+                            error_type: "accessing array as object".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Pattern 3: "Undefined variable: name"
+    if error_msg.contains("Undefined variable:") {
+        if let Some(start) = error_msg.find("Undefined variable: ") {
+            let rest = &error_msg[start + 20..];
+            let var_name = rest.split_whitespace().next().unwrap_or("").trim_matches(|c| c == '.' || c == ',' || c == '\'' || c == '"');
+            if !var_name.is_empty() {
+                return Some(ErrorContext {
+                    failing_expression: var_name.to_string(),
+                    error_type: "undefined variable".to_string(),
+                });
+            }
+        }
+    }
+
+    None
+}
+
+/// Extract S-expression starting at a given operation
+fn extract_sexpr_at(text: &str, op: &str) -> Option<String> {
+    if let Some(start) = text.find(&format!("({}", op)) {
+        let mut depth = 0;
+        let mut chars = text[start..].chars();
+        let mut expr = String::new();
+
+        for ch in chars {
+            expr.push(ch);
+            if ch == '(' {
+                depth += 1;
+            } else if ch == ')' {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(expr);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Fix AI-generated OVSM syntax to match actual OVSM language spec
@@ -693,6 +894,9 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
         std::io::stdout().flush()?;
     }
 
+    // Track initial user query in conversation history
+    ai_service.add_to_history("user", query);
+
     let tool_plan = match ai_service
         .create_validated_tool_plan(query, &available_tools, 3)
         .await
@@ -1045,7 +1249,90 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                                 // Other error type - use default string representation
                                 e.to_string()
                             };
+
+                        // Print detailed error with code context and line numbers
                         println!("❌ Syntax/execution error: {}\n", error_msg);
+
+                        // Extract enhanced error details
+                        let error_details = parse_error_details(&error_msg);
+
+                        // Show error summary box
+                        println!("┌─ ERROR DETAILS {}", "─".repeat(43));
+                        println!("│ Error Type: {}", error_details.error_type);
+                        if let Some(ref var) = error_details.variable_name {
+                            println!("│ Variable: {}", var);
+                        }
+                        if let Some(ref expected) = error_details.expected_type {
+                            println!("│ Expected Type: {}", expected);
+                        }
+                        if let Some(ref actual) = error_details.actual_type {
+                            println!("│ Actual Type: {} ❌", actual);
+                        }
+                        if let Some(ref available) = error_details.available_fields {
+                            println!("│ Available Fields: [{}]", available.join(", "));
+                        }
+                        println!("└{}", "─".repeat(60));
+                        println!();
+
+                        // Try to extract specific error location if available
+                        let error_context = extract_error_context(&error_msg, &current_code);
+
+                        println!("📝 Code with execution trace:");
+                        println!("{}", "─".repeat(60));
+
+                        let mut found_error_line = false;
+                        let lines: Vec<&str> = current_code.lines().collect();
+
+                        // Show code with line numbers and execution indicators
+                        for (line_num, line) in lines.iter().enumerate() {
+                            let line_number = line_num + 1;
+                            let is_define = line.trim_start().starts_with("(define ");
+
+                            // Highlight the error line if we found it
+                            if let Some(ref ctx) = error_context {
+                                if line.contains(&ctx.failing_expression) && !found_error_line {
+                                    println!("  ❌ {:3} │ {} ⚠️ EXECUTION STOPPED HERE", line_number, line);
+                                    println!("       │ {}", "^".repeat(line.len().min(55)));
+
+                                    // Show what went wrong
+                                    if error_details.expected_type.is_some() && error_details.actual_type.is_some() {
+                                        println!("       │ ⚠️  Tried to use {} as {}, but it's actually {}",
+                                            ctx.failing_expression,
+                                            error_details.expected_type.as_ref().unwrap(),
+                                            error_details.actual_type.as_ref().unwrap());
+                                    } else {
+                                        println!("       │ ⚠️  Expression '{}' failed", ctx.failing_expression);
+                                    }
+
+                                    found_error_line = true;
+
+                                    // Show the next few lines in context
+                                    if line_num + 1 < lines.len() {
+                                        println!("     {:3} │ {}", line_number + 1, lines[line_num + 1]);
+                                    }
+                                    if line_num + 2 < lines.len() {
+                                        println!("     {:3} │ {}", line_number + 2, lines[line_num + 2]);
+                                    }
+                                    continue;
+                                }
+                            }
+
+                            // Mark executed lines differently from not-yet-executed
+                            if !found_error_line {
+                                if is_define {
+                                    println!("  ✓  {:3} │ {} ✓ executed", line_number, line);
+                                } else {
+                                    println!("     {:3} │ {}", line_number, line);
+                                }
+                            } else {
+                                // Lines after error - never executed
+                                if line_num < lines.len() - 2 || line_number == lines.len() {
+                                    println!("  ⊗  {:3} │ {} ⊗ not executed", line_number, line);
+                                }
+                            }
+                        }
+                        println!("{}", "─".repeat(60));
+                        println!();
 
                         if attempt >= MAX_RETRY_ATTEMPTS {
                             println!("⛔ Max attempts reached. Giving up.\n");
@@ -1060,6 +1347,12 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                         }
 
                         println!("🔧 Attempting syntax fix (Level 1)...");
+
+                        // Track error in conversation history
+                        ai_service.add_to_history(
+                            "user",
+                            &format!("Error occurred: {} in code:\n{}", error_msg, current_code),
+                        );
 
                         let syntax_prompt = ai_service.create_error_refinement_prompt(
                             query,
@@ -1081,6 +1374,12 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                                             println!("Refined code:");
                                             println!("{}\n", refined_code);
                                         }
+
+                                        // Track successful fix in conversation history
+                                        ai_service.add_to_history(
+                                            "assistant",
+                                            &format!("Fixed code:\n{}", refined_code),
+                                        );
 
                                         current_code = refined_code;
                                         attempt += 1;
@@ -1269,7 +1568,12 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
         println!("{}", "━".repeat(60));
         println!();
     }
-    println!("{}", final_response);
+
+    // Render markdown for better terminal display
+    use crate::utils::markdown_renderer::MarkdownRenderer;
+    let renderer = MarkdownRenderer::new();
+    renderer.render(&final_response);
+
     println!();
 
     // Display execution statistics with timestamp

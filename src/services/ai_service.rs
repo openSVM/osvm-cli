@@ -57,6 +57,13 @@ struct OpenAiChoice {
     message: OpenAiMessage,
 }
 
+/// Conversation message for history tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConversationMessage {
+    pub role: String, // "user", "assistant", "system"
+    pub content: String,
+}
+
 pub struct AiService {
     client: reqwest::Client,
     api_url: String,
@@ -64,6 +71,7 @@ pub struct AiService {
     use_openai: bool,
     circuit_breaker: GranularCircuitBreaker,
     template_manager: PromptTemplateManager,
+    conversation_history: std::sync::Arc<std::sync::Mutex<Vec<ConversationMessage>>>,
 }
 
 impl AiService {
@@ -230,6 +238,58 @@ impl AiService {
             use_openai,
             circuit_breaker,
             template_manager,
+            conversation_history: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        }
+    }
+
+    /// Add a message to the conversation history
+    pub fn add_to_history(&self, role: &str, content: &str) {
+        if let Ok(mut history) = self.conversation_history.lock() {
+            history.push(ConversationMessage {
+                role: role.to_string(),
+                content: content.to_string(),
+            });
+
+            // Keep only last 10 messages to prevent unbounded growth
+            let len = history.len();
+            if len > 10 {
+                history.drain(0..len - 10);
+            }
+        }
+    }
+
+    /// Get formatted conversation history for inclusion in prompts
+    pub fn get_history_context(&self) -> String {
+        if let Ok(history) = self.conversation_history.lock() {
+            if history.is_empty() {
+                return String::new();
+            }
+
+            let mut context = String::from("\n═══ CONVERSATION HISTORY ═══\n");
+            for (i, msg) in history.iter().enumerate() {
+                context.push_str(&format!(
+                    "\n[{}] {}: {}\n",
+                    i + 1,
+                    match msg.role.as_str() {
+                        "user" => "USER",
+                        "assistant" => "ASSISTANT",
+                        "system" => "SYSTEM",
+                        _ => "UNKNOWN",
+                    },
+                    msg.content
+                ));
+            }
+            context.push_str("\n═══ END HISTORY ═══\n\n");
+            context
+        } else {
+            String::new()
+        }
+    }
+
+    /// Clear conversation history
+    pub fn clear_history(&self) {
+        if let Ok(mut history) = self.conversation_history.lock() {
+            history.clear();
         }
     }
 
@@ -1829,8 +1889,81 @@ Focus on what matters to the user.
             error_message.to_string()
         };
 
+        // Analyze error patterns from history
+        let mut error_patterns = Vec::new();
+        if error_message.contains("Type error: expected object, got array") {
+            error_patterns.push("You're treating an ARRAY as an OBJECT. Stop using (get obj field) - the value IS an array!");
+        }
+        if error_message.contains("Type error: expected array") {
+            error_patterns.push("You're treating a value as ARRAY when it's NOT. Check the actual type!");
+        }
+        if error_message.contains("Undefined variable") || error_message.contains("Undefined tool") {
+            error_patterns.push("You're using names that DON'T EXIST. Check available tools and actual response schemas!");
+        }
+
+        let pattern_guidance = if !error_patterns.is_empty() {
+            format!(
+                "\n**🚨 ERROR PATTERN DETECTED:**\n{}\n",
+                error_patterns
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("{}. {}", i + 1, p))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        } else {
+            String::new()
+        };
+
+        // Build history analysis section
+        let history_analysis = if attempt_number > 1 {
+            format!(
+                r#"
+**⚠️ CRITICAL: LEARN FROM HISTORY**
+This is attempt #{}. You have already tried {} time(s) and FAILED.{}
+Review the CONVERSATION HISTORY above carefully:
+- What approaches have you ALREADY TRIED?
+- What specific errors occurred in EACH attempt?
+- What patterns are you REPEATING that don't work?
+
+**YOU MUST:**
+1. ❌ DO NOT repeat the EXACT SAME approach from previous attempts
+2. ❌ DO NOT try field names that already failed (check history!)
+3. ❌ DO NOT use the same data access patterns that caused errors
+4. ✅ TRY A FUNDAMENTALLY DIFFERENT APPROACH
+5. ✅ If you see "expected object, got array" - the data IS an array, access it with (first arr) or (get arr 0)
+6. ✅ If you see "undefined variable" - that field DOES NOT EXIST, try a different tool or approach
+7. ✅ Examine the actual error carefully - it tells you what the REAL data type is
+8. ✅ Look at the EXACT line number in the code where the error occurred
+
+**SPECIFIC FIXES FOR THIS ERROR TYPE:**{}
+
+**HISTORY REVIEW CHECKLIST:**
+□ Have I checked what specific field names failed in previous attempts?
+□ Have I identified the actual data type from the error message?
+□ Am I using a DIFFERENT strategy than attempts 1-{}?
+□ Am I making assumptions about data structure that were proven wrong?
+□ Did I look at the LINE NUMBER where the error occurred?
+
+"#,
+                attempt_number,
+                attempt_number - 1,
+                pattern_guidance,
+                if error_message.contains("Type error: expected object, got array") {
+                    "\n- The value is an ARRAY, not an object\n- Use array operations: (first arr), (get arr 0), (map arr fn)\n- Do NOT use (get obj \"field\") on arrays"
+                } else if error_message.contains("Undefined") {
+                    "\n- The name does NOT exist in current scope\n- Check spelling and available tools\n- Verify the field exists in actual API response"
+                } else {
+                    ""
+                },
+                attempt_number - 1
+            )
+        } else {
+            String::new()
+        };
+
         format!(
-            r#"The previous OVSM plan had an error. Please analyze and fix it.
+            r#"The previous OVSM plan had an error. Please analyze and fix it.{}{}
 
 **Original Query:** {}
 
@@ -1869,6 +2002,8 @@ If you're getting "Undefined variable" errors repeatedly:
 - Conditional logic to handle missing or null API data
 
 Respond ONLY with the corrected OVSM plan structure (Expected Plan, Available Tools, Main Branch, Action)."#,
+            self.get_history_context(),
+            history_analysis,
             original_query,
             attempt_number,
             broken_code,
