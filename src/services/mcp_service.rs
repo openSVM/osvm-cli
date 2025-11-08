@@ -405,45 +405,74 @@ impl McpService {
     }
 
     /// Initialize default MCP servers on first run
-    /// This ensures osvm-mcp is available even on fresh installations
+    /// This ensures osvm-mcp and dune-analytics are available
     fn initialize_default_servers(&mut self) {
-        // Only add defaults if no servers are configured yet
-        if !self.servers.is_empty() {
-            return;
-        }
-
         if self.debug_mode {
-            debug_print!("No MCP servers configured, initializing defaults...");
+            debug_print!("Initializing default MCP servers...");
         }
 
-        // Add osvm-mcp as default MCP server
-        let osvm_mcp_path = if let Some(osvm_dir) = dirs::home_dir() {
-            osvm_dir.join(".osvm/mcp/osvm-mcp/build/index.js")
-        } else {
-            PathBuf::from("~/.osvm/mcp/osvm-mcp/build/index.js")
-        };
-
-        // Only add osvm-mcp if it exists
-        if osvm_mcp_path.exists() {
-            let local_path = dirs::home_dir()
-                .map(|h| h.join(".osvm/mcp/osvm-mcp").to_string_lossy().to_string())
-                .unwrap_or_else(|| "~/.osvm/mcp/osvm-mcp".to_string());
-
-            let osvm_mcp_config = McpServerConfig {
-                name: "OpenSVM MCP".to_string(),
-                url: osvm_mcp_path.to_string_lossy().to_string(),
-                transport_type: McpTransportType::Stdio,
-                auth: None,
-                enabled: true,
-                extra_config: HashMap::new(),
-                github_url: Some("https://github.com/openSVM/osvm-mcp".to_string()),
-                local_path: Some(local_path),
+        // Add osvm-mcp as default MCP server if not already configured
+        if !self.servers.contains_key("osvm-mcp") {
+            let osvm_mcp_path = if let Some(osvm_dir) = dirs::home_dir() {
+                osvm_dir.join(".osvm/mcp/osvm-mcp/build/index.js")
+            } else {
+                PathBuf::from("~/.osvm/mcp/osvm-mcp/build/index.js")
             };
 
-            self.servers.insert("osvm-mcp".to_string(), osvm_mcp_config);
+            // Only add osvm-mcp if it exists
+            if osvm_mcp_path.exists() {
+                let local_path = dirs::home_dir()
+                    .map(|h| h.join(".osvm/mcp/osvm-mcp").to_string_lossy().to_string())
+                    .unwrap_or_else(|| "~/.osvm/mcp/osvm-mcp".to_string());
 
-            if self.debug_mode {
-                debug_success!("Added osvm-mcp as default MCP server");
+                let osvm_mcp_config = McpServerConfig {
+                    name: "OpenSVM MCP".to_string(),
+                    url: osvm_mcp_path.to_string_lossy().to_string(),
+                    transport_type: McpTransportType::Stdio,
+                    auth: None,
+                    enabled: true,
+                    extra_config: HashMap::new(),
+                    github_url: Some("https://github.com/openSVM/osvm-mcp".to_string()),
+                    local_path: Some(local_path),
+                };
+
+                self.servers.insert("osvm-mcp".to_string(), osvm_mcp_config);
+
+                if self.debug_mode {
+                    debug_success!("Added osvm-mcp as default MCP server");
+                }
+            }
+        }
+
+        // Add Dune Analytics MCP server if not already configured
+        if !self.servers.contains_key("dune-analytics") {
+            let dune_mcp_path = if let Some(osvm_dir) = dirs::home_dir() {
+                osvm_dir.join(".osvm/mcp-servers/dune-analytics/dune-mcp-server.js")
+            } else {
+                PathBuf::from("~/.osvm/mcp-servers/dune-analytics/dune-mcp-server.js")
+            };
+
+            if dune_mcp_path.exists() {
+                let local_path = dirs::home_dir()
+                    .map(|h| h.join(".osvm/mcp-servers/dune-analytics").to_string_lossy().to_string())
+                    .unwrap_or_else(|| "~/.osvm/mcp-servers/dune-analytics".to_string());
+
+                let dune_mcp_config = McpServerConfig {
+                    name: "Dune Analytics".to_string(),
+                    url: dune_mcp_path.to_string_lossy().to_string(),
+                    transport_type: McpTransportType::Stdio,
+                    auth: None,
+                    enabled: true,
+                    extra_config: HashMap::new(),
+                    github_url: Some("https://dune.com".to_string()),
+                    local_path: Some(local_path),
+                };
+
+                self.servers.insert("dune-analytics".to_string(), dune_mcp_config);
+
+                if self.debug_mode {
+                    debug_success!("Added dune-analytics as default MCP server");
+                }
             }
         }
 
