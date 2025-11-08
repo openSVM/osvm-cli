@@ -81,12 +81,17 @@ OVSM LISP is the ONLY acceptable format. That's it. Only LISP.
 
 ## Built-in Language Functions (NO NETWORK CALLS)
 These are **part of the OVSM language** and execute locally:
-- **Data**: `count`, `length`, `append`, `slice`, `first`, `rest`, `nth`
-  - **Aliases**: `head` (=first), `tail` (=rest) - Haskell-style
-- **Object Introspection**: `keys`, `get`, `merge` ← **USE THESE FOR MCP RESPONSES!**
+- **Data**: `count`, `length`, `len`, `append`, `slice`, `first`, `rest`, `nth`, `indexOf`, `lastIndexOf`
+  - **Aliases**: `head` (=first), `tail` (=rest), `cdr` (=rest) - Haskell/LISP-style
+  - **Aliases**: `len` (=length) - Python-style
+  - **JavaScript**: `includes` (=contains), `indexOf`, `lastIndexOf`
+- **Object Introspection**: `keys`, `object-values`, `object-entries`, `entries`, `items`, `get`, `merge` ← **USE THESE FOR MCP RESPONSES!**
+  - **Python-style**: `items` (=entries) - Python dict.items()
+  - **JavaScript-style**: `object-entries` - JavaScript Object.entries()
 - **JSON**: `parse-json`, `json-stringify` (BUILT-IN, NOT MCP TOOLS!)
-- **Aggregation**: `group-by`, `aggregate`, `filter`, `map`, `reduce`
-- **Collection operations**: `distinct`, `unique`, `take`, `drop`, `zip`, `partition`, `flatten`
+- **Aggregation**: `group-by`, `aggregate`, `filter`, `map`, `reduce`, `fold`, `foldl`, `foldr`
+  - **Haskell-style**: `foldl` (=reduce), `foldr` (=reduce) - Haskell fold left/right
+- **Collection operations**: `distinct`, `unique`, `take`, `drop`, `zip`, `partition`, `flatten`, `find-index`, `remove`, `insert-at`
   - **Aliases**: `unique` (=distinct) - SQL-style
 - **Predicates**: `some`, `every`, `any`, `all`
   - **Aliases**: `any` (=some), `all` (=every) - JavaScript-style
@@ -95,13 +100,28 @@ These are **part of the OVSM language** and execute locally:
 - **Logic**: `and`, `or`, `not`, `if`, `when`, `while`, `for`
 - **Null checking**: `null?` ← **USE THIS WITH `get`!**
 - **Object**: `.` (property access - ONLY if you're sure field exists), `[]` (array index)
-- **Type Conversions**: `int`, `integer`, `float`, `bool` - Convert between types
-  - `(int "42")` → `42` - String to integer (Python/JS style)
-  - `(float "3.14")` → `3.14` - String to float
+- **Type Conversions**: `int`, `integer`, `parse-int`, `parseint`, `float`, `parse-float`, `parsefloat`, `bool` - Convert between types
+  - `(int "42")` → `42` - String to integer (Python: int(), JavaScript: parseInt())
+  - `(parseint "42")` → `42` - JavaScript parseInt() alias
+  - `(float "3.14")` → `3.14` - String to float (Python: float(), JavaScript: parseFloat())
+  - `(parsefloat "3.14")` → `3.14` - JavaScript parseFloat() alias
   - `(bool "true")` → `true` - String to boolean (accepts: true/false, yes/no, 1/0, t/f, y/n)
   - `(int 3.14)` → `3` - Float to int (truncates)
   - `(float 42)` → `42.0` - Int to float
   - `(bool 0)` → `false`, `(bool 1)` → `true` - Number to boolean (0 is false, non-zero is true)
+- **Number Predicates**: `even?`, `evenp`, `odd?`, `oddp`, `positive?`, `negative?`, `zero?`, `zerop` - Test number properties
+  - `(even? 4)` → `true` - Check if even (LISP-style with Common LISP `evenp` alias)
+  - `(odd? 3)` → `true` - Check if odd (LISP-style with Common LISP `oddp` alias)
+  - `(positive? 5)` → `true` - Check if positive
+  - `(negative? -5)` → `true` - Check if negative
+  - `(zero? 0)` → `true` - Check if zero (LISP-style with Common LISP `zerop` alias)
+- **Statistical Functions**: `mean`, `average`, `avg`, `median`, `mode`, `product`, `variance`, `stddev`, `std` - NumPy/Pandas-style statistics
+  - `(mean [1 2 3 4 5])` → `3.0` - Calculate average (NumPy-style, with `average` and `avg` aliases)
+  - `(median [1 2 3 4 5])` → `3.0` - Find median value
+  - `(mode [1 2 2 3])` → `2` - Find most common value
+  - `(product [2 3 4])` → `24` - Calculate product of all numbers
+  - `(variance [1 2 3 4 5])` → `2.0` - Calculate variance
+  - `(stddev [1 2 3 4 5])` → `1.414...` - Standard deviation (with `std` alias)
 
 ### ✅ STRING FUNCTIONS (AVAILABLE - Use These!)
 OVSM has comprehensive string manipulation:
@@ -117,16 +137,31 @@ OVSM has comprehensive string manipulation:
   - `(sprintf "{} has {} messages" "Alice" 5)` → `"Alice has 5 messages"`
 - **String testing**: `string-contains`, `includes`, `starts-with`, `ends-with`
   - `(string-contains "hello world" "world")` → `true`
+  - `(includes "hello" "ell")` → `true` - JavaScript includes() alias
   - `(starts-with "hello" "hel")` → `true`
   - `(ends-with "world" "ld")` → `true`
-- **Substring**: `substring`, `subseq` - Extract part of string
-  - `(substring "hello" 1 4)` → `"ell"`
-- **Case conversion**: `string-upcase`, `string-downcase`, `string-capitalize`
+- **Substring**: `substring`, `subseq` - Extract part of string (JavaScript-style)
+  - `(substring "hello world" 0 5)` → `"hello"` - JavaScript String.substring()
+  - `(substring "hello" 1 4)` → `"ell"` - Start/end indices (swaps if start > end)
+- **Case conversion**: `toLowerCase`, `toUpperCase`, `string-upcase`, `string-downcase`, `string-capitalize`
+  - `(toLowerCase "HELLO")` → `"hello"` - JavaScript String.toLowerCase()
+  - `(toUpperCase "hello")` → `"HELLO"` - JavaScript String.toUpperCase()
+  - `(string-upcase "hello")` → `"HELLO"` - LISP-style
+  - `(string-downcase "HELLO")` → `"hello"` - LISP-style
+- **Character conversion**: `chr`, `ord` - Python-style character/code conversion
+  - `(chr 65)` → `"A"` - Python chr() - code to character (Unicode support)
+  - `(ord "A")` → `65` - Python ord() - character to code
+  - `(chr 128512)` → `"😀"` - Full Unicode support
 - **Trimming**: `string-trim`, `string-left-trim`, `string-right-trim`
-- **Search**: `search`, `position` - Find substring/character position
+- **Search**: `search`, `position`, `indexOf`, `lastIndexOf` - Find substring/character position
+  - `(indexOf "hello" "l")` → `2` - JavaScript indexOf()
+  - `(lastIndexOf "hello" "l")` → `3` - JavaScript lastIndexOf()
 - **Replace**: `replace`, `replace-all` - Replace substring occurrences
-- **Length**: `string-length`, `length`, `count` - Get string length
-- **Character access**: `char-at`, `char-at-index` - Get character at index
+- **Length**: `string-length`, `length`, `len`, `count` - Get string length
+  - `(len "hello")` → `5` - Python len() alias
+  - `(length "hello")` → `5` - Standard LISP
+- **Character access**: `charAt`, `char-at`, `char-at-index` - Get character at index
+  - `(charAt "hello" 1)` → `"e"` - JavaScript String.charAt() (UTF-8 safe)
 - **Conversion**: `str`, `to-string` - Convert value to string
 - **Type checking**: `stringp`, `typeof`, `type-of` - Check value type
 
