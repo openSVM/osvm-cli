@@ -221,6 +221,10 @@ impl LispEvaluator {
                     "rem" => self.eval_rem(args),
                     "gcd" => self.eval_gcd(args),
                     "lcm" => self.eval_lcm(args),
+                    // Common Lisp list predicates
+                    "atom" => self.eval_atom(args),
+                    "consp" => self.eval_consp(args),
+                    "listp" => self.eval_listp(args),
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -2680,6 +2684,52 @@ impl LispEvaluator {
             return 0;
         }
         (a / Self::gcd_impl(a, b)) * b
+    }
+
+    // =========================================================================
+    // COMMON LISP LIST PREDICATES
+    // =========================================================================
+
+    /// (atom x) - True if x is not a list (Common Lisp)
+    fn eval_atom(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "atom".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(!matches!(val, Value::Array(_))))
+    }
+
+    /// (consp x) - True if x is a non-empty list (Common Lisp)
+    fn eval_consp(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "consp".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        match val {
+            Value::Array(ref arr) => Ok(Value::Bool(!arr.is_empty())),
+            _ => Ok(Value::Bool(false)),
+        }
+    }
+
+    /// (listp x) - True if x is a list or null (Common Lisp)
+    fn eval_listp(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "listp".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        Ok(Value::Bool(matches!(val, Value::Array(_) | Value::Null)))
     }
 
     // =========================================================================
