@@ -3616,7 +3616,39 @@ impl LispEvaluator {
             key_str
         };
 
-        Ok(obj.get(key).cloned().unwrap_or(Value::Null))
+        // Try direct access first
+        if let Some(value) = obj.get(key) {
+            return Ok(value.clone());
+        }
+
+        // If not found, recursively search nested objects (lazy field access)
+        if let Some(value) = self.recursive_field_search(obj, key) {
+            return Ok(value);
+        }
+
+        Ok(Value::Null)
+    }
+
+    /// Recursively search for a field in nested objects
+    /// Returns the first match found via depth-first search
+    fn recursive_field_search(&self, obj: &std::collections::HashMap<String, Value>, key: &str) -> Option<Value> {
+        // Depth-first search through nested objects
+        for (_field_name, field_value) in obj.iter() {
+            match field_value {
+                Value::Object(nested_obj) => {
+                    // Check if this nested object has the key
+                    if let Some(value) = nested_obj.get(key) {
+                        return Some(value.clone());
+                    }
+                    // Recursively search deeper
+                    if let Some(value) = self.recursive_field_search(nested_obj, key) {
+                        return Some(value);
+                    }
+                }
+                _ => continue,
+            }
+        }
+        None
     }
 
     // ========================================

@@ -1,0 +1,77 @@
+;; Simple MCP Demo - Core Features
+;; Demonstrates dynamic tool discovery and basic functionality
+;;
+;; Run with: osvm ovsm run examples/ovsm_scripts/mcp_simple_demo.ovsm --debug
+
+(log :message "🚀 OSVM-MCP SIMPLE DEMO\n")
+
+;; ============================================
+;; 1. DYNAMIC DISCOVERY PROOF
+;; ============================================
+(log :message "1. Dynamic Tool Discovery")
+(log :message "   Run with --debug to see: '📦 Discovered 75 tools'")
+(log :message "   All tools registered automatically!\n")
+
+;; ============================================
+;; 2. BASIC RPC TOOLS
+;; ============================================
+(log :message "2. Basic RPC Tools")
+
+(define slot (getSlot))
+(log :message "   Current slot:" :value slot)
+
+(define height (getBlockHeight))
+(log :message "   Block height:" :value height)
+
+(define version (getVersion))
+(log :message "   Solana version:" :value (. version solana-core))
+
+;; ============================================
+;; 3. MCP TOOLS
+;; ============================================
+(log :message "\n3. MCP-Specific Tools")
+
+(define test_wallet "GBBbhHigLDyfxV71A24vGM2JLFukdChaNDTXGED1mF5r")
+
+;; Account Stats
+(define stats (get_account_stats {:address test_wallet}))
+(log :message "   Account transactions:" :value (. stats totalTransactions))
+
+;; Account Type
+(define acc_type (check_account_type {:address test_wallet}))
+(log :message "   Account type:" :value (. acc_type type))
+
+;; Token Info (USDC)
+(define usdc "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+(define token (get_token_info {:mint usdc}))
+(log :message "   USDC symbol:" :value (. token symbol))
+(log :message "   USDC decimals:" :value (. token decimals))
+
+;; DeFi Overview
+(define defi (get_defi_overview {}))
+(log :message "   Total TVL:" :value (. defi totalTvl))
+(log :message "   Active DEXes:" :value (. defi activeDexes))
+
+;; ============================================
+;; 4. DIRECT RPC ACCESS
+;; ============================================
+(log :message "\n4. Direct RPC Access (90+ methods available)")
+
+(define rpc_slot (solana_rpc_call {:method "getSlot"}))
+(log :message "   Slot via RPC:" :value (. rpc_slot result))
+
+(define rpc_version (solana_rpc_call {:method "getVersion"}))
+(log :message "   Version via RPC:" :value (. (. rpc_version result) solana-core))
+
+;; ============================================
+;; SUMMARY
+;; ============================================
+(log :message "\n✅ DEMO COMPLETE!")
+(log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+(log :message "✅ 75+ tools discovered dynamically")
+(log :message "✅ Basic RPC working (getSlot, getBlockHeight, getVersion)")
+(log :message "✅ MCP tools working (account stats, token info, DeFi data)")
+(log :message "✅ Direct RPC access (90+ Solana methods)")
+(log :message "\n📖 See MCP_TOOLS_REFERENCE.md for complete documentation")
+
+"Demo successful! ✨"

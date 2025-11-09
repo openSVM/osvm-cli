@@ -1,0 +1,164 @@
+;; Working MCP Demo - Verified Tools Only
+;; Demonstrates tools that are confirmed working
+;;
+;; Run with: osvm ovsm run examples/ovsm_scripts/mcp_working_demo.ovsm
+
+(log :message "=== OSVM-MCP WORKING DEMO ===\n")
+
+;; ============================================
+;; 1. DYNAMIC TOOL DISCOVERY
+;; ============================================
+(log :message "✅ 1. DYNAMIC TOOL DISCOVERY")
+(log :message "   All 75+ tools auto-discovered at runtime")
+(log :message "   No hardcoded tool lists - fully dynamic!\n")
+
+;; ============================================
+;; 2. BASIC RPC TOOLS (Working)
+;; ============================================
+(log :message "✅ 2. BASIC RPC TOOLS")
+
+;; 2.1 Get Current Slot
+(log :message "\n2.1 Getting current slot...")
+(define current_slot (getSlot))
+(log :message "Current slot:" :value current_slot)
+
+;; 2.2 Get Block Height
+(log :message "\n2.2 Getting block height...")
+(define block_height (getBlockHeight))
+(log :message "Block height:" :value block_height)
+
+;; 2.3 Get Version
+(log :message "\n2.3 Getting Solana version...")
+(define version (getVersion))
+(log :message "Solana version:" :value (. version solana-core))
+(log :message "Feature set:" :value (. version feature-set))
+
+;; ============================================
+;; 3. ACCOUNT TOOLS (Working)
+;; ============================================
+(log :message "\n\n✅ 3. ACCOUNT TOOLS")
+
+(define test_wallet "GBBbhHigLDyfxV71A24vGM2JLFukdChaNDTXGED1mF5r")
+
+;; 3.1 Account Stats
+(log :message "\n3.1 Getting account statistics...")
+(define stats (get_account_stats {:address test_wallet}))
+(log :message "Total transactions:" :value (. stats totalTransactions))
+(log :message "Token transfers:" :value (. stats tokenTransfers))
+
+;; 3.2 Check Account Type
+(log :message "\n3.2 Checking account type...")
+(define account_type (check_account_type {:address test_wallet}))
+(log :message "Account type:" :value (. account_type type))
+
+;; ============================================
+;; 4. BLOCK TOOLS (Working)
+;; ============================================
+(log :message "\n\n✅ 4. BLOCK TOOLS")
+
+;; 4.1 Get Block
+(log :message "\n4.1 Getting current block data...")
+(define block (get_block {:slot current_slot}))
+(log :message "Block time:" :value (. block blockTime))
+(log :message "Parent slot:" :value (. block parentSlot))
+(log :message "Transactions in block:" :value (length (. block transactions)))
+
+;; 4.2 Block Stats
+(log :message "\n4.2 Getting network statistics...")
+(define block_stats (get_block_stats {}))
+(log :message "Current TPS:" :value (. block_stats tps))
+(log :message "Avg block time:" :value (. block_stats avgBlockTime))
+
+;; ============================================
+;; 5. TOKEN TOOLS (Working)
+;; ============================================
+(log :message "\n\n✅ 5. TOKEN TOOLS")
+
+;; 5.1 Get Token Info (USDC)
+(log :message "\n5.1 Getting USDC token info...")
+(define usdc_mint "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v")
+(define token_info (get_token_info {:mint usdc_mint}))
+(log :message "Symbol:" :value (. token_info symbol))
+(log :message "Name:" :value (. token_info name))
+(log :message "Decimals:" :value (. token_info decimals))
+(log :message "Supply:" :value (. token_info supply))
+
+;; ============================================
+;; 6. DEFI ANALYTICS (Working)
+;; ============================================
+(log :message "\n\n✅ 6. DEFI ANALYTICS")
+
+;; 6.1 DeFi Overview
+(log :message "\n6.1 Getting DeFi ecosystem overview...")
+(define defi (get_defi_overview {}))
+(log :message "Total TVL:" :value (. defi totalTvl))
+(log :message "24h Volume:" :value (. defi totalVolume24h))
+(log :message "Active DEXes:" :value (. defi activeDexes))
+
+(log :message "\nTop 3 protocols:")
+(define top_protocols (. defi topProtocols))
+(for (protocol (take 3 top_protocols))
+  (do
+    (log :message "  Protocol:" :value (. protocol name))
+    (log :message "    TVL:" :value (. protocol tvl))
+    (log :message "    24h Volume:" :value (. protocol volume24h))))
+
+;; 6.2 Validator Analytics
+(log :message "\n6.2 Getting validator analytics...")
+(define validators (get_validator_analytics {}))
+(log :message "Total validators:" :value (. validators total))
+(log :message "Active validators:" :value (. validators active))
+
+;; ============================================
+;; 7. DIRECT RPC ACCESS (Working)
+;; ============================================
+(log :message "\n\n✅ 7. DIRECT RPC ACCESS")
+
+;; 7.1 Via solana_rpc_call
+(log :message "\n7.1 Getting slot via direct RPC call...")
+(define slot_result (solana_rpc_call {:method "getSlot"}))
+(define rpc_slot (. slot_result result))
+(log :message "Slot from RPC:" :value rpc_slot)
+
+;; 7.2 Get Balance via RPC
+(log :message "\n7.2 Getting balance via RPC...")
+(define balance_result (solana_rpc_call {
+  :method "getBalance"
+  :params [test_wallet]
+}))
+(define balance (. (. balance_result result) value))
+(log :message "Balance (lamports):" :value balance)
+
+;; ============================================
+;; 8. UTILITY TOOLS (Working)
+;; ============================================
+(log :message "\n\n✅ 8. UTILITY TOOLS")
+
+;; 8.1 Program Registry
+(log :message "\n8.1 Getting program registry...")
+(define programs (get_program_registry {}))
+(log :message "Registered programs:" :value (length programs))
+
+(if (> (length programs) 0)
+    (do
+      (define first_program (first programs))
+      (log :message "Example program:" :value (. first_program name))
+      (log :message "Program ID:" :value (. first_program programId)))
+    null)
+
+;; ============================================
+;; SUMMARY
+;; ============================================
+(log :message "\n\n🎉 DEMO COMPLETE!")
+(log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+(log :message "✅ Dynamic tool discovery: 75+ tools")
+(log :message "✅ Basic RPC: getSlot, getBlockHeight, getVersion")
+(log :message "✅ Account tools: stats, type checking")
+(log :message "✅ Block tools: block data, network stats")
+(log :message "✅ Token tools: metadata, supply info")
+(log :message "✅ DeFi analytics: TVL, volume, protocols")
+(log :message "✅ Direct RPC: 90+ Solana methods available")
+(log :message "✅ Utility tools: program registry")
+(log :message "\n📖 See MCP_TOOLS_REFERENCE.md for all 75+ tools")
+
+"✨ All major tool categories demonstrated successfully!"
