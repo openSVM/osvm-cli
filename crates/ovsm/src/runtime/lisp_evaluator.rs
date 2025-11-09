@@ -3394,7 +3394,7 @@ impl LispEvaluator {
         };
 
         // Update variable
-        self.env.set(&var_name, new_value.clone());
+        self.env.set(&var_name, new_value.clone())?;
         Ok(new_value)
     }
 
@@ -3443,7 +3443,7 @@ impl LispEvaluator {
         };
 
         // Update variable
-        self.env.set(&var_name, new_value.clone());
+        self.env.set(&var_name, new_value.clone())?;
         Ok(new_value)
     }
 
