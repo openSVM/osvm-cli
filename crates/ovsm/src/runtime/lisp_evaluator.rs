@@ -214,6 +214,13 @@ impl LispEvaluator {
                     "exp" => self.eval_exp(args), // e^x
                     "ln" => self.eval_ln(args), // Natural logarithm
                     "abs" => self.eval_abs(args),
+                    // Common Lisp arithmetic shortcuts
+                    "1+" => self.eval_1_plus(args),
+                    "1-" => self.eval_1_minus(args),
+                    "mod" => self.eval_mod(args),
+                    "rem" => self.eval_rem(args),
+                    "gcd" => self.eval_gcd(args),
+                    "lcm" => self.eval_lcm(args),
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -2495,6 +2502,184 @@ impl LispEvaluator {
                 got: format!("{:?}", val),
             }),
         }
+    }
+
+    // =========================================================================
+    // COMMON LISP ARITHMETIC SHORTCUTS
+    // =========================================================================
+
+    /// (1+ x) - Increment by 1 (Common Lisp)
+    fn eval_1_plus(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "1+".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        match val {
+            Value::Int(i) => Ok(Value::Int(i + 1)),
+            Value::Float(f) => Ok(Value::Float(f + 1.0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: val.type_name(),
+            }),
+        }
+    }
+
+    /// (1- x) - Decrement by 1 (Common Lisp)
+    fn eval_1_minus(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "1-".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        match val {
+            Value::Int(i) => Ok(Value::Int(i - 1)),
+            Value::Float(f) => Ok(Value::Float(f - 1.0)),
+            _ => Err(Error::TypeError {
+                expected: "number".to_string(),
+                got: val.type_name(),
+            }),
+        }
+    }
+
+    /// (mod x y) - Modulo operation (Common Lisp)
+    fn eval_mod(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "mod".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let x = self.evaluate_expression(&args[0].value)?;
+        let y = self.evaluate_expression(&args[1].value)?;
+
+        match (&x, &y) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b == 0 {
+                    return Err(Error::InvalidArguments {
+                        tool: "mod".to_string(),
+                        reason: "Division by zero".to_string(),
+                    });
+                }
+                Ok(Value::Int(a.rem_euclid(*b)))
+            }
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a.rem_euclid(*b))),
+            (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64).rem_euclid(*b))),
+            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a.rem_euclid(*b as f64))),
+            _ => Err(Error::TypeError {
+                expected: "numbers".to_string(),
+                got: format!("{}, {}", x.type_name(), y.type_name()),
+            }),
+        }
+    }
+
+    /// (rem x y) - Remainder operation (Common Lisp)
+    fn eval_rem(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "rem".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let x = self.evaluate_expression(&args[0].value)?;
+        let y = self.evaluate_expression(&args[1].value)?;
+
+        match (&x, &y) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b == 0 {
+                    return Err(Error::InvalidArguments {
+                        tool: "rem".to_string(),
+                        reason: "Division by zero".to_string(),
+                    });
+                }
+                Ok(Value::Int(a % b))
+            }
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a % b)),
+            (Value::Int(a), Value::Float(b)) => Ok(Value::Float((*a as f64) % b)),
+            (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a % (*b as f64))),
+            _ => Err(Error::TypeError {
+                expected: "numbers".to_string(),
+                got: format!("{}, {}", x.type_name(), y.type_name()),
+            }),
+        }
+    }
+
+    /// (gcd a b ...) - Greatest common divisor (Common Lisp)
+    fn eval_gcd(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(0));
+        }
+
+        let mut result = 0i64;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(i) => i.abs(),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            };
+
+            result = Self::gcd_impl(result, num);
+        }
+
+        Ok(Value::Int(result))
+    }
+
+    fn gcd_impl(mut a: i64, mut b: i64) -> i64 {
+        while b != 0 {
+            let temp = b;
+            b = a % b;
+            a = temp;
+        }
+        a.abs()
+    }
+
+    /// (lcm a b ...) - Least common multiple (Common Lisp)
+    fn eval_lcm(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(1));
+        }
+
+        let mut result = 1i64;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(i) => i.abs(),
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            };
+
+            if num == 0 {
+                return Ok(Value::Int(0));
+            }
+
+            result = Self::lcm_impl(result, num);
+        }
+
+        Ok(Value::Int(result))
+    }
+
+    fn lcm_impl(a: i64, b: i64) -> i64 {
+        if a == 0 || b == 0 {
+            return 0;
+        }
+        (a / Self::gcd_impl(a, b)) * b
     }
 
     // =========================================================================
