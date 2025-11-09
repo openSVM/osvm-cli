@@ -185,6 +185,63 @@
   (log :message "  ✓ Arrays are skipped, only objects searched")
 
   ;; ========================================
+  ;; Example 8: V2 Features - get-path
+  ;; ========================================
+  (log :message "\n📝 Example 8: V2 Feature - get-path (NEW!)")
+
+  (define token-data {
+    :supply 1000000
+    :metadata {
+      :info {
+        :name "MyToken"
+        :symbol "MTK"
+      }
+    }
+  })
+
+  ;; get-path returns value AND the path where it was found
+  (define name-path (get-path token-data "name"))
+  (log :message "  Finding 'name' field with path:")
+  (log :value name-path)
+  (log :message "  ✓ Shows exactly where field was found!")
+
+  ;; ========================================
+  ;; Example 9: V2 Features - discover
+  ;; ========================================
+  (log :message "\n📝 Example 9: V2 Feature - discover (NEW!)")
+
+  ;; discover lists all available fields
+  (define all-fields (discover token-data))
+  (log :message "  All fields in token-data:")
+  (log :value all-fields)
+
+  ;; discover with paths shows structure
+  (define fields-with-paths (discover token-data ":with-paths"))
+  (log :message "\n  All fields with their paths:")
+  (log :value fields-with-paths)
+  (log :message "  ✓ Perfect for exploring unknown structures!")
+
+  ;; ========================================
+  ;; Example 10: V2 Features - lazy-config
+  ;; ========================================
+  (log :message "\n📝 Example 10: V2 Feature - lazy-config (NEW!)")
+
+  ;; Configure breadth-first search
+  (log :message "  Configuring breadth-first search:")
+  (lazy-config ":breadth-first" true)
+  (log :message "  ✓ Now searches level by level (finds shallow matches first)")
+
+  ;; Configure max depth
+  (log :message "\n  Limiting search depth to 5:")
+  (lazy-config ":max-depth" 5)
+  (log :message "  ✓ Won't search deeper than 5 levels (performance + safety)")
+
+  ;; Reset to defaults
+  (lazy-config ":breadth-first" false)
+  (lazy-config ":max-depth" 50)
+  (log :message "\n  Reset to defaults")
+
+  ;; ========================================
   ;; Summary
   ;; ========================================
   (log :message "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -199,6 +256,8 @@
 
   ;; Return success
   {:status "Demo completed successfully!"
-   :feature "Lazy Field Access"
-   :examples-shown 7}
+   :feature "Lazy Field Access V2"
+   :v1-examples 7
+   :v2-examples 3
+   :total-examples 10}
 )
