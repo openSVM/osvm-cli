@@ -26,6 +26,29 @@ pub struct LispEvaluator {
     registry: Arc<ToolRegistry>,
     /// Gensym counter for generating unique symbols
     gensym_counter: std::cell::Cell<u64>,
+    /// Lazy field access configuration
+    lazy_field_config: std::cell::RefCell<LazyFieldConfig>,
+}
+
+/// Configuration for lazy field access behavior
+#[derive(Clone, Debug)]
+struct LazyFieldConfig {
+    /// Search strategy: true for breadth-first, false for depth-first
+    breadth_first: bool,
+    /// Strict mode: error on missing fields instead of returning null
+    strict: bool,
+    /// Maximum search depth to prevent infinite recursion
+    max_depth: usize,
+}
+
+impl Default for LazyFieldConfig {
+    fn default() -> Self {
+        LazyFieldConfig {
+            breadth_first: false,  // Default to depth-first (current behavior)
+            strict: false,          // Default to lenient (returns null)
+            max_depth: 50,          // Reasonable default for nested structures
+        }
+    }
 }
 
 impl LispEvaluator {
@@ -35,6 +58,7 @@ impl LispEvaluator {
             env: Environment::new(),
             registry: Arc::new(ToolRegistry::new()),
             gensym_counter: std::cell::Cell::new(0),
+            lazy_field_config: std::cell::RefCell::new(LazyFieldConfig::default()),
         }
     }
 
@@ -44,6 +68,7 @@ impl LispEvaluator {
             env: Environment::new(),
             registry: Arc::new(registry),
             gensym_counter: std::cell::Cell::new(0),
+            lazy_field_config: std::cell::RefCell::new(LazyFieldConfig::default()),
         }
     }
 
@@ -134,8 +159,12 @@ impl LispEvaluator {
                     "string?" => self.eval_string_check(args),
                     "bool?" => self.eval_bool_check(args),
                     "array?" => self.eval_array_check(args),
+                    "list?" => self.eval_array_check(args), // Common LISP: list? is same as array?
                     "object?" => self.eval_object_check(args),
                     "function?" => self.eval_function_check(args),
+                    // Generic type checking (Python/JS style)
+                    "typeof" => self.eval_typeof(args),      // JS: typeof value
+                    "type-of" => self.eval_typeof(args),     // LISP: type-of
                     // Number predicates (Common LISP style)
                     "even?" => self.eval_even(args), // (even? 4) -> true
                     "evenp" => self.eval_even(args), // Common LISP: evenp
@@ -232,6 +261,9 @@ impl LispEvaluator {
                     "items" => self.eval_object_entries(args),        // Python: dict.items()
                     "merge" => self.eval_merge(args),
                     "get" => self.eval_get(args),
+                    "get-path" => self.eval_get_path(args),
+                    "discover" => self.eval_discover(args),
+                    "lazy-config" => self.eval_lazy_config(args),
                     "first" => self.eval_first(args),
                     "head" => self.eval_first(args), // Alias for first (Haskell-style)
                     "rest" => self.eval_rest(args),
@@ -1532,6 +1564,32 @@ impl LispEvaluator {
         }
         let val = self.evaluate_expression(&args[0].value)?;
         Ok(Value::Bool(matches!(val, Value::Function { .. })))
+    }
+
+    /// (typeof x) or (type-of x) - Return type as string
+    /// Returns: "int", "float", "string", "boolean", "array", "object", "function", "null"
+    fn eval_typeof(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "typeof".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            })?;
+        }
+        let val = self.evaluate_expression(&args[0].value)?;
+        let type_str = match val {
+            Value::Int(_) => "number",      // JS-style: int and float both return "number"
+            Value::Float(_) => "number",    // JS-style
+            Value::String(_) => "string",
+            Value::Bool(_) => "boolean",
+            Value::Array(_) => "array",
+            Value::Object(_) => "object",
+            Value::Function { .. } => "function",
+            Value::Null => "null",
+            Value::Range { .. } => "range",
+            Value::Multiple(_) => "multiple", // Common LISP multiple values
+            Value::Macro { .. } => "macro",   // LISP macros
+        };
+        Ok(Value::String(type_str.to_string()))
     }
 
     /// (assert condition "message") - Assert condition is true
@@ -3621,17 +3679,67 @@ impl LispEvaluator {
             return Ok(value.clone());
         }
 
+        // Get config for lazy field access
+        let config = self.lazy_field_config.borrow();
+        let strict = config.strict;
+        let max_depth = config.max_depth;
+        let breadth_first = config.breadth_first;
+        drop(config); // Release borrow before recursive search
+
         // If not found, recursively search nested objects (lazy field access)
-        if let Some(value) = self.recursive_field_search(obj, key) {
+        if let Some(value) = self.recursive_field_search_with_config(obj, key, 0, max_depth, breadth_first) {
             return Ok(value);
+        }
+
+        // Handle strict mode
+        if strict {
+            return Err(Error::InvalidArguments {
+                tool: "get".to_string(),
+                reason: format!("Field '{}' not found in object (strict mode enabled)", key),
+            });
         }
 
         Ok(Value::Null)
     }
 
     /// Recursively search for a field in nested objects
-    /// Returns the first match found via depth-first search
+    /// Returns the first match found via depth-first or breadth-first search
     fn recursive_field_search(&self, obj: &std::collections::HashMap<String, Value>, key: &str) -> Option<Value> {
+        // Use default config (depth-first, max_depth=50)
+        self.recursive_field_search_with_config(obj, key, 0, 50, false)
+    }
+
+    /// Recursively search for a field with configuration options
+    fn recursive_field_search_with_config(
+        &self,
+        obj: &std::collections::HashMap<String, Value>,
+        key: &str,
+        current_depth: usize,
+        max_depth: usize,
+        breadth_first: bool,
+    ) -> Option<Value> {
+        // Check depth limit
+        if current_depth >= max_depth {
+            return None;
+        }
+
+        if breadth_first {
+            // Breadth-first search
+            self.breadth_first_search(obj, key, current_depth, max_depth)
+        } else {
+            // Depth-first search (original behavior)
+            self.depth_first_search(obj, key, current_depth, max_depth)
+        }
+    }
+
+    /// Depth-first search implementation
+    fn depth_first_search(
+        &self,
+        obj: &std::collections::HashMap<String, Value>,
+        key: &str,
+        current_depth: usize,
+        max_depth: usize,
+    ) -> Option<Value> {
         // Depth-first search through nested objects
         for (_field_name, field_value) in obj.iter() {
             match field_value {
@@ -3641,7 +3749,7 @@ impl LispEvaluator {
                         return Some(value.clone());
                     }
                     // Recursively search deeper
-                    if let Some(value) = self.recursive_field_search(nested_obj, key) {
+                    if let Some(value) = self.depth_first_search(nested_obj, key, current_depth + 1, max_depth) {
                         return Some(value);
                     }
                 }
@@ -3650,6 +3758,239 @@ impl LispEvaluator {
         }
         None
     }
+
+    /// Breadth-first search implementation
+    fn breadth_first_search(
+        &self,
+        obj: &std::collections::HashMap<String, Value>,
+        key: &str,
+        current_depth: usize,
+        max_depth: usize,
+    ) -> Option<Value> {
+        use std::collections::VecDeque;
+
+        // Queue of (object, depth) to search
+        let mut queue: VecDeque<(&std::collections::HashMap<String, Value>, usize)> = VecDeque::new();
+        queue.push_back((obj, current_depth));
+
+        while let Some((current_obj, depth)) = queue.pop_front() {
+            // Check depth limit
+            if depth >= max_depth {
+                continue;
+            }
+
+            // First, check all direct children for the key
+            for (_field_name, field_value) in current_obj.iter() {
+                if let Value::Object(nested_obj) = field_value {
+                    if let Some(value) = nested_obj.get(key) {
+                        return Some(value.clone());
+                    }
+                }
+            }
+
+            // Then, add all nested objects to queue for next level
+            for (_field_name, field_value) in current_obj.iter() {
+                if let Value::Object(nested_obj) = field_value {
+                    queue.push_back((nested_obj.as_ref(), depth + 1));
+                }
+            }
+        }
+
+        None
+    }
+
+    /// get-path(object, key) - Get value with path information
+    /// Returns {:value <value> :path [<path components>]}
+    fn eval_get_path(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "get-path".to_string(),
+                reason: "Expected 2 arguments: object, key".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        let key_val = self.evaluate_expression(&args[1].value)?;
+        let key_str = key_val.as_string()?;
+
+        // Strip leading colon from keywords
+        let key = if key_str.starts_with(':') {
+            &key_str[1..]
+        } else {
+            key_str
+        };
+
+        // Try direct access first
+        if let Some(value) = obj.get(key) {
+            let mut result = std::collections::HashMap::new();
+            result.insert("value".to_string(), value.clone());
+            result.insert("path".to_string(), Value::Array(Arc::new(vec![])));
+            return Ok(Value::Object(Arc::new(result)));
+        }
+
+        // If not found, search with path tracking
+        if let Some((value, path)) = self.recursive_field_search_with_path(obj, key, &[]) {
+            let mut result = std::collections::HashMap::new();
+            result.insert("value".to_string(), value);
+            result.insert("path".to_string(), Value::Array(Arc::new(
+                path.iter().map(|s| Value::String(s.to_string())).collect()
+            )));
+            return Ok(Value::Object(Arc::new(result)));
+        }
+
+        // Return null value with empty path
+        let mut result = std::collections::HashMap::new();
+        result.insert("value".to_string(), Value::Null);
+        result.insert("path".to_string(), Value::Array(Arc::new(vec![])));
+        Ok(Value::Object(Arc::new(result)))
+    }
+
+    /// Helper for get-path: recursive search that tracks the path
+    fn recursive_field_search_with_path(
+        &self,
+        obj: &std::collections::HashMap<String, Value>,
+        key: &str,
+        current_path: &[String],
+    ) -> Option<(Value, Vec<String>)> {
+        for (field_name, field_value) in obj.iter() {
+            match field_value {
+                Value::Object(nested_obj) => {
+                    // Check if this nested object has the key
+                    if let Some(value) = nested_obj.get(key) {
+                        let mut path = current_path.to_vec();
+                        path.push(field_name.clone());
+                        return Some((value.clone(), path));
+                    }
+                    // Recursively search deeper
+                    let mut new_path = current_path.to_vec();
+                    new_path.push(field_name.clone());
+                    if let Some(result) = self.recursive_field_search_with_path(nested_obj, key, &new_path) {
+                        return Some(result);
+                    }
+                }
+                _ => continue,
+            }
+        }
+        None
+    }
+
+    /// discover(object) - List all available fields in object and nested objects
+    /// Returns array of field names or array of {:field <name> :path [<path>]} if :with-paths true
+    fn eval_discover(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "discover".to_string(),
+                reason: "Expected at least 1 argument: object".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        // Check for :with-paths option
+        let with_paths = args.len() > 1 && {
+            if let Ok(opt_val) = self.evaluate_expression(&args[1].value) {
+                if let Ok(opt_str) = opt_val.as_string() {
+                    opt_str == ":with-paths" || opt_str == "with-paths"
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
+        let mut fields = Vec::new();
+        self.discover_fields(obj, &[], &mut fields, with_paths);
+
+        if with_paths {
+            // Return array of {:field "name" :path ["a", "b"]}
+            let result: Vec<Value> = fields.into_iter().map(|(field, path)| {
+                let mut obj = std::collections::HashMap::new();
+                obj.insert("field".to_string(), Value::String(field));
+                obj.insert("path".to_string(), Value::Array(Arc::new(
+                    path.iter().map(|s| Value::String(s.to_string())).collect()
+                )));
+                Value::Object(Arc::new(obj))
+            }).collect();
+            Ok(Value::Array(Arc::new(result)))
+        } else {
+            // Return simple array of field names
+            let result: Vec<Value> = fields.into_iter()
+                .map(|(field, _)| Value::String(field))
+                .collect();
+            Ok(Value::Array(Arc::new(result)))
+        }
+    }
+
+    /// Helper for discover: recursively collect all field names
+    fn discover_fields(
+        &self,
+        obj: &std::collections::HashMap<String, Value>,
+        current_path: &[String],
+        fields: &mut Vec<(String, Vec<String>)>,
+        _with_paths: bool,
+    ) {
+        for (field_name, field_value) in obj.iter() {
+            // Add this field
+            fields.push((field_name.clone(), current_path.to_vec()));
+
+            // Recursively discover nested fields
+            if let Value::Object(nested_obj) = field_value {
+                let mut new_path = current_path.to_vec();
+                new_path.push(field_name.clone());
+                self.discover_fields(nested_obj, &new_path, fields, _with_paths);
+            }
+        }
+    }
+
+    /// lazy-config(option, value) - Configure lazy field access behavior
+    /// Options: :strict (bool), :breadth-first (bool), :max-depth (number)
+    fn eval_lazy_config(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "lazy-config".to_string(),
+                reason: "Expected 2 arguments: option, value".to_string(),
+            });
+        }
+
+        let option_val = self.evaluate_expression(&args[0].value)?;
+        let option_str = option_val.as_string()?;
+        let option = if option_str.starts_with(':') {
+            &option_str[1..]
+        } else {
+            option_str
+        };
+
+        let value_val = self.evaluate_expression(&args[1].value)?;
+
+        let mut config = self.lazy_field_config.borrow_mut();
+
+        match option {
+            "strict" => {
+                let strict = value_val.as_bool()?;
+                config.strict = strict;
+                Ok(Value::Bool(strict))
+            }
+            "breadth-first" => {
+                let breadth_first = value_val.as_bool()?;
+                config.breadth_first = breadth_first;
+                Ok(Value::Bool(breadth_first))
+            }
+            "max-depth" => {
+                let max_depth = value_val.as_int()? as usize;
+                config.max_depth = max_depth;
+                Ok(Value::Int(max_depth as i64))
+            }
+            _ => Err(Error::InvalidArguments {
+                tool: "lazy-config".to_string(),
+                reason: format!("Unknown option: {}. Valid options: :strict, :breadth-first, :max-depth", option),
+            }),
+        }
+    }
+
 
     // ========================================
     // JSON Operations (Built-in Functions)
