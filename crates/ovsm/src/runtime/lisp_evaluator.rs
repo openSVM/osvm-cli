@@ -243,6 +243,15 @@ impl LispEvaluator {
                     "string-equal" => self.eval_string_eq(args), // Alternative name
                     "string-lessp" => self.eval_string_lt(args), // Alternative name
                     "string-greaterp" => self.eval_string_gt(args), // Alternative name
+                    // Common Lisp map variants
+                    "mapcar" => self.eval_mapcar(args),
+                    "mapc" => self.eval_mapc(args),
+                    // Common Lisp conditional filters
+                    "remove-if" => self.eval_remove_if(args),
+                    "remove-if-not" => self.eval_remove_if_not(args),
+                    // Common Lisp variable mutation
+                    "incf" => self.eval_incf(args),
+                    "decf" => self.eval_decf(args),
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -3166,6 +3175,276 @@ impl LispEvaluator {
                 got: format!("{}, {}", a.type_name(), b.type_name()),
             }),
         }
+    }
+
+    // =========================================================================
+    // COMMON LISP MAP VARIANTS
+    // =========================================================================
+
+    /// (mapcar function list) - Map and return results (Common Lisp)
+    fn eval_mapcar(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "mapcar".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let func = self.evaluate_expression(&args[0].value)?;
+        let list_val = self.evaluate_expression(&args[1].value)?;
+        let arr = list_val.as_array()?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "mapcar".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut results = Vec::with_capacity(arr.len());
+                for elem in arr.iter() {
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), elem.clone());
+                    let result = self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+                    results.push(result);
+                }
+                Ok(Value::Array(Arc::new(results)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    /// (mapc function list) - Map for side effects, return list (Common Lisp)
+    fn eval_mapc(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "mapc".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let func = self.evaluate_expression(&args[0].value)?;
+        let list_val = self.evaluate_expression(&args[1].value)?;
+        let arr = list_val.as_array()?;
+
+        match func {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "mapc".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                for elem in arr.iter() {
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), elem.clone());
+                    self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+                }
+                Ok(list_val) // Return original list
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: func.type_name(),
+            }),
+        }
+    }
+
+    // =========================================================================
+    // COMMON LISP CONDITIONAL FILTERS
+    // =========================================================================
+
+    /// (remove-if predicate list) - Remove matching elements (Common Lisp)
+    fn eval_remove_if(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "remove-if".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let pred = self.evaluate_expression(&args[0].value)?;
+        let list_val = self.evaluate_expression(&args[1].value)?;
+        let arr = list_val.as_array()?;
+
+        match pred {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "remove-if".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut results = Vec::new();
+                for elem in arr.iter() {
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), elem.clone());
+                    let test_result = self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+
+                    if !test_result.is_truthy() {
+                        results.push(elem.clone());
+                    }
+                }
+                Ok(Value::Array(Arc::new(results)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: pred.type_name(),
+            }),
+        }
+    }
+
+    /// (remove-if-not predicate list) - Keep matching elements (Common Lisp)
+    fn eval_remove_if_not(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "remove-if-not".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let pred = self.evaluate_expression(&args[0].value)?;
+        let list_val = self.evaluate_expression(&args[1].value)?;
+        let arr = list_val.as_array()?;
+
+        match pred {
+            Value::Function { params, body, .. } => {
+                if params.len() != 1 {
+                    return Err(Error::InvalidArguments {
+                        tool: "remove-if-not".to_string(),
+                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                    });
+                }
+
+                let mut results = Vec::new();
+                for elem in arr.iter() {
+                    self.env.enter_scope();
+                    self.env.define(params[0].clone(), elem.clone());
+                    let test_result = self.evaluate_expression(&body)?;
+                    self.env.exit_scope();
+
+                    if test_result.is_truthy() {
+                        results.push(elem.clone());
+                    }
+                }
+                Ok(Value::Array(Arc::new(results)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "function".to_string(),
+                got: pred.type_name(),
+            }),
+        }
+    }
+
+    // =========================================================================
+    // COMMON LISP VARIABLE MUTATION
+    // =========================================================================
+
+    /// (incf place [delta]) - Increment variable (Common Lisp)
+    fn eval_incf(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() || args.len() > 2 {
+            return Err(Error::InvalidArguments {
+                tool: "incf".to_string(),
+                reason: format!("Expected 1 or 2 arguments, got {}", args.len()),
+            });
+        }
+
+        // Get variable name (must be a symbol/identifier in the arg)
+        let var_name = match &args[0].value {
+            Expression::Variable(name) => name.clone(),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "incf".to_string(),
+                    reason: "First argument must be a variable name".to_string(),
+                })
+            }
+        };
+
+        // Get delta (default 1)
+        let delta = if args.len() == 2 {
+            self.evaluate_expression(&args[1].value)?
+        } else {
+            Value::Int(1)
+        };
+
+        // Get current value
+        let current = self.env.get(&var_name)?;
+
+        // Calculate new value
+        let new_value = match (&current, &delta) {
+            (Value::Int(i), Value::Int(d)) => Value::Int(i + d),
+            (Value::Float(f), Value::Float(d)) => Value::Float(f + d),
+            (Value::Int(i), Value::Float(d)) => Value::Float(*i as f64 + d),
+            (Value::Float(f), Value::Int(d)) => Value::Float(f + (*d as f64)),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "numbers".to_string(),
+                    got: format!("{}, {}", current.type_name(), delta.type_name()),
+                })
+            }
+        };
+
+        // Update variable
+        self.env.set(&var_name, new_value.clone());
+        Ok(new_value)
+    }
+
+    /// (decf place [delta]) - Decrement variable (Common Lisp)
+    fn eval_decf(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() || args.len() > 2 {
+            return Err(Error::InvalidArguments {
+                tool: "decf".to_string(),
+                reason: format!("Expected 1 or 2 arguments, got {}", args.len()),
+            });
+        }
+
+        // Get variable name
+        let var_name = match &args[0].value {
+            Expression::Variable(name) => name.clone(),
+            _ => {
+                return Err(Error::InvalidArguments {
+                    tool: "decf".to_string(),
+                    reason: "First argument must be a variable name".to_string(),
+                })
+            }
+        };
+
+        // Get delta (default 1)
+        let delta = if args.len() == 2 {
+            self.evaluate_expression(&args[1].value)?
+        } else {
+            Value::Int(1)
+        };
+
+        // Get current value
+        let current = self.env.get(&var_name)?;
+
+        // Calculate new value
+        let new_value = match (&current, &delta) {
+            (Value::Int(i), Value::Int(d)) => Value::Int(i - d),
+            (Value::Float(f), Value::Float(d)) => Value::Float(f - d),
+            (Value::Int(i), Value::Float(d)) => Value::Float(*i as f64 - d),
+            (Value::Float(f), Value::Int(d)) => Value::Float(f - (*d as f64)),
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "numbers".to_string(),
+                    got: format!("{}, {}", current.type_name(), delta.type_name()),
+                })
+            }
+        };
+
+        // Update variable
+        self.env.set(&var_name, new_value.clone());
+        Ok(new_value)
     }
 
     // =========================================================================
