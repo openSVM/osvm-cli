@@ -231,6 +231,11 @@ impl LispEvaluator {
                     "logxor" => self.eval_logxor(args),
                     "lognot" => self.eval_lognot(args),
                     "ash" => self.eval_ash(args),
+                    // Common Lisp list operations
+                    "member" => self.eval_member(args),
+                    "assoc" => self.eval_assoc(args),
+                    "elt" => self.eval_elt(args),
+                    "subseq" => self.eval_subseq(args),
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -2876,6 +2881,217 @@ impl LispEvaluator {
         };
 
         Ok(Value::Int(result))
+    }
+
+    // =========================================================================
+    // COMMON LISP LIST OPERATIONS
+    // =========================================================================
+
+    /// (member item list) - Find item in list, return tail or null (Common Lisp)
+    fn eval_member(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "member".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let item = self.evaluate_expression(&args[0].value)?;
+        let list_val = self.evaluate_expression(&args[1].value)?;
+        let arr = list_val.as_array()?;
+
+        for (i, elem) in arr.iter().enumerate() {
+            if Self::values_are_equal(&item, elem) {
+                return Ok(Value::Array(Arc::new(arr[i..].to_vec())));
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    fn values_are_equal(a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Float(x), Value::Float(y)) => x == y,
+            (Value::String(x), Value::String(y)) => x == y,
+            (Value::Bool(x), Value::Bool(y)) => x == y,
+            (Value::Null, Value::Null) => true,
+            _ => false,
+        }
+    }
+
+    /// (assoc key alist) - Find key in association list (Common Lisp)
+    fn eval_assoc(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "assoc".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let key = self.evaluate_expression(&args[0].value)?;
+        let alist_val = self.evaluate_expression(&args[1].value)?;
+        let arr = alist_val.as_array()?;
+
+        for elem in arr.iter() {
+            if let Value::Array(pair) = elem {
+                if !pair.is_empty() && Self::values_are_equal(&key, &pair[0]) {
+                    return Ok(elem.clone());
+                }
+            }
+        }
+        Ok(Value::Null)
+    }
+
+    /// (elt sequence index) - Get element at index (Common Lisp)
+    fn eval_elt(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "elt".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let seq = self.evaluate_expression(&args[0].value)?;
+        let index_val = self.evaluate_expression(&args[1].value)?;
+
+        let index = match index_val {
+            Value::Int(i) if i >= 0 => i as usize,
+            Value::Int(i) => {
+                return Err(Error::InvalidArguments {
+                    tool: "elt".to_string(),
+                    reason: format!("Index must be non-negative, got {}", i),
+                })
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: index_val.type_name(),
+                })
+            }
+        };
+
+        match seq {
+            Value::Array(arr) => {
+                if index >= arr.len() {
+                    return Err(Error::InvalidArguments {
+                        tool: "elt".to_string(),
+                        reason: format!(
+                            "Index {} out of bounds for array of length {}",
+                            index,
+                            arr.len()
+                        ),
+                    });
+                }
+                Ok(arr[index].clone())
+            }
+            Value::String(s) => {
+                let chars: Vec<char> = s.chars().collect();
+                if index >= chars.len() {
+                    return Err(Error::InvalidArguments {
+                        tool: "elt".to_string(),
+                        reason: format!(
+                            "Index {} out of bounds for string of length {}",
+                            index,
+                            chars.len()
+                        ),
+                    });
+                }
+                Ok(Value::String(chars[index].to_string()))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: seq.type_name(),
+            }),
+        }
+    }
+
+    /// (subseq sequence start [end]) - Subsequence (Common Lisp)
+    fn eval_subseq(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() < 2 || args.len() > 3 {
+            return Err(Error::InvalidArguments {
+                tool: "subseq".to_string(),
+                reason: format!("Expected 2 or 3 arguments, got {}", args.len()),
+            });
+        }
+
+        let seq = self.evaluate_expression(&args[0].value)?;
+        let start_val = self.evaluate_expression(&args[1].value)?;
+
+        let start = match start_val {
+            Value::Int(i) if i >= 0 => i as usize,
+            Value::Int(i) => {
+                return Err(Error::InvalidArguments {
+                    tool: "subseq".to_string(),
+                    reason: format!("Start index must be non-negative, got {}", i),
+                })
+            }
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: start_val.type_name(),
+                })
+            }
+        };
+
+        let end = if args.len() == 3 {
+            let end_val = self.evaluate_expression(&args[2].value)?;
+            match end_val {
+                Value::Int(i) if i >= 0 => Some(i as usize),
+                Value::Null => None,
+                Value::Int(i) => {
+                    return Err(Error::InvalidArguments {
+                        tool: "subseq".to_string(),
+                        reason: format!("End index must be non-negative, got {}", i),
+                    })
+                }
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer or null".to_string(),
+                        got: end_val.type_name(),
+                    })
+                }
+            }
+        } else {
+            None
+        };
+
+        match seq {
+            Value::Array(arr) => {
+                let end = end.unwrap_or(arr.len());
+                if start > arr.len() || end > arr.len() || start > end {
+                    return Err(Error::InvalidArguments {
+                        tool: "subseq".to_string(),
+                        reason: format!(
+                            "Invalid range [{}, {}) for array of length {}",
+                            start,
+                            end,
+                            arr.len()
+                        ),
+                    });
+                }
+                Ok(Value::Array(Arc::new(arr[start..end].to_vec())))
+            }
+            Value::String(s) => {
+                let chars: Vec<char> = s.chars().collect();
+                let end = end.unwrap_or(chars.len());
+                if start > chars.len() || end > chars.len() || start > end {
+                    return Err(Error::InvalidArguments {
+                        tool: "subseq".to_string(),
+                        reason: format!(
+                            "Invalid range [{}, {}) for string of length {}",
+                            start,
+                            end,
+                            chars.len()
+                        ),
+                    });
+                }
+                Ok(Value::String(chars[start..end].iter().collect()))
+            }
+            _ => Err(Error::TypeError {
+                expected: "array or string".to_string(),
+                got: seq.type_name(),
+            }),
+        }
     }
 
     // =========================================================================
