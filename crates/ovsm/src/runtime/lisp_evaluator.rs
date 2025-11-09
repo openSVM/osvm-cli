@@ -210,7 +210,25 @@ impl LispEvaluator {
                     // Advanced math
                     "sqrt" => self.eval_sqrt(args),
                     "pow" => self.eval_pow(args),
+                    "expt" => self.eval_pow(args), // Common Lisp alias for pow
+                    "exp" => self.eval_exp(args), // e^x
+                    "ln" => self.eval_ln(args), // Natural logarithm
                     "abs" => self.eval_abs(args),
+                    // Trigonometric functions
+                    "sin" => self.eval_sin(args),
+                    "cos" => self.eval_cos(args),
+                    "tan" => self.eval_tan(args),
+                    "asin" => self.eval_asin(args),
+                    "acos" => self.eval_acos(args),
+                    "atan" => self.eval_atan(args),
+                    "atan2" => self.eval_atan2(args),
+                    // Rounding functions
+                    "floor" => self.eval_floor(args),
+                    "ceiling" => self.eval_ceiling(args),
+                    "ceil" => self.eval_ceiling(args), // Alias
+                    "round" => self.eval_round(args),
+                    "truncate" => self.eval_truncate(args),
+                    "trunc" => self.eval_truncate(args), // Alias
                     // Multiple values (Common Lisp style)
                     "values" => self.eval_values(args),
                     "multiple-value-bind" => self.eval_multiple_value_bind(args),
@@ -2110,6 +2128,352 @@ impl LispEvaluator {
         }
 
         Ok(Value::Float(result))
+    }
+
+    /// (exp x) - Exponential function (e^x)
+    fn eval_exp(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "exp".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(num.exp()))
+    }
+
+    /// (ln x) - Natural logarithm
+    fn eval_ln(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "ln".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        if num <= 0.0 {
+            return Err(Error::InvalidArguments {
+                tool: "ln".to_string(),
+                reason: format!("Cannot take natural log of non-positive number: {}", num),
+            });
+        }
+
+        Ok(Value::Float(num.ln()))
+    }
+
+    /// (sin x) - Sine function (radians)
+    fn eval_sin(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "sin".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(num.sin()))
+    }
+
+    /// (cos x) - Cosine function (radians)
+    fn eval_cos(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "cos".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(num.cos()))
+    }
+
+    /// (tan x) - Tangent function (radians)
+    fn eval_tan(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "tan".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(num.tan()))
+    }
+
+    /// (asin x) - Arc sine (inverse sine) in radians
+    fn eval_asin(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "asin".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        if num < -1.0 || num > 1.0 {
+            return Err(Error::InvalidArguments {
+                tool: "asin".to_string(),
+                reason: format!("Input must be in range [-1, 1], got {}", num),
+            });
+        }
+
+        Ok(Value::Float(num.asin()))
+    }
+
+    /// (acos x) - Arc cosine (inverse cosine) in radians
+    fn eval_acos(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "acos".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        if num < -1.0 || num > 1.0 {
+            return Err(Error::InvalidArguments {
+                tool: "acos".to_string(),
+                reason: format!("Input must be in range [-1, 1], got {}", num),
+            });
+        }
+
+        Ok(Value::Float(num.acos()))
+    }
+
+    /// (atan x) - Arc tangent (inverse tangent) in radians
+    fn eval_atan(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "atan".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(num.atan()))
+    }
+
+    /// (atan2 y x) - Two-argument arc tangent in radians
+    fn eval_atan2(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "atan2".to_string(),
+                reason: format!("Expected 2 arguments (y, x), got {}", args.len()),
+            });
+        }
+
+        let y_val = self.evaluate_expression(&args[0].value)?;
+        let x_val = self.evaluate_expression(&args[1].value)?;
+
+        let y = match y_val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: y_val.type_name(),
+                })
+            }
+        };
+
+        let x = match x_val {
+            Value::Int(i) => i as f64,
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: x_val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Float(y.atan2(x)))
+    }
+
+    /// (floor x) - Round down to nearest integer
+    fn eval_floor(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "floor".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => return Ok(Value::Int(i)), // Already an integer
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(num.floor() as i64))
+    }
+
+    /// (ceiling x) - Round up to nearest integer
+    fn eval_ceiling(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "ceiling".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => return Ok(Value::Int(i)), // Already an integer
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(num.ceil() as i64))
+    }
+
+    /// (round x) - Round to nearest integer
+    fn eval_round(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "round".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => return Ok(Value::Int(i)), // Already an integer
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(num.round() as i64))
+    }
+
+    /// (truncate x) - Round towards zero
+    fn eval_truncate(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "truncate".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => return Ok(Value::Int(i)), // Already an integer
+            Value::Float(f) => f,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(num.trunc() as i64))
     }
 
     /// (abs x) - Absolute value of a number
