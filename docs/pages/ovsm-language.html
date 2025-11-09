@@ -15,6 +15,10 @@
             <p>Base58/Base64/Hex encoding, SHA-256/512 hashing, and first-class Solana RPC integration.</p>
         </div>
         <div class="feature-card">
+            <h3>🧠 Lazy Field Access</h3>
+            <p><strong>NEW!</strong> Automatically searches nested objects - write <code>(get obj "name")</code> instead of <code>(get (get obj "metadata") "name")</code></p>
+        </div>
+        <div class="feature-card">
             <h3>🎯 LISP Elegance</h3>
             <p>S-expression syntax, macros with quasiquote, closures, and pattern matching.</p>
         </div>
@@ -69,6 +73,22 @@
     </ul>
 
     <h2>🎯 Key Features</h2>
+
+    <h3>🧠 Lazy Field Access (NEW!)</h3>
+    <div class="info-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin-bottom: 2rem;">
+        <h4 style="color: white; margin-top: 0;">Intelligent Nested Object Access</h4>
+        <p>OVSM's lazy field access automatically searches nested objects when a field isn't found at the top level. No need to know the exact structure!</p>
+
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 4px; margin-top: 1rem;">
+            <strong>Before:</strong> Verbose nested access<br>
+            <code style="color: #ffeb3b;">(define name (get (get response "metadata") "name"))</code><br><br>
+
+            <strong>After:</strong> Simple lazy access ✨<br>
+            <code style="color: #76ff03;">(define name (get response "name"))  ;; Finds metadata.name automatically!</code>
+        </div>
+
+        <p style="margin-top: 1rem; margin-bottom: 0;"><strong>How it works:</strong> Depth-first recursive search through nested objects, returns first match found. Works with arbitrary nesting depth!</p>
+    </div>
 
     <h3>Core Language (83% Common Lisp)</h3>
     <ul>
@@ -193,7 +213,7 @@
             <tr>
                 <td><strong>Objects</strong></td>
                 <td>3</td>
-                <td>get, keys, merge</td>
+                <td>get (with lazy field access ✨), keys, merge</td>
             </tr>
         </tbody>
     </table>
@@ -280,6 +300,57 @@
 (assert (= data-hash hash2) "Hash is not deterministic")
 
 (log :message "✅ All verifications passed")</code></pre>
+
+    <h2>💻 Example: Lazy Field Access with MCP Responses</h2>
+    <pre class="code-block"><code>;; Real-world MCP response structure (typical API response)
+(define mcp-response {
+  :supply 999859804306166700
+  :metadata {
+    :name "OSVM.AI"
+    :symbol "OVSM"
+    :description "AI-powered blockchain investigation"
+    :links {
+      :website "https://osvm.ai"
+      :twitter "@osvm_ai"
+    }
+  }
+})
+
+;; ❌ OLD WAY: Explicit nested path (verbose, error-prone)
+(define name-old (get (get mcp-response "metadata") "name"))
+(define symbol-old (get (get mcp-response "metadata") "symbol"))
+(define website-old (get (get (get mcp-response "metadata") "links") "website"))
+
+;; ✅ NEW WAY: Lazy field access (automatic search)
+(define supply (get mcp-response "supply"))      ;; Direct access (fast path)
+(define name (get mcp-response "name"))          ;; Finds metadata.name
+(define symbol (get mcp-response "symbol"))      ;; Finds metadata.symbol
+(define website (get mcp-response "website"))    ;; Finds metadata.links.website
+
+;; Works with any nesting depth!
+(define deep-nested {
+  :level1 {
+    :level2 {
+      :level3 {
+        :level4 {
+          :treasure "found automatically!"
+        }
+      }
+    }
+  }
+})
+
+(define treasure (get deep-nested "treasure"))  ;; Returns "found automatically!" ✨
+
+;; Gracefully handles missing fields
+(define missing (get mcp-response "nonexistent"))  ;; Returns null (no error)
+
+(log :message "Token Analysis:" :value {
+  :name name
+  :symbol symbol
+  :supply supply
+  :website website
+})</code></pre>
 
     <h2>💻 Example: Functional Data Pipeline</h2>
     <pre class="code-block"><code>;; Filter-Map-Reduce pipeline for blockchain analysis

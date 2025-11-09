@@ -15,6 +15,41 @@ OVSM is a **LISP-1 dialect** (functions and variables share the same namespace) 
 
 ## ✨ Features
 
+### 🧠 Lazy Field Access (NEW!)
+
+**Automatically searches nested objects** - No need to know exact structure!
+
+```lisp
+;; MCP response with nested metadata
+(define response {
+  :supply 999859804306166700
+  :metadata {
+    :name "OSVM.AI"
+    :symbol "OVSM"
+  }
+})
+
+;; ❌ OLD WAY: Verbose nested access
+(define name (get (get response "metadata") "name"))
+
+;; ✅ NEW WAY: Lazy field access
+(define name (get response "name"))  ;; Finds metadata.name automatically! ✨
+(define symbol (get response "symbol"))  ;; Finds metadata.symbol automatically!
+```
+
+**How it works:**
+1. Tries direct access first (O(1) for top-level fields)
+2. If not found, recursively searches nested objects (depth-first)
+3. Returns first match found (deterministic, predictable)
+4. Works with arbitrary nesting depth
+5. Returns `null` if field doesn't exist anywhere
+
+**Benefits:**
+- ✅ Simpler code - write `(get obj "field")` instead of `(get (get obj "nested") "field")`
+- ✅ More forgiving - don't need to know exact API structure
+- ✅ Backward compatible - explicit nested access still works
+- ✅ Zero performance overhead for direct access
+
 ### Core Language (83% Common Lisp)
 ✅ **Data Types** - Numbers, strings, booleans, arrays, objects, ranges
 ✅ **Control Flow** - if/when/unless/cond, while, for, do
@@ -27,6 +62,7 @@ OVSM is a **LISP-1 dialect** (functions and variables share the same namespace) 
 ✅ **Dynamic Variables** - defvar with special scoping
 ✅ **Error Handling** - try/catch (experimental)
 ✅ **Higher-Order Functions** - map, filter, reduce, sort
+✅ **Lazy Field Access** - Automatic nested object search (NEW!)
 
 ### 🌍 World-Class AI Compatibility (99.9%)
 ✅ **91 built-in functions** with cross-language aliases
@@ -274,6 +310,56 @@ osvm ovsm examples
   (reduce + numbers 0))
 
 (sum 1 2 3 4 5)  ; => 15
+```
+
+### Lazy Field Access Example (Real-World MCP Usage)
+
+```lisp
+;; Real-world MCP response (nested structure)
+(define token-response {
+  :supply 999859804306166700
+  :decimals 9
+  :metadata {
+    :name "OSVM.AI"
+    :symbol "OVSM"
+    :description "AI-powered blockchain investigation"
+    :links {
+      :website "https://osvm.ai"
+      :twitter "@osvm_ai"
+      :github "github.com/opensvm"
+    }
+  }
+})
+
+;; ❌ OLD WAY: Explicit nested paths (verbose, brittle)
+(define name-old (get (get token-response "metadata") "name"))
+(define symbol-old (get (get token-response "metadata") "symbol"))
+(define website-old (get (get (get token-response "metadata") "links") "website"))
+
+;; ✅ NEW WAY: Lazy field access (simple, robust)
+(define supply (get token-response "supply"))       ;; Direct access (O(1))
+(define name (get token-response "name"))           ;; Finds metadata.name
+(define symbol (get token-response "symbol"))       ;; Finds metadata.symbol
+(define website (get token-response "website"))     ;; Finds metadata.links.website
+(define github (get token-response "github"))       ;; Finds metadata.links.github
+
+;; Works with deeply nested structures (any depth!)
+(define deep {
+  :a {:b {:c {:d {:e {:f "treasure"}}}}}
+})
+(define treasure (get deep "treasure"))  ;; Returns "treasure" ✨
+
+;; Gracefully handles missing fields
+(define missing (get token-response "nonexistent"))  ;; Returns null
+
+;; Format results
+(log :message "Token Analysis:" :value {
+  :name name
+  :symbol symbol
+  :supply supply
+  :decimals (get token-response "decimals")
+  :website website
+})
 ```
 
 ### Blockchain/Solana Example

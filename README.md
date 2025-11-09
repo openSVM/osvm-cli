@@ -242,6 +242,7 @@ osvm chat --advanced
 
 ### Key Features
 
+- **🧠 Lazy Field Access (NEW!)**: `(get obj "name")` auto-searches nested objects
 - **Variables**: `(define x 42)`, `(set! x 100)`
 - **Arithmetic**: `(+ 1 2 3)`, `(* 10 5)`, `(/ 100 4)`
 - **Conditionals**: `(if (> x 10) "high" "low")`
@@ -249,6 +250,15 @@ osvm chat --advanced
 - **Functions**: `(define (square n) (* n n))`
 - **Arrays**: `[1 2 3 4 5]`
 - **Objects**: `{:name "Alice" :age 30}`
+
+**NEW! Lazy Field Access Example:**
+```lisp
+;; MCP response with nested metadata
+(define response {:metadata {:name "OSVM.AI" :symbol "OVSM"}})
+
+;; ❌ Old way: (get (get response "metadata") "name")
+;; ✅ New way: (get response "name")  ;; Finds metadata.name automatically!
+```
 
 ### OVSM Commands
 
@@ -286,6 +296,7 @@ osvm ovsm examples
 ### 🤖 **AI & Automation**
 - **Interactive Chat** with code execution
 - **OVSM LISP** interpreter (83% Common Lisp, 99.9% AI compatibility)
+- **🧠 Lazy Field Access** - Auto-search nested objects (NEW!)
 - **Natural Language** to code translation
 - **Automatic Validation** and timeout protection
 - **Macros**, **Closures**, **Pattern Matching**

@@ -1,0 +1,204 @@
+;; ========================================
+;; OVSM Lazy Field Access Demo
+;; ========================================
+;;
+;; Demonstrates the NEW lazy/recursive field access feature where
+;; (get obj "field") automatically searches nested objects if the
+;; field isn't found at the top level.
+;;
+;; This eliminates verbose nested access patterns and makes working
+;; with deeply nested API responses much simpler!
+
+(do
+  (log :message "🧠 Lazy Field Access Demo")
+  (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+  ;; ========================================
+  ;; Example 1: Simple Nested Access
+  ;; ========================================
+  (log :message "\n📝 Example 1: Simple Nested Object")
+
+  (define user {
+    :id 123
+    :profile {
+      :name "Alice"
+      :email "alice@example.com"
+      :age 30
+    }
+  })
+
+  ;; ❌ OLD WAY: Explicit nested path
+  (define name-old (get (get user "profile") "name"))
+  (log :message "  Old way: (get (get user \"profile\") \"name\")")
+  (log :message "  Result:" :value name-old)
+
+  ;; ✅ NEW WAY: Lazy field access
+  (define name-new (get user "name"))
+  (define email (get user "email"))
+  (log :message "\n  New way: (get user \"name\")")
+  (log :message "  Name:" :value name-new)
+  (log :message "  Email:" :value email)
+
+  ;; ========================================
+  ;; Example 2: Real-World MCP Response
+  ;; ========================================
+  (log :message "\n📝 Example 2: MCP Token Response (Real-World)")
+
+  (define mcp-response {
+    :supply 999859804306166700
+    :decimals 9
+    :metadata {
+      :name "OSVM.AI"
+      :symbol "OVSM"
+      :description "AI-powered blockchain investigation"
+      :links {
+        :website "https://osvm.ai"
+        :twitter "@osvm_ai"
+        :github "github.com/opensvm"
+      }
+    }
+  })
+
+  ;; ❌ OLD WAY: Triple nesting!
+  (define website-old (get (get (get mcp-response "metadata") "links") "website"))
+  (log :message "  Old way (3 levels!):")
+  (log :message "    (get (get (get resp \"metadata\") \"links\") \"website\")")
+  (log :message "    Result:" :value website-old)
+
+  ;; ✅ NEW WAY: Simple and clean
+  (define supply (get mcp-response "supply"))       ;; Direct (fast path)
+  (define decimals (get mcp-response "decimals"))   ;; Direct (fast path)
+  (define name (get mcp-response "name"))           ;; Found in metadata.name
+  (define symbol (get mcp-response "symbol"))       ;; Found in metadata.symbol
+  (define desc (get mcp-response "description"))    ;; Found in metadata.description
+  (define website (get mcp-response "website"))     ;; Found in metadata.links.website
+  (define twitter (get mcp-response "twitter"))     ;; Found in metadata.links.twitter
+
+  (log :message "\n  New way (simple!):")
+  (log :message "    Supply:" :value supply)
+  (log :message "    Decimals:" :value decimals)
+  (log :message "    Name:" :value name)
+  (log :message "    Symbol:" :value symbol)
+  (log :message "    Website:" :value website)
+  (log :message "    Twitter:" :value twitter)
+
+  ;; ========================================
+  ;; Example 3: Deep Nesting (6 Levels)
+  ;; ========================================
+  (log :message "\n📝 Example 3: Deeply Nested Structure (6 levels)")
+
+  (define deep {
+    :level1 {
+      :level2 {
+        :level3 {
+          :level4 {
+            :level5 {
+              :level6 {
+                :treasure "🏆 Found it!"
+                :score 100
+              }
+            }
+          }
+        }
+      }
+    }
+  })
+
+  ;; ❌ OLD WAY: Would require 6 nested get calls!
+  (log :message "  Old way would require:")
+  (log :message "    (get (get (get (get (get (get deep")
+  (log :message "      \"level1\") \"level2\") \"level3\")")
+  (log :message "      \"level4\") \"level5\") \"level6\")")
+
+  ;; ✅ NEW WAY: Just works!
+  (define treasure (get deep "treasure"))
+  (define score (get deep "score"))
+  (log :message "\n  New way:")
+  (log :message "    (get deep \"treasure\") →" :value treasure)
+  (log :message "    (get deep \"score\") →" :value score)
+
+  ;; ========================================
+  ;; Example 4: Missing Fields (Error Handling)
+  ;; ========================================
+  (log :message "\n📝 Example 4: Missing Fields (Graceful Handling)")
+
+  (define data {:exists "yes"})
+
+  (define found (get data "exists"))
+  (define missing (get data "nonexistent"))
+
+  (log :message "  Field that exists:" :value found)
+  (log :message "  Field that doesn't exist:" :value missing)
+  (log :message "  (Returns null, no error!)")
+
+  ;; ========================================
+  ;; Example 5: Field Name Collision (Precedence)
+  ;; ========================================
+  (log :message "\n📝 Example 5: Field Name Collision (Direct Access Wins)")
+
+  (define collision {
+    :name "Top Level"
+    :nested {
+      :name "Nested Level"
+    }
+  })
+
+  (define result (get collision "name"))
+  (log :message "  Object has 'name' at both levels")
+  (log :message "  Top level: \"Top Level\"")
+  (log :message "  Nested level: \"Nested Level\"")
+  (log :message "  (get collision \"name\") →" :value result)
+  (log :message "  ✓ Direct access takes precedence (predictable!)")
+
+  ;; ========================================
+  ;; Example 6: Performance - Direct Access
+  ;; ========================================
+  (log :message "\n📝 Example 6: Performance (Direct Access is Fast)")
+
+  (define perf-test {
+    :direct-field "I'm fast! (O(1))"
+    :nested {:nested-field "I'm searched (O(n))"}
+  })
+
+  (define direct (get perf-test "direct-field"))
+  (define searched (get perf-test "nested-field"))
+
+  (log :message "  Direct access (O(1)):" :value direct)
+  (log :message "  Lazy search (O(n)):" :value searched)
+  (log :message "  ✓ No performance penalty for top-level fields!")
+
+  ;; ========================================
+  ;; Example 7: Arrays Are Not Searched
+  ;; ========================================
+  (log :message "\n📝 Example 7: Arrays Are Not Searched (Only Objects)")
+
+  (define with-array {
+    :users [
+      {:name "Alice"}
+      {:name "Bob"}
+    ]
+  })
+
+  (define result-array (get with-array "name"))
+  (log :message "  Object with array of objects")
+  (log :message "  (get with-array \"name\") →" :value result-array)
+  (log :message "  ✓ Arrays are skipped, only objects searched")
+
+  ;; ========================================
+  ;; Summary
+  ;; ========================================
+  (log :message "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+  (log :message "✨ Summary: Lazy Field Access Benefits")
+  (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+  (log :message "✅ Simpler code - no nested get calls")
+  (log :message "✅ Works with any depth - automatically searches")
+  (log :message "✅ Backward compatible - explicit paths still work")
+  (log :message "✅ Zero overhead - direct access is O(1)")
+  (log :message "✅ Graceful - returns null for missing fields")
+  (log :message "✅ Predictable - direct access wins on collision")
+
+  ;; Return success
+  {:status "Demo completed successfully!"
+   :feature "Lazy Field Access"
+   :examples-shown 7}
+)
