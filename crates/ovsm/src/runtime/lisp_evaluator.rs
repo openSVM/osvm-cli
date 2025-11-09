@@ -44,9 +44,9 @@ struct LazyFieldConfig {
 impl Default for LazyFieldConfig {
     fn default() -> Self {
         LazyFieldConfig {
-            breadth_first: false,  // Default to depth-first (current behavior)
-            strict: false,          // Default to lenient (returns null)
-            max_depth: 50,          // Reasonable default for nested structures
+            breadth_first: false, // Default to depth-first (current behavior)
+            strict: false,        // Default to lenient (returns null)
+            max_depth: 50,        // Reasonable default for nested structures
         }
     }
 }
@@ -163,8 +163,8 @@ impl LispEvaluator {
                     "object?" => self.eval_object_check(args),
                     "function?" => self.eval_function_check(args),
                     // Generic type checking (Python/JS style)
-                    "typeof" => self.eval_typeof(args),      // JS: typeof value
-                    "type-of" => self.eval_typeof(args),     // LISP: type-of
+                    "typeof" => self.eval_typeof(args), // JS: typeof value
+                    "type-of" => self.eval_typeof(args), // LISP: type-of
                     // Number predicates (Common LISP style)
                     "even?" => self.eval_even(args), // (even? 4) -> true
                     "evenp" => self.eval_even(args), // Common LISP: evenp
@@ -360,7 +360,6 @@ impl LispEvaluator {
                 if name.starts_with(':') {
                     Ok(Value::String(name.clone()))
                 } else {
-                    
                     self.env.get(name)
                 }
             }
@@ -1577,8 +1576,8 @@ impl LispEvaluator {
         }
         let val = self.evaluate_expression(&args[0].value)?;
         let type_str = match val {
-            Value::Int(_) => "number",      // JS-style: int and float both return "number"
-            Value::Float(_) => "number",    // JS-style
+            Value::Int(_) => "number", // JS-style: int and float both return "number"
+            Value::Float(_) => "number", // JS-style
             Value::String(_) => "string",
             Value::Bool(_) => "boolean",
             Value::Array(_) => "array",
@@ -3687,7 +3686,9 @@ impl LispEvaluator {
         drop(config); // Release borrow before recursive search
 
         // If not found, recursively search nested objects (lazy field access)
-        if let Some(value) = self.recursive_field_search_with_config(obj, key, 0, max_depth, breadth_first) {
+        if let Some(value) =
+            self.recursive_field_search_with_config(obj, key, 0, max_depth, breadth_first)
+        {
             return Ok(value);
         }
 
@@ -3700,13 +3701,6 @@ impl LispEvaluator {
         }
 
         Ok(Value::Null)
-    }
-
-    /// Recursively search for a field in nested objects
-    /// Returns the first match found via depth-first or breadth-first search
-    fn recursive_field_search(&self, obj: &std::collections::HashMap<String, Value>, key: &str) -> Option<Value> {
-        // Use default config (depth-first, max_depth=50)
-        self.recursive_field_search_with_config(obj, key, 0, 50, false)
     }
 
     /// Recursively search for a field with configuration options
@@ -3749,7 +3743,9 @@ impl LispEvaluator {
                         return Some(value.clone());
                     }
                     // Recursively search deeper
-                    if let Some(value) = self.depth_first_search(nested_obj, key, current_depth + 1, max_depth) {
+                    if let Some(value) =
+                        self.depth_first_search(nested_obj, key, current_depth + 1, max_depth)
+                    {
                         return Some(value);
                     }
                 }
@@ -3770,7 +3766,8 @@ impl LispEvaluator {
         use std::collections::VecDeque;
 
         // Queue of (object, depth) to search
-        let mut queue: VecDeque<(&std::collections::HashMap<String, Value>, usize)> = VecDeque::new();
+        let mut queue: VecDeque<(&std::collections::HashMap<String, Value>, usize)> =
+            VecDeque::new();
         queue.push_back((obj, current_depth));
 
         while let Some((current_obj, depth)) = queue.pop_front() {
@@ -3834,9 +3831,12 @@ impl LispEvaluator {
         if let Some((value, path)) = self.recursive_field_search_with_path(obj, key, &[]) {
             let mut result = std::collections::HashMap::new();
             result.insert("value".to_string(), value);
-            result.insert("path".to_string(), Value::Array(Arc::new(
-                path.iter().map(|s| Value::String(s.to_string())).collect()
-            )));
+            result.insert(
+                "path".to_string(),
+                Value::Array(Arc::new(
+                    path.iter().map(|s| Value::String(s.to_string())).collect(),
+                )),
+            );
             return Ok(Value::Object(Arc::new(result)));
         }
 
@@ -3866,7 +3866,9 @@ impl LispEvaluator {
                     // Recursively search deeper
                     let mut new_path = current_path.to_vec();
                     new_path.push(field_name.clone());
-                    if let Some(result) = self.recursive_field_search_with_path(nested_obj, key, &new_path) {
+                    if let Some(result) =
+                        self.recursive_field_search_with_path(nested_obj, key, &new_path)
+                    {
                         return Some(result);
                     }
                 }
@@ -3907,18 +3909,25 @@ impl LispEvaluator {
 
         if with_paths {
             // Return array of {:field "name" :path ["a", "b"]}
-            let result: Vec<Value> = fields.into_iter().map(|(field, path)| {
-                let mut obj = std::collections::HashMap::new();
-                obj.insert("field".to_string(), Value::String(field));
-                obj.insert("path".to_string(), Value::Array(Arc::new(
-                    path.iter().map(|s| Value::String(s.to_string())).collect()
-                )));
-                Value::Object(Arc::new(obj))
-            }).collect();
+            let result: Vec<Value> = fields
+                .into_iter()
+                .map(|(field, path)| {
+                    let mut obj = std::collections::HashMap::new();
+                    obj.insert("field".to_string(), Value::String(field));
+                    obj.insert(
+                        "path".to_string(),
+                        Value::Array(Arc::new(
+                            path.iter().map(|s| Value::String(s.to_string())).collect(),
+                        )),
+                    );
+                    Value::Object(Arc::new(obj))
+                })
+                .collect();
             Ok(Value::Array(Arc::new(result)))
         } else {
             // Return simple array of field names
-            let result: Vec<Value> = fields.into_iter()
+            let result: Vec<Value> = fields
+                .into_iter()
                 .map(|(field, _)| Value::String(field))
                 .collect();
             Ok(Value::Array(Arc::new(result)))
@@ -3986,11 +3995,13 @@ impl LispEvaluator {
             }
             _ => Err(Error::InvalidArguments {
                 tool: "lazy-config".to_string(),
-                reason: format!("Unknown option: {}. Valid options: :strict, :breadth-first, :max-depth", option),
+                reason: format!(
+                    "Unknown option: {}. Valid options: :strict, :breadth-first, :max-depth",
+                    option
+                ),
             }),
         }
     }
-
 
     // ========================================
     // JSON Operations (Built-in Functions)
@@ -4751,10 +4762,7 @@ impl LispEvaluator {
                         _ => format!("{:?}", key_val),
                     };
 
-                    groups
-                        .entry(key)
-                        .or_default()
-                        .push(elem.clone());
+                    groups.entry(key).or_default().push(elem.clone());
                 }
 
                 // Convert groups to object with arrays
@@ -5822,13 +5830,16 @@ impl LispEvaluator {
         }
 
         // If we don't have &rest or &key, check for exact arg count
-        if rest_pos.is_none() && key_pos.is_none() && optional_pos.is_none()
-            && args.len() != required_count {
-                return Err(Error::InvalidArguments {
-                    tool: context.to_string(),
-                    reason: format!("Expected {} arguments, got {}", required_count, args.len()),
-                });
-            }
+        if rest_pos.is_none()
+            && key_pos.is_none()
+            && optional_pos.is_none()
+            && args.len() != required_count
+        {
+            return Err(Error::InvalidArguments {
+                tool: context.to_string(),
+                reason: format!("Expected {} arguments, got {}", required_count, args.len()),
+            });
+        }
 
         Ok(())
     }
@@ -6656,8 +6667,6 @@ impl LispEvaluator {
             .as_nanos();
 
         let state = RandomState::new();
-        
-        
 
         let hash = state.hash_one(now);
         let random = (hash as f64) / (u64::MAX as f64);
