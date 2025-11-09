@@ -236,6 +236,13 @@ impl LispEvaluator {
                     "assoc" => self.eval_assoc(args),
                     "elt" => self.eval_elt(args),
                     "subseq" => self.eval_subseq(args),
+                    // Common Lisp string comparisons
+                    "string=" => self.eval_string_eq(args),
+                    "string<" => self.eval_string_lt(args),
+                    "string>" => self.eval_string_gt(args),
+                    "string-equal" => self.eval_string_eq(args), // Alternative name
+                    "string-lessp" => self.eval_string_lt(args), // Alternative name
+                    "string-greaterp" => self.eval_string_gt(args), // Alternative name
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -3090,6 +3097,73 @@ impl LispEvaluator {
             _ => Err(Error::TypeError {
                 expected: "array or string".to_string(),
                 got: seq.type_name(),
+            }),
+        }
+    }
+
+    // =========================================================================
+    // COMMON LISP STRING COMPARISONS
+    // =========================================================================
+
+    /// (string= a b) - String equality (Common Lisp)
+    fn eval_string_eq(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "string=".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let a = self.evaluate_expression(&args[0].value)?;
+        let b = self.evaluate_expression(&args[1].value)?;
+
+        match (&a, &b) {
+            (Value::String(s1), Value::String(s2)) => Ok(Value::Bool(s1 == s2)),
+            _ => Err(Error::TypeError {
+                expected: "strings".to_string(),
+                got: format!("{}, {}", a.type_name(), b.type_name()),
+            }),
+        }
+    }
+
+    /// (string< a b) - String less than (Common Lisp)
+    fn eval_string_lt(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "string<".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let a = self.evaluate_expression(&args[0].value)?;
+        let b = self.evaluate_expression(&args[1].value)?;
+
+        match (&a, &b) {
+            (Value::String(s1), Value::String(s2)) => Ok(Value::Bool(s1 < s2)),
+            _ => Err(Error::TypeError {
+                expected: "strings".to_string(),
+                got: format!("{}, {}", a.type_name(), b.type_name()),
+            }),
+        }
+    }
+
+    /// (string> a b) - String greater than (Common Lisp)
+    fn eval_string_gt(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "string>".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let a = self.evaluate_expression(&args[0].value)?;
+        let b = self.evaluate_expression(&args[1].value)?;
+
+        match (&a, &b) {
+            (Value::String(s1), Value::String(s2)) => Ok(Value::Bool(s1 > s2)),
+            _ => Err(Error::TypeError {
+                expected: "strings".to_string(),
+                got: format!("{}, {}", a.type_name(), b.type_name()),
             }),
         }
     }
