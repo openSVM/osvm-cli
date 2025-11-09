@@ -225,6 +225,12 @@ impl LispEvaluator {
                     "atom" => self.eval_atom(args),
                     "consp" => self.eval_consp(args),
                     "listp" => self.eval_listp(args),
+                    // Common Lisp bitwise operations
+                    "logand" => self.eval_logand(args),
+                    "logior" => self.eval_logior(args),
+                    "logxor" => self.eval_logxor(args),
+                    "lognot" => self.eval_lognot(args),
+                    "ash" => self.eval_ash(args),
                     // Trigonometric functions
                     "sin" => self.eval_sin(args),
                     "cos" => self.eval_cos(args),
@@ -2730,6 +2736,146 @@ impl LispEvaluator {
 
         let val = self.evaluate_expression(&args[0].value)?;
         Ok(Value::Bool(matches!(val, Value::Array(_) | Value::Null)))
+    }
+
+    // =========================================================================
+    // COMMON LISP BITWISE OPERATIONS
+    // =========================================================================
+
+    /// (logand a b ...) - Bitwise AND (Common Lisp)
+    fn eval_logand(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(-1)); // Identity for AND
+        }
+
+        let mut result = -1i64;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(i) => i,
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            };
+            result &= num;
+        }
+
+        Ok(Value::Int(result))
+    }
+
+    /// (logior a b ...) - Bitwise OR (Common Lisp)
+    fn eval_logior(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(0)); // Identity for OR
+        }
+
+        let mut result = 0i64;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(i) => i,
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            };
+            result |= num;
+        }
+
+        Ok(Value::Int(result))
+    }
+
+    /// (logxor a b ...) - Bitwise XOR (Common Lisp)
+    fn eval_logxor(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Ok(Value::Int(0)); // Identity for XOR
+        }
+
+        let mut result = 0i64;
+        for arg in args {
+            let val = self.evaluate_expression(&arg.value)?;
+            let num = match val {
+                Value::Int(i) => i,
+                _ => {
+                    return Err(Error::TypeError {
+                        expected: "integer".to_string(),
+                        got: val.type_name(),
+                    })
+                }
+            };
+            result ^= num;
+        }
+
+        Ok(Value::Int(result))
+    }
+
+    /// (lognot x) - Bitwise NOT (Common Lisp)
+    fn eval_lognot(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "lognot".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let num = match val {
+            Value::Int(i) => i,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        Ok(Value::Int(!num))
+    }
+
+    /// (ash x count) - Arithmetic shift (Common Lisp)
+    fn eval_ash(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "ash".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let count = self.evaluate_expression(&args[1].value)?;
+
+        let num = match val {
+            Value::Int(i) => i,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: val.type_name(),
+                })
+            }
+        };
+
+        let shift = match count {
+            Value::Int(i) => i,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "integer".to_string(),
+                    got: count.type_name(),
+                })
+            }
+        };
+
+        let result = if shift >= 0 {
+            num.checked_shl(shift as u32).unwrap_or(0)
+        } else {
+            num >> (-shift).min(63)
+        };
+
+        Ok(Value::Int(result))
     }
 
     // =========================================================================
