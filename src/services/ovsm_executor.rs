@@ -155,7 +155,7 @@ impl OvsmExecutor {
         let mut content_lines = Vec::new();
 
         // Top-level section keywords (case-insensitive)
-        let top_level_sections = vec![
+        let top_level_sections = [
             "Expected Plan",
             "Main Branch",
             "Action",
@@ -301,15 +301,14 @@ impl OvsmExecutor {
                 let indent_level = raw_line.len() - raw_line.trim_start().len();
 
                 // Collect all lines belonging to this decision
-                for j in i..all_lines.len() {
-                    let l = all_lines[j];
+                for (offset, &l) in all_lines[i..].iter().enumerate() {
                     let l_indent = l.len() - l.trim_start().len();
 
                     // Include this line if:
                     // - It's the DECISION line itself
                     // - It's indented more than the DECISION line
                     // - It starts with IF, THEN, BRANCH, ELSE at appropriate indentation
-                    if j == i
+                    if offset == 0
                         || l_indent > indent_level
                         || l.trim().starts_with("IF ")
                         || l.trim().starts_with("THEN")
@@ -336,12 +335,12 @@ impl OvsmExecutor {
             // FOR loop: FOR $var IN range/array:
             if line.starts_with("FOR ") {
                 // Parse: FOR $item IN $collection:
-                let for_expr = if line.ends_with(':') {
-                    &line[4..line.len() - 1]
-                } else {
-                    &line[4..]
-                }
-                .trim();
+                let for_expr = line
+                    .strip_prefix("FOR ")
+                    .unwrap()
+                    .strip_suffix(':')
+                    .unwrap_or(line.strip_prefix("FOR ").unwrap())
+                    .trim();
 
                 let parts: Vec<&str> = for_expr.split(" IN ").collect();
                 if parts.len() != 2 {
@@ -358,8 +357,7 @@ impl OvsmExecutor {
                 let mut loop_body = Vec::new();
                 let loop_indent = raw_line.len() - raw_line.trim_start().len();
 
-                for j in (i + 1)..all_lines.len() {
-                    let body_line = all_lines[j];
+                for &body_line in &all_lines[(i + 1)..] {
                     let body_indent = body_line.len() - body_line.trim_start().len();
 
                     if body_line.trim().is_empty() {
@@ -398,19 +396,18 @@ impl OvsmExecutor {
 
             // WHILE loop: WHILE condition:
             if line.starts_with("WHILE ") {
-                let condition_part = if line.ends_with(':') {
-                    &line[6..line.len() - 1]
-                } else {
-                    &line[6..]
-                }
-                .trim();
+                let condition_part = line
+                    .strip_prefix("WHILE ")
+                    .unwrap()
+                    .strip_suffix(':')
+                    .unwrap_or(line.strip_prefix("WHILE ").unwrap())
+                    .trim();
 
                 // Collect loop body (indented lines after WHILE)
                 let mut loop_body = Vec::new();
                 let loop_indent = raw_line.len() - raw_line.trim_start().len();
 
-                for j in (i + 1)..all_lines.len() {
-                    let body_line = all_lines[j];
+                for &body_line in &all_lines[(i + 1)..] {
                     let body_indent = body_line.len() - body_line.trim_start().len();
 
                     if body_line.trim().is_empty() {
@@ -483,7 +480,7 @@ impl OvsmExecutor {
             }
             // Direct CALL statement: CALL tool_name
             else if line.starts_with("CALL ") {
-                let tool_name = line[5..].trim();
+                let tool_name = line.strip_prefix("CALL ").unwrap().trim();
                 let tool_result = self.execute_call_statement(tool_name).await?;
                 last_value = tool_result;
             }
@@ -507,6 +504,10 @@ impl OvsmExecutor {
 
     /// Execute a decision point with branching
     async fn execute_decision_point(&self, content: &str) -> Result<serde_json::Value> {
+        // Type alias for cleaner code
+        type Branch = (String, Vec<String>);
+        type IfBlock = (String, Vec<Branch>);
+
         if self.debug {
             println!("🔀 Executing Decision Point");
         }
@@ -528,8 +529,8 @@ impl OvsmExecutor {
 
         // First, try to parse IF/THEN/ELSE structure
         let mut if_blocks = Vec::new();
-        let mut current_if_block: Option<(String, Vec<(String, Vec<String>)>)> = None;
-        let mut current_branch: Option<(String, Vec<String>)> = None;
+        let mut current_if_block: Option<IfBlock> = None;
+        let mut current_branch: Option<Branch> = None;
 
         let mut i = 0;
         while i < lines.len() {
@@ -545,9 +546,11 @@ impl OvsmExecutor {
 
                 // Extract condition from "IF condition THEN"
                 let condition = if let Some(then_pos) = trimmed.find(" THEN") {
-                    trimmed[3..then_pos].trim().to_string()
+                    trimmed.strip_prefix("IF ").unwrap()[..then_pos - 3]
+                        .trim()
+                        .to_string()
                 } else {
-                    trimmed[3..].trim().to_string()
+                    trimmed.strip_prefix("IF ").unwrap().trim().to_string()
                 };
 
                 current_if_block = Some((condition, Vec::new()));
@@ -571,11 +574,11 @@ impl OvsmExecutor {
                 }
 
                 // Parse branch name: "BRANCH name:" or "BRANCH name (condition):"
-                let branch_line = if trimmed.ends_with(':') {
-                    &trimmed[7..trimmed.len() - 1]
-                } else {
-                    &trimmed[7..]
-                };
+                let branch_line = trimmed
+                    .strip_prefix("BRANCH ")
+                    .unwrap()
+                    .strip_suffix(':')
+                    .unwrap_or(trimmed.strip_prefix("BRANCH ").unwrap());
 
                 let branch_name = branch_line.trim().to_string();
                 current_branch = Some((branch_name, Vec::new()));
@@ -618,7 +621,7 @@ impl OvsmExecutor {
 
             if condition_met {
                 // Execute the first branch in this block
-                for (branch_name, actions) in branches {
+                if let Some((branch_name, actions)) = branches.into_iter().next() {
                     if self.debug {
                         println!("  ✅ Taking branch: {}", branch_name);
                     }
@@ -651,7 +654,7 @@ impl OvsmExecutor {
 
             // Check if action is a CALL statement
             if action.starts_with("CALL ") {
-                let tool_name = action[5..].trim();
+                let tool_name = action.strip_prefix("CALL ").unwrap().trim();
                 if let Ok(val) = self.execute_call_statement(tool_name).await {
                     result = val;
                 }
@@ -772,7 +775,7 @@ impl OvsmExecutor {
 
         // CALL statement: CALL tool_name
         if expr.starts_with("CALL ") {
-            let tool_name = expr[5..].trim();
+            let tool_name = expr.strip_prefix("CALL ").unwrap().trim();
             return self.execute_call_statement(tool_name).await;
         }
 

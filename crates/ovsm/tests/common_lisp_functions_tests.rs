@@ -248,11 +248,13 @@ fn test_cl_member() {
 #[test]
 fn test_cl_assoc() {
     // assoc looks up key in association list
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define alist [["a" 1] ["b" 2] ["c" 3]])
           (assoc "b" alist))
-    "#);
+    "#,
+    );
 
     match result {
         Value::Array(arr) => {
@@ -264,11 +266,13 @@ fn test_cl_assoc() {
     }
 
     // assoc returns null if key not found
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define alist [["a" 1] ["b" 2]])
           (assoc "z" alist))
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Null);
 }
 
@@ -389,11 +393,13 @@ fn test_cl_mapcar() {
 #[test]
 fn test_cl_mapc() {
     // mapc executes for side effects but returns original list
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define items [1 2 3])
           (mapc (lambda (x) (* x 100)) items))
-    "#);
+    "#,
+    );
 
     // Should return the original list
     match result {
@@ -465,71 +471,85 @@ fn test_cl_remove_if_not() {
 #[test]
 fn test_cl_incf() {
     // incf with default delta (1)
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define x 10)
           (incf x)
           x)
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Int(11));
 
     // incf with custom delta
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define y 100)
           (incf y 25)
           y)
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Int(125));
 
     // incf with float
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define z 5.5)
           (incf z 2.5)
           z)
-    "#);
+    "#,
+    );
     match result {
         Value::Float(f) => assert!(approx_eq(f, 8.0)),
         _ => panic!("Expected float"),
     }
 
     // incf returns the new value
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define a 5)
           (incf a 3))
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Int(8));
 }
 
 #[test]
 fn test_cl_decf() {
     // decf with default delta (1)
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define x 10)
           (decf x)
           x)
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Int(9));
 
     // decf with custom delta
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define y 100)
           (decf y 30)
           y)
-    "#);
+    "#,
+    );
     assert_eq!(result, Value::Int(70));
 
     // decf with float
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define z 10.0)
           (decf z 2.5)
           z)
-    "#);
+    "#,
+    );
     match result {
         Value::Float(f) => assert!(approx_eq(f, 7.5)),
         _ => panic!("Expected float"),
@@ -543,22 +563,26 @@ fn test_cl_decf() {
 #[test]
 fn test_cl_type_coercion() {
     // incf with mixed Int/Float
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define x 10)
           (incf x 2.5))
-    "#);
+    "#,
+    );
     match result {
         Value::Float(f) => assert!(approx_eq(f, 12.5)),
         _ => panic!("Expected float from Int + Float coercion"),
     }
 
     // decf with mixed Float/Int
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           (define y 10.5)
           (decf y 3))
-    "#);
+    "#,
+    );
     match result {
         Value::Float(f) => assert!(approx_eq(f, 7.5)),
         _ => panic!("Expected float from Float - Int coercion"),
@@ -596,7 +620,8 @@ fn test_cl_edge_cases() {
 #[test]
 fn test_cl_comprehensive_usage() {
     // Complex example using multiple CL functions together
-    let result = eval(r#"
+    let result = eval(
+        r#"
         (do
           ;; Create data
           (define numbers [1 2 3 4 5 6 7 8 9 10])
@@ -615,7 +640,8 @@ fn test_cl_comprehensive_usage() {
           (incf counter 10)
 
           counter)
-    "#);
+    "#,
+    );
 
     // First even is 2, squared is 4, plus 10 is 14
     assert_eq!(result, Value::Int(14));

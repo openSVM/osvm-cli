@@ -155,13 +155,10 @@ impl Tool for ArefTool {
         let array = args[0].as_array()?;
         let index = args[1].as_int()? as usize;
 
-        array
-            .get(index)
-            .cloned()
-            .ok_or_else(|| Error::IndexOutOfBounds {
-                index,
-                length: array.len(),
-            })
+        array.get(index).cloned().ok_or(Error::IndexOutOfBounds {
+            index,
+            length: array.len(),
+        })
     }
 }
 

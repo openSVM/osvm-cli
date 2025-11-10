@@ -170,17 +170,17 @@ impl Tool for CoerceTool {
                     got: "invalid".to_string(),
                 }),
             },
-            "STRING" => Ok(Value::String(format!(
-                "{}",
-                match value {
+            "STRING" => Ok(Value::String(
+                (match value {
                     Value::String(s) => s.clone(),
                     Value::Int(n) => n.to_string(),
                     Value::Float(f) => f.to_string(),
                     Value::Bool(b) => b.to_string(),
                     Value::Null => "null".to_string(),
                     _ => "?".to_string(),
-                }
-            ))),
+                })
+                .to_string(),
+            )),
             _ => Ok(value.clone()),
         }
     }

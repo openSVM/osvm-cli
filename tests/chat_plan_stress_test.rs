@@ -16,7 +16,7 @@ fn test_plan_generation_statistics() {
         std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
         let output = Command::new("cargo")
-            .args(&[
+            .args([
                 "test",
                 "--test",
                 "chat_single_query_test",
@@ -37,7 +37,7 @@ fn test_plan_generation_statistics() {
         for line in combined.lines() {
             if line.contains("Plans generated:") {
                 if let Some(num_str) = line.split("Plans generated:").nth(1) {
-                    if let Some(num) = num_str.trim().split_whitespace().next() {
+                    if let Some(num) = num_str.split_whitespace().next() {
                         run_result.plans_generated = num.parse().unwrap_or(0);
                     }
                 }
@@ -45,7 +45,7 @@ fn test_plan_generation_statistics() {
 
             if line.contains("Tools executed:") {
                 if let Some(num_str) = line.split("Tools executed:").nth(1) {
-                    if let Some(num) = num_str.trim().split_whitespace().next() {
+                    if let Some(num) = num_str.split_whitespace().next() {
                         run_result.tools_executed = num.parse().unwrap_or(0);
                     }
                 }

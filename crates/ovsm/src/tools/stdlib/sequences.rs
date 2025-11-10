@@ -129,7 +129,7 @@ impl Tool for EltTool {
                 chars
                     .get(index)
                     .map(|c| Value::String(c.to_string()))
-                    .ok_or_else(|| Error::IndexOutOfBounds {
+                    .ok_or(Error::IndexOutOfBounds {
                         index,
                         length: chars.len(),
                     })
@@ -827,7 +827,7 @@ impl Tool for UnionTool {
         let list1 = args[0].as_array()?;
         let list2 = args[1].as_array()?;
 
-        let mut result: Vec<Value> = list1.iter().cloned().collect();
+        let mut result: Vec<Value> = list1.to_vec();
 
         for elem in list2.iter() {
             if !result.contains(elem) {

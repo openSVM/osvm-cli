@@ -989,14 +989,18 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             // Get list of ALL configured MCP servers
             let all_servers = {
                 let locked = futures::executor::block_on(mcp_arc.lock());
-                locked.list_servers()
+                locked
+                    .list_servers()
                     .into_iter()
                     .map(|(id, config)| (id.clone(), config.enabled))
                     .collect::<Vec<_>>()
             };
 
             if verbose > 1 {
-                println!("\n🔍 Discovering MCP tools from {} configured server(s):", all_servers.len());
+                println!(
+                    "\n🔍 Discovering MCP tools from {} configured server(s):",
+                    all_servers.len()
+                );
             }
 
             let mut total_tools_registered = 0;
@@ -1045,7 +1049,10 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             }
 
             if verbose > 1 {
-                println!("   📦 Total: {} MCP tools registered\n", total_tools_registered);
+                println!(
+                    "   📦 Total: {} MCP tools registered\n",
+                    total_tools_registered
+                );
             }
 
             // Initialize OVSM service with registry (now has stdlib + RPC + MCP tools)

@@ -5,7 +5,8 @@ use crate::e2e::common::{
 };
 use crate::e2e::test_utils::setup_test_environment;
 use assert_cmd::assert::OutputAssertExt;
-use assert_cmd::prelude::*;
+#[allow(deprecated)]
+use assert_cmd::cargo::cargo_bin;
 use serial_test::serial;
 use std::process::Command;
 
@@ -34,10 +35,7 @@ fn example_test_simple_command() {
 fn example_test_with_assert_cmd() {
     setup_test_environment();
 
-    let assert = Command::cargo_bin("osvm")
-        .expect("Binary exists")
-        .arg("--help")
-        .assert();
+    let assert = Command::new(cargo_bin!("osvm")).arg("--help").assert();
 
     // Less strict check to handle either format
     assert.success();

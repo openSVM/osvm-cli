@@ -148,7 +148,11 @@ impl Tool for McpBridgeTool {
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             eprintln!("Tool: {}", self.name);
             eprintln!("Result JSON:");
-            eprintln!("{}", serde_json::to_string_pretty(&result_json).unwrap_or_else(|_| format!("{:?}", result_json)));
+            eprintln!(
+                "{}",
+                serde_json::to_string_pretty(&result_json)
+                    .unwrap_or_else(|_| format!("{:?}", result_json))
+            );
             eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 

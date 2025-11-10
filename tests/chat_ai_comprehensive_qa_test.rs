@@ -750,7 +750,7 @@ async fn test_comprehensive_qa_100_queries() -> Result<(), Box<dyn std::error::E
             println!("❌ No response");
         }
 
-        println!("");
+        println!();
     }
 
     // Final statistics

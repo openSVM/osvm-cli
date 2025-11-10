@@ -85,7 +85,7 @@ async fn test_launch_100_concurrent_microvms() -> Result<()> {
                     let count = successful.load(Ordering::Relaxed);
 
                     // Progress indicator
-                    if count % 10 == 0 {
+                    if count.is_multiple_of(10) {
                         println!("✓ Launched {} VMs...", count);
                     }
 

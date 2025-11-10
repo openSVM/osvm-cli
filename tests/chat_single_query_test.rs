@@ -115,7 +115,7 @@ async fn test_single_query_plan_generation() {
             plans.len()
         );
         assert!(
-            tools_executed.len() > 0,
+            !tools_executed.is_empty(),
             "If plan exists, at least some tools should execute"
         );
     } else {

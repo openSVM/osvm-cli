@@ -189,7 +189,7 @@ impl Tool for ValuesCountTool {
         "Get number of values returned"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        let count = match args.get(0) {
+        let count = match args.first() {
             Some(Value::Array(arr)) => arr.len(),
             Some(_) => 1,
             None => 0,
@@ -208,7 +208,7 @@ impl Tool for ExtractPrimaryValueTool {
         "Extract only primary value, discard rest"
     }
     fn execute(&self, args: &[Value]) -> Result<Value> {
-        match args.get(0) {
+        match args.first() {
             Some(Value::Array(arr)) => Ok(arr.first().cloned().unwrap_or(Value::Null)),
             Some(v) => Ok(v.clone()),
             None => Ok(Value::Null),
@@ -311,7 +311,7 @@ impl Tool for GetPropertiesTool {
         Ok(Value::Array(Arc::new(vec![
             Value::Null,
             Value::Null,
-            args.get(0).cloned().unwrap_or(Value::Null),
+            args.first().cloned().unwrap_or(Value::Null),
         ])))
     }
 }
@@ -332,11 +332,11 @@ impl Tool for GetSetfExpansionTool {
     fn execute(&self, args: &[Value]) -> Result<Value> {
         // Return 5 values: vars, vals, stores, writer, reader
         Ok(Value::Array(Arc::new(vec![
-            Value::Array(Arc::new(vec![])),              // vars
-            Value::Array(Arc::new(vec![])),              // vals
-            Value::Array(Arc::new(vec![])),              // stores
-            args.get(0).cloned().unwrap_or(Value::Null), // writer
-            args.get(0).cloned().unwrap_or(Value::Null), // reader
+            Value::Array(Arc::new(vec![])),               // vars
+            Value::Array(Arc::new(vec![])),               // vals
+            Value::Array(Arc::new(vec![])),               // stores
+            args.first().cloned().unwrap_or(Value::Null), // writer
+            args.first().cloned().unwrap_or(Value::Null), // reader
         ])))
     }
 }

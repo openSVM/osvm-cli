@@ -54,7 +54,7 @@ fn test_osvm_a_basic_wallet_balance_query() {
 
     // Should succeed without error exit code
     assert!(
-        output.status.success() || output.status.code().map_or(false, |c| c == 0 || c != 1),
+        output.status.success() || output.status.code().is_some_and(|c| c == 0 || c != 1),
         "Command should complete (exit code 0 is expected for planning mode)"
     );
 

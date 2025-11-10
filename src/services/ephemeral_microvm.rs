@@ -178,7 +178,7 @@ impl EphemeralVmManager {
 
         // Grant CAP_NET_ADMIN capability to Firecracker binary
         let output = tokio::process::Command::new("sudo")
-            .args(&[
+            .args([
                 "setcap",
                 "cap_net_admin+ep",
                 firecracker_path.to_str().unwrap(),
@@ -206,21 +206,21 @@ impl EphemeralVmManager {
 
         // Create TAP device
         tokio::process::Command::new("sudo")
-            .args(&["ip", "tuntap", "add", tap_name, "mode", "tap"])
+            .args(["ip", "tuntap", "add", tap_name, "mode", "tap"])
             .output()
             .await
             .context("Failed to create TAP device")?;
 
         // Set TAP device up
         tokio::process::Command::new("sudo")
-            .args(&["ip", "link", "set", tap_name, "up"])
+            .args(["ip", "link", "set", tap_name, "up"])
             .output()
             .await
             .context("Failed to bring TAP device up")?;
 
         // Assign IP to TAP device (host side)
         tokio::process::Command::new("sudo")
-            .args(&["ip", "addr", "add", "172.16.0.1/24", "dev", tap_name])
+            .args(["ip", "addr", "add", "172.16.0.1/24", "dev", tap_name])
             .output()
             .await
             .ok(); // Ignore if already exists
@@ -228,21 +228,21 @@ impl EphemeralVmManager {
         // Change ownership to current user so Firecracker can access it
         let current_user = std::env::var("USER").unwrap_or_else(|_| "root".to_string());
         tokio::process::Command::new("sudo")
-            .args(&["chown", &current_user, &format!("/dev/net/tun")])
+            .args(["chown", &current_user, "/dev/net/tun"])
             .output()
             .await
             .ok();
 
         // Enable IP forwarding
         tokio::process::Command::new("sudo")
-            .args(&["sysctl", "-w", "net.ipv4.ip_forward=1"])
+            .args(["sysctl", "-w", "net.ipv4.ip_forward=1"])
             .output()
             .await
             .context("Failed to enable IP forwarding")?;
 
         // Setup NAT (masquerade)
         tokio::process::Command::new("sudo")
-            .args(&[
+            .args([
                 "iptables",
                 "-t",
                 "nat",
@@ -265,7 +265,7 @@ impl EphemeralVmManager {
         debug!("Cleaning up TAP device: {}", tap_name);
 
         tokio::process::Command::new("sudo")
-            .args(&["ip", "link", "delete", tap_name])
+            .args(["ip", "link", "delete", tap_name])
             .output()
             .await
             .ok(); // Ignore errors on cleanup

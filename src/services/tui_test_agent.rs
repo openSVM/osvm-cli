@@ -23,7 +23,7 @@ use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
@@ -444,7 +444,7 @@ impl TuiTestAgent {
         // If content is mostly empty or just escape codes, try to get cell-by-cell content
         let content = if clean_content.trim().is_empty() || clean_content.len() < 50 {
             warn!("VT100 screen.contents() returned minimal content, extracting cell-by-cell");
-            extract_screen_cells(&screen, self.size.rows, self.size.cols)
+            extract_screen_cells(screen, self.size.rows, self.size.cols)
         } else {
             clean_content
         };
@@ -514,7 +514,7 @@ impl TuiTestAgent {
     }
 
     /// Capture actual terminal window screenshot using system tools
-    async fn capture_window_screenshot(&self, output_path: &PathBuf) -> Result<()> {
+    async fn capture_window_screenshot(&self, output_path: &Path) -> Result<()> {
         // Get the display to use (either Xvfb or system DISPLAY)
         let display_lock = self.xvfb_display.lock().await;
         let display_env = if let Some(ref d) = *display_lock {

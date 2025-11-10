@@ -16,12 +16,12 @@ pub fn handle_svm_command(
     match svm_sub_command {
         "list" => {
             // List all SVMs
-            let svms = svm_info::list_all_svms(&rpc_client, config.commitment_config)?;
+            let svms = svm_info::list_all_svms(rpc_client, config.commitment_config)?;
             svm_info::display_svm_list(&svms);
         }
         "dashboard" => {
             // Launch the interactive dashboard
-            match dashboard::run_dashboard(&rpc_client, config.commitment_config) {
+            match dashboard::run_dashboard(rpc_client, config.commitment_config) {
                 Ok(_) => println!("Dashboard closed"),
                 Err(e) => {
                     eprintln!("Error running dashboard: {}", e);
@@ -35,7 +35,7 @@ pub fn handle_svm_command(
                 .get_one::<String>("name")
                 .map(|s| s.as_str())
                 .unwrap();
-            match svm_info::get_svm_info(&rpc_client, name, config.commitment_config) {
+            match svm_info::get_svm_info(rpc_client, name, config.commitment_config) {
                 Ok(info) => svm_info::display_svm_info(&info),
                 Err(e) => {
                     eprintln!("Error: {}", e);
@@ -58,7 +58,7 @@ pub fn handle_svm_command(
             println!("Host: {}", host);
 
             // First get SVM info to verify it exists and can be installed
-            match svm_info::get_svm_info(&rpc_client, svm_name, config.commitment_config) {
+            match svm_info::get_svm_info(rpc_client, svm_name, config.commitment_config) {
                 Ok(info) => {
                     if !info.can_install_validator && !info.can_install_rpc {
                         eprintln!("SVM '{}' cannot be installed", svm_name);

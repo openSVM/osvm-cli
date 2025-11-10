@@ -145,7 +145,7 @@ async fn test_complex_multi_step_plan_generation() -> Result<(), Box<dyn std::er
         println!("   • Keywords expected: {:?}\n", expected_keywords);
 
         // Estimate steps required
-        let estimated_steps = match test_name.as_ref() {
+        let estimated_steps = match *test_name {
             "validator_analysis" => 100 * 6, // 100 validators × 6 operations each
             "token_portfolio_analysis" => 50 * 8, // 50 tokens × 8 operations
             "multi_account_analysis" => 50 * 100, // 50 accounts × 100 transactions

@@ -38,7 +38,7 @@ impl McpToolExecutor for AnalyzeTool {
         *count += 1;
 
         // Return patterns every other call
-        if *count % 2 == 0 {
+        if (*count).is_multiple_of(2) {
             Ok(json!({
                 "patterns_found": 2,
                 "patterns": [
@@ -173,7 +173,7 @@ async fn test_pumpfun_monitor_plan() -> Result<()> {
 
     // Should have generated some reports
     assert!(
-        reports.lock().unwrap().len() > 0,
+        !reports.lock().unwrap().is_empty(),
         "Should generate pattern reports"
     );
 

@@ -991,10 +991,8 @@ impl AiService {
                 eprintln!("DEBUG parse_ovsm_plan: FAILED - no Expected Plan marker found");
             }
             anyhow::bail!("No OVSM plan structure found");
-        } else {
-            if get_verbosity() >= VerbosityLevel::Verbose {
-                eprintln!("DEBUG parse_ovsm_plan: Found Expected Plan marker!");
-            }
+        } else if get_verbosity() >= VerbosityLevel::Verbose {
+            eprintln!("DEBUG parse_ovsm_plan: Found Expected Plan marker!");
         }
 
         // Extract reasoning from Main Branch or overview
@@ -1035,7 +1033,7 @@ impl AiService {
                 }
 
                 // Extract tool names (comma or space separated)
-                for word in line.split(|c: char| c == ',' || c == ' ' || c == '-') {
+                for word in line.split([',', ' ', '-']) {
                     let tool_name = word.trim();
                     if !tool_name.is_empty() && tool_name.len() > 2 {
                         tools.push(PlannedTool {
@@ -1606,7 +1604,7 @@ impl AiService {
     fn is_response_truncated(&self, response: &str) -> bool {
         // Check response length is suspiciously close to truncation limits
         let length = response.len();
-        let near_3kb = length >= 2900 && length <= 3100;
+        let near_3kb = (2900..=3100).contains(&length);
 
         // Check for missing closing tags in XML-formatted responses
         let has_unclosed_xml = (response.contains("<ovsm_plan>")
@@ -1618,7 +1616,7 @@ impl AiService {
 
         // Check for unclosed code blocks (markdown)
         let code_blocks = response.matches("```").count();
-        let has_unclosed_markdown = code_blocks % 2 != 0;
+        let has_unclosed_markdown = !code_blocks.is_multiple_of(2);
 
         // Check for severely unbalanced parentheses (LISP code)
         let open_parens = response.matches('(').count();
@@ -1705,10 +1703,11 @@ impl AiService {
             }
         }
 
-        if continuation_count >= MAX_CONTINUATIONS && self.is_response_truncated(&full_response) {
-            if debug_mode {
-                println!("⚠️ Max continuations reached but response still appears truncated");
-            }
+        if continuation_count >= MAX_CONTINUATIONS
+            && self.is_response_truncated(&full_response)
+            && debug_mode
+        {
+            println!("⚠️ Max continuations reached but response still appears truncated");
         }
 
         Ok(full_response)

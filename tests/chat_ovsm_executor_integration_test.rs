@@ -133,7 +133,7 @@ Action: Return result
 
     // Verify execution completed
     assert!(result.confidence > 0, "Confidence should be > 0");
-    assert!(result.tools_called.len() >= 1);
+    assert!(!result.tools_called.is_empty());
     assert!(result.execution_time_ms > 0);
 
     println!("✓ Simple plan execution successful");
@@ -202,7 +202,7 @@ Action: Return processed results
 
     // Verify branching occurred
     assert!(
-        result.branches_taken.len() > 0,
+        !result.branches_taken.is_empty(),
         "Should have taken at least one branch"
     );
     assert!(result.tools_called.contains(&"get_data_size".to_string()));
@@ -364,7 +364,7 @@ Action: Complete multi-level decisions
     // Note: Nested DECISION blocks are currently limited (see NESTED_DECISION_ROADMAP.md)
     // The executor will take the first branch but skip nested decisions
     assert!(
-        result.branches_taken.len() >= 1,
+        !result.branches_taken.is_empty(),
         "Should take at least one branch"
     );
     assert!(result.tools_called.contains(&"get_count".to_string()));

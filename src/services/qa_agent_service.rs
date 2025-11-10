@@ -40,18 +40,13 @@ use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 /// Chat mode for QA testing
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum ChatMode {
     /// Basic terminal chat mode (without --advanced)
+    #[default]
     Basic,
     /// Advanced FAR-style TUI chat mode (with --advanced)
     Advanced,
-}
-
-impl Default for ChatMode {
-    fn default() -> Self {
-        ChatMode::Basic
-    }
 }
 
 /// Test scenario category
@@ -169,8 +164,10 @@ pub struct QaAgentService {
 impl QaAgentService {
     /// Create a new QA Agent Service with simple parameters
     pub fn new(debug_mode: bool, verbose: u8) -> Self {
-        let mut config = QaAgentConfig::default();
-        config.ai_analysis_enabled = !debug_mode; // Disable AI in debug mode for faster testing
+        let config = QaAgentConfig {
+            ai_analysis_enabled: !debug_mode, // Disable AI in debug mode for faster testing
+            ..Default::default()
+        };
 
         // Create service or fall back to minimal config on error
         let ai_service = Arc::new(AiService::new());
@@ -830,7 +827,7 @@ Format your response as:
         // Parse response to extract analysis and fix
         let parts: Vec<&str> = response.split("## Suggested Fix").collect();
         let analysis = parts
-            .get(0)
+            .first()
             .unwrap_or(&"")
             .replace("## Analysis", "")
             .trim()
@@ -894,7 +891,7 @@ Format your response as:
                     report.push_str(&format!("- {}\n", warning));
                 }
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Add bug details
@@ -951,7 +948,7 @@ Format your response as:
     pub async fn create_github_issue(&self, bug: &BugReport) -> Result<String> {
         // Build issue body
         let mut body = String::new();
-        body.push_str(&format!("## Bug Report\n\n"));
+        body.push_str("## Bug Report\n\n");
         body.push_str(&format!("**Severity:** {:?}\n", bug.severity));
         body.push_str(&format!("**Test Scenario:** {}\n", bug.test_scenario));
         body.push_str(&format!("**Category:** {:?}\n", bug.category));
@@ -963,7 +960,7 @@ Format your response as:
         for (i, step) in bug.reproduction_steps.iter().enumerate() {
             body.push_str(&format!("{}. {}\n", i + 1, step));
         }
-        body.push_str("\n");
+        body.push('\n');
 
         body.push_str(&format!(
             "## Expected Behavior\n{}\n\n",
@@ -1046,8 +1043,8 @@ Format your response as:
         let mut categories: HashMap<TestCategory, Vec<&TestScenario>> = HashMap::new();
         for scenario in self.scenarios.values() {
             categories
-                .entry(scenario.category.clone())
-                .or_insert_with(Vec::new)
+                .entry(scenario.category)
+                .or_default()
                 .push(scenario);
         }
 

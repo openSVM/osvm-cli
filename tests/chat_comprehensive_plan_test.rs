@@ -41,7 +41,7 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
 
         // Run the query
         let output = std::process::Command::new("cargo")
-            .args(&[
+            .args([
                 "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
             ])
             .env("RUST_LOG", "debug")
@@ -61,7 +61,7 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
                 plans_in_test += 1;
                 // Extract tool count from "1 tools" or "2 tools"
                 if let Some(count_str) = line.split("Plan:").nth(1) {
-                    if let Some(num) = count_str.trim().split_whitespace().next() {
+                    if let Some(num) = count_str.split_whitespace().next() {
                         if let Ok(n) = num.parse::<usize>() {
                             tools_in_test += n;
                         }
@@ -131,7 +131,7 @@ async fn test_comprehensive_plan_generation() -> Result<(), Box<dyn std::error::
     );
 
     assert!(
-        all_tools_seen.len() > 0,
+        !all_tools_seen.is_empty(),
         "❌ FAIL: Should see at least one unique tool"
     );
 
@@ -157,7 +157,7 @@ async fn test_plan_generation_consistency() -> Result<(), Box<dyn std::error::Er
         println!("\n🔄 Run {}/{}", run, runs);
 
         let output = std::process::Command::new("cargo")
-            .args(&[
+            .args([
                 "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
             ])
             .env("RUST_LOG", "debug")
@@ -223,7 +223,7 @@ async fn test_complex_multi_tool_query() -> Result<(), Box<dyn std::error::Error
     println!("📝 Complex query: {}", query);
 
     let output = std::process::Command::new("cargo")
-        .args(&[
+        .args([
             "run", "--bin", "osvm", "--", "chat", "--test", "--query", query,
         ])
         .env("RUST_LOG", "debug")
@@ -241,7 +241,7 @@ async fn test_complex_multi_tool_query() -> Result<(), Box<dyn std::error::Error
         if line.contains("📋 Agent Plan:") {
             plans += 1;
             if let Some(count_str) = line.split("Plan:").nth(1) {
-                if let Some(num) = count_str.trim().split_whitespace().next() {
+                if let Some(num) = count_str.split_whitespace().next() {
                     if let Ok(n) = num.parse::<usize>() {
                         total_tools += n;
                     }

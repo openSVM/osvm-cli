@@ -1,9 +1,11 @@
 //! Integration tests for OVSM language integration in OSVM-CLI
 //! These tests verify that the OVSM service works correctly through the CLI interface.
 
-use assert_cmd::Command;
+#[allow(deprecated)]
+use assert_cmd::cargo::cargo_bin;
 use predicates::prelude::*;
 use std::fs;
+use std::process::Command;
 use tempfile::TempDir;
 
 /// Test helper to create a temporary OVSM script file
@@ -16,7 +18,7 @@ fn create_temp_script(content: &str) -> (TempDir, String) {
 
 #[test]
 fn test_ovsm_help_command() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("--help");
 
     cmd.assert()
@@ -30,7 +32,7 @@ fn test_ovsm_help_command() {
 
 #[test]
 fn test_ovsm_eval_simple_arithmetic() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg("$x = 10; $y = 20; RETURN $x + $y");
@@ -42,7 +44,7 @@ fn test_ovsm_eval_simple_arithmetic() {
 
 #[test]
 fn test_ovsm_eval_string_concatenation() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg(r#"$greeting = "Hello"; RETURN $greeting"#);
@@ -54,7 +56,7 @@ fn test_ovsm_eval_string_concatenation() {
 
 #[test]
 fn test_ovsm_eval_conditional() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg("IF 10 > 5 THEN RETURN \"yes\" ELSE RETURN \"no\"");
@@ -66,7 +68,7 @@ fn test_ovsm_eval_conditional() {
 
 #[test]
 fn test_ovsm_eval_loop() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg("$sum = 0; FOR $i IN [1..6]: $sum = $sum + $i; RETURN $sum");
@@ -86,7 +88,7 @@ RETURN $message
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     cmd.assert()
@@ -110,7 +112,7 @@ ELSE
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     cmd.assert()
@@ -127,7 +129,7 @@ RETURN $result
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path).arg("--json");
 
     cmd.assert()
@@ -145,7 +147,7 @@ RETURN $x + $y
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("check").arg(&script_path);
 
     cmd.assert()
@@ -162,7 +164,7 @@ RETURN $x
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("check").arg(&script_path);
 
     cmd.assert()
@@ -172,7 +174,7 @@ RETURN $x
 
 #[test]
 fn test_ovsm_eval_with_variables() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg("$a = 10; $b = 3; $c = $a * $b; RETURN $c");
@@ -184,7 +186,7 @@ fn test_ovsm_eval_with_variables() {
 
 #[test]
 fn test_ovsm_eval_comparison_operators() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg("$x = 10; $y = 20; IF $x < $y THEN RETURN true ELSE RETURN false");
@@ -196,7 +198,7 @@ fn test_ovsm_eval_comparison_operators() {
 
 #[test]
 fn test_ovsm_run_nonexistent_file() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("run")
         .arg("/tmp/nonexistent_ovsm_file_12345.ovsm");
@@ -208,7 +210,7 @@ fn test_ovsm_run_nonexistent_file() {
 
 #[test]
 fn test_ovsm_examples_command() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("examples");
 
     cmd.assert()
@@ -232,7 +234,7 @@ RETURN $total
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     // 13 + 7 + 30 + 3 + 1 = 54
@@ -258,7 +260,7 @@ ELSE
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     cmd.assert()
@@ -268,7 +270,7 @@ ELSE
 
 #[test]
 fn test_ovsm_eval_power_operator() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("eval").arg("$x = 2; RETURN $x ** 3");
 
     cmd.assert().success().stdout(predicate::str::contains("8"));
@@ -276,7 +278,7 @@ fn test_ovsm_eval_power_operator() {
 
 #[test]
 fn test_ovsm_eval_modulo_operator() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("eval").arg("RETURN 10 % 3");
 
     cmd.assert().success().stdout(predicate::str::contains("1"));
@@ -297,7 +299,7 @@ RETURN $sum
 
     let (_temp_dir, script_path) = create_temp_script(script_content);
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("run").arg(&script_path);
 
     // 0 + 1 + 2 + 3 + 4 = 10
@@ -312,7 +314,7 @@ fn test_ovsm_no_config_required() {
     // We test this by checking that even without a valid Solana config,
     // OVSM commands still work
 
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("eval").arg("RETURN 42");
 
     // Should succeed even without Solana config
@@ -321,7 +323,7 @@ fn test_ovsm_no_config_required() {
 
 #[test]
 fn test_ovsm_eval_boolean_logic() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm").arg("eval").arg(
         "$a = true; $b = false; IF $a AND NOT $b THEN RETURN \"correct\" ELSE RETURN \"wrong\"",
     );
@@ -333,7 +335,7 @@ fn test_ovsm_eval_boolean_logic() {
 
 #[test]
 fn test_ovsm_eval_string_operations() {
-    let mut cmd = Command::cargo_bin("osvm").unwrap();
+    let mut cmd = Command::new(cargo_bin!("osvm"));
     cmd.arg("ovsm")
         .arg("eval")
         .arg(r#"$first = "Hello"; $second = " World"; RETURN $first + $second"#);

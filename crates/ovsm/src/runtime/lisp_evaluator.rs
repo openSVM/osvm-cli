@@ -211,8 +211,8 @@ impl LispEvaluator {
                     "sqrt" => self.eval_sqrt(args),
                     "pow" => self.eval_pow(args),
                     "expt" => self.eval_pow(args), // Common Lisp alias for pow
-                    "exp" => self.eval_exp(args), // e^x
-                    "ln" => self.eval_ln(args), // Natural logarithm
+                    "exp" => self.eval_exp(args),  // e^x
+                    "ln" => self.eval_ln(args),    // Natural logarithm
                     "abs" => self.eval_abs(args),
                     // Common Lisp arithmetic shortcuts
                     "1+" => self.eval_1_plus(args),
@@ -2316,7 +2316,7 @@ impl LispEvaluator {
             }
         };
 
-        if num < -1.0 || num > 1.0 {
+        if !(-1.0..=1.0).contains(&num) {
             return Err(Error::InvalidArguments {
                 tool: "asin".to_string(),
                 reason: format!("Input must be in range [-1, 1], got {}", num),
@@ -2347,7 +2347,7 @@ impl LispEvaluator {
             }
         };
 
-        if num < -1.0 || num > 1.0 {
+        if !(-1.0..=1.0).contains(&num) {
             return Err(Error::InvalidArguments {
                 tool: "acos".to_string(),
                 reason: format!("Input must be in range [-1, 1], got {}", num),
@@ -3199,7 +3199,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "mapcar".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3238,7 +3241,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "mapc".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3279,7 +3285,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "remove-if".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 
@@ -3321,7 +3330,10 @@ impl LispEvaluator {
                 if params.len() != 1 {
                     return Err(Error::InvalidArguments {
                         tool: "remove-if-not".to_string(),
-                        reason: format!("Lambda must take exactly 1 parameter, got {}", params.len()),
+                        reason: format!(
+                            "Lambda must take exactly 1 parameter, got {}",
+                            params.len()
+                        ),
                     });
                 }
 

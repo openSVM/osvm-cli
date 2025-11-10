@@ -11,6 +11,7 @@
 #[cfg(all(test, feature = "incomplete_tests"))]
 mod indexer_core_tests {
     use super::*;
+    use serde_json::json;
 
     #[cfg(feature = "incomplete_tests")]
     #[tokio::test]

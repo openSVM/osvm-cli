@@ -83,6 +83,5 @@ fn test_dummy_backend_runs() {
     // This should complete without hanging
     siv.run_dummy();
 
-    // If we get here, dummy backend worked
-    assert!(true);
+    // If we get here, dummy backend worked (no assertion needed - success is reaching this point)
 }

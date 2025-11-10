@@ -2220,6 +2220,7 @@ impl McpService {
 
         // Priority 3: Check if this tool should be executed in ephemeral unikernel
         // DISABLED: Skip unikernel isolation when use_ephemeral_vms is false
+        #[allow(clippy::overly_complex_bool_expr)]
         if false
             && self
                 .isolation_config

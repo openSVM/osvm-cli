@@ -159,7 +159,6 @@ fn show_devnet_logs(lines: usize, follow: bool) -> Result<(), Box<dyn std::error
 }
 
 /// Handle QA command for automated testing and bug detection
-
 /// Handle MCP commands using the dedicated MCP service
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

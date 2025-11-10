@@ -73,7 +73,7 @@ RETURN {
     println!("\n{}", "=".repeat(60));
     println!("\n✨ Key OVSM Features Demonstrated:\n");
 
-    let features = vec![
+    let features = [
         ("Variables", "$current_slot, $blocks, $fees - Use $ prefix"),
         ("Tool Calls", "getSlot(), getBlock() - Standard Solana RPC"),
         (
@@ -97,7 +97,7 @@ RETURN {
     println!("\n{}", "=".repeat(60));
     println!("\n🔧 How It Works:\n");
 
-    let steps = vec![
+    let steps = [
         "User sends message requiring planning",
         "AI service builds OVSM prompt with system prompt",
         "Calls osvm.ai with ownPlan=true parameter",

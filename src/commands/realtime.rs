@@ -337,7 +337,7 @@ async fn run_polling_mode() -> Result<()> {
         tick.tick().await;
         iteration += 1;
 
-        if iteration % 12 == 0 {
+        if iteration.is_multiple_of(12) {
             // Every minute
             info!("Daemon active (iteration: {})", iteration);
         }

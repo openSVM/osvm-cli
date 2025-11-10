@@ -27,7 +27,7 @@ pub async fn call_osvm_ai_api(query: &str) -> Result<ApiResponse, String> {
     println!("  📡 POST {} with query: '{}'", OSVM_AI_BASE_URL, query);
 
     match client
-        .post(&format!("{}/getAnswer", OSVM_AI_BASE_URL))
+        .post(format!("{}/getAnswer", OSVM_AI_BASE_URL))
         .json(&json!({
             "query": query
         }))
@@ -95,7 +95,7 @@ pub async fn check_apis_available() -> bool {
 
     // Try a simple health check on the AI API
     match client
-        .post(&format!("{}/getAnswer", OSVM_AI_BASE_URL))
+        .post(format!("{}/getAnswer", OSVM_AI_BASE_URL))
         .json(&json!({ "query": "test" }))
         .send()
         .await
