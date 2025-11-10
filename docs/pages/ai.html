@@ -87,8 +87,12 @@ $ osvm "find the top 5 SOL receivers in the last hour"
 
 <span class="info">🤖 AI Agent Process:</span>
 <span class="info">1. Understands Intent:</span> Find top receivers by SOL amount
-<span class="info">2. Plans Investigation:</span> Generate OVSM LISP code
-<span class="info">3. Executes via MCP:</span> Call getSlot, getBlocks, getTransactions
+<span class="info">2. Plans Investigation:</span> Generate OVSM LISP code automatically
+   <span class="comment">;; AI generates:</span>
+   <span class="comment">;; (define current-slot (getSlot))</span>
+   <span class="comment">;; (define transfers (getTransfers current-slot))</span>
+   <span class="comment">;; (define top5 (take 5 (sort transfers)))</span>
+<span class="info">3. Executes via MCP:</span> OVSM calls mcp.solana.com tools
 <span class="info">4. Analyzes Results:</span> Filter transfers, aggregate by receiver
 <span class="info">5. Returns Summary:</span> Formatted table with top 5
 
@@ -103,6 +107,14 @@ $ osvm "find the top 5 SOL receivers in the last hour"
 
     <div class="section">
         <h2>Interactive Chat Interface</h2>
+        <div style="background: #2c3e50; border-left: 4px solid #3498db; padding: 1rem; margin-bottom: 1rem;">
+            <p><strong>💡 Two Ways to Query:</strong></p>
+            <ul style="margin: 0.5rem 0;">
+                <li><strong>Direct:</strong> <code>osvm "your query"</code> - One-shot blockchain questions</li>
+                <li><strong>Chat:</strong> <code>osvm chat</code> - Interactive multi-step investigations with history</li>
+            </ul>
+            <p style="margin-top: 0.5rem; margin-bottom: 0;">Both use the same AI agent → OVSM → MCP pipeline!</p>
+        </div>
         <pre class="terminal">
 <span class="comment"># Launch interactive AI chat</span>
 $ osvm chat

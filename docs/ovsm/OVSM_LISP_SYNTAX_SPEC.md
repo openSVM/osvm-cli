@@ -667,7 +667,7 @@ OVSM provides **91 built-in functions** with cross-language aliases for seamless
 - `charAt` → Character at index (JavaScript-style)
 - `substring` → Extract substring (JavaScript-style with index swapping)
 - `trim`, `starts-with?`, `ends-with?`
-- `contains`, `includes` → Check substring/item presence
+- `contains`, `includes`, `string-contains` → Check substring/item presence
 - `indexOf`, `lastIndexOf` → Find position
 - `repeat`, `reverse`
 - `chr`, `ord` → Character/code conversion (Python-style)

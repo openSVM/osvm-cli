@@ -104,8 +104,17 @@ impl AiConfig {
         let contents = fs::read_to_string(path)
             .with_context(|| format!("Failed to read AI config from {}", path.display()))?;
 
-        let config: AiConfig = serde_yaml::from_str(&contents)
+        let mut config: AiConfig = serde_yaml::from_str(&contents)
             .with_context(|| format!("Failed to parse AI config from {}", path.display()))?;
+
+        // If using local provider and no API key set, try to load from auth service
+        if config.provider == "local" && config.api_key.is_none() {
+            if let Ok(auth_service) = crate::services::auth_service::AuthService::new() {
+                if let Some(osvm_key) = auth_service.get_api_key() {
+                    config.api_key = Some(osvm_key);
+                }
+            }
+        }
 
         Ok(config)
     }

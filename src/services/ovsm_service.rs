@@ -276,6 +276,16 @@ impl OvsmService {
             }
         }
     }
+
+    /// Get the execution trace from the evaluator
+    pub fn get_execution_trace(&self) -> Vec<(String, Value)> {
+        self.evaluator.get_execution_trace()
+    }
+
+    /// Clear the execution trace
+    pub fn clear_execution_trace(&self) {
+        self.evaluator.clear_execution_trace();
+    }
 }
 
 impl Default for OvsmService {

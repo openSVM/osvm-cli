@@ -387,6 +387,131 @@ fn extract_sexpr_at(text: &str, op: &str) -> Option<String> {
     None
 }
 
+/// Format OVSM value for multiline display with nested expansion
+///
+/// # Arguments
+/// * `value` - The OVSM value to format
+/// * `max_depth` - Maximum nesting depth to expand (prevents infinite recursion)
+/// * `max_array_items` - Maximum array items to show before truncating
+///
+/// # Returns
+/// Vector of formatted lines (for multiline display)
+fn format_value_multiline(value: &OvsmValue, max_depth: usize, max_array_items: usize) -> Vec<String> {
+    format_value_multiline_impl(value, max_depth, max_array_items, 0)
+}
+
+fn format_value_multiline_impl(
+    value: &OvsmValue,
+    max_depth: usize,
+    max_array_items: usize,
+    current_depth: usize,
+) -> Vec<String> {
+    match value {
+        OvsmValue::Null => vec!["null".to_string()],
+        OvsmValue::Bool(b) => vec![b.to_string()],
+        OvsmValue::Int(i) => vec![i.to_string()],
+        OvsmValue::Float(f) => vec![format!("{:.2}", f)],
+        OvsmValue::String(s) => {
+            // Never truncate error messages or important debugging info
+            let is_error_msg = s.contains("Error") || s.contains("error") || s.contains("failed") || s.contains("Failed");
+
+            if is_error_msg || s.len() <= 200 {
+                // Show full string for errors and short strings
+                vec![format!("\"{}\"", s)]
+            } else if s.len() > 200 {
+                // For long non-error strings, truncate with more context
+                vec![format!("\"{}...\" ({} chars total)", &s[..197], s.len())]
+            } else {
+                vec![format!("\"{}\"", s)]
+            }
+        }
+        OvsmValue::Array(arr) => {
+            if current_depth >= max_depth {
+                return vec![format!("[...] ({} items)", arr.len())];
+            }
+
+            if arr.is_empty() {
+                return vec!["[]".to_string()];
+            }
+
+            let mut lines = vec!["[".to_string()];
+            let items_to_show = arr.len().min(max_array_items);
+
+            for (idx, item) in arr.iter().take(items_to_show).enumerate() {
+                let item_lines = format_value_multiline_impl(item, max_depth, max_array_items, current_depth + 1);
+                if item_lines.len() == 1 {
+                    let comma = if idx < items_to_show - 1 || arr.len() > items_to_show { "," } else { "" };
+                    lines.push(format!("  {}{}", item_lines[0], comma));
+                } else {
+                    lines.push(format!("  {}", item_lines[0]));
+                    for line in item_lines.iter().skip(1) {
+                        lines.push(format!("  {}", line));
+                    }
+                }
+            }
+
+            if arr.len() > items_to_show {
+                lines.push(format!("  ... ({} more items)", arr.len() - items_to_show));
+            }
+
+            lines.push("]".to_string());
+            lines
+        }
+        OvsmValue::Object(obj) => {
+            // Check if this is an error response
+            let is_error_response = obj.contains_key("isError") || obj.contains_key("error") || obj.contains_key("status");
+
+            if current_depth >= max_depth && !is_error_response {
+                return vec![format!("{{...}} ({} keys)", obj.len())];
+            }
+
+            if obj.is_empty() {
+                return vec!["{}".to_string()];
+            }
+
+            let mut lines = vec!["{".to_string()];
+            // Show more keys for error responses, less for normal objects
+            let keys_to_show = if is_error_response {
+                obj.len() // Show all keys for errors
+            } else {
+                obj.len().min(5) // Show max 5 keys for normal objects
+            };
+
+            for (idx, (key, val)) in obj.iter().take(keys_to_show).enumerate() {
+                let val_lines = format_value_multiline_impl(val, max_depth, max_array_items, current_depth + 1);
+                if val_lines.len() == 1 {
+                    let comma = if idx < keys_to_show - 1 || obj.len() > keys_to_show { "," } else { "" };
+                    lines.push(format!("  {}: {}{}", key, val_lines[0], comma));
+                } else {
+                    lines.push(format!("  {}: {}", key, val_lines[0]));
+                    for line in val_lines.iter().skip(1) {
+                        lines.push(format!("    {}", line));
+                    }
+                }
+            }
+
+            if obj.len() > keys_to_show {
+                lines.push(format!("  ... ({} more keys)", obj.len() - keys_to_show));
+            }
+
+            lines.push("}".to_string());
+            lines
+        }
+        OvsmValue::Function { params, .. } => {
+            vec![format!("<function ({} params)>", params.len())]
+        }
+        OvsmValue::Range { start, end } => {
+            vec![format!("[{}..{}]", start, end)]
+        }
+        OvsmValue::Multiple(vals) => {
+            vec![format!("<multiple-values ({})>", vals.len())]
+        }
+        OvsmValue::Macro { params, .. } => {
+            vec![format!("<macro ({} params)>", params.len())]
+        }
+    }
+}
+
 /// Fix AI-generated OVSM syntax to match actual OVSM language spec
 /// For LISP/S-expression syntax, we only fix casing inconsistencies
 fn fix_ovsm_syntax(code: &str) -> String {
@@ -638,8 +763,36 @@ async fn call_solana_rpc(method: &str, params: Vec<Value>) -> Result<Value> {
 }
 
 /// Execute agent command with real-time streaming output to terminal
-pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) -> Result<()> {
+pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool, debug: bool) -> Result<()> {
     let start_time = std::time::Instant::now();
+
+    // Check for OSVM API key - offer to generate one if missing
+    let auth_service = crate::services::auth_service::AuthService::new()?;
+    if !auth_service.has_api_key() {
+        println!("\n⚠️  No OSVM API key found!");
+        println!("   The AI planning agent requires an OSVM API key to access blockchain data.\n");
+
+        // Prompt user for authentication
+        print!("   Would you like to generate an API key now? [Y/n]: ");
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let input = input.trim().to_lowercase();
+
+        if input.is_empty() || input == "y" || input == "yes" {
+            let key_name = format!("OSVM CLI - {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+            auth_service.interactive_auth(&key_name).await?;
+
+            println!("⏸️  After binding your wallet, press Enter to continue or Ctrl+C to exit...");
+            let mut _continue = String::new();
+            std::io::stdin().read_line(&mut _continue)?;
+        } else {
+            println!("\n❌ Cannot proceed without OSVM API key.");
+            println!("   Set OPENSVM_API_KEY environment variable or run again to generate a key.\n");
+            return Err(anyhow::anyhow!("OSVM API key required"));
+        }
+    }
 
     // Clear schema cache from previous runs to ensure fresh data
     crate::utils::debug_logger::clear_schema_cache();
@@ -1291,6 +1444,17 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                         println!("📝 Code with execution trace:");
                         println!("{}", "─".repeat(60));
 
+                        // Get execution trace from OVSM evaluator
+                        let execution_trace = ovsm_service.get_execution_trace();
+                        let trace_map: std::collections::HashMap<String, Vec<String>> = execution_trace
+                            .iter()
+                            .map(|(name, value)| {
+                                // Format with nested expansion
+                                let formatted_lines = format_value_multiline(value, 3, 2);
+                                (name.clone(), formatted_lines)
+                            })
+                            .collect();
+
                         let mut found_error_line = false;
                         let lines: Vec<&str> = current_code.lines().collect();
 
@@ -1347,7 +1511,28 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                             // Mark executed lines differently from not-yet-executed
                             if !found_error_line {
                                 if is_define {
-                                    println!("  ✓  {:3} │ {} ✓ executed", line_number, line);
+                                    // Extract variable name from (define var_name ...)
+                                    let var_name = line
+                                        .trim_start()
+                                        .trim_start_matches("(define")
+                                        .trim_start()
+                                        .split_whitespace()
+                                        .next()
+                                        .unwrap_or("");
+
+                                    if let Some(value_lines) = trace_map.get(var_name) {
+                                        println!("  ✓  {:3} │ {} ✓ executed", line_number, line);
+                                        // Show first line with arrow
+                                        if !value_lines.is_empty() {
+                                            println!("       │   → {} = {}", var_name, value_lines[0]);
+                                            // Show additional lines with continuation indent
+                                            for value_line in value_lines.iter().skip(1) {
+                                                println!("       │       {}", value_line);
+                                            }
+                                        }
+                                    } else {
+                                        println!("  ✓  {:3} │ {} ✓ executed", line_number, line);
+                                    }
                                 } else {
                                     println!("     {:3} │ {}", line_number, line);
                                 }
@@ -1533,7 +1718,7 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
 
         if tool_results_for_ai.is_empty() && tool_plan.osvm_tools_to_use.is_empty() {
             // No tools - direct response (no execution happened)
-            match ai_service.query_with_debug(query, verbose > 1).await {
+            match ai_service.query_with_debug(query, debug).await {
                 Ok(resp) => {
                     if get_verbosity() >= VerbosityLevel::Detailed {
                         println!(" ✅");

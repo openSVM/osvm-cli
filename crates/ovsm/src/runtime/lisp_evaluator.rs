@@ -28,6 +28,8 @@ pub struct LispEvaluator {
     gensym_counter: std::cell::Cell<u64>,
     /// Lazy field access configuration
     lazy_field_config: std::cell::RefCell<LazyFieldConfig>,
+    /// Execution trace for debugging (variable_name -> value)
+    execution_trace: std::cell::RefCell<Vec<(String, Value)>>,
 }
 
 /// Configuration for lazy field access behavior
@@ -59,6 +61,7 @@ impl LispEvaluator {
             registry: Arc::new(ToolRegistry::new()),
             gensym_counter: std::cell::Cell::new(0),
             lazy_field_config: std::cell::RefCell::new(LazyFieldConfig::default()),
+            execution_trace: std::cell::RefCell::new(Vec::new()),
         }
     }
 
@@ -69,7 +72,18 @@ impl LispEvaluator {
             registry: Arc::new(registry),
             gensym_counter: std::cell::Cell::new(0),
             lazy_field_config: std::cell::RefCell::new(LazyFieldConfig::default()),
+            execution_trace: std::cell::RefCell::new(Vec::new()),
         }
+    }
+
+    /// Get the execution trace (variable assignments)
+    pub fn get_execution_trace(&self) -> Vec<(String, Value)> {
+        self.execution_trace.borrow().clone()
+    }
+
+    /// Clear the execution trace
+    pub fn clear_execution_trace(&self) {
+        self.execution_trace.borrow_mut().clear();
     }
 
     /// Execute a LISP-style program
@@ -330,6 +344,8 @@ impl LispEvaluator {
                     "nth" => self.eval_nth(args),
                     "cons" => self.eval_cons(args),
                     "append" => self.eval_append(args),
+                    "concat" => self.eval_concatenate(args),      // Alias for concatenate
+                    "concatenate" => self.eval_concatenate(args), // Polymorphic concat
                     // JSON operations (built-ins, not MCP tools!)
                     "parse-json" => self.eval_parse_json(args),
                     "json-stringify" => self.eval_json_stringify(args),
@@ -346,6 +362,7 @@ impl LispEvaluator {
                     "indexof" => self.eval_indexof(args),       // JS-style indexOf
                     "index-of" => self.eval_indexof(args),      // Lisp-style index-of
                     "contains" => self.eval_contains(args),     // Python-style contains
+                    "string-contains" => self.eval_contains(args), // Explicit string-contains
                     "elem" => self.eval_contains(args),         // Haskell-style elem
                     "remove" => self.eval_remove(args),         // Remove element by value
                     "insert-at" => self.eval_insert_at(args),   // Insert at index
@@ -620,6 +637,9 @@ impl LispEvaluator {
 
         let value = self.evaluate_expression(&args[1].value)?;
         self.env.define(var_name.clone(), value.clone());
+
+        // Record in execution trace for debugging
+        self.execution_trace.borrow_mut().push((var_name, value.clone()));
 
         Ok(value)
     }
@@ -3764,6 +3784,62 @@ impl LispEvaluator {
             }),
             (other, _) => Err(Error::TypeError {
                 expected: "array".to_string(),
+                got: other.type_name(),
+            }),
+        }
+    }
+
+    /// (concatenate args...) - Polymorphic concatenation for strings and arrays
+    /// - For strings: concatenates all strings together
+    /// - For arrays: concatenates all arrays together
+    /// - Variadic: accepts 1+ arguments
+    fn eval_concatenate(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.is_empty() {
+            return Err(Error::InvalidArguments {
+                tool: "concatenate".to_string(),
+                reason: "Expected at least 1 argument".to_string(),
+            });
+        }
+
+        // Evaluate first arg to determine type
+        let first = self.evaluate_expression(&args[0].value)?;
+
+        match first {
+            Value::String(ref s) => {
+                // String concatenation
+                let mut result = s.clone();
+
+                for arg in args.iter().skip(1) {
+                    let val = self.evaluate_expression(&arg.value)?;
+                    let s = val.as_string()?;
+                    result.push_str(s);
+                }
+
+                Ok(Value::String(result))
+            }
+            Value::Array(ref arr) => {
+                // Array concatenation
+                let mut result = arr.to_vec();
+
+                for arg in args.iter().skip(1) {
+                    let val = self.evaluate_expression(&arg.value)?;
+                    match val {
+                        Value::Array(ref a) => {
+                            result.extend(a.iter().cloned());
+                        }
+                        other => {
+                            return Err(Error::TypeError {
+                                expected: "array".to_string(),
+                                got: other.type_name(),
+                            });
+                        }
+                    }
+                }
+
+                Ok(Value::Array(Arc::new(result)))
+            }
+            other => Err(Error::TypeError {
+                expected: "string or array".to_string(),
                 got: other.type_name(),
             }),
         }

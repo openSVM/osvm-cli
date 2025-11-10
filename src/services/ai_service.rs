@@ -576,7 +576,7 @@ impl AiService {
             own_plan: only_plan,
         };
 
-        if debug_mode && get_verbosity() >= VerbosityLevel::Detailed {
+        if debug_mode {
             println!("📤 OSVM AI Request:");
             println!("  question: {} chars", question.len());
             println!(
@@ -584,19 +584,32 @@ impl AiService {
                 system_prompt.as_ref().map(|s| s.len()).unwrap_or(0)
             );
             println!("  ownPlan: {:?}", only_plan);
-            // Hide system prompt from logs for security/readability
-            // Removed Full JSON output as it's not useful in logs
-            // let mut debug_body = request_body.clone();
-            // if debug_body.system_prompt.is_some() {
-            //     debug_body.system_prompt = Some("[HIDDEN - see length above]".to_string());
-            // }
-            // println!("  Full JSON: {}", serde_json::to_string_pretty(&debug_body)?);
+
+            // Only print full system prompt if OSVM_DEBUG_PROMPT env var is set
+            if std::env::var("OSVM_DEBUG_PROMPT").is_ok() {
+                if let Some(ref prompt) = system_prompt {
+                    println!("\n🔍 SYSTEM PROMPT:");
+                    println!("{}", "═".repeat(80));
+                    println!("{}", prompt);
+                    println!("{}", "═".repeat(80));
+                    println!();
+                }
+            } else {
+                println!("  💡 Set OSVM_DEBUG_PROMPT=1 to see full system prompt");
+            }
         }
 
-        let response = self
+        let mut request = self
             .client
             .post(&self.api_url)
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json");
+
+        // Add Authorization header if API key is available
+        if let Some(ref api_key) = self.api_key {
+            request = request.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        let response = request
             .json(&request_body)
             .send()
             .await?;
@@ -857,92 +870,38 @@ impl AiService {
         if available_tools.is_empty() {
             tools_context.push_str("No MCP tools are currently available.\n");
         } else {
-            // Concise tool listing - just names, grouped by category
-            tools_context.push_str("Available MCP Tools (call with UPPERCASE names):\n\n");
+            // FULL tool listing with descriptions - AI needs this to choose correctly
+            tools_context.push_str("Available MCP Tools:\n\n");
 
             for (server_id, tools) in available_tools {
-                let tool_names: Vec<String> = tools
+                let filtered_tools: Vec<_> = tools
                     .iter()
                     .filter(|t| !matches!(t.name.as_str(), "NOW" | "LOG" | "now" | "log"))
-                    .map(|t| t.name.clone())
                     .collect();
 
-                if !tool_names.is_empty() {
-                    tools_context.push_str(&format!("Server '{}': ", server_id));
+                if !filtered_tools.is_empty() {
+                    tools_context.push_str(&format!("### Server: {}\n\n", server_id));
 
-                    // Group tools by category for readability
-                    let mut tx_tools = Vec::new();
-                    let mut account_tools = Vec::new();
-                    let mut block_tools = Vec::new();
-                    let mut token_tools = Vec::new();
-                    let mut defi_tools = Vec::new();
-                    let mut util_tools = Vec::new();
-
-                    for name in &tool_names {
-                        let lower = name.to_lowercase();
-                        if lower.contains("transaction") || lower.contains("tx") {
-                            tx_tools.push(name);
-                        } else if lower.contains("account")
-                            || lower.contains("balance")
-                            || lower.contains("portfolio")
-                        {
-                            account_tools.push(name);
-                        } else if lower.contains("block") || lower.contains("slot") {
-                            block_tools.push(name);
-                        } else if lower.contains("token") || lower.contains("nft") {
-                            token_tools.push(name);
-                        } else if lower.contains("defi")
-                            || lower.contains("dex")
-                            || lower.contains("validator")
-                        {
-                            defi_tools.push(name);
-                        } else {
-                            util_tools.push(name);
+                    for tool in filtered_tools {
+                        tools_context.push_str(&format!("- **{}**", tool.name));
+                        if let Some(ref desc) = tool.description {
+                            tools_context.push_str(&format!(": {}", desc));
                         }
+                        tools_context.push('\n');
                     }
 
-                    let mut categories = Vec::new();
-                    if !tx_tools.is_empty() {
-                        let names: Vec<&str> = tx_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("Transactions({})", names.join(", ")));
-                    }
-                    if !account_tools.is_empty() {
-                        let names: Vec<&str> = account_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("Accounts({})", names.join(", ")));
-                    }
-                    if !block_tools.is_empty() {
-                        let names: Vec<&str> = block_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("Blocks({})", names.join(", ")));
-                    }
-                    if !token_tools.is_empty() {
-                        let names: Vec<&str> = token_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("Tokens({})", names.join(", ")));
-                    }
-                    if !defi_tools.is_empty() {
-                        let names: Vec<&str> = defi_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("DeFi({})", names.join(", ")));
-                    }
-                    if !util_tools.is_empty() {
-                        let names: Vec<&str> = util_tools.iter().map(|s| s.as_str()).collect();
-                        categories.push(format!("Utils({})", names.join(", ")));
-                    }
-
-                    tools_context.push_str(&categories.join(" | "));
                     tools_context.push('\n');
                 }
             }
 
-            tools_context.push_str(
-                "\nNote: Tool names are case-sensitive. Use exact names from list above.\n",
-            );
+            tools_context.push_str("\n⚠️ CRITICAL: Read tool descriptions carefully before using them!\n");
+            tools_context.push_str("Tool names are case-sensitive. Use exact names from list above.\n");
         }
 
         // Create system prompt with OVSM instructions and available tools
-        let system_prompt = format!(
-            "{}\n\n# Your Available MCP Tools\n\n{}\n\nRemember: Use OVSM syntax and structure your plan with **Expected Plan**, **Available Tools**, **Main Branch**, **Decision Point** (if needed), and **Action** sections.",
-            Self::get_ovsm_system_prompt(),
-            tools_context
-        );
+        // Replace the {MCP_TOOLS_PLACEHOLDER} with dynamically discovered tools
+        let base_prompt = Self::get_ovsm_system_prompt();
+        let system_prompt = base_prompt.replace("{MCP_TOOLS_PLACEHOLDER}", &tools_context);
 
         // For ownPlan mode, send the raw user request without additional instructions
         // The system prompt already contains all the instructions needed

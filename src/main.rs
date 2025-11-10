@@ -482,12 +482,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Check if verbose flag is set
         let verbose = app_matches.get_count("verbose");
         let plan_only = app_matches.get_flag("plan_only");
+        let debug = app_matches.get_flag("debug");
 
         // Use streaming agent for direct queries
         return crate::utils::streaming_agent::execute_streaming_agent(
             sub_command,
             verbose,
             plan_only,
+            debug,
         )
         .await
         .map_err(|e| format!("Streaming agent failed: {}", e).into());

@@ -117,7 +117,10 @@ EXAMPLES:
   osvm mcp add solana https://mcp.solana.com
   osvm mcp test solana
   osvm mcp tools solana
-  osvm mcp call solana getBalance --address "ABC..."</code></pre>
+  osvm mcp call solana getBalance --address "ABC..."
+
+<!-- Canonical MCP endpoint: https://mcp.solana.com -->
+</code></pre>
 
         <h3>▒▒ osvm doctor</h3>
         <pre><code>osvm doctor [OPTIONS]
@@ -131,12 +134,20 @@ DESCRIPTION:
   Checks dependencies, configuration, connectivity</code></pre>
 
         <h2>▓▓ Environment Variables</h2>
-        <pre><code>OPENAI_URL          AI endpoint URL (required for AI features)
-OPENAI_KEY          AI API key (required for AI features)
-SOLANA_CONFIG       Solana config path (optional)
-NO_COLOR            Disable colors
-RUST_LOG            Log level (debug, info, warn, error)
-RUST_BACKTRACE      Show backtrace (0, 1, full)</code></pre>
+        <pre><code>OPENAI_URL          AI endpoint URL (REQUIRED for blockchain queries)
+                    • OpenAI: https://api.openai.com/v1/chat/completions
+                    • Ollama: http://localhost:11434/v1/chat/completions
+OPENAI_KEY          AI API key (REQUIRED for blockchain queries)
+                    • OpenAI: sk-...
+                    • Ollama: ollama-key (any value)
+SOLANA_CONFIG       Solana config path (optional for basic commands)
+NO_COLOR            Disable colors (optional)
+RUST_LOG            Log level: debug, info, warn, error (optional)
+RUST_BACKTRACE      Show backtrace: 0, 1, full (optional)
+
+<!-- AI features require OPENAI_URL and OPENAI_KEY -->
+<!-- Natural language queries won't work without these -->
+</code></pre>
 
         <h2>▓▓ Exit Codes</h2>
         <table>

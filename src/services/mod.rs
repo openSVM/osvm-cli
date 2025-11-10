@@ -2,6 +2,7 @@ pub mod account_decoders;
 pub mod activity_logger;
 pub mod ai_service;
 pub mod audit_service;
+pub mod auth_service;
 pub mod blockchain_indexer;
 pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;

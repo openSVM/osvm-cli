@@ -21,9 +21,8 @@
 
 <!-- Main Introduction -->
 <section class="intro animate-on-scroll" data-animation="slideUp">
-    <h1>Solana Virtual Machine Command-Line Interface</h1>
-    <p class="subtitle">AI-powered blockchain investigation tool with natural language queries, <strong>99.83% attack surface reduction</strong>,
-        <strong>zero-downtime updates</strong>, and <strong>&lt;1ms communication</strong>
+    <h1>AI-Powered Blockchain Investigation CLI</h1>
+    <p class="subtitle"><strong>PRIMARY FEATURE:</strong> Natural language Solana blockchain queries powered by AI agents, OVSM LISP interpreter, and MCP tools. Plus: <strong>99.83% attack surface reduction</strong>, <strong>zero-downtime updates</strong>, and <strong>&lt;1ms communication</strong>
     </p>
 
     <div class="badges">
@@ -54,7 +53,27 @@
         </div>
     </div>
 
+    <div class="info-box" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; margin: 2rem 0; padding: 1.5rem; border-radius: 8px;">
+        <h3 style="color: white; margin-top: 0;">🚀 PRIMARY USE CASE: Blockchain Investigation</h3>
+        <p style="margin-bottom: 1rem;">Ask questions about the Solana blockchain in natural language - the AI agent handles the rest!</p>
+        <div class="command-line" style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 4px;">
+            <span class="prompt">$</span>
+            <span class="command">osvm "show me all transactions for wallet ABC...XYZ in the last 24 hours"</span>
+            <button class="copy-btn" onclick="copyToClipboard('osvm &quot;show me all transactions for wallet ABC...XYZ in the last 24 hours&quot;')">COPY</button>
+        </div>
+    </div>
+
     <div class="command-grid">
+        <div class="command-example animate-on-scroll" data-animation="slideLeft"
+            onclick="copyToClipboard('osvm &quot;analyze DEX trades on Raydium&quot;')">
+            <div class="command-line">
+                <span class="prompt">$</span>
+                <span class="command">osvm "analyze DEX trades on Raydium"</span>
+                <span class="copy-indicator">CLICK TO COPY</span>
+            </div>
+            <div class="command-desc">AI-powered blockchain analysis</div>
+        </div>
+
         <div class="command-example animate-on-scroll" data-animation="slideLeft"
             onclick="copyToClipboard('osvm svm list')">
             <div class="command-line">
@@ -247,8 +266,8 @@
         <div class="news-item animate-on-scroll" data-animation="slideLeft">
             <div class="news-badge">🎉 NEW</div>
             <h3><a href="#" data-cross-link="ovsm-language">OVSM LISP Interpreter</a></h3>
-            <p>Complete LISP interpreter with 356/356 tests passing, 91+ built-in functions, and full Common Lisp compatibility.
-                Production-ready with 97.3% test coverage.</p>
+            <p>Production-ready LISP interpreter with 356/356 tests passing, 91+ built-in functions, and 83% Common Lisp compatibility.
+                Powers AI blockchain queries automatically. <strong>LISP S-expression syntax only</strong> - the AI agent generates OVSM code for you!</p>
             <div class="news-meta">
                 <span class="news-date">v0.9.6</span>
                 <a href="#" data-cross-link="ovsm-language" class="news-link">Learn More →</a>

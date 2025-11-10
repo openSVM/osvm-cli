@@ -42,7 +42,7 @@ pub async fn handle_ai_query_with_planning(
     let plan_only = app_matches.get_flag("plan_only");
 
     // Route to streaming agent which includes OVSM planning capabilities
-    crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, plan_only)
+    crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, plan_only, debug_mode)
         .await
         .map_err(|e| format!("OVSM planning agent failed: {}", e).into())
 }
@@ -108,7 +108,7 @@ pub async fn handle_ai_query(
 
     if plan_only {
         let verbose = app_matches.get_count("verbose");
-        return crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, true)
+        return crate::utils::streaming_agent::execute_streaming_agent(&query, verbose, true, debug_mode)
             .await
             .map_err(|e| format!("OVSM planning agent failed: {}", e).into());
     }

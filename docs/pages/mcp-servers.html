@@ -42,12 +42,12 @@
 
         <div class="command-item">
             <code>osvm mcp add solana https://mcp.solana.com</code>
-            <p>Add HTTP-based MCP server</p>
+            <p>Add official Solana MCP server (canonical endpoint)</p>
         </div>
 
         <div class="command-item">
-            <code>osvm mcp add birdeye https://mcp.solana.com</code>
-            <p>Add another MCP server for analytics</p>
+            <code>osvm mcp add analytics https://mcp.solana.com</code>
+            <p>Add MCP server for blockchain analytics</p>
         </div>
 
         <div class="command-item">
@@ -133,16 +133,24 @@
       "transport": "http",
       "auth": {
         "type": "bearer",
-        "token": "YOUR_TOKEN"
+        "token": "YOUR_TOKEN_HERE"
       }
     },
     {
-      "name": "solana-analytics",
+      "name": "analytics",
       "url": "https://mcp.solana.com",
-      "transport": "http"
+      "transport": "http",
+      "auth": {
+        "type": "bearer",
+        "token": "YOUR_TOKEN_HERE"
+      }
     }
   ]
-}</code></pre>
+}
+
+<!-- CANONICAL ENDPOINT: mcp.solana.com -->
+<!-- Replace example URLs with your actual MCP server endpoints -->
+</code></pre>
 
         <h2>▓▓ Transport Types</h2>
         <ul>
@@ -160,15 +168,31 @@
         </ul>
 
         <h2>▓▓ Integration with AI Chat</h2>
-        <p>MCP servers are automatically available when using AI chat:</p>
-        <pre><code>$ osvm chat
-> "Check balance for wallet ABC...XYZ"
-🤖 Using solana-mcp.getBalance tool...
+        <p>MCP servers are automatically available when using AI-powered blockchain queries:</p>
+        <pre><code>$ osvm "Check balance for wallet ABC...XYZ"
+🤖 AI Agent → OVSM LISP → MCP Tools
+🔍 Using mcp.solana.com getBalance tool...
 ✓ Balance: 150.25 SOL
 
-> "Show DEX trades"
-🤖 Using solana-mcp.getTradeHistory tool...
-✓ Found 23 trades in last 24h</code></pre>
+$ osvm chat
+> "Show DEX trades for this wallet"
+🤖 Generating OVSM execution plan...
+🔍 Using mcp.solana.com getTradeHistory tool...
+✓ Found 23 trades in last 24h
+
+<!-- AI automatically routes to appropriate MCP tools -->
+</code></pre>
+
+        <div style="background: #2c3e50; border-left: 4px solid #3498db; padding: 1rem; margin-top: 1rem;">
+            <p><strong>💡 How It Works:</strong> When you ask blockchain questions in natural language, the AI agent:</p>
+            <ol>
+                <li>Interprets your intent</li>
+                <li>Generates OVSM LISP code</li>
+                <li>Executes via configured MCP servers</li>
+                <li>Returns formatted results</li>
+            </ol>
+            <p><strong>Canonical MCP Endpoint:</strong> <code>https://mcp.solana.com</code></p>
+        </div>
     </div>
 </body>
 </html>
