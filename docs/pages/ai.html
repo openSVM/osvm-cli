@@ -26,64 +26,103 @@
 
     <div class="feature-grid">
         <div class="feature-card">
-            <h3>🤖 Natural Language Queries</h3>
+            <h3>🔍 Blockchain Investigation (PRIMARY)</h3>
             <pre class="code-block">
-<span class="comment"># Ask anything in plain English</span>
-$ osvm "What is my wallet balance?"
-$ osvm "Deploy my program to devnet"
-$ osvm "Show validator performance metrics"</pre>
+<span class="comment"># Natural language blockchain queries</span>
+$ osvm "show me all transactions for wallet ABC...XYZ"
+$ osvm "analyze DEX trading volume on Raydium"
+$ osvm "find NFT holders with rare traits"
+$ osvm "track SOL flow between these wallets"
+<span class="success">✓ AI interprets and executes</span>
+<span class="success">✓ Returns human-readable insights</span></pre>
         </div>
 
         <div class="feature-card">
-            <h3>🔍 Smart Code Auditing</h3>
+            <h3>🧠 AI Planning Mode</h3>
+            <pre class="code-block">
+<span class="comment"># Explicit OVSM planning</span>
+$ osvm plan "analyze arbitrage opportunities"
+$ osvm -p "find unusual wallet activity"
+$ osvm -a "calculate monthly fees"
+<span class="info">📋 Generating OVSM execution plan...</span>
+<span class="success">✓ Plan: 5 steps</span>
+<span class="success">✓ Using 3 MCP tools</span>
+<span class="success">✓ Executing...</span></pre>
+        </div>
+
+        <div class="feature-card">
+            <h3>🔒 Smart Code Auditing</h3>
             <pre class="code-block">
 <span class="comment"># AI-powered security analysis</span>
 $ osvm audit ./my-program
-$ osvm audit github.com/solana-labs/token --ai
+$ osvm audit github.com/solana-labs/token
 <span class="success">✓ Vulnerability detection</span>
-<span class="success">✓ Best practice recommendations</span></pre>
-        </div>
-
-        <div class="feature-card">
-            <h3>🎯 Intelligent Planning</h3>
-            <pre class="code-block">
-<span class="comment"># AI creates execution plans</span>
-$ osvm chat --advanced
-> "Optimize my validator setup"
-<span class="info">📋 Creating optimization plan...</span>
-<span class="success">✓ Network tuning</span>
-<span class="success">✓ Hardware optimization</span></pre>
+<span class="success">✓ Best practice recommendations</span>
+<span class="success">✓ Exit code 1 on critical findings</span></pre>
         </div>
     </div>
 
     <div class="section">
         <h2>Configuration</h2>
         <pre class="terminal">
-<span class="comment"># Configure AI providers</span>
+<span class="comment"># Configure OpenAI</span>
 $ export OPENAI_KEY="sk-..."
 $ export OPENAI_URL="https://api.openai.com/v1/chat/completions"
 
 <span class="comment"># Or use local Ollama</span>
 $ export OPENAI_URL="http://localhost:11434/v1/chat/completions"
+$ export OPENAI_KEY="ollama-key"
 
-<span class="comment"># Use OSVM's built-in AI</span>
-$ osvm --use-internal-ai "analyze my transactions"</pre>
+<span class="comment"># Check AI status</span>
+$ osvm chat
+<span class="info">🤖 AI Provider: OpenAI</span>
+<span class="success">✓ Connection established</span></pre>
     </div>
 
     <div class="section">
-        <h2>Advanced Chat Interface</h2>
+        <h2>How OSVM AI Agent Works</h2>
         <pre class="terminal">
-<span class="comment"># Launch interactive AI chat</span>
-$ osvm chat --advanced
+<span class="comment"># Example query flow</span>
+$ osvm "find the top 5 SOL receivers in the last hour"
+
+<span class="info">🤖 AI Agent Process:</span>
+<span class="info">1. Understands Intent:</span> Find top receivers by SOL amount
+<span class="info">2. Plans Investigation:</span> Generate OVSM LISP code
+<span class="info">3. Executes via MCP:</span> Call getSlot, getBlocks, getTransactions
+<span class="info">4. Analyzes Results:</span> Filter transfers, aggregate by receiver
+<span class="info">5. Returns Summary:</span> Formatted table with top 5
 
 <span class="success">╔═══════════════════════════════════════════╗</span>
-<span class="success">║  OSVM AI Chat - Multi-Session Interface  ║</span>
+<span class="success">║ Rank │ Wallet Address        │ Amount   ║</span>
 <span class="success">╠═══════════════════════════════════════════╣</span>
-<span class="success">║ • Natural language understanding          ║</span>
-<span class="success">║ • Tool execution planning                 ║</span>
-<span class="success">║ • MCP server integration                  ║</span>
-<span class="success">║ • Session recording & replay              ║</span>
+<span class="success">║  1   │ 7xKX...9mPQ          │ 1,250 SOL║</span>
+<span class="success">║  2   │ 3bZQ...4rT2          │ 890 SOL  ║</span>
+<span class="success">║  3   │ 9mPQ...7xKX          │ 625 SOL  ║</span>
 <span class="success">╚═══════════════════════════════════════════╝</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Interactive Chat Interface</h2>
+        <pre class="terminal">
+<span class="comment"># Launch interactive AI chat</span>
+$ osvm chat
+
+<span class="success">╔═══════════════════════════════════════════╗</span>
+<span class="success">║  OSVM AI Chat - Blockchain Investigation ║</span>
+<span class="success">╠═══════════════════════════════════════════╣</span>
+<span class="success">║ • Natural language queries                ║</span>
+<span class="success">║ • Multi-step investigations               ║</span>
+<span class="success">║ • OVSM LISP execution                     ║</span>
+<span class="success">║ • MCP tool integration                    ║</span>
+<span class="success">║ • Session history & export                ║</span>
+<span class="success">╚═══════════════════════════════════════════╝</span>
+
+> "Check my wallet balance"
+<span class="success">✓ Balance: 250.75 SOL</span>
+
+> "Show recent DEX trades"
+<span class="info">🔍 Querying Raydium and Orca...</span>
+<span class="success">✓ Found 15 trades in last 24h</span></pre>
     </div>
 </section>
 

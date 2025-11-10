@@ -77,12 +77,20 @@ $ osvm svm list
 ┌─────────┬──────────┬─────────────────┬────────────────┐
 │ SVM     │ Status   │ Version         │ Network Support│
 ├─────────┼──────────┼─────────────────┼────────────────┤
-│ <span class="success">Sonic</span>   │ Active   │ 1.0.0          │ Mainnet        │
-│ <span class="success">Solana</span>  │ Active   │ 3.0.0          │ All Networks   │
-│ <span class="success">Eclipse</span> │ Active   │ 0.9.0          │ Mainnet        │
-│ <span class="success">Soon</span>    │ Active   │ 0.5.0          │ Devnet         │
-│ <span class="info">Nitro</span>   │ Beta     │ 0.3.0          │ Testnet        │
-└─────────┴──────────┴─────────────────┴────────────────┘</pre>
+│ <span class="success">Sonic</span>   │ Active   │ 1.0.0+         │ Mainnet        │
+│ <span class="success">Solana</span>  │ Active   │ 3.0.0+         │ All Networks   │
+│ <span class="success">Eclipse</span> │ Active   │ 0.9.0+         │ Mainnet        │
+│ <span class="success">Soon</span>    │ Active   │ 0.5.0+         │ Devnet         │
+│ <span class="info">Nitro</span>   │ Beta     │ 0.3.0+         │ Testnet        │
+└─────────┴──────────┴─────────────────┴────────────────┘
+
+<span class="comment"># Get detailed information</span>
+$ osvm svm get sonic
+<span class="success">Name:</span> Sonic SVM
+<span class="success">Status:</span> Active
+<span class="success">Version:</span> 1.0.0+
+<span class="success">Networks:</span> Mainnet, Testnet, Devnet
+<span class="success">Features:</span> Hot-swap, Zero-downtime updates</pre>
     </div>
 
     <div class="section">

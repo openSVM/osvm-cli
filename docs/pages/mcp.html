@@ -108,16 +108,41 @@ $ osvm mcp add key-server https://key.example.com \
         <h2>Integration with AI Chat</h2>
         <pre class="terminal">
 <span class="comment"># MCP servers are automatically available in chat</span>
-$ osvm chat --advanced
+$ osvm chat
 
 > "Check my wallet balance"
-<span class="info">🤖 Planning: Using solana-mcp.get_balance tool...</span>
-<span class="success">✓ Your balance is 250.75 SOL</span>
+<span class="info">🤖 AI Agent: Using solana-mcp.getBalance tool...</span>
+<span class="info">📊 Querying blockchain...</span>
+<span class="success">✓ Balance: 250.75 SOL</span>
 
-> "Deploy my program to devnet"
-<span class="info">🤖 Planning: Using solana-mcp.deploy_program tool...</span>
-<span class="info">📦 Compiling program...</span>
-<span class="success">✓ Program deployed: 7xKX...9mPQ</span></pre>
+> "Show recent transactions"
+<span class="info">🤖 AI Agent: Using solana-mcp.getSignatures tool...</span>
+<span class="info">📊 Fetching transactions...</span>
+<span class="success">✓ Found 15 transactions in last 24h</span>
+
+> "Analyze DEX activity"
+<span class="info">🤖 AI Agent: Using solana-mcp.getTradeHistory tool...</span>
+<span class="info">📊 Analyzing trades...</span>
+<span class="success">✓ 23 trades totaling 1,450 SOL volume</span></pre>
+    </div>
+
+    <div class="section">
+        <h2>Common Investigation Patterns</h2>
+        <pre class="terminal">
+<span class="comment"># Pattern 1: Wallet Activity Analysis</span>
+$ osvm "analyze all activity for wallet X in last 24 hours"
+<span class="info">🤖 Using: getSignatures, getTransaction, getTokenAccounts</span>
+<span class="success">✓ Returns: Categorized summary with timestamps</span>
+
+<span class="comment"># Pattern 2: Token Flow Tracking</span>
+$ osvm "trace USDC flow from wallet A to find destinations"
+<span class="info">🤖 Using: getTransaction, filterTransfers, aggregateByReceiver</span>
+<span class="success">✓ Returns: Flow diagram with amounts and paths</span>
+
+<span class="comment"># Pattern 3: DEX Trading Analysis</span>
+$ osvm "show arbitrage opportunities between Orca and Raydium"
+<span class="info">🤖 Using: getPrices, getLiquidity, calculateSlippage</span>
+<span class="success">✓ Returns: Profitable paths with expected returns</span></pre>
     </div>
 </section>
 

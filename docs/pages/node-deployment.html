@@ -12,30 +12,47 @@
         <h1>Node Deployment</h1>
 
         <h2>▓▓ SSH Deployment</h2>
+        <p>Deploy validators and RPC nodes to remote hosts via SSH:</p>
+
         <div class="command-item">
-            <code>osvm user@host --svm sonic --node-type validator</code>
-            <p>Deploy validator to remote host</p>
+            <code>osvm user@host --svm sonic --node-type validator --network mainnet</code>
+            <p>Deploy Sonic validator to mainnet</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm user@host --svm solana,eclipse --node-type validator --network devnet</code>
+            <p>Deploy multiple SVMs to devnet</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm user@host --svm sonic --node-type rpc --network testnet</code>
+            <p>Deploy RPC node to testnet</p>
         </div>
 
         <h2>▓▓ Node Management</h2>
         <div class="command-item">
             <code>osvm nodes list</code>
-            <p>List all nodes with status</p>
+            <p>List all nodes with status and metrics</p>
         </div>
 
         <div class="command-item">
             <code>osvm nodes dashboard</code>
-            <p>Real-time monitoring dashboard</p>
+            <p>Real-time monitoring dashboard with TPS, CPU, memory</p>
         </div>
 
         <div class="command-item">
             <code>osvm nodes status node-123</code>
-            <p>Check specific node status</p>
+            <p>Check specific node health and status</p>
         </div>
 
         <div class="command-item">
             <code>osvm nodes logs node-123 --follow</code>
-            <p>Stream node logs</p>
+            <p>Stream node logs in real-time</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm nodes restart node-123</code>
+            <p>Restart node with zero-downtime (if hot-swap enabled)</p>
         </div>
 
         <h2>▓▓ Deployment Configuration</h2>
@@ -50,23 +67,25 @@
     }
 }</code></pre>
 
-        <h2>▓▓ Hot Swap Updates</h2>
-        <p>Zero-downtime updates with automatic rollback:</p>
+        <h2>▓▓ Hot Swap Updates (Zero-Downtime)</h2>
+        <p>OSVM supports zero-downtime updates with hot-swap technology:</p>
         <ul>
-            <li>Blue-green deployment</li>
-            <li>State preservation</li>
-            <li>Automatic health checks</li>
-            <li>Rollback on failure</li>
+            <li><strong>Blue-green deployment:</strong> Deploy new version alongside old</li>
+            <li><strong>State preservation:</strong> Transfer state from blue to green</li>
+            <li><strong>Automatic health checks:</strong> Verify green before switching</li>
+            <li><strong>Instant rollback:</strong> Return to blue if issues detected</li>
+            <li><strong>&lt;1ms downtime:</strong> Seamless traffic switching</li>
         </ul>
 
         <h2>▓▓ System Optimization</h2>
-        <p>Automatic system tuning:</p>
+        <p>Automatic system tuning during deployment:</p>
         <ul>
-            <li>File descriptor limits</li>
-            <li>Network parameters</li>
-            <li>Memory management</li>
-            <li>CPU affinity</li>
-            <li>I/O scheduler</li>
+            <li><strong>File descriptor limits:</strong> Set to 1,000,000+</li>
+            <li><strong>Network parameters:</strong> TCP buffer tuning</li>
+            <li><strong>Memory management:</strong> Swappiness, transparent huge pages</li>
+            <li><strong>CPU affinity:</strong> Pin processes to cores</li>
+            <li><strong>I/O scheduler:</strong> Deadline or noop for SSDs</li>
+            <li><strong>Kernel parameters:</strong> Solana-optimized sysctl values</li>
         </ul>
 
         <h2>▓▓ Monitoring</h2>

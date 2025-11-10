@@ -11,16 +11,20 @@
     <div class="main-wrapper">
         <h1>Model Context Protocol (MCP) Servers</h1>
 
+        <h2>▓▓ What is MCP?</h2>
+        <p>MCP (Model Context Protocol) provides enhanced blockchain data access and external integrations.
+           OSVM uses MCP servers to extend AI agent capabilities with specialized tools for Solana data.</p>
+
         <h2>▓▓ MCP with Ephemeral MicroVMs</h2>
-        <p class="warning">NEW: All MCP tools now execute in ephemeral microVMs by default!</p>
+        <p class="warning">SECURITY: MCP tools can execute in ephemeral microVMs for isolation!</p>
 
         <div class="info">
-            <strong>[INFO]</strong> Each tool call:
+            <strong>[ISOLATION MODE]</strong> Each tool call:
             <ul>
-                <li>Launches fresh microVM</li>
+                <li>Launches fresh microVM (optional)</li>
                 <li>Executes in complete isolation</li>
                 <li>Destroys VM after completion</li>
-                <li>Zero state persistence</li>
+                <li>Zero state persistence between calls</li>
             </ul>
         </div>
 
@@ -33,29 +37,52 @@
         <h2>▓▓ Server Management</h2>
         <div class="command-item">
             <code>osvm mcp list</code>
-            <p>List configured servers</p>
+            <p>List all configured MCP servers</p>
         </div>
 
         <div class="command-item">
-            <code>osvm mcp add my-server stdio "node server.js"</code>
-            <p>Add stdio-based server</p>
+            <code>osvm mcp add solana https://mcp.solana.com</code>
+            <p>Add HTTP-based MCP server</p>
         </div>
 
         <div class="command-item">
-            <code>osvm mcp add-github solana https://github.com/solana/mcp-server</code>
-            <p>Add server from GitHub</p>
-        </div>
-
-        <h2>▓▓ Tool Execution</h2>
-        <div class="command-item">
-            <code>osvm mcp tools solana-mcp</code>
-            <p>List available tools</p>
+            <code>osvm mcp add birdeye https://mcp.solana.com</code>
+            <p>Add another MCP server for analytics</p>
         </div>
 
         <div class="command-item">
-            <code>osvm mcp call solana-mcp get_balance</code>
-            <p>Execute tool (runs in ephemeral VM)</p>
+            <code>osvm mcp test solana</code>
+            <p>Test MCP server connection</p>
         </div>
+
+        <div class="command-item">
+            <code>osvm mcp remove solana</code>
+            <p>Remove MCP server</p>
+        </div>
+
+        <h2>▓▓ Tool Discovery & Execution</h2>
+        <div class="command-item">
+            <code>osvm mcp tools solana</code>
+            <p>List available tools from MCP server</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm mcp call solana getTransaction --signature "ABC..."</code>
+            <p>Execute MCP tool directly</p>
+        </div>
+
+        <h2>▓▓ Available MCP Tools</h2>
+        <p>Common MCP tools for blockchain investigation:</p>
+        <ul>
+            <li><strong>getTransaction:</strong> Fetch transaction details</li>
+            <li><strong>getSignatures:</strong> Get transaction signatures for address</li>
+            <li><strong>getAccountInfo:</strong> Retrieve account information</li>
+            <li><strong>getTokenAccounts:</strong> List token accounts</li>
+            <li><strong>getTokenMetadata:</strong> Get token metadata</li>
+            <li><strong>getProgramAccounts:</strong> Query program accounts</li>
+            <li><strong>getSlot:</strong> Get current slot number</li>
+            <li><strong>getBlockTime:</strong> Get block timestamp</li>
+        </ul>
 
         <h2>▓▓ MicroVM Isolation</h2>
         <div class="command-item">
@@ -69,36 +96,79 @@
         </div>
 
         <h2>▓▓ Architecture</h2>
-        <pre>┌─────────────┐
-│  User Chat  │
-└──────┬──────┘
-       │
-┌──────▼──────┐
-│ MCP Service │
-└──────┬──────┘
-       │
-┌──────▼──────────────┐
-│ Ephemeral MicroVMs  │
-│ ┌────┐ ┌────┐ ┌────┐│
-│ │Tool│ │Tool│ │Tool││
-│ │ VM │ │ VM │ │ VM ││
-│ └────┘ └────┘ └────┘│
-└─────────────────────┘</pre>
+        <pre>┌─────────────────┐
+│   User Query    │  Natural language blockchain query
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│   AI Agent      │  Interprets intent, generates OVSM
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  OVSM Runtime   │  Executes LISP plan
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  MCP Service    │  Routes to appropriate MCP servers
+└────────┬────────┘
+         │
+┌────────▼────────────────────┐
+│  MCP Servers (Optional VMs) │
+│ ┌────────┐ ┌────────┐       │
+│ │Helius  │ │Birdeye │ ...   │
+│ └────────┘ └────────┘       │
+└─────────────────────────────┘
+         │
+┌────────▼────────┐
+│  Solana RPC     │  Blockchain data
+└─────────────────┘</pre>
+
+        <h2>▓▓ Configuration File</h2>
+        <p>MCP servers are configured in <code>~/.osvm/mcp_config.json</code>:</p>
+        <pre><code>{
+  "servers": [
+    {
+      "name": "solana",
+      "url": "https://mcp.solana.com",
+      "transport": "http",
+      "auth": {
+        "type": "bearer",
+        "token": "YOUR_TOKEN"
+      }
+    },
+    {
+      "name": "solana-analytics",
+      "url": "https://mcp.solana.com",
+      "transport": "http"
+    }
+  ]
+}</code></pre>
 
         <h2>▓▓ Transport Types</h2>
         <ul>
-            <li><strong>stdio</strong> - Local process communication</li>
-            <li><strong>http</strong> - REST API based</li>
-            <li><strong>websocket</strong> - Real-time bidirectional</li>
+            <li><strong>stdio</strong> - Local process communication (node server.js)</li>
+            <li><strong>http</strong> - REST API based (most common)</li>
+            <li><strong>websocket</strong> - Real-time bidirectional connection</li>
         </ul>
 
         <h2>▓▓ Authentication</h2>
         <ul>
-            <li>Bearer tokens</li>
-            <li>Basic auth</li>
-            <li>API keys</li>
-            <li>Custom headers</li>
+            <li><strong>Bearer tokens:</strong> Most API providers</li>
+            <li><strong>Basic auth:</strong> Username/password</li>
+            <li><strong>API keys:</strong> Custom header or query param</li>
+            <li><strong>Custom headers:</strong> Flexible authentication</li>
         </ul>
+
+        <h2>▓▓ Integration with AI Chat</h2>
+        <p>MCP servers are automatically available when using AI chat:</p>
+        <pre><code>$ osvm chat
+> "Check balance for wallet ABC...XYZ"
+🤖 Using solana-mcp.getBalance tool...
+✓ Balance: 150.25 SOL
+
+> "Show DEX trades"
+🤖 Using solana-mcp.getTradeHistory tool...
+✓ Found 23 trades in last 24h</code></pre>
     </div>
 </body>
 </html>

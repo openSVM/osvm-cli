@@ -11,39 +11,67 @@
     <div class="main-wrapper">
         <h1>AI Integration</h1>
 
-        <h2>▓▓ Natural Language Commands</h2>
-        <p>OSVM understands natural language queries. Simply type what you want to do:</p>
+        <h2>▓▓ Natural Language Blockchain Queries (PRIMARY FEATURE)</h2>
+        <p>OSVM's main feature is AI-powered natural language queries for blockchain investigation:</p>
 
         <div class="command-item">
-            <code>osvm "deploy my program to mainnet"</code>
-            <p>AI interprets and executes your intent</p>
+            <code>osvm "show me all transactions for wallet ABC...XYZ in the last 24 hours"</code>
+            <p>Blockchain investigation with natural language</p>
         </div>
 
         <div class="command-item">
-            <code>osvm "show me all validators on sonic"</code>
-            <p>Natural language query processing</p>
+            <code>osvm "analyze DEX trading volume on Raydium for token XYZ"</code>
+            <p>AI interprets and executes blockchain analysis</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm "find NFT holders for collection ABC with rare traits"</code>
+            <p>Complex blockchain queries made simple</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm "identify unusual activity in program 123...456"</code>
+            <p>Pattern detection and anomaly analysis</p>
+        </div>
+
+        <h2>▓▓ AI Planning Mode</h2>
+        <p>Use explicit planning mode for detailed query execution:</p>
+
+        <div class="command-item">
+            <code>osvm plan "analyze arbitrage opportunities between Orca and Raydium"</code>
+            <p>AI generates OVSM execution plan</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm -p "find wallets that interacted with both program A and B"</code>
+            <p>Short flag for planning mode</p>
+        </div>
+
+        <div class="command-item">
+            <code>osvm -a "calculate total fees paid by wallet X this month"</code>
+            <p>Alternative planning flag alias</p>
         </div>
 
         <h2>▓▓ Interactive Chat</h2>
         <div class="command-item">
             <code>osvm chat</code>
-            <p>Launch basic chat interface</p>
+            <p>Launch interactive chat for continuous investigation</p>
         </div>
 
         <div class="command-item">
             <code>osvm chat --advanced</code>
-            <p>FAR-style multi-session interface</p>
+            <p>Advanced multi-session interface with more tools</p>
         </div>
 
+        <h2>▓▓ AI-Powered Code Auditing</h2>
         <div class="command-item">
-            <code>osvm chat --microvm</code>
-            <p>Isolated chat with ephemeral tool VMs</p>
+            <code>osvm audit ./contracts</code>
+            <p>Security audit with AI-enhanced vulnerability detection</p>
         </div>
 
-        <h2>▓▓ AI-Powered Auditing</h2>
         <div class="command-item">
             <code>osvm audit github.com/project/contract</code>
-            <p>Security audit with AI analysis</p>
+            <p>Audit directly from GitHub repositories</p>
         </div>
 
         <h2>▓▓ Configuration</h2>
@@ -55,23 +83,35 @@ export OPENAI_KEY="sk-your-key-here"</code></pre>
         <pre><code>export OPENAI_URL="http://localhost:11434/v1/chat/completions"
 export OPENAI_KEY="ollama"</code></pre>
 
-        <h2>▓▓ Features</h2>
+        <h2>▓▓ AI Features</h2>
         <ul>
-            <li>Natural language understanding</li>
-            <li>Context-aware responses</li>
-            <li>Tool planning and execution</li>
-            <li>Code generation</li>
-            <li>Error diagnosis</li>
-            <li>Performance optimization suggestions</li>
+            <li>Natural language blockchain query understanding</li>
+            <li>Context-aware investigation planning</li>
+            <li>OVSM LISP code generation for execution</li>
+            <li>MCP tool integration for data access</li>
+            <li>Multi-step investigation workflows</li>
+            <li>Security vulnerability detection</li>
+            <li>Code review and best practices</li>
+            <li>Error diagnosis and troubleshooting</li>
         </ul>
 
-        <h2>▓▓ Circuit Breaker</h2>
+        <h2>▓▓ How OSVM AI Agent Works</h2>
+        <p>When you run a blockchain query, the AI agent:</p>
+        <ol>
+            <li><strong>Understands Intent:</strong> Parses your natural language query</li>
+            <li><strong>Plans Investigation:</strong> Generates OVSM LISP code to execute</li>
+            <li><strong>Executes via MCP:</strong> Runs plan using MCP tools and RPC endpoints</li>
+            <li><strong>Analyzes Results:</strong> Processes raw blockchain data into insights</li>
+            <li><strong>Returns Summary:</strong> Provides human-readable analysis with key findings</li>
+        </ol>
+
+        <h2>▓▓ Circuit Breaker Protection</h2>
         <p>OSVM includes automatic failure protection:</p>
         <ul>
-            <li>5 failure threshold</li>
-            <li>30 second timeout</li>
-            <li>Automatic recovery</li>
-            <li>Fallback to local processing</li>
+            <li>5 failure threshold before circuit opens</li>
+            <li>30 second timeout for requests</li>
+            <li>Automatic recovery after cooldown</li>
+            <li>Graceful fallback to local processing</li>
         </ul>
     </div>
 </body>

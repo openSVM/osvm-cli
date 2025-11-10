@@ -16,23 +16,47 @@
         <h2>▓▓ Quick Install</h2>
         <pre><code>curl https://osvm.ai| sh</code></pre>
 
+        <h2>▓▓ Binary Installation</h2>
+        <p>Download pre-built binaries from GitHub Releases:</p>
+        <pre><code># Linux (x86_64)
+wget https://github.com/openSVM/osvm-cli/releases/latest/download/osvm-linux-x86_64
+chmod +x osvm-linux-x86_64
+sudo mv osvm-linux-x86_64 /usr/local/bin/osvm
+
+# macOS (Apple Silicon)
+wget https://github.com/openSVM/osvm-cli/releases/latest/download/osvm-macos-aarch64
+chmod +x osvm-macos-aarch64
+sudo mv osvm-macos-aarch64 /usr/local/bin/osvm
+
+# macOS (Intel)
+wget https://github.com/openSVM/osvm-cli/releases/latest/download/osvm-macos-x86_64
+chmod +x osvm-macos-x86_64
+sudo mv osvm-macos-x86_64 /usr/local/bin/osvm
+
+# Windows
+# Download osvm-windows-x86_64.exe from releases
+# Add to PATH</code></pre>
+
         <h2>▓▓ Build from Source</h2>
         <pre><code># Clone repository
-git clone https://github.com/opensvm/osvm-cli.git
+git clone https://github.com/openSVM/osvm-cli.git
 cd osvm-cli
 
 # Build release version
 cargo build --release
 
 # Install globally
-sudo ./install-release.sh</code></pre>
+sudo ./install-release.sh
+
+# Or use make
+make install</code></pre>
 
         <h2>▓▓ System Requirements</h2>
         <ul>
-            <li>Rust 1.80.0 or higher</li>
-            <li>Solana CLI tools</li>
-            <li>Linux/macOS (Windows via WSL2)</li>
-            <li>4GB RAM minimum</li>
+            <li>Rust 1.80.0 or higher (for building from source)</li>
+            <li>Solana CLI tools (optional, for blockchain operations)</li>
+            <li>Linux, macOS, or Windows (native support)</li>
+            <li>4GB RAM minimum (8GB recommended)</li>
             <li>10GB disk space</li>
         </ul>
 
