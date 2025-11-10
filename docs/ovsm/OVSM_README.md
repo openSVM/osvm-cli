@@ -22,42 +22,41 @@ OVSM (pronounced "OH-vism") is a domain-specific language designed for expressin
 ## Quick Example
 
 ```ovsm
-## Q: "What is the average transaction fee on Solana?"
+;; Q: "What is the average transaction fee on Solana?"
 
-**Expected Plan:**
+;; Expected Plan:
+;; [TIME: ~15s] [COST: free] [CONFIDENCE: 95%]
 
-[TIME: ~15s] [COST: free] [CONFIDENCE: 95%]
+;; Available Tools:
+;; From Standard Library: getSlot, getBlock, MAP, FLATTEN, MEAN, MEDIAN
 
-**Available Tools:**
-From Standard Library: getSlot, getBlock, MAP, FLATTEN, MEAN, MEDIAN
+;; Main Branch:
+(do
+  (define current_slot (getSlot))
+  (define blocks [])
 
-**Main Branch:**
-$current_slot = getSlot()
-$blocks = []
+  (for (i (range 0 10))
+    (define block (getBlock :slot (- current_slot i)))
+    (set! blocks (append blocks block)))
 
-FOR $i IN 0..10:
-  $block = getBlock(slot: $current_slot - $i)
-  $blocks = APPEND(array: $blocks, item: $block)
+  (define all_txs (flatten (map blocks (lambda (b) (. b transactions)))))
+  (define fees (map all_txs (lambda (tx) (. tx meta fee))))
 
-$all_txs = FLATTEN(collection: MAP($blocks, b => b.transactions))
-$fees = MAP(collection: $all_txs, fn: tx => tx.meta.fee)
+  ;; Statistics:
+  (define mean_fee (mean :data fees))
+  (define median_fee (median :data fees))
+  (define stddev (stddev :data fees))
 
-$mean_fee = MEAN(data: $fees)
-$median_fee = MEDIAN(data: $fees)
-$stddev = STDDEV(data: $fees)
+  ;; DECISION: Check distribution
+  (define result
+    (if (< (/ stddev mean_fee) 0.5)
+        mean_fee          ;; BRANCH A: Normal distribution, use mean
+        median_fee))      ;; BRANCH B: High variance, use median
 
-DECISION: Check distribution
-  BRANCH A ($stddev / $mean_fee < 0.5):
-    $result = $mean_fee
-  BRANCH B ($stddev / $mean_fee >= 0.5):
-    $result = $median_fee
-
-**Action:**
-RETURN {
-  average_fee: $result,
-  confidence: 95,
-  sample_size: COUNT(collection: $fees)
-}
+  ;; Action:
+  {:average_fee result
+   :confidence 95
+   :sample_size (length fees)})
 ```
 
 ---
@@ -65,16 +64,16 @@ RETURN {
 ## Language Features
 
 ### Core Syntax
-- **Variables**: `$variable_name` (shell-style)
-- **Constants**: `CONST NAME = value` (immutable)
-- **Types**: Optional type annotations
-- **Comments**: `//` and `/* */`
+- **Variables**: `(define variable_name value)` (LISP-style)
+- **Constants**: `(const NAME value)` (immutable)
+- **Types**: S-expressions with keyword arguments
+- **Comments**: `;;` (semicolons for comments)
 
 ### Control Flow
-- **Conditionals**: IF/ELSE/THEN
-- **Loops**: WHILE, FOR, LOOP EVERY
-- **Decisions**: DECISION/BRANCH structure
-- **Guards**: GUARD condition ELSE action
+- **Conditionals**: `(if condition then-expr else-expr)`
+- **Loops**: `(while condition body...)`, `(for (item collection) body...)`
+- **Decisions**: Explicit if/else branching
+- **Guards**: Conditional expressions within if blocks
 
 ### Tool System
 - **Standard Library**: 104 tools (Solana RPC, data processing, statistics, math)
@@ -143,33 +142,37 @@ token_investigation.ovsm
 ```
 
 ### Basic Structure
-Every OVSM plan follows this structure:
+Every OVSM plan uses LISP S-expression syntax:
 ```ovsm
-**Expected Plan:**
+;; Expected Plan:
+;; [METADATA tags]
 
-[METADATA tags]
+;; Available Tools:
+;;   [declarations]
 
-**Available Tools:**
-  [declarations]
+;; Main execution:
+(do
+  ;; Primary execution path
+  (define result (someFunction :param value))
 
-**Main Branch:**
-  [primary execution path]
+  ;; Conditional branching
+  (if condition
+      (thenBranch)
+      (elseBranch))
 
-**Decision Point:** [condition]
-  [conditional branches]
-
-**Action:** [final output description]
+  ;; Final output
+  result)
 ```
 
 ---
 
 ## Tool Naming Conventions
 
-- **Solana RPC**: lowercase camelCase (`getSlot`, `getBlock`)
-- **Data Processing**: UPPERCASE (`MAP`, `FILTER`, `SUM`)
-- **Custom Tools**: snake_case (`analyze_fees`, `query_pool`)
-- **Statistical**: UPPERCASE (`MEAN`, `CORRELATE`, `T_TEST`)
-- **Utilities**: UPPERCASE (`NOW`, `LOG`, `ERROR`)
+- **Solana RPC**: lowercase camelCase `(getSlot)`, `(getBlock)`
+- **Data Processing**: lowercase `(map collection fn)`, `(filter collection pred)`, `(sum data)`
+- **Custom Tools**: camelCase `(analyzeFees :block block)`
+- **Statistical**: lowercase `(mean :data data)`, `(correlate :x x :y y)`
+- **Utilities**: lowercase `(now)`, `(log :message msg)`, `(error :message err)`
 
 ---
 

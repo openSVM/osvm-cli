@@ -87,93 +87,105 @@ Core keywords are in UPPERCASE for clarity:
 
 ### Variable Declaration
 
-Variables use `$` prefix (shell/PHP style):
+Variables use LISP-style define:
 
 ```
-$variable_name = value
-$count = 100
-$address = "7cvkjYAkUYs4W8XcXsca7cBrEGFeSUjeZmKoNBvXyzgv"
+(define variable_name value)
+(define count 100)
+(define address "7cvkjYAkUYs4W8XcXsca7cBrEGFeSUjeZmKoNBvXyzgv")
 ```
 
 ### Constants
 
-Constants use UPPERCASE without `$` prefix and are immutable:
+Constants use const and are immutable:
 
 ```
-// Solana System Programs
-CONST SYSTEM_PROGRAM = "11111111111111111111111111111111"
-CONST TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-CONST TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-CONST ASSOCIATED_TOKEN_PROGRAM = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+;; Solana System Programs
+(const SYSTEM_PROGRAM "11111111111111111111111111111111")
+(const TOKEN_PROGRAM "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+(const TOKEN_2022_PROGRAM "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+(const ASSOCIATED_TOKEN_PROGRAM "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
 
-// DeFi Programs
-CONST RAYDIUM_AMM_PROGRAM = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
-CONST ORCA_WHIRLPOOL_PROGRAM = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
-CONST JUPITER_AGGREGATOR_V6 = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+;; DeFi Programs
+(const RAYDIUM_AMM_PROGRAM "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8")
+(const ORCA_WHIRLPOOL_PROGRAM "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc")
+(const JUPITER_AGGREGATOR_V6 "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4")
 
-// Lending Programs
-CONST SOLEND_PROGRAM = "So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo"
-CONST MANGO_V4_PROGRAM = "4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg"
+;; Lending Programs
+(const SOLEND_PROGRAM "So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo")
+(const MANGO_V4_PROGRAM "4MangoMjqJ2firMokCjjGgoK8d4MXcrgL7XJaL3w6fVg")
 
-// System Limits
-CONST MAX_COMPUTE_UNITS = 1400000
-CONST MAX_TRANSACTION_SIZE = 1232
-CONST MAX_ACCOUNTS = 256
-CONST MAX_CPI_DEPTH = 4
-CONST LAMPORTS_PER_SOL = 1000000000
+;; System Limits
+(const MAX_COMPUTE_UNITS 1400000)
+(const MAX_TRANSACTION_SIZE 1232)
+(const MAX_ACCOUNTS 256)
+(const MAX_CPI_DEPTH 4)
+(const LAMPORTS_PER_SOL 1000000000)
 
-// Network
-CONST SLOTS_PER_EPOCH = 432000
-CONST SLOT_DURATION_MS = 400
+;; Network
+(const SLOTS_PER_EPOCH 432000)
+(const SLOT_DURATION_MS 400)
 
-// Aliases for clarity
-CONST DEX_PROGRAM_ID = RAYDIUM_AMM_PROGRAM  // Example: can be any DEX
-CONST ORCA_PROGRAM_ID = ORCA_WHIRLPOOL_PROGRAM
-CONST LENDING_PROGRAM = SOLEND_PROGRAM      // Example: can be any lending protocol
+;; Aliases for clarity
+(const DEX_PROGRAM_ID RAYDIUM_AMM_PROGRAM)  ;; Example: can be any DEX
+(const ORCA_PROGRAM_ID ORCA_WHIRLPOOL_PROGRAM)
+(const LENDING_PROGRAM SOLEND_PROGRAM)      ;; Example: can be any lending protocol
 
-// Usage in conditionals
-IF $program_id == DEX_PROGRAM_ID THEN
-  // Handle DEX transaction
+;; Usage in conditionals
+(if (= program_id DEX_PROGRAM_ID)
+  ;; Handle DEX transaction
+  null)
 
-IF $compute_units > MAX_COMPUTE_UNITS THEN
-  ERROR(message: "Exceeds compute limit")
+(if (> compute_units MAX_COMPUTE_UNITS)
+  (ERROR :message "Exceeds compute limit")
+  null)
 
-IF $accounts_count > MAX_ACCOUNTS THEN
-  ERROR(message: "Too many accounts")
+(if (> accounts_count MAX_ACCOUNTS)
+  (ERROR :message "Too many accounts")
+  null)
 ```
 
 ### Data Types
 
 **Primitives:**
 ```
-$number = 42
-$float = 3.14
-$string = "hello"
-$boolean = true
-$null = null
+(define number 42)
+(define float 3.14)
+(define string "hello")
+(define boolean true)
+(define null_value null)
 ```
 
 **Collections:**
 ```
-$array = [1, 2, 3, 4, 5]
-$object = {key: "value", count: 10}
-$tuple = (value1, value2, value3)
+(define array [1 2 3 4 5])
+(define object {:key "value" :count 10})
+(define tuple [value1 value2 value3])
 ```
 
 ### Type Annotations (Optional)
 
 ```
-$result: Transaction = getTransaction($sig)
-$balance: u64 = getBalance($address)
-$prices: Array<f64> = fetchPrices()
+;; Type annotations are comments - LISP is dynamically typed
+(define result (getTransaction sig))  ;; Transaction
+(define balance (getBalance address))  ;; u64
+(define prices (fetchPrices))  ;; Array<f64>
 ```
 
 ### Destructuring
 
 ```
-{$slot, $epoch} = getEpochInfo()
-[$first, $second, ...$rest] = $array
-{$meta: {$fee, $err}} = $transaction
+(define epoch_info (getEpochInfo))
+(define slot (. epoch_info slot))
+(define epoch (. epoch_info epoch))
+
+(define first (nth array 0))
+(define second (nth array 1))
+(define rest (slice array 2))
+
+(define transaction tx_data)
+(define fee (. (. transaction meta) fee))
+(define err (. (. transaction meta) err))
 ```
 
 ---
@@ -182,30 +194,46 @@ $prices: Array<f64> = fetchPrices()
 
 ### Arithmetic
 ```
-+ - * / % **  (power)
-$total = $price * $quantity
-$average = $sum / $count
+;; Variadic operators
+(+ 1 2 3)       ;; Addition
+(- 10 3 2)      ;; Subtraction
+(* 2 3 4)       ;; Multiplication
+(/ 100 2 5)     ;; Division
+(% 17 5)        ;; Modulo
+
+(define total (* price quantity))
+(define average (/ sum count))
 ```
 
 **Division by Zero:**
 Division by zero results in runtime error. Use guard clauses to prevent:
 ```
-GUARD $count > 0 ELSE RETURN ERROR(message: "Division by zero")
-$average = $sum / $count
+(if (<= count 0)
+    (ERROR :message "Division by zero")
+    (define average (/ sum count)))
 ```
 
 ### Comparison
 ```
-== != > < >= <=
-$is_high = $value > 1000
-$matches = $type == "transfer"
+(= x y)         ;; Equal
+(!= x y)        ;; Not equal
+(> x y)         ;; Greater than
+(< x y)         ;; Less than
+(>= x y)        ;; Greater or equal
+(<= x y)        ;; Less or equal
+
+(define is_high (> value 1000))
+(define matches (= type "transfer"))
 ```
 
 ### Logical
 ```
-AND OR NOT XOR
-$valid = $exists AND $not_expired
-$should_retry = NOT $success OR $timeout
+(and true false)         ;; Logical AND
+(or true false)          ;; Logical OR
+(not true)               ;; Logical NOT
+
+(define valid (and exists (not expired)))
+(define should_retry (or (not success) timeout))
 ```
 
 ### Data Flow Arrow
@@ -219,65 +247,69 @@ $should_retry = NOT $success OR $timeout
 
 **Usage Pattern 1: Pipeline Annotation (for clarity)**
 ```
-// Shows data flow for reader understanding
-$slot = getSlot()        // → current slot number
-$block = getBlock($slot) // → block data
-$txs = $block.transactions // → transaction array
+;; Shows data flow for reader understanding
+(define slot (getSlot))        ;; → current slot number
+(define block (getBlock slot)) ;; → block data
+(define txs (. block transactions)) ;; → transaction array
 ```
 
 **Usage Pattern 2: Inline Comments**
 ```
-getSlot() → getBlock() → extractTransactions()
-// Read as: "getSlot FLOWS TO getBlock FLOWS TO extractTransactions"
-// This is a COMMENT showing the conceptual flow
+;; getSlot() → getBlock() → extractTransactions()
+;; Read as: "getSlot FLOWS TO getBlock FLOWS TO extractTransactions"
+;; This is a COMMENT showing the conceptual flow
 ```
 
 **What arrows are NOT:**
 - NOT a pipe operator (use function composition instead)
-- NOT an assignment operator (use `=`)
+- NOT an assignment operator (use `define`)
 - NOT an executable statement
 
 **Correct Usage:**
 ```
-// Good: Arrow as annotation
-$data = processData()  // → cleaned data
+;; Good: Arrow as annotation
+(define data (processData))  ;; → cleaned data
 
-// Good: Showing conceptual flow in comment
-// Flow: getData() → transform() → save()
+;; Good: Showing conceptual flow in comment
+;; Flow: getData() → transform() → save()
 
-// Bad: Trying to use arrow as operator
-$result = getData() → transform()  // WRONG - not valid syntax
+;; Bad: Trying to use arrow as operator
+;; (define result (→ (getData) (transform)))  ;; WRONG - not valid syntax
 ```
 
 **For Actual Piping:**
 Use function composition or chaining:
 ```
-$result = transform(data: getData())
-// Or define a pipe tool if needed
+(define result (transform :data (getData)))
+;; Or define a pipe tool if needed
 ```
 
 ### Optional/Null Handling
 ```
-?.  (optional chaining)
-??  (null coalescing)
+;; Use conditional checks for null handling
+(define fee
+  (if (and transaction (. transaction meta))
+      (. (. transaction meta) fee)
+      0))
 
-$fee = $transaction?.meta?.fee ?? 0
-$name = $account?.data?.name ?? "Unknown"
+(define name
+  (if (and account (. account data))
+      (. (. account data) name)
+      "Unknown"))
 ```
 
 ### Ternary Conditional
 ```
-condition ? value_if_true : value_if_false
-
-$strategy = $count > 10000 ? "sample" : "exact"
-$label = $score >= 90 ? "good" : "needs_improvement"
+;; Use if expressions for conditional values
+(define strategy (if (> count 10000) "sample" "exact"))
+(define label (if (>= score 90) "good" "needs_improvement"))
 ```
 
 ### Range and Membership
 ```
-IN BETWEEN
-$valid = $value IN [1, 2, 3, 4, 5]
-$in_range = $score BETWEEN 0 AND 100
+;; Use functions for membership testing
+(define valid (contains? [1 2 3 4 5] value))
+(define in_range (and (>= score 0) (<= score 100)))
 ```
 
 ---
@@ -288,9 +320,9 @@ $in_range = $score BETWEEN 0 AND 100
 
 **IF-ELSE:**
 ```
-IF condition THEN
+(if condition
   [statements]
-ELSE IF other_condition THEN
+ELSE (if other_condition
   [statements]
 ELSE
   [statements]
@@ -298,19 +330,19 @@ ELSE
 
 **Example:**
 ```
-IF $count > 1000 THEN
-  $strategy = "sample"
-ELSE IF $count > 100 THEN
-  $strategy = "paginate"
-ELSE
-  $strategy = "fetch_all"
+(define strategy
+  (if (> count 1000)
+      "sample"
+      (if (> count 100)
+          "paginate"
+          "fetch_all")))
 ```
 
 ### Loops
 
 **WHILE:**
 ```
-WHILE condition:
+while condition
   [statements]
   BREAK IF exit_condition
   CONTINUE IF skip_condition
@@ -318,22 +350,22 @@ WHILE condition:
 
 **FOR:**
 ```
-FOR $item IN $collection:
-  [process $item]
+for (item collection)
+  [process item]
   BREAK IF satisfied
   CONTINUE IF should_skip
 ```
 
 **FOR with Range:**
 ```
-FOR $i IN 0..100:
+for (i 0..100)
   [process iteration]
 ```
 
 **FOR with Index:**
 ```
-FOR $item, $index IN $collection:
-  [use $item and $index]
+FOR item, index IN collection:
+  [use item and index]
 ```
 
 ### Loop Control
@@ -356,30 +388,39 @@ LOOP EVERY duration:
 
 **Examples:**
 ```
-// Check every 30 seconds
-LOOP EVERY 30s:
-  $value = checkMetric()
-  LOG(message: "Current value: {$value}")
-  BREAK IF $value < threshold
+;; Check every 30 seconds
+(loop-every 30s
+  (do
+    (define value (checkMetric))
+    (log :message (format "Current value: ~a" value))
+    (if (< value threshold)
+        (break)
+        null)))
 
-// Check every 5 minutes
-LOOP EVERY 5min:
-  $data = collectData()
-  processData($data)
-  BREAK IF dataComplete()
+;; Check every 5 minutes
+(loop-every 5min
+  (do
+    (define data (collectData))
+    (processData data)
+    (if (dataComplete)
+        (break)
+        null)))
 
-// With timeout
-TIMEOUT 10min:
-  LOOP EVERY 1s:
-    $status = checkStatus()
-    BREAK IF $status == "ready"
+;; With timeout
+(timeout 10min
+  (loop-every 1s
+    (do
+      (define status (checkStatus))
+      (if (= status "ready")
+          (break)
+          null))))
 ```
 
 ### Return Early
 
 ```
-RETURN $result IF condition_met
-RETURN early IF $data == null
+RETURN result IF condition_met
+RETURN early IF data == null
 ```
 
 ---
@@ -434,7 +475,7 @@ AVAILABLE_TOOLS:
     getEpochInfo,
     getRecentBlockhash,
     getVoteAccounts,
-    // ... all RPC methods
+    ;; ... all RPC methods
   ]
 
   data_processing: [
@@ -446,7 +487,7 @@ AVAILABLE_TOOLS:
     MAX,
     MIN,
     SORT,
-    // ... data functions
+    ;; ... data functions
   ]
 
   analysis: [
@@ -455,7 +496,7 @@ AVAILABLE_TOOLS:
     DETECT_OUTLIERS,
     FIND_PATTERNS,
     CALCULATE_CONFIDENCE,
-    // ... statistical functions
+    ;; ... statistical functions
   ]
 ```
 
@@ -464,40 +505,40 @@ AVAILABLE_TOOLS:
 Tool calls must use defined tools:
 
 ```
-// Direct invocation
-$slot = CALL getSlot()
-$tx = CALL getTransaction(signature: $sig)
+;; Direct invocation
+(define slot CALL getSlot())
+(define tx CALL getTransaction(signature: sig))
 
-// Shorthand (when unambiguous)
-$slot = getSlot()
-$tx = getTransaction($signature)
+;; Shorthand (when unambiguous)
+(define slot getSlot())
+(define tx getTransaction(signature))
 ```
 
 ### Checking Tool Availability
 
 ```
-IF TOOL_EXISTS("getSlot") THEN
-  $slot = getSlot()
+(if TOOL_EXISTS("getSlot")
+  (define slot getSlot())
 ELSE
   ERROR("Tool getSlot not available")
 
-// Or use guard
+;; Or use guard
 REQUIRE_TOOL getSlot
-$slot = getSlot()
+(define slot getSlot())
 ```
 
 ### Chained Invocation
 
 ```
-$result = getSlot() → getBlock($result) → extractTransactions($result)
-$data = fetchData() → parseData() → validateData()
+(define result getSlot() → getBlock(result) → extractTransactions(result))
+(define data fetchData() → parseData() → validateData())
 ```
 
 ### Named Parameters
 
 ```
-$block = CALL getBlock(
-  slot: $current_slot,
+(define block CALL getBlock()
+  slot: current_slot,
   commitment: "finalized",
   maxSupportedTransactionVersion: 0
 )
@@ -507,8 +548,8 @@ $block = CALL getBlock(
 
 ```
 TRY:
-  $transactions = CALL getSignaturesForAddress(
-    address: $pubkey,
+  (define transactions CALL getSignaturesForAddress()
+    address: pubkey,
     limit: 1000,
     before: $cursor
   )
@@ -520,28 +561,28 @@ CATCH:
 
 **Positional Parameters** (use when obvious and 1-2 params):
 ```
-$count = COUNT($array)
-$first = FIRST($array)
-$sum = SUM($numbers)
+(define count COUNT(array))
+(define first FIRST(array))
+(define sum SUM(numbers))
 ```
 
 **Named Parameters** (use when 3+ params OR clarity needed):
 ```
-$block = getBlock(
-  slot: $current_slot,
+(define block getBlock()
+  slot: current_slot,
   commitment: "finalized",
   maxSupportedTransactionVersion: 0
 )
 
-$fee_analysis = analyze_fees(block: $block)
+(define fee_analysis analyze_fees(block: block))
 ```
 
 **Mixed Parameters** (positional first, named after):
 ```
-$filtered = FILTER($array, item => item > 10)
-// OR with named for clarity
-$filtered = FILTER(
-  collection: $array,
+(define filtered FILTER(array, item => item > 10))
+;; OR with named for clarity
+(define filtered FILTER()
+  collection: array,
   predicate: item => item > 10
 )
 ```
@@ -559,17 +600,17 @@ DEFINE_TOOL analyze_fees:
     block: Block (required)
   returns: {mean: f64, median: f64, p95: f64}
   implementation:
-    $transactions = $block.transactions
-    $fees = MAP(collection: $transactions, fn: tx => tx.meta.fee)
+    (define transactions block.transactions)
+    (define fees MAP(collection: transactions, fn: tx => tx.meta.fee))
     RETURN {
-      mean: MEAN(data: $fees),
-      median: MEDIAN(data: $fees),
-      p95: PERCENTILE(data: $fees, percentile: 95)
+      mean: MEAN(data: fees),
+      median: MEDIAN(data: fees),
+      p95: PERCENTILE(data: fees, percentile: 95)
     }
 
-// Use custom tool
-$block = getBlock(slot: $slot)
-$fee_analysis = analyze_fees(block: $block)
+;; Use custom tool
+(define block getBlock(slot: slot))
+(define fee_analysis analyze_fees(block: block))
 ```
 
 ### Helper Functions Within DEFINE_TOOL
@@ -581,20 +622,20 @@ DEFINE_TOOL queryOrcaPool:
   params: {token_pair: (string, string)}
   returns: f64 | null
   implementation:
-    // Define local helper functions with DEFINE
+    ;; Define local helper functions with DEFINE
     DEFINE derivePoolAddress(pair):
-      $seeds = ["whirlpool", pair[0], pair[1]]
-      RETURN derivePDA(seeds: $seeds, program: ORCA_PROGRAM_ID)
+      (define seeds ["whirlpool", pair[0], pair[1]])
+      RETURN derivePDA(seeds: seeds, program: ORCA_PROGRAM_ID)
 
     DEFINE parsePoolPrice(data):
-      $sqrt_price = parseU64(data: $data, offset: 0)
-      RETURN ($sqrt_price / 2^64) ** 2
+      (define sqrt_price parseU64(data: data, offset: 0))
+      RETURN (sqrt_price / 2^64) ** 2
 
-    // Use helpers
-    $pool_address = derivePoolAddress($token_pair)
-    $pool_account = getAccountInfo(pubkey: $pool_address)
-    $price = parsePoolPrice($pool_account.data)
-    RETURN $price
+    ;; Use helpers
+    (define pool_address derivePoolAddress(token_pair))
+    (define pool_account getAccountInfo(pubkey: pool_address))
+    (define price parsePoolPrice(pool_account.data))
+    price
 ```
 
 **Important**: Helper functions defined with `DEFINE` (not `DEFINE_TOOL`) are:
@@ -610,12 +651,12 @@ DEFINE_TOOL get_and_analyze_block:
     slot: u64
   returns: BlockAnalysis
   implementation:
-    $block = CALL getBlock(slot: $slot)
-    $tx_count = COUNT($block.transactions)
-    $fee_stats = analyze_fees($block)
+    (define block CALL getBlock(slot: slot))
+    (define tx_count COUNT(block.transactions))
+    (define fee_stats analyze_fees(block))
     RETURN {
-      slot: $slot,
-      transaction_count: $tx_count,
+      slot: slot,
+      transaction_count: tx_count,
       fee_analysis: $fee_stats
     }
 ```
@@ -630,9 +671,9 @@ Execute multiple operations concurrently:
 
 ```
 PARALLEL {
-  $account1 = getAccountInfo($addr1)
-  $account2 = getAccountInfo($addr2)
-  $tx = getTransaction($sig)
+  (define account1 getAccountInfo(addr1))
+  (define account2 getAccountInfo(addr2))
+  (define tx getTransaction(sig))
 }
 ```
 
@@ -643,12 +684,12 @@ Wait for all parallel operations to complete.
 
 ```
 PARALLEL {
-  $price1 = fetchPrice("DEX1")
-  $price2 = fetchPrice("DEX2")
-  $price3 = fetchPrice("DEX3")
+  (define price1 fetchPrice("DEX1"))
+  (define price2 fetchPrice("DEX2"))
+  (define price3 fetchPrice("DEX3"))
 }
 WAIT_ALL
-$best_price = MAX([$price1, $price2, $price3])
+(define best_price MAX([price1, price2, price3]))
 ```
 
 **WAIT_ANY:**
@@ -656,11 +697,11 @@ Continue when any operation completes.
 
 ```
 PARALLEL {
-  $result1 = queryNode1()
-  $result2 = queryNode2()
+  (define result1 queryNode1())
+  (define result2 queryNode2())
 }
 WAIT_ANY → $first_result
-// Use whichever completed first
+;; Use whichever completed first
 ```
 
 **RACE:**
@@ -668,8 +709,8 @@ Take first result, cancel others.
 
 ```
 RACE {
-  $data = slowButAccurate()
-  $estimate = fastButApproximate()
+  (define data slowButAccurate())
+  (define estimate fastButApproximate())
 }
 TAKE_FIRST → $result
 ```
@@ -678,9 +719,9 @@ TAKE_FIRST → $result
 
 ```
 TIMEOUT 30s:
-  $result = longRunningOperation()
+  (define result longRunningOperation())
 CATCH TIMEOUT:
-  $result = fallbackValue()
+  (define result fallbackValue())
 ```
 
 ---
@@ -691,7 +732,7 @@ CATCH TIMEOUT:
 
 ```
 TRY:
-  $result = riskyOperation()
+  (define result riskyOperation())
 CATCH:
   [error handling]
 ```
@@ -700,7 +741,7 @@ CATCH:
 
 ```
 TRY:
-  $data = fetchData()
+  (define data fetchData())
 CATCH:
   FATAL → abort with error message
   RECOVERABLE → retry with backoff
@@ -727,19 +768,19 @@ TRY primary_source()
 **Multi-line Fallback:**
 ```
 TRY:
-  $price = fetchFromOracle("primary")
+  (define price fetchFromOracle("primary"))
 CATCH RECOVERABLE:
   TRY:
-    $price = fetchFromOracle("secondary")
+    (define price fetchFromOracle("secondary"))
   CATCH RECOVERABLE:
-    $price = calculateFromDEX()
+    (define price calculateFromDEX())
 ```
 
 ### Retry Logic
 
 ```
 RETRY 3x ON_FAIL:
-  $result = unreliableOperation()
+  (define result unreliableOperation())
 WITH_BACKOFF: [1s, 2s, 4s]
 ```
 
@@ -747,7 +788,7 @@ WITH_BACKOFF: [1s, 2s, 4s]
 
 ```
 CIRCUIT_BREAK AFTER 10 failures FOR 60s:
-  $result = externalService()
+  (define result externalService())
 ```
 
 ---
@@ -758,69 +799,69 @@ CIRCUIT_BREAK AFTER 10 failures FOR 60s:
 
 **MAP:**
 ```
-$fees = MAP($transactions, tx => tx.meta.fee)
-$squares = MAP($numbers, n => n * n)
+(define fees MAP(transactions, tx => tx.meta.fee))
+(define squares MAP(numbers, n => n * n))
 ```
 
 **FILTER:**
 ```
-$successful = FILTER($transactions, tx => tx.meta.err == null)
-$large = FILTER($amounts, amt => amt > 1000)
+(define successful FILTER(transactions, tx => tx.meta.err == null))
+(define large FILTER(amounts, amt => amt > 1000))
 ```
 
 **REDUCE:**
 ```
-$sum = REDUCE($numbers, (acc, n) => acc + n, 0)
-$total_fees = REDUCE($transactions, (sum, tx) => sum + tx.fee, 0)
+(define sum REDUCE(numbers, (acc, n) => acc + n, 0))
+(define total_fees REDUCE(transactions, (sum, tx) => sum + tx.fee, 0))
 ```
 
 ### Aggregation Functions
 
 ```
-SUM($collection)
-AVG($collection)
-MIN($collection)
-MAX($collection)
-COUNT($collection)
-MEDIAN($collection)
+SUM(collection)
+AVG(collection)
+MIN(collection)
+MAX(collection)
+COUNT(collection)
+MEDIAN(collection)
 ```
 
 **Examples:**
 ```
-$total_fees = SUM(MAP($transactions, tx => tx.fee))
-$avg_compute = AVG(MAP($transactions, tx => tx.computeUnits))
-$highest_fee = MAX($fees)
+(define total_fees SUM(MAP(transactions, tx => tx.fee)))
+(define avg_compute AVG(MAP(transactions, tx => tx.computeUnits)))
+(define highest_fee MAX(fees))
 ```
 
 ### Statistical Functions
 
 ```
-MEAN($data)
-MEDIAN($data)
-MODE($data)
-STDDEV($data)
-PERCENTILE($data, 95)
+MEAN(data)
+MEDIAN(data)
+MODE(data)
+STDDEV(data)
+PERCENTILE(data, 95)
 ```
 
 ### Array Operations
 
 ```
-$first = FIRST($array)
-$last = LAST($array)
-$slice = SLICE($array, start: 0, end: 10)
-$reversed = REVERSE($array)
-$sorted = SORT($array)
-$unique = UNIQUE($array)
+(define first FIRST(array))
+(define last LAST(array))
+(define slice SLICE(array, start: 0, end: 10))
+(define reversed REVERSE(array))
+(define sorted SORT(array))
+(define unique UNIQUE(array))
 ```
 
 ### String Operations
 
 ```
-$upper = UPPERCASE($string)
-$lower = LOWERCASE($string)
-$trimmed = TRIM($string)
-$parts = SPLIT($string, delimiter: ",")
-$joined = JOIN($array, separator: ", ")
+(define upper UPPERCASE(string))
+(define lower LOWERCASE(string))
+(define trimmed TRIM(string))
+(define parts SPLIT(string, delimiter: ","))
+(define joined JOIN(array, separator: ", "))
 ```
 
 ---
@@ -845,14 +886,14 @@ DECISION: [description of what we're deciding]
 ```
 DECISION: Determine data collection strategy
   BRANCH A (count < 100):
-    // Fetch all data exactly
-    $data = fetchAll()
+    ;; Fetch all data exactly
+    (define data fetchAll())
   BRANCH B (100 <= count < 10000):
-    // Paginate through results
-    $data = paginate($count)
+    ;; Paginate through results
+    (define data paginate(count))
   BRANCH C (count >= 10000):
-    // Statistical sampling
-    $data = sample($count, sample_size: 1000)
+    ;; Statistical sampling
+    (define data sample(count, sample_size: 1000))
 ```
 
 ### Nested Decisions
@@ -860,16 +901,16 @@ DECISION: Determine data collection strategy
 ```
 DECISION: Check transaction status
   BRANCH A (success):
-    $result = extractSuccessData($tx)
+    (define result extractSuccessData(tx))
 
     DECISION: Check if CPI involved
       BRANCH A1 (has_cpi):
-        $calls = parseInnerInstructions($tx)
+        (define calls parseInnerInstructions(tx))
       BRANCH A2 (no_cpi):
-        $calls = [$tx.instruction]
+        (define calls [tx.instruction])
 
   BRANCH B (failed):
-    $error = parseError($tx)
+    (define error parseError(tx))
 ```
 
 ### AI Decision Points
@@ -889,7 +930,7 @@ AI_DECISION: Determine time range
 ### Pattern Matching
 
 ```
-MATCH $type:
+MATCH type:
   "transfer" → handleTransfer()
   "mint" → handleMint()
   "burn" → handleBurn()
@@ -899,8 +940,8 @@ MATCH $type:
 ### Guard Clauses
 
 ```
-GUARD $data != null ELSE RETURN ERROR(message: "No data")
-GUARD $balance >= $amount ELSE RETURN ERROR(message: "Insufficient balance")
+GUARD data != null ELSE RETURN ERROR(message: "No data")
+GUARD balance >= amount ELSE RETURN ERROR(message: "Insufficient balance")
 ```
 
 ---
@@ -910,8 +951,8 @@ GUARD $balance >= $amount ELSE RETURN ERROR(message: "Insufficient balance")
 ### Inline Comments
 
 ```
-// Single line comment
-$result = calculate()  // End of line comment
+;; Single line comment
+(define result calculate()  // End of line comment)
 
 /* Multi-line comment
    spanning multiple lines
@@ -978,7 +1019,7 @@ $result = calculate()  // End of line comment
  * Side effects: none
  * Complexity: O(1)
  */
-$analysis = analyzeTransaction($signature)
+(define analysis analyzeTransaction(signature))
 ```
 
 ---
@@ -1009,26 +1050,26 @@ To maintain consistency and clarity, the AI Planning Meta-Language uses the foll
 
 **Examples:**
 ```
-// RPC tools (lowercase) - matches Solana SDK
-$slot = getSlot()
-$block = getBlock(slot: $slot)
-$account = getAccountInfo(pubkey: $address)
+;; RPC tools (lowercase) - matches Solana SDK
+(define slot getSlot())
+(define block getBlock(slot: slot))
+(define account getAccountInfo(pubkey: address))
 
-// Data processing (UPPERCASE) - stands out
-$fees = MAP($transactions, tx => tx.meta.fee)
-$high_fees = FILTER($fees, fee => fee > 1000)
-$total = SUM($fees)
+;; Data processing (UPPERCASE) - stands out
+(define fees MAP(transactions, tx => tx.meta.fee))
+(define high_fees FILTER(fees, fee => fee > 1000))
+(define total SUM(fees))
 
-// Custom tools (snake_case) - user-defined
-$analysis = analyze_fees(block: $block)
-$pool_price = query_oracle_pool(token_pair: $pair)
+;; Custom tools (snake_case) - user-defined
+(define analysis analyze_fees(block: block))
+(define pool_price query_oracle_pool(token_pair: pair))
 
-// Statistical tools (UPPERCASE) - mathematical operations
-$average = MEAN($data)
-$correlation = CORRELATE(x: $x_data, y: $y_data)
+;; Statistical tools (UPPERCASE) - mathematical operations
+(define average MEAN(data))
+(define correlation CORRELATE(x: x_data, y: y_data))
 
-// Utility tools (UPPERCASE) - system operations
-$timestamp = NOW()
+;; Utility tools (UPPERCASE) - system operations
+(define timestamp NOW())
 LOG(message: "Processing complete")
 ```
 
@@ -1577,37 +1618,37 @@ From Standard Library:
   - MEAN, MEDIAN, STDDEV (Statistical)
 
 **Main Branch:**
-$current_slot = getSlot()
-$blocks = []
+(do
+  (define current_slot (getSlot))
+  (define blocks [])
 
-FOR $i IN 0..10:
-  $block = getBlock(slot: $current_slot - $i)
-  $blocks = APPEND(array: $blocks, item: $block)
+  (for (i (range 0 10))
+    (do
+      (define block (getBlock :slot (- current_slot i)))
+      (set! blocks (append blocks block))))
 
-$all_transactions = FLATTEN(collection: MAP($blocks, b => b.transactions))
-$fees = MAP(collection: $all_transactions, fn: tx => tx.meta.fee)
+  (define all_transactions (flatten (map blocks (lambda (b) (. b transactions)))))
+  (define fees (map all_transactions (lambda (tx) (. (. tx meta) fee))))
 
-**Statistics:**
-$mean_fee = MEAN(data: $fees)
-$median_fee = MEDIAN(data: $fees)
-$stddev = STDDEV(data: $fees)
+  **Statistics:**
+  (define mean_fee (MEAN :data fees))
+  (define median_fee (MEDIAN :data fees))
+  (define stddev (STDDEV :data fees))
 
-DECISION: Check distribution
-  BRANCH A ($stddev / $mean_fee < 0.5):
-    // Normal distribution, use mean
-    $result = $mean_fee
-  BRANCH B ($stddev / $mean_fee >= 0.5):
-    // High variance, use median
-    $result = $median_fee
-    $note = "High variance detected, using median"
+  DECISION: Check distribution
+    BRANCH A (< (/ stddev mean_fee) 0.5):
+      ;; Normal distribution, use mean
+      (define result mean_fee)
+    BRANCH B (>= (/ stddev mean_fee) 0.5):
+      ;; High variance, use median
+      (define result median_fee)
+      (define note "High variance detected, using median")
 
-**Action:**
-RETURN {
-  average_fee: $result,
-  confidence: 95,
-  sample_size: COUNT(collection: $fees),
-  note: $note ?? "Normal distribution"
-}
+  **Action:**
+  (return {:average_fee result
+           :confidence 95
+           :sample_size (COUNT :collection fees)
+           :note (if (null? note) "Normal distribution" note)}))
 ```
 
 ### Example 2: Parallel Execution with Error Handling
@@ -1635,28 +1676,28 @@ DEFINE_TOOL queryOrcaPool:
   params: {token_pair: (string, string)}
   returns: f64 | null
   implementation:
-    // Helper: Derive Orca pool address from token pair
+    ;; Helper: Derive Orca pool address from token pair
     DEFINE deriveOrcaPoolAddress(pair):
-      $seeds = [
+      (define seeds [)
         "whirlpool",
         pair[0],  // Token A mint
         pair[1]   // Token B mint
       ]
-      RETURN derivePDA(seeds: $seeds, program: ORCA_PROGRAM_ID)
+      RETURN derivePDA(seeds: seeds, program: ORCA_PROGRAM_ID)
 
-    // Helper: Parse price from Orca pool account data
+    ;; Helper: Parse price from Orca pool account data
     DEFINE parseOrcaPoolPrice(data):
-      // Orca stores sqrt_price_x64 at offset 65
-      $sqrt_price_x64 = parseU128(data: $data, offset: 65)
-      // Convert to decimal price
-      $price = POW(base: $sqrt_price_x64 / POW(base: 2, exponent: 64), exponent: 2)
-      RETURN $price
+      ;; Orca stores sqrt_price_x64 at offset 65
+      (define sqrt_price_x64 parseU128(data: data, offset: 65))
+      ;; Convert to decimal price
+      (define price POW(base: sqrt_price_x64 / POW(base: 2, exponent: 64), exponent: 2))
+      price
 
-    $pool_address = deriveOrcaPoolAddress($token_pair)
+    (define pool_address deriveOrcaPoolAddress(token_pair))
     TRY:
-      $pool_account = getAccountInfo(pubkey: $pool_address)
-      $price = parseOrcaPoolPrice($pool_account.data)
-      RETURN $price
+      (define pool_account getAccountInfo(pubkey: pool_address))
+      (define price parseOrcaPoolPrice(pool_account.data))
+      price
     CATCH:
       RETURN null
 
@@ -1664,28 +1705,28 @@ DEFINE_TOOL queryRaydiumPool:
   params: {token_pair: (string, string)}
   returns: f64 | null
   implementation:
-    // Helper: Derive Raydium AMM pool address
+    ;; Helper: Derive Raydium AMM pool address
     DEFINE deriveRaydiumPoolAddress(pair):
-      $seeds = [
+      (define seeds [)
         "amm_associated_seed",
         pair[0],
         pair[1]
       ]
-      RETURN derivePDA(seeds: $seeds, program: RAYDIUM_AMM_PROGRAM)
+      RETURN derivePDA(seeds: seeds, program: RAYDIUM_AMM_PROGRAM)
 
-    // Helper: Parse price from Raydium pool state
+    ;; Helper: Parse price from Raydium pool state
     DEFINE parseRaydiumPoolPrice(data):
-      // Raydium stores reserves at specific offsets
-      $base_reserve = parseU64(data: $data, offset: 8)
-      $quote_reserve = parseU64(data: $data, offset: 16)
-      $price = $quote_reserve / $base_reserve
-      RETURN $price
+      ;; Raydium stores reserves at specific offsets
+      (define base_reserve parseU64(data: data, offset: 8))
+      (define quote_reserve parseU64(data: data, offset: 16))
+      (define price quote_reserve / base_reserve)
+      price
 
-    $pool_address = deriveRaydiumPoolAddress($token_pair)
+    (define pool_address deriveRaydiumPoolAddress(token_pair))
     TRY:
-      $pool_account = getAccountInfo(pubkey: $pool_address)
-      $price = parseRaydiumPoolPrice($pool_account.data)
-      RETURN $price
+      (define pool_account getAccountInfo(pubkey: pool_address))
+      (define price parseRaydiumPoolPrice(pool_account.data))
+      price
     CATCH:
       RETURN null
 
@@ -1693,72 +1734,72 @@ DEFINE_TOOL getJupiterQuote:
   params: {token_pair: (string, string)}
   returns: f64 | null
   implementation:
-    // Helper: Parse Jupiter API response
+    ;; Helper: Parse Jupiter API response
     DEFINE parseJupiterQuote(json_response):
-      $parsed = JSON_PARSE($json_response)
-      $in_amount = $parsed.inAmount
-      $out_amount = $parsed.outAmount
-      $price = $out_amount / $in_amount
-      RETURN $price
+      (define parsed JSON_PARSE(json_response))
+      (define in_amount parsed.inAmount)
+      (define out_amount parsed.outAmount)
+      (define price out_amount / in_amount)
+      price
 
     TRY:
-      $url = "https://quote-api.jup.ag/v6/quote?inputMint={$token_pair[0]}&outputMint={$token_pair[1]}&amount=1000000"
-      $response = FETCH_URL(url: $url)
-      $price = parseJupiterQuote($response)
-      RETURN $price
+      (define url "https://quote-api.jup.ag/v6/quote?inputMint={token_pair[0]}&outputMint={token_pair[1]}&amount=1000000")
+      (define response FETCH_URL(url: url))
+      (define price parseJupiterQuote(response))
+      price
     CATCH:
       RETURN null
 
 **Main Branch:**
-$token_pair = ("SOL", "USDC")
-$timestamp = NOW()
+(define token_pair ("SOL", "USDC"))
+(define timestamp NOW())
 
 PARALLEL {
   TRY:
-    $orca_price = queryOrcaPool(token_pair: $token_pair)
+    (define orca_price queryOrcaPool(token_pair: token_pair))
   CATCH RECOVERABLE:
-    $orca_price = null
+    (define orca_price null)
 
   TRY:
-    $raydium_price = queryRaydiumPool(token_pair: $token_pair)
+    (define raydium_price queryRaydiumPool(token_pair: token_pair))
   CATCH RECOVERABLE:
-    $raydium_price = null
+    (define raydium_price null)
 
   TRY:
-    $jupiter_quote = getJupiterQuote(token_pair: $token_pair)
+    (define jupiter_quote getJupiterQuote(token_pair: token_pair))
   CATCH RECOVERABLE:
-    $jupiter_quote = null
+    (define jupiter_quote null)
 }
 WAIT_ALL
 
 **Data Validation:**
-$valid_prices = FILTER(
-  [$orca_price, $raydium_price, $jupiter_quote],
+(define valid_prices FILTER()
+  [orca_price, raydium_price, jupiter_quote],
   p => p != null
 )
 
-GUARD COUNT($valid_prices) > 0 ELSE RETURN ERROR(message: "No prices available")
+GUARD COUNT(valid_prices) > 0 ELSE RETURN ERROR(message: "No prices available")
 
 **Analysis:**
-$best_price = MAX($valid_prices)
-$worst_price = MIN($valid_prices)
-$avg_price = AVG($valid_prices)
-$spread = ($best_price - $worst_price) / $avg_price * 100
+(define best_price MAX(valid_prices))
+(define worst_price MIN(valid_prices))
+(define avg_price AVG(valid_prices))
+(define spread (best_price - worst_price) / avg_price * 100)
 
 **Action:**
 RETURN {
   prices: {
-    orca: $orca_price,
-    raydium: $raydium_price,
+    orca: orca_price,
+    raydium: raydium_price,
     jupiter: $jupiter_quote
   },
   analysis: {
-    best: $best_price,
-    worst: $worst_price,
-    average: $avg_price,
+    best: best_price,
+    worst: worst_price,
+    average: avg_price,
     spread_percent: $spread
   },
-  recommendation: $spread > 5 ? "Significant arbitrage opportunity" : "Prices aligned"
+  recommendation: spread > 5 ? "Significant arbitrage opportunity" : "Prices aligned"
 }
 ```
 
@@ -1787,162 +1828,162 @@ DEFINE_TOOL analyzeSwap:
   params: {tx: Transaction}
   returns: SwapAnalysis
   implementation:
-    $swap_instruction = FIND(
-      collection: $tx.message.instructions,
+    (define swap_instruction FIND()
+      collection: tx.message.instructions,
       predicate: inst => inst.programId == DEX_PROGRAM_ID
     )
 
-    // Parse swap instruction data
-    $input_amount = parseU64(data: $swap_instruction.data, offset: 8)
-    $output_amount = $tx.meta.postTokenBalances[0].uiAmount
+    ;; Parse swap instruction data
+    (define input_amount parseU64(data: swap_instruction.data, offset: 8))
+    (define output_amount tx.meta.postTokenBalances[0].uiAmount)
 
-    // Extract token mints from token balances
-    $token_a = $tx.meta.preTokenBalances[0].mint
-    $token_b = $tx.meta.postTokenBalances[0].mint
+    ;; Extract token mints from token balances
+    (define token_a tx.meta.preTokenBalances[0].mint)
+    (define token_b tx.meta.postTokenBalances[0].mint)
 
     RETURN {
-      input_amount: $input_amount,
-      output_amount: $output_amount,
-      tokens: {from: $token_a, to: $token_b}
+      input_amount: input_amount,
+      output_amount: output_amount,
+      tokens: {from: token_a, to: token_b}
     }
 
 DEFINE_TOOL analyzeTransfer:
   params: {tx: Transaction}
   returns: TransferAnalysis
   implementation:
-    $amount = $tx.meta.postBalances[1] - $tx.meta.preBalances[1]
+    (define amount tx.meta.postBalances[1] - tx.meta.preBalances[1])
     RETURN {
-      amount: $amount,
-      from: $tx.message.accountKeys[0],
-      to: $tx.message.accountKeys[1]
+      amount: amount,
+      from: tx.message.accountKeys[0],
+      to: tx.message.accountKeys[1]
     }
 
 DEFINE_TOOL getOptimalRoute:
   params: {input_amount: u64, tokens: object}
   returns: Route | null
   implementation:
-    // Helper: Find all DEX pools for token pair
+    ;; Helper: Find all DEX pools for token pair
     DEFINE findPoolsForPair(token_a, token_b):
       PARALLEL {
-        $orca_pool = deriveOrcaPoolAddress((token_a, token_b))
-        $raydium_pool = deriveRaydiumPoolAddress((token_a, token_b))
+        (define orca_pool deriveOrcaPoolAddress((token_a, token_b)))
+        (define raydium_pool deriveRaydiumPoolAddress((token_a, token_b)))
       }
       WAIT_ALL
-      RETURN [$orca_pool, $raydium_pool]
+      RETURN [orca_pool, raydium_pool]
 
-    // Helper: Calculate routes through pools
+    ;; Helper: Calculate routes through pools
     DEFINE calculateRoutes(pools, amount):
-      $routes = []
-      FOR $pool IN $pools:
+      (define routes [])
+      for (pool pools)
         TRY:
-          $pool_account = getAccountInfo(pubkey: $pool)
-          $expected_output = simulateSwap($pool_account, amount)
-          $route = {
-            pool: $pool,
+          (define pool_account getAccountInfo(pubkey: pool))
+          (define expected_output simulateSwap(pool_account, amount))
+          (define route {)
+            pool: pool,
             expected_output: $expected_output
           }
-          $routes = APPEND(array: $routes, item: $route)
+          (define routes APPEND(array: routes, item: route))
         CATCH:
           CONTINUE
-      RETURN $routes
+      routes
 
-    // Helper: Simulate swap through a pool
+    ;; Helper: Simulate swap through a pool
     DEFINE simulateSwap(pool_account, input_amount):
-      // Simplified constant product formula x * y = k
-      $base_reserve = parseU64(data: $pool_account.data, offset: 8)
-      $quote_reserve = parseU64(data: $pool_account.data, offset: 16)
-      $k = $base_reserve * $quote_reserve
-      $new_base = $base_reserve + $input_amount
-      $new_quote = $k / $new_base
-      $output = $quote_reserve - $new_quote
-      RETURN $output
+      ;; Simplified constant product formula x * y = k
+      (define base_reserve parseU64(data: pool_account.data, offset: 8))
+      (define quote_reserve parseU64(data: pool_account.data, offset: 16))
+      (define k base_reserve * quote_reserve)
+      (define new_base base_reserve + input_amount)
+      (define new_quote k / new_base)
+      (define output quote_reserve - new_quote)
+      output
 
-    $pools = findPoolsForPair($tokens.from, $tokens.to)
-    $routes = calculateRoutes($pools, $input_amount)
+    (define pools findPoolsForPair(tokens.from, tokens.to))
+    (define routes calculateRoutes(pools, input_amount))
 
-    IF COUNT(collection: $routes) == 0 THEN
+    (if COUNT(collection: routes) == 0
       RETURN null
 
-    $best = MAX_BY($routes, r => r.expected_output)
-    RETURN $best
+    (define best MAX_BY(routes, r => r.expected_output))
+    best
 
 **Main Branch:**
-$signature = INPUT(prompt: "transaction_signature")
+(define signature INPUT(prompt: "transaction_signature"))
 
 TRY:
-  $tx = getTransaction(signature: $signature)
+  (define tx getTransaction(signature: signature))
 CATCH FATAL:
   RETURN ERROR(message: "Transaction not found")
 
 **Transaction Analysis:**
-$instruction = $tx.message.instructions[0]
-$program_id = $instruction.programId
+(define instruction tx.message.instructions[0])
+(define program_id instruction.programId)
 
 DECISION: Identify transaction type
-  BRANCH A ($program_id == DEX_PROGRAM):
-    $type = "swap"
-    $analysis = analyzeSwap(tx: $tx)
+  BRANCH A (program_id == DEX_PROGRAM):
+    (define type "swap")
+    (define analysis analyzeSwap(tx: tx))
 
-  BRANCH B ($program_id == LENDING_PROGRAM):
-    $type = "lending"
-    $analysis = {type: "lending"} // Simplified
+  BRANCH B (program_id == LENDING_PROGRAM):
+    (define type "lending")
+    (define analysis {type: "lending"} // Simplified)
 
-  BRANCH C ($program_id == SYSTEM_PROGRAM):
-    $type = "transfer"
-    $analysis = analyzeTransfer(tx: $tx)
+  BRANCH C (program_id == SYSTEM_PROGRAM):
+    (define type "transfer")
+    (define analysis analyzeTransfer(tx: tx))
 
   BRANCH D (default):
-    $type = "unknown"
-    $analysis = {basic: true}
+    (define type "unknown")
+    (define analysis {basic: true})
 
 **Optimization Check:**
-IF $type == "swap" THEN
-  // Detailed swap analysis
-  $input = $analysis.input_amount
-  $output = $analysis.output_amount
-  $actual_price = $output / $input
+(if type == "swap"
+  ;; Detailed swap analysis
+  (define input analysis.input_amount)
+  (define output analysis.output_amount)
+  (define actual_price output / input)
 
   PARALLEL {
     TRY:
-      $optimal_route = getOptimalRoute(
-        input_amount: $input,
-        tokens: $analysis.tokens
+      (define optimal_route getOptimalRoute()
+        input_amount: input,
+        tokens: analysis.tokens
       )
     CATCH:
-      $optimal_route = null
+      (define optimal_route null)
 
     TRY:
-      $alternative_prices = [] // Simplified for example
+      (define alternative_prices [] // Simplified for example)
     CATCH:
-      $alternative_prices = []
+      (define alternative_prices [])
   }
   WAIT_ALL
 
-  IF $optimal_route != null THEN
-    $optimal_price = $optimal_route.expected_output / $input
-    $efficiency = ($actual_price / $optimal_price) * 100
+  (if optimal_route != null
+    (define optimal_price optimal_route.expected_output / input)
+    (define efficiency (actual_price / optimal_price) * 100)
   ELSE
-    $efficiency = null
+    (define efficiency null)
 
-  $verdict = $efficiency >= 98 ? "optimal" :
-             $efficiency >= 95 ? "good" :
-             $efficiency >= 90 ? "acceptable" : "suboptimal"
+  (define verdict efficiency >= 98 ? "optimal" :)
+             efficiency >= 95 ? "good" :
+             efficiency >= 90 ? "acceptable" : "suboptimal"
 ELSE
-  $efficiency = null
-  $verdict = "not_applicable"
+  (define efficiency null)
+  (define verdict "not_applicable")
 
 **Final Report:**
 RETURN {
-  transaction: $signature,
-  type: $type,
-  analysis: $analysis,
+  transaction: signature,
+  type: type,
+  analysis: analysis,
   optimization: {
-    efficiency_score: $efficiency,
-    verdict: $verdict,
-    could_have_saved: $efficiency != null ?
-      ($optimal_route.expected_output - $output) : null
+    efficiency_score: efficiency,
+    verdict: verdict,
+    could_have_saved: efficiency != null ?
+      (optimal_route.expected_output - output) : null
   },
-  confidence: $efficiency != null ? 90 : 60
+  confidence: efficiency != null ? 90 : 60
 }
 ```
 
@@ -1962,48 +2003,48 @@ From Standard Library:
   - ANY (Data Processing)
 
 **Main Branch:**
-$target_program = INPUT("program_id")
-$current_slot = getSlot()
-$max_blocks = 1000
-$found = false
+(define target_program INPUT("program_id"))
+(define current_slot getSlot())
+(define max_blocks 1000)
+(define found false)
 
-FOR $i IN 0..$max_blocks:
-  $slot = $current_slot - $i
+for (i 0..max_blocks)
+  (define slot current_slot - i)
 
   TRY:
-    $block = getBlock($slot)
+    (define block getBlock(slot))
   CATCH:
     CONTINUE  // Skip missing blocks
 
-  $transactions = $block.transactions
+  (define transactions block.transactions)
 
-  FOR $tx IN $transactions:
-    $has_program = ANY(
-      $tx.message.instructions,
+  for (tx transactions)
+    (define has_program ANY()
+      tx.message.instructions,
       inst => inst.programId == $target_program
     )
 
-    IF $has_program THEN
-      $found_tx = $tx
-      $found_slot = $slot
-      $found = true
+    (if $has_program
+      (define found_tx tx)
+      (define found_slot slot)
+      (define found true)
       BREAK  // Exit inner loop
 
-  BREAK IF $found  // Exit outer loop
+  BREAK IF found  // Exit outer loop
 
 **Result:**
-IF $found THEN
+(if $found
   RETURN {
     found: true,
-    transaction: $found_tx,
-    slot: $found_slot,
-    blocks_searched: $i + 1
+    transaction: found_tx,
+    slot: found_slot,
+    blocks_searched: i + 1
   }
 ELSE
   RETURN {
     found: false,
-    blocks_searched: $max_blocks,
-    message: "No transaction found in last {$max_blocks} blocks"
+    blocks_searched: max_blocks,
+    message: "No transaction found in last {max_blocks} blocks"
   }
 ```
 
@@ -2013,55 +2054,55 @@ ELSE
 
 ### 1. Use Clear Variable Names
 ```
-// Good
-$transaction_fee = $tx.meta.fee
-$average_compute_units = AVG($compute_values)
+;; Good
+(define transaction_fee tx.meta.fee)
+(define average_compute_units AVG(compute_values))
 
-// Bad
-$f = $tx.meta.fee
-$avg = AVG($vals)
+;; Bad
+(define f tx.meta.fee)
+(define avg AVG(vals))
 ```
 
 ### 2. Show Data Flow Explicitly
 ```
-// Good
-$slot = getSlot() → $current_slot
-$block = getBlock($current_slot) → $block_data
-$transactions = EXTRACT($block_data.transactions)
+;; Good
+(define slot getSlot() → current_slot)
+(define block getBlock(current_slot) → block_data)
+(define transactions EXTRACT(block_data.transactions))
 
-// Also acceptable
-$slot = getSlot()
-$block = getBlock($slot)
-$transactions = $block.transactions
+;; Also acceptable
+(define slot getSlot())
+(define block getBlock(slot))
+(define transactions block.transactions)
 ```
 
 ### 3. Use Metadata Tags
 ```
-// Good - shows expectations upfront
+;; Good - shows expectations upfront
 [TIME: ~30s] [COST: ~0.001 SOL] [CONFIDENCE: 95%]
-$result = complexOperation()
+(define result complexOperation())
 
-// Less informative
-$result = complexOperation()
+;; Less informative
+(define result complexOperation())
 ```
 
 ### 4. Handle Errors Explicitly
 ```
-// Good
+;; Good
 TRY:
-  $data = riskyOperation()
+  (define data riskyOperation())
 CATCH RECOVERABLE:
-  $data = fallbackOperation()
+  (define data fallbackOperation())
 CATCH FATAL:
   RETURN ERROR(message: "Operation failed")
 
-// Bad - vague
-$data = riskyOperation() // handle errors somehow
+;; Bad - vague
+(define data riskyOperation() // handle errors somehow)
 ```
 
 ### 5. Break Complex Logic into Sections
 ```
-// Good
+;; Good
 **Data Collection:**
 [collection logic]
 
@@ -2071,32 +2112,32 @@ $data = riskyOperation() // handle errors somehow
 **Analysis:**
 [analysis logic]
 
-// Bad - everything in one block
+;; Bad - everything in one block
 [all logic together]
 ```
 
 ### 6. Use Decision Points for Clarity
 ```
-// Good
+;; Good
 DECISION: Determine sampling strategy
   BRANCH A (small dataset):
     [exact approach]
   BRANCH B (large dataset):
     [sampling approach]
 
-// Less clear
-IF small THEN [exact] ELSE [sampling]
+;; Less clear
+(if small [exact] ELSE [sampling]
 ```
 
 ### 7. Document Complex Decisions
 ```
-// Good
+;; Good
 /**
  * We use median instead of mean when stddev is high
  * because outlier transactions can skew the average.
  * Threshold: stddev/mean > 0.5
  */
-$result = $stddev/$mean > 0.5 ? MEDIAN($data) : MEAN($data)
+(define result stddev/mean > 0.5 ? MEDIAN(data) : MEAN(data))
 ```
 
 ---
@@ -2195,38 +2236,38 @@ SPAWN_AGENT research_agent WITH:
   timeout: 60s
 AWAIT $agent_result
 
-// Parallel agent spawning
+;; Parallel agent spawning
 PARALLEL_AGENTS {
-  $price_analysis = SPAWN price_analyzer($token_pair)
-  $volume_analysis = SPAWN volume_analyzer($token_pair)
-  $sentiment_analysis = SPAWN sentiment_analyzer($token_pair)
+  (define price_analysis SPAWN price_analyzer(token_pair))
+  (define volume_analysis SPAWN volume_analyzer(token_pair))
+  (define sentiment_analysis SPAWN sentiment_analyzer(token_pair))
 }
-MERGE_RESULTS($price_analysis, $volume_analysis, $sentiment_analysis)
+MERGE_RESULTS(price_analysis, volume_analysis, sentiment_analysis)
 ```
 
 **2. Research State Management**
 ```
-// Define research-specific tools
+;; Define research-specific tools
 DEFINE_TOOL collect_fees:
   params: {time_range: Duration}
   returns: Array<f64>
   implementation:
-    $current_slot = getSlot()
-    $blocks = []
-    FOR $i IN 0..1000:
-      $block = getBlock(slot: $current_slot - $i)
-      $blocks = APPEND(array: $blocks, item: $block)
-    $all_txs = FLATTEN(MAP($blocks, b => b.transactions))
-    $fees = MAP($all_txs, tx => tx.meta.fee)
-    RETURN $fees
+    (define current_slot getSlot())
+    (define blocks [])
+    for (i 0..1000)
+      (define block getBlock(slot: current_slot - i))
+      (define blocks APPEND(array: blocks, item: block))
+    (define all_txs FLATTEN(MAP(blocks, b => b.transactions)))
+    (define fees MAP(all_txs, tx => tx.meta.fee))
+    fees
 
 DEFINE_TOOL collect_congestion:
   params: {time_range: Duration}
   returns: Array<f64>
   implementation:
-    $samples = getRecentPerformanceSamples()
-    $tps_values = MAP($samples, s => s.numTransactions / s.samplePeriodSecs)
-    RETURN $tps_values
+    (define samples getRecentPerformanceSamples())
+    (define tps_values MAP(samples, s => s.numTransactions / s.samplePeriodSecs))
+    tps_values
 
 RESEARCH_STATE:
   hypothesis: "High fees correlate with network congestion"
@@ -2234,17 +2275,17 @@ RESEARCH_STATE:
   confidence: 0%
 
 GATHER_EVIDENCE:
-  $fee_data = collect_fees(time_range: "7 days")
-  $congestion_data = collect_congestion(time_range: "7 days")
-  $correlation = CORRELATE(x: $fee_data, y: $congestion_data)
+  (define fee_data collect_fees(time_range: "7 days"))
+  (define congestion_data collect_congestion(time_range: "7 days"))
+  (define correlation CORRELATE(x: fee_data, y: congestion_data))
 
   UPDATE_STATE:
-    evidence = APPEND(array: evidence, item: $correlation)
+    evidence = APPEND(array: evidence, item: correlation)
     confidence = calculateConfidence(evidence: evidence)
 
-IF confidence > 95% THEN
+(if confidence > 95%
   CONCLUDE hypothesis AS "proven"
-ELSE IF confidence > 70% THEN
+ELSE (if confidence > 70%
   CONCLUDE hypothesis AS "likely"
 ELSE
   CONCLUDE hypothesis AS "inconclusive"
@@ -2257,24 +2298,24 @@ KNOWLEDGE_GRAPH:
   nodes: []
   edges: []
 
-FOR $transaction IN $dataset:
-  EXTRACT_ENTITIES($transaction) → $entities
+for (transaction dataset)
+  EXTRACT_ENTITIES(transaction) → $entities
 
-  FOR $entity IN $entities:
+  for (entity entities)
     GRAPH.ADD_NODE(
-      type: $entity.type,
-      id: $entity.id,
-      properties: $entity.data
+      type: entity.type,
+      id: entity.id,
+      properties: entity.data
     )
 
-  EXTRACT_RELATIONSHIPS($transaction) → $relationships
+  EXTRACT_RELATIONSHIPS(transaction) → $relationships
 
-  FOR $rel IN $relationships:
+  for (rel relationships)
     GRAPH.ADD_EDGE(
-      from: $rel.source,
-      to: $rel.target,
-      type: $rel.relationship,
-      weight: $rel.strength
+      from: rel.source,
+      to: rel.target,
+      type: rel.relationship,
+      weight: rel.strength
     )
 
 QUERY_GRAPH:
@@ -2291,17 +2332,17 @@ HYPOTHESIS "Validators in US have lower skip rates":
   significance_level: 0.05
 
 COLLECT_DATA:
-  $us_validators = FILTER($all_validators, v => v.location == "US")
-  $other_validators = FILTER($all_validators, v => v.location != "US")
+  (define us_validators FILTER(all_validators, v => v.location == "US"))
+  (define other_validators FILTER(all_validators, v => v.location != "US"))
 
-  $us_skip_rates = MAP($us_validators, v => v.skip_rate)
-  $other_skip_rates = MAP($other_validators, v => v.skip_rate)
+  (define us_skip_rates MAP(us_validators, v => v.skip_rate))
+  (define other_skip_rates MAP(other_validators, v => v.skip_rate))
 
 STATISTICAL_TEST:
-  $test = T_TEST($us_skip_rates, $other_skip_rates)
-  $p_value = $test.p_value
+  (define test T_TEST(us_skip_rates, other_skip_rates))
+  (define p_value test.p_value)
 
-  IF $p_value < 0.05 THEN
+  (if p_value < 0.05
     REJECT null_hypothesis
     CONFIDENCE: "statistically significant"
   ELSE
@@ -2311,18 +2352,18 @@ STATISTICAL_TEST:
 
 **5. Progressive Refinement**
 ```
-// Define analysis tools
+;; Define analysis tools
 DEFINE_TOOL analyze_fees_distribution:
   returns: Array<f64>
   implementation:
-    $current_slot = getSlot()
-    $blocks = []
-    FOR $i IN 0..100:
-      $block = getBlock(slot: $current_slot - $i)
-      $blocks = APPEND(array: $blocks, item: $block)
-    $txs = FLATTEN(collection: MAP($blocks, b => b.transactions))
-    $fees = MAP(collection: $txs, fn: tx => tx.meta.fee)
-    RETURN $fees
+    (define current_slot getSlot())
+    (define blocks [])
+    for (i 0..100)
+      (define block getBlock(slot: current_slot - i))
+      (define blocks APPEND(array: blocks, item: block))
+    (define txs FLATTEN(collection: MAP(blocks, b => b.transactions)))
+    (define fees MAP(collection: txs, fn: tx => tx.meta.fee))
+    fees
 
 ITERATIVE_RESEARCH:
   initial_question: "What causes high transaction fees?"
@@ -2333,24 +2374,24 @@ RESEARCH_LOOP:
   depth += 1
 
   STEP_1: Gather broad data
-    $fee_distribution = analyze_fees_distribution()
+    (define fee_distribution analyze_fees_distribution())
 
   STEP_2: Identify patterns
-    $outliers = DETECT_OUTLIERS(data: $fee_distribution)
-    $patterns = FIND_PATTERNS(data: $outliers)
+    (define outliers DETECT_OUTLIERS(data: fee_distribution))
+    (define patterns FIND_PATTERNS(data: outliers))
 
   STEP_3: Generate sub-questions
-    $sub_questions = []
-    FOR $pattern IN $patterns:
-      $sub_questions = APPEND(array: $sub_questions, item: "Why does {$pattern} occur?")
+    (define sub_questions [])
+    for (pattern patterns)
+      (define sub_questions APPEND(array: sub_questions, item: "Why does {pattern} occur?"))
 
   STEP_4: Research each sub-question
-    FOR $question IN $sub_questions:
-      IF depth < max_depth THEN
-        RECURSIVE_RESEARCH($question, depth)
+    for (question sub_questions)
+      (if depth < max_depth
+        RECURSIVE_RESEARCH(question, depth)
 
   STEP_5: Synthesize findings
-    MERGE_INSIGHTS($all_findings) → $comprehensive_answer
+    MERGE_INSIGHTS(all_findings) → $comprehensive_answer
 
 PRESENT_FINDINGS:
   structure: "tree"
@@ -2365,27 +2406,27 @@ CROSS_VALIDATE:
   query: $original_query
 
 PARALLEL {
-  $result1 = QUERY(source: "RPC1", query: $query)
-  $result2 = QUERY(source: "RPC2", query: $query)
-  $result3 = QUERY(source: "Archive", query: $query)
-  $result4 = QUERY(source: "Indexer", query: $query)
+  (define result1 QUERY(source: "RPC1", query: query))
+  (define result2 QUERY(source: "RPC2", query: query))
+  (define result3 QUERY(source: "Archive", query: query))
+  (define result4 QUERY(source: "Indexer", query: query))
 }
 WAIT_ALL
 
 CONSISTENCY_CHECK:
-  $agreements = COMPARE_RESULTS([$result1, $result2, $result3, $result4])
+  (define agreements COMPARE_RESULTS([result1, result2, result3, result4]))
 
-  IF $agreements.consensus >= 75% THEN
-    $validated_result = $agreements.consensus_value
-    $confidence = 100%
-  ELSE IF $agreements.consensus >= 50% THEN
-    $validated_result = $agreements.majority_value
-    $confidence = 75%
-    $note = "Some disagreement between sources"
+  (if agreements.consensus >= 75%
+    (define validated_result agreements.consensus_value)
+    (define confidence 100%)
+  ELSE (if agreements.consensus >= 50%
+    (define validated_result agreements.majority_value)
+    (define confidence 75%)
+    (define note "Some disagreement between sources")
   ELSE
-    $validated_result = null
-    $confidence = 0%
-    INVESTIGATE_DISCREPANCY($agreements.differences)
+    (define validated_result null)
+    (define confidence 0%)
+    INVESTIGATE_DISCREPANCY(agreements.differences)
 ```
 
 **7. Contextual Memory & Learning**
@@ -2396,28 +2437,28 @@ MEMORY_CONTEXT:
   working_set: []  // Active hypotheses
 
 LEARN_FROM_QUERY:
-  $query_result = executeQuery($query)
+  (define query_result executeQuery(query))
 
   EXTRACT_INSIGHTS:
-    $patterns = identifyPatterns($query_result)
-    $anomalies = detectAnomalies($query_result)
-    $correlations = findCorrelations($query_result)
+    (define patterns identifyPatterns(query_result))
+    (define anomalies detectAnomalies(query_result))
+    (define correlations findCorrelations(query_result))
 
   STORE_KNOWLEDGE:
-    FOR $pattern IN $patterns:
-      IF novelty(pattern: $pattern, existing: MEMORY.long_term) > threshold THEN
+    for (pattern patterns)
+      (if novelty(pattern: pattern, existing: MEMORY.long_term) > threshold
         MEMORY.long_term = APPEND(array: MEMORY.long_term, item: {
-          pattern: $pattern,
-          confidence: calculateConfidence(evidence: [$pattern]),
+          pattern: pattern,
+          confidence: calculateConfidence(evidence: [pattern]),
           first_seen: NOW(),
           occurrences: 1
         })
       ELSE
-        UPDATE_EXISTING_PATTERN($pattern)
+        UPDATE_EXISTING_PATTERN(pattern)
 
 APPLY_LEARNED_KNOWLEDGE:
-  $relevant_knowledge = QUERY_MEMORY(
-    context: $current_query,
+  (define relevant_knowledge QUERY_MEMORY()
+    context: current_query,
     similarity_threshold: 0.8
   )
 
@@ -2438,22 +2479,22 @@ CONFIDENCE_CALCULATION:
     method_robustness: 0..100
   }
 
-FOR $finding IN $research_findings:
-  $confidence = WEIGHTED_AVERAGE([
-    $factors.data_quality * 0.25,
-    $factors.sample_size * 0.20,
-    $factors.consistency * 0.25,
-    $factors.source_reliability * 0.15,
-    $factors.method_robustness * 0.15
+for (finding research_findings)
+  (define confidence WEIGHTED_AVERAGE([)
+    factors.data_quality * 0.25,
+    factors.sample_size * 0.20,
+    factors.consistency * 0.25,
+    factors.source_reliability * 0.15,
+    factors.method_robustness * 0.15
   ])
 
-  $uncertainty = 100 - $confidence
+  (define uncertainty 100 - confidence)
 
   ANNOTATE_RESULT:
-    result: $finding,
-    confidence: "{$confidence}%",
-    uncertainty_range: calculateRange($uncertainty),
-    caveats: identifyCaveats($finding)
+    result: finding,
+    confidence: "{confidence}%",
+    uncertainty_range: calculateRange(uncertainty),
+    caveats: identifyCaveats(finding)
 ```
 
 **9. Automated Literature Review (Code & Documentation)**
@@ -2464,38 +2505,38 @@ LITERATURE_REVIEW:
 
 GATHER_SOURCES:
   PARALLEL {
-    $code = SEARCH_GITHUB(query: "solana consensus", language: "rust")
-    $docs = SEARCH_DOCS(query: "proof of history")
-    $discussions = SEARCH_FORUMS(query: "tower bft")
-    $papers = SEARCH_ARXIV(query: "solana blockchain")
+    (define code SEARCH_GITHUB(query: "solana consensus", language: "rust"))
+    (define docs SEARCH_DOCS(query: "proof of history"))
+    (define discussions SEARCH_FORUMS(query: "tower bft"))
+    (define papers SEARCH_ARXIV(query: "solana blockchain"))
   }
   WAIT_ALL
 
 ANALYZE_SOURCES:
-  FOR $source IN ALL_SOURCES:
-    $key_concepts = EXTRACT_CONCEPTS($source)
-    $relationships = MAP_RELATIONSHIPS($key_concepts)
+  for (source ALL_SOURCES)
+    (define key_concepts EXTRACT_CONCEPTS(source))
+    (define relationships MAP_RELATIONSHIPS(key_concepts))
 
     CLASSIFY:
-      category: $source.type,
-      relevance: CALCULATE_RELEVANCE($source, $topic),
-      credibility: ASSESS_CREDIBILITY($source),
-      recency: $source.date
+      category: source.type,
+      relevance: CALCULATE_RELEVANCE(source, topic),
+      credibility: ASSESS_CREDIBILITY(source),
+      recency: source.date
 
 SYNTHESIZE_REVIEW:
-  GROUP_BY_THEME($all_concepts) → $themes
+  GROUP_BY_THEME(all_concepts) → $themes
 
-  FOR $theme IN $themes:
-    $summary = SUMMARIZE_THEME($theme)
-    $consensus = FIND_CONSENSUS($theme.sources)
-    $conflicts = IDENTIFY_CONFLICTS($theme.sources)
+  for (theme themes)
+    (define summary SUMMARIZE_THEME(theme))
+    (define consensus FIND_CONSENSUS(theme.sources))
+    (define conflicts IDENTIFY_CONFLICTS(theme.sources))
 
     RETURN {
-      theme: $theme.name,
-      summary: $summary,
-      consensus: $consensus,
-      conflicts: $conflicts,
-      key_sources: TOP_N($theme.sources, n: 5, by: "credibility")
+      theme: theme.name,
+      summary: summary,
+      consensus: consensus,
+      conflicts: conflicts,
+      key_sources: TOP_N(theme.sources, n: 5, by: "credibility")
     }
 ```
 
@@ -2510,36 +2551,36 @@ ADAPTIVE_QUERY_PLANNER:
   }
 
 PLAN_GENERATION:
-  $possible_plans = ENUMERATE_PLANS($goal)
+  (define possible_plans ENUMERATE_PLANS(goal))
 
-  FOR $plan IN $possible_plans:
+  for (plan possible_plans)
     ESTIMATE:
-      time: $plan.estimated_time
-      cost: $plan.estimated_cost
-      confidence: $plan.expected_confidence
+      time: plan.estimated_time
+      cost: plan.estimated_cost
+      confidence: plan.expected_confidence
 
     SCORE:
-      $score = CALCULATE_SCORE(
-        meets_constraints: CHECK_CONSTRAINTS($plan),
-        efficiency: $plan.cost / $plan.confidence,
-        reliability: $plan.robustness
+      (define score CALCULATE_SCORE()
+        meets_constraints: CHECK_CONSTRAINTS(plan),
+        efficiency: plan.cost / plan.confidence,
+        reliability: plan.robustness
       )
 
 SELECT_OPTIMAL_PLAN:
-  $best_plan = MAX_BY($possible_plans, plan => plan.score)
+  (define best_plan MAX_BY(possible_plans, plan => plan.score))
 
 EXECUTE_WITH_MONITORING:
-  $start_time = NOW()
-  $actual_cost = 0
+  (define start_time NOW())
+  (define actual_cost 0)
 
-  FOR $step IN $best_plan.steps:
-    EXECUTE($step)
+  for (step best_plan.steps)
+    EXECUTE(step)
 
-    // Monitor and adapt
-    IF NOW() - $start_time > $constraints.max_time * 0.8 THEN
+    ;; Monitor and adapt
+    (if NOW() - start_time > constraints.max_time * 0.8
       SWITCH_TO_FASTER_PLAN()
 
-    IF $actual_cost > $constraints.max_cost * 0.8 THEN
+    (if actual_cost > constraints.max_cost * 0.8
       SWITCH_TO_CHEAPER_PLAN()
 ```
 
@@ -2555,34 +2596,34 @@ DESIGN_EXPERIMENT:
   confounders: ["network congestion", "time of day", "transaction size"]
 
 COLLECT_OBSERVATIONAL_DATA:
-  $data = GATHER_TRANSACTIONS(
+  (define data GATHER_TRANSACTIONS()
     time_range: "last 7 days",
     sample_size: 10000
   )
 
 CONTROL_FOR_CONFOUNDERS:
-  $matched_data = PROPENSITY_SCORE_MATCHING(
-    data: $data,
+  (define matched_data PROPENSITY_SCORE_MATCHING()
+    data: data,
     treatment_var: "priority_fee",
     confounders: ["congestion", "time", "size"]
   )
 
 ESTIMATE_EFFECT:
-  $treatment_group = FILTER($matched_data, tx => tx.priority_fee > threshold)
-  $control_group = FILTER($matched_data, tx => tx.priority_fee <= threshold)
+  (define treatment_group FILTER(matched_data, tx => tx.priority_fee > threshold))
+  (define control_group FILTER(matched_data, tx => tx.priority_fee <= threshold))
 
-  $treatment_avg_time = AVG(collection: MAP($treatment_group, tx => tx.confirmation_time))
-  $control_avg_time = AVG(collection: MAP($control_group, tx => tx.confirmation_time))
+  (define treatment_avg_time AVG(collection: MAP(treatment_group, tx => tx.confirmation_time)))
+  (define control_avg_time AVG(collection: MAP(control_group, tx => tx.confirmation_time)))
 
-  $causal_effect = $control_avg_time - $treatment_avg_time
+  (define causal_effect control_avg_time - treatment_avg_time)
 
   STATISTICAL_SIGNIFICANCE:
-    $p_value = CALCULATE_P_VALUE($treatment_group, $control_group)
+    (define p_value CALCULATE_P_VALUE(treatment_group, control_group))
 
   RETURN {
-    effect: $causal_effect,
-    significant: $p_value < 0.05,
-    conclusion: $causal_effect > 0 ?
+    effect: causal_effect,
+    significant: p_value < 0.05,
+    conclusion: causal_effect > 0 ?
       "Higher priority fees DO cause faster confirmation" :
       "No causal relationship found"
   }
@@ -2595,40 +2636,40 @@ FUSION_ANALYSIS:
 
 PARALLEL_COLLECTION:
   PARALLEL {
-    $chain_data = ANALYZE_CHAIN($token_address)
-    $social_data = ANALYZE_SOCIAL($token_name)
-    $code_data = ANALYZE_CODE($program_id)
-    $price_data = ANALYZE_PRICE($token_address)
+    (define chain_data ANALYZE_CHAIN(token_address))
+    (define social_data ANALYZE_SOCIAL(token_name))
+    (define code_data ANALYZE_CODE(program_id))
+    (define price_data ANALYZE_PRICE(token_address))
   }
   WAIT_ALL
 
 ALIGN_TIMELINES:
-  $unified_timeline = ALIGN_BY_TIMESTAMP([
-    $chain_data,
-    $social_data,
-    $code_data,
+  (define unified_timeline ALIGN_BY_TIMESTAMP([)
+    chain_data,
+    social_data,
+    code_data,
     $price_data
   ])
 
 CROSS_MODAL_ANALYSIS:
-  FOR $event IN $unified_timeline:
+  for (event unified_timeline)
     CORRELATE:
       - Chain activity spike → Social sentiment
       - Code deployment → Price movement
       - Social buzz → Chain activity
 
     DETECT_LEADING_INDICATORS:
-      $lag_analysis = CALCULATE_TIME_LAGS($correlations)
+      (define lag_analysis CALCULATE_TIME_LAGS(correlations))
 
     IDENTIFY_CAUSALITY:
-      $granger_test = GRANGER_CAUSALITY_TEST($event.signals)
+      (define granger_test GRANGER_CAUSALITY_TEST(event.signals))
 
 SYNTHESIZE_INSIGHTS:
   RETURN {
-    relationships: $correlations,
-    leading_indicators: $lag_analysis,
-    causal_chains: $granger_test,
-    predictive_signals: EXTRACT_PREDICTIVE_SIGNALS($relationships)
+    relationships: correlations,
+    leading_indicators: lag_analysis,
+    causal_chains: granger_test,
+    predictive_signals: EXTRACT_PREDICTIVE_SIGNALS(relationships)
   }
 ```
 
@@ -2640,35 +2681,35 @@ EXPLAINABLE_RESEARCH:
 
 GENERATE_EXPLANATION:
   STEP_1: Identify key concepts
-    $concepts = EXTRACT_KEY_CONCEPTS($finding)
+    (define concepts EXTRACT_KEY_CONCEPTS(finding))
 
   STEP_2: Build explanation tree
-    $tree = CONSTRUCT_EXPLANATION_TREE(
-      root: $finding,
-      depth: BASED_ON($target_audience),
-      detail: BASED_ON($target_audience)
+    (define tree CONSTRUCT_EXPLANATION_TREE()
+      root: finding,
+      depth: BASED_ON(target_audience),
+      detail: BASED_ON(target_audience)
     )
 
   STEP_3: Generate natural language
-    FOR $node IN $tree:
-      IF $node.requires_explanation THEN
-        $explanation = EXPLAIN(
-          concept: $node.concept,
-          use_analogies: $target_audience == "non-technical",
-          include_technical_details: $target_audience == "expert"
+    for (node tree)
+      (if node.requires_explanation
+        (define explanation EXPLAIN()
+          concept: node.concept,
+          use_analogies: target_audience == "non-technical",
+          include_technical_details: target_audience == "expert"
         )
-        $node.text = $explanation
+        node.text = $explanation
 
   STEP_4: Add supporting evidence
-    FOR $claim IN $finding.claims:
-      $evidence = GATHER_EVIDENCE($claim)
-      ANNOTATE_WITH_CITATIONS($claim, $evidence)
+    for (claim finding.claims)
+      (define evidence GATHER_EVIDENCE(claim))
+      ANNOTATE_WITH_CITATIONS(claim, evidence)
 
   STEP_5: Provide confidence rationale
     EXPLAIN_CONFIDENCE:
-      "We are {$confidence}% confident because:"
-      FOR $factor IN $confidence_factors:
-        "- {$factor.name}: {$factor.description}"
+      "We are {confidence}% confident because:"
+      for (factor confidence_factors)
+        "- {factor.name}: {factor.description}"
 
 RETURN formatted_explanation WITH:
   - Clear introduction
@@ -2695,26 +2736,26 @@ SETUP_WATCH:
 
 CONTINUOUS_MONITORING:
   LOOP EVERY 30s:
-    FOR $watch IN $watches:
-      $current_value = MEASURE($watch.metric)
+    for (watch watches)
+      (define current_value MEASURE(watch.metric))
 
-      IF THRESHOLD_EXCEEDED($current_value, $watch.threshold) THEN
-        $alert = CREATE_ALERT(
-          type: $watch.metric,
-          severity: calculateSeverity($current_value),
-          context: GATHER_CONTEXT($watch)
+      (if THRESHOLD_EXCEEDED(current_value, watch.threshold)
+        (define alert CREATE_ALERT()
+          type: watch.metric,
+          severity: calculateSeverity(current_value),
+          context: GATHER_CONTEXT(watch)
         )
 
         TRIGGER_INVESTIGATION:
           SPAWN_AGENT investigator WITH:
-            focus: $alert.type
-            context: $alert.context
+            focus: alert.type
+            context: alert.context
             goal: "Determine root cause"
 
-          $findings = AWAIT investigator
+          (define findings AWAIT investigator)
 
-          IF $findings.actionable THEN
-            RECOMMEND_ACTIONS($findings)
+          (if findings.actionable
+            RECOMMEND_ACTIONS(findings)
 ```
 
 **15. Meta-Learning & Strategy Optimization**
@@ -2723,34 +2764,34 @@ META_LEARNING:
   history: []  // Past queries and their performance
 
 TRACK_PERFORMANCE:
-  FOR $completed_query IN $history:
+  for (completed_query history)
     RECORD:
-      query_type: $query.type
-      strategy_used: $query.strategy
-      time_taken: $query.duration
-      cost: $query.cost
-      accuracy: $query.accuracy
-      user_satisfaction: $query.rating
+      query_type: query.type
+      strategy_used: query.strategy
+      time_taken: query.duration
+      cost: query.cost
+      accuracy: query.accuracy
+      user_satisfaction: query.rating
 
 LEARN_OPTIMAL_STRATEGIES:
-  FOR $query_type IN UNIQUE(collection: MAP($history, q => q.type)):
-    $queries_of_type = FILTER($history, q => q.type == $query_type)
+  for (query_type UNIQUE(collection: MAP(history, q => q.type)))
+    (define queries_of_type FILTER(history, q => q.type == query_type))
 
-    $best_strategy = MAX_BY($queries_of_type, q =>
+    (define best_strategy MAX_BY(queries_of_type, q =>)
       SCORE(q.accuracy, q.duration, q.cost, q.user_satisfaction)
     )
 
     STORE_LEARNING:
       query_type: $query_type
-      recommended_strategy: $best_strategy.strategy
-      confidence: CALCULATE_CONFIDENCE($queries_of_type.length)
+      recommended_strategy: best_strategy.strategy
+      confidence: CALCULATE_CONFIDENCE(queries_of_type.length)
 
 APPLY_LEARNING:
   WHEN new_query ARRIVES:
-    $learned_strategy = LOOKUP_STRATEGY($new_query.type)
+    (define learned_strategy LOOKUP_STRATEGY(new_query.type))
 
-    IF $learned_strategy.confidence > 80% THEN
-      USE_STRATEGY($learned_strategy)
+    (if learned_strategy.confidence > 80%
+      USE_STRATEGY(learned_strategy)
     ELSE
       EXPLORE_NEW_STRATEGY() // Epsilon-greedy approach
 ```
@@ -2765,12 +2806,12 @@ APPLY_LEARNING:
 
 **17. Module/Function Definitions**
 ```
-DEFINE_FUNCTION analyze_fees($transactions):
-  $fees = MAP($transactions, tx => tx.fee)
+DEFINE_FUNCTION analyze_fees(transactions):
+  (define fees MAP(transactions, tx => tx.fee))
   RETURN {
-    mean: MEAN($fees),
-    median: MEDIAN($fees),
-    p95: PERCENTILE($fees, 95)
+    mean: MEAN(fees),
+    median: MEDIAN(fees),
+    p95: PERCENTILE(fees, 95)
   }
 
 IMPORT common_functions FROM "stdlib"
@@ -2779,18 +2820,18 @@ USE analyze_fees, calculate_confidence
 
 **18. Assertions and Contracts**
 ```
-ASSERT $balance > 0, "Balance must be positive"
-REQUIRE $data.length >= 100, "Insufficient sample size"
-ENSURE $result.confidence >= 80%, "Result not confident enough"
+ASSERT balance > 0, "Balance must be positive"
+REQUIRE data.length >= 100, "Insufficient sample size"
+ENSURE result.confidence >= 80%, "Result not confident enough"
 
 INVARIANT DURING analysis:
-  $state.consistency == true
+  state.consistency == true
 ```
 
 **19. Performance Profiling**
 ```
 PROFILE:
-  $result = expensive_operation()
+  (define result expensive_operation())
 WITH_METRICS:
   time: $elapsed_time
   memory: $memory_used
@@ -2800,10 +2841,10 @@ WITH_METRICS:
 
 **20. Debugging Directives**
 ```
-BREAKPOINT WHEN $count > 1000
-LOG $intermediate_result AT checkpoint
-TRACE $data_flow FROM source TO destination
-WATCH $variable FOR changes
+BREAKPOINT WHEN count > 1000
+LOG intermediate_result AT checkpoint
+TRACE data_flow FROM source TO destination
+WATCH variable FOR changes
 ```
 
 ---

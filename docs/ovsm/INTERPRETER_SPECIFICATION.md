@@ -157,10 +157,10 @@ Source Code
 
 #### Phase 1: Parsing
 ```
-Input: OVSM source string
+Input: OVSM LISP source string
 Process:
-  1. Lexical analysis (tokenization)
-  2. Syntax parsing (AST construction)
+  1. Lexical analysis (S-expression tokenization)
+  2. Syntax parsing (AST construction from S-expressions)
   3. Syntax validation
 Output: Abstract Syntax Tree
 ```
@@ -277,7 +277,7 @@ pub enum AstNode {
 **Strategy**: Tree-walking interpreter with environment-based scoping
 
 #### 3.3.1 Expression Evaluation
-```
+```rust
 evaluate(node: AstNode, env: &mut Environment) -> Result<Value> {
     match node {
         IntLiteral(n) => Ok(Value::Int(n)),
@@ -298,7 +298,7 @@ evaluate(node: AstNode, env: &mut Environment) -> Result<Value> {
 ```
 
 #### 3.3.2 Statement Execution
-```
+```rust
 execute(node: AstNode, env: &mut Environment) -> Result<ExecutionResult> {
     match node {
         Assignment(name, expr) => {
@@ -1597,65 +1597,63 @@ fn execute_tool_with_logging(
 
 ### 14.1 Sample OVSM Program
 
-```ovsm
-**Expected Plan:**
+```lisp
+;; Expected Plan:
+;; [TIME: ~30s] [COST: ~0.001 SOL] [CONFIDENCE: 90%]
 
-[TIME: ~30s] [COST: ~0.001 SOL] [CONFIDENCE: 90%]
+;; Available Tools:
+;; - getSlot, getBlock (Solana RPC)
+;; - map, filter, flatten (Data Processing)
+;; - mean, median (Statistical)
 
-**Available Tools:**
-From Standard Library:
-  - getSlot (Solana RPC)
-  - getBlock (Solana RPC)
-  - MAP, FILTER, FLATTEN (Data Processing)
-  - MEAN, MEDIAN (Statistical)
+;; Main Branch
+(define current-slot (getSlot))
+(define blocks [])
 
-**Main Branch:**
-$current_slot = getSlot()
-$blocks = []
+;; Collect recent blocks
+(for (i (range 0 10))
+  (define block (getBlock :slot (- current-slot i)))
+  (set! blocks (append blocks [block])))
 
-FOR $i IN 0..10:
-  $block = getBlock(slot: $current_slot - $i)
-  $blocks = APPEND(array: $blocks, item: $block)
+;; Extract transaction fees
+(define all-txs (flatten (map (lambda (b) (. b transactions)) blocks)))
+(define fees (map (lambda (tx) (. (. tx meta) fee)) all-txs))
 
-$all_txs = FLATTEN(collection: MAP($blocks, b => b.transactions))
-$fees = MAP(collection: $all_txs, fn: tx => tx.meta.fee)
+;; Calculate statistics
+(define mean-fee (mean fees))
+(define median-fee (median fees))
 
-$mean_fee = MEAN(data: $fees)
-$median_fee = MEDIAN(data: $fees)
+;; Decision Point: Check distribution
+(define result
+  (if (> mean-fee (* median-fee 1.5))
+      median-fee    ; High variance - use median
+      mean-fee))    ; Normal distribution - use mean
 
-**Decision Point:** Check distribution
-  BRANCH A ($mean_fee > $median_fee * 1.5):
-    $result = $median_fee
-  BRANCH B ($mean_fee <= $median_fee * 1.5):
-    $result = $mean_fee
-
-**Action:**
-RETURN {
-  average_fee: $result,
-  sample_size: COUNT(collection: $fees)
-}
+;; Return result
+{:average_fee result
+ :sample_size (length fees)}
 ```
 
 ### 14.2 Expected Execution Flow
 
 ```
-1. Parse → AST with 15 nodes
+1. Parse S-expressions → AST with 15 nodes
 2. Validate → Check tools exist (getSlot, getBlock, etc.)
 3. Execute Main Branch:
-   a. Call getSlot() → 245000000
-   b. Initialize $blocks = []
+   a. Evaluate (getSlot) → 245000000
+   b. Define blocks as empty array []
    c. Loop 10 times:
-      - Call getBlock(slot: 244999990 + i)
-      - Append to $blocks
+      - Evaluate (getBlock :slot (- current-slot i))
+      - Append to blocks
    d. Flatten transactions → ~5000 transactions
    e. Extract fees → array of integers
-   f. Calculate MEAN → 5432
-   g. Calculate MEDIAN → 5000
-4. Reach Decision Point
-5. Call AI service → "Select BRANCH A"
-6. Execute BRANCH A:
-   a. Assign $result = 5000
-7. Evaluate RETURN statement
+   f. Calculate (mean fees) → 5432
+   g. Calculate (median fees) → 5000
+4. Reach Decision Point (if expression)
+5. Evaluate condition: (> mean-fee (* median-fee 1.5))
+6. Execute appropriate branch:
+   a. Return median-fee or mean-fee based on condition
+7. Construct result object
 8. Return Value::Object with average_fee and sample_size
 ```
 

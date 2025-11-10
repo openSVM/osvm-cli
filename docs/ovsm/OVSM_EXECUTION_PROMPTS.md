@@ -197,12 +197,12 @@ Action Plan:
 
 ## Prompt Template 5: Conditional Loop Exit
 
-**When**: In a WHILE or FOR loop with BREAK IF condition
+**When**: In a WHILE or FOR loop with break condition
 **Purpose**: AI evaluates if exit condition is met
 
 ```
 [LOOP CONTEXT]
-Loop Type: {WHILE or FOR}
+Loop Type: {while or for}
 Iteration: {current_iteration}
 Max Iterations: {max_iterations if set}
 
@@ -211,14 +211,14 @@ Loop Code:
 
 [CURRENT STATE]
 Variables:
-$var1 = {value1}
-$var2 = {value2}
+var1 = {value1}
+var2 = {value2}
 
 Latest Results:
 {most_recent_tool_results}
 
 [EXIT CONDITION]
-BREAK IF {condition_expression}
+Break condition: {condition_expression}
 
 [QUESTION]
 Should we exit the loop now?
@@ -231,13 +231,13 @@ Consider: Have we gathered sufficient data? Is confidence high enough?
 Exit Loop: YES
 
 Evaluation:
-- Condition: $confidence > 90
-- Current: $confidence = 93
+- Condition: (> confidence 90)
+- Current: confidence = 93
 - Result: 93 > 90 → TRUE
 
 We have sufficient data with high confidence. No benefit to continuing.
 
-Action: BREAK from loop, proceed to next section
+Action: Break from loop, proceed to next section
 ```
 
 ---
@@ -353,7 +353,7 @@ Limitations:
 
 ## Prompt Template 8: Insufficient Data Recovery
 
-**When**: GUARD clause fails or insufficient data found
+**When**: Assertion fails or insufficient data found
 **Purpose**: AI suggests alternative approaches
 
 ```
@@ -362,7 +362,7 @@ Attempted: {what_was_attempted}
 Expected: {expected_data}
 Actual: {actual_result}
 
-Guard Clause Failed: {guard_condition}
+Assertion Failed: {assertion_condition}
 Error: {error_message}
 
 [QUESTION]
@@ -437,37 +437,34 @@ Provide a modified OVSM plan for the remaining work.
 ```
 
 **AI Response**:
-```
+```lisp
 Alternative Strategy:
 
-**Remaining Plan:**
+;; Remaining Plan:
+;; [TIME: ~15s] [COST: ~0.0005 SOL] [CONFIDENCE: 75%]
 
-[TIME: ~15s] [COST: ~0.0005 SOL] [CONFIDENCE: 75%]
+;; Main Branch:
+;; Reuse already collected data
+(define existing-blocks {blocks_collected})
+(define existing-txs {transactions_parsed})
 
-**Main Branch:**
-// Reuse already collected data
-$existing_blocks = {blocks_collected}
-$existing_txs = {transactions_parsed}
+;; Skip detailed analysis, use statistical sampling
+(define sample (slice existing-txs 0 500))
+(define fees (map (lambda (tx) (. (. tx meta) fee)) sample))
+(define quick-avg (mean fees))
 
-// Skip detailed analysis, use statistical sampling
-$sample = SLICE(array: $existing_txs, start: 0, end: 500)
-$fees = MAP($sample, tx => tx.meta.fee)
-$quick_avg = MEAN(data: $fees)
+;; Action:
+{:average_fee quick-avg
+ :confidence 75
+ :note "Reduced analysis due to time constraint"
+ :sample_size 500
+ :caveat "Sampled data, not exhaustive"}
 
-**Action:**
-RETURN {
-  average_fee: $quick_avg,
-  confidence: 75,
-  note: "Reduced analysis due to time constraint",
-  sample_size: 500,
-  caveat: "Sampled data, not exhaustive"
-}
-
-Tradeoffs:
-- Faster: 15s vs 45s
-- Cheaper: Uses existing data
-- Less confidence: 75% vs 95%
-- Still valuable: User gets answer
+;; Tradeoffs:
+;; - Faster: 15s vs 45s
+;; - Cheaper: Uses existing data
+;; - Less confidence: 75% vs 95%
+;; - Still valuable: User gets answer
 ```
 
 ---
@@ -528,34 +525,39 @@ This minimal format uses ~50-100 tokens vs ~200-400 for full format.
 
 ## Example Integration
 
-```python
-# Initial planning
-plan = ai.generate_plan(user_question)
+```rust
+// Initial planning
+let plan = ai.generate_plan(user_question).await?;
 
-# Execute main branch
-results = execute_tools(plan.main_branch)
+// Execute main branch
+let results = execute_expressions(plan.main_branch).await?;
 
-# Reached decision point
-if plan.has_decision_point():
-    decision_prompt = f"""
-    Decision Point: {plan.decision.description}
+// Reached decision point
+if plan.has_decision_point() {
+    let decision_prompt = format!(
+        "Decision Point: {}
 
-    Tool Results:
-    {format_results(results)}
+        Tool Results:
+        {}
 
-    Variables:
-    {format_variables(current_state)}
+        Variables:
+        {}
 
-    Branches:
-    {format_branches(plan.decision.branches)}
+        Branches:
+        {}
 
-    Which branch should execute?
-    """
+        Which branch should execute?",
+        plan.decision.description,
+        format_results(&results),
+        format_variables(&current_state),
+        format_branches(&plan.decision.branches)
+    );
 
-    branch_choice = ai.decide(decision_prompt)
+    let branch_choice = ai.decide(&decision_prompt).await?;
 
-    # Execute selected branch
-    execute_tools(plan.decision.branches[branch_choice])
+    // Execute selected branch
+    execute_expressions(&plan.decision.branches[branch_choice]).await?;
+}
 ```
 
 ---

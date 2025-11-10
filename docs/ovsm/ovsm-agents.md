@@ -86,61 +86,61 @@ TOOL MERGE_RESULTS:
 
 **Sequential Agent Spawning:**
 ```
-$agent_id = SPAWN_AGENT(
+(define agent_id SPAWN_AGENT()
   agent_type: "validator_analyzer",
   task: "Analyze validator performance metrics",
   context: {
-    validator_address: $validator_pubkey,
+    validator_address: validator_pubkey,
     time_range: "7 days"
   },
   timeout: 120s
 )
 
-$result = AWAIT_AGENT(agent_id: $agent_id)
+(define result AWAIT_AGENT(agent_id: agent_id))
 ```
 
 **Parallel Agent Execution:**
 ```
 PARALLEL_AGENTS {
-  $price_agent = SPAWN_AGENT(
+  (define price_agent SPAWN_AGENT()
     agent_type: "price_analyzer",
     task: "Track price movements",
-    context: {token: $token_address}
+    context: {token: token_address}
   )
 
-  $volume_agent = SPAWN_AGENT(
+  (define volume_agent SPAWN_AGENT()
     agent_type: "volume_analyzer",
     task: "Analyze trading volume",
-    context: {token: $token_address}
+    context: {token: token_address}
   )
 
-  $sentiment_agent = SPAWN_AGENT(
+  (define sentiment_agent SPAWN_AGENT()
     agent_type: "sentiment_analyzer",
     task: "Analyze social sentiment",
-    context: {token_name: $token_name}
+    context: {token_name: token_name}
   )
 }
 WAIT_ALL
 
-$combined = MERGE_RESULTS([$price_agent, $volume_agent, $sentiment_agent])
+(define combined MERGE_RESULTS([price_agent, volume_agent, sentiment_agent]))
 ```
 
 **Agent with Progress Monitoring:**
 ```
-$agent_id = SPAWN_AGENT(
+(define agent_id SPAWN_AGENT()
   agent_type: "blockchain_crawler",
   task: "Scan 10000 blocks for patterns",
-  context: {start_slot: $slot}
+  context: {start_slot: slot}
 )
 
-WHILE true:
-  $status = AGENT_STATUS(agent_id: $agent_id)
-  LOG("Progress: {$status.progress}%")
+while true
+  (define status AGENT_STATUS(agent_id: agent_id))
+  LOG("Progress: {status.progress}%")
 
-  BREAK IF $status.status == "completed"
+  BREAK IF status.status == "completed"
   SLEEP(duration: 5s)
 
-$final_result = AWAIT_AGENT(agent_id: $agent_id)
+(define final_result AWAIT_AGENT(agent_id: agent_id))
 ```
 
 ### Complete Example
@@ -153,46 +153,46 @@ From Standard Library: getSlot, getAccountInfo
 From Agent Extensions: SPAWN_AGENT, PARALLEL_AGENTS
 
 **Main Branch:**
-$token_address = INPUT("token_address")
+(define token_address INPUT("token_address"))
 
-// Spawn specialized agents for different aspects
-$agents = PARALLEL_AGENTS([
+;; Spawn specialized agents for different aspects
+(define agents PARALLEL_AGENTS([)
   {
     type: "holder_analyzer",
     task: "Analyze holder distribution and whale movements",
-    context: {token: $token_address, depth: "deep"}
+    context: {token: token_address, depth: "deep"}
   },
   {
     type: "liquidity_analyzer",
     task: "Analyze liquidity pools and depth",
-    context: {token: $token_address}
+    context: {token: token_address}
   },
   {
     type: "trading_analyzer",
     task: "Analyze trading patterns and volumes",
-    context: {token: $token_address, days: 30}
+    context: {token: token_address, days: 30}
   },
   {
     type: "social_analyzer",
     task: "Analyze social mentions and sentiment",
-    context: {token: $token_address}
+    context: {token: token_address}
   }
 ])
 
 WAIT_ALL
 
 **Synthesis:**
-$comprehensive_report = {
-  holders: $agents[0].result,
-  liquidity: $agents[1].result,
-  trading: $agents[2].result,
-  social: $agents[3].result,
-  confidence: AVG(MAP($agents, a => a.confidence)),
+(define comprehensive_report {)
+  holders: agents[0].result,
+  liquidity: agents[1].result,
+  trading: agents[2].result,
+  social: agents[3].result,
+  confidence: AVG(MAP(agents, a => a.confidence)),
   generated_at: NOW()
 }
 
 **Action:**
-RETURN $comprehensive_report
+comprehensive_report
 ```
 
 ---
@@ -243,62 +243,62 @@ TOOL SUGGEST_NEXT_STEPS:
 
 ```
 **Research State Definition:**
-$research = INIT_RESEARCH_STATE(
+(define research INIT_RESEARCH_STATE()
   hypothesis: "High priority fees cause faster confirmation",
   initial_confidence: 0
 )
 
 **Evidence Gathering:**
-FOR $i IN 0..10:
-  // Collect data
-  $current_slot = getSlot()
-  $block = getBlock(slot: $current_slot - $i * 100)
+for (i 0..10)
+  ;; Collect data
+  (define current_slot getSlot())
+  (define block getBlock(slot: current_slot - i * 100))
 
-  // Extract relevant data
-  $high_fee_txs = FILTER($block.transactions, tx => tx.priority_fee > 1000)
-  $low_fee_txs = FILTER($block.transactions, tx => tx.priority_fee <= 1000)
+  ;; Extract relevant data
+  (define high_fee_txs FILTER(block.transactions, tx => tx.priority_fee > 1000))
+  (define low_fee_txs FILTER(block.transactions, tx => tx.priority_fee <= 1000))
 
-  // Calculate confirmation times
-  $high_fee_times = MAP($high_fee_txs, tx => tx.confirmation_time)
-  $low_fee_times = MAP($low_fee_txs, tx => tx.confirmation_time)
+  ;; Calculate confirmation times
+  (define high_fee_times MAP(high_fee_txs, tx => tx.confirmation_time))
+  (define low_fee_times MAP(low_fee_txs, tx => tx.confirmation_time))
 
-  // Test hypothesis
-  $test_result = T_TEST(
-    sample1: $high_fee_times,
+  ;; Test hypothesis
+  (define test_result T_TEST()
+    sample1: high_fee_times,
     sample2: $low_fee_times
   )
 
-  // Add evidence
-  $research = UPDATE_EVIDENCE(
-    state: $research,
+  ;; Add evidence
+  (define research UPDATE_EVIDENCE()
+    state: research,
     evidence: {
       type: "t_test",
-      p_value: $test_result.p_value,
-      effect_size: MEAN($low_fee_times) - MEAN($high_fee_times),
-      sample_size: COUNT($high_fee_txs) + COUNT($low_fee_txs),
+      p_value: test_result.p_value,
+      effect_size: MEAN(low_fee_times) - MEAN(high_fee_times),
+      sample_size: COUNT(high_fee_txs) + COUNT(low_fee_txs),
       timestamp: NOW()
     }
   )
 
 **Conclusion:**
-$final_confidence = CALCULATE_CONFIDENCE(state: $research)
+(define final_confidence CALCULATE_CONFIDENCE(state: research))
 
-IF $final_confidence > 95 THEN
-  $conclusion = CONCLUDE_RESEARCH(state: $research)
-  $verdict = "PROVEN"
-ELSE IF $final_confidence > 70 THEN
-  $conclusion = CONCLUDE_RESEARCH(state: $research)
-  $verdict = "LIKELY"
-  $next_steps = SUGGEST_NEXT_STEPS(state: $research)
+(if final_confidence > 95
+  (define conclusion CONCLUDE_RESEARCH(state: research))
+  (define verdict "PROVEN")
+ELSE (if final_confidence > 70
+  (define conclusion CONCLUDE_RESEARCH(state: research))
+  (define verdict "LIKELY")
+  (define next_steps SUGGEST_NEXT_STEPS(state: research))
 ELSE
-  $verdict = "INCONCLUSIVE"
-  $next_steps = SUGGEST_NEXT_STEPS(state: $research)
+  (define verdict "INCONCLUSIVE")
+  (define next_steps SUGGEST_NEXT_STEPS(state: research))
 
 RETURN {
-  hypothesis: $research.hypothesis,
-  verdict: $verdict,
-  confidence: $final_confidence,
-  evidence_count: COUNT($research.evidence),
+  hypothesis: research.hypothesis,
+  verdict: verdict,
+  confidence: final_confidence,
+  evidence_count: COUNT(research.evidence),
   next_steps: $next_steps
 }
 ```
@@ -372,85 +372,85 @@ TOOL CENTRALITY:
 
 ```
 **Initialize Graph:**
-$graph = INIT_KNOWLEDGE_GRAPH()
+(define graph INIT_KNOWLEDGE_GRAPH())
 
 **Build Graph from Transactions:**
-$current_slot = getSlot()
+(define current_slot getSlot())
 
-FOR $i IN 0..1000:
-  $block = getBlock(slot: $current_slot - $i)
+for (i 0..1000)
+  (define block getBlock(slot: current_slot - i))
 
-  FOR $tx IN $block.transactions:
-    // Add accounts as nodes
-    FOR $account IN $tx.message.accountKeys:
-      $graph = ADD_NODE(
-        graph: $graph,
-        id: $account,
+  for (tx block.transactions)
+    ;; Add accounts as nodes
+    for (account tx.message.accountKeys)
+      (define graph ADD_NODE()
+        graph: graph,
+        id: account,
         type: "account",
         properties: {
-          first_seen_slot: $block.slot
+          first_seen_slot: block.slot
         }
       )
 
-    // Add transaction as node
-    $graph = ADD_NODE(
-      graph: $graph,
-      id: $tx.signature,
+    ;; Add transaction as node
+    (define graph ADD_NODE()
+      graph: graph,
+      id: tx.signature,
       type: "transaction",
       properties: {
-        slot: $block.slot,
-        fee: $tx.meta.fee,
-        success: $tx.meta.err == null
+        slot: block.slot,
+        fee: tx.meta.fee,
+        success: tx.meta.err == null
       }
     )
 
-    // Add relationships
-    $signer = $tx.message.accountKeys[0]
-    $graph = ADD_EDGE(
-      graph: $graph,
-      from: $signer,
-      to: $tx.signature,
+    ;; Add relationships
+    (define signer tx.message.accountKeys[0])
+    (define graph ADD_EDGE()
+      graph: graph,
+      from: signer,
+      to: tx.signature,
       relationship: "signed",
       weight: 1.0
     )
 
-    FOR $recipient IN $tx.message.accountKeys[1..]:
-      $graph = ADD_EDGE(
-        graph: $graph,
-        from: $tx.signature,
-        to: $recipient,
+    for (recipient tx.message.accountKeys[1..])
+      (define graph ADD_EDGE()
+        graph: graph,
+        from: tx.signature,
+        to: recipient,
         relationship: "interacted_with",
         weight: 1.0
       )
 
 **Query Graph:**
-// Find money flow patterns
-$paths = FIND_PATH(
-  graph: $graph,
+;; Find money flow patterns
+(define paths FIND_PATH()
+  graph: graph,
   from: "address_A",
   to: "address_B",
   max_hops: 5
 )
 
-// Find central actors
-$centrality = CENTRALITY(
-  graph: $graph,
+;; Find central actors
+(define centrality CENTRALITY()
+  graph: graph,
   metric: "betweenness"
 )
-$important_accounts = TOP_N($centrality, n: 10)
+(define important_accounts TOP_N(centrality, n: 10))
 
-// Find communities
-$clusters = FIND_CLUSTERS(
-  graph: $graph,
+;; Find communities
+(define clusters FIND_CLUSTERS()
+  graph: graph,
   algorithm: "louvain"
 )
 
 RETURN {
-  total_nodes: $graph.node_count,
-  total_edges: $graph.edge_count,
-  paths_found: COUNT($paths),
-  central_accounts: $important_accounts,
-  communities: COUNT($clusters)
+  total_nodes: graph.node_count,
+  total_edges: graph.edge_count,
+  paths_found: COUNT(paths),
+  central_accounts: important_accounts,
+  communities: COUNT(clusters)
 }
 ```
 
@@ -504,7 +504,7 @@ TOOL EFFECT_SIZE:
 
 ```
 **Define Hypothesis:**
-$hypothesis = DEFINE_HYPOTHESIS(
+(define hypothesis DEFINE_HYPOTHESIS()
   statement: "US validators have lower skip rates than non-US validators",
   null_hypothesis: "Geographic location has no effect on skip rate",
   alternative: "US validators have significantly lower skip rates",
@@ -512,46 +512,46 @@ $hypothesis = DEFINE_HYPOTHESIS(
 )
 
 **Collect Data:**
-$all_validators = getVoteAccounts()
+(define all_validators getVoteAccounts())
 
-$us_validators = FILTER($all_validators.current, v => v.location == "US")
-$non_us_validators = FILTER($all_validators.current, v => v.location != "US")
+(define us_validators FILTER(all_validators.current, v => v.location == "US"))
+(define non_us_validators FILTER(all_validators.current, v => v.location != "US"))
 
-$us_skip_rates = MAP($us_validators, v => v.skip_rate)
-$non_us_skip_rates = MAP($non_us_validators, v => v.skip_rate)
+(define us_skip_rates MAP(us_validators, v => v.skip_rate))
+(define non_us_skip_rates MAP(non_us_validators, v => v.skip_rate))
 
 **Perform Test:**
-$test_result = PERFORM_TEST(
-  hypothesis: $hypothesis,
+(define test_result PERFORM_TEST()
+  hypothesis: hypothesis,
   test_type: "t_test",
-  sample1: $us_skip_rates,
+  sample1: us_skip_rates,
   sample2: $non_us_skip_rates
 )
 
 **Calculate Effect Size:**
-$effect = EFFECT_SIZE(
-  sample1: $us_skip_rates,
-  sample2: $non_us_skip_rates,
+(define effect EFFECT_SIZE()
+  sample1: us_skip_rates,
+  sample2: non_us_skip_rates,
   method: "cohens_d"
 )
 
 **Draw Conclusion:**
-IF $test_result.p_value < 0.05 THEN
-  $conclusion = "REJECT null hypothesis"
-  $interpretation = "Statistically significant difference found"
+(if test_result.p_value < 0.05
+  (define conclusion "REJECT null hypothesis")
+  (define interpretation "Statistically significant difference found")
 ELSE
-  $conclusion = "FAIL TO REJECT null hypothesis"
-  $interpretation = "No statistically significant difference"
+  (define conclusion "FAIL TO REJECT null hypothesis")
+  (define interpretation "No statistically significant difference")
 
 RETURN {
-  hypothesis: $hypothesis.statement,
-  conclusion: $conclusion,
-  p_value: $test_result.p_value,
-  effect_size: $effect,
-  interpretation: $interpretation,
+  hypothesis: hypothesis.statement,
+  conclusion: conclusion,
+  p_value: test_result.p_value,
+  effect_size: effect,
+  interpretation: interpretation,
   sample_sizes: {
-    us: COUNT($us_skip_rates),
-    non_us: COUNT($non_us_skip_rates)
+    us: COUNT(us_skip_rates),
+    non_us: COUNT(non_us_skip_rates)
   }
 }
 ```
@@ -605,72 +605,72 @@ TOOL BUILD_RESEARCH_TREE:
 DEFINE_TOOL analyze_fee_patterns:
   returns: {patterns: Array<Pattern>, outliers: Array<Transaction>}
   implementation:
-    $current_slot = getSlot()
-    $blocks = []
-    FOR $i IN 0..100:
-      $block = getBlock(slot: $current_slot - $i)
-      $blocks = APPEND(array: $blocks, item: $block)
+    (define current_slot getSlot())
+    (define blocks [])
+    for (i 0..100)
+      (define block getBlock(slot: current_slot - i))
+      (define blocks APPEND(array: blocks, item: block))
 
-    $all_txs = FLATTEN(MAP($blocks, b => b.transactions))
-    $fees = MAP($all_txs, tx => tx.meta.fee)
+    (define all_txs FLATTEN(MAP(blocks, b => b.transactions)))
+    (define fees MAP(all_txs, tx => tx.meta.fee))
 
-    $outliers = DETECT_OUTLIERS(data: $fees)
-    $patterns = FIND_PATTERNS(
-      data: $outliers,
+    (define outliers DETECT_OUTLIERS(data: fees))
+    (define patterns FIND_PATTERNS()
+      data: outliers,
       pattern_type: "temporal"
     )
 
-    RETURN {patterns: $patterns, outliers: $outliers}
+    RETURN {patterns: patterns, outliers: outliers}
 
 **Iterative Research Loop:**
-$research_state = {
+(define research_state {)
   question: "What causes high transaction fees?",
   depth: 0,
   max_depth: 5,
   findings: []
 }
 
-WHILE $research_state.depth < $research_state.max_depth:
-  $research_state.depth += 1
+while research_state.depth < research_state.max_depth
+  research_state.depth += 1
 
-  // Gather data at current level
-  $analysis = analyze_fee_patterns()
+  ;; Gather data at current level
+  (define analysis analyze_fee_patterns())
 
-  // Generate sub-questions from patterns
-  $sub_questions = GENERATE_SUBQUESTIONS(
-    patterns: $analysis.patterns,
+  ;; Generate sub-questions from patterns
+  (define sub_questions GENERATE_SUBQUESTIONS()
+    patterns: analysis.patterns,
     max_questions: 3
   )
 
-  // Research each sub-question
-  FOR $sub_q IN $sub_questions:
-    $sub_result = RECURSIVE_RESEARCH(
-      question: $sub_q,
-      depth: $research_state.depth,
-      max_depth: $research_state.max_depth,
-      context: {parent_analysis: $analysis}
+  ;; Research each sub-question
+  for (sub_q sub_questions)
+    (define sub_result RECURSIVE_RESEARCH()
+      question: sub_q,
+      depth: research_state.depth,
+      max_depth: research_state.max_depth,
+      context: {parent_analysis: analysis}
     )
 
-    $research_state.findings = APPEND(array: $research_state.findings, item: $sub_result)
+    research_state.findings = APPEND(array: research_state.findings, item: sub_result)
 
-  // Check if we have sufficient answer
-  $confidence = CALCULATE_CONFIDENCE(state: $research_state)
-  BREAK IF $confidence > 90
+  ;; Check if we have sufficient answer
+  (define confidence CALCULATE_CONFIDENCE(state: research_state))
+  BREAK IF confidence > 90
 
 **Synthesize Findings:**
-$comprehensive_answer = MERGE_INSIGHTS(
-  findings: $research_state.findings
+(define comprehensive_answer MERGE_INSIGHTS()
+  findings: research_state.findings
 )
 
-$research_tree = BUILD_RESEARCH_TREE(
-  root_question: $research_state.question,
-  findings: $research_state.findings
+(define research_tree BUILD_RESEARCH_TREE()
+  root_question: research_state.question,
+  findings: research_state.findings
 )
 
 RETURN {
-  answer: $comprehensive_answer,
-  research_tree: $research_tree,
-  depth_reached: $research_state.depth,
+  answer: comprehensive_answer,
+  research_tree: research_tree,
+  depth_reached: research_state.depth,
   confidence: $confidence
 }
 ```
@@ -720,7 +720,7 @@ TOOL INVESTIGATE_DISCREPANCY:
 
 ```
 **Define Data Sources:**
-$sources = [
+(define sources [)
   {name: "RPC1", type: "rpc", url: "https://api.mainnet-beta.solana.com"},
   {name: "RPC2", type: "rpc", url: "https://solana-api.projectserum.com"},
   {name: "Archive", type: "archive", url: "https://archive.solana.com"},
@@ -728,55 +728,55 @@ $sources = [
 ]
 
 **Query All Sources:**
-$query = {
+(define query {)
   method: "getBalance",
-  params: {address: $target_address}
+  params: {address: target_address}
 }
 
-$validation = CROSS_VALIDATE(
-  sources: $sources,
+(define validation CROSS_VALIDATE()
+  sources: sources,
   query: $query
 )
 
 WAIT_ALL
 
 **Analyze Consensus:**
-$comparison = COMPARE_RESULTS(
-  results: $validation.results,
+(define comparison COMPARE_RESULTS()
+  results: validation.results,
   tolerance: 0.001  // 0.1% tolerance
 )
 
-IF $comparison.consensus_percentage >= 75 THEN
-  $validated_result = CONSENSUS(
-    results: $validation.results,
+(if comparison.consensus_percentage >= 75
+  (define validated_result CONSENSUS()
+    results: validation.results,
     method: "majority"
   )
-  $confidence = 100
+  (define confidence 100)
 
-ELSE IF $comparison.consensus_percentage >= 50 THEN
-  $validated_result = CONSENSUS(
-    results: $validation.results,
+ELSE (if comparison.consensus_percentage >= 50
+  (define validated_result CONSENSUS()
+    results: validation.results,
     method: "median"
   )
-  $confidence = 75
-  $note = "Some disagreement between sources"
+  (define confidence 75)
+  (define note "Some disagreement between sources")
 
 ELSE
-  $validated_result = null
-  $confidence = 0
+  (define validated_result null)
+  (define confidence 0)
 
-  $discrepancy_report = INVESTIGATE_DISCREPANCY(
-    results: $validation.results,
+  (define discrepancy_report INVESTIGATE_DISCREPANCY()
+    results: validation.results,
     sources: $sources
   )
 
-  LOG("Major discrepancy detected: {$discrepancy_report.summary}")
+  LOG("Major discrepancy detected: {discrepancy_report.summary}")
 
 RETURN {
-  value: $validated_result?.value,
-  confidence: $confidence,
-  sources_agreed: $comparison.consensus_percentage,
-  note: $note,
+  value: validated_result?.value,
+  confidence: confidence,
+  sources_agreed: comparison.consensus_percentage,
+  note: note,
   discrepancy: $discrepancy_report
 }
 ```
@@ -841,69 +841,69 @@ TOOL FORGET:
 
 ```
 **Initialize Memory:**
-$memory = INIT_MEMORY()
+(define memory INIT_MEMORY())
 
 **Learn from Query:**
-$query_result = analyze_fee_patterns()
+(define query_result analyze_fee_patterns())
 
-// Extract insights
-$patterns = $query_result.patterns
-$anomalies = DETECT_OUTLIERS(data: $query_result.fees)
+;; Extract insights
+(define patterns query_result.patterns)
+(define anomalies DETECT_OUTLIERS(data: query_result.fees))
 
 **Store in Memory:**
-FOR $pattern IN $patterns:
-  // Check novelty
-  $existing = RECALL(
-    memory: $memory,
-    query: $pattern.description,
+for (pattern patterns)
+  ;; Check novelty
+  (define existing RECALL()
+    memory: memory,
+    query: pattern.description,
     similarity_threshold: 0.9
   )
 
-  IF COUNT($existing) == 0 THEN
-    // New pattern, store in long-term memory
-    $memory = STORE_LONG_TERM(
-      memory: $memory,
+  (if COUNT(existing) == 0
+    ;; New pattern, store in long-term memory
+    (define memory STORE_LONG_TERM()
+      memory: memory,
       pattern: {
         type: "fee_pattern",
-        description: $pattern.description,
+        description: pattern.description,
         first_seen: NOW(),
         occurrences: 1,
-        confidence: $pattern.strength
+        confidence: pattern.strength
       },
-      confidence: $pattern.strength
+      confidence: pattern.strength
     )
   ELSE
-    // Known pattern, update occurrence count
-    $memory = UPDATE_MEMORY(
-      memory: $memory,
-      item_id: $existing[0].id,
+    ;; Known pattern, update occurrence count
+    (define memory UPDATE_MEMORY()
+      memory: memory,
+      item_id: existing[0].id,
       new_data: {
-        occurrences: $existing[0].occurrences + 1,
+        occurrences: existing[0].occurrences + 1,
         last_seen: NOW()
       }
     )
 
 **Apply Learned Knowledge:**
-$relevant_knowledge = RECALL(
-  memory: $memory,
+(define relevant_knowledge RECALL()
+  memory: memory,
   query: "fee optimization strategies",
   similarity_threshold: 0.7
 )
 
-IF COUNT($relevant_knowledge) > 0 THEN
-  // Use previous learnings to optimize current query
-  LOG("Found {COUNT($relevant_knowledge)} relevant past insights")
+(if COUNT(relevant_knowledge) > 0
+  ;; Use previous learnings to optimize current query
+  LOG("Found {COUNT(relevant_knowledge)} relevant past insights")
 
-  // Skip redundant queries based on memory
-  $should_skip = ANY($relevant_knowledge, k => k.confidence > 0.9)
+  ;; Skip redundant queries based on memory
+  (define should_skip ANY(relevant_knowledge, k => k.confidence > 0.9))
 
-  IF $should_skip THEN
-    RETURN "Using cached knowledge: {$relevant_knowledge[0].result}"
+  (if $should_skip
+    RETURN "Using cached knowledge: {relevant_knowledge[0].result}"
 
 **Memory Maintenance:**
-// Forget old, low-confidence memories
-$memory = FORGET(
-  memory: $memory,
+;; Forget old, low-confidence memories
+(define memory FORGET()
+  memory: memory,
   criteria: {
     older_than: "30 days",
     confidence_below: 0.5,
@@ -956,7 +956,7 @@ TOOL CONFIDENCE_BREAKDOWN:
 
 ```
 **Define Confidence Factors:**
-$factors = {
+(define factors {)
   data_quality: 85,      // 0-100 scale
   sample_size: 90,       // 0-100 scale
   consistency: 95,       // 0-100 scale
@@ -965,8 +965,8 @@ $factors = {
 }
 
 **Calculate Overall Confidence:**
-$confidence = CALCULATE_CONFIDENCE(
-  factors: $factors,
+(define confidence CALCULATE_CONFIDENCE()
+  factors: factors,
   weights: {
     data_quality: 0.25,
     sample_size: 0.20,
@@ -976,36 +976,36 @@ $confidence = CALCULATE_CONFIDENCE(
   }
 )
 
-$uncertainty = 100 - $confidence
+(define uncertainty 100 - confidence)
 
 **Calculate Uncertainty Range:**
-$range = UNCERTAINTY_RANGE(
-  result: $finding.average_fee,
+(define range UNCERTAINTY_RANGE()
+  result: finding.average_fee,
   confidence: $confidence
 )
 
 **Identify Caveats:**
-$caveats = IDENTIFY_CAVEATS(
-  finding: $finding,
+(define caveats IDENTIFY_CAVEATS()
+  finding: finding,
   methodology: "sampling"
 )
 
 **Break Down Confidence:**
-$breakdown = CONFIDENCE_BREAKDOWN(
-  confidence: $confidence,
+(define breakdown CONFIDENCE_BREAKDOWN()
+  confidence: confidence,
   factors: $factors
 )
 
 **Annotate Result:**
 RETURN {
-  result: $finding,
-  confidence: "{$confidence}%",
+  result: finding,
+  confidence: "{confidence}%",
   uncertainty_range: {
-    lower: $range.lower,
-    upper: $range.upper
+    lower: range.lower,
+    upper: range.upper
   },
-  confidence_breakdown: $breakdown,
-  caveats: $caveats,
+  confidence_breakdown: breakdown,
+  caveats: caveats,
   methodology: "Statistical sampling with cross-validation"
 }
 ```
@@ -1073,71 +1073,71 @@ TOOL SYNTHESIZE_REVIEW:
 
 ```
 **Initialize Review:**
-$review = INIT_LITERATURE_REVIEW(
+(define review INIT_LITERATURE_REVIEW()
   topic: "Solana consensus mechanisms",
   sources: ["github", "docs", "forums", "papers"]
 )
 
 **Gather Sources:**
 PARALLEL {
-  $code_sources = SEARCH_GITHUB(
+  (define code_sources SEARCH_GITHUB()
     query: "solana consensus proof of history",
     language: "rust"
   )
 
-  $doc_sources = SEARCH_DOCS(
+  (define doc_sources SEARCH_DOCS()
     query: "tower bft consensus"
   )
 
-  $forum_discussions = SEARCH_FORUMS(
+  (define forum_discussions SEARCH_FORUMS()
     query: "solana consensus explained"
   )
 
-  $academic_papers = SEARCH_ARXIV(
+  (define academic_papers SEARCH_ARXIV()
     query: "solana blockchain consensus"
   )
 }
 WAIT_ALL
 
 **Analyze Each Source:**
-$all_sources = FLATTEN(collection: [
-  $code_sources,
-  $doc_sources,
-  $forum_discussions,
+(define all_sources FLATTEN(collection: [)
+  code_sources,
+  doc_sources,
+  forum_discussions,
   $academic_papers
 ])
 
-$analyzed_sources = []
+(define analyzed_sources [])
 
-FOR $source IN $all_sources:
-  $concepts = EXTRACT_CONCEPTS(source: $source)
-  $relationships = MAP_RELATIONSHIPS(concepts: $concepts)
+for (source all_sources)
+  (define concepts EXTRACT_CONCEPTS(source: source))
+  (define relationships MAP_RELATIONSHIPS(concepts: concepts))
 
-  $analyzed = {
-    source: $source,
-    concepts: $concepts,
-    relationships: $relationships,
-    relevance: CALCULATE_RELEVANCE(source: $source, topic: $review.topic),
-    credibility: ASSESS_CREDIBILITY(source: $source),
-    recency: $source.date
+  (define analyzed {)
+    source: source,
+    concepts: concepts,
+    relationships: relationships,
+    relevance: CALCULATE_RELEVANCE(source: source, topic: review.topic),
+    credibility: ASSESS_CREDIBILITY(source: source),
+    recency: source.date
   }
 
-  $analyzed_sources = APPEND(array: $analyzed_sources, item: $analyzed)
+  (define analyzed_sources APPEND(array: analyzed_sources, item: analyzed))
 
 **Synthesize Review:**
-$synthesis = SYNTHESIZE_REVIEW(
-  sources: $analyzed_sources,
-  topic: $review.topic
+(define synthesis SYNTHESIZE_REVIEW()
+  sources: analyzed_sources,
+  topic: review.topic
 )
 
 RETURN {
-  topic: $review.topic,
-  sources_reviewed: COUNT(collection: $analyzed_sources),
-  key_findings: $synthesis.findings,
-  consensus_views: $synthesis.consensus,
-  conflicting_views: $synthesis.conflicts,
+  topic: review.topic,
+  sources_reviewed: COUNT(collection: analyzed_sources),
+  key_findings: synthesis.findings,
+  consensus_views: synthesis.consensus,
+  conflicting_views: synthesis.conflicts,
   top_sources: TOP_N(
-    collection: $analyzed_sources,
+    collection: analyzed_sources,
     n: 5,
     by: "credibility"
   )
@@ -1197,55 +1197,55 @@ TOOL SWITCH_PLAN:
 
 ```
 **Define Constraints:**
-$constraints = {
+(define constraints {)
   max_time: 60s,
   max_cost: 0.01 SOL,
   min_confidence: 80%
 }
 
 **Generate Possible Plans:**
-$user_goal = "Find all high-value transactions in last epoch"
+(define user_goal "Find all high-value transactions in last epoch")
 
-$possible_plans = ENUMERATE_PLANS(
-  goal: $user_goal,
+(define possible_plans ENUMERATE_PLANS()
+  goal: user_goal,
   available_tools: ["getSlot", "getBlock", "getTransaction", "getEpochInfo"]
 )
 
 **Estimate and Score Each Plan:**
-FOR $plan IN $possible_plans:
-  $estimate = ESTIMATE_PLAN(plan: $plan)
+for (plan possible_plans)
+  (define estimate ESTIMATE_PLAN(plan: plan))
 
-  $plan.estimated_time = $estimate.time
-  $plan.estimated_cost = $estimate.cost
-  $plan.expected_confidence = $estimate.confidence
+  plan.estimated_time = estimate.time
+  plan.estimated_cost = estimate.cost
+  plan.expected_confidence = estimate.confidence
 
-  $plan.score = SCORE_PLAN(
-    plan: $plan,
+  plan.score = SCORE_PLAN(
+    plan: plan,
     constraints: $constraints
   )
 
 **Select Best Plan:**
-$best_plan = SELECT_OPTIMAL_PLAN(plans: $possible_plans)
+(define best_plan SELECT_OPTIMAL_PLAN(plans: possible_plans))
 
-LOG(message: "Selected plan: {$best_plan.name}, score: {$best_plan.score}")
+LOG(message: "Selected plan: {best_plan.name}, score: {best_plan.score}")
 
 **Execute with Monitoring:**
-$start_time = NOW()
-$actual_cost = 0
+(define start_time NOW())
+(define actual_cost 0)
 
 TRY:
-  $result = EXECUTE_PLAN(
-    plan: $best_plan,
+  (define result EXECUTE_PLAN()
+    plan: best_plan,
     monitor: true
   )
 
-  // Monitor progress and adapt
-  $elapsed = NOW() - $start_time
+  ;; Monitor progress and adapt
+  (define elapsed NOW() - start_time)
 
-  IF $elapsed > ($constraints.max_time * 0.8) THEN
+  (if elapsed > (constraints.max_time * 0.8)
     LOG(message: "Approaching time limit, switching strategy")
-    $best_plan = SWITCH_PLAN(
-      current_plan: $best_plan,
+    (define best_plan SWITCH_PLAN()
+      current_plan: best_plan,
       reason: "time_limit",
       new_strategy: "faster"
     )
@@ -1254,11 +1254,11 @@ CATCH:
   ERROR(message: "Plan execution failed")
 
 RETURN {
-  result: $result,
-  plan_used: $best_plan.name,
-  actual_time: $elapsed,
-  actual_cost: $actual_cost,
-  met_constraints: $elapsed <= $constraints.max_time
+  result: result,
+  plan_used: best_plan.name,
+  actual_time: elapsed,
+  actual_cost: actual_cost,
+  met_constraints: elapsed <= constraints.max_time
 }
 ```
 
@@ -1318,7 +1318,7 @@ TOOL INSTRUMENTAL_VARIABLE:
 
 ```
 **Design Experiment:**
-$experiment = DESIGN_EXPERIMENT(
+(define experiment DESIGN_EXPERIMENT()
   treatment: "high_priority_fee",
   control: "low_priority_fee",
   outcome: "confirmation_time",
@@ -1326,55 +1326,55 @@ $experiment = DESIGN_EXPERIMENT(
 )
 
 **Collect Observational Data:**
-$current_slot = getSlot()
-$data = []
+(define current_slot getSlot())
+(define data [])
 
-FOR $i IN 0..1000:
-  $block = getBlock(slot: $current_slot - $i)
+for (i 0..1000)
+  (define block getBlock(slot: current_slot - i))
 
-  FOR $tx IN $block.transactions:
-    $sample = {
-      priority_fee: extractPriorityFee($tx),
-      confirmation_time: $tx.blockTime - $tx.submissionTime,
-      congestion: $block.congestion_level,
-      time_of_day: extractHour($tx.blockTime),
-      tx_size: $tx.size
+  for (tx block.transactions)
+    (define sample {)
+      priority_fee: extractPriorityFee(tx),
+      confirmation_time: tx.blockTime - tx.submissionTime,
+      congestion: block.congestion_level,
+      time_of_day: extractHour(tx.blockTime),
+      tx_size: tx.size
     }
-    $data = APPEND(array: $data, item: $sample)
+    (define data APPEND(array: data, item: sample))
 
 **Match Samples:**
-$matched_data = PROPENSITY_SCORE_MATCHING(
-  data: $data,
+(define matched_data PROPENSITY_SCORE_MATCHING()
+  data: data,
   treatment_var: "priority_fee",
   confounders: ["congestion", "time_of_day", "tx_size"]
 )
 
 **Estimate Causal Effect:**
-$treatment_group = FILTER(
-  collection: $matched_data,
+(define treatment_group FILTER()
+  collection: matched_data,
   predicate: s => s.priority_fee > 1000
 )
 
-$control_group = FILTER(
-  collection: $matched_data,
+(define control_group FILTER()
+  collection: matched_data,
   predicate: s => s.priority_fee <= 1000
 )
 
-$causal_effect = ESTIMATE_CAUSAL_EFFECT(
-  treatment_group: $treatment_group,
-  control_group: $control_group,
+(define causal_effect ESTIMATE_CAUSAL_EFFECT()
+  treatment_group: treatment_group,
+  control_group: control_group,
   outcome_var: "confirmation_time"
 )
 
 **Statistical Significance:**
-$t_stat = $causal_effect.effect / $causal_effect.std_error
-$significant = ABS($t_stat) > 1.96  // 95% confidence
+(define t_stat causal_effect.effect / causal_effect.std_error)
+(define significant ABS(t_stat) > 1.96  // 95% confidence)
 
 RETURN {
-  causal_effect: $causal_effect.effect,
-  std_error: $causal_effect.std_error,
-  significant: $significant,
-  conclusion: $significant AND $causal_effect.effect < 0 ?
+  causal_effect: causal_effect.effect,
+  std_error: causal_effect.std_error,
+  significant: significant,
+  conclusion: significant AND causal_effect.effect < 0 ?
     "Higher priority fees DO cause faster confirmation (causal)" :
     "No causal relationship found"
 }
@@ -1434,61 +1434,61 @@ TOOL EXTRACT_PREDICTIVE_SIGNALS:
 
 ```
 **Collect Multi-Modal Data:**
-$token_address = INPUT(prompt: "token_address")
-$token_name = INPUT(prompt: "token_name")
+(define token_address INPUT(prompt: "token_address"))
+(define token_name INPUT(prompt: "token_name"))
 
 PARALLEL {
-  $chain_data = ANALYZE_CHAIN(
-    address: $token_address,
+  (define chain_data ANALYZE_CHAIN()
+    address: token_address,
     time_range: "30 days"
   )
 
-  $social_data = ANALYZE_SOCIAL(
-    topic: $token_name,
+  (define social_data ANALYZE_SOCIAL()
+    topic: token_name,
     time_range: "30 days"
   )
 
-  $code_data = ANALYZE_CODE(
+  (define code_data ANALYZE_CODE()
     program_id: $token_address
   )
 
-  $price_data = ANALYZE_PRICE(
-    token: $token_address,
+  (define price_data ANALYZE_PRICE()
+    token: token_address,
     time_range: "30 days"
   )
 }
 WAIT_ALL
 
 **Align and Correlate:**
-$unified_timeline = ALIGN_TIMELINES(
+(define unified_timeline ALIGN_TIMELINES()
   datasets: [
-    $chain_data.time_series,
-    $social_data.time_series,
-    $price_data.time_series
+    chain_data.time_series,
+    social_data.time_series,
+    price_data.time_series
   ]
 )
 
-$correlations = CORRELATE_MODALITIES(
+(define correlations CORRELATE_MODALITIES()
   timeline: $unified_timeline
 )
 
 **Find Leading Indicators:**
-$lag_analysis = CALCULATE_TIME_LAGS(
+(define lag_analysis CALCULATE_TIME_LAGS()
   correlations: $correlations
 )
 
-$predictive_signals = EXTRACT_PREDICTIVE_SIGNALS(
+(define predictive_signals EXTRACT_PREDICTIVE_SIGNALS()
   relationships: $correlations
 )
 
 RETURN {
   modalities_analyzed: ["chain", "social", "code", "price"],
-  correlations_found: COUNT(collection: $correlations),
-  leading_indicators: $lag_analysis,
-  predictive_signals: $predictive_signals,
+  correlations_found: COUNT(collection: correlations),
+  leading_indicators: lag_analysis,
+  predictive_signals: predictive_signals,
   insights: [
-    "Social buzz leads price by {$lag_analysis[0].lag} hours",
-    "Code deployments correlate with chain activity (r={$correlations[1].coefficient})"
+    "Social buzz leads price by {lag_analysis[0].lag} hours",
+    "Code deployments correlate with chain activity (r={correlations[1].coefficient})"
   ]
 }
 ```
@@ -1543,47 +1543,47 @@ TOOL ANNOTATE_WITH_CITATIONS:
 
 ```
 **Generate Explanation:**
-$finding = {
+(define finding {)
   conclusion: "Higher priority fees lead to faster confirmation",
   confidence: 94,
   evidence: [...]
 }
 
-$audience = "technical"
+(define audience "technical")
 
-$explanation = GENERATE_EXPLANATION(
-  finding: $finding,
+(define explanation GENERATE_EXPLANATION()
+  finding: finding,
   target_audience: $audience
 )
 
 **Build Detailed Explanation:**
-$key_concepts = EXTRACT_KEY_CONCEPTS(finding: $finding)
+(define key_concepts EXTRACT_KEY_CONCEPTS(finding: finding))
 
-$tree = BUILD_EXPLANATION_TREE(
-  root: $finding.conclusion,
-  depth: $audience == "expert" ? 5 : 3,
+(define tree BUILD_EXPLANATION_TREE()
+  root: finding.conclusion,
+  depth: audience == "expert" ? 5 : 3,
   detail_level: $audience
 )
 
 **Generate Text for Each Node:**
-FOR $node IN $tree.nodes:
-  $node.text = EXPLAIN_CONCEPT(
-    concept: $node.concept,
-    use_analogies: $audience == "non-technical",
-    technical_details: $audience == "expert"
+for (node tree.nodes)
+  node.text = EXPLAIN_CONCEPT(
+    concept: node.concept,
+    use_analogies: audience == "non-technical",
+    technical_details: audience == "expert"
   )
 
-  // Add evidence
-  IF $node.is_claim THEN
-    $evidence = GATHER_EVIDENCE(claim: $node.concept.text)
-    $node.text = ANNOTATE_WITH_CITATIONS(
-      text: $node.text,
+  ;; Add evidence
+  (if node.is_claim
+    (define evidence GATHER_EVIDENCE(claim: node.concept.text))
+    node.text = ANNOTATE_WITH_CITATIONS(
+      text: node.text,
       evidence: $evidence
     )
 
 RETURN {
-  explanation: FORMAT_TEXT(tree: $tree),
-  confidence_explanation: "We are {$finding.confidence}% confident because: ...",
+  explanation: FORMAT_TEXT(tree: tree),
+  confidence_explanation: "We are {finding.confidence}% confident because: ...",
   limitations: ["Sample size limited to 10000 transactions", "..."],
   follow_up_questions: [
     "How does this vary by time of day?",
@@ -1639,9 +1639,9 @@ TOOL TRIGGER_INVESTIGATION:
 
 ```
 **Setup Monitoring:**
-$monitor = INIT_MONITOR()
+(define monitor INIT_MONITOR())
 
-$watch = CREATE_WATCH(
+(define watch CREATE_WATCH()
   name: "validator_skip_rate",
   metric: "skip_rate",
   threshold: 5.0,
@@ -1651,29 +1651,29 @@ $watch = CREATE_WATCH(
 
 **Monitoring Loop:**
 LOOP EVERY 30s:
-  $current_value = MEASURE_METRIC(metric: $watch.metric)
+  (define current_value MEASURE_METRIC(metric: watch.metric))
 
-  IF $current_value > $watch.threshold THEN
-    $alert = CREATE_ALERT(
-      type: $watch.metric,
-      severity: calculateSeverity($current_value, $watch.threshold),
+  (if current_value > watch.threshold
+    (define alert CREATE_ALERT()
+      type: watch.metric,
+      severity: calculateSeverity(current_value, watch.threshold),
       context: {
-        current_value: $current_value,
-        threshold: $watch.threshold,
+        current_value: current_value,
+        threshold: watch.threshold,
         timestamp: NOW()
       }
     )
 
-    // Spawn investigation agent
-    $investigation = TRIGGER_INVESTIGATION(
-      alert: $alert,
+    ;; Spawn investigation agent
+    (define investigation TRIGGER_INVESTIGATION()
+      alert: alert,
       agent_type: "validator_investigator"
     )
 
-    $findings = AWAIT investigation
+    (define findings AWAIT investigation)
 
-    IF $findings.actionable THEN
-      LOG(message: "Action required: {$findings.recommended_actions}")
+    (if findings.actionable
+      LOG(message: "Action required: {findings.recommended_actions}")
 ```
 
 ---
@@ -1831,59 +1831,59 @@ TOOL EXECUTE:
 
 ```
 **Initialize Learner:**
-$meta_learner = INIT_META_LEARNER()
+(define meta_learner INIT_META_LEARNER())
 
 **Record Past Performance:**
-// Assuming we track query executions
-FOR $past_query IN $query_history:
-  $meta_learner = RECORD_QUERY_PERFORMANCE(
-    learner: $meta_learner,
-    query: $past_query,
+;; Assuming we track query executions
+for (past_query query_history)
+  (define meta_learner RECORD_QUERY_PERFORMANCE()
+    learner: meta_learner,
+    query: past_query,
     performance: {
-      type: $past_query.type,
-      strategy: $past_query.strategy,
-      duration: $past_query.duration,
-      cost: $past_query.cost,
-      accuracy: $past_query.accuracy,
-      user_satisfaction: $past_query.rating
+      type: past_query.type,
+      strategy: past_query.strategy,
+      duration: past_query.duration,
+      cost: past_query.cost,
+      accuracy: past_query.accuracy,
+      user_satisfaction: past_query.rating
     }
   )
 
 **Learn Optimal Strategies:**
-$query_types = UNIQUE(collection: MAP($query_history, q => q.type))
+(define query_types UNIQUE(collection: MAP(query_history, q => q.type)))
 
-FOR $type IN $query_types:
-  $learned = LEARN_STRATEGY(
-    learner: $meta_learner,
+for (type query_types)
+  (define learned LEARN_STRATEGY()
+    learner: meta_learner,
     query_type: $type
   )
 
-  LOG(message: "Learned strategy for {$type}: {$learned.strategy}")
+  LOG(message: "Learned strategy for {type}: {learned.strategy}")
 
 **Apply to New Query:**
-$new_query = {
+(define new_query {)
   type: "transaction_analysis",
   question: "What are average fees?"
 }
 
-$learned_strategy = LOOKUP_STRATEGY(
-  learner: $meta_learner,
+(define learned_strategy LOOKUP_STRATEGY()
+  learner: meta_learner,
   query: $new_query
 )
 
-IF $learned_strategy != null AND $learned_strategy.confidence > 0.8 THEN
-  // Use learned strategy
-  LOG(message: "Using learned strategy: {$learned_strategy.name}")
-  $result = EXECUTE_STRATEGY(strategy: $learned_strategy)
+(if learned_strategy != null AND learned_strategy.confidence > 0.8
+  ;; Use learned strategy
+  LOG(message: "Using learned strategy: {learned_strategy.name}")
+  (define result EXECUTE_STRATEGY(strategy: learned_strategy))
 ELSE
-  // Explore new strategy (epsilon-greedy)
+  ;; Explore new strategy (epsilon-greedy)
   LOG(message: "Exploring new strategy")
-  $result = EXPLORE_STRATEGY(
-    learner: $meta_learner,
-    query_type: $new_query.type
+  (define result EXPLORE_STRATEGY()
+    learner: meta_learner,
+    query_type: new_query.type
   )
 
-RETURN $result
+result
 ```
 
 ---
