@@ -1,0 +1,367 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Build release binaries for all platforms in parallel
+  build-matrix:
+    name: Build ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          # Linux x86_64 (glibc)
+          - name: Linux x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: osvm
+            artifact_name: osvm-linux-x86_64
+            archive_ext: tar.gz
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
+
+          # Linux x86_64 (musl - fully static)
+          - name: Linux x86_64 (musl)
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary_name: osvm
+            artifact_name: osvm-linux-x86_64-musl
+            archive_ext: tar.gz
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y musl-tools libhidapi-dev libudev-dev pkg-config libssl-dev perl
+
+          # macOS x86_64 (Intel)
+          - name: macOS x86_64
+            os: macos-13
+            target: x86_64-apple-darwin
+            binary_name: osvm
+            artifact_name: osvm-macos-x86_64
+            archive_ext: tar.gz
+            install_deps: |
+              brew install hidapi libusb
+
+          # macOS ARM64 (Apple Silicon)
+          - name: macOS ARM64
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary_name: osvm
+            artifact_name: osvm-macos-arm64
+            archive_ext: tar.gz
+            install_deps: |
+              brew install hidapi libusb
+
+          # Windows x86_64 (MSVC)
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: osvm.exe
+            artifact_name: osvm-windows-x86_64
+            archive_ext: zip
+            install_deps: |
+              choco install openssl
+              echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $GITHUB_ENV
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install platform dependencies
+        shell: bash
+        run: ${{ matrix.platform.install_deps }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.platform.target }}
+
+      - name: Cache cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ matrix.platform.os }}-cargo-${{ matrix.platform.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.platform.os }}-cargo-${{ matrix.platform.target }}-
+            ${{ matrix.platform.os }}-cargo-
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          cargo build --release --locked --target ${{ matrix.platform.target }}
+
+      - name: Create archive
+        shell: bash
+        run: |
+          cd target/${{ matrix.platform.target }}/release
+          if [[ "${{ matrix.platform.archive_ext }}" == "zip" ]]; then
+            7z a ../../../${{ matrix.platform.artifact_name }}.${{ matrix.platform.archive_ext }} ${{ matrix.platform.binary_name }}
+          else
+            tar czf ../../../${{ matrix.platform.artifact_name }}.${{ matrix.platform.archive_ext }} ${{ matrix.platform.binary_name }}
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.artifact_name }}
+          path: ${{ matrix.platform.artifact_name }}.${{ matrix.platform.archive_ext }}
+          retention-days: 7
+
+  # Run tests using cached build artifacts
+  test:
+    name: Test ${{ matrix.platform.name }}
+    needs: build-matrix
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Linux
+            os: ubuntu-latest
+            artifact_name: osvm-linux-x86_64
+            binary_name: osvm
+          - name: macOS
+            os: macos-13
+            artifact_name: osvm-macos-x86_64
+            binary_name: osvm
+          - name: Windows
+            os: windows-latest
+            artifact_name: osvm-windows-x86_64
+            binary_name: osvm.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.platform.artifact_name }}
+
+      - name: Extract binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
+            7z x ${{ matrix.platform.artifact_name }}.zip
+          else
+            tar xzf ${{ matrix.platform.artifact_name }}.tar.gz
+          fi
+          chmod +x ${{ matrix.platform.binary_name }} || true
+
+      - name: Test binary
+        shell: bash
+        run: |
+          ./${{ matrix.platform.binary_name }} --version
+          ./${{ matrix.platform.binary_name }} --help
+
+  # Create GitHub release and attach all platform binaries
+  release:
+    name: Create Release
+    needs: [build-matrix, test]
+    runs-on: ubuntu-latest
+    # Run on tags OR main/develop branches
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: release_info
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Use the actual tag
+            TAG="${GITHUB_REF#refs/tags/}"
+            IS_PRERELEASE=false
+          else
+            # Use branch name as tag
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            BRANCH_SAFE="${BRANCH//\//-}"
+            TAG="${BRANCH_SAFE}-${GITHUB_SHA::8}"
+            IS_PRERELEASE=true
+          fi
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "is_prerelease=${IS_PRERELEASE}" >> $GITHUB_OUTPUT
+          echo "Release tag: ${TAG}"
+          echo "Is prerelease: ${IS_PRERELEASE}"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: |
+          ls -R artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: Release ${{ steps.release_info.outputs.tag }}
+          draft: false
+          prerelease: ${{ steps.release_info.outputs.is_prerelease }}
+          generate_release_notes: true
+          files: |
+            artifacts/osvm-linux-x86_64/*
+            artifacts/osvm-linux-x86_64-musl/*
+            artifacts/osvm-macos-x86_64/*
+            artifacts/osvm-macos-arm64/*
+            artifacts/osvm-windows-x86_64/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy Debian packages (reuse Linux artifact)
+  deploy-debian:
+    name: Deploy Debian Package
+    needs: [build-matrix, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: osvm-linux-x86_64
+          path: ./
+
+      - name: Extract binary
+        run: |
+          tar xzf osvm-linux-x86_64.tar.gz
+          chmod +x osvm
+
+      - name: Set up Debian packaging
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debhelper dh-make devscripts dpkg-dev build-essential
+
+      - name: Create Debian package
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          cd packaging/debian
+          ./build-deb.sh "$VERSION"
+
+      - name: Upload Debian package
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvm-deb-package
+          path: packaging/debian/debian-packages/*.deb
+
+  # Deploy to Homebrew (reuse macOS artifacts)
+  deploy-homebrew:
+    name: Deploy Homebrew Formula
+    needs: [build-matrix, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Homebrew formula
+        run: |
+          VERSION=$(echo ${{ github.ref_name }} | sed 's/^v//')
+          SHA=$(curl -sL https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz | shasum -a 256 | cut -d ' ' -f 1)
+
+          cat > osvm.rb << EOF
+          class Osvm < Formula
+            desc "OpenSVM CLI tool for managing SVM nodes"
+            homepage "https://github.com/${{ github.repository }}"
+            url "https://github.com/${{ github.repository }}/archive/${{ github.ref_name }}.tar.gz"
+            sha256 "$SHA"
+            version "$VERSION"
+
+            depends_on "rust" => :build
+            depends_on "hidapi"
+            depends_on "libusb"
+
+            def install
+              system "cargo", "build", "--release"
+              bin.install "target/release/osvm"
+            end
+
+            test do
+              system "#{bin}/osvm", "--version"
+            end
+          end
+          EOF
+
+      - name: Upload Homebrew formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: osvm-homebrew-formula
+          path: ./osvm.rb
+
+  # Publish to crates.io (only on tags)
+  publish-crates:
+    name: Publish to crates.io
+    needs: [build-matrix, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
+        env:
+          CARGO_TERM_COLOR: always
+
+  # Deploy documentation (reuse any build)
+  deploy-docs:
+    name: Deploy Documentation
+    needs: [build-matrix, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libhidapi-dev libudev-dev libusb-1.0-0-dev pkg-config libssl-dev perl
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate documentation
+        run: cargo doc --no-deps --document-private-items
+
+      - name: Create index.html
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=osvm/index.html">' > target/doc/index.html
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          force_orphan: true
