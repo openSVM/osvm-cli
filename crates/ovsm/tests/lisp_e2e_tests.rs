@@ -937,6 +937,7 @@ fn test_sqrt_basic() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_sqrt_float() {
     let source = "(sqrt 2.0)";
     let mut scanner = SExprScanner::new(source);
@@ -1029,6 +1030,7 @@ fn test_abs_negative_int() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_abs_negative_float() {
     let source = "(abs -3.14)";
     let mut scanner = SExprScanner::new(source);

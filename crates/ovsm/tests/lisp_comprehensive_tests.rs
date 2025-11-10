@@ -34,6 +34,7 @@ fn test_literals_integers() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_literals_floats() {
     assert_eq!(execute_lisp("3.14").unwrap(), Value::Float(3.14));
     assert_eq!(execute_lisp("-2.5").unwrap(), Value::Float(-2.5));
@@ -265,6 +266,7 @@ fn test_set_incremental_mutation() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)]
 fn test_const_definition() {
     let source = r#"
         (const PI 3.14159)
