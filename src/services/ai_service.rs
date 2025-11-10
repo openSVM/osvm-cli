@@ -1895,9 +1895,11 @@ Focus on what matters to the user.
             error_patterns.push("You're treating an ARRAY as an OBJECT. Stop using (get obj field) - the value IS an array!");
         }
         if error_message.contains("Type error: expected array") {
-            error_patterns.push("You're treating a value as ARRAY when it's NOT. Check the actual type!");
+            error_patterns
+                .push("You're treating a value as ARRAY when it's NOT. Check the actual type!");
         }
-        if error_message.contains("Undefined variable") || error_message.contains("Undefined tool") {
+        if error_message.contains("Undefined variable") || error_message.contains("Undefined tool")
+        {
             error_patterns.push("You're using names that DON'T EXIST. Check available tools and actual response schemas!");
         }
 

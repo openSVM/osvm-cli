@@ -141,6 +141,17 @@ impl Tool for McpBridgeTool {
             message: format!("MCP call_tool failed: {}", e),
         })?;
 
+        // 🔍 DEBUG: Log what MCP service returned
+        if get_verbosity() >= VerbosityLevel::Verbose {
+            eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("🔍 MCP BRIDGE RECEIVED FROM MCP SERVICE");
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            eprintln!("Tool: {}", self.name);
+            eprintln!("Result JSON:");
+            eprintln!("{}", serde_json::to_string_pretty(&result_json).unwrap_or_else(|_| format!("{:?}", result_json)));
+            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        }
+
         // Convert JSON result back to OvsmValue
         fn json_to_ovsm(json: &JsonValue) -> OvsmValue {
             use std::collections::HashMap;

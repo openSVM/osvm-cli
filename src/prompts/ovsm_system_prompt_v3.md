@@ -96,7 +96,9 @@ These are **part of the OVSM language** and execute locally:
 - **Predicates**: `some`, `every`, `any`, `all`
   - **Aliases**: `any` (=some), `all` (=every) - JavaScript-style
 - **Sorting**: `sort-by` (with lambda comparator and `:desc/:asc` keywords)
-- **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`, `abs`, `sqrt`, `floor`, `ceil`, `round`
+- **Math**: `+`, `-`, `*`, `/`, `%`, `min`, `max`, `abs`, `sqrt`, `pow`, `floor`, `ceil`, `round`
+  - ✅ **Use `pow` for exponents**: `(pow 10 decimals)` → 10^decimals
+  - ❌ **NOT `expt`**: OVSM uses `pow`, not Common LISP's `expt`
 - **Logic**: `and`, `or`, `not`, `if`, `when`, `while`, `for`
 - **Null checking**: `null?` ← **USE THIS WITH `get`!**
 - **Object**: `.` (property access - ONLY if you're sure field exists), `[]` (array index)
@@ -163,7 +165,26 @@ OVSM has comprehensive string manipulation:
 - **Character access**: `charAt`, `char-at`, `char-at-index` - Get character at index
   - `(charAt "hello" 1)` → `"e"` - JavaScript String.charAt() (UTF-8 safe)
 - **Conversion**: `str`, `to-string` - Convert value to string
-- **Type checking**: `stringp`, `typeof`, `type-of` - Check value type
+
+**⚠️ TYPE CHECKING - Two Styles Available:**
+
+**Option 1: Generic typeof (JavaScript/Python style) - Returns type as string:**
+- `(typeof x)` or `(type-of x)` - Returns: "number", "string", "boolean", "array", "object", "function", "null"
+- Example: `(== (typeof x) "array")` → true if x is an array
+- Example: `(== (type-of val) "number")` → true if val is a number
+
+**Option 2: Specific Type Predicates (returns boolean):**
+- `(number? x)` - Check if number (int or float)
+- `(int? x)` - Check if integer
+- `(float? x)` - Check if float
+- `(string? x)` - Check if string
+- `(bool? x)` - Check if boolean
+- `(array? x)` or `(list? x)` - Check if array
+- `(object? x)` - Check if object
+- `(function? x)` - Check if function
+- `(null? x)` - Check if null
+
+**Best Practice:** Use specific predicates (`number?`, `string?`, etc.) for better readability.
 
 **ALWAYS USE LOWERCASE** for built-in functions: `count` not `COUNT`!
 
@@ -174,14 +195,15 @@ OVSM has comprehensive string manipulation:
 ```
 
 ## MCP Tools (NETWORK CALLS)
-These are **external tools** that fetch blockchain data:
-- `get_account_transactions` - Fetch transactions for an address
-- `get_transaction` - Get specific transaction details
-- `get_solana_balance` - Get SOL balance and token holdings
-- `get_account_portfolio` - Get complete account portfolio with SOL balance
-- Other multi-word descriptive names with underscores
+MCP tools are **external tools** that fetch blockchain data. They are dynamically provided and listed in the "Your Available MCP Tools" section at the end of this prompt.
 
-**Rule**: If it's a single word, it's a built-in. If it has underscores and describes an action, it's an MCP tool.
+**⚠️ CRITICAL: ONLY USE MCP TOOLS LISTED IN "YOUR AVAILABLE MCP TOOLS" SECTION!**
+- ❌ WRONG: Inventing or guessing tool names that aren't in the list
+- ❌ WRONG: Using any function with underscores that isn't explicitly listed
+- ✅ CORRECT: Only call tools explicitly listed in the "Your Available MCP Tools" section below
+- ✅ CORRECT: Tool names are case-sensitive - use exact names from the list
+
+**Rule**: If it's a single word, it's a built-in function. If it has underscores and is listed in "Your Available MCP Tools", it's an MCP tool you can call.
 
 ❌ **NEVER** write `(COUNT ...)` - always use `(count ...)`
 ❌ **NEVER** list `count`, `filter`, `map` etc. in "Available Tools" - they are built-ins, not tools!

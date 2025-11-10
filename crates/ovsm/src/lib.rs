@@ -266,12 +266,12 @@
 //! Licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
 // Allow specific clippy warnings that are false positives or intentional design choices
-#![allow(clippy::only_used_in_recursion)]  // False positive for recursive helper functions
-#![allow(clippy::if_same_then_else)]       // Intentional for code clarity
-#![allow(clippy::manual_memcpy)]           // Clone semantics required, not simple copy
-#![allow(clippy::manual_strip)]            // Existing pattern is clear and works
-#![allow(clippy::needless_range_loop)]     // Index needed for error messages
-#![allow(clippy::collapsible_match)]       // Separate error handling for clarity
+#![allow(clippy::only_used_in_recursion)] // False positive for recursive helper functions
+#![allow(clippy::if_same_then_else)] // Intentional for code clarity
+#![allow(clippy::manual_memcpy)] // Clone semantics required, not simple copy
+#![allow(clippy::manual_strip)] // Existing pattern is clear and works
+#![allow(clippy::needless_range_loop)] // Index needed for error messages
+#![allow(clippy::collapsible_match)] // Separate error handling for clarity
 #![warn(missing_docs)]
 
 // Module declarations

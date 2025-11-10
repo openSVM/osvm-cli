@@ -215,7 +215,6 @@ fn parse_error_details(error_msg: &str) -> ErrorDetails {
             details.actual_type = Some(actual.to_string());
         }
     }
-
     // Pattern 2: "Undefined variable: name. Parent object has fields: [...]"
     else if error_msg.contains("Undefined variable:") {
         details.error_type = "Undefined Variable".to_string();
@@ -225,7 +224,12 @@ fn parse_error_details(error_msg: &str) -> ErrorDetails {
             if let Some(end) = rest.find('.') {
                 details.variable_name = Some(rest[..end].trim().to_string());
             } else {
-                details.variable_name = Some(rest.split_whitespace().next().unwrap_or("unknown").to_string());
+                details.variable_name = Some(
+                    rest.split_whitespace()
+                        .next()
+                        .unwrap_or("unknown")
+                        .to_string(),
+                );
             }
         }
 
@@ -243,17 +247,20 @@ fn parse_error_details(error_msg: &str) -> ErrorDetails {
             }
         }
     }
-
     // Pattern 3: "Undefined tool: toolname"
     else if error_msg.contains("Undefined tool:") {
         details.error_type = "Undefined Tool".to_string();
 
         if let Some(start) = error_msg.find("Undefined tool: ") {
             let rest = &error_msg[start + 16..];
-            details.variable_name = Some(rest.split_whitespace().next().unwrap_or("unknown").to_string());
+            details.variable_name = Some(
+                rest.split_whitespace()
+                    .next()
+                    .unwrap_or("unknown")
+                    .to_string(),
+            );
         }
     }
-
     // Pattern 4: "Invalid operation: X on types Y and Z"
     else if error_msg.contains("Invalid operation:") {
         details.error_type = "Invalid Operation".to_string();
@@ -265,7 +272,6 @@ fn parse_error_details(error_msg: &str) -> ErrorDetails {
             }
         }
     }
-
     // Pattern 5: "Execution error: ..."
     else if error_msg.starts_with("Execution error:") {
         details.error_type = "Runtime Error".to_string();
@@ -295,7 +301,9 @@ fn extract_error_context(error_msg: &str, code: &str) -> Option<ErrorContext> {
 
                 // Find first occurrence of this operation in code
                 for line in code.lines() {
-                    if line.contains(&format!("({}  ", op_symbol)) || line.contains(&format!("({} ", op_symbol)) {
+                    if line.contains(&format!("({}  ", op_symbol))
+                        || line.contains(&format!("({} ", op_symbol))
+                    {
                         // Extract the s-expression
                         if let Some(expr) = extract_sexpr_at(line, op_symbol) {
                             return Some(ErrorContext {
@@ -340,7 +348,11 @@ fn extract_error_context(error_msg: &str, code: &str) -> Option<ErrorContext> {
     if error_msg.contains("Undefined variable:") {
         if let Some(start) = error_msg.find("Undefined variable: ") {
             let rest = &error_msg[start + 20..];
-            let var_name = rest.split_whitespace().next().unwrap_or("").trim_matches(|c| c == '.' || c == ',' || c == '\'' || c == '"');
+            let var_name = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_matches(|c| c == '.' || c == ',' || c == '\'' || c == '"');
             if !var_name.is_empty() {
                 return Some(ErrorContext {
                     failing_expression: var_name.to_string(),
@@ -969,79 +981,71 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
             // ToolRegistry::new() already includes all built-in tools (COUNT, APPEND, LOG, etc.)
             let mut registry = ToolRegistry::new();
 
-            // Register MCP tools for OVSM script execution (CRITICAL: This was missing!)
+            // 🔄 DYNAMICALLY discover and register ALL MCP tools from ALL configured servers
+            // No hardcoding - query each server for its available tools!
             use crate::utils::mcp_bridge::McpBridgeTool;
             let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
-            let mcp_tools = vec![
-                "get_account_transactions",
-                "get_transaction",
-                "batch_transactions",
-                "analyze_transaction",
-                "explain_transaction",
-                "get_account_stats",
-                "get_account_portfolio",
-                "get_solana_balance",
-                "get_account_token_stats",
-                "check_account_type",
-                "search_accounts",
-                "get_balance",
-                "get_block",
-                "get_recent_blocks",
-                "get_block_stats",
-                "get_token_info",
-                "get_token_metadata",
-                "get_nft_collections",
-                "get_trending_nfts",
-                "get_defi_overview",
-                "get_dex_analytics",
-                "get_defi_health",
-                "get_validator_analytics",
-                "universal_search",
-                "verify_wallet_signature",
-                "get_user_history",
-                "get_usage_stats",
-                "manage_api_keys",
-                "get_api_metrics",
-                "report_error",
-                "get_program_registry",
-                "get_program_info",
-                "solana_rpc_call",
-            ];
-            for tool in mcp_tools {
-                registry.register(McpBridgeTool::new(tool, Arc::clone(&mcp_arc)));
-                if verbose > 1 {
-                    println!("   Registered MCP tool: {}", tool);
+
+            // Get list of ALL configured MCP servers
+            let all_servers = {
+                let locked = futures::executor::block_on(mcp_arc.lock());
+                locked.list_servers()
+                    .into_iter()
+                    .map(|(id, config)| (id.clone(), config.enabled))
+                    .collect::<Vec<_>>()
+            };
+
+            if verbose > 1 {
+                println!("\n🔍 Discovering MCP tools from {} configured server(s):", all_servers.len());
+            }
+
+            let mut total_tools_registered = 0;
+
+            // Query each enabled MCP server for its tools
+            for (server_id, enabled) in all_servers {
+                if !enabled {
+                    if verbose > 1 {
+                        println!("   ⊘ {} (disabled)", server_id);
+                    }
+                    continue;
+                }
+
+                // Try to initialize the server and get its tools
+                let init_result = futures::executor::block_on(async {
+                    let mut locked = mcp_arc.lock().await;
+                    locked.initialize_server(&server_id).await
+                });
+
+                if init_result.is_ok() {
+                    // Get available tools from this server
+                    let tools_result = futures::executor::block_on(async {
+                        let locked = mcp_arc.lock().await;
+                        locked.list_tools(&server_id).await
+                    });
+
+                    if let Ok(available_tools) = tools_result {
+                        if verbose > 1 {
+                            println!("   ✓ {} → {} tools", server_id, available_tools.len());
+                        }
+
+                        // Register ALL tools from this server
+                        for tool in available_tools {
+                            registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
+                            total_tools_registered += 1;
+                            if verbose > 2 {
+                                println!("      • {}", tool.name);
+                            }
+                        }
+                    } else if verbose > 0 {
+                        eprintln!("   ⚠️  {} - failed to list tools", server_id);
+                    }
+                } else if verbose > 0 {
+                    eprintln!("   ⚠️  {} - failed to initialize", server_id);
                 }
             }
 
-            // Dynamically register RPC tools by scanning the OVSM code
-            // Look for function calls like getSignaturesForAddress(...), getSlot(), etc.
-            let rpc_methods = vec![
-                "getSignaturesForAddress",
-                "getSlot",
-                "getBlock",
-                "getTransaction",
-                "getParsedTransaction", // 🎯 Parses SPL Token transfers automatically!
-                "getAccountInfo",
-                "getBalance",
-                "getBlockTime",
-                "getHealth",
-                "getVersion",
-                "getBlockHeight",
-                "getEpochInfo",
-                "getSupply",
-                "getProgramAccounts",
-                "getTokenAccountsByOwner",
-                "getMultipleAccounts",
-            ];
-
-            for method in rpc_methods {
-                if ovsm_code.contains(method) {
-                    registry.register(RpcBridgeTool::new(method));
-                    if verbose > 1 {
-                        println!("   Registered RPC bridge: {}", method);
-                    }
-                }
+            if verbose > 1 {
+                println!("   📦 Total: {} MCP tools registered\n", total_tools_registered);
             }
 
             // Initialize OVSM service with registry (now has stdlib + RPC + MCP tools)
@@ -1291,27 +1295,43 @@ pub async fn execute_streaming_agent(query: &str, verbose: u8, plan_only: bool) 
                             // Highlight the error line if we found it
                             if let Some(ref ctx) = error_context {
                                 if line.contains(&ctx.failing_expression) && !found_error_line {
-                                    println!("  ❌ {:3} │ {} ⚠️ EXECUTION STOPPED HERE", line_number, line);
+                                    println!(
+                                        "  ❌ {:3} │ {} ⚠️ EXECUTION STOPPED HERE",
+                                        line_number, line
+                                    );
                                     println!("       │ {}", "^".repeat(line.len().min(55)));
 
                                     // Show what went wrong
-                                    if error_details.expected_type.is_some() && error_details.actual_type.is_some() {
+                                    if error_details.expected_type.is_some()
+                                        && error_details.actual_type.is_some()
+                                    {
                                         println!("       │ ⚠️  Tried to use {} as {}, but it's actually {}",
                                             ctx.failing_expression,
                                             error_details.expected_type.as_ref().unwrap(),
                                             error_details.actual_type.as_ref().unwrap());
                                     } else {
-                                        println!("       │ ⚠️  Expression '{}' failed", ctx.failing_expression);
+                                        println!(
+                                            "       │ ⚠️  Expression '{}' failed",
+                                            ctx.failing_expression
+                                        );
                                     }
 
                                     found_error_line = true;
 
                                     // Show the next few lines in context
                                     if line_num + 1 < lines.len() {
-                                        println!("     {:3} │ {}", line_number + 1, lines[line_num + 1]);
+                                        println!(
+                                            "     {:3} │ {}",
+                                            line_number + 1,
+                                            lines[line_num + 1]
+                                        );
                                     }
                                     if line_num + 2 < lines.len() {
-                                        println!("     {:3} │ {}", line_number + 2, lines[line_num + 2]);
+                                        println!(
+                                            "     {:3} │ {}",
+                                            line_number + 2,
+                                            lines[line_num + 2]
+                                        );
                                     }
                                     continue;
                                 }

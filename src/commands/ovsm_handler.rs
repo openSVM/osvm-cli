@@ -31,7 +31,8 @@ pub async fn handle_ovsm_command(
                 let mut total_tools = 0;
 
                 // Get all configured servers
-                let servers: Vec<String> = svc.list_servers()
+                let servers: Vec<String> = svc
+                    .list_servers()
                     .iter()
                     .map(|(id, _)| (*id).clone())
                     .collect();
@@ -49,14 +50,19 @@ pub async fn handle_ovsm_command(
                     match svc.list_tools(&server_id).await {
                         Ok(tools) => {
                             if debug {
-                                println!("📦 Discovered {} tools from MCP server '{}'", tools.len(), server_id);
+                                println!(
+                                    "📦 Discovered {} tools from MCP server '{}'",
+                                    tools.len(),
+                                    server_id
+                                );
                             }
                             total_tools += tools.len();
 
                             // Register each tool
                             drop(svc); // Release lock before registering
                             for tool in tools {
-                                registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
+                                registry
+                                    .register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
                             }
                             svc = mcp_arc.lock().await; // Re-acquire lock
                         }
