@@ -427,6 +427,17 @@ sequenceDiagram
 
 **Fix:** Time-weighted average price (TWAP) oracles, Chainlink oracles (manipulation-resistant).
 
+```mermaid
+sankey-beta
+
+Flash Loan,Borrow,10000
+Borrow,Arbitrage,10000
+Arbitrage,Profit,10100
+Profit,Repay Loan,10009
+Profit,Net Profit,91
+Repay Loan,Lender,10009
+```
+
 ---
 
 ### 19.4.2 Reentrancy with Flash Loans
@@ -508,6 +519,14 @@ graph TD
 | 5 | Executed immediately (same block) | Funds transferred |
 | 6 | Repaid flash loans | Attack complete |
 | **Net profit** | **$80M** | After loan fees and swap costs |
+
+```mermaid
+pie title Attack Vector Distribution
+    "Price oracle manipulation" : 45
+    "Liquidity pool imbalance" : 30
+    "Governance exploits" : 15
+    "Other" : 10
+```
 
 ---
 
@@ -1058,6 +1077,20 @@ flowchart LR
 > 📊 **Empirical Finding**
 > Cross-chain flash arb viable during **high volatility** (crypto pumps/dumps, news events).
 > Normal conditions: spreads <0.3%, **unprofitable**.
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Profit vs Flash Loan Size"
+    x-axis "Loan Size (SOL)" [10, 50, 100, 200, 500, 1000]
+    y-axis "Net Profit (SOL)" 0 --> 50
+    line "Profit" [0.8, 4.2, 8.8, 18.5, 42, 48]
+```
 
 ---
 

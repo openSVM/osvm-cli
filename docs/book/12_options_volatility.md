@@ -27,6 +27,23 @@ This chapter develops options pricing theory from first principles, implements t
 
 ### 12.1.1 Early Attempts at Options Valuation
 
+```mermaid
+journey
+    title Options Trader Learning Curve
+    section Beginner Phase
+      Learn Greeks: 3: Trader
+      Understand Black-Scholes: 4: Trader
+    section Intermediate Phase
+      Trade simple strategies: 3: Trader
+      Get volatility crushed: 1: Trader
+    section Advanced Phase
+      Study vol surfaces: 4: Trader
+      Develop intuition: 5: Trader
+    section Expert Phase
+      Master complex strategies: 5: Trader
+      Consistent profits: 5: Trader
+```
+
 Options have existed since ancient times—Aristotle describes Thales profiting from olive press options in 600 BCE. But rigorous pricing remained elusive until the 20th century.
 
 > **📊 Empirical Result**
@@ -253,6 +270,16 @@ and $N(\cdot)$ is the cumulative standard normal distribution.
 
 $$\boxed{P(S, K, T, r, \sigma) = Ke^{-rT} N(-d_2) - S N(-d_1)}$$
 
+```mermaid
+sankey-beta
+
+Options P&L Attribution,Delta,40
+Options P&L Attribution,Gamma,20
+Options P&L Attribution,Vega,25
+Options P&L Attribution,Theta,-15
+Options P&L Attribution,Other Greeks,5
+```
+
 ### 12.3.3 Intuition Behind the Formula
 
 The call formula decomposes into two economic terms:
@@ -414,6 +441,15 @@ $$\Theta_{\text{call}} = -\frac{S N'(d_1) \sigma}{2\sqrt{T}} - rKe^{-rT}N(d_2)$$
 | **Short options** | Positive | Collect premium as time passes |
 | **Near expiration** | Accelerating | ATM options lose value rapidly in final weeks |
 
+```mermaid
+pie title Greeks Exposure Distribution
+    "Delta" : 40
+    "Gamma" : 25
+    "Vega" : 20
+    "Theta" : 10
+    "Rho" : 5
+```
+
 > **💡 Key Concept: Theta vs. Gamma Trade-off**
 > The Black-Scholes PDE relates them:
 > $$\Theta + \frac{1}{2}\sigma^2 S^2 \Gamma + rS\Delta - rV = 0$$
@@ -531,6 +567,30 @@ Find implied volatility $\sigma_{\text{impl}}$.
 
 If Black-Scholes were correct, implied volatility should be constant across all strikes. In reality, we observe systematic patterns:
 
+```mermaid
+stateDiagram-v2
+    [*] --> LowVol: Market Calm
+    LowVol --> HighVol: Shock Event
+    HighVol --> MediumVol: Calm Period
+    MediumVol --> LowVol: Trending Lower
+    MediumVol --> HighVol: Trending Higher
+
+    note right of LowVol
+        VIX < 15
+        Complacency
+    end note
+
+    note right of HighVol
+        VIX > 30
+        Panic Selling
+    end note
+
+    note right of MediumVol
+        VIX 15-30
+        Normal Range
+    end note
+```
+
 **Equity Index Options** (post-1987):
 
 ```mermaid
@@ -568,6 +628,25 @@ The volatility surface is the 3D function:
 $$\sigma_{\text{impl}}(K, T)$$
 
 mapping strike K and expiration T to implied volatility.
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#2E86AB, #A23B72, #F18F01, #C73E1D, #6A994E"
+---
+xychart-beta
+    title "Volatility Smile: Implied Vol vs Strike Price"
+    x-axis "Strike Price (% of Spot)" [80, 85, 90, 95, 100, 105, 110, 115, 120]
+    y-axis "Implied Volatility (%)" 15 --> 35
+    line "30-day expiry" [32, 28, 24, 21, 19, 20, 22, 25, 29]
+    line "60-day expiry" [29, 26, 23, 20, 18, 19, 21, 24, 27]
+    line "90-day expiry" [27, 24, 22, 19, 18, 18, 20, 22, 25]
+```
 
 **Surface Dimensions**:
 

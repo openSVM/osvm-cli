@@ -189,6 +189,21 @@ graph TD
 
 ### 14.3.2 Random Forests: Bagging Trees
 
+```mermaid
+quadrantChart
+    title Model Selection: Bias vs Variance
+    x-axis Low Complexity --> High Complexity
+    y-axis High Error --> Low Error
+    quadrant-1 Low Bias Low Variance
+    quadrant-2 High Bias Low Variance
+    quadrant-3 High Bias High Variance
+    quadrant-4 Low Bias High Variance
+    Random Forest: [0.7, 0.75]
+    XGBoost: [0.75, 0.8]
+    Linear Regression: [0.3, 0.3]
+    Overfit Neural Net: [0.9, 0.4]
+```
+
 **Algorithm** (Breiman, 2001):
 1. For b = 1 to B (e.g., B = 500):
    - Draw bootstrap sample of size n
@@ -276,6 +291,19 @@ graph LR
 
 ⚠️ **The Fundamental Problem**
 1,000 stocks × 100 features × 1,000 days = 100 million observations. Train neural network with 10,000 parameters. In-sample R² = 0.95. Out-of-sample R² = 0.02. **The model memorized noise.**
+
+```mermaid
+timeline
+    title Training/Validation Timeline
+    2018-2019 : Training data
+              : Model fitting phase
+    2020 : Validation set
+         : Hyperparameter tuning
+    2021 : Test set (walk-forward)
+         : Performance evaluation
+    2022 : Out-of-sample (live trading)
+         : Real-world deployment
+```
 
 ### 14.4.1 Walk-Forward Analysis
 

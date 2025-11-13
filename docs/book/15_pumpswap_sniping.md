@@ -503,6 +503,15 @@ From `15_pumpswap_sniper.ovsm`:
         "🚨 DANGEROUS - Likely honeypot/rug pull"))
 ```
 
+```mermaid
+sankey-beta
+
+Total MEV Extracted,Validators,40
+Total MEV Extracted,Snipers,35
+Total MEV Extracted,Failed TX costs,-15
+Total MEV Extracted,Net ecosystem value,10
+```
+
 **Honeypot red flags**:
 
 | Red Flag | Penalty | Risk |
@@ -551,6 +560,15 @@ graph TD
 
 **Break-even requirement**: Must achieve >60% rug detection accuracy to become profitable.
 
+```mermaid
+pie title Snipe Success Attribution
+    "Latency advantage" : 35
+    "Honeypot detection" : 30
+    "Position sizing" : 20
+    "Exit timing" : 10
+    "Luck" : 5
+```
+
 ### 15.6.3 Competition and Arms Race
 
 **Current sniper landscape (Solana)**:
@@ -566,6 +584,20 @@ graph TD
 - 2022: 1-2 SOL (more bots enter)
 - 2023: 0.5-1 SOL (highly competitive)
 - 2024: 0.2-0.5 SOL (saturated)
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Priority Fee vs Success Rate"
+    x-axis "Priority Fee (lamports)" [1000, 5000, 10000, 20000, 50000, 100000]
+    y-axis "Success Rate (%)" 0 --> 100
+    line "Success Rate" [15, 35, 52, 68, 82, 91]
+```
 
 ### 15.6.4 Regulatory and Legal Risks
 

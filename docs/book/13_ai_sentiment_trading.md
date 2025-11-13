@@ -75,6 +75,23 @@ graph LR
 
 Twitter's 2006 launch created an unprecedented public sentiment dataset. Bollen, Mao, and Zeng (2011) analyzed 9.8 million tweets to predict stock market direction with 87.6% accuracy using OpinionFinder and GPOMS mood trackers. The finding was controversial—many replication attempts failed—but it sparked explosive growth in social sentiment trading.
 
+```mermaid
+timeline
+    title NLP/AI Evolution in Finance
+    1990s : Keyword sentiment (simple)
+           : Dictionary-based approaches
+    2000s : Machine learning classifiers
+          : Support Vector Machines
+    2013 : Word2Vec embeddings
+         : Semantic representations
+    2018 : BERT transformers
+         : Contextual understanding
+    2023 : GPT-4 financial analysis
+         : Zero-shot classification
+    2025 : Multimodal sentiment
+         : Text + audio + video analysis
+```
+
 **Key developments:**
 
 ```mermaid
@@ -296,6 +313,31 @@ Represent words as dense vectors capturing semantic similarity.
 > **💡 Key Concept: Embedding Advantage**
 >
 > Advantage over bag-of-words: Handles synonyms—"profit" and "earnings" have similar vectors even if one wasn't in training data. Provides semantic generalization.
+
+```mermaid
+mindmap
+  root((Sentiment Analysis Pipeline))
+    Data Collection
+      APIs
+      Web scraping
+      Social media feeds
+    Preprocessing
+      Cleaning
+      Tokenization
+      Normalization
+    Feature Extraction
+      Embeddings
+      Keywords
+      N-grams
+    Classification
+      Positive
+      Negative
+      Neutral
+    Signal Generation
+      Thresholds
+      Aggregation
+      Filtering
+```
 
 ### 13.3.4 Transformers and BERT: Contextual Representations
 

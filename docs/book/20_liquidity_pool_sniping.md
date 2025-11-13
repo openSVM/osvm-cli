@@ -340,6 +340,20 @@ $$IL = \frac{4,898}{5,000} - 1 = 0.9796 - 1 = -0.0204 = -2.04\%$$
 
 ---
 
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Impermanent Loss vs Price Deviation"
+    x-axis "Price Change from Initial (%)" [-75, -50, -25, 0, 25, 50, 100, 200, 400]
+    y-axis "Impermanent Loss (%)" -50 --> 0
+    line "IL" [-20, -5.7, -2, 0, -0.6, -2, -5.7, -20, -25.5]
+```
+
 ### Visual Representation of IL Mechanics
 
 ```mermaid
@@ -518,6 +532,14 @@ $$\text{Fee APR} = 0.5 \times 0.003 \times 365 = 0.5475 = 54.75\%$$
 | **Exotic** | New tokens | 100-500% | Extreme volume spikes, severe IL risk |
 
 > ⚠️ **Reality Check**: High fee APRs on exotic pairs often don't compensate for catastrophic impermanent loss. Many LPs chase 500% APRs only to suffer 80%+ IL.
+
+```mermaid
+pie title Fee Tier Distribution
+    "0.01% pools" : 15
+    "0.05% pools" : 40
+    "0.3% pools" : 35
+    "1% pools" : 10
+```
 
 ---
 
@@ -1628,6 +1650,18 @@ graph TD
 
 **Total January:** 4 rebalances, $13.13 cost, profitable overall
 
+```mermaid
+sankey-beta
+
+Initial Deposit,Pool,1000
+Pool,Trading Fees,287
+Pool,Impermanent Loss,-68
+Pool,Final Withdrawal,781
+Trading Fees,Net P&L,287
+Impermanent Loss,Net P&L,-68
+Final Withdrawal,Net P&L,781
+```
+
 ---
 
 ## 20.9 Advanced Optimization Techniques
@@ -1687,6 +1721,21 @@ graph TD
 | 1.00% | $2M | $500K | 0.25 | 45.6% | No |
 
 **Action:** Migrate all liquidity to 0.30% tier for maximum fee earnings.
+
+```mermaid
+quadrantChart
+    title Pool Risk/Return Matrix
+    x-axis Low APY --> High APY
+    y-axis Low IL Risk --> High IL Risk
+    quadrant-1 High APY High IL
+    quadrant-2 High APY Low IL
+    quadrant-3 Low APY Low IL
+    quadrant-4 Low APY High IL (avoid)
+    Stablecoin Pairs: [0.12, 0.05]
+    Major Pairs: [0.45, 0.35]
+    Volatile Pairs: [0.85, 0.85]
+    Correlated Pairs: [0.35, 0.15]
+```
 
 ---
 

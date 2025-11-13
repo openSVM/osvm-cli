@@ -10,16 +10,17 @@ The memecoin phenomenon represents one of the most fascinating intersections of 
 
 ```mermaid
 timeline
-    title Memecoin Evolution
-    2013 : Dogecoin Launch
-         : Created as Bitcoin parody
-         : Community-driven growth
-    2021 : WSB/GameStop Era
-         : Coordinated retail power demonstrated
-         : Shiba Inu reaches $41B market cap
-    2024 : Pump.fun Revolution
-         : Anyone can launch tokens in seconds
-         : BONK, WIF, BOME hit $1B+ valuations
+    title Typical Memecoin Lifecycle
+    Day 0 : Launch (initial pump)
+          : Price discovery begins
+    Day 1-3 : FOMO phase (peak)
+            : Maximum hype and volume
+    Day 4-7 : Slow bleed
+            : Momentum fades
+    Day 8-14 : Attempted revival
+             : Secondary pump attempts
+    Day 15+ : Dead (90% from peak)
+            : Abandoned by traders
 ```
 
 ---
@@ -75,6 +76,23 @@ graph TD
 - **Availability bias**: Recent success stories dominate attention (survivorship bias)
 - **Regret aversion**: Pain of missing gains exceeds pain of potential losses
 - **Social comparison**: Relative performance vs peers matters more than absolute returns
+
+```mermaid
+stateDiagram-v2
+    [*] --> Monitoring: Scan for signals
+    Monitoring --> EntrySignal: Momentum detected
+    EntrySignal --> Position: Enter trade
+    Position --> TakeProfit: Price target hit
+    Position --> StopLoss: Stop loss triggered
+    TakeProfit --> Exit
+    StopLoss --> Exit
+    Exit --> Monitoring: Reset
+
+    note right of Position
+        Active position management
+        Dynamic stop-loss trailing
+    end note
+```
 
 #### Empirical FOMO Analysis
 

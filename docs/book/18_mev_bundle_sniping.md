@@ -122,6 +122,14 @@ sequenceDiagram
     Note over S: Keep 80% of MEV profit
 ```
 
+```mermaid
+sankey-beta
+
+Total Bundle Value,Gas Costs,150
+Total Bundle Value,Validator Bribes,200
+Total Bundle Value,Net Profit,650
+```
+
 ---
 
 #### Economic Flow Analysis
@@ -706,6 +714,14 @@ mindmap
 
 **Mitigation:** Submit bundles to **multiple validators** simultaneously, diversify across validator set.
 
+```mermaid
+pie title Bundle Failure Modes
+    "Insufficient priority fee" : 40
+    "Transaction reverted" : 30
+    "Frontrun by competitors" : 20
+    "Network congestion" : 10
+```
+
 ---
 
 ## 18.7 OVSM Implementation
@@ -981,6 +997,30 @@ flowchart LR
 **Impact on MEV:** Reduces sandwich attacks, front-running; increases backrunning importance.
 
 **Searcher adaptation:** Focus on backrunning (still possible) and block-building (construct entire optimized blocks).
+
+```mermaid
+stateDiagram-v2
+    [*] --> DetectOpportunity
+    DetectOpportunity --> BuildBundle: MEV found
+    BuildBundle --> SubmitToJito: Bundle constructed
+    SubmitToJito --> Included: High tip wins
+    SubmitToJito --> Rejected: Outbid
+    SubmitToJito --> Pending: In queue
+    Included --> ProfitCalc: Success
+    Rejected --> [*]: Try again
+    Pending --> Included
+    Pending --> Rejected
+
+    note right of BuildBundle
+        Atomic transaction sequence
+        Tip optimization
+    end note
+
+    note right of Included
+        All TX execute atomically
+        Profit realized
+    end note
+```
 
 ---
 

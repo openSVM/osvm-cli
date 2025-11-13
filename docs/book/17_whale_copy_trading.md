@@ -245,6 +245,19 @@ Sophisticated whales operate multiple wallets to:
 
 **Implication**: When detecting whale consensus (multiple whales buying same token), discount clustered wallets. If 3 whales buy but 2 are clustered, true consensus is only 2 whales, not 3.
 
+```mermaid
+sankey-beta
+
+Whale Detection,Classification,1000
+Classification,Pro Whales,300
+Classification,Lucky Whales,200
+Classification,Bots,250
+Classification,Retail,250
+Pro Whales,Copy Strategy,300
+Copy Strategy,Execution,300
+Execution,Portfolio Returns,280
+```
+
 ---
 
 ## 17.4 Real-Time Monitoring Infrastructure
@@ -797,6 +810,20 @@ Whales exhibit consistent holding durations:
 ```
 
 **Application**: Exit 5-10 minutes before whale's typical exit window to front-run their sell and capture better exit price.
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Copy Delay vs Profit Degradation"
+    x-axis "Execution Delay (milliseconds)" [0, 50, 100, 200, 500, 1000, 2000]
+    y-axis "Profit per Trade (SOL)" 0 --> 1
+    line "Average Profit" [0.95, 0.88, 0.75, 0.58, 0.32, 0.15, 0.05]
+```
 
 ---
 
