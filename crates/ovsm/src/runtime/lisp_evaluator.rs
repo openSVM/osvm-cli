@@ -248,6 +248,9 @@ impl LispEvaluator {
                     // Common Lisp list operations
                     "member" => self.eval_member(args),
                     "assoc" => self.eval_assoc(args),
+                    "assoc-in" => self.eval_assoc_in(args),  // Set key in object (dynamic key)
+                    "set-key" => self.eval_assoc_in(args),   // Alias for assoc-in
+                    "set" => self.eval_object_set(args),     // set(obj, key, value) - like JS/Python
                     "elt" => self.eval_elt(args),
                     "subseq" => self.eval_subseq(args),
                     // Common Lisp string comparisons
@@ -349,6 +352,10 @@ impl LispEvaluator {
                     // JSON operations (built-ins, not MCP tools!)
                     "parse-json" => self.eval_parse_json(args),
                     "json-stringify" => self.eval_json_stringify(args),
+                    // Network operations (async)
+                    "http-get" => self.eval_http_get(args),
+                    "http-post" => self.eval_http_post(args),
+                    "json-rpc" => self.eval_json_rpc(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -1314,12 +1321,11 @@ impl LispEvaluator {
             }
         };
 
-        // Create new scope for loop
-        self.env.enter_scope();
-
+        // DON'T create new scope - loops should share scope with parent
+        // This allows set! to modify outer variables
         let mut last_val = Value::Null;
         for item in items {
-            // Bind loop variable
+            // Bind loop variable (this will shadow any existing variable with same name)
             self.env.define(var_name.clone(), item);
 
             // Execute body (args[2..] because args[0]=var, args[1]=collection)
@@ -1327,8 +1333,6 @@ impl LispEvaluator {
                 last_val = self.evaluate_expression(&arg.value)?;
             }
         }
-
-        self.env.exit_scope();
 
         Ok(last_val)
     }
@@ -2976,6 +2980,51 @@ impl LispEvaluator {
             }
         }
         Ok(Value::Null)
+    }
+
+    /// (assoc-in object key value) - Set a key in an object with a computed key
+    /// Also aliased as set-key
+    /// This allows dynamic key names from variables
+    fn eval_assoc_in(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "assoc-in".to_string(),
+                reason: "Expected 3 arguments: object, key, value".to_string(),
+            });
+        }
+
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let key_val = self.evaluate_expression(&args[1].value)?;
+        let new_val = self.evaluate_expression(&args[2].value)?;
+
+        // Convert key to string
+        let key_str = match key_val {
+            Value::String(s) => s,
+            Value::Int(i) => i.to_string(),
+            Value::Float(f) => f.to_string(),
+            _ => key_val.as_string()?.to_string(),
+        };
+
+        // Create new object with the key set
+        match obj_val {
+            Value::Object(ref map) => {
+                let mut new_map = map.as_ref().clone();
+                new_map.insert(key_str, new_val);
+                Ok(Value::Object(Arc::new(new_map)))
+            }
+            _ => Err(Error::TypeError {
+                expected: "object".to_string(),
+                got: obj_val.type_name(),
+            }),
+        }
+    }
+
+    /// (set object key value) - Set object property (like JavaScript/Python)
+    /// Alias for assoc-in with same functionality
+    /// This is the "everyone else" syntax you wanted
+    fn eval_object_set(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Just delegate to assoc-in - it's the same operation
+        self.eval_assoc_in(args)
     }
 
     /// (elt sequence index) - Get element at index (Common Lisp)
@@ -5589,6 +5638,54 @@ impl LispEvaluator {
     }
 
     // ========================================
+    // Network Operations
+    // ========================================
+
+    /// (http-get url [headers]) - Make HTTP GET request
+    fn eval_http_get(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        use crate::tools::stdlib::network;
+
+        // Evaluate arguments
+        let mut eval_args = Vec::new();
+        for arg in args {
+            eval_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call async function using block_in_place to avoid nested runtime error
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(network::http_get(&eval_args))
+        })
+    }
+
+    /// (http-post url body [headers]) - Make HTTP POST request
+    fn eval_http_post(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        use crate::tools::stdlib::network;
+
+        let mut eval_args = Vec::new();
+        for arg in args {
+            eval_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(network::http_post(&eval_args))
+        })
+    }
+
+    /// (json-rpc url method [params]) - Make JSON-RPC call
+    fn eval_json_rpc(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        use crate::tools::stdlib::network;
+
+        let mut eval_args = Vec::new();
+        for arg in args {
+            eval_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(network::json_rpc(&eval_args))
+        })
+    }
+
+    // ========================================
     // LINQ-Style Functional Operations
     // ========================================
 
@@ -5956,14 +6053,12 @@ impl LispEvaluator {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "take".to_string(),
-                reason: "Expected 2 arguments: collection and n".to_string(),
+                reason: "Expected 2 arguments: n and collection".to_string(),
             });
         }
 
-        let collection = self.evaluate_expression(&args[0].value)?;
-        let array = collection.as_array()?;
-
-        let n_val = self.evaluate_expression(&args[1].value)?;
+        // FIXED: Swap argument order to match standard LISP convention: (take n collection)
+        let n_val = self.evaluate_expression(&args[0].value)?;
         let n = match n_val {
             Value::Int(i) => {
                 if i < 0 {
@@ -5981,6 +6076,9 @@ impl LispEvaluator {
                 });
             }
         };
+
+        let collection = self.evaluate_expression(&args[1].value)?;
+        let array = collection.as_array()?;
 
         let result: Vec<Value> = array.iter().take(n).cloned().collect();
 
@@ -6576,6 +6674,8 @@ impl LispEvaluator {
             BinaryOp::Lt => match (left, right) {
                 (Value::Int(l), Value::Int(r)) => Ok(Value::Bool(l < r)),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Bool(l < r)),
+                (Value::Int(l), Value::Float(r)) => Ok(Value::Bool((l as f64) < r)),
+                (Value::Float(l), Value::Int(r)) => Ok(Value::Bool(l < (r as f64))),
                 (l, r) => Err(Error::InvalidOperation {
                     op: "less than".to_string(),
                     left_type: l.type_name(),
@@ -6586,6 +6686,8 @@ impl LispEvaluator {
             BinaryOp::Gt => match (left, right) {
                 (Value::Int(l), Value::Int(r)) => Ok(Value::Bool(l > r)),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Bool(l > r)),
+                (Value::Int(l), Value::Float(r)) => Ok(Value::Bool((l as f64) > r)),
+                (Value::Float(l), Value::Int(r)) => Ok(Value::Bool(l > (r as f64))),
                 (l, r) => Err(Error::InvalidOperation {
                     op: "greater than".to_string(),
                     left_type: l.type_name(),
@@ -6596,6 +6698,8 @@ impl LispEvaluator {
             BinaryOp::LtEq => match (left, right) {
                 (Value::Int(l), Value::Int(r)) => Ok(Value::Bool(l <= r)),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Bool(l <= r)),
+                (Value::Int(l), Value::Float(r)) => Ok(Value::Bool((l as f64) <= r)),
+                (Value::Float(l), Value::Int(r)) => Ok(Value::Bool(l <= (r as f64))),
                 (l, r) => Err(Error::InvalidOperation {
                     op: "less than or equal".to_string(),
                     left_type: l.type_name(),
@@ -6606,6 +6710,8 @@ impl LispEvaluator {
             BinaryOp::GtEq => match (left, right) {
                 (Value::Int(l), Value::Int(r)) => Ok(Value::Bool(l >= r)),
                 (Value::Float(l), Value::Float(r)) => Ok(Value::Bool(l >= r)),
+                (Value::Int(l), Value::Float(r)) => Ok(Value::Bool((l as f64) >= r)),
+                (Value::Float(l), Value::Int(r)) => Ok(Value::Bool(l >= (r as f64))),
                 (l, r) => Err(Error::InvalidOperation {
                     op: "greater than or equal".to_string(),
                     left_type: l.type_name(),
