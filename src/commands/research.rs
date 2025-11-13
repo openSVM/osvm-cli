@@ -145,21 +145,21 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
     format!(r#";; Wallet analysis script
 (do
   (define target "{}")
-  ;; Fetch transactions with pagination to get up to 10,000 txs
+  ;; Fetch transactions with pagination - 1000 per batch until we get < 1000
   (define all_txs [])
-  (define batch_size 100)
+  (define batch_size 1000)
   (define max_txs 10000)
-  (define before null)
+  (define before_sig null)
   (define keep_fetching true)
 
   (while (and keep_fetching (< (count all_txs) max_txs))
     (define params
-      (if (null? before)
+      (if (null? before_sig)
         {{:address target :limit batch_size}}
-        {{:address target :limit batch_size :before before}}))
+        {{:address target :limit batch_size :beforeSignature before_sig}}))
 
-    (define resp (get_account_transactions params))
-    (define batch (get resp "transactions"))
+    (define resp (get_account_transfers params))
+    (define batch (get resp "transfers"))
 
     (when (array? batch)
       (set! all_txs (concat all_txs batch))
@@ -167,9 +167,9 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
       ;; Get last signature for pagination
       (when (> (count batch) 0)
         (define last_tx (get batch (- (count batch) 1)))
-        (set! before (get last_tx "signature")))
+        (set! before_sig (get last_tx "signature")))
 
-      ;; Stop if we got fewer than batch_size (no more txs)
+      ;; Stop if we got fewer than batch_size (no more txs available)
       (when (< (count batch) batch_size)
         (set! keep_fetching false))))
 

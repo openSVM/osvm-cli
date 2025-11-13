@@ -1,0 +1,896 @@
+# Chapter 13: AI-Powered Sentiment Analysis Trading
+
+## Introduction
+
+The rise of social media, news aggregators, and alternative data vendors has transformed financial markets into vast information ecosystems where sentiment spreads at the speed of light. A single tweet from Elon Musk can move cryptocurrency markets by billions in seconds. Reddit's WallStreetBets community coordinated a short squeeze that nearly collapsed hedge funds. Presidential announcements trigger algorithmic trading cascades before human traders finish reading headlines.
+
+This democratization of information dissemination violates the traditional efficient market hypothesis assumption that information reaches all market participants simultaneously and symmetrically. Instead, we now have **information asymmetry at the millisecond level**—where sentiment detection algorithms extract trading signals from unstructured text before prices fully adjust.
+
+Natural language processing (NLP) and machine learning have evolved from academic curiosities to critical trading infrastructure. Goldman Sachs, Renaissance Technologies, and Two Sigma employ hundreds of computational linguists and NLP engineers. Sentiment analysis—the algorithmic extraction of emotional tone from text—has become a core component of alpha generation.
+
+This chapter develops sentiment-based trading strategies from theoretical foundations through production implementation in OVSM. We'll cover:
+
+1. **Historical context**: From newspaper archives to transformer models, how alternative data emerged as alpha source
+2. **Economic foundations**: Information dissemination theory, market efficiency violations, and sentiment propagation dynamics
+3. **NLP techniques**: Sentiment lexicons, BERT embeddings, aspect-based sentiment, and multi-modal analysis
+4. **Empirical evidence**: Academic studies quantifying sentiment's predictive power (spoiler: it's real but decays fast)
+5. **OVSM implementation**: Complete sentiment analysis pipeline with scoring, aggregation, and signal generation
+6. **Risk analysis**: Sentiment lag, false signals, overfitting, data quality, and regulatory considerations
+7. **Advanced extensions**: Multi-source fusion, real-time stream processing, and social network graph analysis
+
+By chapter's end, you'll possess a rigorous framework for extracting tradable signals from the firehose of modern information flow.
+
+---
+
+## 13.1 Historical Context: From Newspapers to Transformer Models
+
+### 13.1.1 Pre-Digital Era: Manual Sentiment Analysis (1900-1990)
+
+Before computers, fundamental analysts read newspapers, annual reports, and broker recommendations to gauge market sentiment. Benjamin Graham's *Security Analysis* (1934) emphasized qualitative factors alongside quantitative metrics. Jesse Livermore famously made fortunes reading tape and news during the 1907 and 1929 crashes, demonstrating that sentiment-driven panic creates tradable dislocations.
+
+However, manual sentiment analysis suffered fatal flaws:
+- **Subjective interpretation**: Two analysts reading the same article reached opposite conclusions
+- **Limited scale**: Humans could process dozens of articles per day, not thousands
+- **Cognitive biases**: Confirmation bias, recency bias, and anchoring contaminated assessments
+- **No systematic testing**: Impossible to backtest sentiment strategies over decades
+
+The fundamental breakthrough came from recognizing that **language contains statistical structure** amenable to algorithmic extraction.
+
+### 13.1.2 Early Digital Sentiment (1990-2010)
+
+The 1990s brought the first computerized sentiment analysis using **bag-of-words models** and **sentiment lexicons**. Researchers at MIT and Stanford compiled dictionaries mapping words to emotional valences:
+
+- **Harvard IV-4 Psychosocial Dictionary** (1960s, digitized 1990s): 11,788 words categorized into 83 categories including positive/negative emotions
+- **General Inquirer** (Stone et al., 1966): One of the first computational content analysis systems
+- **Loughran-McDonald Financial Sentiment Word Lists** (2011): First finance-specific lexicon, showing generic sentiment dictionaries fail for financial text (e.g., "liability" is neutral in finance but negative generally)
+
+Early sentiment trading focused on **earnings announcements** and **news headlines**. Tetlock (2007) analyzed the Wall Street Journal's "Abreast of the Market" column from 1984-1999, finding that high negative sentiment predicted downward price pressure followed by reversion—a clear trading opportunity.
+
+### 13.1.3 Social Media Revolution (2010-2018)
+
+Twitter's 2006 launch created an unprecedented public sentiment dataset. Bollen, Mao, and Zeng (2011) analyzed 9.8 million tweets to predict stock market direction with 87.6% accuracy using OpinionFinder and GPOMS mood trackers. The finding was controversial—many replication attempts failed—but it sparked explosive growth in social sentiment trading.
+
+Key developments:
+- **StockTwits** (2008): Social network for traders, with pre-labeled bullish/bearish tags enabling supervised learning
+- **Bloomberg Social Sentiment** (2012): Integrated Twitter sentiment into Bloomberg Terminal
+- **Dataminr** (2013): Real-time event detection from Twitter for finance, now serving major institutions
+
+The 2013 "Hack Crash" demonstrated sentiment's power: the Syrian Electronic Army hacked AP's Twitter account, posting "Breaking: Two Explosions in the White House and Barack Obama is injured." The S&P 500 dropped 1% ($136 billion market cap) in 3 minutes before recovering when the hack was identified.
+
+### 13.1.4 Deep Learning Era (2018-Present)
+
+Google's 2018 release of BERT (Bidirectional Encoder Representations from Transformers) revolutionized NLP. Unlike bag-of-words or even word2vec, transformers understand **context**: "Apple released new product" (bullish for AAPL) vs. "Apple rots on tree" (irrelevant).
+
+FinBERT (Araci, 2019), trained on financial text (Reuters, SEC filings, earnings calls), achieves 97% accuracy on financial sentiment classification—far exceeding lexicon-based approaches (70-75% accuracy).
+
+Current frontier:
+- **GPT-4 for financial analysis** (2023): Zero-shot sentiment classification without training
+- **Multi-modal sentiment**: Combining text, images (CEO facial expressions in earnings calls), and audio (voice stress analysis)
+- **Causal reasoning**: Moving beyond correlation to identifying sentiment as causal driver vs. information proxy
+
+The academic consensus: sentiment contains real, tradable information, but signals decay within hours as markets adjust. High-frequency, low-latency implementation is mandatory.
+
+---
+
+## 13.2 Economic Foundations
+
+### 13.2.1 Information Dissemination Theory
+
+Traditional efficient market hypothesis (Fama, 1970) assumes information reaches all investors simultaneously and is instantly incorporated into prices. Reality is messier.
+
+**Gradual Information Diffusion** (Hong and Stein, 1999): Information spreads through investor networks over time. Three phases:
+
+1. **Private information stage** (t=0 to t=τ₁): Insiders or sophisticated algorithms detect signals
+2. **Public dissemination stage** (t=τ₁ to t=τ₂): News appears in media; informed traders position
+3. **Full incorporation stage** (t>τ₂): All investors aware; price converges to fundamental value
+
+Sentiment trading exploits phase 2: detecting public information before full price adjustment.
+
+**Kyle's Model Extended** (Kyle, 1985): In the presence of noise traders, informed traders optimally disguise their information by spreading orders over time. Sentiment can proxy for informed trading:
+
+$$\Delta P_t = \lambda Q_t + \epsilon_t$$
+
+where ΔP_t is price change, Q_t is order flow, λ is Kyle's lambda (market depth), and ε_t is noise. If sentiment S_t is correlated with informed order flow Q_informed, then:
+
+$$\mathbb{E}[Q_t | S_t] = \alpha + \beta S_t$$
+
+High positive sentiment predicts net buying pressure (β>0), causing prices to rise as informed traders execute.
+
+### 13.2.2 Limits to Arbitrage and Sentiment Persistence
+
+Why don't arbitrageurs instantly eliminate sentiment-driven mispricings? Shleifer and Vishny (1997) identify frictions:
+
+1. **Fundamental risk**: Sentiment might reflect real information; shorting a "hyped" stock can lead to losses if news is actually good
+2. **Noise trader risk** (De Long et al., 1990): Sentiment-driven mispricing can worsen before correcting, forcing arbitrageurs to liquidate at losses
+3. **Synchronization risk**: If all arbitrageurs trade together, they move prices against themselves
+4. **Capital constraints**: Limited capital prevents full exploitation of opportunities
+
+These frictions allow sentiment effects to persist for hours to days—long enough for trading strategies to profit.
+
+### 13.2.3 Behavioral Finance: Why Sentiment Matters
+
+Classical finance assumes rational agents. Behavioral finance documents systematic deviations:
+
+**Attention-Based Trading** (Barber and Odean, 2008): Retail investors buy stocks that catch their attention (news, high volume, extreme returns), creating temporary demand shocks. Sentiment measures attention.
+
+**Disposition Effect** (Shefrin and Statman, 1985): Investors hold losers too long, sell winners too soon. Negative sentiment triggers tax-loss selling cascades; positive sentiment creates momentum.
+
+**Herding** (Banerjee, 1992): Investors mimic others during uncertainty. Social media amplifies herding: a viral tweet causes coordinated buying/selling.
+
+**Overreaction and Underreaction** (De Bondt and Thaler, 1985; Jegadeesh and Titman, 1993): Markets overreact to sentiment in the short run (creating reversal opportunities) but underreact to fundamentals (creating momentum). Sentiment strategies exploit both.
+
+### 13.2.4 Theoretical Model: Sentiment-Augmented Asset Pricing
+
+Extend the standard asset pricing model to include sentiment:
+
+$$r_{i,t+1} = \mathbb{E}_t[r_{i,t+1}] + \beta_i f_{t+1} + \gamma_i S_{t} + \epsilon_{i,t+1}$$
+
+where:
+- r_{i,t+1} is asset i's return
+- f_{t+1} is systematic risk factor (market return)
+- S_t is sentiment at time t
+- γ_i is sensitivity to sentiment
+- ε is idiosyncratic noise
+
+**Hypothesis**: γ_i > 0 for high-sentiment-sensitivity stocks (retail favorites, meme stocks, illiquid small-caps) and γ_i ≈ 0 for low-sensitivity stocks (large-cap value, utilities).
+
+Empirical tests (Stambaugh, Yu, and Yuan, 2012) confirm: sentiment predicts returns for high-beta, small-cap, young, volatile, unprofitable, and non-dividend-paying stocks (γ_i ≈ 2-5% annualized alpha). For large-cap value stocks, sentiment has no predictive power (γ_i ≈ 0).
+
+**Trading implication**: Focus sentiment strategies on high-γ assets where signals are strongest.
+
+---
+
+## 13.3 Natural Language Processing Techniques
+
+### 13.3.1 Sentiment Lexicons: Dictionary-Based Approaches
+
+The simplest sentiment scoring: count positive vs. negative words.
+
+**Loughran-McDonald Sentiment Dictionaries** (Loughran and McDonald, 2011):
+- **Positive words** (354): "profit," "growth," "success," "efficient"
+- **Negative words** (2,355): "loss," "decline," "impairment," "restructuring"
+- **Uncertainty** (297): "uncertain," "volatility," "fluctuate"
+- **Litigious** (871): "litigation," "lawsuit," "plaintiff"
+
+**Sentiment Score**:
+$$\text{Sentiment} = \frac{N_{\text{positive}} - N_{\text{negative}}}{N_{\text{total}}}$$
+
+**Example**:
+> "Company reported strong earnings growth despite market volatility."
+
+- Positive: "strong," "growth" (2)
+- Negative: "volatility" (1)
+- Total: 8 words
+- Sentiment = (2-1)/8 = 0.125 (mildly positive)
+
+**Advantages**:
+- Fast: O(N) complexity
+- Interpretable: Exact words driving score
+- No training data required
+
+**Disadvantages**:
+- Ignores context: "not good" treated as positive ("good") and negative ("not")
+- Misses sarcasm: "Great, another earnings miss" reads as positive
+- Domain-specific: Generic lexicons fail for finance
+
+### 13.3.2 Machine Learning: Supervised Classification
+
+Train classifiers on labeled sentiment data.
+
+**Feature Engineering**:
+1. **Bag-of-words**: Binary indicators for word presence
+2. **TF-IDF**: Term frequency-inverse document frequency
+   $$\text{TF-IDF}(w,d) = \text{TF}(w,d) \times \log\left(\frac{N}{N_w}\right)$$
+   where TF(w,d) is frequency of word w in document d, N is total documents, N_w is documents containing w
+3. **N-grams**: Capture phrases ("not good" as single feature)
+4. **Part-of-speech tags**: Adjectives carry more sentiment than nouns
+
+**Algorithms**:
+- **Naive Bayes**: Assumes word independence
+  $$P(\text{positive} | \text{document}) \propto \prod_{w \in \text{doc}} P(w | \text{positive})$$
+  Fast but oversimplified
+- **Logistic Regression**: Linear model
+  $$P(\text{positive}) = \frac{1}{1 + e^{-(\beta_0 + \sum_i \beta_i x_i)}}$$
+  where x_i are features (TF-IDF values)
+- **Random Forest**: Ensemble of decision trees; handles non-linearity
+- **Gradient Boosting** (XGBoost): Sequential tree fitting; often best performance
+
+**Training Data**: StockTwits (bullish/bearish labels), SemEval financial sentiment datasets, manually labeled news articles.
+
+**Performance**: 75-82% accuracy on financial text (Malo et al., 2014).
+
+### 13.3.3 Word Embeddings: word2vec and GloVe
+
+Represent words as dense vectors capturing semantic similarity.
+
+**word2vec** (Mikolov et al., 2013): Neural network trained to predict word from context (CBOW) or context from word (Skip-gram). Result: 100-300 dimensional vectors where:
+- "king" - "man" + "woman" ≈ "queen"
+- "earnings" is close to "revenue," "profit"
+
+**GloVe** (Pennington et al., 2014): Factorizes word co-occurrence matrix. Captures global statistics.
+
+**Sentiment via embeddings**:
+1. Average word vectors in document: $\vec{d} = \frac{1}{N}\sum_{i=1}^N \vec{w}_i$
+2. Train classifier on document vectors
+
+**Advantage over bag-of-words**: Handles synonyms—"profit" and "earnings" have similar vectors even if one wasn't in training data.
+
+### 13.3.4 Transformers and BERT: Contextual Representations
+
+**BERT** (Devlin et al., 2019): Bidirectional Encoder Representations from Transformers.
+
+**Key Innovation**: Contextual embeddings. The word "apple" has different representations in:
+- "Apple stock rose" (company)
+- "Apple fell from tree" (fruit)
+
+**Architecture**:
+- **Self-attention**: Each word attends to all other words
+  $$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$
+  where Q (query), K (key), V (value) are learned projections
+- **Multi-head attention**: Multiple attention mechanisms in parallel
+- **Transformer blocks**: Stack of attention + feedforward layers (12-24 layers for BERT-base/large)
+
+**Pre-training**: Two tasks on unlabeled text (Wikipedia, BookCorpus):
+1. **Masked language modeling**: Predict masked words from context
+2. **Next sentence prediction**: Determine if sentence B follows sentence A
+
+**Fine-tuning for sentiment**: Add classification head, train on labeled financial sentiment data.
+
+**FinBERT** (Araci, 2019): BERT pre-trained on financial text (1.8M documents: Reuters, SEC filings, earnings calls).
+
+**Performance**: 97% accuracy on financial sentiment (vs. 75% for lexicons, 82% for classical ML).
+
+**Example**:
+> "Earnings missed expectations but guidance was strong"
+
+- Lexicon: Mixed signal (positive "strong," negative "missed")
+- FinBERT: **Neutral to slightly positive**—understands "guidance" is forward-looking, offsetting earnings miss
+
+### 13.3.5 Aspect-Based Sentiment Analysis
+
+Financial text often contains mixed sentiment across aspects:
+> "Strong revenue growth but margin compression due to rising costs"
+
+Aspect-based sentiment decomposes:
+- **Revenue**: Positive
+- **Margins**: Negative
+- **Costs**: Negative
+
+**Implementation**: Train model to identify (aspect, sentiment) pairs using sequence labeling (BiLSTM-CRF) or question-answering (BERT QA fine-tuned for "What is sentiment about revenue?").
+
+**Trading application**: React differently based on which aspect drives sentiment—margin compression is more concerning for value stocks than growth stocks.
+
+---
+
+## 13.4 Empirical Evidence: Does Sentiment Predict Returns?
+
+### 13.4.1 News Sentiment and Stock Returns
+
+**Tetlock (2007)**: Analyzed Wall Street Journal's "Abreast of the Market" column (1984-1999) using Harvard IV-4 psychological dictionary.
+- **Finding**: High negative media sentiment predicts downward price pressure, followed by reversion within 1-2 days
+- **Economic magnitude**: High pessimism day → -6.8 basis points same-day return, reverting +4.6 bps next day
+- **Interpretation**: Overreaction to media sentiment creates short-term arbitrage
+
+**Tetlock, Saar-Tsechansky, and Macskassy (2008)**: Firm-specific news sentiment (negative word fraction) predicts earnings and returns.
+- **Immediate effect**: Negative news → -0.9% return on announcement day
+- **Persistence**: Effect lasts 1 week before full adjustment
+- **Mechanism**: News reflects fundamental information (earnings surprises), not pure sentiment
+
+**Garcia (2013)**: Analyzed New York Times from 1905-2005.
+- **Finding**: Sentiment predicts returns **only during recessions**
+- **Economic regime dependence**: Sentiment matters when uncertainty is high, fundamentals are unclear
+- **Implication**: Increase sentiment strategy allocation during high VIX periods
+
+### 13.4.2 Social Media Sentiment
+
+**Bollen, Mao, and Zeng (2011)**: Twitter sentiment predicts DJIA direction.
+- **Data**: 9.8 million tweets (Feb-Dec 2008)
+- **Method**: OpinionFinder (positive/negative), GPOMS (6 mood dimensions)
+- **Result**: 87.6% accuracy predicting market direction 3-4 days ahead (using "calm" mood)
+- **Controversy**: Replication attempts show 50-60% accuracy; original result may be overfitting
+
+**Sprenger et al. (2014)**: StockTwits sentiment and S&P 500 stocks.
+- **Data**: 250,000 messages (Jan-Jun 2010)
+- **Finding**: Bullish sentiment predicts positive returns next day (4.7 basis points per standard deviation increase)
+- **Volume matters**: Effect stronger for high message volume stocks
+- **Decay**: Predictive power disappears after 1-2 days
+
+**Chen, De, Hu, and Hwang (2014)**: Seeking Alpha article sentiment.
+- **Immediate reaction**: Positive article → +1.98% abnormal return, negative → -2.38% (day 0)
+- **Drift**: Effect continues for 1 month (+4.6% cumulative for positive, -5.6% for negative)
+- **Profitability**: Long positive, short negative articles earns 0.75% per month (9% annualized), but decays over 2011-2013 as strategy becomes crowded
+
+### 13.4.3 Earnings Call Sentiment
+
+**Loughran and McDonald (2011)**: 10-K filing tone predicts future returns.
+- **Negative tone**: High negative word fraction → -6.4% lower returns next 12 months
+- **Mechanism**: Pessimistic filings signal poor future earnings
+- **Robustness**: Effect persists after controlling for size, value, momentum, industry
+
+**Mayew and Venkatachalam (2012)**: Vocal emotion in earnings calls.
+- **Method**: Automated voice stress analysis (pitch, tempo)
+- **Finding**: High vocal stress by CFO predicts negative earnings surprises
+- **Economic significance**: Top vs. bottom stress quintile → 2.6% return spread
+- **Interpretation**: Managers inadvertently leak information through vocal cues
+
+### 13.4.4 Meta-Analysis and Decay Rates
+
+**Li, Huang, Zhu, and Chiu (2020)**: Meta-analysis of 100+ sentiment studies.
+- **Average effect**: 1 standard deviation sentiment increase → +2.3 basis points daily return (short-term), +0.8% monthly (medium-term)
+- **Heterogeneity**: Effect 3x larger for small-caps vs. large-caps, 5x larger for high-beta vs. low-beta
+- **Decay**: Signal half-life is 2-4 hours for Twitter, 1-2 days for news, 1 week for earnings calls
+- **Crowding**: Effect declined 40% from 2010-2020 as strategies proliferated
+
+**Key Takeaway**: Sentiment contains real information, but requires **high-frequency execution** before arbitrageurs eliminate the signal.
+
+---
+
+## 13.5 OVSM Implementation
+
+### 13.5.1 Sentiment Scoring Pipeline
+
+We'll implement a complete sentiment analysis system using the OVSM code from `13_ai_sentiment_trading.ovsm`.
+
+**Step 1: Data Ingestion (Mock)**
+```lisp
+;; In production, this would be an HTTP API call to news/Twitter aggregators
+(define news_items [
+  {:title "Bitcoin Breaks All-Time High" :sentiment "positive" :score 0.85}
+  {:title "Regulatory Concerns Impact Crypto" :sentiment "negative" :score -0.65}
+  {:title "Major Institution Adopts Blockchain" :sentiment "positive" :score 0.75}
+  {:title "Market Volatility Increases" :sentiment "negative" :score -0.45}
+  {:title "DeFi TVL Reaches New Peak" :sentiment "positive" :score 0.90}
+])
+```
+
+**Real-world data sources**:
+- **News APIs**: Bloomberg, Reuters, NewsAPI, GDELT
+- **Social media**: Twitter API v2, Reddit API, StockTwits
+- **SEC filings**: EDGAR database (10-K, 8-K, earnings transcripts)
+- **Alternative data**: Web scraping (legal with rate limits)
+
+**Step 2: Aggregate Sentiment Scoring**
+```lisp
+;; Calculate average sentiment across all news items
+(define total_sentiment 0.0)
+(define positive_count 0)
+(define negative_count 0)
+
+(for (item news_items)
+  (define score (get item "score"))
+  (define sentiment (get item "sentiment"))
+
+  (set! total_sentiment (+ total_sentiment score))
+
+  (if (= sentiment "positive")
+      (set! positive_count (+ positive_count 1))
+      (set! negative_count (+ negative_count 1))))
+
+(define avg_sentiment (/ total_sentiment (length news_items)))
+;; Result: avg_sentiment = (0.85 - 0.65 + 0.75 - 0.45 + 0.90) / 5 = 0.28
+```
+
+**Interpretation**: Average sentiment = +0.28 (mildly bullish). 3 positive articles vs. 2 negative, but negative articles have strong sentiment.
+
+**Step 3: Signal Generation**
+```lisp
+(define sentiment_threshold 0.3)
+(define signal (if (> avg_sentiment sentiment_threshold)
+                   "BUY - Bullish sentiment"
+                   (if (< avg_sentiment (- sentiment_threshold))
+                       "SELL - Bearish sentiment"
+                       "HOLD - Neutral sentiment")))
+
+;; Result: "HOLD - Neutral sentiment" (0.28 < 0.30 threshold)
+```
+
+**Threshold calibration**: Backtest to find optimal threshold maximizing Sharpe ratio. Typical values: 0.2-0.4 for daily data, 0.05-0.15 for intraday.
+
+### 13.5.2 Sentiment Momentum
+
+Sentiment level matters, but **rate of change** (momentum) often predicts more.
+
+```lisp
+;; Historical sentiment time series (daily averages)
+(define sentiment_history [0.2 0.3 0.25 0.4 0.5 0.45 0.6 0.7])
+
+;; Calculate sentiment momentum (change from 2 periods ago)
+(define recent_sentiment (last sentiment_history))  ;; 0.7
+(define prev_sentiment (first (drop sentiment_history (- (length sentiment_history) 2))))  ;; 0.6
+
+(define sentiment_momentum (- recent_sentiment prev_sentiment))
+;; sentiment_momentum = 0.7 - 0.6 = 0.1 (accelerating bullishness)
+```
+
+**Combined signal: Sentiment + Momentum**
+```lisp
+(define momentum_signal
+  (if (and (> recent_sentiment 0.4) (> sentiment_momentum 0.0))
+      "STRONG BUY - Positive sentiment + momentum"
+      (if (and (< recent_sentiment -0.4) (< sentiment_momentum 0.0))
+          "STRONG SELL - Negative sentiment + momentum"
+          "NEUTRAL")))
+
+;; Result: "STRONG BUY" (sentiment = 0.7 > 0.4, momentum = 0.1 > 0)
+```
+
+**Academic basis**: Jegadeesh and Titman (1993) show momentum persists 3-12 months. Sentiment momentum works on faster timeframes (hours-days).
+
+### 13.5.3 Weighted Sentiment: Recency and Credibility
+
+Not all news is equal. Recent news matters more (information decays). Credible sources matter more (Reuters > random blog).
+
+```lisp
+(define weighted_news [
+  {:sentiment 0.8 :age_hours 2 :credibility 0.9}   ;; Recent, credible, bullish
+  {:sentiment -0.6 :age_hours 12 :credibility 0.7} ;; Older, credible, bearish
+  {:sentiment 0.7 :age_hours 24 :credibility 0.8}  ;; Old, credible, bullish
+])
+
+(define weighted_score 0.0)
+(define total_weight 0.0)
+
+(for (news weighted_news)
+  (define sentiment (get news "sentiment"))
+  (define age (get news "age_hours"))
+  (define credibility (get news "credibility"))
+
+  ;; Exponential decay: weight = credibility × e^(-λ × age)
+  ;; Approximation: weight = credibility / (1 + λ × age), λ = 0.05
+  (define age_weight (/ 1.0 (+ 1.0 (* age 0.05))))
+
+  ;; Combined weight
+  (define weight (* credibility age_weight))
+
+  (set! weighted_score (+ weighted_score (* sentiment weight)))
+  (set! total_weight (+ total_weight weight)))
+
+(define final_sentiment (/ weighted_score total_weight))
+;; Calculation:
+;; Article 1: weight = 0.9 × 1/(1+0.1) ≈ 0.818, contrib = 0.8 × 0.818 = 0.654
+;; Article 2: weight = 0.7 × 1/(1+0.6) ≈ 0.438, contrib = -0.6 × 0.438 = -0.263
+;; Article 3: weight = 0.8 × 1/(1+1.2) ≈ 0.364, contrib = 0.7 × 0.364 = 0.255
+;; final_sentiment = (0.654 - 0.263 + 0.255) / (0.818 + 0.438 + 0.364) ≈ 0.40
+```
+
+**Decay parameter (λ)**:
+- λ = 0.05 (slow decay): 50% weight after 14 hours
+- λ = 0.2 (fast decay): 50% weight after 3.5 hours
+- **Calibrate to asset class**: Crypto needs fast decay (high information velocity), treasuries need slow decay (low velocity)
+
+### 13.5.4 Social Media Volume-Adjusted Sentiment
+
+High message volume increases signal reliability (law of large numbers) but also indicates attention-driven trading.
+
+```lisp
+(define social_data [
+  {:platform "Twitter" :mentions 15000 :sentiment 0.65}
+  {:platform "Reddit" :mentions 8000 :sentiment 0.72}
+  {:platform "Discord" :mentions 5000 :sentiment 0.58}
+])
+
+;; Volume-weighted sentiment
+(define social_score 0.0)
+(define total_mentions 0)
+
+(for (platform social_data)
+  (define mentions (get platform "mentions"))
+  (define sentiment (get platform "sentiment"))
+
+  (set! social_score (+ social_score (* mentions sentiment)))
+  (set! total_mentions (+ total_mentions mentions)))
+
+(define social_sentiment (/ social_score total_mentions))
+;; social_sentiment = (15000×0.65 + 8000×0.72 + 5000×0.58) / 28000 ≈ 0.66
+```
+
+**Volume signal**:
+```lisp
+(define high_volume_threshold 20000)
+(define volume_signal
+  (if (> total_mentions high_volume_threshold)
+      (if (> social_sentiment 0.6)
+          "HIGH VOLUME BUY - Viral bullishness"
+          "HIGH VOLUME SELL - Viral panic")
+      "LOW VOLUME - Insufficient signal"))
+
+;; Result: "HIGH VOLUME BUY" (28000 > 20000, sentiment 0.66 > 0.6)
+```
+
+**Attention-based trading** (Barber and Odean, 2008): High volume attracts retail flows, causing temporary demand shocks. Strategy: buy high-volume positive sentiment, sell after 1-3 days as attention fades.
+
+### 13.5.5 Fear & Greed Index: Multi-Indicator Fusion
+
+Combine multiple sentiment dimensions into single composite measure.
+
+```lisp
+(define market_indicators {
+  :news_sentiment 0.45      ;; Traditional media
+  :social_sentiment 0.68    ;; Twitter, Reddit
+  :price_momentum 0.72      ;; Technical signal
+  :volatility_index -0.35   ;; VIX analog (high vol = fear)
+  :volume_trend 0.55        ;; Increasing volume = conviction
+})
+
+;; Calculate composite score (normalize to 0-100)
+(define fg_score 0.0)
+(define news_sent (get market_indicators "news_sentiment"))
+(define social_sent (get market_indicators "social_sentiment"))
+(define price_mom (get market_indicators "price_momentum"))
+(define vol_idx (get market_indicators "volatility_index"))
+(define vol_trend (get market_indicators "volume_trend"))
+
+(set! fg_score (+ news_sent social_sent price_mom vol_idx vol_trend))
+(define fear_greed (/ (+ (* (/ fg_score 5.0) 50.0) 50.0) 1.0))
+;; fg_score = 0.45 + 0.68 + 0.72 - 0.35 + 0.55 = 2.05
+;; fear_greed = (2.05/5 × 50 + 50) = (0.41 × 50 + 50) = 70.5
+```
+
+**Interpretation**:
+- 0-25: **Extreme Fear** → Contrarian buy opportunity
+- 25-45: **Fear** → Cautious, quality stocks only
+- 45-55: **Neutral** → No clear signal
+- 55-75: **Greed** → Momentum stocks outperform
+- 75-100: **Extreme Greed** → Distribute, take profits
+
+**Trading rule**:
+```lisp
+(define market_emotion
+  (if (> fear_greed 75.0)
+      "EXTREME GREED - Consider taking profits"
+      (if (> fear_greed 55.0)
+          "GREED - Bullish market, momentum works"
+          (if (> fear_greed 45.0)
+              "NEUTRAL - Wait for clear signal"
+              (if (> fear_greed 25.0)
+                  "FEAR - Buying opportunity, favor quality"
+                  "EXTREME FEAR - Strong contrarian buy")))))
+
+;; Result: "GREED - Bullish market" (70.5 in greed zone)
+```
+
+**Real-world example**: CNN Fear & Greed Index uses 7 indicators (VIX, put/call ratio, junk bond demand, market momentum, stock price breadth, safe haven demand, market volatility). Similar composite approach.
+
+### 13.5.6 Sentiment-Driven Position Sizing
+
+Don't just trade on/off—scale position size by signal confidence.
+
+```lisp
+(define base_position 1000)  ;; $1,000 base position
+(define sentiment_confidence 0.75)  ;; 75% confidence in signal
+
+;; Kelly-inspired position sizing: position ∝ confidence
+(define position_multiplier (+ 0.5 (* sentiment_confidence 0.5)))
+;; multiplier = 0.5 + 0.75 × 0.5 = 0.875 (range: 0.5-1.0)
+
+(define adjusted_position (* base_position position_multiplier))
+;; adjusted_position = 1000 × 0.875 = $875
+```
+
+**Rationale**:
+- **High confidence (0.9)**: Position = $950 (95% of max)
+- **Medium confidence (0.5)**: Position = $750 (75% of max)
+- **Low confidence (0.2)**: Position = $600 (60% of max)
+
+Never go below 50% of base position—maintains some exposure in case signal is correct. Never exceed 100%—caps downside from overconfidence.
+
+**Academic basis**: Kelly Criterion (Kelly, 1956) says optimal bet size is f* = (p×b - q)/b where p is win probability, q = 1-p, b is payout ratio. Confidence proxies for p.
+
+---
+
+## 13.6 Risk Analysis
+
+### 13.6.1 Sentiment Lag: Information or Noise?
+
+**The fundamental question**: Does sentiment predict future returns (information) or reflect past returns (noise)?
+
+**Antweiler and Frank (2004)**: Analyzed 1.5M messages on Yahoo Finance and Raging Bull.
+- **Finding**: Message volume predicts volatility (high volume → high vol next day)
+- **But**: Sentiment does not predict returns after controlling for past returns
+- **Interpretation**: Sentiment reacts to price moves; it's a lagging indicator
+
+**Resolution**: Use **unexpected sentiment**—sentiment orthogonal to recent returns.
+
+$$\text{Unexpected Sentiment}_t = \text{Raw Sentiment}_t - \mathbb{E}[\text{Sentiment}_t | r_{t-1}, r_{t-2}, ...]$$
+
+Estimate expected sentiment by regressing sentiment on lagged returns, then use residuals as signal.
+
+### 13.6.2 False Signals and Sarcasm
+
+NLP models struggle with:
+- **Sarcasm**: "Great, another earnings miss" (negative intent, positive words)
+- **Negation**: "not bad" vs. "not good"
+- **Context**: "exploded" is positive ("sales exploded") or negative ("losses exploded")
+
+**FinBERT improvements**: 97% accuracy includes handling these nuances via context. But 3% error rate on 1,000 articles = 30 misclassified signals → potential losses.
+
+**Risk management**:
+1. **Confidence thresholds**: Only trade when model confidence > 0.8
+2. **Ensemble methods**: Combine lexicon + ML + transformer; trade only if all agree
+3. **Human-in-the-loop**: For high-stakes trades, flag ambiguous articles for manual review
+
+### 13.6.3 Overfitting: The Multiple Testing Problem
+
+With hundreds of sentiment features, it's easy to find spurious correlations in-sample.
+
+**Bailey et al. (2014)**: Probability of finding profitable strategy by chance when testing N strategies:
+$$P(\text{false discovery}) = 1 - (1 - \alpha)^N$$
+
+For N = 100 strategies, α = 0.05 (p < 0.05), probability of at least one false positive = 99.4%!
+
+**Deflated Sharpe Ratio** (Bailey and Lopez de Prado, 2014):
+$$\text{SR}_{\text{deflated}} = \text{SR}_{\text{estimated}} \times \sqrt{1 - \frac{\text{Var}(\text{SR}_{\text{estimated}})}{N_{\text{trials}}}}$$
+
+This adjusts for multiple testing—if you tested 100 features, reported Sharpe must be much higher to be significant.
+
+**Best practices**:
+1. **Training/validation/test split**: Develop on training data, tune on validation, report test performance
+2. **Walk-forward analysis**: Retrain model every 6 months on expanding window
+3. **Cross-validation**: K-fold CV with time-series split (never use future data in training)
+4. **Bonferroni correction**: Adjust p-value threshold to α/N
+
+### 13.6.4 Data Quality and Survivorship Bias
+
+**Survivorship bias**: Historical news datasets exclude delisted companies (bankruptcies, acquisitions). This overstates profitability—sentiment strategies may have bought companies that later delisted.
+
+**Solution**: Use **point-in-time databases** that include delisted securities (CRSP, Compustat Point-in-Time).
+
+**Data quality issues**:
+- **API rate limits**: Twitter allows 500,000 tweets/month on free tier; institutional grade requires $5,000+/month
+- **Language drift**: "Bull market" meant different things in 1950 vs. 2020
+- **Platform changes**: Reddit's r/WallStreetBets went from 1M to 10M users in 2021, changing composition
+
+**Robustness checks**: Test strategy on multiple time periods (pre-2010, 2010-2020, post-2020) and platforms (Twitter, Reddit, news). If results hold, more confident in generalization.
+
+### 13.6.5 Regulatory Risks
+
+**Market manipulation**: Using bots to post fake positive sentiment then selling (pump-and-dump) is illegal under SEC Rule 10b-5.
+
+**Insider trading**: If sentiment analysis uncovers material non-public information (e.g., leaked earnings via executive's Twitter), trading on it is illegal.
+
+**GDPR and privacy**: Scraping social media may violate terms of service or privacy laws in EU.
+
+**Best practices**:
+1. Only use publicly available, legally obtained data
+2. Consult legal counsel on data sourcing
+3. Implement compliance monitoring for suspicious patterns
+4. Document data provenance and methodology
+
+---
+
+## 13.7 Advanced Extensions
+
+### 13.7.1 Multi-Source Aggregation: Bayesian Fusion
+
+Combine signals from news, Twitter, Reddit, insider trades using Bayesian inference.
+
+**Prior**: Base rate of positive returns
+$$P(\text{Return} > 0) = 0.52 \quad \text{(historical average)}$$
+
+**Likelihoods**: How well each source predicts returns
+$$P(\text{Positive Sentiment} | \text{Return} > 0) = 0.65$$
+$$P(\text{Positive Sentiment} | \text{Return} < 0) = 0.40$$
+
+**Posterior** (after observing positive Twitter sentiment):
+$$P(\text{Return} > 0 | \text{Twitter Positive}) = \frac{0.65 \times 0.52}{0.65 \times 0.52 + 0.40 \times 0.48} = 0.64$$
+
+Now observe positive Reddit sentiment (independent):
+$$P(\text{Return} > 0 | \text{Twitter+Reddit Positive}) = \frac{0.65 \times 0.64}{0.65 \times 0.64 + 0.40 \times 0.36} = 0.74$$
+
+**Implementation in OVSM**:
+```lisp
+(define prior 0.52)
+(define twitter_pos_given_up 0.65)
+(define twitter_pos_given_down 0.40)
+
+;; Update belief after Twitter signal
+(define posterior_twitter
+  (/ (* twitter_pos_given_up prior)
+     (+ (* twitter_pos_given_up prior)
+        (* twitter_pos_given_down (- 1 prior)))))
+
+;; Repeat for Reddit (using posterior_twitter as new prior)
+(define reddit_pos_given_up 0.62)
+(define reddit_pos_given_down 0.38)
+
+(define posterior_reddit
+  (/ (* reddit_pos_given_up posterior_twitter)
+     (+ (* reddit_pos_given_up posterior_twitter)
+        (* reddit_pos_given_down (- 1 posterior_twitter)))))
+
+;; Trade if posterior > threshold
+(define trade_threshold 0.70)
+(define should_trade (> posterior_reddit trade_threshold))
+```
+
+### 13.7.2 Real-Time Stream Processing
+
+Sentiment changes fast—need to process tweets within seconds.
+
+**Architecture**:
+1. **Data ingestion**: Kafka or Pulsar for real-time message streaming
+2. **NLP processing**: Distributed FinBERT inference on GPUs (NVIDIA Triton)
+3. **Aggregation**: Flink or Spark Streaming for windowed sentiment averaging
+4. **Signal generation**: OVSM script consuming aggregated sentiment
+5. **Execution**: FIX protocol to broker for sub-second order placement
+
+**Latency breakdown** (target: <1 second):
+- API to Kafka: 50ms
+- FinBERT inference: 300ms (batch size 32)
+- Aggregation: 100ms
+- OVSM signal: 50ms
+- Order placement: 200ms
+- **Total**: 700ms
+
+**Optimization techniques**:
+- **Model quantization**: INT8 FinBERT runs 4x faster with minimal accuracy loss
+- **Speculative execution**: Pre-compute sentiment for likely scenarios
+- **Geo-distributed**: Co-locate infrastructure near exchange for lowest latency
+
+### 13.7.3 Social Network Graph Analysis
+
+Twitter is a network—influence flows through follower relationships.
+
+**Influencer identification**:
+1. **Degree centrality**: Users with most followers
+2. **Betweenness centrality**: Users bridging communities (information brokers)
+3. **Eigenvector centrality**: Users followed by other influential users (PageRank)
+
+**Sentiment propagation model** (Kempe et al., 2003):
+- User i posts bullish tweet at time t
+- Probability follower j reposts: p_ij = β × credibility_i
+- Expected cascade size: sum of propagation probabilities
+
+**Trading signal**: Weight sentiment by expected cascade size—viral tweets move markets more.
+
+**Implementation**:
+```python
+import networkx as nx
+
+G = nx.DiGraph()  # Follower graph
+G.add_edges_from([(influencer, follower) for ...])
+
+# Calculate PageRank
+pagerank = nx.pagerank(G)
+
+# Weight sentiment by influence
+weighted_sentiment = sum(sentiment[user] * pagerank[user] for user in users)
+```
+
+### 13.7.4 Causal Inference: Sentiment or Information?
+
+Correlation ≠ causation. Does sentiment cause returns, or do both respond to underlying information?
+
+**Instrumental variable approach** (Stock and Watson, 2015):
+- **Instrument**: Exogenous sentiment shock (e.g., weather affects mood, affects trading)
+- **Two-stage regression**:
+  1. Regress sentiment on instrument: $\text{Sentiment}_t = \alpha + \beta \text{Weather}_t + \epsilon$
+  2. Regress returns on predicted sentiment: $r_t = \gamma + \delta \widehat{\text{Sentiment}}_t + \eta$
+
+If δ ≠ 0, sentiment has causal effect on returns (not just correlation).
+
+**Findings** (Hirshleifer and Shumway, 2003): Sunshine at country's financial center predicts positive returns—mediated by improved mood → sentiment → buying.
+
+**Practical application**: During rainy days (low ambient sentiment), discount positive news sentiment; during sunny days, trust it more.
+
+---
+
+## 13.8 Complete OVSM Trading System
+
+Bringing it all together: end-to-end sentiment trading strategy.
+
+```lisp
+(do
+  (log :message "=== SENTIMENT TRADING SYSTEM v1.0 ===")
+
+  ;; Step 1: Fetch multi-source sentiment (in production: API calls)
+  (define news_sentiment 0.45)
+  (define twitter_sentiment 0.68)
+  (define reddit_sentiment 0.72)
+  (define insider_trading_sentiment 0.30)  ;; From SEC Form 4 filings
+
+  ;; Step 2: Weight by source reliability (calibrated from backtesting)
+  (define news_weight 0.35)
+  (define twitter_weight 0.25)
+  (define reddit_weight 0.20)
+  (define insider_weight 0.20)
+
+  (define composite_sentiment
+    (+ (* news_sentiment news_weight)
+       (* twitter_sentiment twitter_weight)
+       (* reddit_sentiment reddit_weight)
+       (* insider_trading_sentiment insider_weight)))
+  ;; composite = 0.45×0.35 + 0.68×0.25 + 0.72×0.20 + 0.30×0.20 = 0.532
+
+  (log :message "Composite sentiment:" :value composite_sentiment)
+
+  ;; Step 3: Calculate sentiment momentum
+  (define sentiment_yesterday 0.45)
+  (define sentiment_momentum (- composite_sentiment sentiment_yesterday))
+  ;; momentum = 0.532 - 0.45 = 0.082 (accelerating)
+
+  ;; Step 4: Adjust for market regime (VIX proxy)
+  (define vix_level 22.0)  ;; Current VIX
+  (define high_vix_threshold 25.0)
+  (define vix_adjustment (if (> vix_level high_vix_threshold) 0.8 1.0))
+  ;; In high volatility, discount sentiment (noise dominates)
+
+  (define adjusted_sentiment (* composite_sentiment vix_adjustment))
+
+  ;; Step 5: Generate signal
+  (define long_threshold 0.55)
+  (define short_threshold -0.55)
+
+  (define signal
+    (if (> adjusted_sentiment long_threshold)
+        "LONG"
+        (if (< adjusted_sentiment short_threshold)
+            "SHORT"
+            "FLAT")))
+
+  ;; Step 6: Position sizing (Kelly-inspired)
+  (define base_position 10000)  ;; $10,000
+  (define confidence (/ (+ (if (> adjusted_sentiment 0) adjusted_sentiment (- adjusted_sentiment)) 0.5) 1.0))
+  (define position_size (* base_position confidence))
+
+  ;; Step 7: Risk management
+  (define max_position 15000)
+  (define final_position (if (> position_size max_position) max_position position_size))
+
+  (log :message "Signal:" :value signal)
+  (log :message "Position size:" :value final_position)
+
+  ;; Step 8: Execution (in production: send order via FIX)
+  (if (= signal "LONG")
+      (log :message "EXECUTING: Buy $" :value final_position)
+      (if (= signal "SHORT")
+          (log :message "EXECUTING: Short $" :value final_position)
+          (log :message "EXECUTING: No trade (flat)")))
+
+  "✅ Sentiment trading system executed")
+```
+
+**Backtesting results** (hypothetical, for illustration):
+- **Sharpe Ratio**: 1.8 (excellent)
+- **Max Drawdown**: -12% (acceptable)
+- **Win Rate**: 58% (edge present)
+- **Avg Win/Loss**: 1.4:1 (positive expectancy)
+- **Signal Frequency**: 3-5 trades/day (sufficient activity)
+
+---
+
+## 13.9 Conclusion
+
+Sentiment analysis represents a paradigm shift in quantitative trading—from purely price-based signals to information extraction from unstructured text. The academic evidence is clear: sentiment contains exploitable predictive power, especially for retail-favored, high-volatility, small-cap stocks.
+
+However, successful implementation requires sophistication:
+1. **State-of-the-art NLP**: Transformer models (FinBERT) far outperform lexicons
+2. **Multi-source fusion**: No single source is sufficient; combine news, social, insider trades
+3. **Low latency**: Signals decay within hours; sub-second execution is mandatory
+4. **Regime awareness**: Sentiment matters more during uncertainty (high VIX)
+5. **Rigorous backtesting**: Guard against overfitting with proper cross-validation
+
+The strategy's half-life is finite—as more capital deploys sentiment strategies, returns decay (Li et al., 2020 document 40% decline 2010-2020). Sustainable edge requires continuous innovation: better data sources, faster models, causal inference.
+
+**Future directions**:
+- **Multimodal sentiment**: Integrating images (CEO expressions), audio (voice stress), and text
+- **Real-time misinformation detection**: Identify fake news before it moves markets
+- **Causality-aware models**: Moving beyond correlation to establish causal relationships
+- **Privacy-preserving NLP**: Federated learning on decentralized social data
+
+Sentiment trading is not a silver bullet—it's one tool in the quantitative arsenal. But when implemented with academic rigor and engineering excellence, it provides measurable alpha in modern, information-saturated markets.
+
+---
+
+## References
+
+1. Tetlock, P.C. (2007). "Giving Content to Investor Sentiment: The Role of Media in the Stock Market." *Journal of Finance*, 62(3), 1139-1168.
+2. Bollen, J., Mao, H., & Zeng, X. (2011). "Twitter Mood Predicts the Stock Market." *Journal of Computational Science*, 2(1), 1-8.
+3. Loughran, T., & McDonald, B. (2011). "When Is a Liability Not a Liability? Textual Analysis, Dictionaries, and 10-Ks." *Journal of Finance*, 66(1), 35-65.
+4. Devlin, J., et al. (2019). "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding." *NAACL-HLT*.
+5. Araci, D. (2019). "FinBERT: Financial Sentiment Analysis with Pre-trained Language Models." *arXiv:1908.10063*.
+6. Barber, B.M., & Odean, T. (2008). "All That Glitters: The Effect of Attention and News on the Buying Behavior of Individual and Institutional Investors." *Review of Financial Studies*, 21(2), 785-818.
+7. Chen, H., et al. (2014). "Wisdom of Crowds: The Value of Stock Opinions Transmitted Through Social Media." *Review of Financial Studies*, 27(5), 1367-1403.
+8. Bailey, D.H., et al. (2014). "Pseudo-Mathematics and Financial Charlatanism: The Effects of Backtest Overfitting on Out-of-Sample Performance." *Notices of the AMS*, 61(5), 458-471.
+9. Li, Q., et al. (2020). "Social Media Sentiment and Stock Returns: A Meta-Analysis." *Journal of Empirical Finance*, 57, 101-118.
+10. Shleifer, A., & Vishny, R.W. (1997). "The Limits of Arbitrage." *Journal of Finance*, 52(1), 35-55.
