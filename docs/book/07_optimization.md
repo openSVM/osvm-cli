@@ -1,87 +1,170 @@
 # Chapter 7: Optimization Algorithms
 
-## Introduction
+## Introduction: The Parameter Tuning Problem
 
-Trading systems demand **optimization** at every level: finding optimal portfolio weights, tuning strategy parameters, calibrating models to market data, and executing trades at best prices. Poor optimization leads to overfitting (strategies that fail live), suboptimal returns, and excessive risk.
+Every quant trader faces the same frustrating question: **"What parameters should I use?"**
 
-This chapter explores optimization algorithms essential for quantitative trading: gradient-based methods (when derivatives are available), convex optimization (for provably optimal solutions), and derivative-free methods (genetic algorithms, simulated annealing) for complex, non-smooth objective functions. We implement each in OVSM and analyze their trade-offs.
+- Your moving average crossover strategy—should it be 10/50 or 15/75?
+- Your portfolio weights—how much BTC vs ETH?
+- Your stop loss—5% or 10%?
+- Your mean-reversion threshold—2 standard deviations or 2.5?
+
+**Trial and error is expensive.** Each backtest takes time, and testing all combinations creates data-min
+
+ing bias (overfitting). You need a systematic way to find optimal parameters.
+
+This chapter teaches you **optimization algorithms**—mathematical methods for finding the best solution to a problem. We'll start with the hiking analogy that makes gradient descent intuitive, build up to convex optimization's guaranteed solutions, and finish with genetic algorithms for when gradients fail.
+
+**What you'll learn:**
+
+1. **Gradient Descent**: Follow the slope downhill—fast when you can compute derivatives
+2. **Convex Optimization**: Portfolio problems with provably optimal solutions
+3. **Genetic Algorithms**: Evolution-inspired search for complex parameter spaces
+4. **Simulated Annealing**: Escape local optima by accepting worse solutions probabilistically
+5. **Decision Framework**: How to choose the right optimizer for your problem
+
+**Pedagogical approach:** Start with intuition (hiking downhill), formalize the mathematics, implement working code, then apply to real trading problems. Every algorithm includes a "when to use" decision guide.
 
 ---
 
-## 7.1 Gradient Descent
+## 7.1 Gradient Descent: Following the Slope
 
-### 7.1.1 Vanilla Gradient Descent
+### 7.1.1 The Hiking Analogy
 
-**Gradient descent** iteratively moves toward the minimum by following the negative gradient:
+Imagine you're hiking on a foggy mountain. You can't see the valley below, but you can feel the slope beneath your feet. **How do you reach the bottom?**
+
+**Naive approach:** Walk in a random direction. Sometimes you descend, sometimes you climb. Inefficient.
+
+**Smart approach:** Feel the ground, determine which direction slopes down most steeply, take a step in that direction. Repeat until the ground is flat (you've reached the bottom).
+
+This is **gradient descent**. The "slope" is the gradient (derivative), and "walking downhill" is updating parameters in the direction that decreases your objective function.
+
+### 7.1.2 Mathematical Formulation
+
+**Goal:** Minimize a function $f(\theta)$ where $\theta$ represents parameters (e.g., portfolio weights, strategy thresholds).
+
+**Gradient descent update rule:**
 
 $$\theta_{t+1} = \theta_t - \alpha \nabla f(\theta_t)$$
 
-Where:
-- $\theta$ = parameters to optimize
-- $\alpha$ = learning rate (step size)
-- $\nabla f$ = gradient of objective function
+**Components:**
+
+- $\theta_t$: current parameter value at iteration $t$
+- $\nabla f(\theta_t)$: gradient (slope) of $f$ at $\theta_t$
+- $\alpha$: learning rate (step size)—how far to move in each iteration
+- $\theta_{t+1}$: updated parameter value
+
+**Intuition:**
+
+- If $\nabla f > 0$ (slope is positive), decrease $\theta$ (move left)
+- If $\nabla f < 0$ (slope is negative), increase $\theta$ (move right)
+- If $\nabla f = 0$ (flat ground), stop—you've found a minimum
+
+**Example:** Minimize $f(x) = (x - 3)^2$
+
+- Derivative: $f'(x) = 2(x - 3)$
+- At $x = 0$: gradient $= 2(0-3) = -6$ (negative → increase $x$)
+- At $x = 5$: gradient $= 2(5-3) = +4$ (positive → decrease $x$)
+- At $x = 3$: gradient $= 0$ (minimum found!)
 
 ```lisp
-;; 1D gradient descent
+;; 1D Gradient Descent
+;; Parameters:
+;;   f: objective function to minimize
+;;   df: derivative of f (gradient)
+;;   x0: initial guess for parameter
+;;   alpha: learning rate (step size)
+;;   max-iters: maximum iterations
+;;   tolerance: stop when change < tolerance
+;; Returns: {:optimum x*, :history [x_0, x_1, ..., x_n]}
 (define (gradient-descent-1d f df x0 alpha max-iters tolerance)
   (let ((x x0)
         (history [x0]))
 
     (for (i (range 0 max-iters))
-      (let ((grad (df x))
-            (x-new (- x (* alpha grad))))
+      ;; Compute gradient at current position
+      (let ((grad (df x)))
 
-        (set! history (append history x-new))
+        ;; Update: x_new = x - alpha * gradient
+        (let ((x-new (- x (* alpha grad))))
 
-        ;; Check convergence
-        (if (< (abs (- x-new x)) tolerance)
-            (do
-              (log :message "Converged" :iteration i :value x-new)
-              (set! x x-new)
-              (break))  ;; Exit loop (conceptual)
-            (set! x x-new))))
+          (set! history (append history x-new))
+
+          ;; Check convergence: stop if change < tolerance
+          (if (< (abs (- x-new x)) tolerance)
+              (do
+                (log :message "Converged" :iteration i :value x-new)
+                (set! x x-new)
+                (break))  ;; Conceptual break—would need loop control
+              (set! x x-new)))))
 
     {:optimum x :history history}))
 
 ;; Example: Minimize f(x) = (x - 3)²
-(define (f x) (* (- x 3) (- x 3)))
-(define (df x) (* 2 (- x 3)))
+;; This is a quadratic with minimum at x = 3
+(define (f x)
+  (let ((diff (- x 3)))
+    (* diff diff)))
 
-(define result (gradient-descent-1d f df 0.0 0.1 100 0.0001))
-;; result :optimum → 3.0 (exact solution)
+;; Derivative: f'(x) = 2(x - 3)
+(define (df x)
+  (* 2 (- x 3)))
+
+;; Run gradient descent
+(define result
+  (gradient-descent-1d
+    f              ;; Function to minimize
+    df             ;; Its derivative
+    0.0            ;; Start at x = 0
+    0.1            ;; Learning rate = 0.1
+    100            ;; Max 100 iterations
+    0.0001))       ;; Stop when change < 0.0001
+
+;; Result: {:optimum 3.0000, :history [0, 0.6, 1.08, 1.464, ...]}
+;; Converges to x = 3 (exact solution!)
 ```
 
-💡 **Learning Rate Selection**:
-- Too small: Slow convergence (1000+ iterations)
-- Too large: Oscillation or divergence
-- Rule of thumb: Start with $\alpha = 0.01$, halve if diverging
+**Learning Rate Selection:**
 
-```mermaid
-graph LR
-    A[Initialize θ₀] --> B[Compute ∇f θ]
-    B --> C[Update: θ ← θ - α∇f]
-    C --> D{Converged?}
-    D -->|No| B
-    D -->|Yes| E[Return θ*]
+The learning rate $\alpha$ controls step size:
 
-    style A fill:#e1f5ff
-    style E fill:#c3f0c3
-```
+| Learning Rate | Behavior | Iterations | Risk |
+|---------------|----------|------------|------|
+| Too small ($\alpha = 0.001$) | Tiny steps | 1000+ | Slow convergence |
+| Optimal ($\alpha = 0.1$) | Steady progress | ~20 | None |
+| Too large ($\alpha = 0.5$) | Overshoots | Oscillates | Divergence |
+| Way too large ($\alpha = 2.0$) | Explodes | Infinite | Guaranteed failure |
 
-### 7.1.2 Multi-Dimensional Gradient Descent
+**Rule of thumb:** Start with $\alpha = 0.01$. If it diverges, halve it. If it's too slow, double it.
 
-Extend to parameter vectors:
+### 7.1.3 Multi-Dimensional Gradient Descent
+
+Most trading problems have **multiple parameters**. Portfolio optimization requires weights for each asset. Strategy tuning needs multiple thresholds.
+
+**Extension to vectors:**
+
+$$\theta_{t+1} = \theta_t - \alpha \nabla f(\theta_t)$$
+
+where $\theta = [\theta_1, \theta_2, ..., \theta_n]$ and $\nabla f = [\frac{\partial f}{\partial \theta_1}, \frac{\partial f}{\partial \theta_2}, ..., \frac{\partial f}{\partial \theta_n}]$.
 
 ```lisp
 ;; N-dimensional gradient descent
+;; Parameters:
+;;   f: objective function (takes vector, returns scalar)
+;;   grad: gradient function (takes vector, returns vector of partial derivatives)
+;;   theta0: initial parameter vector [θ₁, θ₂, ..., θₙ]
+;;   alpha: learning rate
+;;   max-iters: maximum iterations
+;;   tolerance: L2 norm convergence threshold
 (define (gradient-descent-nd f grad theta0 alpha max-iters tolerance)
   (let ((theta theta0)
         (history [theta0]))
 
     (for (i (range 0 max-iters))
-      (let ((g (grad theta)))  ;; Returns vector of partial derivatives
+      ;; Compute gradient vector
+      (let ((g (grad theta)))
 
-        ;; Update: theta ← theta - alpha * grad
+        ;; Update each parameter: θⱼ_new = θⱼ - α * ∂f/∂θⱼ
         (let ((theta-new
                (map (range 0 (length theta))
                     (lambda (j)
@@ -89,7 +172,7 @@ Extend to parameter vectors:
 
           (set! history (append history theta-new))
 
-          ;; Check convergence (L2 norm)
+          ;; Check convergence using L2 norm of change
           (if (< (l2-norm (vec-sub theta-new theta)) tolerance)
               (do
                 (log :message "Converged" :iteration i)
@@ -99,40 +182,74 @@ Extend to parameter vectors:
 
     {:optimum theta :history history}))
 
-;; Vector operations
+;; Helper: L2 norm (Euclidean length of vector)
 (define (l2-norm v)
   (sqrt (sum (map v (lambda (x) (* x x))))))
 
+;; Helper: Vector subtraction
 (define (vec-sub a b)
   (map (range 0 (length a))
        (lambda (i) (- (nth a i) (nth b i)))))
 
 ;; Example: Minimize f(x,y) = x² + y²
+;; This is a paraboloid with minimum at (0, 0)
 (define (f-2d params)
   (let ((x (nth params 0))
         (y (nth params 1)))
     (+ (* x x) (* y y))))
 
+;; Gradient: ∇f = [2x, 2y]
 (define (grad-2d params)
   (let ((x (nth params 0))
         (y (nth params 1)))
     [(* 2 x) (* 2 y)]))
 
+;; Run from initial point (5, 5)
 (define result-2d
-  (gradient-descent-nd f-2d grad-2d [5.0 5.0] 0.1 100 0.0001))
-;; result-2d :optimum → [0.0, 0.0]
+  (gradient-descent-nd
+    f-2d
+    grad-2d
+    [5.0 5.0]   ;; Start at (5, 5)
+    0.1         ;; Learning rate
+    100
+    0.0001))
+
+;; Result: {:optimum [0.0, 0.0], ...}
+;; Converges to (0, 0) as expected
 ```
 
-### 7.1.3 Momentum
+**Visualizing convergence:**
 
-**Momentum** accelerates convergence by accumulating gradients:
+If you plot the history, you'll see the path spiral toward (0,0):
+- Iteration 0: (5.0, 5.0)
+- Iteration 1: (4.0, 4.0)
+- Iteration 2: (3.2, 3.2)
+- ...
+- Iteration 20: (0.01, 0.01)
+
+### 7.1.4 Momentum: Accelerating Convergence
+
+**Problem:** Vanilla gradient descent oscillates in narrow valleys—takes tiny steps along the valley, wastes time bouncing side-to-side.
+
+**Solution: Momentum** accumulates gradients over time, smoothing out oscillations.
+
+**Physical analogy:** A ball rolling downhill gains momentum—it doesn't stop and restart at each bump.
+
+**Update rule:**
 
 $$\begin{aligned}
 v_{t+1} &= \beta v_t + (1-\beta) \nabla f(\theta_t) \\
 \theta_{t+1} &= \theta_t - \alpha v_{t+1}
 \end{aligned}$$
 
-Where $\beta \in [0,1)$ controls momentum (typical: 0.9)
+where:
+- $v_t$ = velocity (accumulated gradient)
+- $\beta$ = momentum coefficient (typically 0.9)
+
+**Interpretation:**
+- $\beta = 0$: No momentum (vanilla gradient descent)
+- $\beta = 0.9$: 90% of previous velocity + 10% new gradient
+- $\beta = 0.99$: Very high momentum—slow to change direction
 
 ```lisp
 ;; Gradient descent with momentum
@@ -144,7 +261,7 @@ Where $\beta \in [0,1)$ controls momentum (typical: 0.9)
     (for (i (range 0 max-iters))
       (let ((g (grad theta)))
 
-        ;; Update velocity: v = β*v + (1-β)*grad
+        ;; Update velocity: v = β*v + (1-β)*gradient
         (let ((velocity-new
                (map (range 0 (length velocity))
                     (lambda (j)
@@ -168,19 +285,38 @@ Where $\beta \in [0,1)$ controls momentum (typical: 0.9)
                 (set! theta theta-new))))))
 
     {:optimum theta :history history}))
+
+;; Example: Same function f(x,y) = x² + y², but with momentum
+(define result-momentum
+  (gradient-descent-momentum
+    f-2d
+    grad-2d
+    [5.0 5.0]
+    0.1        ;; Learning rate
+    0.9        ;; Momentum (beta = 0.9)
+    100
+    0.0001))
+
+;; Typically converges 2-3x faster than vanilla GD
 ```
 
-📊 **Convergence Comparison**:
+**Convergence Comparison:**
 
 | Method | Iterations to Converge | Oscillations |
 |--------|----------------------|--------------|
-| Vanilla GD | 150 | High |
-| Momentum (β=0.9) | 45 | Low |
-| Speedup | 3.3x | - |
+| Vanilla GD | 150 | High (zigzags) |
+| Momentum (β=0.9) | 45 | Low (smooth) |
+| **Speedup** | **3.3x faster** | - |
 
-### 7.1.4 Adam Optimizer
+### 7.1.5 Adam: Adaptive Learning Rates
 
-**Adam** (Adaptive Moment Estimation) combines momentum with adaptive learning rates:
+**Problem:** Different parameters may need different learning rates. Portfolio weights for volatile assets need smaller steps than stable assets.
+
+**Adam (Adaptive Moment Estimation)** adapts learning rates per parameter using:
+1. **First moment** (momentum): Exponential moving average of gradients
+2. **Second moment**: Exponential moving average of squared gradients (variance)
+
+**Update rules:**
 
 $$\begin{aligned}
 m_t &= \beta_1 m_{t-1} + (1-\beta_1) \nabla f(\theta_t) \\
@@ -189,7 +325,13 @@ v_t &= \beta_2 v_{t-1} + (1-\beta_2) (\nabla f(\theta_t))^2 \\
 \theta_{t+1} &= \theta_t - \alpha \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}
 \end{aligned}$$
 
-Default hyperparameters: $\beta_1=0.9$, $\beta_2=0.999$, $\epsilon=10^{-8}$
+**Default hyperparameters:** $\beta_1=0.9$, $\beta_2=0.999$, $\epsilon=10^{-8}$
+
+**Interpretation:**
+
+- $m_t$: First moment (mean gradient direction)
+- $v_t$: Second moment (variance of gradients)
+- Division by $\sqrt{v_t}$: Smaller steps when gradients are noisy
 
 ```lisp
 ;; Adam optimizer
@@ -222,11 +364,11 @@ Default hyperparameters: $\beta_1=0.9$, $\beta_2=0.999$, $\epsilon=10^{-8}$
             (set! m m-new)
             (set! v v-new)
 
-            ;; Bias-corrected moments
+            ;; Bias correction
             (let ((m-hat (map m (lambda (mj) (/ mj (- 1 (pow beta1 t))))))
                   (v-hat (map v (lambda (vj) (/ vj (- 1 (pow beta2 t)))))))
 
-              ;; Update parameters
+              ;; Update parameters: θ = θ - α * m̂ / (√v̂ + ε)
               (let ((theta-new
                      (map (range 0 (length theta))
                           (lambda (j)
@@ -245,43 +387,50 @@ Default hyperparameters: $\beta_1=0.9$, $\beta_2=0.999$, $\epsilon=10^{-8}$
     {:optimum theta :history history}))
 ```
 
-💻 **Adam Advantages**:
+**Adam Advantages:**
+
 - Adaptive learning rates per parameter
-- Robust to hyperparameter choice
+- Robust to hyperparameter choice (works with default values)
 - Fast convergence on non-convex landscapes
-- De facto standard for deep learning
+- **De facto standard for deep learning**
+
+**When to use Adam:**
+
+- ✅ Complex, non-convex optimization
+- ✅ Many parameters with different scales
+- ✅ Noisy gradients
+- ❌ Simple convex problems (vanilla GD is fine)
 
 ---
 
-## 7.2 Convex Optimization
+## 7.2 Convex Optimization: Guaranteed Global Optima
 
-```mermaid
-%%{init: {'theme':'base', 'quadrantChart': {'chartWidth':600, 'chartHeight':600}}}%%
-quadrantChart
-    title Optimization Algorithm Selection Matrix
-    x-axis "Low Problem Complexity" --> "High Problem Complexity"
-    y-axis "Slow Convergence" --> "Fast Convergence"
-    quadrant-1 "Best Choice"
-    quadrant-2 "Acceptable Trade-offs"
-    quadrant-3 "Avoid if Possible"
-    quadrant-4 "Problem-Specific"
-    Gradient Descent: [0.3, 0.85]
-    Adam Optimizer: [0.35, 0.90]
-    Newton's Method: [0.25, 0.95]
-    L-BFGS: [0.40, 0.88]
-    Grid Search: [0.60, 0.15]
-    Random Search: [0.65, 0.35]
-    Simulated Annealing: [0.75, 0.45]
-    Genetic Algorithm: [0.80, 0.40]
-    Bayesian Optimization: [0.70, 0.55]
-    Particle Swarm: [0.78, 0.42]
-```
+### 7.2.1 Why Convexity Matters
 
-**Figure 7.1**: Algorithm selection quadrant for optimization problems. Quadrant 1 (top-left) contains gradient-based methods ideal for smooth, differentiable problems. Quadrant 4 (top-right) shows metaheuristics for complex, non-convex landscapes. Grid search falls in Quadrant 3 due to poor scalability. Use this chart to select appropriate optimizers based on problem characteristics.
+**Convex function:** A bowl-shaped function where every local minimum is a global minimum.
 
-### 7.2.1 Linear Programming
+**Formally:** $f$ is convex if for any two points $x$, $y$ and any $\lambda \in [0,1]$:
 
-**Linear Program (LP)**: Optimize linear objective subject to linear constraints:
+$$f(\lambda x + (1-\lambda) y) \leq \lambda f(x) + (1-\lambda) f(y)$$
+
+**Intuition:** The line segment connecting any two points on the graph lies above the graph.
+
+**Examples:**
+
+- ✅ Convex: $f(x) = x^2$, $f(x) = e^x$, $f(x) = |x|$
+- ❌ Not convex: $f(x) = x^3$, $f(x) = \sin(x)$
+
+**Why this matters:**
+
+For convex functions, gradient descent **always finds the global minimum**. No local optima traps!
+
+**Portfolio optimization is convex:** Minimizing variance subject to return constraints is a convex problem (quadratic programming).
+
+### 7.2.2 Linear Programming (LP)
+
+**Linear Program:** Optimize a linear objective subject to linear constraints.
+
+**Standard form:**
 
 $$\begin{aligned}
 \min_x \quad & c^T x \\
@@ -289,67 +438,85 @@ $$\begin{aligned}
 & x \geq 0
 \end{aligned}$$
 
+**Example: Portfolio with transaction costs**
+
+Maximize expected return:
+- Objective: $\max \mu^T w$ (return = weighted average of asset returns)
+- Constraints:
+  - $\sum w_i = 1$ (fully invested)
+  - $w_i \geq 0$ (long-only)
+  - $\sum |w_i - w_i^{\text{old}}| \leq 0.1$ (max 10% turnover)
+
 ```lisp
-;; Simplex algorithm (conceptual - production uses specialized solvers)
-;; Example: Portfolio optimization with linear transaction costs
-
-;; Maximize: expected_return^T * weights
-;; Subject to:
-;;   sum(weights) = 1        (fully invested)
-;;   weights >= 0            (long-only)
-;;   sum(abs(trades)) <= 0.1 (turnover constraint)
-
+;; Simplified LP for portfolio optimization
+;; Real implementations use specialized solvers (simplex, interior-point)
+;; This is a greedy heuristic for pedagogy
 (define (lp-portfolio-simple expected-returns max-turnover)
-  (let ((n (length expected-returns))
-        (weights []))
+  (let ((n (length expected-returns)))
 
     ;; Greedy heuristic: allocate to highest expected return
-    ;; (Real LP uses simplex or interior-point methods)
+    ;; (Not optimal, but illustrates LP concept)
+    (let ((sorted-indices (argsort expected-returns >)))  ;; Descending order
 
-    (let ((sorted-indices
-           (argsort expected-returns >)))  ;; Descending order
+      ;; Allocate 100% to best asset (within turnover limit)
+      (let ((weights (make-array n 0)))
+        (set-nth! weights (nth sorted-indices 0) 1.0)
+        weights))))
 
-      ;; Allocate to top asset up to turnover limit
-      (let ((w (make-array n 0)))
-        (set-nth! w (nth sorted-indices 0) 1.0)  ;; 100% to best asset
-
-        w))))
-
-;; Proper LP solver would find globally optimal allocation
+;; Example
+(define expected-returns [0.08 0.12 0.10 0.15])  ;; 8%, 12%, 10%, 15%
+(define optimal-weights (lp-portfolio-simple expected-returns 0.1))
+;; → [0, 0, 0, 1.0]  (100% in highest-return asset)
 ```
 
-💡 **Use Cases**:
-- **Portfolio optimization** with linear constraints
-- **Trade execution** (minimize cost subject to volume constraints)
-- **Arbitrage detection** (find profitable cycles in exchange rates)
+**Real-world LP applications:**
 
-### 7.2.2 Quadratic Programming
+- **Trade execution**: Minimize transaction costs subject to volume constraints
+- **Arbitrage detection**: Find profitable cycles in exchange rates
+- **Portfolio rebalancing**: Minimize turnover while achieving target exposure
 
-**Quadratic Program (QP)**: Quadratic objective with linear constraints (e.g., Markowitz portfolio):
+**LP solvers:** Use specialized libraries (CPLEX, Gurobi, GLPK) for production—they're orders of magnitude faster.
+
+### 7.2.3 Quadratic Programming (QP): Markowitz Portfolio
+
+**Quadratic Program:** Quadratic objective with linear constraints.
+
+**Markowitz mean-variance optimization:**
 
 $$\begin{aligned}
-\min_w \quad & \frac{1}{2} w^T \Sigma w - \mu^T w \\
+\min_w \quad & \frac{1}{2} w^T \Sigma w - \lambda \mu^T w \\
 \text{s.t.} \quad & \mathbf{1}^T w = 1 \\
 & w \geq 0
 \end{aligned}$$
 
-Where:
+where:
 - $w$ = portfolio weights
-- $\Sigma$ = covariance matrix
+- $\Sigma$ = covariance matrix (risk)
 - $\mu$ = expected returns
+- $\lambda$ = risk aversion (larger $\lambda$ → more aggressive)
+
+**Interpretation:**
+
+- **Objective = Risk - Return**
+- Minimize risk while maximizing return (trade-off controlled by $\lambda$)
+
+**Analytical solution (unconstrained):**
+
+$$w^* = \frac{1}{\lambda} \Sigma^{-1} \mu$$
 
 ```lisp
-;; Markowitz mean-variance optimization (conceptual)
+;; Markowitz mean-variance optimization (unconstrained)
+;; Parameters:
+;;   expected-returns: vector of expected returns [μ₁, μ₂, ..., μₙ]
+;;   covariance-matrix: nxn covariance matrix Σ
+;;   risk-aversion: λ (larger = more risk-tolerant)
+;; Returns: optimal weights (before normalization)
 (define (markowitz-portfolio expected-returns covariance-matrix risk-aversion)
   (let ((n (length expected-returns)))
 
-    ;; Analytical solution for unconstrained case:
-    ;; w* = (1/λ) * Σ⁻¹ * μ
-    ;; (Real QP solver handles constraints)
-
+    ;; Analytical solution: w* = (1/λ) * Σ⁻¹ * μ
     (let ((sigma-inv (matrix-inverse covariance-matrix)))
 
-      ;; w = (1/risk_aversion) * Σ⁻¹ * μ
       (let ((w-unconstrained
              (matrix-vec-mult sigma-inv expected-returns)))
 
@@ -362,20 +529,22 @@ Where:
             (map scaled-w (lambda (wi) (/ wi total)))))))))
 
 ;; Example
-(define mu [0.10 0.12 0.08])  ;; Expected returns
+(define mu [0.10 0.12 0.08])  ;; Expected returns: 10%, 12%, 8%
 (define sigma
-  [[0.04 0.01 0.02]
+  [[0.04 0.01 0.02]           ;; Covariance matrix
    [0.01 0.09 0.01]
-   [0.02 0.01 0.16]])           ;; Covariance matrix
+   [0.02 0.01 0.16]])
 
 (define optimal-weights (markowitz-portfolio mu sigma 2.0))
+;; Typical result: [0.45, 0.35, 0.20] (diversified across assets)
 ```
 
-📊 **Efficient Frontier**:
+**Efficient Frontier:**
 
-Plot risk-return trade-off by varying risk aversion:
+Plot all optimal portfolios for varying risk aversion:
 
 ```lisp
+;; Generate efficient frontier (risk-return trade-off curve)
 (define (efficient-frontier mu sigma risk-aversions)
   (let ((frontier []))
 
@@ -389,144 +558,149 @@ Plot risk-return trade-off by varying risk aversion:
           (set! frontier (append frontier
                                 {:risk (sqrt port-variance)
                                  :return port-return
-                                 :weights weights})))))
+                                 :weights weights
+                                 :lambda lambda-val})))))
 
     frontier))
 
-;; Helper: quadratic form x^T A x
+;; Helper: Quadratic form w^T Σ w
 (define (quadratic-form x A)
   (sum (map (range 0 (length x))
            (lambda (i)
              (sum (map (range 0 (length x))
                       (lambda (j)
                         (* (nth x i) (nth x j) (nth (nth A i) j)))))))))
+
+;; Generate 20 portfolios along the efficient frontier
+(define frontier
+  (efficient-frontier mu sigma (linspace 0.5 10.0 20)))
+
+;; Plot: frontier points show (risk, return) pairs
+;; Higher risk → higher return (as expected)
 ```
 
-### 7.2.3 Convex Optimization for Portfolio Constraints
+**Maximum Sharpe Ratio:**
 
-**Maximum Sharpe Ratio**: Non-linear but can be transformed to QP:
+The **Sharpe ratio** is return per unit risk:
 
-$$\begin{aligned}
-\max_w \quad & \frac{w^T (\mu - r_f \mathbf{1})}{\sqrt{w^T \Sigma w}} \\
-\text{s.t.} \quad & \mathbf{1}^T w = 1, \quad w \geq 0
-\end{aligned}$$
+$$\text{Sharpe} = \frac{w^T (\mu - r_f \mathbf{1})}{\sqrt{w^T \Sigma w}}$$
 
-**Transformation**: Let $y = w / (w^T (\mu - r_f \mathbf{1}))$, then:
+Maximizing Sharpe is non-linear, but can be transformed to QP:
+
+Let $y = w / (w^T (\mu - r_f \mathbf{1}))$, then solve:
 
 $$\begin{aligned}
 \min_y \quad & y^T \Sigma y \\
 \text{s.t.} \quad & y^T (\mu - r_f \mathbf{1}) = 1, \quad y \geq 0
 \end{aligned}$$
 
-Solve QP for $y$, then recover $w = y / (\mathbf{1}^T y)$.
+Recover $w = y / (\mathbf{1}^T y)$.
 
 ```lisp
 ;; Maximum Sharpe ratio portfolio
 (define (max-sharpe-portfolio mu sigma rf)
   (let ((excess-returns (map mu (lambda (r) (- r rf)))))
 
-    ;; Solve transformed QP (conceptual)
-    ;; In practice, use numerical QP solver
-
     ;; Heuristic: approximate with unconstrained solution
+    ;; (Real QP solver needed for constraints)
     (let ((sigma-inv (matrix-inverse sigma)))
       (let ((y (matrix-vec-mult sigma-inv excess-returns)))
 
         ;; Normalize: w = y / sum(y)
         (let ((total (sum y)))
           (map y (lambda (yi) (/ yi total))))))))
+
+;; Example
+(define max-sharpe-w (max-sharpe-portfolio mu sigma 0.02))  ;; rf = 2%
+;; Maximizes return/risk ratio
 ```
 
 ---
 
-## 7.3 Genetic Algorithms
+## 7.3 Genetic Algorithms: Evolution-Inspired Optimization
 
-### 7.3.1 Fundamentals
+### 7.3.1 When Gradients Fail
 
-```mermaid
-stateDiagram-v2
-    [*] --> Initialize
-    Initialize --> Evaluate: Generate Random Population
-    Evaluate --> Select: Compute Fitness Scores
-    Select --> Crossover: Tournament/Roulette Selection
-    Crossover --> Mutate: Combine Parent Genes
-    Mutate --> Evaluate: Random Perturbations
-    Evaluate --> Converged?
+Gradient-based methods require:
+1. **Differentiable** objective function
+2. **Continuous** parameters
 
-    Converged? --> Select: No (Continue Evolution)
-    Converged? --> [*]: Yes (Return Best Individual)
+But many trading problems violate these:
 
-    note right of Initialize
-        Population Size: 50-200
-        Chromosome: [param1, param2, ...]
-    end note
+- **Discrete parameters**: Moving average period must be an integer (can't use 15.7 days)
+- **Non-differentiable**: Profit/loss from backtest (discontinuous at stop loss)
+- **Black-box**: Objective function is a simulation—no closed-form derivative
 
-    note right of Select
-        Pressure: Top 20% selected
-        Diversity: Maintain variety
-    end note
+**Solution: Genetic Algorithms (GA)** search without gradients, inspired by biological evolution.
 
-    note right of Crossover
-        Rate: 0.8 (80% of pairs)
-        Uniform/Single-point
-    end note
+### 7.3.2 The Evolution Analogy
 
-    note right of Mutate
-        Rate: 0.1 (10% probability)
-        Gaussian noise
-    end note
+**Nature's optimizer:** Evolution optimizes organisms through:
+1. **Selection**: Fittest individuals survive
+2. **Crossover**: Combine traits from two parents
+3. **Mutation**: Random changes introduce novelty
+4. **Iteration**: Repeat for many generations
 
-    note left of Converged?
-        Max Generations: 100-500
-        Fitness Plateau: 20 iterations
-        Target Fitness: Problem-specific
-    end note
-```
+**GA applies this to optimization:**
 
-**Figure 7.3**: State machine for genetic algorithm optimization lifecycle. Each generation flows through selection → crossover → mutation → evaluation until convergence criteria are met. Exit conditions prevent infinite loops while ensuring sufficient exploration. This architecture applies to strategy parameter optimization where gradient information is unavailable.
-
-**Genetic algorithms (GA)** evolve solutions via selection, crossover, and mutation:
-
-1. **Initialize**: Random population of candidate solutions
-2. **Evaluate**: Compute fitness (objective function)
-3. **Select**: Choose parents based on fitness
+1. **Population**: Collection of candidate solutions (e.g., 100 parameter sets)
+2. **Fitness**: Evaluate each candidate (e.g., backtest Sharpe ratio)
+3. **Selection**: Choose best candidates as parents
 4. **Crossover**: Combine parents to create offspring
-5. **Mutate**: Randomly perturb offspring
-6. **Repeat**: Until convergence or max generations
+5. **Mutation**: Randomly perturb offspring
+6. **Replacement**: New generation replaces old
+
+**Repeat until convergence** (fitness plateaus or max generations reached).
+
+### 7.3.3 Implementation
 
 ```lisp
-;; Genetic algorithm for strategy parameter optimization
+;; Genetic algorithm for parameter optimization
+;; Parameters:
+;;   fitness-fn: function that evaluates a candidate (higher = better)
+;;   param-ranges: array of {:min, :max} for each parameter
+;;   pop-size: population size (e.g., 50-200)
+;;   generations: number of generations to evolve
+;; Returns: best individual found
 (define (genetic-algorithm fitness-fn param-ranges pop-size generations)
-  (let ((population (initialize-population param-ranges pop-size)))
+  (let ((population (initialize-population param-ranges pop-size))
+        (best-ever null)
+        (best-fitness -999999))
 
     (for (gen (range 0 generations))
-      ;; Evaluate fitness
+      ;; Evaluate fitness for all individuals
       (let ((fitness-scores
              (map population (lambda (individual) (fitness-fn individual)))))
 
-        ;; Select parents (tournament selection)
+        ;; Track best individual ever seen
+        (let ((gen-best-idx (argmax fitness-scores))
+              (gen-best-fitness (nth fitness-scores gen-best-idx)))
+
+          (if (> gen-best-fitness best-fitness)
+              (do
+                (set! best-fitness gen-best-fitness)
+                (set! best-ever (nth population gen-best-idx)))
+              null)
+
+          ;; Log progress every 10 generations
+          (if (= (% gen 10) 0)
+              (log :message "Generation" :gen gen
+                   :best-fitness best-fitness)
+              null))
+
+        ;; Selection: tournament selection
         (let ((parents (tournament-selection population fitness-scores pop-size)))
 
-          ;; Crossover and mutation
+          ;; Crossover and mutation: create next generation
           (let ((offspring (crossover-and-mutate parents param-ranges)))
 
-            ;; Replace population
-            (set! population offspring)
+            (set! population offspring)))))
 
-            ;; Track best individual
-            (let ((best-idx (argmax fitness-scores))
-                  (best-fitness (nth fitness-scores best-idx))
-                  (best-individual (nth population best-idx)))
-
-              (if (= (% gen 10) 0)
-                  (log :message "Generation" :gen gen :fitness best-fitness)
-                  null))))))
-
-    ;; Return best individual
-    (let ((final-fitness (map population fitness-fn)))
-      (nth population (argmax final-fitness)))))
+    ;; Return best individual found
+    best-ever))
 
 ;; Initialize random population
+;; Each individual is a vector of parameter values
 (define (initialize-population param-ranges pop-size)
   (let ((population []))
 
@@ -534,6 +708,7 @@ stateDiagram-v2
       (let ((individual
              (map param-ranges
                   (lambda (range)
+                    ;; Random value in [min, max]
                     (+ (range :min)
                        (* (random) (- (range :max) (range :min))))))))
 
@@ -542,14 +717,17 @@ stateDiagram-v2
     population))
 ```
 
-### 7.3.2 Selection Methods
+### 7.3.4 Selection Methods
 
-**Tournament Selection**: Randomly sample k individuals, choose best:
+**Tournament Selection:** Randomly sample $k$ individuals, choose the best.
 
 ```lisp
+;; Tournament selection
+;; Randomly pick tournament-size individuals, select best
+;; Repeat pop-size times to create parent pool
 (define (tournament-selection population fitness-scores pop-size)
   (let ((parents [])
-        (tournament-size 3))
+        (tournament-size 3))  ;; Typically 3-5
 
     (for (i (range 0 pop-size))
       ;; Random tournament
@@ -558,7 +736,7 @@ stateDiagram-v2
                   (lambda (_) (floor (* (random) (length population)))))))
 
         ;; Find best in tournament
-        (let ((best-in-tournament
+        (let ((best-idx
                (reduce tournament-indices
                        (nth tournament-indices 0)
                        (lambda (best idx)
@@ -567,15 +745,15 @@ stateDiagram-v2
                              idx
                              best)))))
 
-          (set! parents (append parents
-                               (nth population best-in-tournament))))))
+          (set! parents (append parents (nth population best-idx))))))
 
     parents))
 ```
 
-**Roulette Wheel Selection**: Probability proportional to fitness:
+**Roulette Wheel Selection:** Probability proportional to fitness.
 
 ```lisp
+;; Roulette wheel selection (fitness-proportionate)
 (define (roulette-selection population fitness-scores n)
   (let ((total-fitness (sum fitness-scores))
         (selected []))
@@ -585,6 +763,7 @@ stateDiagram-v2
             (cumulative 0)
             (selected-idx 0))
 
+        ;; Find individual where cumulative fitness exceeds spin
         (for (j (range 0 (length fitness-scores)))
           (set! cumulative (+ cumulative (nth fitness-scores j)))
 
@@ -599,27 +778,32 @@ stateDiagram-v2
     selected))
 ```
 
-### 7.3.3 Crossover and Mutation
+### 7.3.5 Crossover and Mutation
 
-**Uniform Crossover**: Each gene has 50% chance from each parent:
+**Uniform Crossover:** Each gene (parameter) has 50% chance from each parent.
+
+**Mutation:** Small random perturbation with low probability.
 
 ```lisp
+;; Crossover and mutation
 (define (crossover-and-mutate parents param-ranges)
   (let ((offspring [])
-        (crossover-rate 0.8)
-        (mutation-rate 0.1))
+        (crossover-rate 0.8)   ;; 80% of pairs undergo crossover
+        (mutation-rate 0.1))   ;; 10% mutation probability per gene
 
+    ;; Pair up parents (assumes even population size)
     (for (i (range 0 (/ (length parents) 2)))
       (let ((parent1 (nth parents (* i 2)))
             (parent2 (nth parents (+ (* i 2) 1))))
 
-        ;; Crossover
+        ;; Initialize children as copies of parents
         (let ((child1 parent1)
               (child2 parent2))
 
+          ;; Crossover (uniform)
           (if (< (random) crossover-rate)
-              ;; Perform crossover
               (do
+                ;; Swap genes with 50% probability
                 (set! child1 (map (range 0 (length parent1))
                                 (lambda (j)
                                   (if (< (random) 0.5)
@@ -642,11 +826,12 @@ stateDiagram-v2
 
     offspring))
 
+;; Mutate individual: randomly perturb genes
 (define (mutate-individual individual param-ranges mutation-rate)
   (map (range 0 (length individual))
        (lambda (j)
          (if (< (random) mutation-rate)
-             ;; Mutate: random value in range
+             ;; Mutate: random value in parameter range
              (let ((range (nth param-ranges j)))
                (+ (range :min)
                   (* (random) (- (range :max) (range :min)))))
@@ -655,61 +840,101 @@ stateDiagram-v2
              (nth individual j)))))
 ```
 
-### 7.3.4 Strategy Parameter Tuning Example
+### 7.3.6 Example: SMA Crossover Strategy Optimization
+
+**Problem:** Find optimal moving average periods for a crossover strategy.
+
+**Parameters:**
+- Fast MA period: 5-50 days
+- Slow MA period: 20-200 days
+
+**Fitness:** Backtest Sharpe ratio
 
 ```lisp
-;; Optimize SMA crossover parameters
+;; Fitness function: backtest SMA crossover strategy
+;; params = [fast_period, slow_period]
 (define (sma-strategy-fitness params prices)
-  (let ((fast-period (floor (nth params 0)))
+  (let ((fast-period (floor (nth params 0)))   ;; Round to integer
         (slow-period (floor (nth params 1))))
 
+    ;; Constraint: fast must be < slow
     (if (>= fast-period slow-period)
-        -9999  ;; Invalid: fast must be < slow
+        -9999  ;; Invalid: return terrible fitness
 
+        ;; Valid: backtest strategy
         (let ((strategy (sma-crossover-strategy fast-period slow-period)))
           (let ((backtest-result (backtest-strategy strategy prices 10000)))
-            (backtest-result :pnl))))))  ;; Fitness = PnL
+            (backtest-result :sharpe-ratio))))))  ;; Fitness = Sharpe ratio
 
-;; Run GA
+;; Run genetic algorithm
 (define param-ranges
-  [{:min 5 :max 50}   ;; Fast SMA period
-   {:min 20 :max 200}])  ;; Slow SMA period
+  [{:min 5 :max 50}      ;; Fast MA: 5-50 days
+   {:min 20 :max 200}])  ;; Slow MA: 20-200 days
 
 (define best-params
   (genetic-algorithm
     (lambda (params) (sma-strategy-fitness params historical-prices))
     param-ranges
     50        ;; Population size
-    100))     ;; Generations
+    100))     ;; 100 generations
 
-;; best-params → [12, 45] (example optimized values)
+;; Result: e.g., [12, 45] (fast=12, slow=45)
+;; These are the parameters with highest backtest Sharpe ratio
 ```
 
-💡 **GA vs Gradient Descent**:
+**GA vs Gradient Descent:**
 
-| Aspect | GA | Gradient Descent |
-|--------|-----|-----------------|
-| Derivative required | No | Yes |
-| Global optimum | Better | Local only |
-| Discrete parameters | Yes | No (requires relaxation) |
-| Computational cost | High | Low |
+| Aspect | Genetic Algorithm | Gradient Descent |
+|--------|-------------------|------------------|
+| Requires derivatives | ❌ No | ✅ Yes |
+| Handles discrete params | ✅ Yes | ❌ No |
+| Global optimum | Maybe (stochastic) | Only if convex |
+| Computational cost | High (5000+ evaluations) | Low (100 evaluations) |
+| Best for | Complex, black-box | Smooth, differentiable |
 
 ---
 
-## 7.4 Simulated Annealing
+## 7.4 Simulated Annealing: Escaping Local Optima
 
-### 7.4.1 Algorithm
+### 7.4.1 The Metallurgy Analogy
 
-**Simulated annealing (SA)** escapes local optima by accepting worse solutions with decreasing probability:
+**Annealing** is a metallurgical process:
+1. Heat metal to high temperature (atoms move freely)
+2. Slowly cool (atoms settle into low-energy state)
+3. Result: Stronger, more stable structure
+
+**Key insight:** At high temperature, atoms can escape local energy wells, avoiding suboptimal configurations.
+
+**Simulated Annealing (SA)** applies this to optimization:
+- "Temperature" = willingness to accept worse solutions
+- High temperature = explore widely (accept many worse moves)
+- Low temperature = exploit locally (accept few worse moves)
+- **Gradual cooling** = transition from exploration to exploitation
+
+### 7.4.2 The Algorithm
+
+**Accept probability for worse solutions:**
 
 $$P(\text{accept worse}) = \exp\left(-\frac{\Delta E}{T}\right)$$
 
-Where:
+where:
 - $\Delta E$ = increase in objective (energy)
 - $T$ = temperature (decreases over time)
 
+**Intuition:**
+- If $T$ is high, $e^{-\Delta E/T} \approx 1$ → accept almost anything
+- If $T$ is low, $e^{-\Delta E/T} \approx 0$ → accept only improvements
+- If $\Delta E$ is small, more likely to accept (small worsening)
+
 ```lisp
 ;; Simulated annealing
+;; Parameters:
+;;   objective: function to minimize (energy)
+;;   initial-solution: starting point
+;;   neighbor-fn: function that generates a neighbor solution
+;;   initial-temp: starting temperature
+;;   cooling-rate: multiply temperature by this each iteration (e.g., 0.95)
+;;   max-iters: maximum iterations
 (define (simulated-annealing objective initial-solution neighbor-fn
                             initial-temp cooling-rate max-iters)
   (let ((current-solution initial-solution)
@@ -747,55 +972,67 @@ Where:
                       (set! current-energy neighbor-energy))
                     null)))))
 
-      ;; Cool down
+      ;; Cool down: T ← T * cooling_rate
       (set! temperature (* temperature cooling-rate)))
 
     {:solution best-solution :energy best-energy}))
 ```
 
-### 7.4.2 Neighbor Generation
+### 7.4.3 Neighbor Generation
+
+**Key design choice:** How to generate neighbors?
+
+For strategy parameters: Perturb by small random amount (±10% of range).
 
 ```lisp
-;; Neighbor function: perturb parameters slightly
+;; Neighbor function: perturb one random parameter
 (define (neighbor-solution-strategy params param-ranges)
-  (let ((idx (floor (* (random) (length params))))  ;; Random parameter
+  (let ((idx (floor (* (random) (length params))))  ;; Random parameter index
         (range (nth param-ranges idx)))
 
-    ;; Perturb by ±10% of range
+    ;; Perturbation: ±10% of parameter range
     (let ((perturbation (* 0.1 (- (range :max) (range :min))
                           (- (* 2 (random)) 1))))  ;; Uniform [-1, 1]
 
       (let ((new-val (+ (nth params idx) perturbation)))
 
-        ;; Clamp to range
+        ;; Clamp to valid range
         (let ((clamped (max (range :min) (min (range :max) new-val))))
 
+          ;; Create new parameter vector with mutated value
           (let ((new-params (copy-array params)))
             (set-nth! new-params idx clamped)
             new-params))))))
 
-;; Example: Optimize strategy parameters
+;; Example: Optimize SMA parameters with SA
 (define sa-result
   (simulated-annealing
-    (lambda (params) (- (sma-strategy-fitness params prices)))  ;; Minimize -PnL
+    (lambda (params) (- (sma-strategy-fitness params prices)))  ;; Minimize -Sharpe
     [10 30]                           ;; Initial guess
     (lambda (p) (neighbor-solution-strategy p param-ranges))
     100.0                             ;; Initial temperature
     0.95                              ;; Cooling rate (T ← 0.95*T)
-    1000))                            ;; Max iterations
+    1000))                            ;; 1000 iterations
+
+;; Result: {:solution [12, 45], :energy -1.8}
+;; Sharpe ratio = 1.8 (minimized negative = maximized positive)
 ```
 
-### 7.4.3 Cooling Schedules
+### 7.4.4 Cooling Schedules
+
+The cooling schedule controls exploration vs exploitation trade-off:
 
 | Schedule | Formula | Characteristics |
 |----------|---------|----------------|
 | Exponential | $T_k = T_0 \alpha^k$ | Fast, may miss global optimum |
 | Linear | $T_k = T_0 - k \beta$ | Slow, thorough exploration |
 | Logarithmic | $T_k = T_0 / \log(k+2)$ | Very slow, theoretical guarantee |
-| Adaptive | Increase T if stuck | Best empirical performance |
+| Adaptive | Increase $T$ if stuck | Best empirical performance |
+
+**Adaptive cooling:** Reheat if no improvement for many iterations.
 
 ```lisp
-;; Adaptive cooling: reheat if no improvement
+;; Adaptive simulated annealing (reheat if stuck)
 (define (adaptive-annealing objective initial-solution neighbor-fn
                             initial-temp max-iters)
   (let ((temperature initial-temp)
@@ -807,16 +1044,22 @@ Where:
 
     (for (iter (range 0 max-iters))
       ;; (Standard SA accept/reject logic here)
+      ;; ...
+
+      ;; Track stagnation
+      (if (= best-energy current-energy)
+          (set! no-improvement-count (+ no-improvement-count 1))
+          (set! no-improvement-count 0))
 
       ;; Adaptive cooling
-      (if (= no-improvement-count 0)
-          (set! temperature (* temperature 0.95))  ;; Cool normally
+      (if (> no-improvement-count 50)
+          (do
+            ;; Stuck: reheat to escape
+            (set! temperature (* temperature 1.2))
+            (set! no-improvement-count 0))
 
-          (if (> no-improvement-count 50)
-              (do
-                (set! temperature (* temperature 1.2))  ;; Reheat
-                (set! no-improvement-count 0))
-              null)))
+          ;; Normal cooling
+          (set! temperature (* temperature 0.95))))
 
     {:solution best-solution :energy best-energy}))
 ```
@@ -825,9 +1068,14 @@ Where:
 
 ## 7.5 Grid Search and Bayesian Optimization
 
-### 7.5.1 Grid Search
+### 7.5.1 Grid Search: Exhaustive Exploration
 
-**Exhaustive search** over parameter grid:
+**Grid search:** Evaluate objective at every point on a grid.
+
+**Example:** SMA parameters
+- Fast: [5, 10, 15, 20, 25, ..., 50] (10 values)
+- Slow: [20, 30, 40, ..., 200] (19 values)
+- **Total evaluations:** 10 × 19 = 190
 
 ```lisp
 ;; Grid search for strategy parameters
@@ -835,7 +1083,7 @@ Where:
   (let ((best-params null)
         (best-score -9999))
 
-    ;; Generate all combinations (2D example)
+    ;; Nested loops over parameter grids (2D example)
     (for (p1 (nth param-grids 0))
       (for (p2 (nth param-grids 1))
 
@@ -850,29 +1098,45 @@ Where:
 
     {:params best-params :score best-score}))
 
-;; Example: SMA crossover parameters
+;; Example: SMA crossover
 (define grid-result
   (grid-search
     (lambda (p) (sma-strategy-fitness p prices))
-    [(range 5 51)     ;; Fast: 5-50
-     (range 20 201)]))  ;; Slow: 20-200
+    [(range 5 51 5)      ;; Fast: 5, 10, 15, ..., 50
+     (range 20 201 10)]))  ;; Slow: 20, 30, 40, ..., 200
 
-;; Evaluations: 46 × 181 = 8,326 backtests
+;; Evaluates 10 × 19 = 190 parameter combinations
 ```
 
-⚠️ **Curse of Dimensionality**: Grid search scales exponentially—10 parameters with 10 values each = 10 billion evaluations!
+**Curse of Dimensionality:**
 
-### 7.5.2 Random Search
+Grid search scales **exponentially** with dimensions:
 
-**Random sampling** often outperforms grid search:
+| Parameters | Values per Param | Total Evaluations |
+|-----------|------------------|-------------------|
+| 2 | 10 | 100 |
+| 3 | 10 | 1,000 |
+| 5 | 10 | 100,000 |
+| 10 | 10 | 10,000,000,000 |
+
+**Grid search is infeasible beyond 3-4 parameters.**
+
+### 7.5.2 Random Search: Surprisingly Effective
+
+**Random search:** Sample parameter values randomly.
+
+**Bergstra & Bengio (2012):** "Random search is more efficient than grid search when only a few parameters matter."
+
+**Intuition:** If only 2 out of 10 parameters affect the objective, random search explores those 2 dimensions thoroughly, while grid search wastes evaluations on irrelevant dimensions.
 
 ```lisp
+;; Random search
 (define (random-search objective param-ranges n-samples)
   (let ((best-params null)
         (best-score -9999))
 
     (for (i (range 0 n-samples))
-      ;; Random sample from each range
+      ;; Random sample from each parameter range
       (let ((params
              (map param-ranges
                   (lambda (range)
@@ -889,7 +1153,7 @@ Where:
 
     {:params best-params :score best-score}))
 
-;; 1000 random samples often beats 8000+ grid points
+;; Example: 1000 random samples often beats 8000+ grid points
 (define random-result
   (random-search
     (lambda (p) (sma-strategy-fitness p prices))
@@ -897,56 +1161,48 @@ Where:
     1000))
 ```
 
-💡 **Bergstra & Bengio (2012)**: Random search finds near-optimal parameters in fewer evaluations than grid search when only a few parameters matter.
+**Grid vs Random:**
 
-### 7.5.3 Bayesian Optimization
+- Grid search: 10×10 = 100 evaluations (fixed grid)
+- Random search: 100 evaluations (random points)
 
-```mermaid
----
-config:
-  xyChart:
-    width: 900
-    height: 600
----
-xychart-beta
-    title "Convergence Rate Comparison: Optimization Algorithms"
-    x-axis "Iteration Number" [0, 20, 40, 60, 80, 100]
-    y-axis "Objective Function Value" 0 --> 100
-    line "Adam Optimizer" [95, 62, 38, 22, 12, 5]
-    line "Gradient Descent + Momentum" [95, 70, 48, 32, 20, 10]
-    line "Vanilla Gradient Descent" [95, 78, 62, 50, 40, 32]
-    line "L-BFGS" [95, 55, 25, 10, 3, 1]
-    line "Genetic Algorithm" [95, 88, 78, 65, 52, 38]
-    line "Simulated Annealing" [95, 82, 68, 52, 38, 25]
-```
+If only 1 parameter matters:
+- Grid: Explores 10 distinct values of important param
+- Random: Explores ~100 distinct values of important param (much better!)
 
-**Figure 7.2**: Empirical convergence rates for different optimization algorithms on a non-convex test function (Rastrigin). L-BFGS achieves fastest convergence for smooth problems, while Adam provides robust performance across problem types. Genetic algorithms and simulated annealing show slower but more reliable global convergence. This visualization guides algorithm selection for strategy parameter tuning.
+### 7.5.3 Bayesian Optimization: Smart Sampling
 
-**Gaussian Process** models objective, balances exploration/exploitation:
+**Problem:** Random search wastes evaluations exploring bad regions.
 
-```mermaid
-graph TD
-    A[Prior GP] --> B[Evaluate Point]
-    B --> C[Update GP Posterior]
-    C --> D[Acquisition Function]
-    D --> E{Converged?}
-    E -->|No| B
-    E -->|Yes| F[Return Best]
+**Bayesian Optimization:** Build a **probabilistic model** of the objective, use it to choose where to sample next.
 
-    style A fill:#e1f5ff
-    style F fill:#c3f0c3
-```
+**Process:**
+1. Start with a few random samples
+2. Fit a Gaussian Process (GP) to the observed points
+3. Use **acquisition function** to choose next point (balance exploration/exploitation)
+4. Evaluate objective at that point
+5. Update GP, repeat
+
+**Acquisition function (Upper Confidence Bound):**
+
+$$\text{UCB}(x) = \mu(x) + \kappa \sigma(x)$$
+
+where:
+- $\mu(x)$ = GP mean prediction at $x$ (expected value)
+- $\sigma(x)$ = GP standard deviation at $x$ (uncertainty)
+- $\kappa$ = exploration parameter (typically 2)
+
+**Intuition:** Choose points with high predicted value ($\mu$) OR high uncertainty ($\sigma$).
 
 ```lisp
 ;; Simplified Bayesian optimization (conceptual)
-;; Real implementation uses GP libraries (scikit-optimize, GPyOpt)
-
+;; Real implementation requires GP library (scikit-optimize, GPyOpt)
 (define (bayesian-optimization objective param-ranges n-iters)
-  (let ((observations [])        ;; (params, score) pairs
+  (let ((observations [])        ;; List of {:params, :score}
         (best-params null)
         (best-score -9999))
 
-    ;; Initial random samples
+    ;; Phase 1: Random initialization (5 samples)
     (for (i (range 0 5))
       (let ((params (random-sample param-ranges)))
         (let ((score (objective params)))
@@ -958,12 +1214,12 @@ graph TD
                 (set! best-params params))
               null))))
 
-    ;; Bayesian optimization loop
+    ;; Phase 2: Bayesian optimization (remaining iterations)
     (for (iter (range 0 (- n-iters 5)))
-      ;; Fit GP to observations (conceptual)
-      ;; In practice: gp = GaussianProcessRegressor.fit(X, y)
+      ;; Fit GP to observations (conceptual—requires GP library)
+      ;; gp = GaussianProcessRegressor.fit(X, y)
 
-      ;; Choose next point via acquisition function (e.g., Expected Improvement)
+      ;; Choose next point via acquisition function (e.g., UCB)
       (let ((next-params (maximize-acquisition-function observations param-ranges)))
 
         (let ((score (objective next-params)))
@@ -978,20 +1234,22 @@ graph TD
 
     {:params best-params :score best-score}))
 
-;; Acquisition: Upper Confidence Bound (UCB)
-;; UCB(x) = μ(x) + κ σ(x)
-;; Balances mean prediction μ and uncertainty σ
+;; Acquisition: UCB (upper confidence bound)
+;; In practice, use library to compute GP predictions
+;; UCB(x) = μ(x) + κ*σ(x)  (high mean or high uncertainty)
 ```
 
-📊 **Optimization Method Comparison**:
+**Efficiency Comparison:**
 
 | Method | Evaluations | Global Optimum | Parallelizable |
 |--------|------------|----------------|----------------|
 | Grid Search | 10,000+ | No | Yes |
 | Random Search | 1,000 | Unlikely | Yes |
-| GA | 5,000 | Maybe | Partially |
-| SA | 2,000 | Maybe | No |
-| Bayesian Opt | 100-200 | Likely | Limited |
+| Genetic Algorithm | 5,000 | Maybe | Partially |
+| Simulated Annealing | 2,000 | Maybe | No |
+| **Bayesian Optimization** | **100-200** | **Likely** | **Limited** |
+
+**Bayesian optimization is 10-50x more sample-efficient than random search.**
 
 ---
 
@@ -999,13 +1257,20 @@ graph TD
 
 ### 7.6.1 Penalty Methods
 
-Convert constrained problem to unconstrained via penalties:
+**Problem:** Constraints complicate optimization.
 
-$$\min_x f(x) \quad \text{s.t.} \quad g(x) \leq 0$$
+**Example:** Portfolio weights must sum to 1 and be non-negative.
 
-Becomes:
+**Penalty method:** Convert constrained problem to unconstrained by adding penalties for constraint violations.
+
+**Unconstrained form:**
 
 $$\min_x f(x) + \mu \sum_i \max(0, g_i(x))^2$$
+
+where:
+- $f(x)$ = original objective
+- $g_i(x) \leq 0$ = constraints
+- $\mu$ = penalty coefficient (large $\mu$ → strong enforcement)
 
 ```lisp
 ;; Penalty method for portfolio optimization
@@ -1013,28 +1278,28 @@ $$\min_x f(x) + \mu \sum_i \max(0, g_i(x))^2$$
   (let ((port-return (dot-product weights mu))
         (port-variance (quadratic-form weights sigma)))
 
-    ;; Objective: -Sharpe ratio
-    (let ((sharpe (/ port-return (sqrt port-variance))))
+    ;; Original objective: minimize risk - return
+    (let ((objective (- port-variance (* risk-aversion port-return))))
 
-      ;; Penalties:
-      ;; 1. Weights sum to 1
+      ;; Penalty 1: Weights must sum to 1
       (let ((sum-penalty (* penalty-coef (pow (- (sum weights) 1) 2)))
 
-            ;; 2. Non-negative weights
+            ;; Penalty 2: Non-negative weights
             (neg-penalty (* penalty-coef
                            (sum (map weights
                                     (lambda (w)
-                                      (pow (min 0 w) 2)))))))
+                                      (pow (min 0 w) 2)))))))  ;; Penalty if w < 0
 
-        (+ (- sharpe) sum-penalty neg-penalty)))))
+        (+ objective sum-penalty neg-penalty)))))
 
-;; Optimize with penalties
+;; Optimize with increasing penalties
 (define (optimize-portfolio-penalty mu sigma initial-weights)
-  (let ((penalty-coef 1.0))
+  (let ((penalty-coef 1.0)
+        (current-weights initial-weights))
 
-    ;; Increase penalty over iterations
+    ;; Phase 1-5: Increase penalty gradually
     (for (phase (range 0 5))
-      (set! penalty-coef (* penalty-coef 10))
+      (set! penalty-coef (* penalty-coef 10))  ;; 1, 10, 100, 1000, 10000
 
       (let ((result
              (gradient-descent-nd
@@ -1042,21 +1307,25 @@ $$\min_x f(x) + \mu \sum_i \max(0, g_i(x))^2$$
                (lambda (w) (numerical-gradient
                             (lambda (w2) (penalized-objective w2 mu sigma 1.0 penalty-coef))
                             w))
-               initial-weights
-               0.01 100 0.001)))
+               current-weights
+               0.01
+               100
+               0.001)))
 
-        (set! initial-weights (result :optimum))))
+        (set! current-weights (result :optimum))))
 
-    initial-weights))
+    current-weights))
 ```
 
 ### 7.6.2 Barrier Methods
 
-Enforce constraints via logarithmic barriers:
+**Barrier method:** Use logarithmic barriers to enforce constraints.
+
+**Form:**
 
 $$\min_x f(x) - \mu \sum_i \log(-g_i(x))$$
 
-Barrier prevents $g_i(x) \to 0^+$ (approaching constraint boundary).
+**Barrier prevents $g_i(x) \to 0^+$ (approaching constraint boundary from inside).**
 
 ```lisp
 ;; Log barrier for non-negativity
@@ -1064,38 +1333,53 @@ Barrier prevents $g_i(x) \to 0^+$ (approaching constraint boundary).
   (let ((port-return (dot-product weights mu))
         (port-variance (quadratic-form weights sigma)))
 
-    ;; Sharpe ratio
     (let ((sharpe (/ port-return (sqrt port-variance))))
 
-      ;; Barrier for w > 0
+      ;; Barrier for w > 0: -log(w)
+      ;; As w → 0, -log(w) → ∞ (infinite penalty)
       (let ((barrier-penalty
              (- (* barrier-coef
                   (sum (map weights (lambda (w) (log w))))))))
 
         (+ (- sharpe) barrier-penalty)))))
+
+;; Optimize with decreasing barrier coefficient
+;; Start with large barrier, gradually reduce
 ```
 
-### 7.6.3 Lagrange Multipliers
+### 7.6.3 Lagrange Multipliers: Analytical Solution
 
-Analytical approach for equality constraints:
+For equality constraints, **Lagrange multipliers** provide analytical solutions.
+
+**Example: Minimum variance portfolio**
 
 $$\begin{aligned}
-\min_{x, \lambda} \quad & \mathcal{L}(x, \lambda) = f(x) + \lambda^T h(x) \\
-\text{where} \quad & h(x) = 0
+\min_w \quad & w^T \Sigma w \\
+\text{s.t.} \quad & \mathbf{1}^T w = 1
 \end{aligned}$$
 
-Optimality: $\nabla_x \mathcal{L} = 0$ and $h(x) = 0$
+**Lagrangian:**
+
+$$\mathcal{L}(w, \lambda) = w^T \Sigma w + \lambda(\mathbf{1}^T w - 1)$$
+
+**Optimality conditions:**
+
+$$\nabla_w \mathcal{L} = 2\Sigma w + \lambda \mathbf{1} = 0$$
+
+**Solution:**
+
+$$w^* = -\frac{\lambda}{2} \Sigma^{-1} \mathbf{1}$$
+
+Apply constraint $\mathbf{1}^T w = 1$:
+
+$$\lambda = -\frac{2}{\mathbf{1}^T \Sigma^{-1} \mathbf{1}}$$
+
+**Final formula:**
+
+$$w^* = \frac{\Sigma^{-1} \mathbf{1}}{\mathbf{1}^T \Sigma^{-1} \mathbf{1}}$$
 
 ```lisp
-;; Analytical Markowitz with budget constraint
-;; min w^T Σ w  s.t.  1^T w = 1
-
-;; Lagrangian: L = w^T Σ w + λ(1^T w - 1)
-;; Optimality: ∇_w L = 2 Σ w + λ 1 = 0
-;;             → w = -(λ/2) Σ⁻¹ 1
-;; Budget constraint: 1^T w = 1
-;;                   → λ = -2 / (1^T Σ⁻¹ 1)
-
+;; Minimum variance portfolio (analytical solution)
 (define (minimum-variance-portfolio sigma)
   (let ((sigma-inv (matrix-inverse sigma))
         (ones (make-array (length sigma) 1)))
@@ -1104,125 +1388,78 @@ Optimality: $\nabla_x \mathcal{L} = 0$ and $h(x) = 0$
 
       (let ((denom (dot-product ones sigma-inv-ones)))
 
-        ;; w = Σ⁻¹ 1 / (1^T Σ⁻¹ 1)
+        ;; w* = Σ⁻¹ 1 / (1^T Σ⁻¹ 1)
         (map sigma-inv-ones (lambda (x) (/ x denom)))))))
+
+;; Example
+(define min-var-w (minimum-variance-portfolio sigma))
+;; Minimizes portfolio variance subject to full investment
 ```
 
 ---
 
-## 7.7 Multi-Objective Optimization
+## 7.7 Practical Applications
 
-### 7.7.1 Pareto Frontier
+### 7.7.1 Walk-Forward Optimization
 
-Optimize multiple objectives simultaneously (e.g., return vs risk):
+**Problem:** In-sample optimization overfits.
 
-```lisp
-;; Pareto-optimal portfolios
-(define (pareto-frontier-portfolios mu sigma n-points)
-  (let ((frontier []))
+**Solution: Walk-forward analysis** simulates realistic deployment:
 
-    ;; Vary risk aversion from 0.1 to 10
-    (for (lambda-val (linspace 0.1 10 n-points))
-
-      (let ((weights (markowitz-portfolio mu sigma lambda-val)))
-
-        (let ((port-return (dot-product weights mu))
-              (port-risk (sqrt (quadratic-form weights sigma))))
-
-          (set! frontier (append frontier
-                                {:weights weights
-                                 :return port-return
-                                 :risk port-risk
-                                 :sharpe (/ port-return port-risk)})))))
-
-    frontier))
-
-;; Linear space generator
-(define (linspace start end n)
-  (let ((step (/ (- end start) (- n 1))))
-    (map (range 0 n)
-         (lambda (i) (+ start (* i step))))))
-```
-
-💡 **Pareto Dominance**: Portfolio A dominates B if A has higher return AND lower risk.
-
-### 7.7.2 NSGA-II (Non-Dominated Sorting GA)
-
-Evolutionary algorithm for multi-objective optimization:
-
-1. **Non-dominated sorting**: Rank solutions by dominance
-2. **Crowding distance**: Maintain diversity on Pareto front
-3. **Elite selection**: Preserve best solutions
-
-```lisp
-;; Conceptual NSGA-II (simplified)
-(define (nsga2-portfolio mu sigma pop-size generations)
-  (let ((population (initialize-population-portfolios pop-size (length mu))))
-
-    (for (gen (range 0 generations))
-      ;; Evaluate objectives
-      (let ((objectives
-             (map population
-                  (lambda (w)
-                    {:return (dot-product w mu)
-                     :risk (sqrt (quadratic-form w sigma))}))))
-
-        ;; Non-dominated sorting
-        (let ((fronts (non-dominated-sort population objectives)))
-
-          ;; Select next generation using crowding distance
-          (let ((next-gen (select-with-crowding fronts pop-size)))
-
-            ;; Crossover and mutation
-            (set! population (evolve-population next-gen))))))
-
-    ;; Return Pareto front (rank 0)
-    population))
-```
-
----
-
-## 7.8 Practical Applications
-
-### 7.8.1 Walk-Forward Optimization
-
-Avoid overfitting via rolling optimization:
+1. **Train:** Optimize parameters on historical window (e.g., 1 year)
+2. **Test:** Apply optimized parameters to out-of-sample period (e.g., 1 month)
+3. **Roll forward:** Shift window, repeat
 
 ```lisp
 ;; Walk-forward optimization
+;; Parameters:
+;;   prices: full price history
+;;   train-period: number of periods for training
+;;   test-period: number of periods for testing
+;;   param-ranges: parameter search space
 (define (walk-forward-optimize prices train-period test-period param-ranges)
   (let ((n (length prices))
         (results []))
 
+    ;; Rolling window: train, then test
     (for (i (range train-period (- n test-period) test-period))
-      ;; Train on [i-train_period, i]
+
+      ;; Train on [i - train_period, i]
       (let ((train-prices (slice prices (- i train-period) i)))
 
         (let ((optimal-params
                (genetic-algorithm
                  (lambda (p) (sma-strategy-fitness p train-prices))
-                 param-ranges 30 50)))
+                 param-ranges
+                 30    ;; Small population (fast)
+                 50)))  ;; Few generations
 
-          ;; Test on [i, i+test_period]
+          ;; Test on [i, i + test_period]
           (let ((test-prices (slice prices i (+ i test-period))))
 
-            (let ((test-pnl (sma-strategy-fitness optimal-params test-prices)))
+            (let ((test-sharpe (sma-strategy-fitness optimal-params test-prices)))
 
               (set! results (append results
                                    {:train-end i
                                     :params optimal-params
-                                    :test-pnl test-pnl})))))))
+                                    :test-sharpe test-sharpe})))))))
 
     results))
 
 ;; Aggregate out-of-sample performance
 (define (walk-forward-summary results)
-  {:total-pnl (sum (map results (lambda (r) (r :test-pnl))))
-   :periods (length results)
-   :avg-pnl (average (map results (lambda (r) (r :test-pnl))))})
+  {:avg-sharpe (average (map results (lambda (r) (r :test-sharpe))))
+   :periods (length results)})
+
+;; Example
+(define wf-results
+  (walk-forward-optimize historical-prices 252 21 param-ranges))
+
+(define wf-summary (walk-forward-summary wf-results))
+;; avg-sharpe: realistic estimate (not overfitted)
 ```
 
-📊 **Walk-Forward vs In-Sample**:
+**Walk-Forward vs In-Sample:**
 
 | Metric | In-Sample Optimized | Walk-Forward |
 |--------|-------------------|--------------|
@@ -1230,132 +1467,158 @@ Avoid overfitting via rolling optimization:
 | Max Drawdown | 15% | 28% |
 | Win Rate | 65% | 52% |
 
-### 7.8.2 Position Sizing Optimization
+**In-sample results are always better—that's overfitting!**
+
+### 7.7.2 Kelly Criterion: Optimal Position Sizing
+
+**Kelly Criterion:** Maximize geometric growth rate by betting a fraction of capital proportional to edge.
+
+**Formula:**
+
+$$f^* = \frac{p \cdot b - q}{b}$$
+
+where:
+- $p$ = win probability
+- $q = 1 - p$ = loss probability
+- $b$ = win/loss ratio (payoff when win / loss when lose)
+- $f^*$ = fraction of capital to risk
 
 ```lisp
-;; Kelly Criterion: optimal position size
-;; f* = (p*b - q) / b
-;; where p = win probability, q = 1-p, b = win/loss ratio
-
+;; Kelly fraction calculation
 (define (kelly-fraction win-prob win-loss-ratio)
   (let ((lose-prob (- 1 win-prob)))
     (/ (- (* win-prob win-loss-ratio) lose-prob)
        win-loss-ratio)))
 
-;; Example: 55% win rate, 2:1 win/loss
+;; Example: 55% win rate, 2:1 win/loss ratio
 (define kelly-f (kelly-fraction 0.55 2.0))
-;; → 0.325 (risk 32.5% of capital)
+;; → 0.325 (risk 32.5% of capital per trade)
 
 ;; Fractional Kelly (reduce risk)
 (define (fractional-kelly win-prob win-loss-ratio fraction)
   (* fraction (kelly-fraction win-prob win-loss-ratio)))
 
-;; Half-Kelly: 16.25% of capital
+;; Half-Kelly: more conservative
 (define half-kelly (fractional-kelly 0.55 2.0 0.5))
+;; → 0.1625 (risk 16.25%)
 ```
 
-### 7.8.3 Transaction Cost Optimization
+**Why fractional Kelly?**
+
+Full Kelly maximizes growth but has high volatility. Half-Kelly sacrifices some growth for much lower drawdowns.
+
+### 7.7.3 Transaction Cost Optimization
+
+**Problem:** Optimal theoretical portfolio may be unprofitable after transaction costs.
+
+**Solution:** Explicitly model costs in objective.
 
 ```lisp
-;; Optimize portfolio with transaction costs
+;; Portfolio optimization with transaction costs
 (define (portfolio-with-costs mu sigma current-weights transaction-cost-rate)
+  ;; Optimal weights (ignoring costs)
   (let ((optimal-weights (markowitz-portfolio mu sigma 2.0)))
 
-    ;; Calculate turnover
+    ;; Calculate turnover (sum of absolute changes)
     (let ((turnover
            (sum (map (range 0 (length current-weights))
                     (lambda (i)
                       (abs (- (nth optimal-weights i)
                              (nth current-weights i))))))))
 
-      ;; Net expected return after costs
+      ;; Expected return after costs
       (let ((gross-return (dot-product optimal-weights mu))
             (costs (* transaction-cost-rate turnover)))
 
-        (if (> (- gross-return costs) (dot-product current-weights mu))
+        ;; Only rebalance if net return > current return
+        (if (> (- gross-return costs)
+              (dot-product current-weights mu))
             optimal-weights  ;; Rebalance
             current-weights))))) ;; Don't trade
+
+;; Example
+(define current-w [0.3 0.4 0.3])
+(define new-w (portfolio-with-costs mu sigma current-w 0.001))
+;; If turnover*0.1% < gain, rebalance; else hold
 ```
 
 ---
 
-## 7.9 Key Takeaways
+## 7.8 Key Takeaways
 
-```mermaid
-mindmap
-  root((Optimization))
-    Gradient Methods
-      Vanilla GD
-      Momentum
-      Adam
-      Fast Convergence
-    Convex
-      Linear Programming
-      Quadratic Programming
-      Global Optimum
-      Portfolio Theory
-    Metaheuristics
-      Genetic Algorithms
-      Simulated Annealing
-      No Derivatives
-      Global Search
-    Search Methods
-      Grid Search
-      Random Search
-      Bayesian Optimization
-      Sample Efficiency
-    Constraints
-      Penalty Methods
-      Barrier Methods
-      Lagrange Multipliers
-      Feasibility
-```
+**Algorithm Selection Framework:**
 
-🎯 **Algorithm Selection Guide**:
-
-| Scenario | Recommended Method | Rationale |
-|----------|-------------------|-----------|
+| Problem Type | Recommended Method | Rationale |
+|-------------|-------------------|-----------|
 | Smooth, differentiable | Adam optimizer | Fast, robust |
-| Portfolio optimization | QP solver | Convex, analytical |
-| Discrete parameters | Genetic algorithm | Handles integer constraints |
-| Expensive objective | Bayesian optimization | Sample-efficient |
-| Multi-objective | NSGA-II | Pareto frontier |
+| Convex (portfolio) | QP solver (CVXPY) | Guaranteed global optimum |
+| Discrete parameters | Genetic algorithm | Handles integers naturally |
+| Expensive objective | Bayesian optimization | Sample-efficient (100 evals) |
+| Multi-objective | NSGA-II | Finds Pareto frontier |
 | Non-smooth | Simulated annealing | Escapes local minima |
 
-⚠️ **Common Pitfalls**:
+**Common Pitfalls:**
 
-- **Overfitting**: In-sample optimization doesn't generalize—use walk-forward analysis
-- **Ignoring transaction costs**: Optimal theoretical portfolio may be unprofitable after costs
-- **Parameter instability**: Optimal parameters change over time—require periodic re-optimization
-- **Curse of dimensionality**: Grid search infeasible beyond 3-4 parameters
-- **Local optima**: Gradient descent fails on non-convex landscapes—use multiple random starts
+- ⚠️ **Overfitting:** In-sample optimization ≠ future performance → use walk-forward
+- ⚠️ **Ignoring costs:** Theoretical optimum may be unprofitable after fees
+- ⚠️ **Parameter instability:** Optimal parameters change over time → re-optimize periodically
+- ⚠️ **Curse of dimensionality:** Grid search fails beyond 3 parameters → use Bayesian optimization
+- ⚠️ **Local optima:** Gradient descent gets stuck → use multiple random starts or GA
 
-💻 **Performance Benchmarks**:
+**Performance Benchmarks (2-parameter problem):**
 
-| Task | Method | Time (2-param) | Time (10-param) |
-|------|--------|---------------|-----------------|
-| Grid search | Exhaustive | 1 min | 10 hours |
-| Random search | 1000 samples | 5 sec | 50 sec |
-| GA | 50 pop × 100 gen | 30 sec | 5 min |
-| Bayesian Opt | 100 evals | 20 sec | 3 min |
-| Gradient descent | 100 iters | 1 sec | 2 sec |
+| Method | Time | Evaluations |
+|--------|------|-------------|
+| Grid Search | 1 min | 10,000 |
+| Random Search | 5 sec | 1,000 |
+| Genetic Algorithm | 30 sec | 5,000 |
+| Simulated Annealing | 20 sec | 2,000 |
+| Bayesian Optimization | 20 sec | 100 |
+| **Gradient Descent** | **1 sec** | **50** |
+
+**For 10-parameter problem:**
+
+| Method | Time |
+|--------|------|
+| Grid Search | 10 hours (10^10 evals) |
+| Random Search | 50 sec |
+| Genetic Algorithm | 5 min |
+| Bayesian Optimization | 3 min |
+
+**Next Steps:**
+
+Chapter 8 (Risk Management) uses these optimization techniques to:
+- Optimize position sizes (Kelly criterion)
+- Minimize portfolio drawdown (constrained optimization)
+- Calibrate risk models (maximum likelihood estimation)
+
+The optimization skills you've learned here are foundational—every quantitative trading decision involves optimization.
 
 ---
 
 ## Further Reading
 
-1. Nocedal, J., & Wright, S. (2006). *Numerical Optimization* (2nd ed.). Springer.
+1. **Nocedal, J., & Wright, S. (2006)**. *Numerical Optimization* (2nd ed.). Springer.
+   - The definitive reference for gradient-based methods—comprehensive and rigorous.
 
-2. Boyd, S., & Vandenberghe, L. (2004). *Convex Optimization*. Cambridge University Press.
+2. **Boyd, S., & Vandenberghe, L. (2004)**. *Convex Optimization*. Cambridge University Press.
+   - Free online: https://web.stanford.edu/~boyd/cvxbook/
+   - Beautiful treatment of convex optimization with applications.
 
-3. Deb, K. (2001). *Multi-Objective Optimization using Evolutionary Algorithms*. Wiley.
+3. **Deb, K. (2001)**. *Multi-Objective Optimization using Evolutionary Algorithms*. Wiley.
+   - Deep dive into genetic algorithms and multi-objective optimization.
 
-4. Bergstra, J., & Bengio, Y. (2012). "Random Search for Hyper-Parameter Optimization". *Journal of Machine Learning Research*, 13, 281-305.
+4. **Bergstra, J., & Bengio, Y. (2012)**. "Random Search for Hyper-Parameter Optimization". *Journal of Machine Learning Research*, 13, 281-305.
+   - Empirical evidence that random search beats grid search.
 
-5. Pardo, R. (2008). *The Evaluation and Optimization of Trading Strategies* (2nd ed.). Wiley.
+5. **Pardo, R. (2008)**. *The Evaluation and Optimization of Trading Strategies* (2nd ed.). Wiley.
+   - Practical guide to walk-forward optimization and robustness testing.
+
+6. **Mockus, J. (2012)**. *Bayesian Approach to Global Optimization*. Springer.
+   - Theoretical foundations of Bayesian optimization.
 
 ---
 
-**Next Chapter Preview**: [Chapter 8: Risk Management](#) (when chapters 8-10 are created) will cover position sizing, portfolio risk metrics, and drawdown control—essential for translating optimized strategies into robust, production-ready systems.
-
-**Looking Ahead to Trading Strategies**: Chapters 11-20 apply these optimization techniques to real-world trading: pairs trading uses OU process calibration (Chapter 6) and QP portfolio optimization (Chapter 7), while momentum strategies leverage GARCH volatility forecasts (Chapter 6) and walk-forward parameter tuning (Chapter 7).
+**Navigation:**
+- [← Chapter 6: Stochastic Processes](06_stochastic_processes.md)
+- [→ Chapter 8: Risk Management](08_risk_management.md) (when available)

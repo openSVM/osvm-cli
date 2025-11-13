@@ -1,540 +1,1021 @@
 # Chapter 5: Functional Programming for Trading Systems
 
-## Introduction
+## The $440 Million Bug That Could Have Been Prevented
 
-Functional programming (FP) transforms how we build trading systems. By emphasizing pure functions, immutability, and composition, FP eliminates entire classes of bugs that plague imperative trading code: race conditions, unintended side effects, and non-deterministic behavior.
+On August 1, 2012, Knight Capital Group deployed new trading software. Within 45 minutes, a hidden bug executed 4 million trades, accumulating a $440 million loss—nearly wiping out the company. The root cause? **Mutable shared state** in their order routing system.
 
-In finance, where a single bug can cause million-dollar losses, FP's mathematical rigor and testability are not luxuries—they're necessities. This chapter shows how FP principles map directly onto trading problems: backtests become pure transformations, strategies compose like mathematical functions, and concurrent execution becomes safe by default.
+A flag variable that should have been set to "off" remained "on" from a previous test. This single piece of mutable state, shared across multiple trading algorithms, caused the system to repeatedly send duplicate orders. Each algorithm thought it was acting independently, but they were all reading and modifying the same variable without coordination.
+
+This disaster illustrates the central problem that functional programming solves: **when state can change anywhere, bugs can hide everywhere**.
 
 ---
 
-## 5.1 Pure Functions and Referential Transparency
+## Why Trading Systems Need Functional Programming
 
-**Figure 5.2**: Functional Programming Learning Journey
+Before we dive into techniques, let's understand *why* functional programming matters for trading:
 
-```mermaid
-journey
-    title Functional Refactoring: From Imperative to Pure
-    section Discovery
-      Write imperative loops: 3: Developer
-      Read about map/filter/reduce: 4: Developer
-      First functional attempt: 2: Developer
-    section Confusion
-      Fight with immutability: 1: Developer
-      Debug side effects: 2: Developer
-      Question everything: 3: Developer
-    section Practice
-      Refactor small functions: 4: Developer
-      Compose larger pipelines: 5: Developer
-      Master higher-order functions: 5: Developer
-    section Aha Moments
-      Tests become trivial: 5: Developer
-      Concurrency just works: 5: Developer
-      Code reads like math: 5: Developer
-    section Mastery
-      Default to pure functions: 5: Developer
-      Debug in minutes not hours: 5: Developer
-      Ship fewer bugs: 5: Developer
+**Problem 1: Backtests that lie**
+
+You run a backtest on Monday. Sharpe ratio: 2.3. You run the *exact same code* on Tuesday with the *exact same data*. Sharpe ratio: 1.8. What happened?
+
+Your strategy accidentally relied on global state—perhaps a counter that wasn't reset, or a cache that accumulated stale data. The backtest isn't **reproducible** because the code has **side effects** that change hidden state.
+
+**Problem 2: Race conditions in live trading**
+
+Your strategy monitors SOL/USDC on two exchanges. When prices diverge, you arbitrage. Simple, right?
+
+Thread 1 sees: Binance $100, Coinbase $102 → Buy Binance, Sell Coinbase
+Thread 2 sees: Binance $100, Coinbase $102 → Buy Binance, Sell Coinbase
+
+Both threads execute simultaneously. You buy 200 SOL on Binance (double the intended position) and sell 200 on Coinbase. The arbitrage profit evaporates because you've doubled your transaction costs and moved the market against yourself.
+
+The problem? **Shared mutable state** (your position counter) accessed by multiple threads without proper synchronization.
+
+**Problem 3: Debugging temporal chaos**
+
+Your strategy makes a bad trade at 2:47 PM. You add logging to debug, but now the bug disappears. Why? Your logging code modified global state (a counter, a timestamp, a file pointer), changing the program's behavior. This is a **Heisenbug**—observation changes the outcome.
+
+Functional programming eliminates these problems through three core principles:
+
+1. **Pure functions**: Output depends only on inputs, never on hidden state
+2. **Immutability**: Data never changes after creation
+3. **Composition**: Build complex behavior from simple, reusable pieces
+
+Let's explore each principle by solving real trading problems.
+
+---
+
+## 5.1 Pure Functions: Making Code Predictable
+
+### What Makes a Function "Pure"?
+
+A pure function is like a mathematical equation. Given the same inputs, it *always* produces the same outputs, and it doesn't change anything else in the world.
+
+**Mathematical function (pure):**
+```
+f(x) = x² + 2x + 1
+f(3) = 16    (always)
+f(3) = 16    (always)
+f(3) = 16    (always, forever)
 ```
 
-*This journey diagram maps the emotional and technical progression of learning functional programming for trading systems. The Discovery phase brings excitement (4) tempered by initial failures (2). The Confusion phase is the "valley of despair" (scores 1-3) where mutable state habits clash with FP principles. Practice gradually builds competence (4-5) through refactoring exercises. Aha moments arrive suddenly—tests that write themselves, concurrent code without locks, mathematical clarity. Mastery (all 5s) emerges when pure functions become the default mental model, debugging time drops 90%, and production bugs decrease dramatically. Most traders who push through the confusion valley never return to imperative style.*
+**Trading calculation (pure):**
+```lisp
+;; Calculate profit/loss from a trade
+(define (calculate-pnl entry-price exit-price quantity)
+  (* quantity (- exit-price entry-price)))
 
----
+;; This function is pure because:
+;; 1. Same inputs → same output (always)
+(calculate-pnl 100 105 10)  ;; → 50
+(calculate-pnl 100 105 10)  ;; → 50 (deterministic)
 
-### 5.1.1 Definition and Properties
+;; 2. No side effects (doesn't change anything)
+;; - Doesn't modify global variables
+;; - Doesn't write to databases
+;; - Doesn't send network requests
+;; - Doesn't print to console
+```
 
-A **pure function** satisfies two constraints:
-
-1. **Deterministic**: Same inputs always produce same outputs
-2. **No side effects**: Doesn't modify external state or perform I/O
+Now contrast with an **impure** version:
 
 ```lisp
-;; PURE: Deterministic, no side effects
+;; IMPURE: Modifies global state
+(define total-pnl 0)  ;; Global variable (danger!)
+
+(define (calculate-pnl-impure entry-price exit-price quantity)
+  (let ((pnl (* quantity (- exit-price entry-price))))
+    (set! total-pnl (+ total-pnl pnl))  ;; Side effect!
+    pnl))
+
+;; This function has hidden behavior:
+(calculate-pnl-impure 100 105 10)  ;; → 50, and total-pnl becomes 50
+(calculate-pnl-impure 100 105 10)  ;; → 50, but total-pnl becomes 100!
+
+;; Two problems:
+;; 1. The function's behavior depends on when you call it
+;; 2. Concurrent calls will corrupt total-pnl (race condition)
+```
+
+### Why Purity Matters: The Backtest Reproducibility Problem
+
+Imagine backtesting a simple moving average crossover strategy:
+
+```lisp
+;; IMPURE VERSION (typical imperative style)
+(define sma-fast [])  ;; Global arrays (hidden state!)
+(define sma-slow [])
+(define position 0)
+
+(define (backtest-impure prices)
+  ;; BUG: These arrays accumulate across multiple backtest runs!
+  (set! sma-fast [])  ;; We "reset" them, but...
+  (set! sma-slow [])
+  (set! position 0)
+
+  (for (i (range 10 (length prices)))
+    (let ((fast (average (slice prices (- i 10) i)))
+          (slow (average (slice prices (- i 20) i))))
+
+      (set! sma-fast (append sma-fast fast))  ;; Side effect
+      (set! sma-slow (append sma-slow slow))  ;; Side effect
+
+      ;; Trading logic
+      (if (and (> fast slow) (= position 0))
+          (set! position 100)  ;; Buy
+          (if (and (< fast slow) (> position 0))
+              (set! position 0)  ;; Sell
+              null))))
+
+  {:final-position position
+   :trades (length sma-fast)})  ;; Wrong! Counts SMA calculations, not trades
+```
+
+This code has subtle bugs:
+
+1. **Non-deterministic across runs**: If you call `backtest-impure` twice, the second run might behave differently because global arrays might not be fully cleared
+2. **Hard to test**: You can't test the SMA calculation independently—it's entangled with the trading logic
+3. **Impossible to parallelize**: Two backtests running simultaneously will corrupt each other's global state
+
+Now the **pure** version:
+
+```lisp
+;; PURE VERSION: All inputs explicit, all outputs explicit
 (define (calculate-sma prices window)
-  (let ((n (length prices)))
-    (if (< n window)
-        []
-        (let ((result []))
-          (for (i (range (- window 1) n))
-            (let ((window-sum (sum (slice prices (- i window -1) (+ i 1)))))
-              (set! result (append result (/ window-sum window)))))
-          result))))
+  "Calculate simple moving average for a price series.
+   Returns array of SMA values (length = prices.length - window + 1)"
 
-;; IMPURE: Modifies global state (side effect)
-(define total-trades 0)  ;; Global mutable state
+  (let ((result []))  ;; Local variable (no global state)
+    (for (i (range (- window 1) (length prices)))
+      ;; Extract window of prices
+      (let ((window-prices (slice prices (- i window -1) (+ i 1))))
+        ;; Calculate average for this window
+        (let ((avg (/ (sum window-prices) window)))
+          (set! result (append result avg)))))
+    result))
 
-(define (execute-trade-impure price quantity)
-  (set! total-trades (+ total-trades 1))  ;; Side effect!
-  (* price quantity))
+;; Test it in isolation:
+(define test-prices [100 102 101 103 105])
+(define sma-3 (calculate-sma test-prices 3))
+;; → [101.0, 102.0, 103.0]
+;;
+;; Let's verify by hand:
+;; Window 1: [100, 102, 101] → average = 303/3 = 101.0 ✓
+;; Window 2: [102, 101, 103] → average = 306/3 = 102.0 ✓
+;; Window 3: [101, 103, 105] → average = 309/3 = 103.0 ✓
 
-;; PURE equivalent: Return updated state explicitly
-(define (execute-trade-pure trade-count price quantity)
-  {:trade-count (+ trade-count 1)
-   :value (* price quantity)})
-```
+(define (generate-signals fast-sma slow-sma)
+  "Generate buy/sell signals from two SMA series.
+   Returns array of signals: 'buy', 'sell', or 'hold'"
 
-💡 **Referential Transparency**: An expression is referentially transparent if it can be replaced by its value without changing program behavior.
+  (let ((signals []))
+    (for (i (range 0 (min (length fast-sma) (length slow-sma))))
+      (let ((fast (nth fast-sma i))
+            (slow (nth slow-sma i)))
 
-```lisp
-;; Referentially transparent
-(define x (+ 2 3))      ;; Can replace with 5
-(define y (* x 4))      ;; Becomes (* 5 4) = 20
+        ;; Crossover logic
+        (if (> i 0)
+            (let ((prev-fast (nth fast-sma (- i 1)))
+                  (prev-slow (nth slow-sma (- i 1))))
 
-;; NOT referentially transparent
-(define x (read-market-price "SOL/USDC"))  ;; Value changes each call!
-(define y (* x 4))                          ;; Different each time
-```
+              ;; Golden cross: fast crosses above slow
+              (if (and (> fast slow) (<= prev-fast prev-slow))
+                  (set! signals (append signals "buy"))
 
-### 5.1.2 Benefits for Backtesting
+                  ;; Death cross: fast crosses below slow
+                  (if (and (< fast slow) (>= prev-fast prev-slow))
+                      (set! signals (append signals "sell"))
 
-Pure functions make backtesting deterministic and reproducible:
+                      ;; No cross
+                      (set! signals (append signals "hold")))))
 
-```lisp
-;; Pure backtest function
-(define (backtest-strategy strategy prices initial-capital)
+            ;; First signal (no previous value to compare)
+            (set! signals (append signals "hold")))))
+    signals))
+
+(define (simulate-trades signals prices initial-capital)
+  "Simulate trades based on signals.
+   Returns final portfolio state with trade history"
+
   (let ((capital initial-capital)
         (position 0)
         (trades []))
 
-    (for (i (range 0 (length prices)))
-      (let ((price (nth prices i))
-            (signal (strategy prices i)))  ;; Strategy is pure function
+    (for (i (range 0 (length signals)))
+      (let ((signal (nth signals i))
+            (price (nth prices i)))
 
-        (if (and (= signal "buy") (> capital (* price 100)))
-            (do
-              (set! position (+ position 100))
-              (set! capital (- capital (* price 100)))
-              (set! trades (append trades {:time i :type "buy" :price price})))
+        ;; Execute buy
+        (if (and (= signal "buy") (= position 0))
+            (let ((shares (floor (/ capital price))))
+              (set! position shares)
+              (set! capital (- capital (* shares price)))
+              (set! trades (append trades {:time i :type "buy" :price price :shares shares})))
 
+            ;; Execute sell
             (if (and (= signal "sell") (> position 0))
                 (do
-                  (set! capital (+ capital (* price position)))
-                  (set! trades (append trades {:time i :type "sell" :price price}))
+                  (set! capital (+ capital (* position price)))
+                  (set! trades (append trades {:time i :type "sell" :price price :shares position}))
                   (set! position 0))
                 null))))
 
-    {:final-capital capital
-     :final-position position
-     :trades trades
-     :pnl (- (+ capital (* position (nth prices (- (length prices) 1))))
-             initial-capital)}))
+    ;; Final portfolio value
+    (let ((final-value (+ capital (* position (last prices)))))
+      {:capital capital
+       :position position
+       :trades trades
+       :final-value final-value
+       :pnl (- final-value initial-capital)})))
 
-;; Pure strategy: SMA crossover
-(define (sma-crossover-strategy fast-period slow-period)
-  (lambda (prices i)
-    (if (< i slow-period)
-        "hold"
-        (let ((fast-sma (average (slice prices (- i fast-period) i)))
-              (slow-sma (average (slice prices (- i slow-period) i)))
-              (prev-fast (average (slice prices (- i fast-period 1) (- i 1))))
-              (prev-slow (average (slice prices (- i slow-period 1) (- i 1)))))
+;; Pure backtest: compose pure functions
+(define (backtest-pure prices fast-window slow-window initial-capital)
+  "Complete backtest pipeline using pure function composition"
 
-          (if (and (> fast-sma slow-sma) (<= prev-fast prev-slow))
-              "buy"
-              (if (and (< fast-sma slow-sma) (>= prev-fast prev-slow))
-                  "sell"
-                  "hold"))))))
+  (let ((fast-sma (calculate-sma prices fast-window))
+        (slow-sma (calculate-sma prices slow-window)))
+
+    ;; Align SMAs (slow-sma is shorter, starts later)
+    (let ((offset (- slow-window fast-window))
+          (aligned-fast (slice fast-sma offset (length fast-sma))))
+
+      (let ((signals (generate-signals aligned-fast slow-sma)))
+
+        ;; Align prices with signals
+        (let ((aligned-prices (slice prices (+ slow-window -1) (length prices))))
+
+          (simulate-trades signals aligned-prices initial-capital))))))
 ```
 
-🎯 **Reproducibility Guarantee**:
+Now let's see why this matters:
 
 ```lisp
-;; Run same backtest 1000 times - identical results EVERY time
-(define strategy (sma-crossover-strategy 10 30))
-(define prices [100 102 101 103 105 104 106 108 107 110])
+;; Test with concrete data
+(define test-prices [100 102 101 103 105 104 106 108 107 110 112 111])
 
+;; Run backtest once
+(define result1 (backtest-pure test-prices 3 5 10000))
+;; → {:final-value 11234 :pnl 1234 :trades [...]}
+
+;; Run exact same backtest again
+(define result2 (backtest-pure test-prices 3 5 10000))
+;; → {:final-value 11234 :pnl 1234 :trades [...]}
+
+;; Results are IDENTICAL because function is pure
+(= result1 result2)  ;; → true (always!)
+
+;; Run 1000 backtests in parallel (if we had parallelism)
 (define results
   (map (range 0 1000)
-       (lambda (_) (backtest-strategy strategy prices 10000))))
+       (lambda (_) (backtest-pure test-prices 3 5 10000))))
 
-;; ALL results identical: same PnL, same trades, same final capital
-(define unique-results (deduplicate results))
-(length unique-results)  ;; → 1 (only one unique result)
+;; ALL 1000 results are identical
+(define unique (deduplicate results))
+(length unique)  ;; → 1 (only one unique result)
+
+;; This is the power of purity:
+;; - Deterministic: Same inputs → same outputs
+;; - Testable: Each function can be tested in isolation
+;; - Composable: Functions combine like LEGO bricks
+;; - Parallelizable: No shared state = no race conditions
+;; - Debuggable: No hidden state to corrupt your reasoning
 ```
+
+### The Testing Advantage
+
+Because each function is pure, we can test them independently with **concrete examples**:
+
+```lisp
+;; Test SMA calculation
+(define test-sma (calculate-sma [10 20 30 40 50] 3))
+;; Expected: [20, 30, 40]
+;; Window 1: (10+20+30)/3 = 20 ✓
+;; Window 2: (20+30+40)/3 = 30 ✓
+;; Window 3: (30+40+50)/3 = 40 ✓
+(assert (= test-sma [20 30 40]))
+
+;; Test signal generation
+(define test-signals (generate-signals [10 15 20] [12 14 16]))
+;; Fast starts below slow (10 < 12), then crosses above
+;; Expected: ["hold", "hold", "buy"]
+(assert (= (nth test-signals 2) "buy"))
+
+;; Test trade execution
+(define test-trades (simulate-trades ["hold" "buy" "hold" "sell"]
+                                     [100 105 110 108]
+                                     1000))
+;; Buy at 105: get floor(1000/105) = 9 shares, capital = 1000 - 945 = 55
+;; Sell at 108: capital = 55 + 9*108 = 1027
+;; PnL = 1027 - 1000 = 27
+(assert (= (test-trades :pnl) 27))
+```
+
+Every function can be verified **by hand** with small inputs. This is impossible with impure functions that depend on hidden state.
 
 ---
 
-## 5.2 Higher-Order Functions
+## 5.2 Higher-Order Functions: Code That Writes Code
 
-### 5.2.1 Map, Filter, Reduce
+### The Problem: Repetitive Transformations
 
-Higher-order functions accept functions as arguments or return them:
+You're analyzing a portfolio of 100 assets. For each asset, you need to:
+1. Calculate daily returns
+2. Compute volatility
+3. Normalize returns (z-score)
+4. Detect outliers
+
+The imperative way leads to repetitive loops:
 
 ```lisp
-;; MAP: Transform each element
-(define prices [100 102 101 103 105])
-(define log-returns
-  (map (range 1 (length prices))
-       (lambda (i)
-         (log (/ (nth prices i) (nth prices (- i 1)))))))
-;; → [0.0198 -0.0098 0.0196 0.0192]
+;; IMPERATIVE: Repetitive loops everywhere
+(define returns [])
+(for (i (range 1 (length prices)))
+  (set! returns (append returns (/ (nth prices i) (nth prices (- i 1))))))
 
-;; FILTER: Select elements matching predicate
-(define large-moves
-  (filter log-returns
-          (lambda (r) (> (abs r) 0.015))))
-;; → [0.0198 0.0196 0.0192]
+(define squared-returns [])
+(for (i (range 0 (length returns)))
+  (set! squared-returns (append squared-returns
+                                (* (nth returns i) (nth returns i)))))
 
-;; REDUCE: Aggregate to single value
-(define total-return
-  (reduce log-returns 0
-          (lambda (acc r) (+ acc r))))
-;; → Sum of all log returns
-
-;; Compound interest (multiplicative reduce)
-(define cumulative-returns
-  (reduce prices 1.0
-          (lambda (acc p)
-            (* acc (/ p (first prices))))))
+(define normalized [])
+(let ((mean (average returns))
+      (std (std-dev returns)))
+  (for (i (range 0 (length returns)))
+    (set! normalized (append normalized
+                            (/ (- (nth returns i) mean) std)))))
 ```
 
-### 5.2.2 Indicator Composition
+Notice the pattern: **loop through array, transform each element, build new array**. This appears three times!
 
-Higher-order functions enable indicator composition:
+Higher-order functions eliminate this repetition by treating **functions as data**:
 
 ```lisp
-;; Generic windowed operation
-(define (windowed-operation prices window op)
-  (map (range (- window 1) (length prices))
-       (lambda (i)
-         (op (slice prices (- i window -1) (+ i 1))))))
+;; FUNCTIONAL: Transform with map
+(define returns
+  (map (range 1 (length prices))
+       (lambda (i) (/ (nth prices i) (nth prices (- i 1))))))
 
-;; SMA using windowed-operation
+(define squared-returns
+  (map returns (lambda (r) (* r r))))
+
+(define normalized
+  (let ((mean (average returns))
+        (std (std-dev returns)))
+    (map returns (lambda (r) (/ (- r mean) std)))))
+```
+
+The `map` function encapsulates the loop pattern. We just specify *what* to do to each element (via a `lambda` function), not *how* to loop.
+
+### Map: Transform Every Element
+
+`map` takes two arguments:
+1. A collection (array)
+2. A function to apply to each element
+
+It returns a new array with the function applied to every element.
+
+**By hand example:**
+
+```lisp
+;; Transform each price to a percentage change
+(define prices [100 105 103 108])
+
+;; What we want:
+;; 100 → (no previous, skip)
+;; 105 → (105/100 - 1) * 100 = 5%
+;; 103 → (103/105 - 1) * 100 = -1.9%
+;; 108 → (108/103 - 1) * 100 = 4.85%
+
+(define pct-changes
+  (map (range 1 (length prices))
+       (lambda (i)
+         (* 100 (- (/ (nth prices i) (nth prices (- i 1))) 1)))))
+
+;; Result: [5.0, -1.9047, 4.8543]
+
+;; Let's verify step by step:
+;; i=1: prices[1]=105, prices[0]=100 → 100*(105/100-1) = 100*0.05 = 5.0 ✓
+;; i=2: prices[2]=103, prices[1]=105 → 100*(103/105-1) = 100*(-0.019) = -1.9 ✓
+;; i=3: prices[3]=108, prices[2]=103 → 100*(108/103-1) = 100*0.0485 = 4.85 ✓
+```
+
+### Filter: Select Elements That Match
+
+`filter` takes a collection and a **predicate** (a function that returns true/false), returning only elements where the predicate is true.
+
+**By hand example:**
+
+```lisp
+;; Find all days with returns > 2%
+(define returns [0.5 2.3 -1.2 3.1 0.8 -0.5 2.7])
+
+(define large-gains
+  (filter returns (lambda (r) (> r 2.0))))
+
+;; Process each element:
+;; 0.5 > 2.0? NO → exclude
+;; 2.3 > 2.0? YES → include
+;; -1.2 > 2.0? NO → exclude
+;; 3.1 > 2.0? YES → include
+;; 0.8 > 2.0? NO → exclude
+;; -0.5 > 2.0? NO → exclude
+;; 2.7 > 2.0? YES → include
+
+;; Result: [2.3, 3.1, 2.7]
+```
+
+### Reduce: Aggregate to a Single Value
+
+`reduce` (also called "fold") collapses an array into a single value by repeatedly applying a function.
+
+**By hand example:**
+
+```lisp
+;; Calculate total portfolio value
+(define holdings [
+  {:symbol "SOL" :shares 100 :price 105}
+  {:symbol "BTC" :shares 2 :price 45000}
+  {:symbol "ETH" :shares 10 :price 2500}
+])
+
+(define total-value
+  (reduce holdings
+          0  ;; Starting value (accumulator)
+          (lambda (acc holding)
+            (+ acc (* (holding :shares) (holding :price))))))
+
+;; Step-by-step execution:
+;; acc=0, holding=SOL → acc = 0 + 100*105 = 10500
+;; acc=10500, holding=BTC → acc = 10500 + 2*45000 = 100500
+;; acc=100500, holding=ETH → acc = 100500 + 10*2500 = 125500
+
+;; Result: 125500
+```
+
+The `reduce` pattern:
+1. Start with an initial value (the accumulator)
+2. Process each element, updating the accumulator
+3. Return final accumulator value
+
+### Composing Higher-Order Functions: Building Pipelines
+
+The real power emerges when we **chain** these operations:
+
+```lisp
+;; Calculate volatility of large positive returns
+
+;; Step 1: Calculate returns
+(define prices [100 105 103 108 110 107 112])
+
+;; Step 2: Convert to returns
+(define returns
+  (map (range 1 (length prices))
+       (lambda (i) (- (/ (nth prices i) (nth prices (- i 1))) 1))))
+;; → [0.05, -0.019, 0.049, 0.019, -0.027, 0.047]
+
+;; Step 3: Filter for large gains (> 2%)
+(define large-gains
+  (filter returns (lambda (r) (> r 0.02))))
+;; → [0.05, 0.049, 0.047]
+
+;; Step 4: Calculate variance (reduce)
+(let ((n (length large-gains))
+      (mean (/ (reduce large-gains 0 +) n)))
+
+  ;; Sum of squared deviations
+  (let ((sum-sq-dev
+         (reduce large-gains 0
+                 (lambda (acc r)
+                   (+ acc (* (- r mean) (- r mean)))))))
+
+    ;; Variance
+    (/ sum-sq-dev n)))
+
+;; Let's work through this by hand:
+;; large-gains = [0.05, 0.049, 0.047]
+;; mean = (0.05 + 0.049 + 0.047) / 3 = 0.146 / 3 = 0.04867
+;;
+;; Squared deviations:
+;; (0.05 - 0.04867)² = 0.000133² = 0.0000000177
+;; (0.049 - 0.04867)² = 0.000033² = 0.0000000011
+;; (0.047 - 0.04867)² = -0.001667² = 0.0000027779
+;;
+;; Sum = 0.0000029967
+;; Variance = 0.0000029967 / 3 = 0.000000999
+```
+
+This pipeline is:
+- **Declarative**: Says *what* to compute, not *how* to loop
+- **Composable**: Each step is independent and testable
+- **Pure**: No side effects, fully reproducible
+- **Readable**: Reads like a specification
+
+### Real Example: Multi-Indicator Strategy
+
+Let's build a complete trading strategy using higher-order functions:
+
+```lisp
+;; Strategy: Buy when ALL indicators bullish, sell when ALL bearish
+
+;; Indicator 1: RSI > 30 (oversold recovery)
+(define (rsi-indicator prices period threshold)
+  (let ((rsi (calculate-rsi prices period)))
+    (map rsi (lambda (r) (> r threshold)))))
+
+;; Indicator 2: Price above 50-day MA
+(define (ma-indicator prices period)
+  (let ((ma (calculate-sma prices period)))
+    (map (range 0 (length ma))
+         (lambda (i)
+           (> (nth prices (+ i period -1)) (nth ma i))))))
+
+;; Indicator 3: Volume above average
+(define (volume-indicator volumes period threshold-multiplier)
+  (let ((avg-vol (calculate-sma volumes period)))
+    (map (range 0 (length avg-vol))
+         (lambda (i)
+           (> (nth volumes (+ i period -1))
+              (* threshold-multiplier (nth avg-vol i)))))))
+
+;; Combine indicators: ALL must agree
+(define (combine-indicators indicator-arrays)
+  "Returns array of booleans: true only when ALL indicators true"
+
+  ;; Make sure all arrays have same length
+  (let ((min-len (reduce indicator-arrays
+                         (length (first indicator-arrays))
+                         (lambda (acc arr) (min acc (length arr))))))
+
+    ;; For each index, check if ALL indicators are true
+    (map (range 0 min-len)
+         (lambda (i)
+           ;; Use reduce to implement AND across all indicators
+           (reduce indicator-arrays true
+                   (lambda (acc indicator-arr)
+                     (and acc (nth indicator-arr i))))))))
+
+;; Generate signals from combined indicators
+(define (indicators-to-signals combined-indicators)
+  (map combined-indicators
+       (lambda (bullish) (if bullish "buy" "hold"))))
+
+;; Complete strategy
+(define (multi-indicator-strategy prices volumes)
+  (let ((rsi-signals (rsi-indicator prices 14 30))
+        (ma-signals (ma-indicator prices 50))
+        (vol-signals (volume-indicator volumes 20 1.5)))
+
+    (let ((combined (combine-indicators [rsi-signals ma-signals vol-signals])))
+      (indicators-to-signals combined))))
+```
+
+Let's trace through with concrete data:
+
+```lisp
+;; Simplified example with 5 data points
+(define test-prices [100 105 103 108 110])
+(define test-volumes [1000 1200 900 1500 1100])
+
+;; Assume we've calculated indicators:
+(define rsi-signals [false true true true false])     ;; RSI crosses 30
+(define ma-signals [true true false true true])       ;; Price vs MA
+(define vol-signals [false true false true false])    ;; High volume
+
+;; Combine with AND logic:
+;; Index 0: false AND true AND false = FALSE
+;; Index 1: true AND true AND true = TRUE
+;; Index 2: true AND false AND false = FALSE
+;; Index 3: true AND true AND true = TRUE
+;; Index 4: false AND true AND false = FALSE
+
+(define combined [false true false true false])
+(define signals ["hold" "buy" "hold" "buy" "hold"])
+```
+
+The beauty of this approach:
+1. **Each indicator is independent** (easy to test)
+2. **Combination logic is separate** (easy to modify AND vs OR)
+3. **Pure functions throughout** (no hidden state)
+4. **Highly composable** (add/remove indicators trivially)
+
+---
+
+## 5.3 Immutability: Why Never Changing Data Prevents Bugs
+
+### The Race Condition Disaster
+
+Imagine two trading threads sharing a portfolio:
+
+```lisp
+;; MUTABLE SHARED STATE (dangerous!)
+(define global-portfolio {:cash 10000 :positions {}})
+
+(define (execute-trade symbol quantity price)
+  ;; Thread 1 might be here
+  (let ((current-cash (global-portfolio :cash)))
+
+    ;; ... while Thread 2 reads the SAME cash value
+
+    ;; Now both threads write, LAST WRITE WINS
+    (set! global-portfolio
+          (assoc global-portfolio :cash
+                (- current-cash (* quantity price))))))
+
+;; Thread 1: Buy 100 SOL @ $45 → cash should be 10000 - 4500 = 5500
+;; Thread 2: Buy 50 ETH @ $2500 → cash should be 10000 - 125000 = ERROR!
+;; But both read cash=10000 simultaneously...
+
+;; Possible outcomes:
+;; 1. Thread 1 writes last: cash = 5500 (Thread 2's purchase lost!)
+;; 2. Thread 2 writes last: cash = -115000 (negative cash, bankruptcy!)
+;; 3. Corrupted data: cash = NaN (memory corruption)
+
+;; THIS IS A HEISENBUG: Appears randomly, hard to reproduce, impossible to debug
+```
+
+The problem: **time** becomes a hidden input to your function. The output depends not just on the arguments, but on *when* you call it relative to other threads.
+
+### Immutability: Data That Can't Change
+
+Immutable data structures **never change after creation**. Instead of modifying, we create new versions:
+
+```lisp
+;; IMMUTABLE VERSION: Safe by construction
+(define (execute-trade-immutable portfolio symbol quantity price)
+  "Returns NEW portfolio, original unchanged"
+
+  (let ((cost (* quantity price))
+        (new-cash (- (portfolio :cash) cost))
+        (old-positions (portfolio :positions))
+        (old-quantity (get old-positions symbol 0)))
+
+    ;; Create NEW portfolio (original untouched)
+    {:cash new-cash
+     :positions (assoc old-positions symbol (+ old-quantity quantity))}))
+
+;; Usage:
+(define portfolio-v0 {:cash 10000 :positions {}})
+
+;; Thread 1 creates new portfolio
+(define portfolio-v1 (execute-trade-immutable portfolio-v0 "SOL" 100 45))
+;; → {:cash 5500 :positions {"SOL" 100}}
+
+;; Thread 2 ALSO starts from portfolio-v0 (not affected by Thread 1)
+(define portfolio-v2 (execute-trade-immutable portfolio-v0 "ETH" 50 2500))
+;; → {:cash -115000 :positions {"ETH" 50}}  (clearly invalid!)
+
+;; Application logic decides which to keep:
+(if (>= (portfolio-v1 :cash) 0)
+    portfolio-v1  ;; Valid trade
+    portfolio-v0)  ;; Reject, not enough cash
+```
+
+Key insight: **No race condition is possible** because:
+1. Each thread works with its own copy of data
+2. The original data never changes
+3. Conflicts become explicit (two different versions exist)
+4. Application logic chooses which version to commit
+
+### "But Doesn't Copying Everything Waste Memory?"
+
+No! Modern immutable data structures use **structural sharing**:
+
+```lisp
+;; Original portfolio
+(define portfolio-v0
+  {:cash 10000
+   :positions {"SOL" 100 "BTC" 2 "ETH" 10}})
+
+;; Update just cash (positions unchanged)
+(define portfolio-v1
+  (assoc portfolio-v0 :cash 9000))
+
+;; Memory layout (conceptual):
+;; portfolio-v0 → {:cash 10000, :positions → [SOL:100, BTC:2, ETH:10]}
+;;                                              ↑
+;; portfolio-v1 → {:cash 9000, :positions ------┘ (SHARES the same array!)
+;;
+;; Only the changed field is copied, not the entire structure!
+```
+
+Immutable data structures in languages like Clojure, Haskell, and modern JavaScript achieve:
+- **O(log n) updates** (almost as fast as mutation)
+- **Constant-time snapshots** (entire history preserved cheaply)
+- **Safe concurrent access** (no locks needed)
+
+### Time-Travel Debugging
+
+Immutability enables **undo/redo** and **state snapshots** trivially:
+
+```lisp
+;; Portfolio history: array of immutable snapshots
+(define (create-portfolio-history initial-portfolio)
+  {:states [initial-portfolio]
+   :current-index 0})
+
+(define (execute-trade-with-history history symbol quantity price)
+  (let ((current (nth (history :states) (history :current-index))))
+
+    (let ((new-portfolio (execute-trade-immutable current symbol quantity price)))
+
+      ;; Append new state to history
+      {:states (append (history :states) new-portfolio)
+       :current-index (+ (history :current-index) 1)})))
+
+(define (undo history)
+  (if (> (history :current-index) 0)
+      (assoc history :current-index (- (history :current-index) 1))
+      history))
+
+(define (redo history)
+  (if (< (history :current-index) (- (length (history :states)) 1))
+      (assoc history :current-index (+ (history :current-index) 1))
+      history))
+
+;; Usage:
+(define hist (create-portfolio-history {:cash 10000 :positions {}}))
+
+(set! hist (execute-trade-with-history hist "SOL" 100 45))
+;; States: [{cash:10000}, {cash:5500, SOL:100}]
+
+(set! hist (execute-trade-with-history hist "BTC" 2 45000))
+;; States: [{cash:10000}, {cash:5500, SOL:100}, {cash:-84500, SOL:100, BTC:2}]
+
+;; Oops, BTC trade was bad! Undo it:
+(set! hist (undo hist))
+;; Current index: 1 → {cash:5500, SOL:100}
+
+;; Try different trade:
+(set! hist (execute-trade-with-history hist "ETH" 10 2500))
+;; States: [..., {cash:5500, SOL:100}, {cash:-19500, SOL:100, ETH:10}]
+;;                ↑ can still access this!
+```
+
+This is **impossible** with mutable state—once you overwrite data, it's gone forever.
+
+---
+
+## 5.4 Function Composition: Building Complex from Simple
+
+### The Unix Philosophy for Trading
+
+Unix commands succeed because they compose:
+
+```bash
+cat trades.csv | grep "SOL" | awk '{sum+=$3} END {print sum}'
+```
+
+Each command:
+1. Does one thing well
+2. Accepts input from previous command
+3. Produces output for next command
+
+We can apply this to trading:
+
+```lisp
+;; Instead of one giant function:
+(define (analyze-portfolio-WRONG prices)
+  ;; 200 lines of tangled logic
+  ...)
+
+;; Build pipeline of small functions:
+(define (analyze-portfolio prices)
+  (let ((returns (calculate-returns prices)))
+    (let ((filtered (filter-outliers returns)))
+      (let ((normalized (normalize filtered)))
+        (calculate-sharpe normalized)))))
+
+;; Or using composition:
+(define analyze-portfolio
+  (compose calculate-sharpe
+           normalize
+           filter-outliers
+           calculate-returns))
+```
+
+### Composition Operator
+
+The `compose` function chains functions right-to-left (like mathematical composition):
+
+```lisp
+;; Manual composition:
+(define (f-then-g x)
+  (g (f x)))
+
+;; Generic compose:
+(define (compose f g)
+  (lambda (x) (f (g x))))
+
+;; Example: Price → Returns → Log Returns → Volatility
+(define price-to-vol
+  (compose std-dev          ;; 4. Standard deviation
+           (compose log           ;; 3. Take log
+                    (compose calculate-returns)))) ;; 2. Calculate returns
+                    ;; 1. Input: prices
+
+;; Usage:
+(define prices [100 105 103 108 110])
+(define vol (price-to-vol prices))
+
+;; Step-by-step:
+;; 1. calculate-returns([100,105,103,108,110]) → [1.05, 0.98, 1.05, 1.02]
+;; 2. log([1.05, 0.98, 1.05, 1.02]) → [0.0488, -0.0202, 0.0488, 0.0198]
+;; 3. std-dev([0.0488, -0.0202, 0.0488, 0.0198]) → 0.0314
+```
+
+### Indicator Pipelines
+
+Let's build a complete technical analysis pipeline:
+
+```lisp
+;; Step 1: Basic transformations
+(define (to-returns prices)
+  (map (range 1 (length prices))
+       (lambda (i) (- (/ (nth prices i) (nth prices (- i 1))) 1))))
+
+(define (to-log-returns returns)
+  (map returns log))
+
+(define (zscore values)
+  (let ((mean (average values))
+        (std (std-dev values)))
+    (map values (lambda (v) (/ (- v mean) std)))))
+
+;; Step 2: Windowed operations (for indicators)
+(define (windowed-operation data window-size operation)
+  "Apply operation to sliding windows of data"
+  (map (range (- window-size 1) (length data))
+       (lambda (i)
+         (operation (slice data (- i window-size -1) (+ i 1))))))
+
+;; Step 3: Build indicators using windowed-operation
 (define (sma prices window)
   (windowed-operation prices window average))
 
-;; Standard deviation using windowed-operation
-(define (rolling-std prices window)
-  (windowed-operation prices window std-dev))
-
-;; Bollinger Bands: composed from SMA and rolling-std
 (define (bollinger-bands prices window num-std)
   (let ((middle (sma prices window))
-        (std (rolling-std prices window)))
+        (rolling-std (windowed-operation prices window std-dev)))
 
     {:middle middle
      :upper (map (range 0 (length middle))
-                (lambda (i)
-                  (+ (nth middle i) (* num-std (nth std i)))))
+                (lambda (i) (+ (nth middle i) (* num-std (nth rolling-std i)))))
      :lower (map (range 0 (length middle))
-                (lambda (i)
-                  (- (nth middle i) (* num-std (nth std i)))))}))
+                (lambda (i) (- (nth middle i) (* num-std (nth rolling-std i)))))}))
 
-;; RSI composition
-(define (rsi prices period)
-  (let ((changes (map (range 1 (length prices))
-                     (lambda (i)
-                       (- (nth prices i) (nth prices (- i 1)))))))
+;; Step 4: Compose into complete analysis
+(define (analyze-price-action prices)
+  ;; Returns: {returns, volatility, bands, ...}
+  (let ((returns (to-returns prices))
+        (log-returns (to-log-returns returns))
+        (vol (std-dev log-returns))
+        (bands (bollinger-bands prices 20 2)))
 
-    (let ((gains (map changes (lambda (c) (if (> c 0) c 0))))
-          (losses (map changes (lambda (c) (if (< c 0) (abs c) 0)))))
+    {:returns returns
+     :log-returns log-returns
+     :volatility vol
+     :annualized-vol (* vol (sqrt 252))
+     :bands bands
+     :current-price (last prices)
+     :current-band-position
+       (let ((price (last prices))
+             (upper (last (bands :upper)))
+             (lower (last (bands :lower))))
+         (/ (- price lower) (- upper lower)))}))  ;; 0 = lower band, 1 = upper band
 
-      (let ((avg-gain (sma gains period))
-            (avg-loss (sma losses period)))
+;; Usage:
+(define prices [/* 252 days of data */])
+(define analysis (analyze-price-action prices))
 
-        (map (range 0 (length avg-gain))
-             (lambda (i)
-               (let ((ag (nth avg-gain i))
-                     (al (nth avg-loss i)))
-                 (if (= al 0)
-                     100
-                     (- 100 (/ 100 (+ 1 (/ ag al))))))))))))
+;; Access results:
+(analysis :annualized-vol)  ;; → 0.45 (45% annualized volatility)
+(analysis :current-band-position)  ;; → 0.85 (near upper band, overbought?)
 ```
 
-💡 **Composition Pattern**: Build complex indicators from simple, pure building blocks:
-
-```mermaid
-graph LR
-    A[Prices] --> B[Changes]
-    B --> C[Gains/Losses]
-    C --> D[Avg Gains/Losses]
-    D --> E[RS]
-    E --> F[RSI]
-
-    style A fill:#e1f5ff
-    style F fill:#c3f0c3
-```
-
-### 5.2.3 Strategy Combinators
-
-Combine multiple strategies using higher-order functions:
-
-```lisp
-;; Strategy combinator: AND logic
-(define (and-strategy s1 s2)
-  (lambda (prices i)
-    (let ((sig1 (s1 prices i))
-          (sig2 (s2 prices i)))
-      (if (and (= sig1 "buy") (= sig2 "buy"))
-          "buy"
-          (if (and (= sig1 "sell") (= sig2 "sell"))
-              "sell"
-              "hold")))))
-
-;; Strategy combinator: OR logic
-(define (or-strategy s1 s2)
-  (lambda (prices i)
-    (let ((sig1 (s1 prices i))
-          (sig2 (s2 prices i)))
-      (if (or (= sig1 "buy") (= sig2 "buy"))
-          "buy"
-          (if (or (= sig1 "sell") (= sig2 "sell"))
-              "sell"
-              "hold")))))
-
-;; Weighted voting strategy
-(define (weighted-vote-strategy strategies weights)
-  (lambda (prices i)
-    (let ((votes {:buy 0 :sell 0 :hold 0}))
-
-      ;; Collect weighted votes
-      (for (j (range 0 (length strategies)))
-        (let ((signal ((nth strategies j) prices i))
-              (weight (nth weights j)))
-
-          (if (= signal "buy")
-              (set! votes (assoc votes :buy (+ (votes :buy) weight)))
-              (if (= signal "sell")
-                  (set! votes (assoc votes :sell (+ (votes :sell) weight)))
-                  (set! votes (assoc votes :hold (+ (votes :hold) weight)))))))
-
-      ;; Return signal with highest weighted vote
-      (let ((max-vote (max (votes :buy) (votes :sell) (votes :hold))))
-        (if (= max-vote (votes :buy))
-            "buy"
-            (if (= max-vote (votes :sell))
-                "sell"
-                "hold"))))))
-
-;; Example: Ensemble of strategies
-(define ensemble-strategy
-  (weighted-vote-strategy
-    [(sma-crossover-strategy 10 30)
-     (rsi-strategy 14)
-     (bollinger-strategy 20 2)]
-    [0.4 0.3 0.3]))  ;; Weights sum to 1.0
-```
+The pipeline is **declarative**: each step describes *what* to compute, and the composition operator handles *how* to thread data through.
 
 ---
 
-## 5.3 Lazy Evaluation
+## 5.5 Monads: Making Error Handling Composable
 
-### 5.3.1 Infinite Streams
+### The Problem: Error Handling Breaks Composition
 
-Lazy evaluation delays computation until results are needed:
-
-```lisp
-;; Conceptual infinite price stream (OVSM doesn't have native lazy evaluation)
-;; Real implementation would use generators or iterators
-
-(define (price-stream initial-price drift volatility)
-  ;; Generator function that yields next price on demand
-  (let ((current-price initial-price)
-        (time 0))
-
-    (lambda ()
-      (set! time (+ time 1))
-      (let ((random-shock (* volatility (standard-normal)))
-            (drift-component (* drift (/ 1 365))))
-        (set! current-price (* current-price
-                              (exp (+ drift-component random-shock))))
-        {:time time :price current-price}))))
-
-;; Take first N elements from infinite stream
-(define (take-stream stream n)
-  (let ((result []))
-    (for (i (range 0 n))
-      (set! result (append result (stream))))
-    result))
-
-;; Example: Generate 1000 simulated prices
-(define sim-stream (price-stream 100.0 0.05 0.2))
-(define simulated-prices (take-stream sim-stream 1000))
-```
-
-### 5.3.2 On-Demand Indicator Calculation
-
-Lazy evaluation avoids computing unused values:
+You're fetching market data from multiple exchanges:
 
 ```lisp
-;; Eager evaluation (computes ALL values)
-(define (eager-bollinger-bands prices window std-dev)
-  (let ((all-bands (bollinger-bands prices window std-dev)))
-    all-bands))  ;; Computes for entire history
+;; Each fetch might fail (network error, API down, invalid data)
+(define (fetch-price symbol exchange)
+  ;; Returns price OR null if error
+  ...)
 
-;; Lazy evaluation (computes only what's queried)
-(define (lazy-bollinger-bands prices window std-dev)
-  ;; Returns function that computes band at specific index on demand
-  (lambda (i)
-    (if (< i (- window 1))
-        null
-        (let ((window-prices (slice prices (- i window -1) (+ i 1))))
-          (let ((mean (average window-prices))
-                (std (std-dev window-prices)))
-            {:middle mean
-             :upper (+ mean (* std-dev std))
-             :lower (- mean (* std-dev std))})))))
+;; UGLY: Manual null checks everywhere
+(let ((price-binance (fetch-price "SOL" "binance")))
+  (if (null? price-binance)
+      (log :error "Binance fetch failed")
 
-;; Usage: Only compute for index 100 (doesn't compute 0-99, 101-end)
-(define lazy-bb (lazy-bollinger-bands prices 20 2))
-(define bb-at-100 (lazy-bb 100))
+      (let ((price-coinbase (fetch-price "SOL" "coinbase")))
+        (if (null? price-coinbase)
+            (log :error "Coinbase fetch failed")
+
+            (let ((arb-opportunity (- price-binance price-coinbase)))
+              (if (> arb-opportunity 0.5)
+                  (execute-arbitrage "SOL" arb-opportunity)
+                  (log :message "No arbitrage")))))))
 ```
 
-💻 **Performance Comparison**:
+This is **pyramid of doom**—deeply nested conditionals that obscure the actual logic.
 
-```
-Dataset: 1M price points
-Query: Bollinger band at index 500,000
+### Maybe Monad: Explicit Absence
 
-Eager evaluation:
-- Compute ALL 1M band values
-- Time: 2.5 seconds
-- Memory: 48 MB
-
-Lazy evaluation:
-- Compute ONLY index 500,000
-- Time: 0.003 seconds
-- Memory: 960 bytes
-
-Speedup: 833x faster, 50,000x less memory
-```
-
-### 5.3.3 Pipeline Optimization
-
-Lazy evaluation enables efficient pipelines:
+The Maybe monad makes "might not exist" explicit in the type:
 
 ```lisp
-;; Eager: Each step processes entire dataset
-(define result
-  (take 10
-    (filter (lambda (x) (> x 0.02))
-      (map calculate-return prices))))
+;; Maybe type: represents value OR absence
+(define (just value)
+  {:type "just" :value value})
 
-;; Execution:
-;; 1. map over ALL prices → 1M calculations
-;; 2. filter ALL results → 1M comparisons
-;; 3. take first 10 → discard 999,990 values
+(define (nothing)
+  {:type "nothing"})
 
-;; Lazy: Stops when 10 results found
-;; 1. map, filter, take fused into single pass
-;; 2. Stop after 10 matches found
-;; 3. Only ~50-100 calculations (assuming ~20% match rate)
-```
+;; Check if Maybe has value
+(define (is-just? m)
+  (= (m :type) "just"))
 
----
-
-## 5.4 Monads for Error Handling
-
-### 5.4.1 Maybe Monad
-
-The Maybe monad handles optional values without null checks:
-
-```lisp
-;; Conceptual Maybe monad (OVSM doesn't have native monads)
-
-(define (maybe-value val)
-  {:type "maybe" :value val})
-
-(define (maybe-null)
-  {:type "maybe" :value null})
-
-;; Bind operation: chain computations that might fail
+;; Bind: chain operations that might fail
 (define (maybe-bind m f)
-  (if (null? (m :value))
-      (maybe-null)
-      (f (m :value))))
+  "If m is Just, apply f to its value. If Nothing, short-circuit"
+  (if (is-just? m)
+      (f (m :value))
+      (nothing)))
 
-;; Example: Safe division chain
-(define (safe-divide a b)
-  (if (= b 0)
-      (maybe-null)
-      (maybe-value (/ a b))))
+;; Now we can chain without null checks:
+(maybe-bind (fetch-price "SOL" "binance")
+  (lambda (price-binance)
+    (maybe-bind (fetch-price "SOL" "coinbase")
+      (lambda (price-coinbase)
+        (let ((arb (- price-binance price-coinbase)))
+          (if (> arb 0.5)
+              (just (execute-arbitrage "SOL" arb))
+              (nothing)))))))
 
-;; Chain divisions (stops at first failure)
-(define result
-  (maybe-bind (safe-divide 100 5)
-    (lambda (x)
-      (maybe-bind (safe-divide x 0)    ;; This fails
-        (lambda (y)
-          (safe-divide y 2))))))
-
-;; result → {:type "maybe" :value null}
-;; No error thrown, failure propagated cleanly
+;; If ANY step fails, the entire chain returns Nothing
+;; No need for manual null checks at each step!
 ```
 
-### 5.4.2 Either Monad for Trade Validation
-
-**Figure 5.1**: Monad Transformation State Diagram
-
-```mermaid
-stateDiagram-v2
-    [*] --> MaybeJust: Input Value
-    MaybeJust --> Transform: bind operation
-    Transform --> MaybeJust: Success (Just)
-    Transform --> MaybeNothing: Failure (Nothing)
-    MaybeNothing --> [*]: Propagate failure
-    MaybeJust --> [*]: Extract value
-
-    state "Either Pipeline" as Either {
-        [*] --> Right: Valid input
-        Right --> Operation: bind
-        Operation --> Right: Success
-        Operation --> Left: Error
-        Left --> Left: Short-circuit
-        Right --> [*]: Unwrap
-        Left --> [*]: Handle error
-    }
-
-    note right of Transform
-        Monadic bind:
-        - Apply function if Just
-        - Propagate Nothing
-        - No null checks needed
-    end note
-
-    note right of Left
-        Railway-oriented:
-        - Errors skip remaining ops
-        - Type-safe error handling
-        - Composable validations
-    end note
-```
-
-*This state diagram illustrates monad transformation pipelines for error handling in trading systems. The Maybe monad (top) transforms Just values through bind operations, short-circuiting to Nothing on first failure—eliminating null pointer exceptions. The Either monad (bottom) implements railway-oriented programming: successful operations stay on the Right track, while errors switch to the Left track and bypass remaining validations. This approach makes error handling compositional and type-safe, ensuring trade validation chains never inadvertently process invalid data. Once in the Left/Nothing state, the system remains there until explicit error recovery.*
-
----
-
-Either monad carries success value (Right) or error (Left):
+By hand example:
 
 ```lisp
-;; Either monad constructors
-(define (right val)
-  {:type "right" :value val})
+;; Success case:
+;; fetch-price("SOL", "binance") → Just(105.5)
+;; → apply lambda, fetch-price("SOL", "coinbase") → Just(107.2)
+;; → apply lambda, calculate arb: 105.5 - 107.2 = -1.7 (not > 0.5)
+;; → return Nothing
 
-(define (left error)
-  {:type "left" :error error})
+;; Failure case:
+;; fetch-price("SOL", "binance") → Nothing
+;; → maybe-bind short-circuits, return Nothing immediately
+;; → Second fetch never happens!
+```
+
+### Either Monad: Carrying Error Information
+
+Maybe tells us something failed, but not *why*. Either carries error details:
+
+```lisp
+;; Either type: success (Right) OR error (Left)
+(define (right value)
+  {:type "right" :value value})
+
+(define (left error-message)
+  {:type "left" :error error-message})
+
+(define (is-right? e)
+  (= (e :type) "right"))
 
 ;; Bind for Either
-(define (either-bind m f)
-  (if (= (m :type) "left")
-      m                        ;; Propagate error
-      (f (m :value))))         ;; Continue with success value
+(define (either-bind e f)
+  (if (is-right? e)
+      (f (e :value))
+      e))  ;; Propagate error
 
 ;; Trade validation pipeline
 (define (validate-price order)
   (if (and (> (order :price) 0) (< (order :price) 1000000))
       (right order)
-      (left "Invalid price range")))
+      (left "Price out of range [0, 1000000]")))
 
 (define (validate-quantity order)
   (if (and (> (order :quantity) 0) (< (order :quantity) 1000000))
       (right order)
-      (left "Invalid quantity")))
+      (left "Quantity out of range [0, 1000000]")))
 
 (define (validate-balance order account-balance)
-  (if (>= account-balance (* (order :price) (order :quantity)))
-      (right order)
-      (left "Insufficient balance")))
+  (let ((cost (* (order :price) (order :quantity))))
+    (if (>= account-balance cost)
+        (right order)
+        (left (string-concat "Insufficient balance. Need "
+                            (to-string cost)
+                            ", have "
+                            (to-string account-balance))))))
 
 ;; Chain validations
 (define (validate-order order balance)
@@ -544,650 +1025,308 @@ Either monad carries success value (Right) or error (Left):
         (lambda (o2)
           (validate-balance o2 balance))))))
 
-;; Example
-(define order {:price 45.67 :quantity 100})
-(define result (validate-order order 5000))
-;; result → {:type "right" :value {:price 45.67 :quantity 100}}
+;; Test cases:
+(define good-order {:price 45.5 :quantity 100})
+(validate-order good-order 5000)
+;; → Right({:price 45.5 :quantity 100})
 
-(define bad-order {:price -10 :quantity 100})
-(define bad-result (validate-order bad-order 5000))
-;; bad-result → {:type "left" :error "Invalid price range"}
+(define bad-price {:price -10 :quantity 100})
+(validate-order bad-price 5000)
+;; → Left("Price out of range [0, 1000000]")
+
+(define bad-balance {:price 45.5 :quantity 100})
+(validate-order bad-balance 1000)
+;; → Left("Insufficient balance. Need 4550, have 1000")
 ```
 
-💡 **Railway-Oriented Programming**: Validations form "tracks"—success continues on the right track, errors switch to left track and short-circuit remaining validations.
+The pipeline **short-circuits** on first error:
 
-```mermaid
-graph LR
-    A[Order] --> B{Validate Price}
-    B -->|Success| C{Validate Qty}
-    B -->|Fail| E[Error: Price]
-    C -->|Success| D{Validate Balance}
-    C -->|Fail| F[Error: Qty]
-    D -->|Success| G[Execute Trade]
-    D -->|Fail| H[Error: Balance]
+```
+validate-price → PASS
+validate-quantity → PASS
+validate-balance → FAIL → return Left("Insufficient...")
 
-    style G fill:#c3f0c3
-    style E fill:#ffc3c3
-    style F fill:#ffc3c3
-    style H fill:#ffc3c3
+validate-price → FAIL → return Left("Price...")
+(validate-quantity never runs)
+(validate-balance never runs)
 ```
 
-### 5.4.3 IO Monad for Side Effects
+### Railway-Oriented Programming
 
-IO monad isolates side effects from pure code:
+Visualize Either as two tracks:
 
-```lisp
-;; IO monad: wraps side-effectful operations
-(define (io-action f)
-  {:type "io" :action f})
-
-;; Execute IO action (only called at program boundary)
-(define (run-io io)
-  ((io :action)))
-
-;; Pure function that RETURNS IO action (doesn't execute)
-(define (log-trade trade)
-  (io-action (lambda ()
-               (log :message "Executed trade" :value trade))))
-
-;; Pure function that returns IO action for market data fetch
-(define (fetch-price symbol)
-  (io-action (lambda ()
-               (http-get (string-concat "https://api.example.com/price/"
-                                       symbol)))))
-
-;; Pure composition: build complex IO without executing
-(define (trade-and-log symbol quantity)
-  ;; Returns IO action that, when run, will:
-  ;; 1. Fetch price
-  ;; 2. Calculate cost
-  ;; 3. Log trade
-  (io-action (lambda ()
-               (let ((price-io (fetch-price symbol)))
-                 (let ((price (run-io price-io)))
-                   (let ((cost (* price quantity)))
-                     (let ((trade {:symbol symbol
-                                  :price price
-                                  :quantity quantity
-                                  :cost cost}))
-                       (run-io (log-trade trade))
-                       trade)))))))
-
-;; Main function: only place IO executes
-(define (main)
-  (let ((trade-io (trade-and-log "SOL/USDC" 100)))
-    (run-io trade-io)))
+```
+Input Order
+    ↓
+[Validate Price] → Success → [Validate Quantity] → Success → [Validate Balance] → Success → Execute Trade
+    ↓ Failure                      ↓ Failure                    ↓ Failure              ↓
+    Error Track ←─────────────────Error Track ←──────────────Error Track ←────────── Error Track
 ```
 
-🎯 **Benefit**: Pure functions compose IO actions without executing them. Side effects isolated to program boundaries, enabling:
-- Testable code (inject mock IO actions)
-- Reasoning about code without running it
-- Deferred execution until optimal time
+Once on the error track, you stay there until explicitly handled.
 
 ---
 
-## 5.5 Immutability
+## 5.6 Practical Example: Complete Backtesting System
 
-### 5.5.1 Persistent Data Structures
-
-Immutable data structures share structure to avoid copying:
+Let's build a production-quality backtesting system using all FP principles:
 
 ```lisp
-;; Immutable update: create new structure, share unchanged parts
-(define original-account
-  {:balance 10000
-   :positions {:SOL 100 :BTC 0.5}
-   :trades []})
-
-;; Update balance (creates new account, shares positions)
-(define updated-account
-  (assoc original-account :balance 9000))
-
-;; Original unchanged
-(original-account :balance)  ;; → 10000
-(updated-account :balance)   ;; → 9000
-
-;; Both share same :positions object (memory efficient)
-```
-
-### 5.5.2 Concurrent Strategy Execution
-
-Immutability eliminates race conditions:
-
-```lisp
-;; MUTABLE: Race condition in concurrent environment
-(define global-portfolio {:cash 10000 :positions {}})
-
-(define (execute-trade-mutable symbol quantity price)
-  ;; DANGER: Two threads can interleave here
-  (let ((current-cash (global-portfolio :cash)))
-    (set! global-portfolio
-          (assoc global-portfolio :cash
-                (- current-cash (* quantity price))))))
-
-;; Thread 1: execute-trade-mutable "SOL" 100 45  → reads cash=10000
-;; Thread 2: execute-trade-mutable "BTC" 1 50000 → reads cash=10000
-;; Thread 1: writes cash=5500 (10000 - 4500)
-;; Thread 2: writes cash=-40000 (10000 - 50000)
-;; RESULT: Lost update! Cash should be -44500
-
-;; IMMUTABLE: No race condition
-(define (execute-trade-immutable portfolio symbol quantity price)
-  ;; Returns NEW portfolio, doesn't modify original
-  (let ((new-cash (- (portfolio :cash) (* quantity price)))
-        (new-positions (assoc (portfolio :positions)
-                             symbol
-                             (+ (get (portfolio :positions) symbol 0)
-                                quantity))))
-    {:cash new-cash :positions new-positions}))
-
-;; Safe concurrent execution with immutable data
-;; Thread 1: p1 = execute-trade-immutable portfolio "SOL" 100 45
-;; Thread 2: p2 = execute-trade-immutable portfolio "BTC" 1 50000
-;; Merge results explicitly (application logic, not race condition):
-;; final = merge-portfolios p1 p2
-```
-
-💡 **Concurrent Backtest**: Run multiple strategy variations in parallel:
-
-```lisp
-;; Pure function: backtest single parameter set
-(define (backtest-params prices fast slow)
-  (let ((strategy (sma-crossover-strategy fast slow)))
-    {:params {:fast fast :slow slow}
-     :result (backtest-strategy strategy prices 10000)}))
-
-;; Generate parameter combinations
-(define param-grid
-  (let ((grid []))
-    (for (fast (range 5 20))
-      (for (slow (range 20 60))
-        (if (< fast slow)
-            (set! grid (append grid {:fast fast :slow slow}))
-            null)))
-    grid))
-
-;; Map over grid (can parallelize safely - pure function!)
-(define results
-  (map param-grid
-       (lambda (params)
-         (backtest-params prices (params :fast) (params :slow)))))
-
-;; Find best parameters
-(define best-result
-  (reduce results (first results)
-          (lambda (best current)
-            (if (> ((current :result) :pnl) ((best :result) :pnl))
-                current
-                best))))
-```
-
-### 5.5.3 Time Travel Debugging
-
-Immutability enables portfolio state snapshots:
-
-```lisp
-;; State history: array of immutable portfolio snapshots
-(define (create-portfolio-history initial-portfolio)
-  {:states [initial-portfolio]
-   :current-index 0})
-
-;; Execute trade: append new state
-(define (execute-trade-with-history history symbol quantity price)
-  (let ((current-portfolio (nth (history :states) (history :current-index))))
-
-    (let ((new-portfolio
-           (execute-trade-immutable current-portfolio symbol quantity price)))
-
-      ;; Append new state
-      {:states (append (history :states) new-portfolio)
-       :current-index (+ (history :current-index) 1)})))
-
-;; Undo last trade
-(define (undo-trade history)
-  (if (> (history :current-index) 0)
-      (assoc history :current-index (- (history :current-index) 1))
-      history))
-
-;; Redo trade
-(define (redo-trade history)
-  (if (< (history :current-index) (- (length (history :states)) 1))
-      (assoc history :current-index (+ (history :current-index) 1))
-      history))
-
-;; Get current portfolio state
-(define (current-portfolio history)
-  (nth (history :states) (history :current-index)))
-```
-
-📊 **Debug Workflow**:
-
-```lisp
-;; Initialize
-(define history (create-portfolio-history {:cash 10000 :positions {}}))
-
-;; Trade 1
-(set! history (execute-trade-with-history history "SOL" 100 45))
-;; States: [{cash:10000}, {cash:5500, SOL:100}]
-
-;; Trade 2
-(set! history (execute-trade-with-history history "BTC" 1 50000))
-;; States: [{cash:10000}, {cash:5500, SOL:100}, {cash:-44500, SOL:100, BTC:1}]
-
-;; Oops, BTC trade was too large. Undo it
-(set! history (undo-trade history))
-;; Current index: 1 (back to {cash:5500, SOL:100})
-
-;; Try smaller BTC trade
-(set! history (execute-trade-with-history history "BTC" 0.1 50000))
-;; States: [{...}, {cash:5500, SOL:100}, {cash:500, SOL:100, BTC:0.1}]
-```
-
----
-
-## 5.6 Function Composition
-
-### 5.6.1 Point-Free Style
-
-Point-free style omits explicit arguments:
-
-```lisp
-;; Point-ful (explicit arguments)
-(define (double-all numbers)
-  (map numbers (lambda (x) (* x 2))))
-
-;; Point-free (arguments implicit)
-(define double-all-pf
-  (partial map (lambda (x) (* x 2))))
-
-;; Composition operator (conceptual)
-(define (compose f g)
-  (lambda (x) (f (g x))))
-
-;; Pipeline: prices → log-returns → squared → sum
-(define total-variance
-  (compose
-    (compose sum (partial map (lambda (x) (* x x))))
-    log-returns))
-
-;; Equivalent to:
-(define (total-variance-explicit prices)
-  (sum (map (log-returns prices)
-           (lambda (x) (* x x)))))
-```
-
-### 5.6.2 Indicator Pipelines
-
-```lisp
-;; Compose indicators into pipelines
-(define (pipe . functions)
-  (reduce functions
-          (lambda (acc f) (lambda (x) (f (acc x))))
-          (lambda (x) x)))
-
-;; Building blocks
-(define (ema-transform alpha)
-  (lambda (prices)
-    (ema prices alpha)))
-
-(define (normalize-transform)
-  (lambda (values)
-    (let ((mean (average values))
-          (std (std-dev values)))
-      (map values (lambda (x) (/ (- x mean) std))))))
-
-(define (clip-transform low high)
-  (lambda (values)
-    (map values (lambda (x)
-                  (max low (min high x))))))
-
-;; Pipeline: EMA → normalize → clip to [-3, 3]
-(define price-pipeline
-  (pipe
-    (ema-transform 0.1)
-    (normalize-transform)
-    (clip-transform -3 3)))
-
-;; Apply pipeline
-(define processed-prices (price-pipeline raw-prices))
-```
-
-### 5.6.3 Strategy Decorators
-
-Decorate strategies with additional behavior:
-
-```lisp
-;; Logging decorator
-(define (with-logging strategy)
-  (lambda (prices i)
-    (let ((signal (strategy prices i)))
-      (log :message "Strategy signal" :index i :signal signal)
-      signal)))
-
-;; Risk filter decorator
-(define (with-position-limit strategy max-position)
-  (lambda (prices i current-position)
-    (let ((signal (strategy prices i)))
-      (if (and (= signal "buy") (>= current-position max-position))
-          "hold"   ;; Block buy if at position limit
-          (if (and (= signal "sell") (<= current-position 0))
-              "hold"   ;; Block sell if no position
-              signal)))))
-
-;; Cooldown decorator (prevent rapid trading)
-(define (with-cooldown strategy cooldown-bars)
-  (let ((last-trade-index -999))  ;; Closure captures state
-    (lambda (prices i)
-      (let ((signal (strategy prices i)))
-        (if (or (= signal "buy") (= signal "sell"))
-            (if (>= (- i last-trade-index) cooldown-bars)
-                (do
-                  (set! last-trade-index i)
-                  signal)
-                "hold")  ;; In cooldown period
-            signal)))))
-
-;; Compose decorators
-(define decorated-strategy
-  (with-logging
-    (with-cooldown
-      (with-position-limit
-        (sma-crossover-strategy 10 30)
-        100)  ;; Max position
-      5)))    ;; Cooldown bars
-```
-
----
-
-## 5.7 Recursion and Tail-Call Optimization
-
-### 5.7.1 Recursive Indicator Calculations
-
-Many indicators have recursive definitions:
-
-```lisp
-;; EMA recursive definition: EMA[t] = α * price[t] + (1-α) * EMA[t-1]
-
-;; Direct recursion (not tail-recursive)
-(define (ema-recursive prices alpha)
-  (define (ema-helper i)
-    (if (= i 0)
-        (first prices)  ;; Base case
-        (+ (* alpha (nth prices i))
-           (* (- 1 alpha) (ema-helper (- i 1))))))  ;; Recursive call
-
-  (map (range 0 (length prices))
-       (lambda (i) (ema-helper i))))
-
-;; Tail-recursive (optimizable)
-(define (ema-tail-recursive prices alpha)
-  (define (ema-helper i acc result)
-    (if (>= i (length prices))
-        result  ;; Base case: return accumulated result
-        (let ((new-ema (+ (* alpha (nth prices i))
-                         (* (- 1 alpha) acc))))
-          (ema-helper (+ i 1)          ;; Next iteration
-                     new-ema           ;; Updated accumulator
-                     (append result new-ema)))))  ;; Tail call
-
-  (ema-helper 1 (first prices) [(first prices)]))
-```
-
-💡 **Tail-Call Optimization**: Compiler can optimize tail-recursive calls into loops, preventing stack overflow for large datasets.
-
-### 5.7.2 Recursive Backtest
-
-```lisp
-;; Tail-recursive backtest
-(define (backtest-recursive strategy prices capital position trades i)
-  (if (>= i (length prices))
-      ;; Base case: return final state
-      {:capital capital :position position :trades trades}
-
-      ;; Recursive case
+;; ============================================================================
+;; PURE INDICATOR FUNCTIONS
+;; ============================================================================
+
+(define (calculate-sma prices window)
+  "Simple Moving Average: average of last N prices"
+  (windowed-operation prices window
+    (lambda (window-prices)
+      (/ (sum window-prices) (length window-prices)))))
+
+(define (calculate-ema prices alpha)
+  "Exponential Moving Average: EMA[t] = α*Price[t] + (1-α)*EMA[t-1]"
+  (let ((ema-values [(first prices)]))  ;; EMA[0] = Price[0]
+    (for (i (range 1 (length prices)))
+      (let ((prev-ema (last ema-values))
+            (current-price (nth prices i)))
+        (let ((new-ema (+ (* alpha current-price)
+                         (* (- 1 alpha) prev-ema))))
+          (set! ema-values (append ema-values new-ema)))))
+    ema-values))
+
+(define (calculate-rsi prices period)
+  "Relative Strength Index: momentum indicator (0-100)"
+  ;; Calculate price changes
+  (let ((changes (map (range 1 (length prices))
+                     (lambda (i) (- (nth prices i) (nth prices (- i 1)))))))
+
+    ;; Separate gains and losses
+    (let ((gains (map changes (lambda (c) (if (> c 0) c 0))))
+          (losses (map changes (lambda (c) (if (< c 0) (abs c) 0)))))
+
+      ;; Calculate average gains and losses
+      (let ((avg-gains (calculate-sma gains period))
+            (avg-losses (calculate-sma losses period)))
+
+        ;; RSI formula: 100 - (100 / (1 + RS)), where RS = avg-gain / avg-loss
+        (map (range 0 (length avg-gains))
+             (lambda (i)
+               (let ((ag (nth avg-gains i))
+                     (al (nth avg-losses i)))
+                 (if (= al 0)
+                     100  ;; No losses → RSI = 100
+                     (- 100 (/ 100 (+ 1 (/ ag al))))))))))))
+
+;; ============================================================================
+;; PURE STRATEGY FUNCTIONS (return signals, not side effects)
+;; ============================================================================
+
+(define (sma-crossover-strategy fast-period slow-period)
+  "Returns function that generates buy/sell signals from SMA crossover"
+  (lambda (prices current-index)
+    (if (< current-index slow-period)
+        "hold"  ;; Not enough data yet
+
+        (let ((recent-prices (slice prices 0 (+ current-index 1))))
+          (let ((fast-sma (calculate-sma recent-prices fast-period))
+                (slow-sma (calculate-sma recent-prices slow-period)))
+
+            ;; Current values
+            (let ((fast-current (last fast-sma))
+                  (slow-current (last slow-sma)))
+
+              ;; Previous values
+              (let ((fast-prev (nth fast-sma (- (length fast-sma) 2)))
+                    (slow-prev (nth slow-sma (- (length slow-sma) 2))))
+
+                ;; Golden cross: fast crosses above slow
+                (if (and (> fast-current slow-current)
+                        (<= fast-prev slow-prev))
+                    "buy"
+
+                    ;; Death cross: fast crosses below slow
+                    (if (and (< fast-current slow-current)
+                            (>= fast-prev slow-prev))
+                        "sell"
+
+                        "hold")))))))))
+
+(define (rsi-mean-reversion-strategy period oversold overbought)
+  "Buy when oversold, sell when overbought"
+  (lambda (prices current-index)
+    (if (< current-index period)
+        "hold"
+
+        (let ((recent-prices (slice prices 0 (+ current-index 1))))
+          (let ((rsi-values (calculate-rsi recent-prices period)))
+            (let ((current-rsi (last rsi-values)))
+
+              (if (< current-rsi oversold)
+                  "buy"   ;; Oversold → expect reversion up
+                  (if (> current-rsi overbought)
+                      "sell"  ;; Overbought → expect reversion down
+                      "hold"))))))))
+
+;; ============================================================================
+;; PURE BACKTEST ENGINE
+;; ============================================================================
+
+(define (backtest-strategy strategy prices initial-capital)
+  "Simulate strategy on historical prices. Returns complete trade history."
+
+  (let ((capital initial-capital)
+        (position 0)
+        (trades [])
+        (equity-curve [initial-capital]))
+
+    (for (i (range 0 (length prices)))
       (let ((price (nth prices i))
             (signal (strategy prices i)))
 
-        (if (and (= signal "buy") (> capital (* price 100)))
-            ;; Execute buy
-            (backtest-recursive strategy prices
-                               (- capital (* price 100))
-                               (+ position 100)
-                               (append trades {:i i :type "buy" :price price})
-                               (+ i 1))  ;; Tail call
+        ;; Execute trades based on signal
+        (if (and (= signal "buy") (= position 0))
+            ;; Buy with all available capital
+            (let ((shares (floor (/ capital price))))
+              (if (> shares 0)
+                  (do
+                    (set! position shares)
+                    (set! capital (- capital (* shares price)))
+                    (set! trades (append trades {:time i
+                                                :type "buy"
+                                                :price price
+                                                :shares shares
+                                                :capital capital})))
+                  null))
 
+            ;; Sell entire position
             (if (and (= signal "sell") (> position 0))
-                ;; Execute sell
-                (backtest-recursive strategy prices
-                                   (+ capital (* price position))
-                                   0
-                                   (append trades {:i i :type "sell" :price price})
-                                   (+ i 1))  ;; Tail call
+                (do
+                  (set! capital (+ capital (* position price)))
+                  (set! trades (append trades {:time i
+                                              :type "sell"
+                                              :price price
+                                              :shares position
+                                              :capital capital}))
+                  (set! position 0))
+                null))
 
-                ;; Hold
-                (backtest-recursive strategy prices capital position trades
-                                   (+ i 1)))))))  ;; Tail call
+        ;; Record equity (capital + position value)
+        (let ((equity (+ capital (* position price))))
+          (set! equity-curve (append equity-curve equity)))))
 
-;; Initial call
-(define result
-  (backtest-recursive (sma-crossover-strategy 10 30)
-                     prices 10000 0 [] 0))
+    ;; Calculate performance metrics
+    (let ((final-equity (last equity-curve))
+          (total-return (/ (- final-equity initial-capital) initial-capital))
+          (returns (calculate-returns equity-curve))
+          (sharpe-ratio (/ (average returns) (std-dev returns))))
+
+      {:initial-capital initial-capital
+       :final-equity final-equity
+       :total-return total-return
+       :sharpe-ratio sharpe-ratio
+       :trades trades
+       :equity-curve equity-curve
+       :max-drawdown (calculate-max-drawdown equity-curve)})))
+
+(define (calculate-max-drawdown equity-curve)
+  "Maximum peak-to-trough decline"
+  (let ((peak (first equity-curve))
+        (max-dd 0))
+
+    (for (i (range 1 (length equity-curve)))
+      (let ((equity (nth equity-curve i)))
+        ;; Update peak
+        (if (> equity peak)
+            (set! peak equity)
+            null)
+
+        ;; Update max drawdown
+        (let ((drawdown (/ (- peak equity) peak)))
+          (if (> drawdown max-dd)
+              (set! max-dd drawdown)
+              null))))
+
+    max-dd))
+
+;; ============================================================================
+;; USAGE EXAMPLES
+;; ============================================================================
+
+;; Load historical data
+(define sol-prices [100 102 101 103 105 104 106 108 107 110 112 111 113 115])
+
+;; Test SMA crossover strategy
+(define sma-strategy (sma-crossover-strategy 3 5))
+(define sma-results (backtest-strategy sma-strategy sol-prices 10000))
+
+(log :message "SMA Strategy Results")
+(log :value (sma-results :final-equity))
+(log :value (sma-results :total-return))
+(log :value (sma-results :sharpe-ratio))
+(log :value (length (sma-results :trades)))
+
+;; Test RSI strategy
+(define rsi-strategy (rsi-mean-reversion-strategy 14 30 70))
+(define rsi-results (backtest-strategy rsi-strategy sol-prices 10000))
+
+(log :message "RSI Strategy Results")
+(log :value (rsi-results :final-equity))
+(log :value (rsi-results :total-return))
+
+;; Compare strategies
+(if (> (sma-results :sharpe-ratio) (rsi-results :sharpe-ratio))
+    (log :message "SMA strategy wins")
+    (log :message "RSI strategy wins"))
 ```
+
+**Key properties of this system:**
+
+1. **Pure indicator functions**: Same inputs → same outputs, always
+2. **Testable strategies**: Each strategy is a function that can be tested in isolation
+3. **Composable**: Easy to combine multiple strategies
+4. **Reproducible**: Running the backtest twice gives identical results
+5. **No hidden state**: All state is explicit in function parameters and return values
 
 ---
 
-## 5.8 Practical Examples
+## 5.7 Key Takeaways
 
-### 5.8.1 Functional Multi-Timeframe Analysis
+**Core Principles:**
 
-```lisp
-;; Pure function: resample to lower frequency
-(define (resample-ohlc ticks timeframe-minutes)
-  (let ((window-ms (* timeframe-minutes 60 1000))
-        (bars [])
-        (current-bar null))
+1. **Pure functions eliminate non-determinism**
+   - Same inputs always produce same outputs
+   - No side effects mean no hidden dependencies
+   - Makes testing and debugging trivial
 
-    (for (tick ticks)
-      (let ((window-start (floor (/ (tick :timestamp) window-ms))))
+2. **Immutability prevents race conditions**
+   - Data can't change, so threads can't conflict
+   - Enables time-travel debugging and undo
+   - Uses structural sharing for efficiency
 
-        (if (or (null? current-bar)
-                (!= ((current-bar :window)) window-start))
-            ;; Start new bar
-            (do
-              (if (not (null? current-bar))
-                  (set! bars (append bars current-bar))
-                  null)
-              (set! current-bar {:window window-start
-                                :open (tick :price)
-                                :high (tick :price)
-                                :low (tick :price)
-                                :close (tick :price)
-                                :volume (tick :volume)}))
+3. **Higher-order functions eliminate repetition**
+   - map/filter/reduce replace manual loops
+   - Functions compose like LEGO blocks
+   - Code becomes declarative (what, not how)
 
-            ;; Update current bar
-            (do
-              (set! current-bar (assoc current-bar :high
-                                      (max (current-bar :high) (tick :price))))
-              (set! current-bar (assoc current-bar :low
-                                      (min (current-bar :low) (tick :price))))
-              (set! current-bar (assoc current-bar :close (tick :price)))
-              (set! current-bar (assoc current-bar :volume
-                                      (+ (current-bar :volume) (tick :volume))))))))
+4. **Monads make error handling composable**
+   - Maybe/Either prevent null pointer exceptions
+   - Railway-oriented programming: errors short-circuit
+   - Explicit failure handling in types
 
-    (append bars current-bar)))
+**When to Use FP:**
 
-;; Multi-timeframe strategy (pure composition)
-(define (multi-timeframe-strategy ticks)
-  (let ((bars-1m (resample-ohlc ticks 1))
-        (bars-5m (resample-ohlc ticks 5))
-        (bars-15m (resample-ohlc ticks 15)))
+- **Backtesting**: Reproducibility is critical
+- **Risk calculations**: Bugs cost millions
+- **Concurrent systems**: No locks needed with immutability
+- **Complex algorithms**: Composition reduces complexity
 
-    (let ((prices-1m (map bars-1m (lambda (b) (b :close))))
-          (prices-5m (map bars-5m (lambda (b) (b :close))))
-          (prices-15m (map bars-15m (lambda (b) (b :close)))))
+**When to Be Pragmatic:**
 
-      (let ((signal-1m (last (sma prices-1m 10)))
-            (signal-5m (last (sma prices-5m 10)))
-            (signal-15m (last (sma prices-15m 10))))
+- **Performance-critical tight loops**: Mutation can be faster (but profile first!)
+- **Interfacing with imperative APIs**: Isolate side effects at boundaries
+- **Simple scripts**: Don't over-engineer for throwaway code
 
-        ;; Trend alignment: all timeframes agree
-        (if (and (> signal-1m signal-5m)
-                 (> signal-5m signal-15m))
-            "strong-buy"
-            (if (and (< signal-1m signal-5m)
-                     (< signal-5m signal-15m))
-                "strong-sell"
-                "neutral"))))))
-```
+**The Knight Capital lesson**: Shared mutable state killed a company. Pure functions, immutability, and explicit error handling prevent entire classes of catastrophic bugs. In production trading systems, FP isn't academic purity—it's pragmatic risk management.
 
-### 5.8.2 Functional Portfolio Optimization
+**Next Steps:**
 
-```lisp
-;; Pure function: calculate portfolio return
-(define (portfolio-return weights returns)
-  (sum (map (range 0 (length weights))
-           (lambda (i)
-             (* (nth weights i) (nth returns i))))))
-
-;; Pure function: calculate portfolio variance
-(define (portfolio-variance weights covariance-matrix)
-  (let ((n (length weights))
-        (variance 0))
-
-    (for (i (range 0 n))
-      (for (j (range 0 n))
-        (set! variance (+ variance
-                         (* (nth weights i)
-                            (nth weights j)
-                            (nth (nth covariance-matrix i) j))))))
-    variance))
-
-;; Pure function: Sharpe ratio
-(define (sharpe-ratio weights returns covariance-matrix risk-free-rate)
-  (let ((port-return (portfolio-return weights returns))
-        (port-variance (portfolio-variance weights covariance-matrix)))
-    (/ (- port-return risk-free-rate)
-       (sqrt port-variance))))
-
-;; Pure optimization: grid search (functional approach)
-(define (optimize-portfolio returns covariance-matrix risk-free-rate)
-  (let ((n (length returns))
-        (best-sharpe -999)
-        (best-weights null))
-
-    ;; Generate weight combinations (simplified: equal steps)
-    (define (generate-weights n step)
-      ;; Recursive generation of valid weight vectors that sum to 1.0
-      ;; (Simplified for illustration)
-      [[0.25 0.25 0.25 0.25]
-       [0.3 0.3 0.2 0.2]
-       [0.4 0.3 0.2 0.1]])  ;; Example candidates
-
-    (let ((candidates (generate-weights n 0.05)))
-
-      (for (weights candidates)
-        (let ((sr (sharpe-ratio weights returns covariance-matrix
-                               risk-free-rate)))
-          (if (> sr best-sharpe)
-              (do
-                (set! best-sharpe sr)
-                (set! best-weights weights))
-              null)))
-
-      {:weights best-weights :sharpe best-sharpe})))
-```
-
----
-
-## 5.9 Key Takeaways
-
-**Figure 5.3**: Code Complexity vs Functional Purity
-
-```mermaid
-xychart-beta
-    title "Cyclomatic Complexity Reduction through Functional Programming"
-    x-axis "Functional Purity (% of functions that are pure)" [0, 20, 40, 60, 80, 100]
-    y-axis "Average Cyclomatic Complexity" 1 --> 25
-    "Imperative Codebase" [22, 20, 18, 15, 10, 5]
-    "Hybrid Codebase" [18, 16, 14, 11, 7, 4]
-    "Pure FP Codebase" [12, 10, 8, 6, 4, 3]
-```
-
-*This XY chart demonstrates the inverse relationship between functional purity and code complexity in trading systems. As pure functions increase from 0% to 100%, cyclomatic complexity (branches per function) drops exponentially. Imperative codebases average 22 complexity at 0% purity, falling to 5 at 100% purity—a 78% reduction. Pure FP codebases start lower (12) and reach ultimate simplicity (3) at full purity. The steepest decline occurs between 40-60% purity, suggesting a tipping point where functional patterns dominate. Lower complexity directly correlates with fewer bugs: each complexity point adds 5% bug probability. Codebases with 100% purity (complexity 3) have 90% fewer bugs than 0% purity (complexity 22). This data justifies FP adoption for risk-critical trading systems.*
-
----
-
-```mermaid
-mindmap
-  root((Functional Programming))
-    Pure Functions
-      Deterministic
-      No Side Effects
-      Referential Transparency
-      Testable
-    Higher-Order
-      map/filter/reduce
-      Composition
-      Decorators
-      Combinators
-    Immutability
-      Persistent Structures
-      Concurrent Safety
-      Time Travel Debug
-      State Snapshots
-    Monads
-      Maybe Error Handling
-      Either Validation
-      IO Side Effects
-      Railway Pattern
-    Lazy Evaluation
-      Infinite Streams
-      On-Demand Compute
-      Pipeline Fusion
-      Memory Efficiency
-```
-
-🎯 **Design Principles**:
-
-1. **Favor pure functions**: 80% of code should be pure, 20% manages side effects
-2. **Compose, don't convolute**: Build complex logic from simple, reusable functions
-3. **Make illegal states unrepresentable**: Use types and monads to enforce invariants
-4. **Immutability by default**: Mutate only when profiling shows performance bottleneck
-5. **Isolate I/O at boundaries**: Push side effects to program edges
-
-⚠️ **Common Pitfalls**:
-
-- **Over-abstraction**: Don't wrap every operation in monads—use when error handling benefits
-- **Ignoring performance**: Immutability has overhead—profile before optimizing
-- **Forgetting evaluation strategy**: OVSM is eager—laziness requires explicit generators
-- **Mixing paradigms carelessly**: Choose FP or imperative per module, don't mix within functions
-
-📊 **Functional vs Imperative Comparison**:
-
-| Aspect | Functional | Imperative | Winner |
-|--------|-----------|------------|--------|
-| Testability | Pure functions, easy mocking | Global state, hard to isolate | FP |
-| Concurrency | Safe by default (immutable) | Requires locks/synchronization | FP |
-| Debugging | Deterministic, reproducible | Non-deterministic races | FP |
-| Performance | Allocation overhead | In-place mutation | Imperative* |
-| Learning Curve | Steeper (monads, composition) | Familiar (loops, variables) | Imperative |
-
-*Modern GCs and persistent data structures narrow performance gap significantly.
-
----
-
-## Further Reading
-
-1. Hutton, G. (2016). *Programming in Haskell* (2nd ed.). Cambridge University Press.
-
-2. Bird, R., & Wadler, P. (1988). *Introduction to Functional Programming*. Prentice Hall.
-
-3. Okasaki, C. (1999). *Purely Functional Data Structures*. Cambridge University Press.
-
-4. Hughes, J. (1989). "Why Functional Programming Matters". *The Computer Journal*, 32(2), 98-107.
-
-5. Lipovača, M. (2011). *Learn You a Haskell for Great Good!*. No Starch Press.
-
----
-
-**Next Chapter Preview**: [Chapter 6: Stochastic Processes and Simulation](#) explores mathematical models of price dynamics, from Brownian motion to jump-diffusion processes, and their implementation in OVSM.
+Now that we can write **correct, composable code**, we need to model the **randomness** inherent in markets. Chapter 6 introduces stochastic processes—mathematical models of price movements that capture uncertainty while remaining analytically tractable.
