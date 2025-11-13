@@ -30,6 +30,55 @@ $$
 
 ### 8.1.2 Unit Root Tests
 
+```mermaid
+stateDiagram-v2
+    [*] --> LoadData
+    LoadData --> VisualInspection: Plot Time Series
+    VisualInspection --> ADFTest: Check for Trend/Seasonality
+
+    ADFTest --> RejectH0: ADF Statistic < Critical Value
+    ADFTest --> FailToReject: ADF Statistic ≥ Critical Value
+
+    RejectH0 --> KPSSTest: Series Appears Stationary
+    FailToReject --> Difference: Non-Stationary Detected
+
+    KPSSTest --> Stationary: KPSS Does Not Reject
+    KPSSTest --> TrendStationary: KPSS Rejects H0
+    Stationary --> ProceedModeling
+
+    TrendStationary --> Detrend: Remove Linear Trend
+    Detrend --> ReTest: Apply ADF Again
+
+    Difference --> DiffOrder: d = d + 1
+    DiffOrder --> MaxDiff?: d < max_d?
+    MaxDiff? --> ADFTest: Yes - Test Differenced Series
+    MaxDiff? --> IntegratedTooHigh: No - Series Too Integrated
+
+    ReTest --> ProceedModeling
+    ProceedModeling --> [*]
+    IntegratedTooHigh --> [*]
+
+    note right of ADFTest
+        H0: Unit root exists (non-stationary)
+        H1: Series is stationary
+        Typical α = 0.05
+    end note
+
+    note left of KPSSTest
+        H0: Series is stationary
+        H1: Unit root exists
+        Complementary to ADF
+    end note
+
+    note right of Difference
+        Apply: Δy_t = y_t - y_{t-1}
+        Repeat until stationary
+        Typical max_d = 2
+    end note
+```
+
+**Figure 8.1**: Stationarity testing workflow combining ADF and KPSS tests. This decision tree prevents spurious regressions by ensuring time series models are applied to stationary data. The complementary nature of ADF (null: non-stationary) and KPSS (null: stationary) provides robust validation. Most financial returns require d=0 (already stationary), while price levels typically need d=1.
+
 #### Augmented Dickey-Fuller (ADF) Test
 
 Tests the null hypothesis that a unit root is present:
@@ -226,6 +275,36 @@ This provides a complementary perspective to ADF:
 
 ## 8.2 ARIMA Models
 
+```mermaid
+timeline
+    title Time Series Methodology Evolution (1920-2025)
+    section Classical Period (1920-1970)
+        1927 : Yule introduces autoregression
+             : Foundation of AR models
+        1938 : Wold Decomposition Theorem
+             : Any stationary series = deterministic + stochastic
+        1970 : Box-Jenkins ARIMA methodology
+             : Systematic model identification
+    section Volatility Era (1980-2000)
+        1982 : ARCH models (Engle)
+             : Time-varying volatility
+        1986 : GARCH models (Bollerslev)
+             : Generalized volatility clustering
+        1991 : Johansen cointegration test
+             : Multivariate equilibrium relationships
+    section Modern Era (2010-Present)
+        2012 : Prophet (Facebook)
+             : Automated forecasting at scale
+        2017 : DeepAR (Amazon)
+             : Probabilistic forecasting with LSTM
+        2020 : Transformers for Time Series
+             : Attention mechanisms
+        2023 : Foundation Models
+             : TimeGPT, Chronos, Lag-Llama
+```
+
+**Figure 8.3**: Evolution of time series analysis from Yule's 1927 autoregression through Box-Jenkins ARIMA to modern deep learning approaches. Each era addresses specific limitations: classical methods handle linear patterns, volatility models capture heteroskedasticity, and modern ML tackles non-linearity and high-dimensional forecasting.
+
 ### 8.2.1 Autoregressive (AR) Models
 
 An **AR(p)** model expresses the current value as a linear combination of past values:
@@ -366,6 +445,25 @@ Where:
 ---
 
 ### 8.2.4 Box-Jenkins Methodology
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "ACF and PACF for ARIMA Model Identification"
+    x-axis "Lag" [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    y-axis "Correlation" -0.4 --> 1.0
+    line "ACF (Autocorrelation)" [1.0, 0.7, 0.5, 0.35, 0.24, 0.17, 0.12, 0.08, 0.06, 0.04, 0.03]
+    line "PACF (Partial Autocorrelation)" [1.0, 0.7, 0.1, -0.05, 0.02, -0.01, 0.03, -0.02, 0.01, 0.00, -0.01]
+    line "Upper 95% Confidence" [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+    line "Lower 95% Confidence" [-0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2]
+```
+
+**Figure 8.2**: Sample ACF and PACF plots for ARIMA(2,1,0) identification. ACF shows exponential decay (characteristic of AR processes), while PACF cuts off sharply after lag 2, suggesting p=2. Values outside confidence bounds (±0.2 for this sample size) indicate significant correlation. This pattern guides model order selection in the Box-Jenkins methodology.
 
 📊 **Systematic ARIMA Model Selection:**
 
@@ -977,6 +1075,41 @@ Where $w_k$ are smoothing weights.
 ## 8.6 OVSM Time Series Toolkit
 
 ### 8.6.1 Complete Workflow Example
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','secondaryColor':'#4ecdc4','tertiaryColor':'#ffe66d'}}}%%
+sankey-beta
+
+Raw Data,Preprocessing,100
+Preprocessing,Stationarity Testing,80
+Preprocessing,Data Quality Issues,20
+Stationarity Testing,Model Training,70
+Stationarity Testing,Differencing Required,10
+Differencing Required,Model Training,10
+Model Training,Validation,65
+Model Training,Overfit Rejected,5
+Validation,Production Deployment,60
+Validation,Retrain Needed,5
+Production Deployment,Monitoring,55
+Production Deployment,Model Degradation,5
+Monitoring,Retraining Triggered,10
+Retraining Triggered,Model Training,10
+```
+
+**Figure 8.4**: Time series forecasting pipeline showing data flow from raw data through production deployment. Width represents percentage of data/models flowing through each stage. 20% of raw data is rejected for quality issues, 10% of models overfit during training, and 5% degrade in production requiring retraining. This Sankey diagram illustrates the attrition at each stage and the feedback loop for continuous improvement.
+
+```mermaid
+%%{init: {'theme':'base', 'pie': {'textPosition': 0.5}, 'themeVariables': {'pieOuterStrokeWidth': '5px'}} }%%
+pie showData
+    title Forecast Error Attribution in Time Series Models
+    "Model Specification Error" : 35
+    "Data Quality Issues" : 25
+    "Regime Change/Structural Break" : 20
+    "Parameter Instability" : 12
+    "Random Noise (Irreducible)" : 8
+```
+
+**Figure 8.5**: Decomposition of forecast errors in production time series models. Model specification (wrong ARIMA orders) accounts for 35% of errors, followed by data quality issues (25%). Regime changes cause 20% of errors—a major challenge in financial forecasting where market dynamics shift. Only 8% of error is truly random and irreducible. This distribution guides where to focus improvement efforts: better model selection and robust data pipelines yield the highest ROI.
 
 ```lisp
 ;; Complete Time Series Analysis Pipeline

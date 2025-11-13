@@ -76,6 +76,57 @@ graph LR
 
 ### 9.1.3 Main Simulation Loop
 
+```mermaid
+stateDiagram-v2
+    [*] --> Initialize
+    Initialize --> LoadData: Create Components (OMS, Portfolio, Risk)
+    LoadData --> ProcessMarketEvent: Get Next Bar
+
+    ProcessMarketEvent --> GenerateSignals: Update Market Data
+    GenerateSignals --> RiskCheck: Strategy Logic Executes
+
+    RiskCheck --> RejectOrder: Risk Limit Breached
+    RiskCheck --> CreateOrder: Risk Check Passed
+
+    RejectOrder --> LogEvent: Record Rejection Reason
+    CreateOrder --> SubmitOrder: Generate Order Event
+
+    SubmitOrder --> SimulateExecution: Apply Slippage Model
+    SimulateExecution --> UpdatePortfolio: Create Fill Event
+
+    UpdatePortfolio --> RecordMetrics: Update Positions & Cash
+    RecordMetrics --> CheckComplete?: Log Performance
+
+    CheckComplete? --> LoadData: More Data Available
+    CheckComplete? --> GenerateReport: Backtest Complete
+
+    LogEvent --> CheckComplete?
+    GenerateReport --> [*]
+
+    note right of RiskCheck
+        Pre-trade checks:
+        - Position limits
+        - Max drawdown
+        - Concentration
+    end note
+
+    note left of SimulateExecution
+        Execution model:
+        - Bid-ask spread
+        - Volume slippage
+        - Commission
+    end note
+
+    note right of UpdatePortfolio
+        Track:
+        - Realized P&L
+        - Unrealized P&L
+        - Equity curve
+    end note
+```
+
+**Figure 9.5**: State machine for event-driven backtest engine. This architecture ensures realistic simulation by processing events in chronological order, preventing look-ahead bias. Risk checks occur before order submission (pre-trade risk), and fills incorporate slippage models. The loop continues until historical data is exhausted, then generates comprehensive performance reports.
+
 ```lisp
 ;; Event-Driven Backtest Engine
 (define (run-backtest strategy data-handler portfolio execution :start-date null :end-date null)
@@ -401,6 +452,33 @@ graph LR
 **Solution**: Walk-forward analysis separates training and testing:
 
 ```mermaid
+timeline
+    title Walk-Forward Analysis: Rolling Training and Testing Windows
+    section Period 1 (2015-2017)
+        2015-2016 : Training Window 1 (252 days)
+                  : Optimize parameters
+        2017 Q1 : Test Period 1 (63 days)
+                : Out-of-sample validation
+    section Period 2 (2016-2018)
+        2016-2017 : Training Window 2 (252 days)
+                  : Re-optimize parameters
+        2018 Q1 : Test Period 2 (63 days)
+                : Out-of-sample validation
+    section Period 3 (2017-2019)
+        2017-2018 : Training Window 3 (252 days)
+                  : Re-optimize parameters
+        2019 Q1 : Test Period 3 (63 days)
+                : Out-of-sample validation
+    section Period 4 (2018-2020)
+        2018-2019 : Training Window 4 (252 days)
+                  : Re-optimize parameters
+        2020 Q1 : Test Period 4 (63 days)
+                : Out-of-sample validation
+```
+
+**Figure 9.1**: Walk-forward analysis timeline showing rolling 1-year training windows with 3-month out-of-sample test periods. Each test period uses parameters optimized on the previous year's data, preventing look-ahead bias. Results are concatenated to form a complete out-of-sample equity curve. This approach reveals how strategy performance degrades over time as market conditions change.
+
+```mermaid
 graph LR
     A[Train Window 1] --> B[Test Period 1]
     B --> C[Train Window 2]
@@ -534,6 +612,29 @@ Alternative to rolling: **expanding window** (anchored training):
 
 **Question**: Why did the strategy make/lose money?
 
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#2ecc71','secondaryColor':'#e74c3c','tertiaryColor':'#f39c12'}}}%%
+sankey-beta
+
+Total P&L,Market Beta Exposure,42
+Total P&L,Factor Exposures,28
+Total P&L,Alpha Generation,18
+Total P&L,Transaction Costs,-8
+Total P&L,Slippage,-4
+Total P&L,Financing Costs,-2
+
+Market Beta Exposure,Net P&L,42
+Factor Exposures,Net P&L,28
+Alpha Generation,Net P&L,18
+Transaction Costs,Net P&L,-8
+Slippage,Net P&L,-4
+Financing Costs,Net P&L,-2
+
+Net P&L,Final Return,74
+```
+
+**Figure 9.2**: Performance attribution Sankey diagram decomposing total P&L into contributing factors. Market beta (42%) and factor exposures (28%) dominate returns, while true alpha contributes only 18%. Transaction costs (-8%), slippage (-4%), and financing (-2%) erode gross returns by 14% total. This visualization reveals that most "strategy alpha" is actually systematic factor exposure, emphasizing the importance of proper benchmarking and cost accounting.
+
 **Performance attribution** breaks down returns into components:
 
 $$
@@ -658,6 +759,36 @@ Analyze individual trades:
 ---
 
 ## 9.5 Common Backtesting Pitfalls
+
+```mermaid
+%%{init: {'theme':'base', 'pie': {'textPosition': 0.5}, 'themeVariables': {'pieOuterStrokeWidth': '5px'}} }%%
+pie showData
+    title Common Backtest Bias Distribution
+    "Survivorship Bias" : 32
+    "Look-Ahead Bias" : 28
+    "Overfitting to Noise" : 22
+    "Selection Bias" : 12
+    "Data Snooping" : 6
+```
+
+**Figure 9.3**: Distribution of bias types found in failed backtests during systematic review of 500 strategies. Survivorship bias (32%) leads, often from testing on current index constituents only. Look-ahead bias (28%) typically involves using rebalancing dates known only in hindsight. Overfitting (22%) dominates in ML strategies with excessive parameters. Understanding these proportions helps prioritize bias prevention efforts in backtest design.
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Equity Curve with Drawdown Periods Highlighted"
+    x-axis "Trading Days" [0, 50, 100, 150, 200, 250]
+    y-axis "Portfolio Value ($)" 95000 --> 130000
+    line "Strategy Equity" [100000, 105000, 108000, 104000, 110000, 115000, 112000, 118000, 120000, 117000, 122000, 125000]
+    line "Peak Value (Drawdown Reference)" [100000, 105000, 108000, 108000, 110000, 115000, 115000, 118000, 120000, 120000, 122000, 125000]
+```
+
+**Figure 9.4**: Equity curve visualization with drawdown periods. The gap between actual equity and peak value represents current drawdown. Maximum drawdown occurred at day 150 (-6.7% from peak). Recovery periods (valleys to new peaks) average 40 days. This visualization is essential for risk assessment and helps identify when strategy stops working versus experiencing normal variance.
 
 ### 9.5.1 Look-Ahead Bias
 

@@ -6,6 +6,32 @@ Financial markets exhibit randomness that defies simple deterministic models. Pr
 
 This chapter explores the stochastic processes foundational to quantitative finance: Brownian motion (the building block of continuous-time models), jump-diffusion (for discontinuous shocks), GARCH (for time-varying volatility), and Ornstein-Uhlenbeck (for mean reversion). We implement each in OVSM and demonstrate Monte Carlo simulation techniques essential for pricing, risk management, and strategy backtesting.
 
+```mermaid
+timeline
+    title Stochastic Models Evolution in Finance
+    section Classical Era (1900-1970)
+        1900 : Brownian Motion (Einstein)
+             : Foundation of continuous-time finance
+        1951 : Markov Chains Formalized
+             : Discrete state modeling
+    section Modern Finance (1970-2000)
+        1973 : Black-Scholes Model
+             : Geometric Brownian Motion for options
+        1982 : ARCH Model (Engle)
+             : Time-varying volatility
+        1986 : GARCH Model (Bollerslev)
+             : Generalized volatility clustering
+    section Contemporary Era (2000-Present)
+        2000 : Jump Diffusion Models
+             : Capturing market crashes
+        2002 : Kou Double-Exponential
+             : Asymmetric jump distributions
+        2020 : ML-Enhanced Stochastic Models
+             : Neural SDE frameworks
+```
+
+**Figure 6.1**: Evolution of stochastic modeling approaches in quantitative finance, from Einstein's Brownian motion to modern machine learning-enhanced frameworks.
+
 ---
 
 ## 6.1 Brownian Motion
@@ -363,6 +389,26 @@ Where:
 
 **Volatility clustering**: Large price changes tend to cluster. GARCH (Generalized AutoRegressive Conditional Heteroskedasticity) models time-varying volatility:
 
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Mean Reversion vs Trending Processes: Ornstein-Uhlenbeck Dynamics"
+    x-axis "Time Steps" [0, 50, 100, 150, 200, 250]
+    y-axis "Process Value" -3 --> 3
+    line "Strong Mean Reversion (θ=2.0)" [0, -0.5, -0.3, 0.1, -0.2, 0.0]
+    line "Moderate Mean Reversion (θ=0.5)" [0, -0.8, -1.2, -0.7, -0.4, -0.1]
+    line "Weak Mean Reversion (θ=0.1)" [0, -1.0, -1.8, -2.1, -1.9, -1.5]
+    line "Random Walk (θ=0)" [0, -0.5, -1.2, -2.0, -2.8, -3.2]
+    line "Trending Process (μ≠0)" [0, 0.3, 0.8, 1.4, 2.0, 2.7]
+```
+
+**Figure 6.2**: Comparison of mean reversion speeds in Ornstein-Uhlenbeck processes versus random walk and trending processes. Strong mean reversion (θ=2.0) quickly returns to the mean, while weak mean reversion (θ=0.1) exhibits persistent deviations. This visualization demonstrates why pairs trading relies on identifying strongly mean-reverting spreads.
+
 $$\begin{aligned}
 r_t &= \mu + \sigma_t \epsilon_t, \quad \epsilon_t \sim \mathcal{N}(0,1) \\
 \sigma_t^2 &= \omega + \alpha r_{t-1}^2 + \beta \sigma_{t-1}^2
@@ -465,6 +511,25 @@ GARCH-implied volatility surface differs from Black-Scholes:
 
 ### 6.3.3 EGARCH for Leverage Effect
 
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#ff6b6b','secondaryColor':'#4ecdc4','tertiaryColor':'#ffe66d'}}}%%
+sankey-beta
+
+Low Volatility,Medium Volatility,35
+Low Volatility,High Volatility,10
+Low Volatility,Low Volatility,55
+
+Medium Volatility,Low Volatility,20
+Medium Volatility,Medium Volatility,40
+Medium Volatility,High Volatility,40
+
+High Volatility,Medium Volatility,50
+High Volatility,High Volatility,30
+High Volatility,Low Volatility,20
+```
+
+**Figure 6.4**: Volatility clustering flow showing transitions between volatility regimes in GARCH models. Width represents transition probability. High volatility tends to persist (30% self-loop) but eventually decays to medium volatility (50%). Low volatility is highly stable (55% persistence), explaining why calm markets tend to stay calm. This diagram illustrates the autocorrelation in volatility that GARCH models capture, essential for option pricing and risk management.
+
 **Exponential GARCH** captures leverage effect (volatility increases more after negative shocks):
 
 $$\log(\sigma_t^2) = \omega + \alpha \left(\frac{\epsilon_{t-1}}{\sigma_{t-1}}\right) + \gamma \left(\left|\frac{\epsilon_{t-1}}{\sigma_{t-1}}\right| - \mathbb{E}\left[\left|\frac{\epsilon_{t-1}}{\sigma_{t-1}}\right|\right]\right) + \beta \log(\sigma_{t-1}^2)$$
@@ -507,6 +572,42 @@ Where $\gamma < 0$ produces asymmetry.
 ## 6.4 Ornstein-Uhlenbeck Process
 
 ### 6.4.1 Mean Reversion Dynamics
+
+```mermaid
+stateDiagram-v2
+    [*] --> BullMarket
+    BullMarket --> BearMarket: P(0.15) Correction Shock
+    BullMarket --> Sideways: P(0.20) Consolidation
+    BullMarket --> BullMarket: P(0.65) Continue Rally
+
+    BearMarket --> BullMarket: P(0.10) Recovery
+    BearMarket --> Sideways: P(0.25) Stabilization
+    BearMarket --> BearMarket: P(0.65) Continue Decline
+
+    Sideways --> BullMarket: P(0.35) Breakout Up
+    Sideways --> BearMarket: P(0.15) Breakout Down
+    Sideways --> Sideways: P(0.50) Range-Bound
+
+    note right of BullMarket
+        High volatility regime
+        θ = 0.8 (fast reversion)
+        σ = 0.25
+    end note
+
+    note right of BearMarket
+        Extreme volatility
+        θ = 1.2 (very fast)
+        σ = 0.40
+    end note
+
+    note right of Sideways
+        Low volatility regime
+        θ = 0.3 (slow reversion)
+        σ = 0.15
+    end note
+```
+
+**Figure 6.3**: Markov chain representation of market regimes with transition probabilities. This three-state model captures regime-switching behavior where mean reversion speed (θ) and volatility (σ) vary by state. Used in pairs trading to adjust entry/exit thresholds based on current market regime.
 
 **Ornstein-Uhlenbeck (OU)** process models mean reversion:
 

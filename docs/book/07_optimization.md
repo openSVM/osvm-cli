@@ -255,6 +255,30 @@ Default hyperparameters: $\beta_1=0.9$, $\beta_2=0.999$, $\epsilon=10^{-8}$
 
 ## 7.2 Convex Optimization
 
+```mermaid
+%%{init: {'theme':'base', 'quadrantChart': {'chartWidth':600, 'chartHeight':600}}}%%
+quadrantChart
+    title Optimization Algorithm Selection Matrix
+    x-axis "Low Problem Complexity" --> "High Problem Complexity"
+    y-axis "Slow Convergence" --> "Fast Convergence"
+    quadrant-1 "Best Choice"
+    quadrant-2 "Acceptable Trade-offs"
+    quadrant-3 "Avoid if Possible"
+    quadrant-4 "Problem-Specific"
+    Gradient Descent: [0.3, 0.85]
+    Adam Optimizer: [0.35, 0.90]
+    Newton's Method: [0.25, 0.95]
+    L-BFGS: [0.40, 0.88]
+    Grid Search: [0.60, 0.15]
+    Random Search: [0.65, 0.35]
+    Simulated Annealing: [0.75, 0.45]
+    Genetic Algorithm: [0.80, 0.40]
+    Bayesian Optimization: [0.70, 0.55]
+    Particle Swarm: [0.78, 0.42]
+```
+
+**Figure 7.1**: Algorithm selection quadrant for optimization problems. Quadrant 1 (top-left) contains gradient-based methods ideal for smooth, differentiable problems. Quadrant 4 (top-right) shows metaheuristics for complex, non-convex landscapes. Grid search falls in Quadrant 3 due to poor scalability. Use this chart to select appropriate optimizers based on problem characteristics.
+
 ### 7.2.1 Linear Programming
 
 **Linear Program (LP)**: Optimize linear objective subject to linear constraints:
@@ -418,6 +442,48 @@ Solve QP for $y$, then recover $w = y / (\mathbf{1}^T y)$.
 ## 7.3 Genetic Algorithms
 
 ### 7.3.1 Fundamentals
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initialize
+    Initialize --> Evaluate: Generate Random Population
+    Evaluate --> Select: Compute Fitness Scores
+    Select --> Crossover: Tournament/Roulette Selection
+    Crossover --> Mutate: Combine Parent Genes
+    Mutate --> Evaluate: Random Perturbations
+    Evaluate --> Converged?
+
+    Converged? --> Select: No (Continue Evolution)
+    Converged? --> [*]: Yes (Return Best Individual)
+
+    note right of Initialize
+        Population Size: 50-200
+        Chromosome: [param1, param2, ...]
+    end note
+
+    note right of Select
+        Pressure: Top 20% selected
+        Diversity: Maintain variety
+    end note
+
+    note right of Crossover
+        Rate: 0.8 (80% of pairs)
+        Uniform/Single-point
+    end note
+
+    note right of Mutate
+        Rate: 0.1 (10% probability)
+        Gaussian noise
+    end note
+
+    note left of Converged?
+        Max Generations: 100-500
+        Fitness Plateau: 20 iterations
+        Target Fitness: Problem-specific
+    end note
+```
+
+**Figure 7.3**: State machine for genetic algorithm optimization lifecycle. Each generation flows through selection → crossover → mutation → evaluation until convergence criteria are met. Exit conditions prevent infinite loops while ensuring sufficient exploration. This architecture applies to strategy parameter optimization where gradient information is unavailable.
 
 **Genetic algorithms (GA)** evolve solutions via selection, crossover, and mutation:
 
@@ -834,6 +900,27 @@ Where:
 💡 **Bergstra & Bengio (2012)**: Random search finds near-optimal parameters in fewer evaluations than grid search when only a few parameters matter.
 
 ### 7.5.3 Bayesian Optimization
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "Convergence Rate Comparison: Optimization Algorithms"
+    x-axis "Iteration Number" [0, 20, 40, 60, 80, 100]
+    y-axis "Objective Function Value" 0 --> 100
+    line "Adam Optimizer" [95, 62, 38, 22, 12, 5]
+    line "Gradient Descent + Momentum" [95, 70, 48, 32, 20, 10]
+    line "Vanilla Gradient Descent" [95, 78, 62, 50, 40, 32]
+    line "L-BFGS" [95, 55, 25, 10, 3, 1]
+    line "Genetic Algorithm" [95, 88, 78, 65, 52, 38]
+    line "Simulated Annealing" [95, 82, 68, 52, 38, 25]
+```
+
+**Figure 7.2**: Empirical convergence rates for different optimization algorithms on a non-convex test function (Rastrigin). L-BFGS achieves fastest convergence for smooth problems, while Adam provides robust performance across problem types. Genetic algorithms and simulated annealing show slower but more reliable global convergence. This visualization guides algorithm selection for strategy parameter tuning.
 
 **Gaussian Process** models objective, balances exploration/exploitation:
 

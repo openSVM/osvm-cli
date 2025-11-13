@@ -21,6 +21,39 @@ Building a production trading system transforms backtested strategies into live,
 ### 10.1.2 Microservices Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#3498db','secondaryColor':'#2ecc71','tertiaryColor':'#e74c3c'}}}%%
+sankey-beta
+
+Market Data Feed,Data Normalization,10000
+Data Normalization,Strategy Engine,9500
+Data Normalization,Data Quality Checks Failed,500
+
+Strategy Engine,Risk Manager,7200
+Strategy Engine,Signals Filtered,2300
+
+Risk Manager,Order Management System,6800
+Risk Manager,Risk Rejected,400
+
+Order Management System,Execution Router,6500
+Order Management System,Order Validation Failed,300
+
+Execution Router,Exchange A,3200
+Execution Router,Exchange B,2100
+Execution Router,Dark Pool,1200
+
+Exchange A,Fill Confirmations,3000
+Exchange B,Fill Confirmations,2000
+Dark Pool,Fill Confirmations,1100
+Execution Router,Execution Failed,200
+
+Fill Confirmations,Position Manager,6100
+Position Manager,Portfolio Reporting,6000
+Position Manager,P&L Calculation,6000
+```
+
+**Figure 10.2**: Production trading system data flow represented as Sankey diagram. Width represents message/event volume per second. 500 messages (5%) fail data quality checks. Risk manager rejects 400 orders (6%). Execution succeeds 97% of the time. Multiple exchange routes provide redundancy and best execution. This visualization helps identify bottlenecks (Strategy Engine processing capacity) and failure points (risk rejection rate may be too high, causing missed opportunities).
+
+```mermaid
 graph TB
     A[Market Data Service] -->|Events| B[Strategy Engine]
     B -->|Signals| C[Risk Manager]
@@ -64,6 +97,76 @@ graph TB
 **Command Query Responsibility Segregation (CQRS)**:
 - **Write Model**: Handle commands (place order, cancel order)
 - **Read Model**: Optimized queries (current positions, P&L)
+
+```mermaid
+erDiagram
+    ORDERS ||--o{ FILLS : contains
+    ORDERS ||--o{ ORDER_EVENTS : has
+    POSITIONS ||--o{ POSITION_EVENTS : tracks
+    ORDERS }o--|| STRATEGIES : generated_by
+
+    ORDERS {
+        uuid order_id PK
+        string symbol
+        string side
+        decimal quantity
+        decimal limit_price
+        string order_type
+        string status
+        timestamp created_at
+        timestamp updated_at
+        uuid strategy_id FK
+    }
+
+    FILLS {
+        uuid fill_id PK
+        uuid order_id FK
+        decimal fill_quantity
+        decimal fill_price
+        decimal commission
+        timestamp fill_time
+        string venue
+        string exec_id
+    }
+
+    ORDER_EVENTS {
+        uuid event_id PK
+        uuid order_id FK
+        string event_type
+        jsonb event_data
+        timestamp event_time
+        uuid user_id
+    }
+
+    POSITIONS {
+        uuid position_id PK
+        string symbol PK
+        decimal quantity
+        decimal avg_cost
+        decimal realized_pnl
+        decimal unrealized_pnl
+        timestamp last_updated
+    }
+
+    POSITION_EVENTS {
+        uuid event_id PK
+        uuid position_id FK
+        string event_type
+        decimal quantity_delta
+        decimal price
+        timestamp event_time
+    }
+
+    STRATEGIES {
+        uuid strategy_id PK
+        string strategy_name
+        jsonb parameters
+        string status
+        timestamp created_at
+    }
+```
+
+**Figure 10.1**: Entity-relationship diagram for production trading system database schema. Event sourcing is implemented through ORDER_EVENTS and POSITION_EVENTS tables, providing complete audit trail. The schema supports CQRS pattern: write path (events) and optimized read path (materialized views from ORDERS, FILLS, POSITIONS). Foreign key relationships ensure referential integrity while JSONB fields allow flexible parameter storage for diverse strategy types.
 
 ```lisp
 ;; Event Sourcing Example
@@ -713,6 +816,38 @@ stateDiagram-v2
 ## 10.4 Monitoring and Alerting
 
 ### 10.4.1 Key Metrics
+
+```mermaid
+---
+config:
+  xyChart:
+    width: 900
+    height: 600
+---
+xychart-beta
+    title "System Performance: Latency vs Throughput Trade-off"
+    x-axis "Throughput (Orders per Second)" [0, 500, 1000, 1500, 2000, 2500, 3000]
+    y-axis "P99 Latency (microseconds)" 0 --> 1000
+    line "Baseline Configuration" [10, 25, 50, 120, 280, 600, 950]
+    line "Optimized (Lock-free Queues)" [8, 18, 35, 80, 180, 380, 720]
+    line "With Kernel Bypass" [5, 12, 22, 45, 95, 200, 450]
+    line "Target SLA (100μs)" [100, 100, 100, 100, 100, 100, 100]
+```
+
+**Figure 10.3**: Latency vs throughput performance curves for different system configurations. Baseline configuration hits 100μs SLA limit at 1,500 orders/sec. Lock-free data structures extend capacity to 2,200 orders/sec. Kernel bypass (DPDK) achieves 2,800 orders/sec before breaching SLA. This chart guides infrastructure decisions: for < 1,500 ops, baseline suffices; beyond 2,000 ops requires kernel bypass investment. Real production systems plot these curves under load testing to set capacity limits.
+
+```mermaid
+%%{init: {'theme':'base', 'pie': {'textPosition': 0.5}, 'themeVariables': {'pieOuterStrokeWidth': '5px'}} }%%
+pie showData
+    title System Failure Mode Distribution (Last 90 Days)
+    "Exchange API Timeouts" : 38
+    "Network Packet Loss" : 28
+    "Internal Software Bugs" : 18
+    "Market Data Feed Issues" : 12
+    "Hardware Failures" : 4
+```
+
+**Figure 10.4**: Root cause analysis of production system failures over 90 days. Exchange API issues (38%) dominate, requiring circuit breakers and failover logic. Network problems (28%) necessitate redundant connections. Internal bugs (18%) despite testing emphasize need for comprehensive monitoring. Data feed issues (12%) require backup providers. Hardware failures (4%) are rare due to cloud redundancy. This distribution informs where to invest reliability engineering effort: API resilience and network redundancy yield highest ROI.
 
 📊 **Performance Metrics**:
 
