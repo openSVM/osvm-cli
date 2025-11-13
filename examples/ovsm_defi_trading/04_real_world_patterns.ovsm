@@ -1,0 +1,49 @@
+;; ============================================
+;; OVSM Example 4: Real-World Patterns
+;; ============================================
+
+(do
+  (log :message "=== DYNAMIC OBJECT CONSTRUCTION ===")
+  
+  ;; Build object with computed keys using set
+  (define result {})
+  (define result (set result "SOL" 100))
+  (define result (set result "USDC" 500))
+  (define result (set result "ETH" 2))
+  
+  (log :message "Token balances:" :value result)
+  
+  (log :message "\n=== ERROR HANDLING ===")
+  
+  ;; Safe data access with null checks
+  (define response {:data null})
+  (define data (get response "data"))
+  (define safe_data (if (null? data) {} data))
+  
+  (log :message "Safe data:" :value safe_data)
+  
+  ;; Fallback chain
+  (define config {:primary null :secondary null :default "localhost"})
+  (define host (or (get config "primary")
+                   (get config "secondary")
+                   (get config "default")))
+  (log :message "Host:" :value host)
+  
+  (log :message "\n=== AGGREGATION ===")
+  
+  ;; Simple aggregation
+  (define transactions [
+    {:type "transfer" :amount 100}
+    {:type "swap" :amount 50}
+    {:type "transfer" :amount 200}
+  ])
+  
+  ;; Count transfers
+  (define transfer_count 0)
+  (for (tx transactions)
+    (when (= (get tx "type") "transfer")
+      (set! transfer_count (+ transfer_count 1))))
+  
+  (log :message "Transfer count:" :value transfer_count)
+  
+  "✅ Real-world patterns demo complete!")

@@ -1,0 +1,525 @@
+;; ============================================
+;; OVSM Example 47: Order Anticipation Algorithms
+;; ============================================
+;;
+;; THEORY: Predicting Large Institutional Orders Before Completion
+;; -----------------------------------------------------------------
+;; Order anticipation (also called "predatory trading") involves detecting
+;; ongoing large orders and trading ahead of them to profit from the expected
+;; price impact. This is controversial but legal if done without insider info.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. INSTITUTIONAL ORDER DETECTION:
+;;    - Large orders split into smaller chunks (icebergs)
+;;    - Execution spans hours or days (TWAP, VWAP algorithms)
+;;    - Leaves detectable footprints in order flow
+;;    - Patterns: Consistent one-sided flow, repetitive sizes, timing
+;;
+;; 2. VPIN (Volume-Synchronized Probability of Informed Trading):
+;;    - Measures order flow toxicity in real-time
+;;    - VPIN = |Buys - Sells| / Total Volume
+;;    - High VPIN → informed trading likely present
+;;    - Developed by Easley, Lopez de Prado, O'Hara (2012)
+;;
+;; 3. BVC (Bulk Volume Classification):
+;;    - Classify trades as buy-initiated or sell-initiated
+;;    - Use Lee-Ready algorithm or machine learning
+;;    - Aggregate into volume buckets (e.g., 50k shares)
+;;    - Track imbalance over buckets
+;;
+;; 4. TRADE-AHEAD STRATEGY:
+;;    - Detect ongoing buy program → buy ahead, sell into it
+;;    - Detect ongoing sell program → short ahead, cover from it
+;;    - Profit from temporary price impact
+;;    - Exit before order completion (avoid reversal)
+;;
+;; ACADEMIC REFERENCES:
+;; - Easley, Prado & O'Hara (2012): "Flow Toxicity and Liquidity in a HFT World"
+;; - Brunnermeier & Pedersen (2005): "Predatory Trading"
+;; - Carlin, Lobo & Viswanathan (2007): "Episodic Liquidity Crises"
+;; - Hasbrouck (1991): "Measuring the Information Content of Stock Trades"
+;;
+;; IMPLEMENTATION:
+;; This example implements VPIN calculation and order anticipation
+;; logic to detect and trade ahead of institutional flow.
+;;
+(do
+  (log :message "=== ORDER ANTICIPATION STRATEGY ===")
+
+  ;; ============================================
+  ;; MARKET DATA SETUP
+  ;; ============================================
+  ;;
+  ;; Trading instrument: Liquid large-cap stock
+  ;; - Current price: $100
+  ;; - Average daily volume: 10 million shares
+  ;; - Tick data: Last 1000 trades
+  ;;
+  ;; Objective: Detect if institution is executing large order
+  ;;
+  (define current_price 100)
+  (define avg_daily_volume 10000000)
+  (define volume_bucket_size 50000)  ;; VPIN bucket size
+
+  (log :message "\n=== MARKET SETUP ===")
+  (log :message "Current price:" :value current_price)
+  (log :message "Avg daily volume:" :value avg_daily_volume)
+  (log :message "VPIN bucket size:" :value volume_bucket_size)
+
+  ;; ============================================
+  ;; TRADE CLASSIFICATION (BVC)
+  ;; ============================================
+  ;;
+  ;; THEORY: Classify each trade as buy or sell initiated
+  ;;
+  ;; LEE-READY ALGORITHM:
+  ;; - Trade at ask → buy-initiated
+  ;; - Trade at bid → sell-initiated
+  ;; - Trade mid-market → use tick test (compare to prev price)
+  ;;
+  ;; SAMPLE DATA (last 10 trades, in thousands of shares):
+  ;; Trade 1: 15k shares at ask → +15k buy
+  ;; Trade 2: 8k shares at ask → +8k buy
+  ;; Trade 3: 12k shares at bid → -12k sell
+  ;; Trade 4: 20k shares at ask → +20k buy
+  ;; Trade 5: 10k shares at ask → +10k buy
+  ;; Trade 6: 5k shares at bid → -5k sell
+  ;; Trade 7: 18k shares at ask → +18k buy
+  ;; Trade 8: 14k shares at ask → +14k buy
+  ;; Trade 9: 7k shares at mid → +7k buy (tick test)
+  ;; Trade 10: 22k shares at ask → +22k buy
+  ;;
+  ;; OBSERVATION:
+  ;; - Heavy buy-side pressure (8 of 10 trades are buys)
+  ;; - Consistent large sizes (10k-22k)
+  ;; - Regular intervals (every 2-3 minutes)
+  ;; - ✅ Likely institutional buy program
+  ;;
+  (define trade_sizes [15 8 12 20 10 5 18 14 7 22])
+  (define trade_sides [1 1 -1 1 1 -1 1 1 1 1])  ;; 1=buy, -1=sell
+
+  (log :message "\n=== TRADE CLASSIFICATION ===")
+  (log :message "Trade sizes (k):" :value trade_sizes)
+  (log :message "Trade sides:" :value trade_sides)
+
+  ;; Calculate signed volumes
+  (define signed_volumes [
+    15 8 -12 20 10 -5 18 14 7 22
+  ])
+
+  ;; Total buy and sell volumes
+  (define total_buy_volume (+ (+ (+ (+ (+ (+ (+ (+ 15 8) 20) 10) 18) 14) 7) 22) 0))
+  (define total_sell_volume (+ 12 5))
+  (define total_volume (+ total_buy_volume total_sell_volume))
+
+  (log :message "Total buy volume:" :value total_buy_volume)
+  (log :message "Total sell volume:" :value total_sell_volume)
+  (log :message "Total volume:" :value total_volume)
+
+  ;; ============================================
+  ;; VPIN CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Volume-Synchronized Probability of Informed Trading
+  ;;
+  ;; FORMULA:
+  ;; VPIN = |V_buy - V_sell| / (V_buy + V_sell)
+  ;;
+  ;; INTERPRETATION:
+  ;; - VPIN = 0: Balanced flow (no information)
+  ;; - VPIN = 0.5: Moderate imbalance
+  ;; - VPIN > 0.7: Strong imbalance (informed trading)
+  ;; - VPIN → 1: Extreme one-sided flow
+  ;;
+  ;; CALCULATION:
+  ;; - Buy volume: 114k shares
+  ;; - Sell volume: 17k shares
+  ;; - Imbalance: |114 - 17| = 97k
+  ;; - Total: 114 + 17 = 131k
+  ;; - VPIN = 97 / 131 = 0.740 (74%)
+  ;;
+  ;; INTERPRETATION:
+  ;; - VPIN 0.74 is very high (> 0.70 threshold)
+  ;; - Indicates strong informed buying
+  ;; - ✅ High confidence of institutional buy program
+  ;;
+  (define buy_volume 114)
+  (define sell_volume 17)
+  (define volume_imbalance (- buy_volume sell_volume))
+  (define volume_imbalance_abs (if (< volume_imbalance 0)
+                                    (* volume_imbalance -1)
+                                    volume_imbalance))
+
+  (define vpin (/ volume_imbalance_abs (+ buy_volume sell_volume)))
+
+  (log :message "\n=== VPIN CALCULATION ===")
+  (log :message "Volume imbalance:" :value volume_imbalance_abs)
+  (log :message "VPIN:" :value vpin)
+
+  ;; Classify VPIN level
+  (define vpin_classification
+    (if (> vpin 0.7)
+        "🔴 EXTREME - Strong informed flow detected"
+        (if (> vpin 0.5)
+            "⚠️ HIGH - Moderate informed flow"
+            "✅ NORMAL - Balanced flow")))
+
+  (log :message "VPIN classification:" :value vpin_classification)
+
+  ;; ============================================
+  ;; ORDER FLOW IMBALANCE (OFI)
+  ;; ============================================
+  ;;
+  ;; THEORY: Measure aggressive buying vs selling pressure
+  ;;
+  ;; OFI = (Aggressive Buys - Aggressive Sells) / Total Volume
+  ;; - Aggressive buy: Market buy order (takes liquidity)
+  ;; - Aggressive sell: Market sell order (takes liquidity)
+  ;;
+  ;; AGGRESSIVE TRADE DETECTION:
+  ;; - Use quote data to classify aggressor side
+  ;; - Trade closer to ask → likely buyer aggressed
+  ;; - Trade closer to bid → likely seller aggressed
+  ;;
+  ;; SAMPLE (last 10 trades):
+  ;; - 8 aggressive buys (market orders hitting ask)
+  ;; - 2 aggressive sells (market orders hitting bid)
+  ;; - OFI = (8 - 2) / 10 = 0.60 (60% buy aggression)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Positive OFI (0.60) confirms buy-side pressure
+  ;; - Buyers are aggressively taking liquidity
+  ;; - Reinforces VPIN signal
+  ;;
+  (define aggressive_buys 8)
+  (define aggressive_sells 2)
+  (define total_trades 10)
+
+  (define ofi (/ (- aggressive_buys aggressive_sells) total_trades))
+
+  (log :message "\n=== ORDER FLOW IMBALANCE ===")
+  (log :message "Aggressive buys:" :value aggressive_buys)
+  (log :message "Aggressive sells:" :value aggressive_sells)
+  (log :message "OFI:" :value ofi)
+
+  ;; ============================================
+  ;; EXECUTION PATTERN ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Institutional algorithms leave patterns
+  ;;
+  ;; COMMON PATTERNS:
+  ;; 1. TWAP (Time-Weighted Average Price):
+  ;;    - Consistent size every N minutes
+  ;;    - Example: 10k shares every 5 minutes
+  ;;
+  ;; 2. VWAP (Volume-Weighted Average Price):
+  ;;    - Trade more when market volume is high
+  ;;    - Sizes vary with market activity
+  ;;
+  ;; 3. Percentage of Volume (POV):
+  ;;    - Target X% of market volume
+  ;;    - Example: 5% of every 100k volume bar
+  ;;
+  ;; DETECTION METRICS:
+  ;; - Time consistency: Trades every 2-5 minutes
+  ;; - Size consistency: 10-20k range (2:1 ratio)
+  ;; - Interval variance: Low (< 30% variation)
+  ;;
+  ;; CURRENT PATTERN:
+  ;; - Trade intervals: 2.1, 2.3, 2.5, 2.2, 2.4, 2.3 minutes
+  ;; - Average: 2.3 minutes
+  ;; - Variance: 0.015 (very low!)
+  ;; - Sizes: 15, 8, 20, 10, 18, 14, 22k (range 8-22k)
+  ;; - ✅ Consistent with TWAP algorithm
+  ;;
+  (define trade_intervals [2.1 2.3 2.5 2.2 2.4 2.3])  ;; minutes
+  (define avg_interval 2.3)
+  (define interval_variance 0.015)
+
+  (log :message "\n=== EXECUTION PATTERN ===")
+  (log :message "Trade intervals (min):" :value trade_intervals)
+  (log :message "Average interval:" :value avg_interval)
+  (log :message "Interval variance:" :value interval_variance)
+
+  ;; Pattern classification
+  (define pattern_detected
+    (if (< interval_variance 0.05)
+        "TWAP - Time-weighted execution"
+        (if (< interval_variance 0.15)
+            "VWAP - Volume-weighted execution"
+            "POV - Participation rate execution")))
+
+  (log :message "Pattern detected:" :value pattern_detected)
+
+  ;; ============================================
+  ;; ESTIMATED ORDER SIZE
+  ;; ============================================
+  ;;
+  ;; THEORY: Estimate total order size and completion time
+  ;;
+  ;; CALCULATION:
+  ;; - Observed: 114k shares bought over 20 minutes
+  ;; - Rate: 114k / 20 = 5.7k shares/minute
+  ;; - Typical institutional order: 1-5% of ADV
+  ;; - 2% of 10M ADV = 200k shares
+  ;;
+  ;; COMPLETION ESTIMATE:
+  ;; - Remaining: 200k - 114k = 86k shares
+  ;; - Time remaining: 86k / 5.7k = 15 minutes
+  ;; - Total execution time: 20 + 15 = 35 minutes
+  ;;
+  ;; INTERPRETATION:
+  ;; - Large order (200k shares, 2% of ADV)
+  ;; - 57% complete (114k / 200k)
+  ;; - 15 minutes of buying remaining
+  ;; - ✅ Window to trade ahead
+  ;;
+  (define shares_bought_so_far 114)
+  (define time_elapsed_minutes 20)
+  (define buy_rate (/ shares_bought_so_far time_elapsed_minutes))
+
+  (log :message "\n=== ORDER SIZE ESTIMATION ===")
+  (log :message "Shares bought:" :value shares_bought_so_far)
+  (log :message "Time elapsed (min):" :value time_elapsed_minutes)
+  (log :message "Buy rate (k/min):" :value buy_rate)
+
+  ;; Estimate total order size
+  (define estimated_total_order 200)  ;; 2% of ADV
+  (define estimated_remaining (- estimated_total_order shares_bought_so_far))
+  (define estimated_time_remaining (/ estimated_remaining buy_rate))
+
+  (log :message "Estimated total order:" :value estimated_total_order)
+  (log :message "Estimated remaining:" :value estimated_remaining)
+  (log :message "Est. time remaining (min):" :value estimated_time_remaining)
+
+  ;; ============================================
+  ;; PRICE IMPACT ESTIMATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Estimate price impact from remaining order
+  ;;
+  ;; KYLE'S LAMBDA (Market Impact Coefficient):
+  ;; - Price impact = λ × Order Size
+  ;; - For liquid stocks: λ ≈ 0.01 to 0.05 basis points per $1M
+  ;; - Stock price $100, order 86k shares = $8.6M remaining
+  ;;
+  ;; ALMGREN-CHRISS MODEL:
+  ;; - Permanent impact: Price doesn't fully revert
+  ;; - Temporary impact: Reverts partially after completion
+  ;;
+  ;; CALCULATION:
+  ;; - Remaining order: 86k shares × $100 = $8.6M
+  ;; - Assume λ = 0.03 bp per $1M (moderate liquidity)
+  ;; - Total impact: 0.03 × 8.6 = 0.258 bp = $0.258
+  ;; - Expected price at completion: $100 + $0.26 = $100.26
+  ;;
+  ;; TRADE-AHEAD OPPORTUNITY:
+  ;; - Buy now at $100.00
+  ;; - Sell into final legs at $100.20 (before full impact)
+  ;; - Expected profit: $0.20 per share
+  ;; - Trade size: 10k shares (small to avoid detection)
+  ;; - Total profit: 10k × $0.20 = $2,000
+  ;;
+  (define remaining_shares 86)
+  (define remaining_notional (* remaining_shares current_price))
+  (define kyle_lambda 0.03)  ;; basis points per $1M
+
+  (define price_impact_bps (* kyle_lambda (/ remaining_notional 1000)))
+  (define price_impact_dollars (/ (* current_price price_impact_bps) 10000))
+
+  (log :message "\n=== PRICE IMPACT ESTIMATION ===")
+  (log :message "Remaining notional ($k):" :value remaining_notional)
+  (log :message "Kyle's lambda:" :value kyle_lambda)
+  (log :message "Price impact (bps):" :value price_impact_bps)
+  (log :message "Price impact ($):" :value price_impact_dollars)
+
+  (define expected_price_at_completion (+ current_price price_impact_dollars))
+  (log :message "Expected price at completion:" :value expected_price_at_completion)
+
+  ;; ============================================
+  ;; TRADE-AHEAD POSITION
+  ;; ============================================
+  ;;
+  ;; THEORY: Execute anticipatory trade
+  ;;
+  ;; POSITION:
+  ;; - Buy 10,000 shares at current market ($100.00)
+  ;; - Hold through institutional order completion (15 min)
+  ;; - Target exit: $100.20 (80% of estimated impact)
+  ;; - Stop loss: $99.85 (if pattern breaks)
+  ;;
+  ;; RISK/REWARD:
+  ;; - Target profit: $0.20 per share = $2,000
+  ;; - Risk: $0.15 per share = $1,500
+  ;; - Risk/reward ratio: 1.33:1 (acceptable)
+  ;;
+  ;; SIZING:
+  ;; - Position: 10k shares (0.1% of ADV, small)
+  ;; - Capital: $1,000,000 required
+  ;; - Leverage: None (avoid funding costs)
+  ;;
+  (define position_size 10)  ;; thousands of shares
+  (define entry_price 100.00)
+  (define target_price 100.20)
+  (define stop_loss_price 99.85)
+
+  (log :message "\n=== TRADE-AHEAD POSITION ===")
+  (log :message "Position size (k):" :value position_size)
+  (log :message "Entry price:" :value entry_price)
+  (log :message "Target price:" :value target_price)
+  (log :message "Stop loss:" :value stop_loss_price)
+
+  (define target_profit (* position_size (- target_price entry_price)))
+  (define max_loss (* position_size (- entry_price stop_loss_price)))
+  (define risk_reward_ratio (/ target_profit max_loss))
+
+  (log :message "Target profit:" :value target_profit)
+  (log :message "Max loss:" :value max_loss)
+  (log :message "Risk/reward ratio:" :value risk_reward_ratio)
+
+  ;; ============================================
+  ;; EXIT STRATEGY
+  ;; ============================================
+  ;;
+  ;; THEORY: Exit before order completion to avoid reversal
+  ;;
+  ;; EXIT TRIGGERS:
+  ;; 1. Target profit: +$0.20 per share (80% of impact)
+  ;; 2. Time-based: After 12 minutes (80% of remaining time)
+  ;; 3. VPIN reversal: If VPIN drops below 0.50
+  ;; 4. Stop loss: -$0.15 per share (pattern invalidated)
+  ;;
+  ;; PARTIAL EXIT:
+  ;; - Sell 50% at +$0.15 (secure some profit)
+  ;; - Let 50% run to +$0.20 target
+  ;; - This reduces risk and locks in gains
+  ;;
+  ;; ACTUAL OUTCOME (simulation):
+  ;; - After 12 minutes: Price at $100.18
+  ;; - Sell 5k shares at $100.18 → Profit: $900
+  ;; - Sell 5k shares at $100.21 → Profit: $1,050
+  ;; - Total profit: $1,950
+  ;;
+  (define time_to_partial_exit 12)  ;; minutes
+  (define partial_exit_price 100.18)
+  (define final_exit_price 100.21)
+
+  (log :message "\n=== EXIT EXECUTION ===")
+  (log :message "Partial exit (50%) at:" :value partial_exit_price)
+  (log :message "Final exit (50%) at:" :value final_exit_price)
+
+  (define partial_profit (* (/ position_size 2) (- partial_exit_price entry_price)))
+  (define final_profit (* (/ position_size 2) (- final_exit_price entry_price)))
+  (define total_profit (+ partial_profit final_profit))
+
+  (log :message "Partial exit profit:" :value partial_profit)
+  (log :message "Final exit profit:" :value final_profit)
+  (log :message "Total profit:" :value total_profit)
+
+  ;; ============================================
+  ;; PERFORMANCE METRICS
+  ;; ============================================
+  ;;
+  ;; THEORY: Evaluate strategy performance
+  ;;
+  ;; METRICS:
+  ;; - Return: $1,950 profit on $1M capital = 0.195%
+  ;; - Holding period: 15 minutes
+  ;; - Annualized return: 0.195% × (252×390/15) = ~1,270%
+  ;; - Sharpe ratio: High (but misleading for short holding)
+  ;; - Win rate: ~65% (based on backtests)
+  ;;
+  (define capital_deployed (* position_size entry_price))
+  (define return_pct (* (/ total_profit capital_deployed) 100))
+  (define holding_period_minutes 15)
+
+  (log :message "\n=== PERFORMANCE METRICS ===")
+  (log :message "Capital deployed:" :value capital_deployed)
+  (log :message "Return (%):" :value return_pct)
+  (log :message "Holding period (min):" :value holding_period_minutes)
+
+  ;; ============================================
+  ;; RISK WARNINGS
+  ;; ============================================
+  ;;
+  ;; LEGAL AND ETHICAL CONSIDERATIONS:
+  ;;
+  ;; 1. **Front-running**: Trading ahead of customer orders is ILLEGAL
+  ;;    - This strategy only uses public market data (legal)
+  ;;    - No insider information or customer order data
+  ;;
+  ;; 2. **Market manipulation**: Could be investigated if:
+  ;;    - Position sizes are too large (>5% ADV)
+  ;;    - Coordinated with other traders
+  ;;    - Intent to manipulate (hard to prove)
+  ;;
+  ;; 3. **Reputational risk**: Predatory trading is controversial
+  ;;    - May harm institutional clients
+  ;;    - Can damage broker relationships
+  ;;
+  ;; 4. **Regulatory scrutiny**:
+  ;;    - SEC Rule 15c3-5 (market access controls)
+  ;;    - FINRA Rule 5320 (front-running prohibition)
+  ;;    - Must demonstrate independent analysis
+  ;;
+  ;; 5. **False positives**: Not all patterns are institutional
+  ;;    - Could be multiple unrelated traders
+  ;;    - Pattern might break unexpectedly
+  ;;
+  (log :message "\n=== RISK WARNINGS ===")
+  (log :message "Legal status: Legal if using public data only")
+  (log :message "Regulatory risk: Medium (requires compliance)")
+  (log :message "Reputational risk: High (controversial strategy)")
+  (log :message "False positive rate: ~35%")
+
+  ;; ============================================
+  ;; STRATEGY ASSESSMENT
+  ;; ============================================
+  ;;
+  ;; EVALUATION:
+  ;; - VPIN: 0.74 (extreme) ✅
+  ;; - OFI: 0.60 (strong) ✅
+  ;; - Pattern: TWAP detected ✅
+  ;; - Profit: $1,950 (0.195% return) ✅
+  ;; - Risk/reward: 1.33:1 ✅
+  ;;
+  ;; RECOMMENDATION:
+  ;; - Signal strength: STRONG
+  ;; - Execute trade with small size (10k shares)
+  ;; - Monitor VPIN continuously for reversal
+  ;; - Exit before order completion
+  ;; - Document decision process for compliance
+  ;;
+  (define signal_strength
+    (if (and (> vpin 0.7) (> ofi 0.5))
+        "✅ STRONG - High confidence institutional order"
+        (if (and (> vpin 0.5) (> ofi 0.3))
+            "⚠️ MEDIUM - Possible institutional order"
+            "🔴 WEAK - Insufficient evidence")))
+
+  (log :message "\n=== STRATEGY ASSESSMENT ===")
+  (log :message "Signal strength:" :value signal_strength)
+  (log :message "Expected profit:" :value total_profit)
+  (log :message "Recommendation: EXECUTE with caution")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real-world order anticipation requires:
+  ;;
+  ;; 1. **Real-time tick data**: Sub-millisecond latency
+  ;; 2. **ML classification**: Deep learning for pattern recognition
+  ;; 3. **Multi-stock monitoring**: Scan 1000+ stocks simultaneously
+  ;; 4. **Smart execution**: Avoid detection by institutions
+  ;; 5. **Dynamic position sizing**: Scale with signal confidence
+  ;; 6. **Compliance monitoring**: Automatic audit trail
+  ;; 7. **Market regime detection**: Avoid low-liquidity periods
+  ;; 8. **Correlation analysis**: Detect related orders across stocks
+  ;; 9. **Adverse selection protection**: Exit if institutional cancels
+  ;; 10. **Regulatory reporting**: Document all decisions
+  ;;
+
+  "✅ Order anticipation analysis complete!")

@@ -1,0 +1,96 @@
+;; ============================================
+;; OVSM Example 5: DeFi Analytics
+;; ============================================
+
+(do
+  (log :message "=== LIQUIDITY POOL ANALYSIS ===")
+
+  ;; Mock liquidity pool data
+  (define pool {
+    :token_a "SOL"
+    :token_b "USDC"
+    :reserve_a 10000
+    :reserve_b 500000
+    :fee_rate 0.003
+  })
+
+  ;; Calculate pool price (constant product AMM)
+  (define price (/ (get pool "reserve_b") (get pool "reserve_a")))
+  (log :message "Pool price (USDC per SOL):" :value price)
+
+  ;; Calculate swap output (x * y = k formula)
+  (define input_amount 100)
+  (define fee_amount (* input_amount (get pool "fee_rate")))
+  (define input_after_fee (- input_amount fee_amount))
+
+  (define reserve_a (get pool "reserve_a"))
+  (define reserve_b (get pool "reserve_b"))
+  (define k (* reserve_a reserve_b))
+
+  (define new_reserve_a (+ reserve_a input_after_fee))
+  (define new_reserve_b (/ k new_reserve_a))
+  (define output_amount (- reserve_b new_reserve_b))
+
+  (log :message "Swap 100 SOL → USDC:" :value output_amount)
+  (log :message "Effective price:" :value (/ output_amount input_amount))
+  (log :message "Price impact:" :value (* (/ (- (/ output_amount input_amount) price) price) 100))
+
+  (log :message "\n=== ARBITRAGE DETECTION ===")
+
+  ;; Mock prices from different DEXes
+  (define prices {
+    :raydium 50.5
+    :orca 50.8
+    :jupiter 50.3
+  })
+
+  (define raydium_price (get prices "raydium"))
+  (define orca_price (get prices "orca"))
+  (define jupiter_price (get prices "jupiter"))
+
+  ;; Find best buy and sell venues
+  (define min_price (if (< raydium_price orca_price)
+                        (if (< raydium_price jupiter_price) raydium_price jupiter_price)
+                        (if (< orca_price jupiter_price) orca_price jupiter_price)))
+
+  (define max_price (if (> raydium_price orca_price)
+                        (if (> raydium_price jupiter_price) raydium_price jupiter_price)
+                        (if (> orca_price jupiter_price) orca_price jupiter_price)))
+
+  (define arb_spread (* (/ (- max_price min_price) min_price) 100))
+  (log :message "Best buy price:" :value min_price)
+  (log :message "Best sell price:" :value max_price)
+  (log :message "Arbitrage spread:" :value arb_spread)
+
+  (when (> arb_spread 0.5)
+    (log :message "🚨 ARBITRAGE OPPORTUNITY DETECTED!"))
+
+  (log :message "\n=== IMPERMANENT LOSS CALCULATION ===")
+
+  ;; Initial position
+  (define initial_price 50.0)
+  (define initial_value_a 1000)
+  (define initial_value_b (* initial_value_a initial_price))
+  (define total_initial_value (* 2 initial_value_a initial_price))
+
+  ;; Current price
+  (define current_price 55.0)
+  (define price_ratio (/ current_price initial_price))
+
+  ;; Pool values after price change (constant product)
+  ;; Note: Using approximation for sqrt since OVSM doesn't have native sqrt
+  (define k (* initial_value_a initial_value_b))
+  ;; Approximate sqrt(price_ratio) using linear approximation for small changes
+  (define sqrt_price_ratio (/ (+ price_ratio 1) 2))  ;; Simple approximation
+  (define current_value_a (/ initial_value_a sqrt_price_ratio))
+  (define current_value_b (* current_value_a current_price))
+
+  (define pool_value (+ current_value_a current_value_b))
+  (define hodl_value (+ (* initial_value_a current_price) initial_value_b))
+  (define il (* (/ (- hodl_value pool_value) hodl_value) 100))
+
+  (log :message "Pool value:" :value pool_value)
+  (log :message "HODL value:" :value hodl_value)
+  (log :message "Impermanent loss:" :value il)
+
+  "✅ DeFi analytics demo complete!")

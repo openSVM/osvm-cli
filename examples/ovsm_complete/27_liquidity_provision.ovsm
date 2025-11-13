@@ -1,0 +1,245 @@
+;; ============================================
+;; OVSM Example 27: Liquidity Provision Optimization
+;; ============================================
+;;
+;; THEORY: Automated Market Maker (AMM) LP Strategy
+;; --------------------------------------------------
+;; Liquidity provision (LP) in DeFi involves depositing token pairs into
+;; automated market maker pools. LPs earn trading fees but face impermanent
+;; loss risk when token prices diverge. This example implements the Uniswap V2
+;; constant product formula and IL calculation.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. CONSTANT PRODUCT AMM (x × y = k):
+;;    - Pool maintains constant product of token amounts
+;;    - Formula: token_a_amount × token_b_amount = constant
+;;    - Price = token_b_amount / token_a_amount
+;;    - Trades move along the curve to maintain k
+;;
+;; 2. IMPERMANENT LOSS (IL):
+;;    - Loss vs holding tokens directly (opportunity cost)
+;;    - Formula: IL = 2×√(price_ratio) / (1 + price_ratio) - 1
+;;    - Worst at 50% price change: ~5.7% IL
+;;    - Worst at 2x price change: ~5.7% IL
+;;    - Worst at 5x price change: ~25.5% IL
+;;    - Only realized if you withdraw at unfavorable price
+;;
+;; 3. FEE EARNINGS:
+;;    - LPs earn % of trading volume (typically 0.3%)
+;;    - Fees accumulate in pool, increasing LP share value
+;;    - High volume can overcome IL losses
+;;    - APR calculation: (fees/TVL) × 365 × 100
+;;
+;; 4. NET P&L:
+;;    - Net P&L = Fee earnings - Impermanent loss
+;;    - Profitable when: fees > IL cost
+;;    - Optimal for: High fee pools, low volatility pairs
+;;    - Risk: Divergence loss exceeds fee income
+;;
+;; WHY THIS MATTERS:
+;; - LPs provide ~$50B+ TVL across DeFi
+;; - Earning 10-100%+ APR on capital
+;; - IL can wipe out gains if not managed
+;; - Need to calculate break-even holding period
+;;
+;; ACADEMIC REFERENCES:
+;; - Uniswap V2 Whitepaper (2020): Constant product formula
+;; - Pintail (2019): "Understanding IL"
+;; - Aigner & Dhaliwal (2021): "The Costs of Providing Liquidity"
+;; - Milionis et al. (2022): "Automated Market Making and Loss-Versus-Rebalancing"
+;;
+;; IMPLEMENTATION:
+;; Calculates LP value, impermanent loss, fee earnings, and net P&L
+;; to determine if providing liquidity is profitable.
+;;
+(do
+  (log :message "=== LP POSITION ANALYSIS ===")
+
+  ;; ============================================
+  ;; LP POSITION SNAPSHOT
+  ;; ============================================
+  ;;
+  ;; Current holdings in AMM pool:
+  ;; - Token A: 1,000 units
+  ;; - Token B: 50,000 units
+  ;; - Price: 1 A = 50 B (from deposit ratio)
+  ;;
+  ;; VALUE CALCULATION:
+  ;; - Token A value in B: 1,000 × 50 = 50,000 B
+  ;; - Token B value: 50,000 B
+  ;; - Total value: 100,000 B equivalent
+  ;;
+  (define token_a_amount 1000)
+  (define token_b_amount 50000)
+  (define price_a_in_b 50.0)
+
+  (define lp_value_a (* token_a_amount price_a_in_b))
+  (define lp_value_b token_b_amount)
+  (define total_value (+ lp_value_a lp_value_b))
+
+  (log :message "Token A amount:" :value token_a_amount)
+  (log :message "Token B amount:" :value token_b_amount)
+  (log :message "Price (A in B):" :value price_a_in_b)
+  (log :message "Token A value:" :value lp_value_a)
+  (log :message "Token B value:" :value lp_value_b)
+  (log :message "Total value:" :value total_value)
+
+  ;; ============================================
+  ;; IMPERMANENT LOSS CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Divergence loss from price movement
+  ;; - Initial price: 50.0 (1 A = 50 B)
+  ;; - Current price: 55.0 (1 A = 55 B)
+  ;; - Price ratio: 55 / 50 = 1.1 (10% increase)
+  ;;
+  ;; IL FORMULA:
+  ;; IL = 2×√(price_ratio) / (1 + price_ratio) - 1
+  ;;
+  ;; CALCULATION (simplified sqrt):
+  ;; - price_ratio = 1.1
+  ;; - √(1.1) ≈ 1.048 (using (1.1 + 1)/2 approximation ≈ 1.05)
+  ;; - IL_numerator = 2 × 1.05 = 2.1
+  ;; - IL_denominator = 1 + 1.1 = 2.1
+  ;; - IL = 2.1 / 2.1 - 1 = 0 (minimal IL at small price change)
+  ;;
+  ;; INTERPRETATION:
+  ;; - 10% price change = ~0.23% IL (actual)
+  ;; - Small price changes have minimal IL
+  ;; - IL grows quadratically with price divergence
+  ;;
+  (define initial_price 50.0)
+  (define current_price 55.0)
+  (define price_ratio (/ current_price initial_price))
+
+  (log :message "\n=== IMPERMANENT LOSS ===")
+  (log :message "Initial price:" :value initial_price)
+  (log :message "Current price:" :value current_price)
+  (log :message "Price change (%):" :value (* (- price_ratio 1) 100))
+
+  ;; Simplified sqrt approximation for price_ratio
+  (define sqrt_ratio (/ (+ price_ratio 1) 2))
+  (define il_numerator (* 2 sqrt_ratio))
+  (define il_denominator (+ 1 price_ratio))
+  (define il (- (/ il_numerator il_denominator) 1))
+
+  (log :message "Price ratio:" :value price_ratio)
+  (log :message "Impermanent loss (%):" :value (* il 100))
+
+  ;; ============================================
+  ;; FEE EARNINGS CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: LP earns % of trading volume
+  ;; - Fee APR: 25% annualized
+  ;; - Holding period: 30 days
+  ;; - Prorated fees: 25% × (30/365) ≈ 2.05%
+  ;;
+  ;; CALCULATION:
+  ;; - Total value: 100,000 B
+  ;; - Fee APR: 0.25 (25%)
+  ;; - Days held: 30
+  ;; - Fee earned: 100,000 × 0.25 × (30/365) ≈ 2,055 B
+  ;;
+  ;; INTERPRETATION:
+  ;; - Earned ~2,055 B in fees over 30 days
+  ;; - Represents 2.05% return on capital
+  ;; - Must exceed IL to be profitable
+  ;;
+  (define fee_apr 0.25)  ;; 25% APR
+  (define days_held 30)
+
+  (log :message "\n=== FEE EARNINGS ===")
+  (log :message "Fee APR:" :value fee_apr)
+  (log :message "Days held:" :value days_held)
+
+  (define fee_earned (* total_value fee_apr (/ days_held 365)))
+
+  (log :message "Fees earned:" :value fee_earned)
+  (log :message "Fee return (%):" :value (* (/ fee_earned total_value) 100))
+
+  ;; ============================================
+  ;; NET P&L ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Compare fee earnings to IL cost
+  ;; - IL cost: Opportunity cost of holding LP vs tokens
+  ;; - Fee earnings: Income from providing liquidity
+  ;; - Net P&L: Fee earnings - IL cost
+  ;;
+  ;; CALCULATION:
+  ;; - IL: ~0% (minimal at 10% price change)
+  ;; - IL cost: 100,000 × 0 ≈ 0 B
+  ;; - Fee earned: 2,055 B
+  ;; - Net P&L: 2,055 - 0 = 2,055 B (profitable!)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Net positive P&L of 2,055 B
+  ;; - Fees exceeded IL losses
+  ;; - Providing liquidity was profitable
+  ;; - Should continue or even increase position
+  ;;
+  (log :message "\n=== NET P&L ===")
+
+  (define il_cost (* total_value il))
+  (define net_pnl (- fee_earned il_cost))
+
+  (log :message "IL cost:" :value il_cost)
+  (log :message "Fee earned:" :value fee_earned)
+  (log :message "Net P&L:" :value net_pnl)
+  (log :message "Net return (%):" :value (* (/ net_pnl total_value) 100))
+
+  ;; ============================================
+  ;; DECISION FRAMEWORK
+  ;; ============================================
+  ;;
+  ;; THEORY: Determine optimal LP strategy
+  ;; - Profitable: Keep providing, consider increasing
+  ;; - Break-even: Monitor closely, no changes
+  ;; - Unprofitable: Consider withdrawing liquidity
+  ;;
+  ;; THRESHOLDS:
+  ;; - Net P&L > 0: Profitable
+  ;; - Net P&L ≈ 0: Break-even
+  ;; - Net P&L < 0: Unprofitable
+  ;;
+  (define lp_decision (if (> net_pnl 0)
+                          "✅ PROFITABLE - Keep providing"
+                          (if (> net_pnl (* total_value -0.01))
+                              "⚠️ BREAK-EVEN - Monitor closely"
+                              "❌ UNPROFITABLE - Consider withdrawing")))
+
+  (log :message "\n=== LP DECISION ===")
+  (log :message "Decision:" :value lp_decision)
+
+  (when (> net_pnl 0)
+    (log :message "Strategy: Continue LP, fees > IL")
+    (log :message "Recommendation: Consider increasing position"))
+
+  (when (and (<= net_pnl 0) (> net_pnl (* total_value -0.01)))
+    (log :message "Strategy: Hold current position")
+    (log :message "Recommendation: Monitor fee rate and volatility"))
+
+  (when (<= net_pnl (* total_value -0.01))
+    (log :message "Strategy: IL exceeds fees")
+    (log :message "Recommendation: Withdraw or wait for price reversion"))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real LP optimization systems would add:
+  ;; 1. Dynamic IL calculation with actual sqrt function
+  ;; 2. Multiple pool analysis and comparison
+  ;; 3. Concentrated liquidity range optimization (Uniswap V3)
+  ;; 4. Rebalancing triggers based on IL thresholds
+  ;; 5. Fee APR forecasting using historical volume
+  ;; 6. Price impact modeling for entry/exit
+  ;; 7. Yield farming opportunity integration
+  ;; 8. Risk-adjusted return metrics (Sharpe, Sortino)
+  ;; 9. Automated hedging strategies (delta neutral)
+  ;; 10. Gas cost optimization for position management
+  ;;
+
+  "✅ LP optimization complete!")

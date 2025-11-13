@@ -1,0 +1,148 @@
+;; ============================================
+;; OVSM Example 42: Adaptive Execution Algorithms
+;; ============================================
+;;
+;; THEORY: Smart Order Execution with Dynamic Adjustment
+;; -----------------------------------------------------
+;; Adaptive execution algorithms adjust execution pace in real-time based on:
+;; 1. Schedule adherence (are we on track?)
+;; 2. Market conditions (volatility, liquidity)
+;; 3. Price movement (favorable/adverse)
+;;
+;; KEY CONCEPTS:
+;; - TWAP (Time-Weighted Average Price): Execute evenly over time
+;; - VWAP (Volume-Weighted Average Price): Follow market volume pattern
+;; - Adaptive TWAP: Adjust pace based on schedule and market conditions
+;; - Participation rate: Our order size relative to market volume
+;;
+;; IMPLEMENTATION:
+;; This example shows adaptive TWAP that:
+;; - Monitors progress vs target schedule
+;; - Speeds up if behind, slows down if ahead
+;; - Adjusts for current market volatility
+;; - Minimizes market impact while hitting deadline
+;;
+(do
+  (log :message "=== ADAPTIVE EXECUTION ===")
+
+  ;; ============================================
+  ;; ORDER PROGRESS TRACKING
+  ;; ============================================
+  ;;
+  ;; Track what we've executed and what remains
+  ;; - total_order: Full size we need to execute
+  ;; - executed: Amount filled so far (40% done)
+  ;; - remaining: What's left to execute
+  ;; - time_elapsed: 30% of time window used
+  ;; - time_remaining: 70% of time left
+  ;;
+  (define total_order 10000)
+  (define executed 4000)
+  (define remaining (- total_order executed))
+  (define time_elapsed 0.3)  ;; 30% of time
+  (define time_remaining 0.7)
+
+  (log :message "Remaining:" :value remaining)
+  (log :message "Time left:" :value time_remaining)
+
+  ;; ============================================
+  ;; SCHEDULE ADHERENCE ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Compare execution progress vs time progress
+  ;; - pct_done = executed / total (40%)
+  ;; - pct_time_used = time elapsed (30%)
+  ;; - schedule_ratio = done / time_used (40%/30% = 1.33)
+  ;;
+  ;; INTERPRETATION:
+  ;; - ratio > 1.2 = ahead of schedule (slow down)
+  ;; - ratio < 0.8 = behind schedule (speed up)
+  ;; - 0.8 to 1.2 = on track (maintain pace)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - Finishing too early wastes execution window (more impact)
+  ;; - Finishing late misses deadline
+  ;; - Optimal is to finish exactly on time (minimize impact)
+  ;;
+  (define pct_done (/ executed total_order))
+  (define pct_time_used (- 1 time_remaining))
+  (define schedule_ratio (/ pct_done pct_time_used))
+
+  (log :message "Schedule ratio:" :value schedule_ratio)
+
+  ;; Adaptive adjustment decision
+  (define adjustment (if (> schedule_ratio 1.2)
+                         "SLOW DOWN - Ahead of schedule"
+                         (if (< schedule_ratio 0.8)
+                             "SPEED UP - Behind schedule"
+                             "ON TRACK - Maintain pace")))
+
+  (log :message "Adjustment:" :value adjustment)
+
+  ;; ============================================
+  ;; NEXT SLICE SIZE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Adjust execution rate to hit target on time
+  ;; - base_slice: Remaining / # of intervals (10 intervals left)
+  ;; - multiplier: Adjust for schedule deviation
+  ;;   * Ahead of schedule → 0.7x (slow down 30%)
+  ;;   * Behind schedule → 1.3x (speed up 30%)
+  ;;   * On track → 1.0x (maintain)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Dynamic pacing ensures we finish on time
+  ;; - Prevents both rushing (high impact) and missing deadline
+  ;;
+  (define base_slice (/ remaining 10))
+  (define multiplier (if (< schedule_ratio 0.8) 1.3
+                         (if (> schedule_ratio 1.2) 0.7 1.0)))
+  (define next_slice (* base_slice multiplier))
+
+  (log :message "Next slice:" :value next_slice)
+
+  ;; ============================================
+  ;; VOLATILITY ADAPTATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Adjust execution rate for market conditions
+  ;; - High volatility → trade smaller (avoid impact)
+  ;; - Low volatility → can trade more aggressively
+  ;; - vol_multiplier = normal_vol / current_vol
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - current_volatility = 0.35 (elevated)
+  ;; - normal_volatility = 0.25 (baseline)
+  ;; - multiplier = 0.25/0.35 = 0.71 (reduce size by 29%)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - High volatility = wider spreads, less liquidity
+  ;; - Trading too large in high vol = excessive slippage
+  ;; - Better to wait for calm markets when possible
+  ;;
+  (define current_volatility 0.35)
+  (define normal_volatility 0.25)
+  (define vol_multiplier (/ normal_volatility current_volatility))
+
+  (define adapted_slice (* next_slice vol_multiplier))
+
+  (log :message "Vol-adapted slice:" :value adapted_slice)
+
+  ;; ============================================
+  ;; FINAL EXECUTION DECISION
+  ;; ============================================
+  ;;
+  ;; SUMMARY: The adapted_slice is our final execution size
+  ;; - Started with base_slice (remaining / 10)
+  ;; - Adjusted for schedule (ahead/behind)
+  ;; - Adjusted for volatility (current vs normal)
+  ;; - Result: Optimal slice size for current conditions
+  ;;
+  ;; PRODUCTION ENHANCEMENTS:
+  ;; - Add price movement consideration (adverse/favorable)
+  ;; - Monitor order book depth (liquidity)
+  ;; - Track participation rate (% of volume)
+  ;; - Implement arrival price benchmark tracking
+  ;;
+
+  "✅ Adaptive execution complete!")

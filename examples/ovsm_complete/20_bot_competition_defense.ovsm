@@ -1,0 +1,405 @@
+;; ============================================
+;; OVSM Example 20: Bot Competition & Defense Strategies
+;; ============================================
+
+(do
+  (log :message "=== BOT COMPETITION ANALYSIS ===")
+
+  ;; Detect competing sniper bots
+  (define recent_snipes [
+    {:bot "Bot_A" :speed_ms 120 :success_rate 0.85 :avg_tip 0.015}
+    {:bot "Bot_B" :speed_ms 80 :success_rate 0.92 :avg_tip 0.022}
+    {:bot "Bot_C" :speed_ms 150 :success_rate 0.78 :avg_tip 0.012}
+    {:bot "Bot_D" :speed_ms 95 :success_rate 0.88 :avg_tip 0.018}
+  ])
+
+  (log :message "Competing bots detected:" :value (length recent_snipes))
+
+  ;; Identify the fastest bot (our main competitor)
+  (define fastest_bot null)
+  (define fastest_speed 999999)
+
+  (for (bot recent_snipes)
+    (define bot_name (get bot "bot"))
+    (define speed (get bot "speed_ms"))
+    (define success_rate (get bot "success_rate"))
+    (define avg_tip (get bot "avg_tip"))
+
+    (log :message bot_name)
+    (log :message "  Speed:" :value speed)
+    (log :message "  Success rate:" :value success_rate)
+    (log :message "  Avg tip:" :value avg_tip)
+
+    (when (< speed fastest_speed)
+      (set! fastest_speed speed)
+      (set! fastest_bot bot_name)))
+
+  (log :message "\nFastest competitor:" :value fastest_bot)
+  (log :message "Their speed:" :value fastest_speed)
+
+  ;; Our bot's performance
+  (define our_speed_ms 110)
+  (define our_success_rate 0.80)
+
+  (log :message "Our speed:" :value our_speed_ms)
+  (log :message "Our success rate:" :value our_success_rate)
+
+  ;; Calculate competitive edge needed
+  (define speed_gap (- our_speed_ms fastest_speed))
+  (log :message "Speed gap to fastest:" :value speed_gap)
+
+  (log :message "\n=== LATENCY OPTIMIZATION ===")
+
+  ;; Breakdown of our latency
+  (define latency_breakdown {:rpc_call 30
+                              :signature_check 15
+                              :tx_construction 25
+                              :tx_send 20
+                              :jito_bundle 20})
+
+  (define rpc_latency (get latency_breakdown "rpc_call"))
+  (define sig_latency (get latency_breakdown "signature_check"))
+  (define construct_latency (get latency_breakdown "tx_construction"))
+  (define send_latency (get latency_breakdown "tx_send"))
+  (define jito_latency (get latency_breakdown "jito_bundle"))
+
+  (define total_latency (+ rpc_latency sig_latency construct_latency send_latency jito_latency))
+
+  (log :message "Latency breakdown (ms):")
+  (log :message "  RPC call:" :value rpc_latency)
+  (log :message "  Signature check:" :value sig_latency)
+  (log :message "  TX construction:" :value construct_latency)
+  (log :message "  TX send:" :value send_latency)
+  (log :message "  Jito bundle:" :value jito_latency)
+  (log :message "  Total:" :value total_latency)
+
+  ;; Optimization opportunities
+  (define optimizations [
+    {:area "RPC" :reduction_ms 10 :cost "Dedicated RPC node"}
+    {:area "Signature" :reduction_ms 10 :cost "Pre-sign templates"}
+    {:area "Construction" :reduction_ms 8 :cost "Cached instructions"}
+    {:area "Send" :reduction_ms 5 :cost "Direct validator connection"}
+  ])
+
+  (define total_reduction 0)
+  (for (opt optimizations)
+    (define area (get opt "area"))
+    (define reduction (get opt "reduction_ms"))
+    (define cost (get opt "cost"))
+
+    (log :message area :value cost)
+    (log :message "  Saves:" :value reduction)
+
+    (set! total_reduction (+ total_reduction reduction)))
+
+  (define optimized_latency (- total_latency total_reduction))
+  (log :message "Optimized latency:" :value optimized_latency)
+
+  (define now_beats_competition (< optimized_latency fastest_speed))
+  (log :message "Beats competition:" :value now_beats_competition)
+
+  (log :message "\n=== PRIORITY FEE WARFARE ===")
+
+  ;; Dynamic priority fee adjustment
+  (define competitor_fees [0.012 0.015 0.018 0.022 0.025])
+
+  ;; Calculate percentiles
+  (define fee_50th 0.018)
+  (define fee_75th 0.022)
+  (define fee_90th 0.025)
+
+  (log :message "Competitor fee percentiles:")
+  (log :message "  50th:" :value fee_50th)
+  (log :message "  75th:" :value fee_75th)
+  (log :message "  90th:" :value fee_90th)
+
+  ;; Our fee strategy
+  (define expected_profit 1.5)
+  (define max_fee_ratio 0.30)  ;; Max 30% of profit
+  (define max_fee (* expected_profit max_fee_ratio))
+
+  (log :message "Max fee we can pay:" :value max_fee)
+
+  ;; Choose aggressive fee to beat 90% of bots
+  (define target_fee (if (< fee_90th max_fee) fee_90th max_fee))
+  (log :message "Target fee (90th):" :value target_fee)
+
+  ;; Calculate our win probability
+  (define bots_beaten 0)
+  (for (fee competitor_fees)
+    (when (> target_fee fee)
+      (set! bots_beaten (+ bots_beaten 1))))
+
+  (define win_probability (/ bots_beaten (length competitor_fees)))
+  (log :message "Win probability:" :value win_probability)
+
+  (log :message "\n=== DECEPTIVE STRATEGIES ===")
+
+  ;; Strategy 1: Fake transactions to mislead bots
+  (define fake_tx_count 3)
+  (define real_tx_count 1)
+
+  (log :message "Fake transactions:" :value fake_tx_count)
+  (log :message "Real transactions:" :value real_tx_count)
+
+  ;; Competitor bots waste resources trying all paths
+  (define competitor_cost_per_attempt 0.002)
+  (define competitor_total_cost (* competitor_cost_per_attempt (+ fake_tx_count real_tx_count)))
+
+  (log :message "Competitor cost:" :value competitor_total_cost)
+
+  ;; Our cost (only real tx)
+  (define our_cost (* competitor_cost_per_attempt real_tx_count))
+  (log :message "Our cost:" :value our_cost)
+
+  (define cost_advantage (- competitor_total_cost our_cost))
+  (log :message "Cost advantage:" :value cost_advantage)
+
+  ;; Strategy 2: Randomized timing to avoid pattern detection
+  (define base_delay_ms 50)
+  (define random_jitter_ms 30)
+
+  (define timing_variance (* (/ random_jitter_ms base_delay_ms) 100))
+  (log :message "Timing variance:" :value timing_variance)
+
+  (log :message "\n=== ANTI-COPY-TRADING PROTECTION ===")
+
+  ;; Detect if other bots are copying our strategy
+  (define our_trades [
+    {:token "TokenA" :time 100 :profit 0.5}
+    {:token "TokenB" :time 200 :profit 0.8}
+    {:token "TokenC" :time 300 :profit 0.3}
+  ])
+
+  (define copycat_trades [
+    {:token "TokenA" :time 105 :profit 0.4}
+    {:token "TokenB" :time 205 :profit 0.7}
+    {:token "TokenC" :time 305 :profit 0.25}
+  ])
+
+  ;; Calculate correlation
+  (define matching_tokens 0)
+  (for (trade our_trades)
+    (define our_token (get trade "token"))
+
+    (for (copycat copycat_trades)
+      (define copy_token (get copycat "token"))
+      (when (= our_token copy_token)
+        (set! matching_tokens (+ matching_tokens 1)))))
+
+  (define copy_ratio (/ matching_tokens (length our_trades)))
+  (log :message "Token matching ratio:" :value copy_ratio)
+
+  (define being_copied (> copy_ratio 0.7))
+  (log :message "Being copy-traded:" :value being_copied)
+
+  (when being_copied
+    (log :message "🚨 ALERT: Implement anti-copy measures"))
+
+  ;; Anti-copy technique: Mixed signals
+  (define decoy_trades 2)
+  (define real_trades 3)
+  (define signal_noise_ratio (/ real_trades (+ real_trades decoy_trades)))
+
+  (log :message "Signal-to-noise ratio:" :value signal_noise_ratio)
+
+  (log :message "\n=== MEMPOOL MONITORING DEFENSE ===")
+
+  ;; Protect against mempool snipers
+  (define using_private_mempool true)
+  (define using_jito_bundle true)
+
+  (log :message "Private mempool:" :value using_private_mempool)
+  (log :message "Jito bundles:" :value using_jito_bundle)
+
+  ;; Calculate visibility reduction
+  (define base_visibility 1.0)
+  (define visibility base_visibility)
+
+  (when using_private_mempool
+    (set! visibility (* visibility 0.1)))  ;; 90% reduction
+
+  (when using_jito_bundle
+    (set! visibility (* visibility 0.2)))  ;; Further 80% reduction
+
+  (log :message "Transaction visibility:" :value visibility)
+  (log :message "Stealth factor:" :value (- 1.0 visibility))
+
+  (log :message "\n=== BOT FINGERPRINTING ===")
+
+  ;; Identify bot patterns to counter them
+  (define bot_patterns [
+    {:bot "Bot_A" :pattern "Always 0.015 SOL tip" :frequency 0.95}
+    {:bot "Bot_B" :pattern "120ms after listing" :frequency 0.88}
+    {:bot "Bot_C" :pattern "Buys exactly 5 SOL" :frequency 0.92}
+  ])
+
+  (log :message "Known bot patterns:" :value (length bot_patterns))
+
+  (for (pattern bot_patterns)
+    (define bot (get pattern "bot"))
+    (define behavior (get pattern "pattern"))
+    (define freq (get pattern "frequency"))
+
+    (log :message bot)
+    (log :message " " :value behavior)
+    (log :message "  Frequency:" :value freq))
+
+  ;; Counter-strategy: Do the opposite
+  (log :message "\nCounter-strategies:")
+  (log :message "  Vary tip amounts randomly")
+  (log :message "  Random timing jitter")
+  (log :message "  Variable position sizes")
+
+  (log :message "\n=== SYBIL ATTACK DEFENSE ===")
+
+  ;; Detect if we're competing against one entity with many bots
+  (define wallet_connections [
+    {:wallet1 "Bot_A" :wallet2 "Bot_D" :shared_funding true}
+    {:wallet1 "Bot_B" :wallet2 "Bot_C" :shared_funding false}
+  ])
+
+  (define sybil_clusters 0)
+  (for (connection wallet_connections)
+    (define shared (get connection "shared_funding"))
+    (when shared
+      (set! sybil_clusters (+ sybil_clusters 1))))
+
+  (log :message "Sybil clusters detected:" :value sybil_clusters)
+
+  (when (> sybil_clusters 0)
+    (log :message "⚠️ WARNING: Multiple bots from same entity"))
+
+  (log :message "\n=== SMART ORDER ROUTING ===")
+
+  ;; Route around congested bots
+  (define routes [
+    {:route "Direct RPC" :latency 30 :congestion 0.8}
+    {:route "Jito MEV" :latency 50 :congestion 0.4}
+    {:route "Private relay" :latency 40 :congestion 0.2}
+  ])
+
+  (define best_route null)
+  (define best_score 0.0)
+
+  (for (route routes)
+    (define route_name (get route "route"))
+    (define latency (get route "latency"))
+    (define congestion (get route "congestion"))
+
+    ;; Score = low latency + low congestion
+    (define score (- 100 (+ latency (* congestion 50))))
+
+    (log :message route_name)
+    (log :message "  Latency:" :value latency)
+    (log :message "  Congestion:" :value congestion)
+    (log :message "  Score:" :value score)
+
+    (when (> score best_score)
+      (set! best_score score)
+      (set! best_route route_name)))
+
+  (log :message "Best route:" :value best_route)
+
+  (log :message "\n=== ADAPTIVE COMPETITION STRATEGY ===")
+
+  ;; Adjust strategy based on competition level
+  (define competition_metrics {:active_bots 4
+                                :avg_speed_ms 110
+                                :avg_tip 0.018
+                                :success_rate 0.85})
+
+  (define active_bots (get competition_metrics "active_bots"))
+  (define avg_speed (get competition_metrics "avg_speed_ms"))
+  (define avg_tip (get competition_metrics "avg_tip"))
+  (define avg_success (get competition_metrics "success_rate"))
+
+  ;; Calculate competition intensity
+  (define competition_score 0.0)
+
+  (when (> active_bots 3) (set! competition_score (+ competition_score 0.3)))
+  (when (< avg_speed 100) (set! competition_score (+ competition_score 0.3)))
+  (when (> avg_tip 0.015) (set! competition_score (+ competition_score 0.2)))
+  (when (> avg_success 0.8) (set! competition_score (+ competition_score 0.2)))
+
+  (log :message "Competition intensity:" :value competition_score)
+
+  ;; Adaptive response
+  (define strategy (if (> competition_score 0.7)
+                       "🔴 HIGH - Use max tip, Jito bundles, private RPC"
+                       (if (> competition_score 0.4)
+                           "🟡 MEDIUM - Moderate tip, standard execution"
+                           "🟢 LOW - Minimal fees, regular snipe")))
+
+  (log :message "Adaptive strategy:" :value strategy)
+
+  (log :message "\n=== COST-BENEFIT ANALYSIS ===")
+
+  ;; Calculate if competing is profitable
+  (define competition_costs {:dedicated_rpc 50
+                              :jito_tips 20
+                              :compute_fees 5
+                              :development 100})
+
+  (define rpc_cost (get competition_costs "dedicated_rpc"))
+  (define jito_cost (get competition_costs "jito_tips"))
+  (define compute_cost (get competition_costs "compute_fees"))
+  (define dev_cost (get competition_costs "development"))
+
+  (define total_monthly_cost (+ rpc_cost jito_cost compute_cost dev_cost))
+
+  (log :message "Monthly costs:")
+  (log :message "  RPC:" :value rpc_cost)
+  (log :message "  Jito:" :value jito_cost)
+  (log :message "  Compute:" :value compute_cost)
+  (log :message "  Development:" :value dev_cost)
+  (log :message "  Total:" :value total_monthly_cost)
+
+  ;; Estimate monthly revenue
+  (define monthly_snipes 50)
+  (define avg_profit_per_snipe 0.8)
+  (define monthly_revenue (* monthly_snipes avg_profit_per_snipe))
+
+  (log :message "Monthly revenue:" :value monthly_revenue)
+
+  (define net_monthly_profit (- monthly_revenue total_monthly_cost))
+  (log :message "Net monthly profit:" :value net_monthly_profit)
+
+  (define roi_monthly (* (/ net_monthly_profit total_monthly_cost) 100))
+  (log :message "Monthly ROI:" :value roi_monthly)
+
+  (log :message "\n=== FINAL COMPETITION DECISION ===")
+
+  ;; Should we compete or pivot?
+  (define compete_score 0.0)
+
+  ;; We can beat competition (30%)
+  (when now_beats_competition (set! compete_score (+ compete_score 0.3)))
+
+  ;; High win probability (30%)
+  (when (> win_probability 0.7) (set! compete_score (+ compete_score 0.3)))
+
+  ;; Positive ROI (30%)
+  (when (> net_monthly_profit 0) (set! compete_score (+ compete_score 0.3)))
+
+  ;; Low visibility to copycats (10%)
+  (when (< visibility 0.3) (set! compete_score (+ compete_score 0.1)))
+
+  (log :message "Competition viability score:" :value compete_score)
+
+  (define competition_decision (if (>= compete_score 0.75)
+                                   "🚀 COMPETE - Strong edge"
+                                   (if (>= compete_score 0.5)
+                                       "⚠️ SELECTIVE - Pick battles"
+                                       "❌ PIVOT - Find less competitive niche")))
+
+  (log :message "Competition Decision:" :value competition_decision)
+
+  (when (>= compete_score 0.5)
+    (log :message "\nRecommended Tactics:")
+    (log :message "  1. Use" :value best_route)
+    (log :message "  2. Latency target:" :value optimized_latency)
+    (log :message "  3. Fee strategy:" :value target_fee)
+    (log :message "  4. Stealth factor:" :value (- 1.0 visibility)))
+
+  "✅ Bot competition analysis complete!")

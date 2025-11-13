@@ -1,0 +1,155 @@
+;; ============================================
+;; OVSM Example 41: Market Impact Models
+;; ============================================
+;;
+;; THEORY: Quantifying Price Impact of Large Orders
+;; -------------------------------------------------
+;; Market impact models predict how much a large order moves the price.
+;; Two main types of impact:
+;;
+;; 1. PERMANENT IMPACT (PI):
+;;    - Information content of the order
+;;    - Reveals new information to market ("This buyer knows something")
+;;    - Persists after trade completes
+;;    - Proportional to sqrt(order_size/volume)
+;;
+;; 2. TEMPORARY IMPACT (TI):
+;;    - Liquidity provision cost
+;;    - "We need liquidity NOW, pay up for immediacy"
+;;    - Reverts after trade (price bounces back)
+;;    - Smaller than permanent impact
+;;
+;; FAMOUS MODELS:
+;; - Almgren-Chriss (2000): Optimal execution with risk aversion
+;; - Square-root law: Impact ~ sqrt(size/volume)
+;; - Linear model: Impact ~ size/volume (simpler approximation)
+;;
+;; IMPLEMENTATION:
+;; This example compares both models and calculates:
+;; - Impact costs in dollars
+;; - Optimal execution duration
+;; - Trade-off between time risk and impact cost
+;;
+(do
+  (log :message "=== MARKET IMPACT MODELING ===")
+
+  ;; ============================================
+  ;; ORDER PARAMETERS
+  ;; ============================================
+  ;;
+  ;; - order_size: 10,000 shares (what we need to execute)
+  ;; - daily_volume: 100,000 shares (typical market volume)
+  ;; - price: $100 per share
+  ;; - volatility: 40% annualized (moderately volatile)
+  ;;
+  ;; Our order is 10% of daily volume (significant size)
+  ;;
+  (define order_size 10000)
+  (define daily_volume 100000)
+  (define price 100.0)
+  (define volatility 0.40)
+
+  ;; ============================================
+  ;; SQUARE-ROOT MODEL (Almgren-Chriss)
+  ;; ============================================
+  ;;
+  ;; THEORY: Impact scales with sqrt of participation rate
+  ;; - participation_rate = order_size / daily_volume
+  ;; - Impact = volatility × sqrt(participation_rate) × coefficient
+  ;;
+  ;; PERMANENT vs TEMPORARY:
+  ;; - Permanent: 0.1 coefficient (10% of vol × sqrt)
+  ;; - Temporary: 0.05 coefficient (5% of vol × sqrt)
+  ;; - Temporary is ~50% of permanent (typical calibration)
+  ;;
+  ;; WHY SQRT?
+  ;; - Market depth increases non-linearly
+  ;; - 4x larger order ≠ 4x more impact (only 2x)
+  ;; - Empirically validated across many markets
+  ;;
+  ;; IMPLEMENTATION NOTE:
+  ;; - We use Babylonian sqrt approximation: (x + n/x) / 2
+  ;; - For better accuracy, iterate multiple times
+  ;;
+  (define participation_rate (/ order_size daily_volume))
+  (define sqrt_pr (/ (+ participation_rate 1) 2))  ;; Sqrt approximation
+  (define permanent_impact (* volatility sqrt_pr 0.1))
+  (define temporary_impact (* volatility sqrt_pr 0.05))
+
+  (log :message "Permanent impact:" :value permanent_impact)
+  (log :message "Temporary impact:" :value temporary_impact)
+
+  ;; Total cost in dollars
+  ;; - Permanent + Temporary impact × price × size
+  ;; - This is the expected cost of immediacy
+  ;;
+  (define total_impact (* (+ permanent_impact temporary_impact) price order_size))
+
+  (log :message "Total impact cost:" :value total_impact)
+
+  ;; ============================================
+  ;; LINEAR MODEL (Simplified)
+  ;; ============================================
+  ;;
+  ;; THEORY: Impact proportional to participation rate
+  ;; - Impact = coefficient × (order_size / volume) × price × size
+  ;; - Simpler but less accurate for large orders
+  ;; - Overestimates impact for small orders
+  ;; - Underestimates impact for very large orders
+  ;;
+  ;; WHEN TO USE:
+  ;; - Quick estimates
+  ;; - Small orders (<5% of volume)
+  ;; - Back-of-envelope calculations
+  ;;
+  ;; CALIBRATION:
+  ;; - coefficient = 0.0002 (20 basis points per 10% participation)
+  ;; - Varies by asset class, liquidity, volatility
+  ;;
+  (define linear_coef 0.0002)
+  (define linear_impact (* linear_coef participation_rate price order_size))
+
+  (log :message "Linear model cost:" :value linear_impact)
+
+  ;; ============================================
+  ;; EXECUTION TIME OPTIMIZATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Trade-off between time risk and impact cost
+  ;; - Execute too fast → high impact cost
+  ;; - Execute too slow → high timing risk (price moves against you)
+  ;; - Optimal duration minimizes total cost
+  ;;
+  ;; TARGET PARTICIPATION RATE:
+  ;; - 5% is common for liquid stocks
+  ;; - Lower for illiquid stocks (1-3%)
+  ;; - Higher for very liquid (10%+)
+  ;;
+  ;; CALCULATION:
+  ;; - optimal_duration = order_size / (daily_volume × target_participation)
+  ;; - For 10,000 shares at 5% participation in 100k volume
+  ;; - Duration = 10,000 / (100,000 × 0.05) = 2 days
+  ;;
+  ;; INTERPRETATION:
+  ;; - Spread order over 2 days
+  ;; - Execute 5,000 shares per day
+  ;; - Balances impact cost vs timing risk
+  ;;
+  (define target_participation 0.05)  ;; 5% of volume
+  (define optimal_duration (/ order_size (* daily_volume target_participation)))
+
+  (log :message "Optimal duration (days):" :value optimal_duration)
+
+  ;; ============================================
+  ;; PRODUCTION CONSIDERATIONS
+  ;; ============================================
+  ;;
+  ;; Real-world enhancements:
+  ;; 1. Intraday patterns: Volume U-shaped (high at open/close)
+  ;; 2. Adverse selection: Smart traders detect our flow
+  ;; 3. Price momentum: Impact depends on direction of recent moves
+  ;; 4. Order book state: Current depth and slope
+  ;; 5. Cross-venue effects: Impact on correlated assets
+  ;;
+
+  "✅ Market impact models complete!")

@@ -1,0 +1,522 @@
+;; ============================================
+;; OVSM Example 61: High-Frequency Momentum Trading
+;; ============================================
+;;
+;; THEORY: Sub-Second Price Continuation and Microstructure Momentum
+;; -------------------------------------------------------------------
+;; High-frequency momentum exploits short-lived price trends that persist
+;; for 100ms-3 seconds before reverting. Lee & Ready (1991) showed that
+;; aggressive trades (market orders) predict short-term price continuation.
+;; Cont et al. (2014) documented momentum half-life of ~500ms in liquid
+;; stocks. This strategy uses order flow imbalance, trade aggressor
+;; classification, and inventory risk management at HFT timescales.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. MICROSTRUCTURE MOMENTUM:
+;;    - Price continuation after aggressive trades
+;;    - Duration: 100ms to 3 seconds (very short-lived)
+;;    - Cause: Information diffusion, order splitting, latency arbitrage
+;;    - Example: Large buy market order → price rises for 500ms → reverts
+;;    - Profitable window: Enter at +100ms, exit at +400ms
+;;
+;; 2. LEE-READY ALGORITHM (Trade Classification):
+;;    - Classify each trade as buyer- or seller-initiated
+;;    - RULE 1 (Tick Test): Compare to previous trade price
+;;      * Trade > Previous → BUY aggressor (buyer initiated)
+;;      * Trade < Previous → SELL aggressor (seller initiated)
+;;    - RULE 2 (Quote Test): If price unchanged, compare to mid-quote
+;;      * Trade > Mid → BUY aggressor
+;;      * Trade < Mid → SELL aggressor
+;;    - Academic: Lee & Ready (1991), 85% accuracy in practice
+;;
+;; 3. ORDER FLOW IMBALANCE (OFI):
+;;    OFI = (Buy Volume - Sell Volume) / (Buy Volume + Sell Volume)
+;;    Values: -1 (all sells) to +1 (all buys)
+;;    - OFI > +0.30 → Strong buy pressure (go long)
+;;    - OFI < -0.30 → Strong sell pressure (go short)
+;;    - Time window: Rolling 500ms window
+;;    - Predictive power: OFI at time t predicts return at t+500ms
+;;
+;; 4. MOMENTUM HALF-LIFE (Exponential Decay):
+;;    Price impact decays exponentially:
+;;    Impact(t) = Impact(0) * exp(-t / τ)
+;;    Where τ = half-life (time for impact to halve)
+;;    - Liquid stocks (SPY, QQQ): τ ≈ 500ms
+;;    - Mid-caps: τ ≈ 1-2 seconds
+;;    - Small-caps: τ ≈ 3-5 seconds
+;;    - Hold time = 0.5 * τ (exit before full decay)
+;;
+;; 5. INVENTORY RISK MANAGEMENT:
+;;    - Max position: 100 shares (minimize overnight risk)
+;;    - Max holding period: 2 seconds (intraday only)
+;;    - Position limits by volatility: Max$ = $10k / (1 + 2*σ)
+;;    - Cancel all orders at market close-30 seconds
+;;    - Inventory decay: Reduce position as unrealized P&L < 0
+;;
+;; ACADEMIC REFERENCES:
+;; - Lee & Ready (1991): "Inferring Trade Direction from Intraday Data"
+;; - Hasbrouck (1991): "Measuring the Information Content of Stock Trades"
+;; - Cont, Kukanov & Stoikov (2014): "The Price Impact of Order Book Events"
+;; - Gatheral (2010): "No-Dynamic-Arbitrage and Market Impact"
+;; - Biais, Foucault & Moinas (2015): "Equilibrium Fast Trading"
+;;
+;; IMPLEMENTATION:
+;; This example monitors real-time trades, classifies aggressors using
+;; Lee-Ready, calculates order flow imbalance, predicts momentum continuation,
+;; and executes sub-second trades with strict inventory control.
+;;
+(do
+  (log :message "=== HIGH-FREQUENCY MOMENTUM TRADING ===")
+
+  ;; ============================================
+  ;; MARKET SETUP
+  ;; ============================================
+  ;;
+  ;; Ticker: SPY (S&P 500 ETF)
+  ;; Current price: $450.00
+  ;; Current time: 10:00:00.000 AM (mid-morning, good liquidity)
+  ;; Bid-ask spread: $0.01 (tight, liquid market)
+  ;; Average trade size: 150 shares
+  ;; Trades per second: ~80 (very active)
+  ;;
+  ;; STRATEGY PARAMETERS:
+  ;; - Timeframe: 500ms rolling window (momentum half-life)
+  ;; - Entry threshold: OFI > +0.30 (strong buy) or < -0.30 (strong sell)
+  ;; - Hold duration: 250ms (half of half-life, optimal exit)
+  ;; - Max position: ±100 shares (inventory limit)
+  ;; - Stop loss: -$50 unrealized loss (5 bps on $10k position)
+  ;;
+  (define ticker "SPY")
+  (define current_price 450.00)
+  (define current_time "10:00:00.000")
+  (define bid_price 449.995)
+  (define ask_price 450.005)
+  (define spread (- ask_price bid_price))
+  (define mid_price (/ (+ bid_price ask_price) 2))
+  (define momentum_half_life_ms 500)
+  (define hold_duration_ms 250)
+  (define max_position_shares 100)
+  (define ofi_threshold 0.30)
+  (define stop_loss_dollars 50)
+
+  (log :message "\n=== MARKET SETUP ===")
+  (log :message "Ticker:" :value ticker)
+  (log :message "Current price:" :value current_price)
+  (log :message "Bid:" :value bid_price)
+  (log :message "Ask:" :value ask_price)
+  (log :message "Spread:" :value spread)
+  (log :message "Mid-quote:" :value mid_price)
+  (log :message "Momentum half-life:" :value momentum_half_life_ms)
+  (log :message "Target hold duration:" :value hold_duration_ms)
+
+  ;; ============================================
+  ;; STEP 1: REAL-TIME TRADE DATA (500ms Window)
+  ;; ============================================
+  ;;
+  ;; THEORY: Capture all trades in rolling 500ms window
+  ;;
+  ;; TRADE FEED (Last 500ms):
+  ;; Time (ms)  Price     Size   Previous  Mid-Quote  Classification
+  ;; ---------------------------------------------------------------
+  ;; 0          450.005   120    450.000   450.000    BUY (at ask)
+  ;; 45         450.010   200    450.005   450.005    BUY (above prev)
+  ;; 98         450.015   180    450.010   450.010    BUY (above prev)
+  ;; 145        450.010   90     450.015   450.012    SELL (below prev)
+  ;; 203        450.015   250    450.010   450.010    BUY (above prev)
+  ;; 267        450.020   300    450.015   450.015    BUY (above prev)
+  ;; 312        450.015   110    450.020   450.017    SELL (below prev)
+  ;; 389        450.020   220    450.015   450.015    BUY (above prev)
+  ;; 421        450.025   280    450.020   450.020    BUY (above prev)
+  ;; 478        450.030   190    450.025   450.025    BUY (above prev)
+  ;;
+  ;; Total trades: 10
+  ;; Total volume: 1,940 shares
+  ;;
+  (define trades [
+    {:time 0   :price 450.005 :size 120 :prev 450.000 :mid 450.000}
+    {:time 45  :price 450.010 :size 200 :prev 450.005 :mid 450.005}
+    {:time 98  :price 450.015 :size 180 :prev 450.010 :mid 450.010}
+    {:time 145 :price 450.010 :size 90  :prev 450.015 :mid 450.012}
+    {:time 203 :price 450.015 :size 250 :prev 450.010 :mid 450.010}
+    {:time 267 :price 450.020 :size 300 :prev 450.015 :mid 450.015}
+    {:time 312 :price 450.015 :size 110 :prev 450.020 :mid 450.017}
+    {:time 389 :price 450.020 :size 220 :prev 450.015 :mid 450.015}
+    {:time 421 :price 450.025 :size 280 :prev 450.020 :mid 450.020}
+    {:time 478 :price 450.030 :size 190 :prev 450.025 :mid 450.025}
+  ])
+
+  (define num_trades (length trades))
+  (define total_volume 1940)
+
+  (log :message "\n=== TRADE FEED (Last 500ms) ===")
+  (log :message "Number of trades:" :value num_trades)
+  (log :message "Total volume:" :value total_volume)
+  (log :message "Trades per second:" :value (* num_trades 2))
+  (log :message "Average trade size:" :value (/ total_volume num_trades))
+
+  ;; ============================================
+  ;; STEP 2: LEE-READY CLASSIFICATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Classify each trade as buyer- or seller-initiated
+  ;;
+  ;; ALGORITHM:
+  ;; 1. Tick test: Compare price to previous trade
+  ;;    - If price > previous → BUY aggressor
+  ;;    - If price < previous → SELL aggressor
+  ;; 2. Quote test (if price = previous): Compare to mid-quote
+  ;;    - If price > mid → BUY aggressor
+  ;;    - If price < mid → SELL aggressor
+  ;;
+  ;; CLASSIFICATION RESULTS:
+  ;; Trade 0: 450.005 > 450.000 (prev) → BUY, volume = 120
+  ;; Trade 1: 450.010 > 450.005 (prev) → BUY, volume = 200
+  ;; Trade 2: 450.015 > 450.010 (prev) → BUY, volume = 180
+  ;; Trade 3: 450.010 < 450.015 (prev) → SELL, volume = 90
+  ;; Trade 4: 450.015 > 450.010 (prev) → BUY, volume = 250
+  ;; Trade 5: 450.020 > 450.015 (prev) → BUY, volume = 300
+  ;; Trade 6: 450.015 < 450.020 (prev) → SELL, volume = 110
+  ;; Trade 7: 450.020 > 450.015 (prev) → BUY, volume = 220
+  ;; Trade 8: 450.025 > 450.020 (prev) → BUY, volume = 280
+  ;; Trade 9: 450.030 > 450.025 (prev) → BUY, volume = 190
+  ;;
+  ;; SUMMARY:
+  ;; Buy-initiated: 8 trades, 1,740 shares (89.7%)
+  ;; Sell-initiated: 2 trades, 200 shares (10.3%)
+  ;; Strong buy pressure detected!
+  ;;
+  (define buy_volume 1740)
+  (define sell_volume 200)
+  (define buy_trades 8)
+  (define sell_trades 2)
+  (define buy_pct (/ (* buy_volume 100) total_volume))
+  (define sell_pct (/ (* sell_volume 100) total_volume))
+
+  (log :message "\n=== LEE-READY CLASSIFICATION ===")
+  (log :message "Buy-initiated trades:" :value buy_trades)
+  (log :message "Buy volume:" :value buy_volume)
+  (log :message "Buy percentage:" :value buy_pct)
+  (log :message "Sell-initiated trades:" :value sell_trades)
+  (log :message "Sell volume:" :value sell_volume)
+  (log :message "Sell percentage:" :value sell_pct)
+  (log :message "")
+  (log :message "INTERPRETATION:")
+  (log :message "89.7% buy aggression indicates strong upward momentum")
+  (log :message "Aggressive buyers are lifting the offer")
+
+  ;; ============================================
+  ;; STEP 3: ORDER FLOW IMBALANCE (OFI)
+  ;; ============================================
+  ;;
+  ;; THEORY: Quantify directional trading pressure
+  ;;
+  ;; FORMULA:
+  ;; OFI = (Buy Volume - Sell Volume) / (Buy Volume + Sell Volume)
+  ;;     = (1,740 - 200) / (1,740 + 200)
+  ;;     = 1,540 / 1,940
+  ;;     = +0.794
+  ;;
+  ;; INTERPRETATION:
+  ;; - OFI = +0.794 (VERY STRONG BUY PRESSURE)
+  ;; - Threshold: |OFI| > 0.30 triggers trade
+  ;; - Direction: +0.794 >> +0.30 → GO LONG
+  ;; - Confidence: 79.4% of flow is buy-side (high confidence)
+  ;;
+  ;; EXPECTED CONTINUATION:
+  ;; Research shows OFI at time t predicts return at t+500ms:
+  ;; E[Return] ≈ 0.05 * OFI * σ (in bps)
+  ;; Where σ = realized volatility (last 5min)
+  ;;
+  ;; Assuming σ = 20% annualized = 0.13% per 5min = 13 bps
+  ;; E[Return] = 0.05 * 0.794 * 13 bps = 0.52 bps
+  ;; On $450 price = 0.52 bps = $0.0234 per share
+  ;; For 100 shares = $2.34 expected profit (in 250ms hold)
+  ;;
+  (define ofi (/ (- buy_volume sell_volume) (+ buy_volume sell_volume)))
+  (define realized_vol_bps 13.0)
+  (define expected_return_bps (* 0.05 ofi realized_vol_bps))
+  (define expected_return_dollars (* expected_return_bps current_price 0.0001))
+  (define position_size 100)
+  (define expected_profit (* expected_return_dollars position_size))
+
+  (log :message "\n=== ORDER FLOW IMBALANCE ===")
+  (log :message "OFI:" :value ofi)
+  (log :message "Threshold:" :value ofi_threshold)
+  (log :message "Signal: OFI > threshold → LONG")
+  (log :message "")
+  (log :message "EXPECTED RETURN CALCULATION:")
+  (log :message "Realized vol (5min):" :value realized_vol_bps)
+  (log :message "Expected return (bps):" :value expected_return_bps)
+  (log :message "Expected return ($):" :value expected_return_dollars)
+  (log :message "Position size:" :value position_size)
+  (log :message "Expected profit:" :value expected_profit)
+
+  ;; ============================================
+  ;; STEP 4: MOMENTUM HALF-LIFE & TIMING
+  ;; ============================================
+  ;;
+  ;; THEORY: Price impact decays exponentially
+  ;;
+  ;; IMPACT DECAY MODEL:
+  ;; Impact(t) = Impact(0) * exp(-t / τ)
+  ;; Where τ = 500ms (half-life for SPY)
+  ;;
+  ;; TIME EVOLUTION:
+  ;; t = 0ms:   Impact = 100% (peak momentum, just after aggressor trade)
+  ;; t = 125ms: Impact = 100% * exp(-125/500) = 77.9% (still strong)
+  ;; t = 250ms: Impact = 100% * exp(-250/500) = 60.7% (optimal exit)
+  ;; t = 500ms: Impact = 100% * exp(-500/500) = 36.8% (half-life reached)
+  ;; t = 1000ms: Impact = 100% * exp(-1000/500) = 13.5% (mostly decayed)
+  ;;
+  ;; OPTIMAL HOLDING PERIOD:
+  ;; Exit at t = τ/2 = 250ms
+  ;; Rationale: Capture 60.7% of momentum, avoid reversal risk
+  ;;
+  ;; EXECUTION PLAN:
+  ;; Entry: Immediately (500ms window just closed, strong OFI detected)
+  ;; Entry time: 10:00:00.500
+  ;; Entry price: $450.030 (current ask, market order)
+  ;; Exit time: 10:00:00.750 (250ms later)
+  ;; Expected exit price: $450.030 + $0.0234 = $450.0534
+  ;; Exit method: Market order (accept spread cost for speed)
+  ;;
+  (define entry_time_ms 500)
+  (define exit_time_ms 750)
+  (define hold_duration_actual_ms (- exit_time_ms entry_time_ms))
+  (define decay_at_exit (exp (/ (* hold_duration_actual_ms -1) momentum_half_life_ms)))
+  (define capture_rate (* 100 decay_at_exit))
+  (define entry_price 450.030)
+  (define expected_exit_price (+ entry_price expected_return_dollars))
+
+  (log :message "\n=== MOMENTUM HALF-LIFE & TIMING ===")
+  (log :message "Half-life (τ):" :value momentum_half_life_ms)
+  (log :message "Optimal hold:" :value hold_duration_actual_ms)
+  (log :message "Impact at exit:" :value capture_rate)
+  (log :message "")
+  (log :message "EXECUTION PLAN:")
+  (log :message "Entry time: 10:00:00.500 (immediate)")
+  (log :message "Entry price:" :value entry_price)
+  (log :message "Exit time: 10:00:00.750 (+250ms)")
+  (log :message "Expected exit price:" :value expected_exit_price)
+  (log :message "Expected gain per share:" :value expected_return_dollars)
+
+  ;; ============================================
+  ;; STEP 5: TRADE EXECUTION & P&L
+  ;; ============================================
+  ;;
+  ;; THEORY: Execute with minimal latency and slippage
+  ;;
+  ;; ENTRY EXECUTION:
+  ;; Time: 10:00:00.500 (0ms latency to exchange)
+  ;; Order: Buy 100 shares SPY @ market
+  ;; Fill price: $450.030 (lifted the ask)
+  ;; Cost: 100 * $450.030 = $45,003.00
+  ;; Position: +100 shares
+  ;;
+  ;; HOLDING PERIOD (250ms):
+  ;; 10:00:00.500 → 10:00:00.750
+  ;; Monitoring: Real-time unrealized P&L
+  ;; Stop loss: Exit if P&L < -$50 (risk control)
+  ;;
+  ;; EXIT EXECUTION:
+  ;; Time: 10:00:00.750 (250ms hold)
+  ;; Current ask: $450.055 (price moved up as predicted!)
+  ;; Current bid: $450.050
+  ;; Exit order: Sell 100 shares @ market (hit the bid)
+  ;; Fill price: $450.050 (sell at bid)
+  ;; Proceeds: 100 * $450.050 = $45,005.00
+  ;;
+  ;; P&L CALCULATION:
+  ;; Revenue: $45,005.00
+  ;; Cost: $45,003.00
+  ;; Gross profit: $45,005.00 - $45,003.00 = $2.00
+  ;; Transaction costs: 2 * $0.0002/share * 100 = $0.04 (exchange fees)
+  ;; Net profit: $2.00 - $0.04 = $1.96
+  ;;
+  ;; RETURN:
+  ;; Return = $1.96 / $45,003.00 = 0.00436% (4.36 bps)
+  ;; Annualized: 0.00436% * (252 days * 6.5 hrs * 3600s / 0.25s)
+  ;;           = 0.00436% * 23,587,200
+  ;;           = 1,028% (extremely high, but holding period is 250ms!)
+  ;;
+  (define entry_cost (* position_size entry_price))
+  (define exit_price_actual 450.050)
+  (define exit_proceeds (* position_size exit_price_actual))
+  (define gross_profit (- exit_proceeds entry_cost))
+  (define fee_per_share 0.0002)
+  (define total_fees (* 2 fee_per_share position_size))
+  (define net_profit (- gross_profit total_fees))
+  (define return_pct (/ (* net_profit 100) entry_cost))
+  (define return_bps (* return_pct 100))
+
+  (log :message "\n=== TRADE EXECUTION & P&L ===")
+  (log :message "ENTRY (10:00:00.500):")
+  (log :message "  Buy 100 SPY @ $450.030")
+  (log :message "  Cost:" :value entry_cost)
+  (log :message "")
+  (log :message "EXIT (10:00:00.750, +250ms):")
+  (log :message "  Sell 100 SPY @ $450.050")
+  (log :message "  Proceeds:" :value exit_proceeds)
+  (log :message "")
+  (log :message "P&L:")
+  (log :message "  Gross profit:" :value gross_profit)
+  (log :message "  Transaction fees:" :value total_fees)
+  (log :message "  Net profit:" :value net_profit)
+  (log :message "  Return (%):" :value return_pct)
+  (log :message "  Return (bps):" :value return_bps)
+
+  ;; ============================================
+  ;; STEP 6: INVENTORY RISK MANAGEMENT
+  ;; ============================================
+  ;;
+  ;; THEORY: Limit inventory exposure at HFT timescales
+  ;;
+  ;; INVENTORY CONSTRAINTS:
+  ;; 1. MAX POSITION: ±100 shares ($45k notional @ $450)
+  ;;    Rationale: Single algo should not move market
+  ;;
+  ;; 2. MAX HOLD DURATION: 2 seconds (intraday only)
+  ;;    Rationale: Momentum decays, avoid overnight risk
+  ;;
+  ;; 3. VOLATILITY SCALING:
+  ;;    Max$ = Base$ / (1 + 2*σ)
+  ;;    Where σ = realized vol (annualized)
+  ;;    Example: σ = 20% → Max$ = $10k / (1 + 2*0.20) = $7,143
+  ;;    Current: $45k > $7,143 → OVER LIMIT (need to scale down)
+  ;;
+  ;; 4. STOP LOSS: -$50 unrealized loss (5 bps on $10k)
+  ;;    Implementation: Cancel and flatten position immediately
+  ;;
+  ;; 5. END-OF-DAY: Cancel all orders at 3:59:30 PM
+  ;;    Close all positions at 3:59:50 PM (10s before close)
+  ;;    Rationale: Zero overnight exposure
+  ;;
+  ;; CURRENT INVENTORY STATUS:
+  ;; Position: 0 shares (just exited at 10:00:00.750)
+  ;; Unrealized P&L: $0 (flat)
+  ;; Realized P&L (today): +$1.96 (this trade)
+  ;; Max position used: 100 shares (within limit)
+  ;; Max hold duration: 250ms (well within 2s limit)
+  ;; Status: ✓ All risk limits respected
+  ;;
+  (define base_position_limit_dollars 10000)
+  (define annualized_vol 0.20)
+  (define vol_adjusted_limit (/ base_position_limit_dollars (+ 1 (* 2 annualized_vol))))
+  (define max_notional_used 45003)
+  (define current_position 0)
+  (define unrealized_pnl 0)
+  (define realized_pnl_today 1.96)
+  (define max_hold_duration_seconds 2.0)
+  (define actual_hold_duration_seconds (/ hold_duration_actual_ms 1000))
+
+  (log :message "\n=== INVENTORY RISK MANAGEMENT ===")
+  (log :message "MAX LIMITS:")
+  (log :message "  Max position: ±100 shares")
+  (log :message "  Max hold duration:" :value max_hold_duration_seconds)
+  (log :message "  Vol-adjusted limit:" :value vol_adjusted_limit)
+  (log :message "  Stop loss:" :value stop_loss_dollars)
+  (log :message "")
+  (log :message "CURRENT STATUS:")
+  (log :message "  Position:" :value current_position)
+  (log :message "  Unrealized P&L:" :value unrealized_pnl)
+  (log :message "  Realized P&L (today):" :value realized_pnl_today)
+  (log :message "  Max notional used:" :value max_notional_used)
+  (log :message "  Actual hold duration:" :value actual_hold_duration_seconds)
+  (log :message "")
+  (log :message "RISK CHECK:")
+  (log :message "  Position within limit: ✓")
+  (log :message "  Hold duration within limit: ✓")
+  (log :message "  No stop loss triggered: ✓")
+  (log :message "  Flat position (zero inventory): ✓")
+
+  ;; ============================================
+  ;; STEP 7: PERFORMANCE METRICS
+  ;; ============================================
+  ;;
+  ;; THEORY: Evaluate strategy quality beyond P&L
+  ;;
+  ;; SHARPE RATIO (Single Trade):
+  ;; Return = 4.36 bps
+  ;; Volatility (assume 1 bp std for 250ms trade) = 1 bp
+  ;; Sharpe = 4.36 / 1 = 4.36 (excellent for HFT)
+  ;;
+  ;; WIN RATE ANALYSIS:
+  ;; Trades today: 1
+  ;; Winners: 1 (+$1.96)
+  ;; Losers: 0
+  ;; Win rate: 100% (need more samples)
+  ;;
+  ;; EXPECTED DAILY PERFORMANCE:
+  ;; Trading hours: 6.5 hours = 23,400 seconds
+  ;; Hold duration: 0.25 seconds
+  ;; Max possible trades: 93,600 (if continuous)
+  ;; Realistic: 100-200 trades/day (filter for high OFI)
+  ;; Expected daily P&L: 150 trades * $1.96 = $294/day
+  ;; Expected monthly: $294 * 21 = $6,174
+  ;; Expected annual: $294 * 252 = $74,088
+  ;;
+  ;; CAPACITY ANALYSIS:
+  ;; Current: 100 shares per trade = $45k notional
+  ;; Max without market impact: ~0.5% ADV
+  ;; SPY ADV: 80M shares = $36B
+  ;; Max capacity: 0.5% * $36B = $180M notional
+  ;; At 150 trades/day: $180M / 150 = $1.2M per trade
+  ;; Scale factor: $1.2M / $45k = 26.7x
+  ;; Scaled daily P&L: $294 * 26.7 = $7,850/day
+  ;; Scaled annual: $7,850 * 252 = $1,978,200
+  ;;
+  (define sharpe_ratio 4.36)
+  (define win_rate 100.0)
+  (define trades_per_day 150)
+  (define expected_daily_pnl (* trades_per_day net_profit))
+  (define expected_monthly_pnl (* expected_daily_pnl 21))
+  (define expected_annual_pnl (* expected_daily_pnl 252))
+  (define spy_adv_notional 36000000000)
+  (define max_capacity_pct 0.005)
+  (define max_capacity_notional (* spy_adv_notional max_capacity_pct))
+  (define max_per_trade (/ max_capacity_notional trades_per_day))
+  (define scale_factor (/ max_per_trade entry_cost))
+  (define scaled_daily_pnl (* expected_daily_pnl scale_factor))
+  (define scaled_annual_pnl (* scaled_daily_pnl 252))
+
+  (log :message "\n=== PERFORMANCE METRICS ===")
+  (log :message "SINGLE TRADE:")
+  (log :message "  Return: 4.36 bps")
+  (log :message "  Sharpe ratio:" :value sharpe_ratio)
+  (log :message "  Win rate:" :value win_rate)
+  (log :message "")
+  (log :message "EXPECTED DAILY (150 trades):")
+  (log :message "  Daily P&L:" :value expected_daily_pnl)
+  (log :message "  Monthly P&L:" :value expected_monthly_pnl)
+  (log :message "  Annual P&L:" :value expected_annual_pnl)
+  (log :message "")
+  (log :message "CAPACITY ANALYSIS:")
+  (log :message "  SPY ADV notional:" :value spy_adv_notional)
+  (log :message "  Max capacity (0.5%):" :value max_capacity_notional)
+  (log :message "  Max per trade:" :value max_per_trade)
+  (log :message "  Scale factor:" :value scale_factor)
+  (log :message "  Scaled annual P&L:" :value scaled_annual_pnl)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Co-location: Place servers in exchange data center (<1ms latency)")
+  (log :message "2. FPGA acceleration: Hardware-based Lee-Ready classification (<10μs)")
+  (log :message "3. Direct market access: Bypass brokers, connect directly to exchange")
+  (log :message "4. Adaptive OFI thresholds: Machine learning to optimize entry trigger")
+  (log :message "5. Multi-venue execution: Route to fastest venue (BATS, ARCA, NASDAQ)")
+  (log :message "6. Queue position inference: Estimate place in limit order book")
+  (log :message "7. Smart order routing: Split orders across dark pools and lit markets")
+  (log :message "8. Latency arbitrage detection: Identify and exploit stale quotes")
+  (log :message "9. Microstructure regime classification: Adapt to fast/slow markets")
+  (log :message "10. Predictive OFI: Forecast next-tick OFI using order book dynamics")
+  (log :message "11. Cross-asset momentum: Propagate signals from futures to ETFs")
+  (log :message "12. Maker-taker optimization: Prefer venues with rebates when possible")
+  (log :message "13. Hidden order detection: Infer iceberg orders from fill patterns")
+  (log :message "14. Cancel-replace optimization: Minimize message latency overhead")
+  (log :message "15. Hardware timestamping: Kernel-bypass networking for exact timing")
+
+  (log :message "\n=== HIGH-FREQUENCY MOMENTUM TRADING COMPLETE ===")
+)

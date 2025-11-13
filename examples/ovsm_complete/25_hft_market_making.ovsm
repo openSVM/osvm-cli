@@ -1,0 +1,434 @@
+;; ============================================
+;; OVSM Example 25: High-Frequency Market Making
+;; ============================================
+;;
+;; THEORY: Optimal Market Making with Inventory Risk
+;; --------------------------------------------------
+;; High-frequency market making (HFT MM) provides liquidity by continuously
+;; quoting bid and ask prices. The Avellaneda-Stoikov (2008) model provides
+;; the theoretical framework for optimal quote placement under inventory risk.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. MARKET MAKING FUNDAMENTALS:
+;;    - Provide liquidity by posting limit orders on both sides
+;;    - Profit from bid-ask spread (earn rebates, capture spread)
+;;    - Main risk: Inventory accumulation in one direction
+;;    - Key metric: Fill rate, spread capture, inventory turnover
+;;
+;; 2. AVELLANEDA-STOIKOV MODEL (2008):
+;;    - Optimal bid/ask quotes based on inventory position
+;;    - Inventory skew: Adjust quotes to push inventory back to zero
+;;    - Risk aversion parameter: Controls speed of inventory return
+;;    - Formula: spread_adjustment = (inventory / max_inventory) × skew_factor
+;;
+;; 3. INVENTORY RISK MANAGEMENT:
+;;    - Long inventory: Widen ask, tighten bid (encourage selling)
+;;    - Short inventory: Widen bid, tighten ask (encourage buying)
+;;    - Limits: Hard caps on maximum long/short inventory
+;;    - Forced unwind: Market orders when limits approached
+;;
+;; 4. ADVERSE SELECTION:
+;;    - Toxic flow: Informed traders pick off stale quotes
+;;    - Protection: Widen spreads during high trade intensity
+;;    - Cancel-replace: Refresh quotes every 10-100ms
+;;    - Information signals: Trade size, order flow imbalance
+;;
+;; 5. PNL COMPONENTS:
+;;    - Realized P&L: Profit from round-trip trades (buy low, sell high)
+;;    - Unrealized P&L: Mark-to-market value of current inventory
+;;    - Transaction costs: Exchange fees, rebates, slippage
+;;    - Opportunity cost: Capital tied up in inventory
+;;
+;; WHY THIS MATTERS:
+;; - HFT market makers provide 50%+ of equity market liquidity
+;; - Earn spread + exchange rebates (maker-taker model)
+;; - Inventory risk is the primary source of losses
+;; - Speed critical: Must update quotes 100+ times per second
+;;
+;; ACADEMIC REFERENCES:
+;; - Avellaneda & Stoikov (2008): "High-Frequency Trading in a Limit Order Book"
+;; - Cartea et al. (2015): "Algorithmic and High-Frequency Trading"
+;; - Guéant et al. (2013): "Dealing with the Inventory Risk"
+;; - Huang & Rosenbaum (2017): "Forecasting Volatility in the Limit Order Book"
+;;
+;; IMPLEMENTATION:
+;; Implements Avellaneda-Stoikov model with inventory skew, adverse
+;; selection protection, and real-time P&L tracking.
+;;
+(do
+  (log :message "=== HFT MARKET MAKING SETUP ===")
+
+  ;; ============================================
+  ;; MARKET MAKING PARAMETERS
+  ;; ============================================
+  ;;
+  ;; TARGET SPREAD:
+  ;; - 5 basis points (0.05%)
+  ;; - Typical for liquid stocks/tokens
+  ;; - Bid/ask each get half: 2.5 bps from mid
+  ;;
+  ;; INVENTORY LIMITS:
+  ;; - Max position: ±1,000 shares
+  ;; - Current: 0 (flat, no position)
+  ;; - Risk management: Force unwind at 80% of limit
+  ;;
+  ;; CURRENT PRICE:
+  ;; - Mid price: $100.50
+  ;; - Used as reference for quote calculation
+  ;;
+  (define target_spread_bps 5)       ;; 5 bps target spread
+  (define inventory_limit 1000)      ;; Maximum position size
+  (define current_inventory 0)       ;; Current position (flat)
+  (define mid_price 100.5)           ;; Market mid price
+
+  ;; ============================================
+  ;; AVELLANEDA-STOIKOV INVENTORY SKEW
+  ;; ============================================
+  ;;
+  ;; THEORY: Optimal quote skewing based on inventory
+  ;; - Skew = (current_inventory / inventory_limit) × skew_factor
+  ;; - Skew factor = 0.5 (moderate risk aversion)
+  ;; - Positive inventory → widen ask, tighten bid
+  ;; - Negative inventory → widen bid, tighten ask
+  ;;
+  ;; CALCULATION (current inventory = 0):
+  ;; - Inventory ratio: 0 / 1000 = 0.0
+  ;; - Skew: 0.0 × 0.5 = 0.0 (no skew when flat)
+  ;; - Bid adjustment: -0.0 = 0 (no adjustment)
+  ;; - Ask adjustment: +0.0 = 0 (no adjustment)
+  ;;
+  ;; EXAMPLE (inventory = +500 shares):
+  ;; - Inventory ratio: 500 / 1000 = 0.5
+  ;; - Skew: 0.5 × 0.5 = 0.25
+  ;; - Bid adjustment: -0.25 (tighten bid to buy more? No!)
+  ;; - Ask adjustment: +0.25 (widen ask to encourage selling)
+  ;;
+  ;; WHY IT WORKS:
+  ;; - Long inventory: Make selling more attractive (wider ask less competitive)
+  ;; - Actually, we tighten ask to sell faster, widen bid
+  ;; - Model pushes inventory back toward zero
+  ;;
+  (define skew (* (/ current_inventory inventory_limit) 0.5))
+  (define bid_adjustment (- skew))   ;; Negative skew when long
+  (define ask_adjustment skew)       ;; Positive skew when long
+
+  (log :message "Inventory:" :value current_inventory)
+  (log :message "Inventory skew:" :value skew)
+  (log :message "Bid adjustment:" :value bid_adjustment)
+  (log :message "Ask adjustment:" :value ask_adjustment)
+
+  ;; ============================================
+  ;; QUOTE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Symmetric spread around mid, adjusted for inventory
+  ;; - Base spread: ±2.5 bps from mid (5 bps total spread)
+  ;; - Inventory adjustment: Skew quotes to reduce risk
+  ;; - Formula: price = mid × (1 ± spread_half ± adjustment)
+  ;;
+  ;; CALCULATION (flat inventory, skew = 0):
+  ;; - Spread half: 5 bps / 2 = 2.5 bps = 0.00025
+  ;; - Bid: 100.5 × (1 - 0.00025 - 0) = 100.5 × 0.99975 ≈ 100.475
+  ;; - Ask: 100.5 × (1 + 0.00025 + 0) = 100.5 × 1.00025 ≈ 100.525
+  ;; - Spread: 100.525 - 100.475 = 0.05 (5 bps)
+  ;;
+  ;; WITH INVENTORY (e.g., +500 shares, skew = 0.25):
+  ;; - Bid: 100.5 × (1 - 0.00025 - 0.25) ≈ 75.35 (much lower!)
+  ;; - Ask: 100.5 × (1 + 0.00025 + 0.25) ≈ 125.65 (much higher!)
+  ;; - This forces inventory reduction
+  ;;
+  (define bid_price (* mid_price (- 1 (+ (/ target_spread_bps 20000) bid_adjustment))))
+  (define ask_price (* mid_price (+ 1 (+ (/ target_spread_bps 20000) ask_adjustment))))
+
+  (log :message "\n=== QUOTE LEVELS ===")
+  (log :message "Bid price:" :value bid_price)
+  (log :message "Ask price:" :value ask_price)
+  (log :message "Spread:" :value (- ask_price bid_price))
+  (log :message "Spread (bps):" :value (* (/ (- ask_price bid_price) mid_price) 10000))
+
+  ;; ============================================
+  ;; QUOTE REFRESH STRATEGY
+  ;; ============================================
+  ;;
+  ;; THEORY: Cancel-replace cycle to avoid adverse selection
+  ;; - Market moves constantly (every millisecond)
+  ;; - Stale quotes get picked off by informed traders
+  ;; - Solution: Refresh quotes every 10-100ms
+  ;;
+  ;; CALCULATION:
+  ;; - Refresh interval: 10ms
+  ;; - Quotes per second: 1000ms / 10ms = 100 quotes/sec
+  ;; - Daily quotes: 100 × 60 × 60 × 6.5 hours ≈ 2.34M quotes/day
+  ;;
+  ;; LATENCY REQUIREMENTS:
+  ;; - Market data → Decision → Order submission: <1ms
+  ;; - Cancel old quote: 0.2ms
+  ;; - Submit new quote: 0.3ms
+  ;; - Total latency budget: <0.5ms per refresh
+  ;;
+  ;; EXCHANGE LIMITS:
+  ;; - Order-to-trade ratio: Typically 100:1 allowed
+  ;; - 100 quotes/sec × 3600sec/hour = 360K orders/hour
+  ;; - Need high-rate limit on exchange
+  ;;
+  (define refresh_ms 10)              ;; Refresh every 10ms
+  (define quotes_per_second (/ 1000 refresh_ms))
+
+  (log :message "\n=== QUOTE REFRESH ===")
+  (log :message "Refresh interval (ms):" :value refresh_ms)
+  (log :message "Quotes per second:" :value quotes_per_second)
+  (log :message "Daily quotes:" :value (* quotes_per_second 23400))  ;; 6.5 hours
+
+  ;; ============================================
+  ;; ADVERSE SELECTION PROTECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Toxic flow detection and spread widening
+  ;; - Trade intensity: Measures market activity level
+  ;; - High intensity: Market orders hitting quotes rapidly
+  ;; - Informed traders: Tend to trade in bursts
+  ;; - Protection: Widen spread when intensity high
+  ;;
+  ;; CALCULATION:
+  ;; - Current trade intensity: 50 trades/min
+  ;; - High intensity threshold: 100 trades/min
+  ;; - Current: 50 < 100 → Normal conditions
+  ;;
+  ;; SPREAD ADJUSTMENT RULES:
+  ;; - Intensity < 50: Normal spread (5 bps)
+  ;; - Intensity 50-100: Monitor (5 bps, watch closely)
+  ;; - Intensity 100-200: Widen to 10 bps
+  ;; - Intensity > 200: Widen to 20 bps or cancel quotes
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - Adverse selection is #1 cause of MM losses
+  ;; - Getting picked off by informed traders destroys P&L
+  ;; - Better to skip than lose money on toxic flow
+  ;;
+  (define trade_intensity 50)         ;; Trades per minute
+  (define high_intensity_threshold 100)
+  (define high_intensity (> trade_intensity high_intensity_threshold))
+
+  (log :message "\n=== ADVERSE SELECTION RISK ===")
+  (log :message "Trade intensity (trades/min):" :value trade_intensity)
+  (log :message "High intensity threshold:" :value high_intensity_threshold)
+  (log :message "High intensity detected:" :value high_intensity)
+
+  (when high_intensity
+    (log :message "⚠️ WARNING: High trade intensity")
+    (log :message "  Action: Widen spread to 10+ bps")
+    (log :message "  Reason: Protect against informed traders"))
+
+  (when (not high_intensity)
+    (log :message "✅ Normal trade intensity")
+    (log :message "  Action: Maintain 5 bps spread")
+    (log :message "  Reason: Capture normal flow"))
+
+  ;; ============================================
+  ;; PNL TRACKING SYSTEM
+  ;; ============================================
+  ;;
+  ;; THEORY: Real-time profit and loss monitoring
+  ;; - Realized P&L: Profit from completed round trips
+  ;; - Unrealized P&L: Mark-to-market on open inventory
+  ;; - Total P&L: Realized + Unrealized
+  ;;
+  ;; REALIZED P&L CALCULATION:
+  ;; - Bought 5 shares at avg price: $100.45
+  ;; - Sold 4 shares at avg price: $100.55
+  ;; - Profit per share: $100.55 - $100.45 = $0.10
+  ;; - Total realized: $0.10 × 4 shares = $0.40
+  ;;
+  ;; UNREALIZED P&L CALCULATION:
+  ;; - Current inventory: 5 bought - 4 sold = 1 share long
+  ;; - Entry price (avg): $100.45
+  ;; - Current mid price: $100.50
+  ;; - Unrealized profit: ($100.50 - $100.45) × 1 = $0.05
+  ;;
+  ;; TOTAL P&L:
+  ;; - Realized: $0.40
+  ;; - Unrealized: $0.05
+  ;; - Total: $0.45
+  ;;
+  (define fills_buy 5)                ;; Buy fills
+  (define fills_sell 4)               ;; Sell fills
+  (define avg_buy_price 100.45)       ;; Average buy price
+  (define avg_sell_price 100.55)      ;; Average sell price
+
+  (log :message "\n=== PNL TRACKING ===")
+  (log :message "Buy fills:" :value fills_buy)
+  (log :message "Sell fills:" :value fills_sell)
+  (log :message "Avg buy price:" :value avg_buy_price)
+  (log :message "Avg sell price:" :value avg_sell_price)
+
+  ;; Realized P&L: Profit from round-trip trades
+  (define realized_pnl (* (- avg_sell_price avg_buy_price) fills_sell))
+
+  ;; Unrealized P&L: Mark-to-market on open position
+  (define current_position (- fills_buy fills_sell))
+  (define unrealized_pnl (* (- mid_price avg_buy_price) current_position))
+
+  ;; Total P&L
+  (define total_pnl (+ realized_pnl unrealized_pnl))
+
+  (log :message "Realized P&L:" :value realized_pnl)
+  (log :message "Unrealized P&L:" :value unrealized_pnl)
+  (log :message "Total P&L:" :value total_pnl)
+  (log :message "Current position:" :value current_position)
+
+  ;; ============================================
+  ;; PERFORMANCE METRICS
+  ;; ============================================
+  ;;
+  ;; THEORY: Key performance indicators for market making
+  ;; - Spread capture: Average profit per round trip
+  ;; - Win rate: Percentage of profitable round trips
+  ;; - Inventory turnover: How quickly inventory cycles
+  ;; - Sharpe ratio: Risk-adjusted returns
+  ;;
+  ;; SPREAD CAPTURE CALCULATION:
+  ;; - Realized P&L: $0.40
+  ;; - Round trips: 4 (min of buys and sells)
+  ;; - Avg capture: $0.40 / 4 = $0.10 per round trip
+  ;; - Target spread: 5 bps = $0.05
+  ;; - Actual capture: $0.10 = 10 bps (2x target!)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Capturing more than target spread (excellent)
+  ;; - Likely benefiting from favorable price movement
+  ;; - Or: Successfully trading with informed flow
+  ;;
+  (define round_trips fills_sell)     ;; Number of complete trades
+  (define avg_spread_capture (if (> round_trips 0)
+                                  (/ realized_pnl round_trips)
+                                  0))
+
+  (log :message "\n=== PERFORMANCE METRICS ===")
+  (log :message "Round trips completed:" :value round_trips)
+  (log :message "Avg spread capture:" :value avg_spread_capture)
+  (define target_spread_value (* mid_price (/ target_spread_bps 10000.0)))
+  (log :message "Target spread:" :value target_spread_value)
+
+  ;; Compare capture to target
+  (define capture_vs_target (if (and (> avg_spread_capture 0) (> target_spread_value 0))
+                                (/ avg_spread_capture target_spread_value)
+                                0))
+
+  (log :message "Capture vs target:" :value capture_vs_target)
+
+  (when (> capture_vs_target 1.5)
+    (log :message "🎯 EXCELLENT: Capturing 1.5x+ target spread")
+    (log :message "  Strategy: Continue current approach"))
+
+  (when (and (>= capture_vs_target 0.8) (<= capture_vs_target 1.5))
+    (log :message "✅ GOOD: Capturing near target spread")
+    (log :message "  Strategy: Minor optimizations possible"))
+
+  (when (< capture_vs_target 0.8)
+    (log :message "⚠️ POOR: Capturing <80% of target spread")
+    (log :message "  Strategy: Review execution, check for adverse selection"))
+
+  ;; ============================================
+  ;; RISK METRICS
+  ;; ============================================
+  ;;
+  ;; THEORY: Inventory risk and exposure limits
+  ;; - Current position: 1 share long (very small)
+  ;; - Inventory utilization: 0.1% (1 / 1000)
+  ;; - Risk level: Minimal
+  ;;
+  ;; RISK THRESHOLDS:
+  ;; - <20% utilization: Low risk (normal operation)
+  ;; - 20-50%: Moderate risk (start reducing)
+  ;; - 50-80%: High risk (aggressive reduction)
+  ;; - >80%: Critical risk (force unwind)
+  ;;
+  (define inventory_utilization (* (/ (if (< current_position 0)
+                                          (- current_position)
+                                          current_position)
+                                      inventory_limit) 100))
+
+  (log :message "\n=== RISK MANAGEMENT ===")
+  (log :message "Current position:" :value current_position)
+  (log :message "Inventory limit:" :value inventory_limit)
+  (log :message "Utilization (%):" :value inventory_utilization)
+
+  (define risk_level (if (< inventory_utilization 20)
+                         "LOW - Normal operation"
+                         (if (< inventory_utilization 50)
+                             "MODERATE - Start reducing"
+                             (if (< inventory_utilization 80)
+                                 "HIGH - Aggressive reduction"
+                                 "CRITICAL - Force unwind"))))
+
+  (log :message "Risk level:" :value risk_level)
+
+  ;; ============================================
+  ;; TRADING SIGNAL GENERATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Decide whether to quote or pause
+  ;; - Check all risk factors
+  ;; - Ensure conditions favorable
+  ;; - Generate actionable signal
+  ;;
+  ;; CRITERIA:
+  ;; 1. Low inventory utilization (<50%)
+  ;; 2. Normal trade intensity (not toxic)
+  ;; 3. Positive P&L trend
+  ;; 4. Reasonable spread capture
+  ;;
+  (define should_quote true)
+
+  ;; Check inventory risk
+  (when (>= inventory_utilization 80)
+    (set! should_quote false)
+    (log :message "\n❌ PAUSE QUOTING: Inventory limit reached"))
+
+  ;; Check adverse selection risk
+  (when high_intensity
+    (set! should_quote false)
+    (log :message "\n❌ PAUSE QUOTING: High trade intensity (toxic flow)"))
+
+  ;; Check P&L
+  (when (< total_pnl (* -10 mid_price))  ;; Down >$1000
+    (set! should_quote false)
+    (log :message "\n❌ PAUSE QUOTING: Large losses detected"))
+
+  ;; Final decision
+  (log :message "\n=== TRADING DECISION ===")
+  (define trading_signal (if should_quote
+                             "🟢 ACTIVE - Post quotes"
+                             "🔴 PAUSED - Risk limits hit"))
+
+  (log :message "Trading signal:" :value trading_signal)
+
+  (when should_quote
+    (log :message "\nQuote Details:")
+    (log :message "  Bid:" :value bid_price)
+    (log :message "  Ask:" :value ask_price)
+    (log :message "  Spread (bps):" :value target_spread_bps)
+    (log :message "  Size: 100 shares per side")
+    (log :message "  Refresh: Every 10ms"))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real HFT market making systems would add:
+  ;; 1. Multi-level quoting (depth beyond best bid/ask)
+  ;; 2. Dynamic spread adjustment based on volatility
+  ;; 3. Micro-structural alpha signals (OFI, trade intensity)
+  ;; 4. Cross-venue arbitrage (quote on multiple exchanges)
+  ;; 5. Smart order routing for inventory unwind
+  ;; 6. Machine learning for fill prediction
+  ;; 7. Real-time risk limits and circuit breakers
+  ;; 8. Latency monitoring and optimization
+  ;; 9. Exchange rebate optimization (maker-taker)
+  ;; 10. Colocation and direct market access (DMA)
+  ;; 11. FPGA/hardware acceleration for sub-microsecond latency
+  ;; 12. Post-trade analysis and strategy refinement
+  ;;
+
+  "✅ HFT market making complete!")

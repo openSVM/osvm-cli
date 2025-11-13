@@ -1,0 +1,394 @@
+;; ============================================
+;; OVSM Example 39: Portfolio Rebalancing Optimization
+;; ============================================
+;;
+;; THEORY: Optimal Portfolio Maintenance
+;; -------------------------------------
+;; Portfolio rebalancing restores target asset allocations after
+;; market movements. The challenge: balancing risk reduction against
+;; transaction costs. Rebalance too often = high fees; too rarely = drift risk.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. WHY REBALANCE?
+;;    - Drift: Winners grow, losers shrink (changes allocation)
+;;    - Risk: Concentrated positions increase volatility
+;;    - Mean-Reversion: Sell high, buy low (alpha generation)
+;;    - Discipline: Maintains strategic allocation
+;;
+;; 2. REBALANCING COSTS:
+;;    - Trading fees (brokerage commissions)
+;;    - Bid-ask spread (market impact)
+;;    - Tax implications (realized gains)
+;;    - Opportunity cost (timing risk)
+;;
+;; 3. REBALANCING BENEFITS:
+;;    - Risk reduction (maintains diversification)
+;;    - Reversion alpha (contrarian positioning)
+;;    - Behavioral discipline (removes emotion)
+;;    - Volatility control (stabilizes drawdowns)
+;;
+;; 4. OPTIMIZATION FRAMEWORK:
+;;    - Calculate drift from target
+;;    - Estimate transaction costs
+;;    - Predict benefits from rebalancing
+;;    - Execute if benefits > costs
+;;
+;; 5. TOLERANCE BANDS:
+;;    - Rebalance only when drift exceeds threshold
+;;    - Tighter bands = more frequent, less drift
+;;    - Wider bands = less frequent, more drift
+;;    - Optimal width balances costs vs risk
+;;
+;; WHY THIS MATTERS:
+;; - Annual rebalancing captures 0.4-0.8% extra return (DeMiguel et al., 2009)
+;; - Volatility reduction: 1-2% annualized
+;; - But over-rebalancing destroys value via fees
+;; - Optimal frequency varies by market regime
+;;
+;; IMPLEMENTATION:
+;; Cost-benefit analysis to determine if rebalancing is worthwhile
+;; given current drift and expected benefits.
+;;
+(do
+  (log :message "=== OPTIMAL REBALANCING ===")
+
+  ;; ============================================
+  ;; CURRENT HOLDINGS (PORTFOLIO STATE)
+  ;; ============================================
+  ;;
+  ;; Four-asset crypto portfolio with drift from targets:
+  ;;
+  ;; 1. BTC (Bitcoin):
+  ;;    - Current value: $4,500
+  ;;    - Target value: $4,000
+  ;;    - Drift: +$500 (+12.5% overweight)
+  ;;    - Volatility: 60% annualized
+  ;;    - Reason for drift: BTC outperformed recently
+  ;;
+  ;; 2. ETH (Ethereum):
+  ;;    - Current value: $2,800
+  ;;    - Target value: $3,000
+  ;;    - Drift: -$200 (-6.7% underweight)
+  ;;    - Volatility: 70% annualized
+  ;;    - Reason for drift: ETH underperformed BTC
+  ;;
+  ;; 3. SOL (Solana):
+  ;;    - Current value: $1,200
+  ;;    - Target value: $1,500
+  ;;    - Drift: -$300 (-20% underweight)
+  ;;    - Volatility: 90% annualized (highest risk)
+  ;;    - Reason for drift: SOL correction
+  ;;
+  ;; 4. USDC (Stablecoin):
+  ;;    - Current value: $1,500
+  ;;    - Target value: $1,500
+  ;;    - Drift: $0 (perfectly balanced)
+  ;;    - Volatility: 1% annualized (cash equivalent)
+  ;;    - Purpose: Dry powder for rebalancing
+  ;;
+  ;; PORTFOLIO ANALYSIS:
+  ;; - Total value: $10,000
+  ;; - Total drift: |500| + |200| + |300| + |0| = $1,000
+  ;; - Rebalancing would trade $1,000 notional
+  ;; - BTC overweight → need to sell
+  ;; - ETH/SOL underweight → need to buy
+  ;;
+  (define holdings [
+    {:symbol "BTC" :value 4500 :target 4000 :volatility 0.6}
+    {:symbol "ETH" :value 2800 :target 3000 :volatility 0.7}
+    {:symbol "SOL" :value 1200 :target 1500 :volatility 0.9}
+    {:symbol "USDC" :value 1500 :target 1500 :volatility 0.01}
+  ])
+
+  ;; ============================================
+  ;; TOTAL PORTFOLIO VALUE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Sum of all position values
+  ;; - Baseline for percentage calculations
+  ;; - Used to compute allocation weights
+  ;;
+  ;; CALCULATION:
+  ;; - BTC: $4,500
+  ;; - ETH: $2,800
+  ;; - SOL: $1,200
+  ;; - USDC: $1,500
+  ;; - Total: $10,000
+  ;;
+  ;; CURRENT ALLOCATION:
+  ;; - BTC: 45% (target 40%)
+  ;; - ETH: 28% (target 30%)
+  ;; - SOL: 12% (target 15%)
+  ;; - USDC: 15% (target 15%)
+  ;;
+  (define total_value 0)
+  (for (holding holdings)
+    (set! total_value (+ total_value (get holding "value"))))
+
+  (log :message "Total portfolio:" :value total_value)
+
+  ;; ============================================
+  ;; REBALANCING TRADES CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: For each asset, calculate required trade
+  ;; - Trade amount = Target - Current
+  ;; - Positive = buy (add to position)
+  ;; - Negative = sell (reduce position)
+  ;; - Only execute if drift exceeds threshold
+  ;;
+  ;; IMPLEMENTATION:
+  ;; Loop through holdings, calculate drift and fees
+  ;; Accumulate total transaction costs
+  ;;
+  (define trades [])
+  (define total_cost 0.0)
+
+  (for (holding holdings)
+    ;; Extract holding attributes
+    (define symbol (get holding "symbol"))
+    (define current (get holding "value"))
+    (define target (get holding "target"))
+
+    ;; ============================================
+    ;; DRIFT CALCULATION
+    ;; ============================================
+    ;;
+    ;; THEORY: Deviation from target allocation
+    ;; - diff = target - current
+    ;; - Positive diff = need to buy
+    ;; - Negative diff = need to sell
+    ;;
+    ;; EXAMPLES:
+    ;; - BTC: 4000 - 4500 = -500 (sell $500)
+    ;; - ETH: 3000 - 2800 = +200 (buy $200)
+    ;; - SOL: 1500 - 1200 = +300 (buy $300)
+    ;; - USDC: 1500 - 1500 = 0 (no trade)
+    ;;
+    (define diff (- target current))
+
+    ;; Absolute difference (for fee calculation)
+    ;; Need absolute value because fees apply to both buys and sells
+    (define abs_diff (if (< diff 0) (- diff) diff))
+
+    ;; ============================================
+    ;; TRANSACTION FEE CALCULATION
+    ;; ============================================
+    ;;
+    ;; THEORY: Cost of executing the rebalancing trade
+    ;; - Fee rate: 0.3% (30 basis points)
+    ;; - Industry typical: 0.1-0.5% for crypto
+    ;; - Formula: fee = trade_amount × fee_rate
+    ;;
+    ;; CALCULATION EXAMPLES:
+    ;; - BTC: $500 × 0.003 = $1.50
+    ;; - ETH: $200 × 0.003 = $0.60
+    ;; - SOL: $300 × 0.003 = $0.90
+    ;; - USDC: $0 × 0.003 = $0
+    ;;
+    ;; TOTAL FEES: $1.50 + $0.60 + $0.90 = $3.00
+    ;;
+    ;; WHY 0.3%?
+    ;; - Crypto exchanges: 0.1-0.5% maker/taker
+    ;; - Includes bid-ask spread impact
+    ;; - Conservative estimate (covers slippage)
+    ;;
+    (define fee (* abs_diff 0.003))
+
+    ;; ============================================
+    ;; TRADE THRESHOLD FILTER
+    ;; ============================================
+    ;;
+    ;; THEORY: Only rebalance significant drift
+    ;; - Threshold: $50 (0.5% of portfolio)
+    ;; - Avoids churning on small movements
+    ;; - Reduces total transaction costs
+    ;;
+    ;; RATIONALE:
+    ;; - Below $50: Fee/benefit ratio too high
+    ;; - Small drifts don't materially affect risk
+    ;; - Transaction costs dominate small trades
+    ;;
+    ;; CURRENT TRADES:
+    ;; - BTC: $500 > $50 ✓ (execute)
+    ;; - ETH: $200 > $50 ✓ (execute)
+    ;; - SOL: $300 > $50 ✓ (execute)
+    ;; - USDC: $0 NOT > $50 ✗ (skip)
+    ;;
+    (when (> abs_diff 50)
+      ;; Log trade details for transparency
+      (log :message symbol)
+      (log :message "  Difference:" :value diff)
+      (log :message "  Fee:" :value fee)
+
+      ;; Accumulate total rebalancing cost
+      (set! total_cost (+ total_cost fee))))
+
+  ;; ============================================
+  ;; TOTAL REBALANCING COST
+  ;; ============================================
+  ;;
+  ;; THEORY: Sum of all transaction fees
+  ;; - Direct cost of rebalancing
+  ;; - Must be compared to benefits
+  ;;
+  ;; CALCULATION:
+  ;; - BTC fee: $1.50
+  ;; - ETH fee: $0.60
+  ;; - SOL fee: $0.90
+  ;; - Total: $3.00
+  ;;
+  ;; INTERPRETATION:
+  ;; - $3 on $10,000 portfolio = 3 bps (0.03%)
+  ;; - Relatively low cost (manageable)
+  ;; - Annual rebalancing at this cost = ~12 bps/year
+  ;;
+  (log :message "Total rebalancing cost:" :value total_cost)
+
+  ;; ============================================
+  ;; COST-BENEFIT ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Expected daily benefit from rebalancing
+  ;; - Risk reduction value
+  ;; - Mean-reversion alpha capture
+  ;; - Empirically estimated from historical data
+  ;;
+  ;; BENEFIT ESTIMATION:
+  ;; - $15 per day = typical for this portfolio size
+  ;; - Comes from:
+  ;;   * Reduced volatility (0.5-1% vol reduction)
+  ;;   * Rebalancing premium (contrarian alpha)
+  ;;   * Maintained diversification
+  ;;
+  ;; ACADEMIC BASIS:
+  ;; - DeMiguel et al. (2009): Rebalancing adds 0.4-0.8% annually
+  ;; - For $10k portfolio: $40-80/year ≈ $0.11-0.22/day
+  ;; - Our $15/day is generous (includes vol reduction value)
+  ;;
+  (define benefit_per_day 15)  ;; Expected daily benefit from rebalancing
+
+  ;; ============================================
+  ;; BREAKEVEN ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: How many days until rebalancing pays for itself?
+  ;; - breakeven_days = total_cost / daily_benefit
+  ;; - Lower = rebalancing more attractive
+  ;; - Compare to rebalancing frequency tolerance
+  ;;
+  ;; CALCULATION:
+  ;; - total_cost = $3.00
+  ;; - benefit_per_day = $15
+  ;; - breakeven = $3.00 / $15 = 0.2 days (~5 hours)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Breaks even in 5 hours
+  ;; - Extremely favorable
+  ;; - High confidence rebalancing is worthwhile
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - Quick breakeven = strong signal
+  ;; - Indicates significant drift
+  ;; - Low cost relative to benefit
+  ;; - Should definitely rebalance
+  ;;
+  (define breakeven_days (/ total_cost benefit_per_day))
+
+  (log :message "Breakeven days:" :value breakeven_days)
+
+  ;; ============================================
+  ;; REBALANCING DECISION
+  ;; ============================================
+  ;;
+  ;; THEORY: Execute if breakeven acceptable
+  ;; - Threshold: 30 days
+  ;; - Rationale: Monthly rebalancing frequency
+  ;; - Aligns with common institutional practice
+  ;;
+  ;; DECISION RULE:
+  ;; - breakeven < 30 days → Rebalance
+  ;; - breakeven ≥ 30 days → Wait
+  ;;
+  ;; CALCULATION:
+  ;; - breakeven_days = 0.2
+  ;; - 0.2 < 30? → Yes
+  ;; - should_rebalance = true
+  ;;
+  ;; INTERPRETATION:
+  ;; - Definitely rebalance
+  ;; - Costs are minimal vs benefits
+  ;; - Portfolio has drifted enough to warrant action
+  ;; - Expected to add $15/day value going forward
+  ;;
+  ;; ALTERNATIVE THRESHOLDS:
+  ;; - Conservative: 15 days (rebalance less often)
+  ;; - Aggressive: 60 days (rebalance more often)
+  ;; - Tax-aware: 365 days (minimize taxable events)
+  ;;
+  (define should_rebalance (< breakeven_days 30))
+
+  (log :message "Should rebalance:" :value should_rebalance)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Threshold-based rebalancing
+  ;;    - Trigger when allocation drifts > X%
+  ;;    - Absolute thresholds (5% rule)
+  ;;    - Relative thresholds (20% of target)
+  ;;    - Combines time and drift criteria
+  ;;
+  ;; 2. Volatility targeting
+  ;;    - Calculate current portfolio volatility
+  ;;    - Compare to target volatility
+  ;;    - Rebalance to restore target risk level
+  ;;    - Dynamic allocation based on vol regime
+  ;;
+  ;; 3. Tax-aware rebalancing
+  ;;    - Defer trades that realize short-term gains
+  ;;    - Harvest tax losses opportunistically
+  ;;    - Consider holding period (1 year)
+  ;;    - After-tax optimization
+  ;;
+  ;; 4. Transaction cost models
+  ;;    - Market impact (price × size)
+  ;;    - Time-of-day effects
+  ;;    - Liquidity analysis
+  ;;    - Venue selection (exchange routing)
+  ;;
+  ;; 5. Smart order execution
+  ;;    - TWAP (Time-Weighted Average Price)
+  ;;    - VWAP (Volume-Weighted Average Price)
+  ;;    - Minimize market impact
+  ;;    - Adaptive algorithms
+  ;;
+  ;; 6. Multi-period optimization
+  ;;    - Predict future drift
+  ;;    - Optimal trading trajectory
+  ;;    - Minimize cumulative costs
+  ;;    - Dynamic programming solution
+  ;;
+  ;; 7. Factor-based rebalancing
+  ;;    - Rebalance to target factor exposures
+  ;;    - Maintain beta, momentum, value loadings
+  ;;    - Factor timing overlays
+  ;;    - Risk parity across factors
+  ;;
+  ;; 8. Machine learning optimization
+  ;;    - Learn optimal thresholds from data
+  ;;    - Predict benefit from market regime
+  ;;    - Adaptive rebalancing frequency
+  ;;    - Reinforcement learning agent
+  ;;
+  ;; ACADEMIC REFERENCES:
+  ;; - DeMiguel et al. (2009): "Optimal Versus Naive Diversification"
+  ;; - Dichtl et al. (2014): "Rebalancing Strategies for Portfolio Optimization"
+  ;; - Perold & Sharpe (1988): "Dynamic Strategies for Asset Allocation"
+  ;; - Donohue & Yip (2003): "Optimal Portfolio Rebalancing with Transaction Costs"
+  ;;
+
+  "✅ Rebalancing optimization complete!")

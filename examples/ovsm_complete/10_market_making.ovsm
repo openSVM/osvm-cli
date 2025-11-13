@@ -1,0 +1,213 @@
+;; ============================================
+;; OVSM Example 10: Market Making Strategies
+;; ============================================
+
+(do
+  (log :message "=== BASIC MARKET MAKING ===")
+
+  ;; Market parameters
+  (define mid_price 50.0)
+  (define spread 0.10)  ;; 10 cent spread
+  (define order_size 100)
+
+  (define bid_price (- mid_price (/ spread 2.0)))
+  (define ask_price (+ mid_price (/ spread 2.0)))
+
+  (log :message "Mid price:" :value mid_price)
+  (log :message "Bid:" :value bid_price)
+  (log :message "Ask:" :value ask_price)
+  (log :message "Spread:" :value spread)
+
+  ;; Expected profit per round trip
+  (define profit_per_rt (* order_size spread))
+  (log :message "Profit per round trip:" :value profit_per_rt)
+
+  (log :message "\n=== INVENTORY MANAGEMENT ===")
+
+  ;; Track inventory risk
+  (define max_inventory 1000)
+  (define current_inventory 500)
+  (define target_inventory 0)
+
+  (define inventory_skew (/ current_inventory max_inventory))
+  (log :message "Current inventory:" :value current_inventory)
+  (log :message "Max inventory:" :value max_inventory)
+  (log :message "Inventory skew:" :value inventory_skew)
+
+  ;; Adjust quotes based on inventory
+  (define skew_adjustment (* inventory_skew 0.05))  ;; 5% max adjustment
+
+  (define adjusted_bid (- bid_price (* mid_price skew_adjustment)))
+  (define adjusted_ask (+ ask_price (* mid_price skew_adjustment)))
+
+  (log :message "Adjusted bid (skewed):" :value adjusted_bid)
+  (log :message "Adjusted ask (skewed):" :value adjusted_ask)
+
+  (log :message "\n=== AVELLANEDA-STOIKOV MODEL ===")
+
+  ;; Optimal market making with inventory risk
+  (define risk_aversion 0.5)
+  (define volatility 0.02)  ;; 2% vol
+  (define time_horizon 1.0)  ;; 1 day
+
+  ;; Reservation price (adjust mid based on inventory)
+  (define q current_inventory)
+  (define reservation_price (- mid_price (* risk_aversion volatility volatility q time_horizon)))
+
+  (log :message "Reservation price:" :value reservation_price)
+
+  ;; Optimal spread
+  (define gamma risk_aversion)
+  (define optimal_half_spread (+ (* gamma volatility volatility time_horizon)
+                                 (/ (* 2.0 (/ 1.0 gamma)) (* volatility volatility time_horizon))))
+
+  ;; Simplified: spread = gamma * sigma^2 * T
+  (define as_spread (* 2.0 gamma volatility volatility time_horizon))
+
+  (log :message "Optimal spread (AS model):" :value as_spread)
+
+  (define as_bid (- reservation_price (/ as_spread 2.0)))
+  (define as_ask (+ reservation_price (/ as_spread 2.0)))
+
+  (log :message "AS Bid:" :value as_bid)
+  (log :message "AS Ask:" :value as_ask)
+
+  (log :message "\n=== ADVERSE SELECTION PROTECTION ===")
+
+  ;; Detect toxic flow and widen spreads
+  (define recent_trades [
+    [:buy 100 0.5]    ;; [side, size, time_ago]
+    [:buy 150 0.4]
+    [:sell 80 0.3]
+    [:buy 200 0.2]
+    [:buy 120 0.1]
+  ])
+
+  ;; Calculate order flow imbalance
+  (define buy_volume 0.0)
+  (define sell_volume 0.0)
+
+  (for (trade recent_trades)
+    (define side (first trade))
+    (define size (first (drop trade 1)))
+    (if (= side :buy)
+        (set! buy_volume (+ buy_volume size))
+        (set! sell_volume (+ sell_volume size))))
+
+  (define flow_imbalance (/ (- buy_volume sell_volume) (+ buy_volume sell_volume)))
+  (log :message "Order flow imbalance:" :value flow_imbalance)
+
+  ;; Widen spread if detecting adverse selection
+  (define toxicity_threshold 0.5)
+  (define spread_widening (if (> flow_imbalance toxicity_threshold)
+                              2.0
+                              (if (< flow_imbalance (- toxicity_threshold))
+                                  2.0
+                                  1.0)))
+
+  (define protected_spread (* spread spread_widening))
+  (log :message "Spread widening factor:" :value spread_widening)
+  (log :message "Protected spread:" :value protected_spread)
+
+  (log :message "\n=== QUOTE LAYERING ===")
+
+  ;; Multiple price levels
+  (define num_layers 5)
+  (define size_per_layer 100)
+  (define price_increment 0.02)
+
+  (log :message "Building" :value num_layers)
+
+  (define layer 0)
+  (while (< layer num_layers)
+    (define bid_offset (* layer price_increment))
+    (define ask_offset (* layer price_increment))
+
+    (define layer_bid (- mid_price (+ (/ spread 2.0) bid_offset)))
+    (define layer_ask (+ mid_price (+ (/ spread 2.0) ask_offset)))
+
+    (log :message "Layer" :value layer)
+    (log :message "  Bid:" :value layer_bid)
+    (log :message "  Ask:" :value layer_ask)
+
+    (set! layer (+ layer 1)))
+
+  (log :message "\n=== PNL CALCULATION ===")
+
+  ;; Track realized and unrealized PnL
+  (define trades_executed [
+    [:buy 100 49.95]   ;; [side, qty, price]
+    [:sell 100 50.05]
+    [:buy 200 50.00]
+    [:sell 150 50.10]
+  ])
+
+  (define position 0.0)
+  (define realized_pnl 0.0)
+  (define avg_cost 0.0)
+  (define total_cost 0.0)
+
+  (for (trade trades_executed)
+    (define side (first trade))
+    (define qty (first (drop trade 1)))
+    (define price (first (drop trade 2)))
+
+    (if (= side :buy)
+        (do
+          (set! total_cost (+ total_cost (* qty price)))
+          (set! position (+ position qty))
+          (set! avg_cost (/ total_cost position)))
+        (do
+          ;; Sell - realize PnL
+          (define cost_basis (* qty avg_cost))
+          (define proceeds (* qty price))
+          (define trade_pnl (- proceeds cost_basis))
+          (set! realized_pnl (+ realized_pnl trade_pnl))
+          (set! position (- position qty))
+          (if (> position 0.0)
+              (set! total_cost (* position avg_cost))
+              (do
+                (set! total_cost 0.0)
+                (set! avg_cost 0.0))))))
+
+  (log :message "Final position:" :value position)
+  (log :message "Realized PnL:" :value realized_pnl)
+
+  ;; Unrealized PnL
+  (define unrealized_pnl (if (> position 0.0)
+                             (* position (- mid_price avg_cost))
+                             0.0))
+  (log :message "Unrealized PnL:" :value unrealized_pnl)
+  (log :message "Total PnL:" :value (+ realized_pnl unrealized_pnl))
+
+  (log :message "\n=== MAKER-TAKER ECONOMICS ===")
+
+  ;; Calculate profitability with fee structure
+  (define maker_rebate 0.0002)    ;; 2 bps rebate
+  (define taker_fee 0.0005)       ;; 5 bps fee
+  (define trades_per_day 100)
+
+  ;; Scenario 1: All maker (passive)
+  (define notional_per_trade (* mid_price order_size))
+  (define maker_revenue_per_trade (+ (* notional_per_trade maker_rebate)
+                                      (* notional_per_trade (/ spread mid_price))))
+  (define daily_maker_pnl (* trades_per_day maker_revenue_per_trade))
+
+  (log :message "All-maker daily PnL:" :value daily_maker_pnl)
+
+  ;; Scenario 2: All taker (aggressive)
+  (define taker_cost_per_trade (* notional_per_trade taker_fee))
+  (define daily_taker_pnl (- (* trades_per_day (* notional_per_trade (/ spread mid_price)))
+                              (* trades_per_day taker_cost_per_trade)))
+
+  (log :message "All-taker daily PnL:" :value daily_taker_pnl)
+
+  ;; Scenario 3: Mixed (70% maker, 30% taker)
+  (define maker_ratio 0.70)
+  (define taker_ratio 0.30)
+  (define mixed_pnl (+ (* daily_maker_pnl maker_ratio)
+                       (* daily_taker_pnl taker_ratio)))
+
+  (log :message "Mixed (70/30) daily PnL:" :value mixed_pnl)
+
+  "✅ Market making demo complete!")

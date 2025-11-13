@@ -1,0 +1,244 @@
+;; ============================================
+;; OVSM Example 34: Iceberg Order Detection
+;; ============================================
+;;
+;; THEORY: Detecting Hidden Liquidity in Order Books
+;; --------------------------------------------------
+;; Iceberg orders are large orders split into smaller visible pieces,
+;; with hidden liquidity replenished as the visible portion fills.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. VISIBLE VS HIDDEN LIQUIDITY:
+;;    - Trader wants to buy 10,000 shares
+;;    - Shows only 500 shares on order book
+;;    - As 500 fills, another 500 automatically appears
+;;    - Prevents market from seeing true size (information leakage)
+;;
+;; 2. DETECTION SIGNALS:
+;;    a) Fill/Visible Ratio: Total fills >> visible size
+;;       - Ratio > 2.0 strongly suggests iceberg
+;;       - Normal orders: ratio ≈ 1.0
+;;    b) Refill Pattern: Size stays constant despite fills
+;;       - High refill rate indicates automated replenishment
+;;       - Manual traders would show size variation
+;;
+;; 3. WHY DETECT ICEBERGS?
+;;    - Price impact prediction (more liquidity than visible)
+;;    - Front-running prevention (don't trade ahead blindly)
+;;    - Liquidity assessment (true depth calculation)
+;;    - Trade-with strategy (align with large player)
+;;
+;; 4. TRADING IMPLICATIONS:
+;;    - Detected iceberg = likely institutional order
+;;    - Trade WITH direction (piggyback on smart money)
+;;    - Avoid taking opposite side (will get run over)
+;;    - Use for price direction confirmation
+;;
+;; IMPLEMENTATION:
+;; Analyzes order book snapshots to identify iceberg patterns
+;; and recommend optimal trading strategy.
+;;
+(do
+  (log :message "=== ICEBERG ORDER DETECTION ===")
+
+  ;; ============================================
+  ;; HISTORICAL ORDER BOOK SNAPSHOTS
+  ;; ============================================
+  ;;
+  ;; Time-series data from order book at specific price level (100.5)
+  ;; Each snapshot shows:
+  ;; - price: Order price level
+  ;; - visible_size: Size shown on order book (50 shares constant)
+  ;; - fills: Number of shares filled in that period
+  ;;
+  ;; PATTERN ANALYSIS:
+  ;; - Visible size stays at 50 (suspicious!)
+  ;; - Fills vary: 20, 30, 25, 35 (total = 110 shares)
+  ;; - Normal order would deplete to 30, 0, 0, 0
+  ;; - Iceberg order refills after each fill
+  ;;
+  (define snapshots [
+    {:price 100.5 :visible_size 50 :fills 20}
+    {:price 100.5 :visible_size 50 :fills 30}
+    {:price 100.5 :visible_size 50 :fills 25}
+    {:price 100.5 :visible_size 50 :fills 35}
+  ])
+
+  ;; ============================================
+  ;; FILL-TO-VISIBLE RATIO ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Primary iceberg detection metric
+  ;; - Total fills / Average visible size
+  ;; - Normal order: Ratio ≈ 1.0 (fills once)
+  ;; - Iceberg order: Ratio > 2.0 (multiple refills)
+  ;;
+  ;; CALCULATION:
+  ;; - Total fills = 20 + 30 + 25 + 35 = 110 shares
+  ;; - Average visible = 50 shares (constant across snapshots)
+  ;; - Ratio = 110 / 50 = 2.2
+  ;;
+  ;; INTERPRETATION:
+  ;; - 2.2x ratio = filled 2.2x the visible amount
+  ;; - Clear evidence of hidden liquidity
+  ;; - Estimated total order size ≈ 110 + (110 * 0.7) = ~187 shares
+  ;;
+  (define total_fills 0)
+  (for (snap snapshots)
+    (set! total_fills (+ total_fills (get snap "fills"))))
+
+  (define avg_visible 50)  ;; Constant 50 shares across all snapshots
+  (define iceberg_ratio (/ total_fills avg_visible))
+
+  (log :message "Total fills:" :value total_fills)
+  (log :message "Avg visible:" :value avg_visible)
+  (log :message "Iceberg ratio:" :value iceberg_ratio)
+
+  ;; ============================================
+  ;; ICEBERG DETECTION THRESHOLD
+  ;; ============================================
+  ;;
+  ;; THEORY: Statistical threshold for classification
+  ;; - Ratio > 2.0 = High confidence iceberg detection
+  ;; - Accounts for normal market noise (~1.5x)
+  ;; - Production systems use dynamic thresholds based on volatility
+  ;;
+  ;; WHY 2.0?
+  ;; - Below 1.5: Could be coincidence (multiple buyers)
+  ;; - 1.5-2.0: Possible iceberg, need confirmation
+  ;; - Above 2.0: Very likely iceberg (automated refill pattern)
+  ;;
+  (define iceberg_detected (> iceberg_ratio 2))
+
+  (log :message "Iceberg detected:" :value iceberg_detected)
+
+  ;; ============================================
+  ;; HIDDEN LIQUIDITY ESTIMATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Estimate total order size from fill pattern
+  ;; - Typical iceberg shows 20-30% of total size
+  ;; - Remaining 70% hidden and replenished
+  ;; - Formula: Total ≈ Filled / (1 - Hidden%)
+  ;;
+  ;; CALCULATION:
+  ;; - Filled: 110 shares
+  ;; - Assumed hidden: 70%
+  ;; - Estimated total: 110 / 0.3 ≈ 367 shares
+  ;; - Remaining hidden: 367 - 110 = 257 shares
+  ;;
+  ;; NOTE: Conservative estimate (70% hidden)
+  ;; - Some icebergs show only 10% (90% hidden)
+  ;; - Market makers often use 5% visible
+  ;;
+  (when iceberg_detected
+    (log :message "🔍 Hidden liquidity present")
+    (log :message "  Estimated hidden:" :value (* total_fills 0.7)))
+
+  ;; ============================================
+  ;; REFILL RATE ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Secondary confirmation via size consistency
+  ;; - Iceberg maintains constant visible size
+  ;; - Refill event = size stays same between snapshots
+  ;; - High refill rate = automated replenishment
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Compare consecutive snapshots
+  ;; - Count events where size unchanged
+  ;; - Calculate refill rate = refills / total_comparisons
+  ;;
+  ;; EXPECTED PATTERNS:
+  ;; - Normal order: Refill rate ≈ 0% (size decreases)
+  ;; - Iceberg order: Refill rate > 70% (constant size)
+  ;;
+  (define refill_count 0)
+  (define i 0)
+
+  ;; Loop through consecutive snapshot pairs
+  (while (< i (- (length snapshots) 1))
+    ;; Get snapshot at index i and i+1
+    (define snap1 (first (drop snapshots i)))
+    (define snap2 (first (drop snapshots (+ i 1))))
+
+    ;; Extract visible sizes
+    (define size1 (get snap1 "visible_size"))
+    (define size2 (get snap2 "visible_size"))
+
+    ;; If sizes are equal, a refill occurred
+    ;; (normal order would show decreasing size)
+    (when (= size1 size2)
+      (set! refill_count (+ refill_count 1)))
+
+    (set! i (+ i 1)))
+
+  (log :message "Refill events:" :value refill_count)
+
+  ;; ============================================
+  ;; REFILL RATE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Percentage of snapshots showing refill behavior
+  ;; - Total comparisons = snapshots - 1 (consecutive pairs)
+  ;; - Refill rate = refills / comparisons
+  ;;
+  ;; CALCULATION:
+  ;; - Comparisons: 4 snapshots = 3 pairs
+  ;; - Refills: 3 (all showed constant size)
+  ;; - Rate: 3 / 3 = 100%
+  ;;
+  ;; INTERPRETATION:
+  ;; - 100% refill rate = perfect iceberg signature
+  ;; - Combined with 2.2x ratio = high confidence detection
+  ;;
+  (define refill_rate (/ refill_count (- (length snapshots) 1)))
+  (log :message "Refill rate:" :value refill_rate)
+
+  ;; ============================================
+  ;; TRADING STRATEGY RECOMMENDATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Information-based trading decision
+  ;; - Iceberg detected = institutional order
+  ;; - Institutions are often informed traders
+  ;; - Strategy: Trade WITH iceberg direction
+  ;;
+  ;; RATIONALE:
+  ;; 1. Size implies conviction (not noise trading)
+  ;; 2. Iceberg usage suggests information edge
+  ;; 3. Price will likely move in their direction
+  ;; 4. Taking opposite side = adverse selection
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - If iceberg: Follow their direction (momentum)
+  ;; - If normal: Use standard execution (no edge)
+  ;;
+  ;; RISK MANAGEMENT:
+  ;; - Position size proportional to confidence
+  ;; - Stop loss below iceberg entry (if they exit, we exit)
+  ;; - Monitor for iceberg completion (refills stop)
+  ;;
+  (define strategy (if iceberg_detected
+                       "✅ TRADE WITH - Follow iceberg direction"
+                       "⚠️ NORMAL - Standard execution"))
+
+  (log :message "Strategy:" :value strategy)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Multi-level analysis (detect icebergs across price levels)
+  ;; 2. Time-weighted fill rates (recent vs historical)
+  ;; 3. Exchange-specific patterns (venue differences)
+  ;; 4. Machine learning classification (pattern recognition)
+  ;; 5. Historical iceberg database (known player signatures)
+  ;; 6. Real-time alerts when icebergs detected
+  ;; 7. Size estimation using Bayesian updating
+  ;; 8. Integration with order flow toxicity metrics
+  ;;
+
+  "✅ Iceberg detection complete!")

@@ -1,0 +1,239 @@
+;; ============================================
+;; OVSM Example 12: Options & Volatility Trading
+;; ============================================
+
+(do
+  (log :message "=== BLACK-SCHOLES APPROXIMATION ===")
+
+  ;; Option parameters
+  (define spot_price 100.0)
+  (define strike_price 105.0)
+  (define time_to_expiry 0.25)  ;; 3 months
+  (define risk_free_rate 0.05)   ;; 5%
+  (define volatility 0.20)       ;; 20% vol
+
+  (log :message "Spot:" :value spot_price)
+  (log :message "Strike:" :value strike_price)
+  (log :message "Time to expiry:" :value time_to_expiry)
+  (log :message "Volatility:" :value volatility)
+
+  ;; Simplified sqrt approximation
+  (define sqrt_t_guess (/ time_to_expiry 2.0))
+  (define sqrt_t (/ (+ sqrt_t_guess (/ time_to_expiry (if (= sqrt_t_guess 0.0) 0.001 sqrt_t_guess))) 2.0))
+  (define vol_sqrt_t (* volatility sqrt_t))
+
+  ;; Moneyness (simplified without log)
+  (define moneyness (/ spot_price strike_price))
+  (define moneyness_factor (- moneyness 1.0))  ;; Linear approximation of log
+
+  (define d1_numerator (+ moneyness_factor (* time_to_expiry (+ risk_free_rate (* 0.5 volatility volatility)))))
+  (define d1 (/ d1_numerator vol_sqrt_t))
+  (define d2 (- d1 vol_sqrt_t))
+
+  (log :message "d1 (approx):" :value d1)
+  (log :message "d2 (approx):" :value d2)
+
+  ;; Rough option value estimation (intrinsic + time value)
+  (define intrinsic (if (> spot_price strike_price)
+                        (- spot_price strike_price)
+                        0.0))
+  (define time_value (* spot_price volatility sqrt_t))
+  (define option_value (+ intrinsic (* 0.4 time_value)))  ;; Simplified
+
+  (log :message "Intrinsic value:" :value intrinsic)
+  (log :message "Estimated option value:" :value option_value)
+
+  (log :message "\n=== IMPLIED VOLATILITY (IV) ===")
+
+  ;; Given market price, back out implied volatility
+  (define market_option_price 5.50)
+  (define iv_guess 0.25)  ;; Start with 25% vol guess
+
+  ;; Newton-Raphson iteration (simplified - just 3 iterations)
+  (define iteration 0)
+  (while (< iteration 3)
+    ;; Calculate theoretical price at current IV guess
+    (define iv_sqrt_t (* iv_guess sqrt_t))
+    (define theoretical_time_value (* spot_price iv_guess sqrt_t))
+    (define theoretical_price (+ intrinsic (* 0.4 theoretical_time_value)))
+
+    ;; Error
+    (define price_error (- theoretical_price market_option_price))
+
+    ;; Vega (sensitivity to vol) - approximate
+    (define vega (* spot_price sqrt_t))
+
+    ;; Update IV
+    (define iv_adjustment (/ price_error vega))
+    (set! iv_guess (- iv_guess iv_adjustment))
+
+    (log :message "Iteration" :value iteration)
+    (log :message "  IV guess:" :value iv_guess)
+
+    (set! iteration (+ iteration 1)))
+
+  (define implied_vol iv_guess)
+  (log :message "Implied volatility:" :value implied_vol)
+
+  (log :message "\n=== VOLATILITY SMILE ===")
+
+  ;; Different strikes have different IVs
+  (define strikes [90.0 95.0 100.0 105.0 110.0])
+  (define implied_vols [0.28 0.24 0.20 0.24 0.28])  ;; Smile shape
+
+  (log :message "Strike | IV")
+  (define k 0)
+  (while (< k (length strikes))
+    (define strike (first (drop strikes k)))
+    (define iv (first (drop implied_vols k)))
+    (log :message strike :value iv)
+    (set! k (+ k 1)))
+
+  ;; ATM vs OTM vol spread
+  (define atm_vol 0.20)
+  (define otm_vol 0.28)
+  (define vol_skew (- otm_vol atm_vol))
+  (log :message "Volatility skew:" :value vol_skew)
+
+  (log :message "\n=== REALIZED VOLATILITY ===")
+
+  ;; Calculate historical volatility from returns
+  (define prices [100.0 101.5 100.8 102.3 101.5 103.0 102.5 104.0 103.2 105.0])
+  (define returns [])
+
+  (define i 0)
+  (while (< i (- (length prices) 1))
+    (define p1 (first (drop prices i)))
+    (define p2 (first (drop prices (+ i 1))))
+    (define ret (/ (- p2 p1) p1))
+    (set! returns (append returns [ret]))
+    (set! i (+ i 1)))
+
+  ;; Calculate mean return
+  (define sum_ret 0.0)
+  (for (r returns)
+    (set! sum_ret (+ sum_ret r)))
+  (define mean_ret (/ sum_ret (length returns)))
+
+  ;; Calculate variance
+  (define sum_sq_ret 0.0)
+  (for (r returns)
+    (define dev (- r mean_ret))
+    (set! sum_sq_ret (+ sum_sq_ret (* dev dev))))
+
+  (define ret_variance (/ sum_sq_ret (length returns)))
+  (define ret_std_guess (/ ret_variance 2.0))
+  (define ret_std (/ (+ ret_std_guess (/ ret_variance (if (= ret_std_guess 0.0) 0.001 ret_std_guess))) 2.0))
+
+  ;; Annualize (252 trading days) - sqrt(252) ≈ 15.87
+  (define sqrt_252_guess (/ 252.0 2.0))
+  (define sqrt_252 (/ (+ sqrt_252_guess (/ 252.0 sqrt_252_guess)) 2.0))
+  (define realized_vol (* ret_std sqrt_252))
+
+  (log :message "Daily volatility:" :value ret_std)
+  (log :message "Annualized realized vol:" :value realized_vol)
+
+  (log :message "\n=== VOLATILITY TRADING SIGNALS ===")
+
+  ;; IV vs RV comparison
+  (define iv_rv_spread (- implied_vol realized_vol))
+  (log :message "IV - RV spread:" :value iv_rv_spread)
+
+  (define vol_signal (if (> iv_rv_spread 0.05)
+                         "Sell vol (IV too high)"
+                         (if (< iv_rv_spread -0.05)
+                             "Buy vol (IV too low)"
+                             "Fair value")))
+
+  (log :message "Signal:" :value vol_signal)
+
+  (log :message "\n=== STRADDLE STRATEGY ===")
+
+  ;; Buy ATM call and put
+  (define atm_strike 100.0)
+  (define call_price 5.50)
+  (define put_price 4.80)
+  (define straddle_cost (+ call_price put_price))
+
+  (log :message "Straddle cost:" :value straddle_cost)
+
+  ;; Breakeven points
+  (define upper_breakeven (+ atm_strike straddle_cost))
+  (define lower_breakeven (- atm_strike straddle_cost))
+
+  (log :message "Upper breakeven:" :value upper_breakeven)
+  (log :message "Lower breakeven:" :value lower_breakeven)
+
+  ;; PnL at various spot prices
+  (define scenarios [85.0 90.0 95.0 100.0 105.0 110.0 115.0])
+
+  (log :message "\nStraddle PnL scenarios:")
+  (for (scenario scenarios)
+    (define call_payoff (if (> scenario atm_strike)
+                            (- scenario atm_strike)
+                            0.0))
+    (define put_payoff (if (< scenario atm_strike)
+                           (- atm_strike scenario)
+                           0.0))
+    (define total_payoff (+ call_payoff put_payoff))
+    (define pnl (- total_payoff straddle_cost))
+
+    (log :message "Spot" :value scenario)
+    (log :message "  PnL:" :value pnl))
+
+  (log :message "\n=== IRON CONDOR ===")
+
+  ;; Sell ATM straddle, buy OTM wings
+  (define short_call_strike 105.0)
+  (define short_put_strike 95.0)
+  (define long_call_strike 110.0)
+  (define long_put_strike 90.0)
+
+  (define short_call_premium 3.50)
+  (define short_put_premium 3.20)
+  (define long_call_cost 1.50)
+  (define long_put_cost 1.30)
+
+  (define net_credit (- (+ short_call_premium short_put_premium)
+                        (+ long_call_cost long_put_cost)))
+
+  (log :message "Net credit received:" :value net_credit)
+
+  ;; Max profit = net credit
+  (log :message "Max profit:" :value net_credit)
+
+  ;; Max loss (if spot moves beyond wings)
+  (define wing_width (- long_call_strike short_call_strike))
+  (define max_loss (- wing_width net_credit))
+  (log :message "Max loss:" :value max_loss)
+
+  ;; Profit range
+  (log :message "Profit range:" :value short_put_strike)
+  (log :message "         to:" :value short_call_strike)
+
+  (log :message "\n=== GAMMA SCALPING ===")
+
+  ;; Delta-hedged option position - profit from gamma
+  (define long_calls 10)
+  (define call_delta 0.50)
+  (define call_gamma 0.05)
+  (define hedge_ratio (* long_calls call_delta))
+
+  (log :message "Long calls:" :value long_calls)
+  (log :message "Initial hedge (short stock):" :value hedge_ratio)
+
+  ;; Stock moves up
+  (define stock_move 2.0)
+  (define new_delta (+ call_delta (* call_gamma stock_move)))
+  (define new_hedge_ratio (* long_calls new_delta))
+  (define rehedge_amount (- new_hedge_ratio hedge_ratio))
+
+  (log :message "\nAfter $2 stock move:")
+  (log :message "New delta:" :value new_delta)
+  (log :message "Rehedge (buy back):" :value rehedge_amount)
+
+  ;; Profit from rehedging
+  (define gamma_pnl (* rehedge_amount stock_move 0.5))
+  (log :message "Gamma scalp profit:" :value gamma_pnl)
+
+  "✅ Options & volatility demo complete!")

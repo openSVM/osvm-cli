@@ -1,0 +1,354 @@
+;; ============================================
+;; OVSM Example 18: MEV Bundle Sniping & Jito Integration
+;; ============================================
+
+(do
+  (log :message "=== JITO BUNDLE CONSTRUCTION ===")
+
+  ;; Jito tip account for MEV bundles
+  (define jito_tip_accounts [
+    "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5"
+    "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe"
+    "Cw8CFyM9FkoMi7K7Cz6HNuQ2gC8WvMtq3dVPGNVKdGsF"
+  ])
+
+  ;; Select tip account (round-robin)
+  (define selected_tip (first jito_tip_accounts))
+  (log :message "Selected Jito tip account:" :value selected_tip)
+
+  (log :message "\n=== BUNDLE TRANSACTION ORDERING ===")
+
+  ;; Critical: Transaction order in bundle determines success
+  (define bundle_txs [
+    {:index 0 :type "tip" :amount 0.01 :priority "critical"}
+    {:index 1 :type "snipe_buy" :amount 5.0 :priority "high"}
+    {:index 2 :type "set_compute_limit" :units 400000 :priority "high"}
+    {:index 3 :type "approve_token" :priority "medium"}
+  ])
+
+  (log :message "Bundle transaction count:" :value (length bundle_txs))
+
+  ;; Validate bundle ordering
+  (define has_tip false)
+  (for (tx bundle_txs)
+    (define tx_type (get tx "type"))
+    (when (= tx_type "tip")
+      (set! has_tip true)))
+
+  (when (not has_tip)
+    (log :message "⚠️ WARNING: Bundle missing tip transaction"))
+
+  (log :message "Bundle validation:" :value (if has_tip "✅ Valid" "❌ Invalid"))
+
+  (log :message "\n=== DYNAMIC TIP CALCULATION ===")
+
+  ;; Calculate optimal tip based on competition
+  (define competitor_tips [0.005 0.008 0.012 0.015 0.020])
+
+  ;; Find max competitor tip
+  (define max_competitor_tip 0.0)
+  (for (tip competitor_tips)
+    (when (> tip max_competitor_tip)
+      (set! max_competitor_tip tip)))
+
+  (log :message "Max competitor tip:" :value max_competitor_tip)
+
+  ;; Outbid by 20%
+  (define optimal_tip (* max_competitor_tip 1.2))
+  (log :message "Optimal tip (120% of max):" :value optimal_tip)
+
+  ;; Cap tip at 5% of trade value
+  (define trade_value 5.0)
+  (define max_tip (* trade_value 0.05))
+  (define final_tip (if (> optimal_tip max_tip) max_tip optimal_tip))
+
+  (log :message "Final tip (capped):" :value final_tip)
+
+  ;; Expected ROI after tip
+  (define expected_gain 1.5)  ;; Expected profit
+  (define net_profit (- expected_gain final_tip))
+  (define roi (* (/ net_profit trade_value) 100))
+
+  (log :message "Expected net profit:" :value net_profit)
+  (log :message "Expected ROI:" :value roi)
+
+  (log :message "\n=== BUNDLE SIMULATION & VALIDATION ===")
+
+  ;; Simulate bundle execution
+  (define token_liquidity 20.0)
+  (define our_buy_amount 5.0)
+
+  ;; Check if bundle will succeed
+  (define bundle_impact (* (/ our_buy_amount token_liquidity) 100))
+  (log :message "Bundle market impact:" :value bundle_impact)
+
+  ;; Estimate slippage
+  (define base_slippage 0.5)
+  (define impact_slippage (* bundle_impact 0.1))
+  (define total_slippage (+ base_slippage impact_slippage))
+
+  (log :message "Total estimated slippage:" :value total_slippage)
+
+  ;; Check if profitable after slippage
+  (define min_profit_threshold 0.1)
+  (define profit_after_slippage (- net_profit (* trade_value (/ total_slippage 100))))
+
+  (log :message "Profit after slippage:" :value profit_after_slippage)
+
+  (define bundle_viable (> profit_after_slippage min_profit_threshold))
+  (log :message "Bundle viable:" :value bundle_viable)
+
+  (log :message "\n=== COMPUTE BUDGET OPTIMIZATION ===")
+
+  ;; Optimize compute units for bundle
+  (define base_compute_units 200000)
+  (define bundle_tx_count 4)
+
+  ;; Add units per transaction
+  (define total_compute_units (+ base_compute_units (* bundle_tx_count 50000)))
+
+  (log :message "Total compute units:" :value total_compute_units)
+
+  ;; Compute budget vs priority fee trade-off
+  (define compute_unit_price 50000)  ;; micro-lamports
+  (define compute_fee (* total_compute_units (/ compute_unit_price 1000000)))
+
+  (log :message "Compute fee (SOL):" :value compute_fee)
+
+  ;; Total bundle cost
+  (define total_bundle_cost (+ final_tip compute_fee))
+  (log :message "Total bundle cost:" :value total_bundle_cost)
+
+  (log :message "\n=== BUNDLE LANDING PROBABILITY ===")
+
+  ;; Factors affecting landing probability
+  (define tip_percentile 0.85)  ;; 85th percentile tip
+  (define compute_percentile 0.75)
+  (define timing_score 0.90)  ;; How fast we submit
+  (define network_congestion 0.40)  ;; Lower = better
+
+  ;; Calculate landing probability
+  (define base_probability (* (* tip_percentile compute_percentile) timing_score))
+  (define congestion_penalty (* network_congestion 0.3))
+  (define landing_probability (- base_probability congestion_penalty))
+
+  (log :message "Tip percentile:" :value tip_percentile)
+  (log :message "Landing probability:" :value landing_probability)
+
+  ;; Expected value calculation
+  (define expected_value (* profit_after_slippage landing_probability))
+  (log :message "Expected value (EV):" :value expected_value)
+
+  (log :message "\n=== MULTI-BUNDLE STRATEGY ===")
+
+  ;; Send multiple bundles with different tips
+  (define bundle_variants [
+    {:tip 0.01 :probability 0.60}
+    {:tip 0.015 :probability 0.75}
+    {:tip 0.02 :probability 0.85}
+    {:tip 0.025 :probability 0.92}
+  ])
+
+  (log :message "Bundle variants:" :value (length bundle_variants))
+
+  ;; Calculate optimal strategy
+  (define best_ev 0.0)
+  (define best_tip 0.0)
+
+  (for (variant bundle_variants)
+    (define tip (get variant "tip"))
+    (define prob (get variant "probability"))
+
+    (define variant_profit (- expected_gain tip))
+    (define variant_ev (* variant_profit prob))
+
+    (log :message "Tip:" :value tip)
+    (log :message "  Probability:" :value prob)
+    (log :message "  EV:" :value variant_ev)
+
+    (when (> variant_ev best_ev)
+      (set! best_ev variant_ev)
+      (set! best_tip tip)))
+
+  (log :message "Best tip strategy:" :value best_tip)
+  (log :message "Best expected value:" :value best_ev)
+
+  (log :message "\n=== BUNDLE RETRY LOGIC ===")
+
+  ;; Retry strategy if bundle fails
+  (define max_retries 3)
+  (define retry_delay_ms 50)
+  (define tip_increase_per_retry 0.005)
+
+  (define retry_count 0)
+  (define bundle_landed false)
+
+  (while (and (< retry_count max_retries) (not bundle_landed))
+    (define current_tip (+ final_tip (* retry_count tip_increase_per_retry)))
+
+    (log :message "Retry" :value retry_count)
+    (log :message "  Tip:" :value current_tip)
+
+    ;; Simulate landing attempt (70% success on retry)
+    (define retry_success (> 0.7 0.5))
+
+    (when retry_success
+      (set! bundle_landed true)
+      (log :message "  ✅ Bundle landed"))
+
+    (set! retry_count (+ retry_count 1)))
+
+  (when (not bundle_landed)
+    (log :message "❌ Bundle failed after max retries"))
+
+  (log :message "\n=== CROSS-BUNDLE ARBITRAGE ===")
+
+  ;; Exploit price differences between bundle executions
+  (define pumpswap_price 0.0001)
+  (define raydium_price 0.00012)
+
+  (define arb_spread (* (/ (- raydium_price pumpswap_price) pumpswap_price) 100))
+  (log :message "Arbitrage spread:" :value arb_spread)
+
+  ;; Bundle strategy: Buy on PumpSwap, sell on Raydium
+  (define arb_bundle [
+    {:action "buy" :dex "pumpswap" :amount 5.0 :price pumpswap_price}
+    {:action "sell" :dex "raydium" :amount 5.0 :price raydium_price}
+  ])
+
+  (define buy_cost (* 5.0 pumpswap_price))
+  (define sell_revenue (* 5.0 raydium_price))
+  (define arb_profit (- sell_revenue buy_cost))
+
+  (log :message "Buy cost:" :value buy_cost)
+  (log :message "Sell revenue:" :value sell_revenue)
+  (log :message "Arb profit:" :value arb_profit)
+
+  ;; Net profit after bundle costs
+  (define net_arb_profit (- arb_profit total_bundle_cost))
+  (log :message "Net arb profit:" :value net_arb_profit)
+
+  (log :message "\n=== BACKRUN STRATEGY ===")
+
+  ;; Backrun other snipers' buys
+  (define victim_buy_amount 10.0)
+  (define pool_liquidity 30.0)
+
+  ;; Calculate price after victim buy
+  (define k (* pool_liquidity 1000000))  ;; x*y=k
+  (define new_sol_reserves (+ pool_liquidity victim_buy_amount))
+  (define new_token_reserves (/ k new_sol_reserves))
+  (define victim_tokens (- 1000000 new_token_reserves))
+
+  (log :message "Victim acquired tokens:" :value victim_tokens)
+
+  ;; Our backrun buy
+  (define our_backrun_amount 3.0)
+  (define backrun_sol_reserves (+ new_sol_reserves our_backrun_amount))
+  (define backrun_token_reserves (/ k backrun_sol_reserves))
+  (define our_tokens (- new_token_reserves backrun_token_reserves))
+
+  (log :message "Our backrun tokens:" :value our_tokens)
+
+  ;; Immediate sell estimate
+  (define sell_price (* (/ our_backrun_amount our_tokens) 1.1))  ;; 10% pump estimate
+  (define sell_revenue (* our_tokens sell_price))
+  (define backrun_profit (- sell_revenue our_backrun_amount))
+
+  (log :message "Estimated backrun profit:" :value backrun_profit)
+
+  (log :message "\n=== BUNDLE PRIORITY QUEUE ===")
+
+  ;; Manage multiple pending bundles
+  (define pending_bundles [
+    {:id "bundle1" :tip 0.01 :priority 70 :status "pending"}
+    {:id "bundle2" :tip 0.015 :priority 85 :status "pending"}
+    {:id "bundle3" :tip 0.02 :priority 95 :status "landed"}
+  ])
+
+  (log :message "Managing" :value (length pending_bundles))
+  (log :message "bundles")
+
+  ;; Cancel lower priority bundles if higher one lands
+  (define highest_priority 0)
+  (define landed_bundle null)
+
+  (for (bundle pending_bundles)
+    (define status (get bundle "status"))
+    (define priority (get bundle "priority"))
+
+    (when (= status "landed")
+      (when (> priority highest_priority)
+        (set! highest_priority priority)
+        (set! landed_bundle (get bundle "id")))))
+
+  (when (not (null? landed_bundle))
+    (log :message "Bundle landed:" :value landed_bundle)
+    (log :message "Cancelling lower priority bundles..."))
+
+  (log :message "\n=== ANTI-SANDWICH PROTECTION ===")
+
+  ;; Protect our snipe from being sandwiched
+  (define sandwich_risk_score 0.0)
+
+  ;; Check if our trade is large enough to sandwich
+  (define our_trade_size 5.0)
+  (define pool_size 20.0)
+  (define size_ratio (/ our_trade_size pool_size))
+
+  (when (> size_ratio 0.1)  ;; >10% of pool
+    (set! sandwich_risk_score (+ sandwich_risk_score 0.4)))
+
+  ;; Check if pool is popular (more sandwichers)
+  (define pool_volume_24h 500.0)
+  (when (> pool_volume_24h 100)
+    (set! sandwich_risk_score (+ sandwich_risk_score 0.3)))
+
+  ;; Check network congestion (easier to sandwich)
+  (when (> network_congestion 0.5)
+    (set! sandwich_risk_score (+ sandwich_risk_score 0.3)))
+
+  (log :message "Sandwich risk score:" :value sandwich_risk_score)
+
+  ;; Mitigation: Private mempool via bundle
+  (define using_bundle true)
+  (when using_bundle
+    (set! sandwich_risk_score (* sandwich_risk_score 0.2))  ;; 80% reduction
+    (log :message "Risk after bundle protection:" :value sandwich_risk_score))
+
+  (log :message "\n=== FINAL MEV BUNDLE DECISION ===")
+
+  ;; Aggregate all factors
+  (define mev_score 0.0)
+
+  ;; Profitability (40%)
+  (when (> net_arb_profit 0.5) (set! mev_score (+ mev_score 0.4)))
+
+  ;; Landing probability (30%)
+  (when (> landing_probability 0.7) (set! mev_score (+ mev_score 0.3)))
+
+  ;; Low sandwich risk (20%)
+  (when (< sandwich_risk_score 0.3) (set! mev_score (+ mev_score 0.2)))
+
+  ;; Positive expected value (10%)
+  (when (> expected_value 0.2) (set! mev_score (+ mev_score 0.1)))
+
+  (log :message "MEV bundle score:" :value mev_score)
+
+  (define mev_decision (if (>= mev_score 0.75)
+                           "🚀 EXECUTE MEV BUNDLE"
+                           (if (>= mev_score 0.5)
+                               "⚠️ RISKY - Consider reducing size"
+                               "❌ SKIP - Unfavorable conditions")))
+
+  (log :message "MEV Decision:" :value mev_decision)
+
+  (when (>= mev_score 0.5)
+    (log :message "\nBundle Configuration:")
+    (log :message "  Tip:" :value best_tip)
+    (log :message "  Compute units:" :value total_compute_units)
+    (log :message "  Expected profit:" :value net_arb_profit)
+    (log :message "  Landing probability:" :value landing_probability)
+    (log :message "  Expected value:" :value expected_value))
+
+  "✅ MEV bundle sniping analysis complete!")

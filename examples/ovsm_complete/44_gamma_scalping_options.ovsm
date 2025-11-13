@@ -1,0 +1,350 @@
+;; ============================================
+;; OVSM Example 44: Gamma Scalping & Delta Hedging
+;; ============================================
+;;
+;; THEORY: Options Market Making with Dynamic Hedging
+;; --------------------------------------------------
+;; Gamma scalping is a sophisticated options trading strategy that profits from
+;; volatility by maintaining a delta-neutral portfolio through continuous rehedging.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. THE GREEKS:
+;;    - Delta (Δ): Option price change per $1 underlying move (0 to 1 for calls)
+;;    - Gamma (Γ): Rate of delta change per $1 underlying move
+;;    - Theta (Θ): Option value decay per day (time decay)
+;;    - Vega (ν): Option price change per 1% volatility change
+;;
+;; 2. DELTA HEDGING:
+;;    - Buy/sell underlying to maintain portfolio delta ≈ 0
+;;    - Delta-neutral = immune to small price moves
+;;    - Rebalance when underlying moves significantly
+;;
+;; 3. GAMMA SCALPING:
+;;    - Profit from rehedging as delta changes
+;;    - When price ↑: Delta increases → sell underlying (sell high)
+;;    - When price ↓: Delta decreases → buy underlying (buy low)
+;;    - Net effect: Buy low, sell high repeatedly
+;;
+;; 4. PROFITABILITY:
+;;    - Profit = Realized Volatility - Implied Volatility (paid in premium)
+;;    - If realized vol > implied vol → profit from rehedging > theta decay
+;;    - If realized vol < implied vol → theta decay > rehedging profit
+;;
+;; ACADEMIC REFERENCES:
+;; - Black & Scholes (1973): Options Pricing Theory
+;; - Taleb (1997): Dynamic Hedging
+;; - Carr & Madan (2001): Towards a Theory of Volatility Trading
+;;
+;; IMPLEMENTATION:
+;; This example simulates a gamma scalping position with:
+;; - Long 100 ATM call options
+;; - Dynamic delta hedging with rebalance triggers
+;; - P&L tracking from hedging gains vs theta decay
+;;
+(do
+  (log :message "=== GAMMA SCALPING STRATEGY ===")
+
+  ;; ============================================
+  ;; POSITION SETUP
+  ;; ============================================
+  ;;
+  ;; Options position:
+  ;; - 100 contracts of ATM call options
+  ;; - Strike = $100 (at-the-money)
+  ;; - 30 days to expiration
+  ;; - Implied volatility = 40% (IV we paid)
+  ;;
+  ;; Greeks per contract:
+  ;; - Delta = 0.50 (ATM calls are ~0.50 delta)
+  ;; - Gamma = 0.03 (high for ATM options)
+  ;; - Theta = -0.15 (lose $0.15 per day per contract)
+  ;; - Premium paid = $5.00 per contract
+  ;;
+  (define num_contracts 100)
+  (define strike 100)
+  (define underlying_price 100)
+  (define delta_per_contract 0.50)
+  (define gamma_per_contract 0.03)
+  (define theta_per_contract -0.15)
+  (define premium_paid 5.00)
+
+  (log :message "Position: Long" :value num_contracts)
+  (log :message "Strike:" :value strike)
+  (log :message "Premium paid per contract:" :value premium_paid)
+
+  ;; ============================================
+  ;; INITIAL DELTA HEDGE
+  ;; ============================================
+  ;;
+  ;; THEORY: To achieve delta neutrality, we must offset option delta
+  ;; - Options delta = num_contracts × delta_per_contract × 100 shares
+  ;; - For 100 contracts × 0.50 delta × 100 = 5,000 shares delta
+  ;; - To neutralize: Short 5,000 shares of underlying
+  ;;
+  ;; CALCULATION:
+  ;; - Portfolio delta before hedge = +5,000 (long delta from calls)
+  ;; - Hedge position = -5,000 shares (short underlying)
+  ;; - Portfolio delta after hedge = 0 (delta neutral)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - Delta neutral = small price moves don't affect P&L
+  ;; - We only profit/lose from gamma effects (larger moves)
+  ;;
+  (define total_delta (* (* num_contracts delta_per_contract) 100))
+  (define hedge_shares (* total_delta -1))  ;; Short to neutralize
+
+  (log :message "\n=== INITIAL HEDGE ===")
+  (log :message "Total delta:" :value total_delta)
+  (log :message "Hedge position:" :value hedge_shares)
+
+  ;; ============================================
+  ;; SCENARIO 1: PRICE MOVES UP
+  ;; ============================================
+  ;;
+  ;; THEORY: As underlying rises, call delta increases (gamma effect)
+  ;; - New delta = old_delta + (gamma × price_move)
+  ;; - When delta increases, we're now net long → rehedge by selling
+  ;;
+  ;; CALCULATION:
+  ;; - Price moves: $100 → $102 (+$2)
+  ;; - Delta change = gamma × price_move = 0.03 × 2 = 0.06
+  ;; - New delta per contract = 0.50 + 0.06 = 0.56
+  ;; - New portfolio delta = 100 × 0.56 × 100 = 5,600 shares
+  ;; - Currently hedged at -5,000 → need to sell 600 more
+  ;;
+  ;; REHEDGING PROFIT:
+  ;; - Sell 600 shares at $102 = $61,200 revenue
+  ;; - These shares have cost basis of $100 (initial hedge)
+  ;; - Profit = 600 × ($102 - $100) = $1,200
+  ;;
+  (define price_move_up 2)
+  (define new_price (+ underlying_price price_move_up))
+  (define delta_change (* gamma_per_contract price_move_up))
+  (define new_delta_per_contract (+ delta_per_contract delta_change))
+  (define new_total_delta (* (* num_contracts new_delta_per_contract) 100))
+  (define rehedge_amount (- new_total_delta total_delta))
+
+  (log :message "\n=== PRICE MOVE UP: $100 → $102 ===")
+  (log :message "New delta per contract:" :value new_delta_per_contract)
+  (log :message "New total delta:" :value new_total_delta)
+  (log :message "Need to sell shares:" :value rehedge_amount)
+
+  ;; Profit from selling at higher price
+  (define rehedge_profit (* rehedge_amount price_move_up))
+  (log :message "Rehedging profit:" :value rehedge_profit)
+
+  ;; ============================================
+  ;; SCENARIO 2: PRICE MOVES DOWN
+  ;; ============================================
+  ;;
+  ;; THEORY: As underlying falls, call delta decreases
+  ;; - When delta decreases, we're now net short → rehedge by buying
+  ;; - Buy low after selling high = profit
+  ;;
+  ;; CALCULATION:
+  ;; - Starting from $102, price moves to $100 (-$2)
+  ;; - Delta change = gamma × price_move = 0.03 × (-2) = -0.06
+  ;; - New delta = 0.56 - 0.06 = 0.50 (back to original)
+  ;; - New portfolio delta = 5,000 shares
+  ;; - Currently hedged at -5,600 → need to buy 600 shares
+  ;;
+  ;; REHEDGING PROFIT:
+  ;; - Buy 600 shares at $100 = $60,000 cost
+  ;; - Previously sold at $102 = $61,200
+  ;; - Profit = $61,200 - $60,000 = $1,200
+  ;;
+  (define price_move_down -2)
+  (define price_after_down (+ new_price price_move_down))
+  (define delta_change_down (* gamma_per_contract price_move_down))
+  (define final_delta (+ new_delta_per_contract delta_change_down))
+  (define final_total_delta (* (* num_contracts final_delta) 100))
+  (define rehedge_back (- final_total_delta new_total_delta))
+
+  (log :message "\n=== PRICE MOVE DOWN: $102 → $100 ===")
+  (log :message "Delta change:" :value delta_change_down)
+  (log :message "Final delta:" :value final_delta)
+  (log :message "Need to buy shares:" :value (* rehedge_back -1))
+
+  ;; Profit from buying at lower price after selling high
+  (define rehedge_profit_down (* rehedge_back -2))  ;; Negative × negative = positive
+  (log :message "Rehedging profit:" :value rehedge_profit_down)
+
+  ;; ============================================
+  ;; TOTAL P&L CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Gamma scalping P&L = Rehedging Gains - Theta Decay
+  ;;
+  ;; REHEDGING GAINS:
+  ;; - From up move: $1,200
+  ;; - From down move: $1,200
+  ;; - Total: $2,400
+  ;;
+  ;; THETA DECAY (Time Decay Cost):
+  ;; - 2 days passed (up move day + down move day)
+  ;; - Theta per day = -$0.15 × 100 contracts × 100 = -$1,500
+  ;; - Total theta decay = -$1,500 × 2 = -$3,000
+  ;;
+  ;; NET P&L:
+  ;; - Rehedging gains: +$2,400
+  ;; - Theta decay: -$3,000
+  ;; - Net: -$600
+  ;;
+  ;; INTERPRETATION:
+  ;; - We lost money because realized volatility was too low
+  ;; - Implied volatility (40%) was priced for larger moves
+  ;; - Our $2 moves weren't enough to overcome theta
+  ;; - Need realized vol > implied vol to profit
+  ;;
+  (define total_rehedge_profit (+ rehedge_profit rehedge_profit_down))
+  (define days_passed 2)
+  (define total_theta_decay (* (* (* theta_per_contract num_contracts) 100) days_passed))
+
+  (log :message "\n=== TOTAL P&L ===")
+  (log :message "Rehedging profit:" :value total_rehedge_profit)
+  (log :message "Theta decay:" :value total_theta_decay)
+
+  (define net_pnl (+ total_rehedge_profit total_theta_decay))
+  (log :message "Net P&L:" :value net_pnl)
+
+  ;; ============================================
+  ;; BREAKEVEN ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: What move size do we need to break even?
+  ;; - Rehedging profit must equal theta decay
+  ;; - Profit from gamma = 0.5 × gamma × (price_move)²
+  ;; - Set equal to theta and solve
+  ;;
+  ;; CALCULATION:
+  ;; - Daily theta = $1,500
+  ;; - Gamma profit formula: 0.5 × 0.03 × 100 × 100 × move²
+  ;; - 0.5 × 0.03 × 10,000 × move² = 1,500
+  ;; - 150 × move² = 1,500
+  ;; - move² = 10
+  ;; - move = √10 ≈ 3.16
+  ;;
+  ;; INTERPRETATION:
+  ;; - Need underlying to move $3.16 per day to break even
+  ;; - This equals ~3.16% daily move (at $100)
+  ;; - Annualized: 3.16% × √252 ≈ 50% realized volatility
+  ;; - We paid 40% IV, need 50% realized vol = need more volatility!
+  ;;
+  (define daily_theta_abs (* (* theta_per_contract num_contracts) 100))
+  (define gamma_total (* (* gamma_per_contract num_contracts) 100))
+
+  ;; Approximate breakeven move (simplified calculation)
+  (define breakeven_move_squared (/ (* daily_theta_abs 2) gamma_total))
+  (define breakeven_move (/ (+ breakeven_move_squared 1) 2))  ;; Sqrt approximation
+
+  (log :message "\n=== BREAKEVEN ANALYSIS ===")
+  (log :message "Daily theta (abs):" :value daily_theta_abs)
+  (log :message "Breakeven move (approx):" :value breakeven_move)
+
+  ;; ============================================
+  ;; REHEDGING TRIGGERS
+  ;; ============================================
+  ;;
+  ;; THEORY: When should we rehedge?
+  ;; - Too frequent → transaction costs kill profits
+  ;; - Too infrequent → take on unwanted directional risk
+  ;;
+  ;; COMMON TRIGGERS:
+  ;; 1. Delta threshold: Rehedge when portfolio delta > X shares
+  ;; 2. Time threshold: Rehedge every Y hours
+  ;; 3. Move threshold: Rehedge after Z% price move
+  ;; 4. Gamma threshold: Rehedge when gamma changes significantly
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Delta threshold = 500 shares (10% of original hedge)
+  ;; - This balances cost vs risk management
+  ;;
+  (define rehedge_threshold 500)
+  (define current_delta_drift rehedge_amount)
+  (define should_rehedge (> current_delta_drift rehedge_threshold))
+
+  (log :message "\n=== REHEDGE DECISION ===")
+  (log :message "Delta drift:" :value current_delta_drift)
+  (log :message "Rehedge threshold:" :value rehedge_threshold)
+  (log :message "Should rehedge:" :value should_rehedge)
+
+  ;; ============================================
+  ;; TRANSACTION COSTS
+  ;; ============================================
+  ;;
+  ;; THEORY: Every rehedge incurs costs
+  ;; - Bid-ask spread (typically 1-2 cents on liquid stocks)
+  ;; - Exchange fees (SEC fees, routing fees)
+  ;; - Market impact (your order moves the price)
+  ;;
+  ;; CALCULATION:
+  ;; - Rehedged 600 shares × 2 times = 1,200 shares total
+  ;; - Cost per share = $0.02 (spread + fees)
+  ;; - Total cost = 1,200 × $0.02 = $24
+  ;;
+  ;; ADJUSTED P&L:
+  ;; - Net P&L before costs: -$600
+  ;; - Transaction costs: -$24
+  ;; - Final P&L: -$624
+  ;;
+  (define shares_rehedged (* rehedge_amount 2))
+  (define cost_per_share 0.02)
+  (define transaction_costs (* shares_rehedged cost_per_share))
+
+  (log :message "\n=== TRANSACTION COSTS ===")
+  (log :message "Shares rehedged:" :value shares_rehedged)
+  (log :message "Cost per share:" :value cost_per_share)
+  (log :message "Transaction costs:" :value transaction_costs)
+
+  (define final_pnl (- net_pnl transaction_costs))
+  (log :message "Final P&L after costs:" :value final_pnl)
+
+  ;; ============================================
+  ;; STRATEGY ASSESSMENT
+  ;; ============================================
+  ;;
+  ;; EVALUATION CRITERIA:
+  ;; - Positive P&L → Strategy profitable
+  ;; - Realized vol > Implied vol → Good trade
+  ;; - Sharpe ratio > 1.0 → Risk-adjusted returns acceptable
+  ;;
+  (define pnl_category (if (> final_pnl 0)
+                           "✅ PROFITABLE - Realized vol exceeded IV"
+                           (if (> final_pnl -1000)
+                               "⚠️ SMALL LOSS - Close to breakeven"
+                               "🔴 LOSS - Realized vol too low")))
+
+  (log :message "\n=== STRATEGY ASSESSMENT ===")
+  (log :message "Result:" :value pnl_category)
+
+  ;; Calculate implied vs realized volatility comparison
+  (define implied_vol 40.0)
+  (define realized_move_pct (* (/ price_move_up underlying_price) 100))
+  (define annualized_realized (* realized_move_pct 15.87))  ;; √252 ≈ 15.87
+
+  (log :message "Implied volatility:" :value implied_vol)
+  (log :message "Realized volatility (est):" :value annualized_realized)
+
+  (define vol_edge (- annualized_realized implied_vol))
+  (log :message "Volatility edge:" :value vol_edge)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real-world gamma scalping requires:
+  ;;
+  ;; 1. **Multi-strike positions**: Hedge entire volatility surface, not single strike
+  ;; 2. **Vega management**: Monitor and hedge volatility risk separately
+  ;; 3. **Automated rehedging**: Sub-second latency for delta adjustments
+  ;; 4. **Smart order routing**: Minimize transaction costs across venues
+  ;; 5. **Inventory optimization**: Balance long/short gamma across expiries
+  ;; 6. **Correlation trading**: Hedge cross-asset gamma (SPX vs stock)
+  ;; 7. **Tail risk hedging**: Protect against gap moves (overnight, news)
+  ;; 8. **Pin risk management**: Handle near-expiry ATM options carefully
+  ;; 9. **Volatility forecasting**: ML models to predict realized vol
+  ;; 10. **Regulatory compliance**: Large Option Position reports, position limits
+  ;;
+
+  "✅ Gamma scalping analysis complete!")

@@ -355,6 +355,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Handle research command early - it only needs AI and OVSM services, no Solana config
+    if sub_command == "research" {
+        return commands::research::handle_research_command(sub_matches)
+            .await
+            .map_err(|e| e.into());
+    }
+
     // Handle agent command for CLI-based agent execution
     if sub_command == "agent" {
         // Get prompt args (can be multiple words)
@@ -719,6 +726,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ovsm" => {
             // This case should not be reached as ovsm is handled early to avoid config loading
             eprintln!("❌ OVSM command should be handled before config loading");
+            eprintln!("   This indicates a programming error - please report this issue.");
+            exit(1);
+        }
+        "research" => {
+            // This case should not be reached as research is handled early to avoid config loading
+            eprintln!("❌ Research command should be handled before config loading");
             eprintln!("   This indicates a programming error - please report this issue.");
             exit(1);
         }

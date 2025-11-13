@@ -1,0 +1,56 @@
+;; ============================================
+;; OVSM Example 3: Functional Programming Concepts
+;; ============================================
+
+(do
+  (log :message "=== BASIC FUNCTIONS ===")
+
+  (define numbers [1 2 3 4 5])
+  (log :message "Numbers:" :value numbers)
+
+  ;; Array access
+  (define first_num (first numbers))
+  (define last_num (last numbers))
+  (log :message "First:" :value first_num)
+  (log :message "Last:" :value last_num)
+
+  (log :message "\n=== ARRAY OPERATIONS ===")
+
+  ;; Drop and length
+  (define after_two (drop numbers 2))
+  (log :message "After dropping 2:" :value after_two)
+
+  (define len (length numbers))
+  (log :message "Length:" :value len)
+
+  ;; Manual doubling with loop
+  (define doubled [])
+  (for (n numbers)
+    (define double_n (* n 2))
+    (log :message "Doubled value:" :value double_n))
+
+  (log :message "\n=== CALCULATIONS ===")
+
+  ;; Sum calculation
+  (define sum 0)
+  (for (n numbers)
+    (set! sum (+ sum n)))
+  (log :message "Sum:" :value sum)
+
+  ;; Product calculation
+  (define product 1)
+  (for (n numbers)
+    (set! product (* product n)))
+  (log :message "Product:" :value product)
+
+  (log :message "\n=== STRING OPERATIONS ===")
+
+  (define text "Hello World")
+  (log :message "Text:" :value text)
+  (log :message "Length:" :value (length text))
+
+  ;; Simple checks
+  (define is_empty (empty? text))
+  (log :message "Is empty:" :value is_empty)
+
+  "✅ Functional programming demo complete!")

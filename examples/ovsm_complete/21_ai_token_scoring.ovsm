@@ -1,0 +1,429 @@
+;; ============================================
+;; OVSM Example 21: AI-Powered Token Scoring & Ranking
+;; ============================================
+
+(do
+  (log :message "=== AI TOKEN SCORING SYSTEM ===")
+
+  ;; Token candidates for analysis
+  (define token_candidates [
+    {:symbol "PEPE2" :age_hours 2 :holders 5000 :liquidity 15.0 :volume_24h 300}
+    {:symbol "DOGE3" :age_hours 12 :holders 8000 :liquidity 25.0 :volume_24h 500}
+    {:symbol "SHIB2" :age_hours 48 :holders 12000 :liquidity 50.0 :volume_24h 800}
+    {:symbol "BONK2" :age_hours 1 :holders 2000 :liquidity 8.0 :volume_24h 150}
+  ])
+
+  (log :message "Analyzing" :value (length token_candidates))
+  (log :message "token candidates\n")
+
+  (log :message "=== FEATURE EXTRACTION ===")
+
+  ;; Extract features for ML model
+  (define scored_tokens [])
+
+  (for (token token_candidates)
+    (define symbol (get token "symbol"))
+    (define age (get token "age_hours"))
+    (define holders (get token "holders"))
+    (define liquidity (get token "liquidity"))
+    (define volume (get token "volume_24h"))
+
+    (log :message symbol)
+    (log :message "  Age:" :value age)
+    (log :message "  Holders:" :value holders)
+    (log :message "  Liquidity:" :value liquidity)
+    (log :message "  Volume:" :value volume)
+
+    ;; Feature 1: Liquidity-to-age ratio (higher = better)
+    (define liq_age_ratio (/ liquidity (+ age 1)))
+
+    ;; Feature 2: Volume-to-liquidity ratio (higher = more activity)
+    (define vol_liq_ratio (/ volume liquidity))
+
+    ;; Feature 3: Holder growth rate (estimate)
+    (define holder_growth_rate (/ holders age))
+
+    ;; Feature 4: Normalized liquidity (log scale)
+    (define norm_liquidity (/ liquidity 100))
+
+    ;; Feature 5: Volume momentum
+    (define volume_momentum (/ volume 1000))
+
+    (log :message "  Liq/Age ratio:" :value liq_age_ratio)
+    (log :message "  Vol/Liq ratio:" :value vol_liq_ratio)
+    (log :message "  Holder growth:" :value holder_growth_rate)
+
+    ;; Create feature vector
+    (define features [
+      liq_age_ratio
+      vol_liq_ratio
+      holder_growth_rate
+      norm_liquidity
+      volume_momentum
+    ])
+
+    (set! scored_tokens (concat scored_tokens [
+      {:symbol symbol :features features :token token}
+    ])))
+
+  (log :message "\n=== NEURAL NETWORK SCORING ===")
+
+  ;; Neural network weights (trained on historical data)
+  (define weights_layer1 [
+    [0.3 0.2 0.25 0.15 0.1]   ;; Neuron 1
+    [0.2 0.3 0.15 0.2 0.15]   ;; Neuron 2
+    [0.25 0.15 0.3 0.2 0.1]   ;; Neuron 3
+  ])
+
+  (define weights_layer2 [0.35 0.4 0.25])  ;; Output layer
+  (define bias_layer1 [0.1 0.15 0.12])
+  (define bias_layer2 0.05)
+
+  ;; Score each token
+  (define final_scores [])
+
+  (for (scored_token scored_tokens)
+    (define symbol (get scored_token "symbol"))
+    (define features (get scored_token "features"))
+
+    ;; Layer 1: Hidden layer with ReLU activation
+    (define hidden_outputs [])
+
+    ;; Neuron 1
+    (define weights1 (first weights_layer1))
+    (define activation1 (first bias_layer1))
+    (define i 0)
+    (while (< i (length features))
+      (define feat (first (drop features i)))
+      (define weight (first (drop weights1 i)))
+      (set! activation1 (+ activation1 (* feat weight)))
+      (set! i (+ i 1)))
+    (define output1 (if (> activation1 0) activation1 0))  ;; ReLU
+    (set! hidden_outputs (concat hidden_outputs [output1]))
+
+    ;; Neuron 2
+    (define weights2 (first (drop weights_layer1 1)))
+    (define activation2 (first (drop bias_layer1 1)))
+    (set! i 0)
+    (while (< i (length features))
+      (define feat (first (drop features i)))
+      (define weight (first (drop weights2 i)))
+      (set! activation2 (+ activation2 (* feat weight)))
+      (set! i (+ i 1)))
+    (define output2 (if (> activation2 0) activation2 0))
+    (set! hidden_outputs (concat hidden_outputs [output2]))
+
+    ;; Neuron 3
+    (define weights3 (first (drop weights_layer1 2)))
+    (define activation3 (first (drop bias_layer1 2)))
+    (set! i 0)
+    (while (< i (length features))
+      (define feat (first (drop features i)))
+      (define weight (first (drop weights3 i)))
+      (set! activation3 (+ activation3 (* feat weight)))
+      (set! i (+ i 1)))
+    (define output3 (if (> activation3 0) activation3 0))
+    (set! hidden_outputs (concat hidden_outputs [output3]))
+
+    ;; Layer 2: Output layer with sigmoid
+    (define final_activation bias_layer2)
+    (set! i 0)
+    (while (< i (length hidden_outputs))
+      (define hidden_out (first (drop hidden_outputs i)))
+      (define weight (first (drop weights_layer2 i)))
+      (set! final_activation (+ final_activation (* hidden_out weight)))
+      (set! i (+ i 1)))
+
+    ;; Sigmoid approximation: x / (1 + |x|)
+    (define abs_activation (if (< final_activation 0) (- final_activation) final_activation))
+    (define ai_score (/ final_activation (+ 1.0 abs_activation)))
+
+    (log :message symbol :value ai_score)
+
+    (set! final_scores (concat final_scores [
+      {:symbol symbol :score ai_score :token (get scored_token "token")}
+    ])))
+
+  (log :message "\n=== GRADIENT BOOSTING ENSEMBLE ===")
+
+  ;; Combine multiple weak learners
+  (define ensemble_scores [])
+
+  (for (scored scored_tokens)
+    (define symbol (get scored "symbol"))
+    (define features (get scored "features"))
+
+    ;; Weak Learner 1: Liquidity-focused
+    (define liq_score (* (first features) 0.6))
+
+    ;; Weak Learner 2: Volume-focused
+    (define vol_score (* (first (drop features 1)) 0.4))
+
+    ;; Weak Learner 3: Holder growth-focused
+    (define holder_score (* (first (drop features 2)) 0.5))
+
+    ;; Combine with learned weights
+    (define boosted_score (+
+      (* liq_score 0.4)
+      (* vol_score 0.35)
+      (* holder_score 0.25)))
+
+    (log :message symbol :value boosted_score)
+
+    (set! ensemble_scores (concat ensemble_scores [
+      {:symbol symbol :score boosted_score}
+    ])))
+
+  (log :message "\n=== RANDOM FOREST CLASSIFICATION ===")
+
+  ;; Decision tree ensemble for buy/sell classification
+  (define rf_predictions [])
+
+  (for (scored scored_tokens)
+    (define symbol (get scored "symbol"))
+    (define token (get scored "token"))
+    (define liquidity (get token "liquidity"))
+    (define volume (get token "volume_24h"))
+    (define holders (get token "holders"))
+
+    ;; Tree 1: Liquidity-based
+    (define tree1_vote (if (> liquidity 20) 1 0))
+
+    ;; Tree 2: Volume-based
+    (define tree2_vote (if (> volume 400) 1 0))
+
+    ;; Tree 3: Holder-based
+    (define tree3_vote (if (> holders 6000) 1 0))
+
+    ;; Tree 4: Combined threshold
+    (define tree4_vote (if (and (> liquidity 15) (> volume 300)) 1 0))
+
+    ;; Majority vote
+    (define total_votes (+ tree1_vote tree2_vote tree3_vote tree4_vote))
+    (define rf_prediction (if (>= total_votes 3) "BUY" "SKIP"))
+
+    (log :message symbol)
+    (log :message "  Votes:" :value total_votes)
+    (log :message "  Prediction:" :value rf_prediction)
+
+    (set! rf_predictions (concat rf_predictions [
+      {:symbol symbol :prediction rf_prediction :votes total_votes}
+    ])))
+
+  (log :message "\n=== CLUSTERING ANALYSIS ===")
+
+  ;; K-means clustering to find similar tokens
+  (define cluster_centers [
+    {:liquidity 20.0 :volume 400.0}   ;; Cluster 1: Mid-cap
+    {:liquidity 50.0 :volume 800.0}   ;; Cluster 2: High-cap
+    {:liquidity 10.0 :volume 200.0}   ;; Cluster 3: Low-cap
+  ])
+
+  (for (token token_candidates)
+    (define symbol (get token "symbol"))
+    (define liquidity (get token "liquidity"))
+    (define volume (get token "volume_24h"))
+
+    ;; Find nearest cluster
+    (define min_distance 999999.0)
+    (define assigned_cluster 0)
+
+    (define cluster_idx 0)
+    (while (< cluster_idx (length cluster_centers))
+      (define center (first (drop cluster_centers cluster_idx)))
+      (define center_liq (get center "liquidity"))
+      (define center_vol (get center "volume"))
+
+      ;; Euclidean distance
+      (define liq_diff (- liquidity center_liq))
+      (define vol_diff (- volume center_vol))
+      (define distance (+ (* liq_diff liq_diff) (* vol_diff vol_diff)))
+
+      (when (< distance min_distance)
+        (set! min_distance distance)
+        (set! assigned_cluster (+ cluster_idx 1)))
+
+      (set! cluster_idx (+ cluster_idx 1)))
+
+    (define cluster_name (if (= assigned_cluster 1)
+                             "Mid-cap"
+                             (if (= assigned_cluster 2)
+                                 "High-cap"
+                                 "Low-cap")))
+
+    (log :message symbol :value cluster_name))
+
+  (log :message "\n=== ANOMALY DETECTION ===")
+
+  ;; Detect unusual tokens (potential scams or gems)
+  (for (token token_candidates)
+    (define symbol (get token "symbol"))
+    (define age (get token "age_hours"))
+    (define holders (get token "holders"))
+    (define liquidity (get token "liquidity"))
+    (define volume (get token "volume_24h"))
+
+    ;; Calculate z-scores (deviation from mean)
+    ;; Mean holders: 6750, std: 4000
+    (define holder_zscore (/ (- holders 6750) 4000))
+
+    ;; Mean volume: 437.5, std: 270
+    (define volume_zscore (/ (- volume 437.5) 270))
+
+    (define is_anomaly (or
+      (> holder_zscore 2)   ;; More than 2 std devs
+      (< holder_zscore -2)
+      (> volume_zscore 2)
+      (< volume_zscore -2)))
+
+    (when is_anomaly
+      (log :message "🚨 ANOMALY:" :value symbol)
+      (log :message "  Holder z-score:" :value holder_zscore)
+      (log :message "  Volume z-score:" :value volume_zscore)))
+
+  (log :message "\n=== SENTIMENT INTEGRATION ===")
+
+  ;; Combine AI scores with sentiment data
+  (define sentiment_data [
+    {:symbol "PEPE2" :sentiment 0.75}
+    {:symbol "DOGE3" :sentiment 0.65}
+    {:symbol "SHIB2" :sentiment 0.55}
+    {:symbol "BONK2" :sentiment 0.85}
+  ])
+
+  (define combined_scores [])
+
+  (for (final_score final_scores)
+    (define symbol (get final_score "symbol"))
+    (define ai_score (get final_score "score"))
+
+    ;; Find sentiment
+    (define sentiment 0.5)
+    (for (sent sentiment_data)
+      (define sent_symbol (get sent "symbol"))
+      (when (= sent_symbol symbol)
+        (set! sentiment (get sent "sentiment"))))
+
+    ;; Combine: 60% AI + 40% sentiment
+    (define combined_score (+ (* ai_score 0.6) (* sentiment 0.4)))
+
+    (log :message symbol)
+    (log :message "  AI score:" :value ai_score)
+    (log :message "  Sentiment:" :value sentiment)
+    (log :message "  Combined:" :value combined_score)
+
+    (set! combined_scores (concat combined_scores [
+      {:symbol symbol :score combined_score}
+    ])))
+
+  (log :message "\n=== RANKING & SELECTION ===")
+
+  ;; Rank tokens by combined score
+  (define rankings [])
+
+  ;; Find top token (simplified ranking)
+  (define top_symbol null)
+  (define top_score 0.0)
+
+  (for (scored combined_scores)
+    (define symbol (get scored "symbol"))
+    (define score (get scored "score"))
+
+    (when (> score top_score)
+      (set! top_score score)
+      (set! top_symbol symbol)))
+
+  (log :message "🏆 TOP RANKED TOKEN:" :value top_symbol)
+  (log :message "Score:" :value top_score)
+
+  ;; Find all tokens above threshold
+  (define buy_threshold 0.6)
+  (define buy_candidates [])
+
+  (for (scored combined_scores)
+    (define symbol (get scored "symbol"))
+    (define score (get scored "score"))
+
+    (when (>= score buy_threshold)
+      (log :message "✅ BUY CANDIDATE:" :value symbol)
+      (log :message "  Score:" :value score)
+      (set! buy_candidates (concat buy_candidates [symbol]))))
+
+  (log :message "\nTotal buy candidates:" :value (length buy_candidates))
+
+  (log :message "\n=== CONFIDENCE INTERVALS ===")
+
+  ;; Calculate prediction confidence
+  (for (scored combined_scores)
+    (define symbol (get scored "symbol"))
+    (define score (get scored "score"))
+
+    ;; Confidence based on score extremity
+    (define distance_from_midpoint (* (- score 0.5) 2))
+    (define abs_distance (if (< distance_from_midpoint 0)
+                             (- distance_from_midpoint)
+                             distance_from_midpoint))
+    (define confidence (* abs_distance 100))
+
+    (log :message symbol)
+    (log :message "  Confidence:" :value confidence))
+
+  (log :message "\n=== MODEL PERFORMANCE METRICS ===")
+
+  ;; Simulated historical performance
+  (define predictions_made 100)
+  (define correct_predictions 78)
+  (define false_positives 12)
+  (define false_negatives 10)
+
+  (define accuracy (* (/ correct_predictions predictions_made) 100))
+  (define precision (* (/ correct_predictions (+ correct_predictions false_positives)) 100))
+  (define recall (* (/ correct_predictions (+ correct_predictions false_negatives)) 100))
+
+  ;; F1 score
+  (define f1_numerator (* 2 precision recall))
+  (define f1_denominator (+ precision recall))
+  (define f1_score (if (> f1_denominator 0)
+                       (/ f1_numerator f1_denominator)
+                       0.0))
+
+  (log :message "Model Performance:")
+  (log :message "  Accuracy:" :value accuracy)
+  (log :message "  Precision:" :value precision)
+  (log :message "  Recall:" :value recall)
+  (log :message "  F1 Score:" :value f1_score)
+
+  (log :message "\n=== FINAL AI RECOMMENDATION ===")
+
+  ;; Generate final trading decision
+  (define ai_decision_score 0.0)
+
+  ;; High accuracy model (30%)
+  (when (> accuracy 75) (set! ai_decision_score (+ ai_decision_score 0.3)))
+
+  ;; Strong top candidate (40%)
+  (when (> top_score 0.65) (set! ai_decision_score (+ ai_decision_score 0.4)))
+
+  ;; Multiple buy candidates (20%)
+  (when (>= (length buy_candidates) 2) (set! ai_decision_score (+ ai_decision_score 0.2)))
+
+  ;; High F1 score (10%)
+  (when (> f1_score 70) (set! ai_decision_score (+ ai_decision_score 0.1)))
+
+  (log :message "AI Decision Score:" :value ai_decision_score)
+
+  (define final_recommendation (if (>= ai_decision_score 0.75)
+                                   "🚀 STRONG BUY - High confidence"
+                                   (if (>= ai_decision_score 0.5)
+                                       "✅ BUY - Moderate confidence"
+                                       "⏸️ WAIT - Low confidence")))
+
+  (log :message "Final Recommendation:" :value final_recommendation)
+
+  (when (>= ai_decision_score 0.5)
+    (log :message "\nRecommended Action:")
+    (log :message "  Buy token:" :value top_symbol)
+    (log :message "  Confidence:" :value (* ai_decision_score 100))
+    (log :message "  Model accuracy:" :value accuracy))
+
+  "✅ AI token scoring complete!")

@@ -1,0 +1,178 @@
+;; ============================================
+;; OVSM Example 9: Execution Algorithms
+;; ============================================
+
+(do
+  (log :message "=== TWAP (Time-Weighted Average Price) EXECUTION ===")
+
+  ;; Order parameters
+  (define total_quantity 10000)
+  (define num_slices 10)
+  (define time_interval 60)  ;; seconds between orders
+
+  (define slice_size (/ total_quantity num_slices))
+  (log :message "Total quantity:" :value total_quantity)
+  (log :message "Slices:" :value num_slices)
+  (log :message "Size per slice:" :value slice_size)
+
+  ;; Simulate execution across time slices
+  (define executed_slices [])
+  (define current_time 0)
+
+  ;; Mock price movement during execution
+  (define prices [50.0 50.2 50.1 50.3 50.2 50.4 50.3 50.5 50.6 50.4])
+
+  (define total_cost 0.0)
+  (define i 0)
+  (while (< i num_slices)
+    (define price (first (drop prices i)))
+    (define cost (* slice_size price))
+    (set! total_cost (+ total_cost cost))
+    (set! executed_slices (append executed_slices [[current_time slice_size price]]))
+    (set! current_time (+ current_time time_interval))
+    (set! i (+ i 1)))
+
+  (define avg_execution_price (/ total_cost total_quantity))
+  (log :message "Average execution price:" :value avg_execution_price)
+  (log :message "Total cost:" :value total_cost)
+
+  (log :message "\n=== VWAP (Volume-Weighted Average Price) EXECUTION ===")
+
+  ;; Historical volume profile (percentage of daily volume per hour)
+  (define volume_profile [
+    0.05  ;; Hour 0
+    0.08  ;; Hour 1
+    0.12  ;; Hour 2
+    0.15  ;; Hour 3
+    0.18  ;; Hour 4
+    0.15  ;; Hour 5
+    0.12  ;; Hour 6
+    0.09  ;; Hour 7
+    0.06  ;; Hour 8
+  ])
+
+  ;; Calculate order sizes proportional to expected volume
+  (define vwap_slices [])
+  (define j 0)
+  (while (< j (length volume_profile))
+    (define vol_pct (first (drop volume_profile j)))
+    (define quantity (* total_quantity vol_pct))
+    (set! vwap_slices (append vwap_slices [quantity]))
+    (set! j (+ j 1)))
+
+  (log :message "VWAP-weighted slices:" :value vwap_slices)
+
+  (log :message "\n=== ICEBERG ORDER ===")
+
+  ;; Hide large order by showing small visible quantity
+  (define total_order_size 50000)
+  (define visible_size 1000)
+  (define num_icebergs (/ total_order_size visible_size))
+
+  (log :message "Total order:" :value total_order_size)
+  (log :message "Visible per slice:" :value visible_size)
+  (log :message "Number of refreshes:" :value num_icebergs)
+
+  ;; Simulate iceberg execution with price impact
+  (define base_price 50.0)
+  (define impact_per_slice 0.001)  ;; 0.1% impact per visible fill
+
+  (define iceberg_avg_price 0.0)
+  (define k 0)
+  (while (< k num_icebergs)
+    (define current_impact (* k impact_per_slice))
+    (define exec_price (* base_price (+ 1.0 current_impact)))
+    (set! iceberg_avg_price (+ iceberg_avg_price exec_price))
+    (set! k (+ k 1)))
+
+  (set! iceberg_avg_price (/ iceberg_avg_price num_icebergs))
+  (log :message "Average iceberg price:" :value iceberg_avg_price)
+  (log :message "Total slippage:" :value (* (- iceberg_avg_price base_price) total_order_size))
+
+  (log :message "\n=== IMPLEMENTATION SHORTFALL ===")
+
+  ;; Measure cost of execution delay
+  (define decision_price 50.0)
+  (define initial_delay_price 50.1)
+  (define final_execution_price 50.25)
+
+  ;; Components of implementation shortfall
+  (define delay_cost (- initial_delay_price decision_price))
+  (define execution_cost (- final_execution_price initial_delay_price))
+  (define total_shortfall (- final_execution_price decision_price))
+
+  (log :message "Decision price:" :value decision_price)
+  (log :message "Delay cost:" :value delay_cost)
+  (log :message "Execution cost:" :value execution_cost)
+  (log :message "Total shortfall:" :value total_shortfall)
+
+  (define shortfall_bps (* (/ total_shortfall decision_price) 10000.0))
+  (log :message "Shortfall (bps):" :value shortfall_bps)
+
+  (log :message "\n=== ADAPTIVE EXECUTION (POV) ===")
+
+  ;; Participate in volume at target percentage
+  (define target_pov 0.20)  ;; 20% of volume
+  (define remaining_qty 10000.0)
+
+  ;; Mock market volumes
+  (define market_volumes [1000 1500 1200 1800 1400])
+  (define executed_qty 0.0)
+
+  (define m 0)
+  (while (< m (length market_volumes))
+    (define mkt_vol (first (drop market_volumes m)))
+    (define our_qty (* mkt_vol target_pov))
+
+    ;; Don't exceed remaining
+    (if (> our_qty remaining_qty)
+        (set! our_qty remaining_qty)
+        null)
+
+    (set! executed_qty (+ executed_qty our_qty))
+    (set! remaining_qty (- remaining_qty our_qty))
+
+    (log :message "Period" :value m)
+    (log :message "  Market vol:" :value mkt_vol)
+    (log :message "  Our fill:" :value our_qty)
+    (log :message "  Remaining:" :value remaining_qty)
+
+    (when (<= remaining_qty 0.0)
+      (set! m (length market_volumes)))  ;; Break loop
+
+    (set! m (+ m 1)))
+
+  (log :message "Total executed:" :value executed_qty)
+
+  (log :message "\n=== DARK POOL ROUTING ===")
+
+  ;; Route order to minimize information leakage
+  (define order_size 5000)
+  (define venues {:lit_exchange 0.40
+                  :dark_pool_1 0.25
+                  :dark_pool_2 0.20
+                  :dark_pool_3 0.15})
+
+  (define lit_qty (* order_size (get venues "lit_exchange")))
+  (define dark1_qty (* order_size (get venues "dark_pool_1")))
+  (define dark2_qty (* order_size (get venues "dark_pool_2")))
+  (define dark3_qty (* order_size (get venues "dark_pool_3")))
+
+  (log :message "Lit exchange:" :value lit_qty)
+  (log :message "Dark pool 1:" :value dark1_qty)
+  (log :message "Dark pool 2:" :value dark2_qty)
+  (log :message "Dark pool 3:" :value dark3_qty)
+
+  ;; Expected fill rates
+  (define lit_fill_rate 1.0)      ;; 100% fills on lit
+  (define dark_fill_rate 0.60)    ;; 60% average fill in dark
+
+  (define expected_dark_fill (* (+ dark1_qty dark2_qty dark3_qty) dark_fill_rate))
+  (define expected_lit_fill (* lit_qty lit_fill_rate))
+  (define total_expected_fill (+ expected_dark_fill expected_lit_fill))
+
+  (log :message "Expected fills:" :value total_expected_fill)
+  (define fill_shortfall (- order_size total_expected_fill))
+  (log :message "Expected shortfall:" :value fill_shortfall)
+
+  "✅ Execution algorithms demo complete!")

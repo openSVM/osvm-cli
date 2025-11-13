@@ -3,7 +3,7 @@ use {
     solana_clap_utils::input_validators::{is_url_or_moniker, is_valid_signer},
 };
 
-// Import all modularized command builders (full refactoring - 19 commands)
+// Import all modularized command builders (full refactoring - 20 commands)
 mod agent;
 mod audit;
 mod balance;
@@ -19,6 +19,7 @@ mod ovsm;
 mod plan;
 mod qa;
 mod realtime;
+mod research;
 mod rpc;
 mod settings;
 mod snapshot;
@@ -266,6 +267,7 @@ Issues & feedback: https://github.com/opensvm/osvm-cli/issues",
         .subcommand(chat::build_chat_command())
         .subcommand(plan::build_plan_command())
         .subcommand(agent::build_agent_command())
+        .subcommand(research::build_research_command())
         .subcommand(svm::build_svm_command())
         .subcommand(nodes::build_nodes_command())
         .subcommand(deploy::build_deploy_command())

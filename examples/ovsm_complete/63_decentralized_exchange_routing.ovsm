@@ -1,0 +1,514 @@
+;; ============================================
+;; OVSM Example 63: Decentralized Exchange Routing
+;; ============================================
+;;
+;; THEORY: Multi-Pool Optimal Routing on Automated Market Makers (AMMs)
+;; -----------------------------------------------------------------------
+;; Decentralized exchanges (DEXs) like Uniswap, Sushiswap, and Curve use
+;; Automated Market Makers (AMMs) instead of order books. Adams et al. (2021)
+;; formalized Uniswap V3's concentrated liquidity. Angeris et al. (2020)
+;; proved optimal routing across constant-product AMMs. This strategy splits
+;; large orders across multiple pools to minimize price impact, gas costs,
+;; and MEV (sandwich attacks). Includes private mempool protection.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. CONSTANT PRODUCT AMM (x * y = k):
+;;    - Uniswap V2, Sushiswap use this formula
+;;    - Pool has reserves: x tokens of A, y tokens of B
+;;    - Invariant: x * y = k (constant)
+;;    - Swap A for B: Add Δx to pool, get Δy out
+;;    - New invariant: (x + Δx) * (y - Δy) = k
+;;    - Solving: Δy = y * Δx / (x + Δx) [before fees]
+;;    - With fees (0.3%): Δy = y * 0.997*Δx / (x + 0.997*Δx)
+;;
+;; 2. CONCENTRATED LIQUIDITY (Uniswap V3):
+;;    - Liquidity providers (LPs) specify price range [P_low, P_high]
+;;    - Capital efficiency: 10-100x vs Uniswap V2
+;;    - Price impact formula: Non-linear, depends on active range
+;;    - Example: ETH/USDC pool with 80% liquidity in $1,800-$2,200
+;;    - Large swaps that exit range face extreme slippage
+;;
+;; 3. SANDWICH ATTACK (MEV):
+;;    - Attacker sees your swap in mempool (before block inclusion)
+;;    - Front-run: Attacker buys before your swap → price increases
+;;    - Your swap: Executes at worse price (you pay more)
+;;    - Back-run: Attacker sells at profit
+;;    - Cost: 1-5% slippage on large trades (millions lost annually)
+;;    - Defense: Private mempool (Flashbots Protect, Eden Network)
+;;
+;; 4. GAS COST OPTIMIZATION:
+;;    - Each swap costs gas: Uniswap V2 ≈ 100k gas, V3 ≈ 150k gas
+;;    - Multi-hop swaps: ETH→USDC→DAI = 2 swaps = 300k gas
+;;    - Gas price (50 gwei) * 300k = 15M gwei = 0.015 ETH = $30
+;;    - Trade-off: More routes = better price, but higher gas
+;;    - Optimal: Balance slippage savings vs gas cost
+;;
+;; 5. MULTI-POOL ROUTING (Optimal Splitting):
+;;    - Given: Want to swap $100k USDC for ETH
+;;    - Pools: Uniswap V2, Uniswap V3, Sushiswap, Curve
+;;    - Naïve: Use single largest pool → High slippage
+;;    - Optimal: Split order across all pools proportional to liquidity
+;;    - Formula: x_i = x * sqrt(L_i) / Σ sqrt(L_j)
+;;    - Where L_i = liquidity depth of pool i
+;;    - Result: Minimize total price impact
+;;
+;; ACADEMIC REFERENCES:
+;; - Adams et al. (2021): "Uniswap v3 Core" (concentrated liquidity whitepaper)
+;; - Angeris, Kao, Chiang & Noyes (2020): "An Analysis of Uniswap Markets"
+;; - Zhou et al. (2021): "High-Frequency Trading on Decentralized Exchanges"
+;; - Daian et al. (2020): "Flash Boys 2.0: Frontrunning in Decentralized Exchanges"
+;; - Heimbach & Wattenhofer (2022): "SoK: Preventing Transaction Reordering Attacks"
+;;
+;; IMPLEMENTATION:
+;; This example routes a large USDC→ETH swap across Uniswap V2, Uniswap V3,
+;; Sushiswap, and Curve. Calculates optimal split, estimates price impact,
+;; compares gas costs, protects against sandwich attacks via private mempool.
+;;
+(do
+  (log :message "=== DECENTRALIZED EXCHANGE ROUTING ===")
+
+  ;; ============================================
+  ;; TRADE SETUP
+  ;; ============================================
+  ;;
+  ;; Goal: Swap $500,000 USDC for ETH
+  ;; Current ETH price: $2,000 (mid-market price)
+  ;; Expected output: 250 ETH (before slippage)
+  ;; Challenge: Minimize slippage and gas costs, avoid sandwich attacks
+  ;;
+  ;; AVAILABLE POOLS (ETH/USDC pairs):
+  ;; 1. Uniswap V2:  Reserves: 5,000 ETH, 10,000,000 USDC, Fee: 0.30%
+  ;; 2. Uniswap V3:  Liquidity: $8M in range [$1,900-$2,100], Fee: 0.05%
+  ;; 3. Sushiswap:   Reserves: 3,000 ETH, 6,000,000 USDC, Fee: 0.30%
+  ;; 4. Curve:       Reserves: 2,000 ETH, 4,000,000 USDC, Fee: 0.04% (stableswap)
+  ;;
+  ;; Total available liquidity: 10,000 ETH, $20M USDC (across all pools)
+  ;; Trade size: $500k = 2.5% of total liquidity (significant impact!)
+  ;;
+  (define usdc_amount 500000)
+  (define eth_mid_price 2000)
+  (define expected_eth_output (/ usdc_amount eth_mid_price))
+
+  (log :message "\n=== TRADE SPECIFICATION ===")
+  (log :message "Input: $500,000 USDC")
+  (log :message "Current ETH price:" :value eth_mid_price)
+  (log :message "Expected output (no slippage):" :value expected_eth_output)
+  (log :message "")
+  (log :message "AVAILABLE POOLS:")
+  (log :message "1. Uniswap V2:  5,000 ETH, $10M USDC, 0.30% fee")
+  (log :message "2. Uniswap V3:  $8M liquidity [$1,900-$2,100], 0.05% fee")
+  (log :message "3. Sushiswap:   3,000 ETH, $6M USDC, 0.30% fee")
+  (log :message "4. Curve:       2,000 ETH, $4M USDC, 0.04% fee")
+
+  ;; ============================================
+  ;; STEP 1: SINGLE POOL ANALYSIS (Naïve Approach)
+  ;; ============================================
+  ;;
+  ;; THEORY: Evaluate executing entire trade on largest pool (Uniswap V2)
+  ;;
+  ;; UNISWAP V2 CONSTANT PRODUCT:
+  ;; Reserves: x = 5,000 ETH, y = 10,000,000 USDC
+  ;; Invariant: k = x * y = 5,000 * 10,000,000 = 50,000,000,000
+  ;; Fee: 0.3% → Keep 99.7% of input
+  ;;
+  ;; SWAP CALCULATION:
+  ;; Input: Δy = 500,000 USDC
+  ;; After fee: Δy_net = 500,000 * 0.997 = 498,500 USDC
+  ;; Formula: Δx = x * Δy_net / (y + Δy_net)
+  ;; Δx = 5,000 * 498,500 / (10,000,000 + 498,500)
+  ;;    = 2,492,500,000 / 10,498,500
+  ;;    = 237.5 ETH
+  ;;
+  ;; SLIPPAGE:
+  ;; Expected: 250 ETH (at mid price)
+  ;; Actual: 237.5 ETH
+  ;; Slippage: 250 - 237.5 = 12.5 ETH
+  ;; Slippage %: 12.5 / 250 = 5.0% (very high!)
+  ;;
+  ;; EFFECTIVE PRICE:
+  ;; Paid: $500,000
+  ;; Received: 237.5 ETH
+  ;; Effective price: $500,000 / 237.5 = $2,105 per ETH
+  ;; vs mid price: $2,000 per ETH
+  ;; Premium: $105/ETH (5.25% worse)
+  ;;
+  (define univ2_eth_reserves 5000)
+  (define univ2_usdc_reserves 10000000)
+  (define univ2_fee 0.003)
+  (define usdc_input_after_fee (* usdc_amount (- 1 univ2_fee)))
+  (define univ2_eth_output (/ (* univ2_eth_reserves usdc_input_after_fee)
+                              (+ univ2_usdc_reserves usdc_input_after_fee)))
+  (define univ2_slippage_eth (- expected_eth_output univ2_eth_output))
+  (define univ2_slippage_pct (/ (* univ2_slippage_eth 100) expected_eth_output))
+  (define univ2_effective_price (/ usdc_amount univ2_eth_output))
+  (define univ2_price_premium (- univ2_effective_price eth_mid_price))
+
+  (log :message "\n=== SINGLE POOL (Uniswap V2 Only) ===")
+  (log :message "Reserves: 5,000 ETH, $10M USDC")
+  (log :message "Input: $500k USDC (after 0.3% fee: $498.5k)")
+  (log :message "")
+  (log :message "OUTPUT:")
+  (log :message "  ETH received:" :value univ2_eth_output)
+  (log :message "  Expected (no slippage):" :value expected_eth_output)
+  (log :message "  Slippage (ETH):" :value univ2_slippage_eth)
+  (log :message "  Slippage (%):" :value univ2_slippage_pct)
+  (log :message "")
+  (log :message "EFFECTIVE PRICE:")
+  (log :message "  Price per ETH:" :value univ2_effective_price)
+  (log :message "  Mid price:" :value eth_mid_price)
+  (log :message "  Premium:" :value univ2_price_premium)
+  (log :message "")
+  (log :message "CONCLUSION: 5% slippage is TOO HIGH! Need multi-pool routing")
+
+  ;; ============================================
+  ;; STEP 2: OPTIMAL ROUTING CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Split order across pools to minimize total price impact
+  ;;
+  ;; LIQUIDITY-WEIGHTED SPLITTING:
+  ;; Angeris et al. (2020) optimal allocation: x_i ∝ sqrt(L_i)
+  ;; Where L_i = effective liquidity of pool i
+  ;;
+  ;; POOL LIQUIDITY ESTIMATES:
+  ;; Uniswap V2:  L = sqrt(x*y) = sqrt(5000*10M) = sqrt(50B) = 223,607
+  ;; Uniswap V3:  L = 400,000 (effective, concentrated in range)
+  ;; Sushiswap:   L = sqrt(3000*6M) = sqrt(18B) = 134,164
+  ;; Curve:       L = sqrt(2000*4M) * 1.5 = sqrt(8B) * 1.5 = 134,164 (stableswap bonus)
+  ;;
+  ;; ALLOCATION WEIGHTS:
+  ;; Total sqrt(L) = 223,607 + 400,000 + 134,164 + 134,164 = 891,935
+  ;; Uniswap V2:  223,607 / 891,935 = 25.1%
+  ;; Uniswap V3:  400,000 / 891,935 = 44.8%
+  ;; Sushiswap:   134,164 / 891,935 = 15.0%
+  ;; Curve:       134,164 / 891,935 = 15.0%
+  ;;
+  ;; USDC ALLOCATION:
+  ;; Uniswap V2:  $500k * 0.251 = $125,500
+  ;; Uniswap V3:  $500k * 0.448 = $224,000
+  ;; Sushiswap:   $500k * 0.150 = $75,000
+  ;; Curve:       $500k * 0.150 = $75,500
+  ;;
+  (define univ2_liquidity 223607)
+  (define univ3_liquidity 400000)
+  (define sushi_liquidity 134164)
+  (define curve_liquidity 134164)
+  (define total_sqrt_liquidity (+ univ2_liquidity univ3_liquidity sushi_liquidity curve_liquidity))
+
+  (define univ2_weight (/ univ2_liquidity total_sqrt_liquidity))
+  (define univ3_weight (/ univ3_liquidity total_sqrt_liquidity))
+  (define sushi_weight (/ sushi_liquidity total_sqrt_liquidity))
+  (define curve_weight (/ curve_liquidity total_sqrt_liquidity))
+
+  (define univ2_usdc_allocated (* usdc_amount univ2_weight))
+  (define univ3_usdc_allocated (* usdc_amount univ3_weight))
+  (define sushi_usdc_allocated (* usdc_amount sushi_weight))
+  (define curve_usdc_allocated (* usdc_amount curve_weight))
+
+  (log :message "\n=== OPTIMAL ROUTING CALCULATION ===")
+  (log :message "LIQUIDITY ESTIMATES:")
+  (log :message "  Uniswap V2:" :value univ2_liquidity)
+  (log :message "  Uniswap V3:" :value univ3_liquidity)
+  (log :message "  Sushiswap:" :value sushi_liquidity)
+  (log :message "  Curve:" :value curve_liquidity)
+  (log :message "  Total sqrt(L):" :value total_sqrt_liquidity)
+  (log :message "")
+  (log :message "ALLOCATION WEIGHTS:")
+  (log :message "  Uniswap V2:" :value (* univ2_weight 100))
+  (log :message "  Uniswap V3:" :value (* univ3_weight 100))
+  (log :message "  Sushiswap:" :value (* sushi_weight 100))
+  (log :message "  Curve:" :value (* curve_weight 100))
+  (log :message "")
+  (log :message "USDC ALLOCATION:")
+  (log :message "  Uniswap V2:" :value univ2_usdc_allocated)
+  (log :message "  Uniswap V3:" :value univ3_usdc_allocated)
+  (log :message "  Sushiswap:" :value sushi_usdc_allocated)
+  (log :message "  Curve:" :value curve_usdc_allocated)
+
+  ;; ============================================
+  ;; STEP 3: EXECUTE MULTI-POOL SWAPS
+  ;; ============================================
+  ;;
+  ;; THEORY: Calculate output from each pool separately
+  ;;
+  ;; UNISWAP V2 SWAP ($125,500):
+  ;; Input after fee: $125,500 * 0.997 = $125,124
+  ;; Δx = 5,000 * 125,124 / (10,000,000 + 125,124) = 61.86 ETH
+  ;;
+  ;; UNISWAP V3 SWAP ($224,000):
+  ;; V3 concentrated liquidity: Better execution
+  ;; Assuming 0.05% fee and tighter spread: Output = 111.80 ETH
+  ;;
+  ;; SUSHISWAP SWAP ($75,000):
+  ;; Input after fee: $75,000 * 0.997 = $74,775
+  ;; Δx = 3,000 * 74,775 / (6,000,000 + 74,775) = 36.94 ETH
+  ;;
+  ;; CURVE SWAP ($75,500):
+  ;; Stableswap formula (better for similar assets, but ETH/USDC less optimal)
+  ;; Input after fee: $75,500 * 0.9996 = $75,470
+  ;; Output: 37.71 ETH (slightly better than constant product)
+  ;;
+  ;; TOTAL OUTPUT:
+  ;; 61.86 + 111.80 + 36.94 + 37.71 = 248.31 ETH
+  ;;
+  ;; SLIPPAGE COMPARISON:
+  ;; Single pool: 237.5 ETH (5.0% slippage)
+  ;; Multi-pool: 248.31 ETH (0.7% slippage)
+  ;; Improvement: 248.31 - 237.5 = 10.81 ETH = $21,620 saved!
+  ;;
+  (define univ2_input_after_fee (* univ2_usdc_allocated (- 1 univ2_fee)))
+  (define univ2_eth_out_split (/ (* univ2_eth_reserves univ2_input_after_fee)
+                                  (+ univ2_usdc_reserves univ2_input_after_fee)))
+
+  (define univ3_fee 0.0005)
+  (define univ3_input_after_fee (* univ3_usdc_allocated (- 1 univ3_fee)))
+  (define univ3_eth_out_split (/ univ3_input_after_fee eth_mid_price))
+
+  (define sushi_eth_reserves 3000)
+  (define sushi_usdc_reserves 6000000)
+  (define sushi_fee 0.003)
+  (define sushi_input_after_fee (* sushi_usdc_allocated (- 1 sushi_fee)))
+  (define sushi_eth_out_split (/ (* sushi_eth_reserves sushi_input_after_fee)
+                                  (+ sushi_usdc_reserves sushi_input_after_fee)))
+
+  (define curve_fee 0.0004)
+  (define curve_input_after_fee (* curve_usdc_allocated (- 1 curve_fee)))
+  (define curve_eth_out_split (/ curve_input_after_fee eth_mid_price))
+
+  (define total_eth_output_routed (+ univ2_eth_out_split univ3_eth_out_split
+                                       sushi_eth_out_split curve_eth_out_split))
+  (define routed_slippage_eth (- expected_eth_output total_eth_output_routed))
+  (define routed_slippage_pct (/ (* routed_slippage_eth 100) expected_eth_output))
+  (define improvement_eth (- total_eth_output_routed univ2_eth_output))
+  (define improvement_dollars (* improvement_eth eth_mid_price))
+
+  (log :message "\n=== MULTI-POOL EXECUTION ===")
+  (log :message "UNISWAP V2 ($125.5k):")
+  (log :message "  ETH output:" :value univ2_eth_out_split)
+  (log :message "")
+  (log :message "UNISWAP V3 ($224k):")
+  (log :message "  ETH output:" :value univ3_eth_out_split)
+  (log :message "")
+  (log :message "SUSHISWAP ($75k):")
+  (log :message "  ETH output:" :value sushi_eth_out_split)
+  (log :message "")
+  (log :message "CURVE ($75.5k):")
+  (log :message "  ETH output:" :value curve_eth_out_split)
+  (log :message "")
+  (log :message "TOTAL OUTPUT:" :value total_eth_output_routed)
+  (log :message "Expected (no slippage):" :value expected_eth_output)
+  (log :message "Slippage:" :value routed_slippage_pct)
+  (log :message "")
+  (log :message "COMPARISON TO SINGLE POOL:")
+  (log :message "  Single pool output:" :value univ2_eth_output)
+  (log :message "  Multi-pool output:" :value total_eth_output_routed)
+  (log :message "  Improvement:" :value improvement_eth)
+  (log :message "  Savings:" :value improvement_dollars)
+
+  ;; ============================================
+  ;; STEP 4: GAS COST ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Multi-pool routing requires more gas (multiple transactions)
+  ;;
+  ;; GAS COSTS PER SWAP:
+  ;; Uniswap V2: 100,000 gas
+  ;; Uniswap V3: 150,000 gas (more complex)
+  ;; Sushiswap: 100,000 gas (V2 clone)
+  ;; Curve: 120,000 gas (stableswap math)
+  ;;
+  ;; SINGLE POOL GAS:
+  ;; 1 swap on Uniswap V2: 100,000 gas
+  ;;
+  ;; MULTI-POOL GAS:
+  ;; 4 swaps: 100k + 150k + 100k + 120k = 470,000 gas
+  ;;
+  ;; GAS COST (50 gwei gas price, $2,000 ETH):
+  ;; Single pool: 100,000 * 50 * 10^-9 ETH = 0.005 ETH = $10
+  ;; Multi-pool: 470,000 * 50 * 10^-9 ETH = 0.0235 ETH = $47
+  ;; Additional gas cost: $37
+  ;;
+  ;; NET SAVINGS:
+  ;; Slippage savings: $21,620
+  ;; Additional gas: -$37
+  ;; Net benefit: $21,620 - $37 = $21,583
+  ;;
+  ;; BREAKEVEN ANALYSIS:
+  ;; When is multi-pool routing worth it?
+  ;; Gas cost difference: $37
+  ;; Slippage improvement: 10.81 ETH * $2,000 = $21,620
+  ;; Ratio: $21,620 / $37 = 584x return on gas cost
+  ;; Conclusion: Overwhelmingly worth it for large trades
+  ;;
+  (define gas_univ2 100000)
+  (define gas_univ3 150000)
+  (define gas_sushi 100000)
+  (define gas_curve 120000)
+  (define gas_single_pool gas_univ2)
+  (define gas_multi_pool (+ gas_univ2 gas_univ3 gas_sushi gas_curve))
+  (define gas_price_gwei 50)
+  (define gas_cost_single (* gas_single_pool gas_price_gwei 0.000000001 eth_mid_price))
+  (define gas_cost_multi (* gas_multi_pool gas_price_gwei 0.000000001 eth_mid_price))
+  (define additional_gas_cost (- gas_cost_multi gas_cost_single))
+  (define net_savings (- improvement_dollars additional_gas_cost))
+  (define gas_roi (/ improvement_dollars additional_gas_cost))
+
+  (log :message "\n=== GAS COST ANALYSIS ===")
+  (log :message "GAS PER SWAP:")
+  (log :message "  Uniswap V2:" :value gas_univ2)
+  (log :message "  Uniswap V3:" :value gas_univ3)
+  (log :message "  Sushiswap:" :value gas_sushi)
+  (log :message "  Curve:" :value gas_curve)
+  (log :message "")
+  (log :message "TOTAL GAS:")
+  (log :message "  Single pool:" :value gas_single_pool)
+  (log :message "  Multi-pool:" :value gas_multi_pool)
+  (log :message "")
+  (log :message "GAS COSTS (50 gwei, $2k ETH):")
+  (log :message "  Single pool:" :value gas_cost_single)
+  (log :message "  Multi-pool:" :value gas_cost_multi)
+  (log :message "  Additional cost:" :value additional_gas_cost)
+  (log :message "")
+  (log :message "NET BENEFIT:")
+  (log :message "  Slippage savings:" :value improvement_dollars)
+  (log :message "  Additional gas:" :value additional_gas_cost)
+  (log :message "  Net savings:" :value net_savings)
+  (log :message "  ROI on gas:" :value gas_roi)
+
+  ;; ============================================
+  ;; STEP 5: SANDWICH ATTACK PROTECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Protect against MEV (Maximal Extractable Value) attacks
+  ;;
+  ;; SANDWICH ATTACK MECHANICS:
+  ;; 1. Your transaction enters public mempool (visible to everyone)
+  ;; 2. MEV bot sees your $500k USDC→ETH swap
+  ;; 3. Bot front-runs: Buys 100 ETH before your swap (pays higher gas)
+  ;; 4. Price rises: ETH now $2,050 (you get worse price)
+  ;; 5. Your swap executes: Buy 245 ETH at inflated price
+  ;; 6. Bot back-runs: Sells 100 ETH at $2,045 (profit = $45/ETH = $4,500)
+  ;; 7. You lose: Expected 248 ETH, got 245 ETH = 3 ETH loss = $6,000
+  ;;
+  ;; COST OF SANDWICH ATTACK:
+  ;; Without protection: Lose 1-5% to MEV bots
+  ;; On $500k trade: 2% loss = $10,000 to MEV
+  ;;
+  ;; PROTECTION: PRIVATE MEMPOOL
+  ;; - Flashbots Protect: Submit transaction directly to miners
+  ;; - Eden Network: Private transaction pool
+  ;; - No public mempool visibility → No sandwich attacks
+  ;; - Trade-off: Slightly slower inclusion (~1-2 blocks)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Use Flashbots RPC endpoint: relay.flashbots.net
+  ;; - Set slippage tolerance: 1.5% (reasonable buffer)
+  ;; - Set gas price: Match block base fee + 2 gwei priority
+  ;; - Result: No MEV leakage, optimal execution
+  ;;
+  (define mev_loss_pct 0.02)
+  (define potential_mev_loss (* usdc_amount mev_loss_pct))
+  (define protected_mev_loss 0)
+  (define mev_savings (- potential_mev_loss protected_mev_loss))
+  (define slippage_tolerance 0.015)
+  (define min_eth_output (* total_eth_output_routed (- 1 slippage_tolerance)))
+
+  (log :message "\n=== SANDWICH ATTACK PROTECTION ===")
+  (log :message "ATTACK SCENARIO:")
+  (log :message "  Your trade: $500k USDC → ETH")
+  (log :message "  Bot front-runs: Buys 100 ETH")
+  (log :message "  Price increases: $2,000 → $2,050")
+  (log :message "  You get worse price: 245 ETH instead of 248 ETH")
+  (log :message "  Bot back-runs: Sells at profit")
+  (log :message "")
+  (log :message "MEV COST:")
+  (log :message "  Typical loss: 1-5% on large trades")
+  (log :message "  On $500k trade:" :value potential_mev_loss)
+  (log :message "")
+  (log :message "PROTECTION METHOD:")
+  (log :message "  Use Flashbots Protect (private mempool)")
+  (log :message "  No public mempool exposure")
+  (log :message "  Slippage tolerance:" :value (* slippage_tolerance 100))
+  (log :message "  Min ETH output:" :value min_eth_output)
+  (log :message "")
+  (log :message "RESULT:")
+  (log :message "  MEV loss (with protection):" :value protected_mev_loss)
+  (log :message "  Savings:" :value mev_savings)
+
+  ;; ============================================
+  ;; STEP 6: FINAL EXECUTION SUMMARY
+  ;; ============================================
+  ;;
+  ;; THEORY: Compare all approaches
+  ;;
+  ;; APPROACH 1: Naïve (Single Pool, Public Mempool)
+  ;; - Pool: Uniswap V2 only
+  ;; - Output: 237.5 ETH
+  ;; - Slippage: 5.0% ($25,000 loss)
+  ;; - Gas: $10
+  ;; - MEV loss: ~$10,000
+  ;; - Total cost: $35,010
+  ;; - Net ETH: 232.5 ETH ($465,000 value)
+  ;;
+  ;; APPROACH 2: Optimal (Multi-Pool, Private Mempool)
+  ;; - Pools: Uniswap V2 + V3 + Sushiswap + Curve
+  ;; - Output: 248.31 ETH
+  ;; - Slippage: 0.7% ($3,380 loss)
+  ;; - Gas: $47
+  ;; - MEV loss: $0 (protected)
+  ;; - Total cost: $3,427
+  ;; - Net ETH: 248.31 ETH ($496,620 value)
+  ;;
+  ;; SAVINGS: $496,620 - $465,000 = $31,620 (6.3% better execution)
+  ;;
+  (define naive_eth_output 232.5)
+  (define naive_total_cost 35010)
+  (define naive_net_value (* naive_eth_output eth_mid_price))
+
+  (define optimal_total_cost 3427)
+  (define optimal_net_value (* total_eth_output_routed eth_mid_price))
+
+  (define total_savings (- optimal_net_value naive_net_value))
+  (define savings_pct (/ (* total_savings 100) usdc_amount))
+
+  (log :message "\n=== FINAL EXECUTION SUMMARY ===")
+  (log :message "APPROACH 1: NAÏVE (Single Pool, Public)")
+  (log :message "  ETH output:" :value naive_eth_output)
+  (log :message "  Total costs:" :value naive_total_cost)
+  (log :message "  Net value:" :value naive_net_value)
+  (log :message "")
+  (log :message "APPROACH 2: OPTIMAL (Multi-Pool, Private)")
+  (log :message "  ETH output:" :value total_eth_output_routed)
+  (log :message "  Total costs:" :value optimal_total_cost)
+  (log :message "  Net value:" :value optimal_net_value)
+  (log :message "")
+  (log :message "SAVINGS:")
+  (log :message "  Absolute:" :value total_savings)
+  (log :message "  Percentage:" :value savings_pct)
+  (log :message "")
+  (log :message "CONCLUSION: Multi-pool routing with MEV protection")
+  (log :message "saves $31,620 (6.3%) on a $500k trade!")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Real-time liquidity monitoring: Track pool reserves every block")
+  (log :message "2. Dynamic rebalancing: Adjust routing as liquidity changes mid-execution")
+  (log :message "3. Cross-chain routing: Include Polygon, Arbitrum, Optimism pools")
+  (log :message "4. Aggregator integration: Use 1inch, Matcha, CowSwap for best price")
+  (log :message "5. Limit order protocol: Use CoW Protocol for batch auctions (zero MEV)")
+  (log :message "6. Just-in-time liquidity: Provide LP to your own swap, remove after")
+  (log :message "7. Flash loan arbitrage: Borrow capital to rebalance pools before swap")
+  (log :message "8. Volatility-adjusted slippage: Tighten tolerance in low-vol periods")
+  (log :message "9. Gas price prediction: Time execution for low gas periods (Sunday night)")
+  (log :message "10. Multi-hop routing: ETH→WBTC→USDC if more efficient than direct")
+  (log :message "11. Liquidity concentration detection: Avoid Uniswap V3 pools with sparse liquidity")
+  (log :message "12. MEV-Share integration: Capture some MEV yourself via Flashbots MEV-Share")
+  (log :message "13. Order splitting: Break into 10 smaller orders over 1 hour (TWAP)")
+  (log :message "14. Private RPC fallback: Use Alchemy/Infura private mempool as backup")
+  (log :message "15. Smart contract wallet: Use Gnosis Safe for multi-sig protection")
+
+  (log :message "\n=== DECENTRALIZED EXCHANGE ROUTING COMPLETE ===")
+)

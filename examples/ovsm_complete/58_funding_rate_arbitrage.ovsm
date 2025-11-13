@@ -1,0 +1,444 @@
+;; ============================================
+;; OVSM Example 58: Funding Rate Arbitrage
+;; ============================================
+;;
+;; THEORY: Crypto Perpetual Swap vs Spot Arbitrage
+;; -------------------------------------------------
+;; Perpetual swaps (perps) are crypto derivatives with no expiry date.
+;; To keep perp price anchored to spot, exchanges use funding rates:
+;; long positions pay shorts (or vice versa) every 8 hours. When funding
+;; is high, cash-and-carry arbitrage (long spot + short perp) earns
+;; the funding rate with minimal risk.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. PERPETUAL SWAP MECHANICS:
+;;    - No expiration (unlike futures)
+;;    - Funding rate: Periodic payment between longs and shorts
+;;    - Positive funding: Longs pay shorts (perp > spot, bullish sentiment)
+;;    - Negative funding: Shorts pay longs (perp < spot, bearish sentiment)
+;;    - Payment frequency: Every 8 hours (3x daily)
+;;
+;; 2. FUNDING RATE FORMULA:
+;;    Funding Rate = (Perp Price - Spot Price) / Spot Price + Premium Index
+;;    Typical range: -0.10% to +0.30% per 8h period
+;;    Annualized: Daily rate * 365 = 8h rate * 3 * 365
+;;
+;; 3. CASH-AND-CARRY ARBITRAGE:
+;;    - Buy spot BTC on exchange (e.g., Coinbase)
+;;    - Short BTC perpetual swap (e.g., Binance)
+;;    - Delta-neutral: No directional exposure
+;;    - Earn funding rate every 8 hours
+;;    - Profit = Funding Rate - Transaction Costs - Funding Risk
+;;
+;; 4. FUNDING RATE PREDICTION:
+;;    Drivers:
+;;    - Open interest: High OI in longs → higher funding
+;;    - Basis: Perp trading above spot → positive funding
+;;    - Volatility: High vol → higher funding (hedging demand)
+;;    - Leverage: More leverage → more funding pressure
+;;
+;; 5. LIQUIDATION RISK:
+;;    - Perpetual positions use leverage (5x-125x)
+;;    - If price moves against you, can get liquidated
+;;    - Safety: Use low leverage (5x-10x), maintain margin buffer
+;;    - Stop-loss: Unwind if unrealized loss exceeds funding earned
+;;
+;; ACADEMIC REFERENCES:
+;; - Makarov & Schoar (2020): "Trading and Arbitrage in Cryptocurrency Markets"
+;; - Alexander & Heck (2020): "Price Discovery in Bitcoin Futures"
+;; - Kozhan & Viswanath-Natraj (2021): "Decentralized Stablecoins and Collateral Risk"
+;;
+;; IMPLEMENTATION:
+;; This example analyzes a funding rate arbitrage opportunity on BTC,
+;; calculating expected returns, risks, and optimal leverage.
+;;
+(do
+  (log :message "=== FUNDING RATE ARBITRAGE ===")
+
+  ;; ============================================
+  ;; MARKET SETUP
+  ;; ============================================
+  ;;
+  ;; Asset: Bitcoin (BTC)
+  ;; Spot price: $50,000 (Coinbase)
+  ;; Perpetual price: $50,150 (Binance BTCUSDT perp)
+  ;; Basis: $150 (0.30% premium)
+  ;; Current funding rate: 0.10% per 8h (very high!)
+  ;;
+  ;; STRATEGY:
+  ;; - Buy $100,000 of BTC spot
+  ;; - Short $100,000 of BTC perp (5x leverage)
+  ;; - Hold for 1 month (90 funding payments)
+  ;;
+  (define asset "BTC")
+  (define spot_price 50000)
+  (define perp_price 50150)
+  (define basis (- perp_price spot_price))
+  (define basis_pct (/ (* basis 100) spot_price))
+  (define current_funding_rate_8h 0.10)  ;; % per 8 hours
+
+  (define capital 100000)
+  (define holding_period_days 30)
+  (define payments_per_day 3)
+  (define total_payments (* holding_period_days payments_per_day))
+
+  (log :message "\n=== MARKET DATA ===")
+  (log :message "Asset:" :value asset)
+  (log :message "Spot price (Coinbase):" :value spot_price)
+  (log :message "Perp price (Binance):" :value perp_price)
+  (log :message "Basis ($):" :value basis)
+  (log :message "Basis (%):" :value basis_pct)
+  (log :message "Funding rate (per 8h):" :value current_funding_rate_8h)
+  (log :message "")
+  (log :message "TRADE PLAN:")
+  (log :message "Capital:" :value capital)
+  (log :message "Holding period (days):" :value holding_period_days)
+  (log :message "Total funding payments:" :value total_payments)
+
+  ;; ============================================
+  ;; STEP 1: ANNUALIZED FUNDING RATE
+  ;; ============================================
+  ;;
+  ;; THEORY: Convert 8h rate to annualized rate
+  ;;
+  ;; FORMULA:
+  ;; Daily rate = 8h rate * 3 (payments per day)
+  ;; Annualized rate = Daily rate * 365
+  ;;
+  ;; CALCULATION:
+  ;; Daily rate = 0.10% * 3 = 0.30%
+  ;; Annualized = 0.30% * 365 = 109.5% APY (!!)
+  ;;
+  ;; INTERPRETATION:
+  ;; This is an EXTREMELY high funding rate, suggesting:
+  ;; - Strong bullish sentiment (longs overcrowded)
+  ;; - High leverage in the market
+  ;; - Arbitrage opportunity (likely mean-reverts)
+  ;;
+  ;; REALITY CHECK:
+  ;; Funding this high is unsustainable (typical: 10-30% APY)
+  ;; Likely to drop quickly as arbitrageurs pile in
+  ;; Plan assumes declining rate over 30 days
+  ;;
+  (define daily_funding_rate (* current_funding_rate_8h payments_per_day))
+  (define annualized_funding_rate (* daily_funding_rate 365))
+
+  (log :message "\n=== ANNUALIZED FUNDING RATE ===")
+  (log :message "8h funding rate:" :value current_funding_rate_8h)
+  (log :message "Daily funding rate:" :value daily_funding_rate)
+  (log :message "Annualized funding rate (APY):" :value annualized_funding_rate)
+  (log :message "🔥 EXTREME: 109.5% APY (unsustainable, expect mean reversion)")
+
+  ;; ============================================
+  ;; STEP 2: TRADE EXECUTION
+  ;; ============================================
+  ;;
+  ;; LEG 1: BUY SPOT
+  ;; - Buy $100,000 / $50,000 = 2.0 BTC on Coinbase
+  ;; - Fee: 0.50% (maker) = $500
+  ;; - Net cost: $100,500
+  ;;
+  ;; LEG 2: SHORT PERP
+  ;; - Short 2.0 BTC ($100,000 notional) on Binance
+  ;; - Leverage: 5x (margin required = $100,000 / 5 = $20,000)
+  ;; - Fee: 0.04% (maker) = $40
+  ;; - Margin posted: $20,000
+  ;;
+  ;; TOTAL CAPITAL DEPLOYED:
+  ;; - Spot: $100,500
+  ;; - Perp margin: $20,000
+  ;; - Total: $120,500
+  ;;
+  (define btc_quantity (/ capital spot_price))
+  (define spot_fee_pct 0.50)
+  (define spot_fee_dollars (* capital (/ spot_fee_pct 100)))
+  (define spot_total_cost (+ capital spot_fee_dollars))
+
+  (define perp_leverage 5)
+  (define perp_margin_required (/ capital perp_leverage))
+  (define perp_fee_pct 0.04)
+  (define perp_fee_dollars (* capital (/ perp_fee_pct 100)))
+
+  (define total_capital_deployed (+ spot_total_cost perp_margin_required))
+
+  (log :message "\n=== TRADE EXECUTION ===")
+  (log :message "LEG 1 - Buy Spot:")
+  (log :message "  Quantity (BTC):" :value btc_quantity)
+  (log :message "  Cost:" :value capital)
+  (log :message "  Fee (0.50%):" :value spot_fee_dollars)
+  (log :message "  Total cost:" :value spot_total_cost)
+  (log :message "")
+  (log :message "LEG 2 - Short Perp:")
+  (log :message "  Notional:" :value capital)
+  (log :message "  Leverage:" :value perp_leverage)
+  (log :message "  Margin required:" :value perp_margin_required)
+  (log :message "  Fee (0.04%):" :value perp_fee_dollars)
+  (log :message "")
+  (log :message "Total capital deployed:" :value total_capital_deployed)
+
+  ;; ============================================
+  ;; STEP 3: FUNDING PAYMENT CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Earn funding every 8 hours on short position
+  ;;
+  ;; ASSUMPTION: Funding rate decays over time
+  ;; - Week 1: 0.10% per 8h (current high)
+  ;; - Week 2: 0.08% per 8h (arbs enter, rate drops)
+  ;; - Week 3: 0.06% per 8h (more normalization)
+  ;; - Week 4: 0.05% per 8h (approaching normal)
+  ;;
+  ;; CALCULATION:
+  ;; Week 1: 21 payments * 0.10% * $100,000 = $2,100
+  ;; Week 2: 21 payments * 0.08% * $100,000 = $1,680
+  ;; Week 3: 21 payments * 0.06% * $100,000 = $1,260
+  ;; Week 4: 27 payments * 0.05% * $100,000 = $1,350
+  ;; Total: $2,100 + $1,680 + $1,260 + $1,350 = $6,390
+  ;;
+  (define week1_rate 0.10)
+  (define week2_rate 0.08)
+  (define week3_rate 0.06)
+  (define week4_rate 0.05)
+
+  (define week1_payments 21)
+  (define week2_payments 21)
+  (define week3_payments 21)
+  (define week4_payments 27)
+
+  (define week1_funding (* week1_payments (/ week1_rate 100) capital))
+  (define week2_funding (* week2_payments (/ week2_rate 100) capital))
+  (define week3_funding (* week3_payments (/ week3_rate 100) capital))
+  (define week4_funding (* week4_payments (/ week4_rate 100) capital))
+
+  (define total_funding_earned (+ week1_funding week2_funding week3_funding week4_funding))
+
+  (log :message "\n=== FUNDING PAYMENTS (30 days) ===")
+  (log :message "Week 1 (21 payments @ 0.10%):" :value week1_funding)
+  (log :message "Week 2 (21 payments @ 0.08%):" :value week2_funding)
+  (log :message "Week 3 (21 payments @ 0.06%):" :value week3_funding)
+  (log :message "Week 4 (27 payments @ 0.05%):" :value week4_funding)
+  (log :message "---")
+  (log :message "Total funding earned:" :value total_funding_earned)
+
+  ;; ============================================
+  ;; STEP 4: TRANSACTION COSTS
+  ;; ============================================
+  ;;
+  ;; THEORY: Subtract all costs from gross profit
+  ;;
+  ;; ENTRY COSTS:
+  ;; - Spot buy fee: $500
+  ;; - Perp short fee: $40
+  ;; - Total entry: $540
+  ;;
+  ;; EXIT COSTS (estimated):
+  ;; - Spot sell fee: $500 (0.50%)
+  ;; - Perp close fee: $40 (0.04%)
+  ;; - Total exit: $540
+  ;;
+  ;; HOLDING COSTS:
+  ;; - Spot custody: $0 (self-custody)
+  ;; - Perp overnight fees: $0 (no daily fees, just funding)
+  ;;
+  ;; TOTAL COSTS: $540 + $540 = $1,080
+  ;;
+  (define entry_costs (+ spot_fee_dollars perp_fee_dollars))
+  (define exit_costs (+ spot_fee_dollars perp_fee_dollars))
+  (define holding_costs 0)
+  (define total_transaction_costs (+ entry_costs exit_costs holding_costs))
+
+  (log :message "\n=== TRANSACTION COSTS ===")
+  (log :message "Entry costs:" :value entry_costs)
+  (log :message "Exit costs (estimated):" :value exit_costs)
+  (log :message "Holding costs:" :value holding_costs)
+  (log :message "Total transaction costs:" :value total_transaction_costs)
+
+  ;; ============================================
+  ;; CALCULATION: NET PROFIT
+  ;; ============================================
+  ;;
+  ;; THEORY: Profit = Funding Earned - Costs - Basis Convergence
+  ;;
+  ;; BASIS CONVERGENCE:
+  ;; Perp started at $50,150 (0.30% premium)
+  ;; At exit, assume perp = spot (basis → 0)
+  ;; Spot position: Unrealized P&L = (spot_exit - spot_entry) * quantity
+  ;; Perp position: Realized P&L = (perp_entry - perp_exit) * quantity
+  ;; If prices converge: spot and perp cancel out (delta neutral)
+  ;; But basis collapse helps perp (you're short at premium): +$150 * 2 BTC = +$300
+  ;;
+  ;; TOTAL P&L:
+  ;; Funding earned: +$6,390
+  ;; Transaction costs: -$1,080
+  ;; Basis gain (short perp at premium): +$300
+  ;; Net profit: $6,390 - $1,080 + $300 = $5,610
+  ;;
+  (define basis_gain (* basis btc_quantity))
+  (define net_profit (+ (- total_funding_earned total_transaction_costs) basis_gain))
+  (define roi_pct (/ (* net_profit 100) total_capital_deployed))
+
+  (log :message "\n=== NET PROFIT CALCULATION ===")
+  (log :message "Funding earned:" :value total_funding_earned)
+  (log :message "Transaction costs:" :value total_transaction_costs)
+  (log :message "Basis gain (perp premium):" :value basis_gain)
+  (log :message "---")
+  (log :message "Net profit:" :value net_profit)
+  (log :message "Capital deployed:" :value total_capital_deployed)
+  (log :message "ROI (30 days):" :value roi_pct)
+  (log :message "Annualized ROI:" :value (* roi_pct 12))
+
+  ;; ============================================
+  ;; STEP 5: RISK ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Identify and quantify risks
+  ;;
+  ;; RISK 1: FUNDING RATE REVERSAL
+  ;; If funding goes negative (shorts pay longs), you lose money
+  ;; Historical probability: 10% of time funding negative
+  ;; Mitigation: Exit if funding drops below 0.01% per 8h
+  ;;
+  ;; RISK 2: LIQUIDATION (PERP SIDE)
+  ;; Perp uses 5x leverage
+  ;; Liquidation if BTC rises 20% = $50,000 * 1.20 = $60,000
+  ;; Current price: $50,000
+  ;; Buffer: 20% (comfortable for 30-day hold)
+  ;; Mitigation: Add margin if BTC rises 10%
+  ;;
+  ;; RISK 3: EXCHANGE RISK (COUNTERPARTY)
+  ;; Binance could freeze withdrawals, get hacked, or fail
+  ;; Historical precedent: FTX collapse (2022)
+  ;; Mitigation: Diversify across multiple exchanges, use Deribit/Bybit too
+  ;;
+  ;; RISK 4: BASIS BLOWOUT
+  ;; Perp could trade at larger premium (funding insufficient to attract arbs)
+  ;; If basis → $500 (1%), your perp short loses $700 unrealized
+  ;; Mitigation: Set stop-loss at basis = 0.50% ($250)
+  ;;
+  ;; RISK 5: REGULATORY
+  ;; Perpetual swaps banned/restricted in jurisdiction
+  ;; Mitigation: Use offshore entity, VPN access
+  ;;
+  (define liquidation_threshold_pct 20)
+  (define liquidation_price (* spot_price (+ 1 (/ liquidation_threshold_pct 100))))
+  (define funding_reversal_prob 0.10)
+  (define basis_blowout_threshold 0.50)
+
+  (log :message "\n=== RISK ANALYSIS ===")
+  (log :message "1. Funding Rate Reversal:")
+  (log :message "   Probability:" :value funding_reversal_prob)
+  (log :message "   Mitigation: Exit if funding < 0.01%")
+  (log :message "")
+  (log :message "2. Liquidation Risk (Perp):")
+  (log :message "   Leverage:" :value perp_leverage)
+  (log :message "   Liquidation price:" :value liquidation_price)
+  (log :message "   Buffer: 20% (safe for 30 days)")
+  (log :message "   Mitigation: Add margin at +10% move")
+  (log :message "")
+  (log :message "3. Exchange Risk:")
+  (log :message "   Risk: Binance freeze/hack")
+  (log :message "   Mitigation: Diversify across Deribit, Bybit")
+  (log :message "")
+  (log :message "4. Basis Blowout:")
+  (log :message "   Threshold:" :value basis_blowout_threshold)
+  (log :message "   Stop-loss: Unwind if basis > 0.50%")
+  (log :message "")
+  (log :message "5. Regulatory Risk:")
+  (log :message "   Mitigation: Offshore structure, VPN")
+
+  ;; ============================================
+  ;; STEP 6: FUNDING RATE FORECASTING
+  ;; ============================================
+  ;;
+  ;; THEORY: Predict future funding rates
+  ;;
+  ;; INDICATORS:
+  ;; 1. Open Interest: Currently $10B (very high)
+  ;;    High OI → More leverage → Higher funding
+  ;;    If OI drops 20% → Funding drops proportionally
+  ;;
+  ;; 2. Basis: Currently 0.30% (elevated)
+  ;;    Basis and funding highly correlated (r = 0.85)
+  ;;    If basis → 0.10%, funding → 0.03% per 8h
+  ;;
+  ;; 3. Volatility: BTC 30-day vol = 60% (moderate)
+  ;;    High vol → Hedging demand → Higher funding
+  ;;    If vol rises to 80%, funding +50% increase
+  ;;
+  ;; FORECAST MODEL (simple regression):
+  ;; Funding = 0.02% + 0.25 * Basis% + 0.0001 * OI_billions + 0.05 * Vol%
+  ;;
+  ;; Current: 0.02% + 0.25*0.30 + 0.0001*10 + 0.05*60 = 0.02 + 0.075 + 0.001 + 3.0 = 3.096%
+  ;; (Model is simplified for illustration; actual: use ML with more features)
+  ;;
+  (define open_interest_billions 10)
+  (define btc_volatility 60)
+  (define funding_forecast (+ 0.02
+                              (* 0.25 basis_pct)
+                              (* 0.0001 open_interest_billions)
+                              (* 0.05 btc_volatility)))
+
+  (log :message "\n=== FUNDING RATE FORECAST ===")
+  (log :message "Current inputs:")
+  (log :message "  Open interest ($B):" :value open_interest_billions)
+  (log :message "  Basis (%):" :value basis_pct)
+  (log :message "  Volatility (%):" :value btc_volatility)
+  (log :message "")
+  (log :message "Forecast model (simplified):")
+  (log :message "  Funding = 0.02 + 0.25*Basis + 0.0001*OI + 0.05*Vol")
+  (log :message "  Predicted funding:" :value funding_forecast)
+  (log :message "")
+  (log :message "Note: Real models use ML with 20+ features")
+
+  ;; ============================================
+  ;; FINAL ASSESSMENT
+  ;; ============================================
+  (log :message "\n=== FINAL ASSESSMENT ===")
+  (log :message "OPPORTUNITY:")
+  (log :message "- Funding rate: 109.5% APY (extreme)")
+  (log :message "- Expected 30-day profit: $5,610 (4.7% ROI)")
+  (log :message "- Annualized ROI: 56% (after decay)")
+  (log :message "- Risk-adjusted: Attractive for capital efficiency")
+  (log :message "")
+  (log :message "EXECUTION:")
+  (log :message "✓ Buy 2.0 BTC spot ($100,500)")
+  (log :message "✓ Short 2.0 BTC perp at 5x leverage ($20k margin)")
+  (log :message "✓ Delta-neutral position (no directional risk)")
+  (log :message "✓ Earn funding every 8 hours")
+  (log :message "")
+  (log :message "RISK MANAGEMENT:")
+  (log :message "✓ Liquidation buffer: 20% (safe)")
+  (log :message "✓ Basis stop-loss: 0.50%")
+  (log :message "✓ Funding exit: Below 0.01% per 8h")
+  (log :message "✓ Exchange diversification: Spread across 3 venues")
+  (log :message "")
+  (log :message "WHY THIS WORKS:")
+  (log :message "- Overcrowded longs create funding imbalance")
+  (log :message "- Arb forces funding back to equilibrium (0.01-0.03%)")
+  (log :message "- Delta-neutral eliminates directional risk")
+  (log :message "- Low leverage (5x) prevents liquidation")
+  (log :message "- Transaction costs minimal vs funding earned")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Auto-rebalancing: Dynamically adjust hedge ratio as prices drift")
+  (log :message "2. Multi-exchange arb: Trade spot/perp across Binance, FTX, Bybit")
+  (log :message "3. Funding rate prediction: ML model (XGBoost) with 30+ features")
+  (log :message "4. Optimal leverage: Maximize return per unit margin (Kelly criterion)")
+  (log :message "5. Basis monitoring: Alert on basis expansion (risk of blowout)")
+  (log :message "6. Liquidation alerts: SMS/email when within 5% of liquidation")
+  (log :message "7. Cross-margining: Use same collateral for multiple positions")
+  (log :message "8. Tax optimization: Harvest losses on spot, realize gains on perp")
+  (log :message "9. Funding history: Track realized funding vs forecast accuracy")
+  (log :message "10. Open interest tracking: Exit when OI drops 30% (demand weakening)")
+  (log :message "11. Vol regime switching: Increase position size in low-vol")
+  (log :message "12. Cross-asset arb: ETH, SOL funding rates correlation")
+  (log :message "13. Automated unwinding: Close position if profit target hit (7%)")
+  (log :message "14. Spread trades: Long low-funding coin, short high-funding coin")
+  (log :message "15. DeFi integration: Use Aave for spot leverage (lower cost)")
+
+  (log :message "\n=== FUNDING RATE ARBITRAGE COMPLETE ===")
+)

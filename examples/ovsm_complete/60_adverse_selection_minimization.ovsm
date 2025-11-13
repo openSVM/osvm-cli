@@ -1,0 +1,447 @@
+;; ============================================
+;; OVSM Example 60: Adverse Selection Minimization
+;; ============================================
+;;
+;; THEORY: Reducing Information Disadvantage in Order Execution
+;; -------------------------------------------------------------
+;; Adverse selection occurs when informed traders exploit uninformed traders.
+;; Market makers and large institutional orders face adverse selection: they
+;; get filled when prices are about to move against them. Kyle (1985) models
+;; this as informed traders' private information creating price impact (lambda).
+;; Minimizing adverse selection requires timing, size optimization, and
+;; identifying toxic flow periods.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. ADVERSE SELECTION MECHANISM:
+;;    - You place limit buy order at $100.00
+;;    - Informed seller knows bad news coming (price will drop)
+;;    - Seller hits your bid, fills you at $100.00
+;;    - News released: price drops to $99.50
+;;    - You lost $0.50 per share (adverse selection cost)
+;;
+;; 2. KYLE'S LAMBDA (Price Impact Coefficient):
+;;    λ = dP / dQ = (Spread / 2) / (Avg Trade Size)
+;;    Where:
+;;    - dP = price change
+;;    - dQ = order size
+;;    - Higher λ = higher adverse selection risk
+;;    - Estimate λ from historical trades
+;;
+;; 3. TOXIC FLOW PERIODS:
+;;    HIGH ADVERSE SELECTION:
+;;    - Macro announcements (FOMC, NFP, CPI)
+;;    - Earnings releases (30min before/after)
+;;    - Market open/close (9:30-10AM, 3:30-4PM)
+;;    - Flash crashes, circuit breakers
+;;
+;;    LOW ADVERSE SELECTION:
+;;    - Mid-day doldrums (11AM-2PM)
+;;    - Low volatility regimes
+;;    - High liquidity periods (depth > 2x normal)
+;;
+;; 4. VOLUME CURVE TIMING (U-Shaped Pattern):
+;;    - Market open (9:30-10AM): 30% of daily volume, high AS
+;;    - Mid-day (11AM-3PM): 40% of volume, low AS
+;;    - Market close (3PM-4PM): 30% of volume, high AS
+;;    - Optimal execution: Weight towards mid-day
+;;
+;; 5. TRADE SIZE OPTIMIZATION:
+;;    - Large orders signal information (high AS risk)
+;;    - Small orders hide intent but take longer (timing risk)
+;;    - Optimal: Size orders to match normal market flow
+;;    - Rule of thumb: < 5% of average trade size
+;;
+;; ACADEMIC REFERENCES:
+;; - Kyle (1985): "Continuous Auctions and Insider Trading"
+;; - Glosten & Milgrom (1985): "Bid, Ask and Transaction Prices"
+;; - Easley et al. (2012): "Flow Toxicity and Liquidity in a High-Frequency World"
+;; - Cartea et al. (2015): "Algorithmic and High-Frequency Trading"
+;;
+;; IMPLEMENTATION:
+;; This example analyzes a large institutional order, identifies toxic
+;; flow periods, and optimizes execution timing to minimize adverse selection.
+;;
+(do
+  (log :message "=== ADVERSE SELECTION MINIMIZATION ===")
+
+  ;; ============================================
+  ;; TRADE SETUP
+  ;; ============================================
+  ;;
+  ;; Order: Buy 500,000 shares of Apple (AAPL)
+  ;; Current price: $180.00
+  ;; Target: Execute over 1 trading day (6.5 hours)
+  ;; Challenge: Minimize adverse selection cost
+  ;;
+  ;; MARKET CONTEXT:
+  ;; - AAPL Average Daily Volume (ADV): 50M shares
+  ;; - Your order: 500k / 50M = 1% of ADV (significant!)
+  ;; - Average trade size: 200 shares
+  ;; - Bid-ask spread: $0.02 (2 cents)
+  ;; - Market cap: $2.8T (highly liquid)
+  ;;
+  (define ticker "AAPL")
+  (define order_quantity 500000)
+  (define current_price 180.00)
+  (define adv 50000000)
+  (define order_pct_adv (/ (* order_quantity 100) adv))
+  (define avg_trade_size 200)
+  (define spread 0.02)
+  (define trading_hours 6.5)
+
+  (log :message "\n=== TRADE SPECIFICATION ===")
+  (log :message "Ticker:" :value ticker)
+  (log :message "Quantity:" :value order_quantity)
+  (log :message "Current price:" :value current_price)
+  (log :message "% of ADV:" :value order_pct_adv)
+  (log :message "Avg trade size:" :value avg_trade_size)
+  (log :message "Spread:" :value spread)
+
+  ;; ============================================
+  ;; STEP 1: KYLE'S LAMBDA ESTIMATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Measure price impact per unit traded
+  ;;
+  ;; FORMULA:
+  ;; λ = (Half-Spread) / (Avg Trade Size)
+  ;;   = ($0.01) / (200 shares)
+  ;;   = $0.00005 per share per share
+  ;;
+  ;; INTERPRETATION:
+  ;; For every 1 share traded, price moves $0.00005 on average
+  ;; For 500,000 shares: Expected impact = 500,000 * $0.00005 = $25
+  ;;
+  ;; But this is LINEAR approximation. Reality: non-linear (square-root law)
+  ;; Actual impact = λ * sqrt(Quantity) = $0.00005 * sqrt(500,000)
+  ;;                = $0.00005 * 707 = $0.0354 per share
+  ;; Total impact = $0.0354 * 500,000 = $17,700
+  ;;
+  ;; ADVERSE SELECTION COMPONENT:
+  ;; Kyle's model: 50% of impact is adverse selection
+  ;; AS cost = $17,700 * 0.50 = $8,850
+  ;;
+  (define half_spread (/ spread 2))
+  (define kyles_lambda (/ half_spread avg_trade_size))
+  (define linear_impact (* kyles_lambda order_quantity))
+  (define sqrt_impact_per_share (* kyles_lambda (sqrt order_quantity)))
+  (define total_market_impact (* sqrt_impact_per_share order_quantity))
+  (define adverse_selection_pct 0.50)
+  (define estimated_as_cost (* total_market_impact adverse_selection_pct))
+
+  (log :message "\n=== KYLE'S LAMBDA ESTIMATION ===")
+  (log :message "Half-spread:" :value half_spread)
+  (log :message "Kyle's lambda:" :value kyles_lambda)
+  (log :message "Linear impact (naive):" :value linear_impact)
+  (log :message "Sqrt impact per share:" :value sqrt_impact_per_share)
+  (log :message "Total market impact:" :value total_market_impact)
+  (log :message "Adverse selection (50%):" :value estimated_as_cost)
+
+  ;; ============================================
+  ;; STEP 2: INTRADAY TIMING ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Volume curve is U-shaped (high at open/close, low mid-day)
+  ;;
+  ;; INTRADAY VOLUME PROFILE:
+  ;; 9:30-10:00: 15% of daily volume (high AS risk, price discovery)
+  ;; 10:00-11:00: 12% of volume (declining AS)
+  ;; 11:00-12:00: 8% of volume (LOW AS - ideal time)
+  ;; 12:00-1:00: 7% of volume (LOWEST AS - best time!)
+  ;; 1:00-2:00: 8% of volume (low AS)
+  ;; 2:00-3:00: 10% of volume (rising AS)
+  ;; 3:00-3:30: 12% of volume (high AS, positioning for close)
+  ;; 3:30-4:00: 28% of volume (VERY high AS, closing auction)
+  ;;
+  ;; ADVERSE SELECTION BY HOUR:
+  ;; 9:30-10:00: 25% AS rate (1 in 4 trades adverse)
+  ;; 10:00-11:00: 18% AS rate
+  ;; 11:00-12:00: 12% AS rate ✓ GOOD
+  ;; 12:00-1:00: 10% AS rate ✓✓ BEST
+  ;; 1:00-2:00: 12% AS rate ✓ GOOD
+  ;; 2:00-3:00: 15% AS rate
+  ;; 3:00-3:30: 20% AS rate
+  ;; 3:30-4:00: 30% AS rate (avoid!)
+  ;;
+  (define vol_930_1000 15)
+  (define vol_1000_1100 12)
+  (define vol_1100_1200 8)
+  (define vol_1200_1300 7)
+  (define vol_1300_1400 8)
+  (define vol_1400_1500 10)
+  (define vol_1500_1530 12)
+  (define vol_1530_1600 28)
+
+  (define as_rate_930_1000 0.25)
+  (define as_rate_1000_1100 0.18)
+  (define as_rate_1100_1200 0.12)
+  (define as_rate_1200_1300 0.10)
+  (define as_rate_1300_1400 0.12)
+  (define as_rate_1400_1500 0.15)
+  (define as_rate_1500_1530 0.20)
+  (define as_rate_1530_1600 0.30)
+
+  (log :message "\n=== INTRADAY VOLUME & AS RATES ===")
+  (log :message "9:30-10:00: Vol 15%, AS 25% (HIGH RISK)")
+  (log :message "10:00-11:00: Vol 12%, AS 18%")
+  (log :message "11:00-12:00: Vol 8%, AS 12% ✓")
+  (log :message "12:00-1:00: Vol 7%, AS 10% ✓✓ BEST")
+  (log :message "1:00-2:00: Vol 8%, AS 12% ✓")
+  (log :message "2:00-3:00: Vol 10%, AS 15%")
+  (log :message "3:00-3:30: Vol 12%, AS 20%")
+  (log :message "3:30-4:00: Vol 28%, AS 30% (AVOID!)")
+
+  ;; ============================================
+  ;; STEP 3: OPTIMAL EXECUTION SCHEDULE
+  ;; ============================================
+  ;;
+  ;; THEORY: Weight execution towards low-AS periods
+  ;;
+  ;; NAIVE TWAP (Time-Weighted Average Price):
+  ;; Execute evenly throughout day: 62,500 shares per hour
+  ;; Problem: Executes 62,500 shares during high-AS open/close
+  ;;
+  ;; OPTIMAL AS-MINIMIZING SCHEDULE:
+  ;; Avoid high-AS periods, concentrate in low-AS periods
+  ;;
+  ;; ALLOCATION:
+  ;; 9:30-10:00: 0 shares (SKIP - AS too high)
+  ;; 10:00-11:00: 50,000 shares (10%)
+  ;; 11:00-12:00: 100,000 shares (20%) ✓ Low AS
+  ;; 12:00-1:00: 150,000 shares (30%) ✓✓ Lowest AS
+  ;; 1:00-2:00: 100,000 shares (20%) ✓ Low AS
+  ;; 2:00-3:00: 75,000 shares (15%)
+  ;; 3:00-3:30: 25,000 shares (5%)
+  ;; 3:30-4:00: 0 shares (SKIP - AS too high)
+  ;; Total: 500,000 shares
+  ;;
+  (define alloc_930_1000 0)
+  (define alloc_1000_1100 50000)
+  (define alloc_1100_1200 100000)
+  (define alloc_1200_1300 150000)
+  (define alloc_1300_1400 100000)
+  (define alloc_1400_1500 75000)
+  (define alloc_1500_1530 25000)
+  (define alloc_1530_1600 0)
+
+  (define total_allocated (+ alloc_930_1000 alloc_1000_1100 alloc_1100_1200
+                             alloc_1200_1300 alloc_1300_1400 alloc_1400_1500
+                             alloc_1500_1530 alloc_1530_1600))
+
+  (log :message "\n=== OPTIMAL EXECUTION SCHEDULE ===")
+  (log :message "9:30-10:00: 0 shares (SKIP)")
+  (log :message "10:00-11:00: 50,000 shares")
+  (log :message "11:00-12:00: 100,000 shares")
+  (log :message "12:00-1:00: 150,000 shares (PEAK)")
+  (log :message "1:00-2:00: 100,000 shares")
+  (log :message "2:00-3:00: 75,000 shares")
+  (log :message "3:00-3:30: 25,000 shares")
+  (log :message "3:30-4:00: 0 shares (SKIP)")
+  (log :message "Total allocated:" :value total_allocated)
+
+  ;; ============================================
+  ;; CALCULATION: Expected AS Cost (TWAP vs Optimal)
+  ;; ============================================
+  ;;
+  ;; TWAP STRATEGY (naive, equal weighting):
+  ;; Shares per period * AS rate * impact per share
+  ;;
+  ;; 9:30-10:00: 62,500 * 0.25 * $0.0354 = $553
+  ;; 10:00-11:00: 62,500 * 0.18 * $0.0354 = $398
+  ;; 11:00-12:00: 62,500 * 0.12 * $0.0354 = $265
+  ;; 12:00-1:00: 62,500 * 0.10 * $0.0354 = $221
+  ;; 1:00-2:00: 62,500 * 0.12 * $0.0354 = $265
+  ;; 2:00-3:00: 62,500 * 0.15 * $0.0354 = $332
+  ;; 3:00-3:30: 31,250 * 0.20 * $0.0354 = $221
+  ;; 3:30-4:00: 156,250 * 0.30 * $0.0354 = $1,659
+  ;; Total TWAP AS cost: $3,914
+  ;;
+  (define twap_shares_per_hour 62500)
+  (define twap_shares_last_hour 156250)
+  (define twap_shares_half_hour 31250)
+
+  (define twap_as_cost (+ (* twap_shares_per_hour as_rate_930_1000 sqrt_impact_per_share)
+                          (* twap_shares_per_hour as_rate_1000_1100 sqrt_impact_per_share)
+                          (* twap_shares_per_hour as_rate_1100_1200 sqrt_impact_per_share)
+                          (* twap_shares_per_hour as_rate_1200_1300 sqrt_impact_per_share)
+                          (* twap_shares_per_hour as_rate_1300_1400 sqrt_impact_per_share)
+                          (* twap_shares_per_hour as_rate_1400_1500 sqrt_impact_per_share)
+                          (* twap_shares_half_hour as_rate_1500_1530 sqrt_impact_per_share)
+                          (* twap_shares_last_hour as_rate_1530_1600 sqrt_impact_per_share)))
+
+  ;; OPTIMAL STRATEGY (AS-minimizing):
+  ;; Concentrate in low-AS periods, skip high-AS periods
+  ;;
+  ;; 9:30-10:00: 0 * 0.25 * $0.0354 = $0
+  ;; 10:00-11:00: 50,000 * 0.18 * $0.0354 = $318
+  ;; 11:00-12:00: 100,000 * 0.12 * $0.0354 = $425
+  ;; 12:00-1:00: 150,000 * 0.10 * $0.0354 = $531
+  ;; 1:00-2:00: 100,000 * 0.12 * $0.0354 = $425
+  ;; 2:00-3:00: 75,000 * 0.15 * $0.0354 = $398
+  ;; 3:00-3:30: 25,000 * 0.20 * $0.0354 = $177
+  ;; 3:30-4:00: 0 * 0.30 * $0.0354 = $0
+  ;; Total Optimal AS cost: $2,274
+  ;;
+  (define optimal_as_cost (+ (* alloc_930_1000 as_rate_930_1000 sqrt_impact_per_share)
+                             (* alloc_1000_1100 as_rate_1000_1100 sqrt_impact_per_share)
+                             (* alloc_1100_1200 as_rate_1100_1200 sqrt_impact_per_share)
+                             (* alloc_1200_1300 as_rate_1200_1300 sqrt_impact_per_share)
+                             (* alloc_1300_1400 as_rate_1300_1400 sqrt_impact_per_share)
+                             (* alloc_1400_1500 as_rate_1400_1500 sqrt_impact_per_share)
+                             (* alloc_1500_1530 as_rate_1500_1530 sqrt_impact_per_share)
+                             (* alloc_1530_1600 as_rate_1530_1600 sqrt_impact_per_share)))
+
+  (define as_savings (- twap_as_cost optimal_as_cost))
+  (define as_savings_pct (/ (* as_savings 100) twap_as_cost))
+
+  (log :message "\n=== ADVERSE SELECTION COST COMPARISON ===")
+  (log :message "TWAP strategy (naive):")
+  (log :message "  Total AS cost:" :value twap_as_cost)
+  (log :message "")
+  (log :message "Optimal strategy (AS-minimizing):")
+  (log :message "  Total AS cost:" :value optimal_as_cost)
+  (log :message "")
+  (log :message "SAVINGS:")
+  (log :message "  AS cost reduction:" :value as_savings)
+  (log :message "  Reduction %:" :value as_savings_pct)
+  (log :message "  ✓ Save $1,640 (41.9% reduction!) by timing optimization")
+
+  ;; ============================================
+  ;; STEP 4: TRADE SIZE OPTIMIZATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Large trades signal information, increase AS
+  ;;
+  ;; CURRENT PLAN: Execute 150,000 shares in 12-1PM window
+  ;; If done as single trade: Massive information signal!
+  ;; AS rate would spike from 10% → 40%
+  ;;
+  ;; OPTIMAL: Break into smaller child orders
+  ;; Target: Match normal market flow (200 share avg)
+  ;; Child order size: 500-1,000 shares (2.5x-5x normal)
+  ;; Number of child orders: 150,000 / 750 = 200 orders
+  ;; Execution: 1 order every 18 seconds (200 orders in 60 min)
+  ;;
+  ;; BENEFIT:
+  ;; Smaller orders don't signal information
+  ;; AS rate stays at 10% (doesn't spike to 40%)
+  ;; Additional savings: 150,000 * 0.30 * $0.0354 = $1,593
+  ;;
+  (define large_order_as_rate 0.40)
+  (define small_order_as_rate 0.10)
+  (define peak_period_shares 150000)
+
+  (define large_order_as_cost (* peak_period_shares large_order_as_rate sqrt_impact_per_share))
+  (define small_order_as_cost (* peak_period_shares small_order_as_rate sqrt_impact_per_share))
+  (define size_optimization_savings (- large_order_as_cost small_order_as_cost))
+
+  (define child_order_size 750)
+  (define num_child_orders (/ peak_period_shares child_order_size))
+  (define seconds_between_orders (/ 3600 num_child_orders))
+
+  (log :message "\n=== TRADE SIZE OPTIMIZATION ===")
+  (log :message "Peak period (12-1PM): 150,000 shares")
+  (log :message "")
+  (log :message "If executed as single large order:")
+  (log :message "  AS rate spikes to 40%")
+  (log :message "  AS cost:" :value large_order_as_cost)
+  (log :message "")
+  (log :message "If broken into small child orders:")
+  (log :message "  Child order size:" :value child_order_size)
+  (log :message "  Number of orders:" :value num_child_orders)
+  (log :message "  Interval:" :value seconds_between_orders)
+  (log :message "  AS rate stays at 10%")
+  (log :message "  AS cost:" :value small_order_as_cost)
+  (log :message "")
+  (log :message "Additional savings:" :value size_optimization_savings)
+
+  ;; ============================================
+  ;; STEP 5: EVENT AVOIDANCE
+  ;; ============================================
+  ;;
+  ;; THEORY: Avoid trading during scheduled information events
+  ;;
+  ;; HIGH-AS EVENTS (avoid completely):
+  ;; - FOMC meetings: 2:00 PM ET (8x per year)
+  ;; - Non-Farm Payrolls: 8:30 AM ET (1st Friday of month)
+  ;; - CPI releases: 8:30 AM ET (monthly)
+  ;; - Company earnings: After close or pre-market
+  ;; - Dividend ex-dates: Price adjusts at open
+  ;; - Index rebalancing: Close of rebalance day
+  ;;
+  ;; TODAY'S CHECK:
+  ;; No FOMC, no major macro releases, no AAPL earnings
+  ;; Safe to trade: ✓
+  ;;
+  ;; IF HIGH-AS EVENT:
+  ;; Push entire execution to next day or split across 2 days
+  ;; Cost of delay: Opportunity cost vs AS savings
+  ;;
+  (define fomc_today false)
+  (define earnings_today false)
+  (define macro_release_today false)
+  (define safe_to_trade (and (not fomc_today)
+                            (not earnings_today)
+                            (not macro_release_today)))
+
+  (log :message "\n=== EVENT AVOIDANCE CHECK ===")
+  (log :message "FOMC today:" :value fomc_today)
+  (log :message "Earnings today:" :value earnings_today)
+  (log :message "Macro release today:" :value macro_release_today)
+  (log :message "Safe to trade:" :value safe_to_trade)
+  (log :message "✓ No high-AS events, proceed with execution")
+
+  ;; ============================================
+  ;; FINAL EXECUTION PLAN
+  ;; ============================================
+  (log :message "\n=== FINAL EXECUTION PLAN ===")
+  (log :message "Order: 500,000 AAPL @ $180")
+  (log :message "")
+  (log :message "STRATEGY:")
+  (log :message "✓ Skip market open (9:30-10AM) - high AS")
+  (log :message "✓ Concentrate 60% in 11AM-2PM - low AS window")
+  (log :message "✓ Peak execution 12-1PM (150k shares)")
+  (log :message "✓ Break into 200 child orders (750 shares each)")
+  (log :message "✓ Execute 1 order every 18 seconds")
+  (log :message "✓ Skip market close (3:30-4PM) - very high AS")
+  (log :message "")
+  (log :message "EXPECTED COSTS:")
+  (log :message "  Market impact: $17,700")
+  (log :message "  Adverse selection (optimal): $2,274")
+  (log :message "  Total execution cost: $19,974")
+  (log :message "")
+  (log :message "SAVINGS vs TWAP:")
+  (log :message "  TWAP AS cost: $3,914")
+  (log :message "  Optimal AS cost: $2,274")
+  (log :message "  Savings: $1,640 (41.9%)")
+  (log :message "")
+  (log :message "WHY THIS WORKS:")
+  (log :message "- Avoid high-AS periods (open/close)")
+  (log :message "- Concentrate in low-AS window (mid-day)")
+  (log :message "- Small order sizes don't signal information")
+  (log :message "- Match natural market flow (stealth)")
+  (log :message "- Skip macro event days entirely")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Real-time AS estimation: Update λ every minute based on fills")
+  (log :message "2. Machine learning: Predict AS rate by time/volatility/volume")
+  (log :message "3. Dynamic scheduling: Adjust execution in real-time as AS changes")
+  (log :message "4. Fill quality scoring: Track AS by venue/time for future optimization")
+  (log :message "5. Event calendar integration: Auto-skip FOMC, NFP, earnings days")
+  (log :message "6. Market impact forecasting: Almgren-Chriss optimal execution model")
+  (log :message "7. Toxicity detection: Easley's VPIN (Volume-Synchronized PIN)")
+  (log :message "8. Cross-venue routing: Execute on least-toxic venue (IEX, dark pools)")
+  (log :message "9. Adaptive order sizing: Increase size when AS drops, reduce when spikes")
+  (log :message "10. Hidden order types: Use iceberg/reserve to avoid information leakage")
+  (log :message "11. Price improvement seeking: Post at mid-point when AS low")
+  (log :message "12. Urgency adjustment: Accept higher AS if alpha decays fast")
+  (log :message "13. Regime detection: Switch from passive to aggressive in high-AS regime")
+  (log :message "14. Multi-day optimization: Split order across days if AS consistently high")
+  (log :message "15. Options overlay: Use options for tail protection during execution")
+
+  (log :message "\n=== ADVERSE SELECTION MINIMIZATION COMPLETE ===")
+)

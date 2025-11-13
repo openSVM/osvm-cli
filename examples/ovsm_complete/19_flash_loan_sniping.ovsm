@@ -1,0 +1,338 @@
+;; ============================================
+;; OVSM Example 19: Flash Loan Sniping & Leverage
+;; ============================================
+
+(do
+  (log :message "=== FLASH LOAN OPPORTUNITY DETECTION ===")
+
+  ;; Available flash loan providers on Solana
+  (define flash_loan_providers [
+    {:name "Solend" :max_amount 100000 :fee_bps 9}
+    {:name "Kamino" :max_amount 50000 :fee_bps 5}
+    {:name "MarginFi" :max_amount 75000 :fee_bps 7}
+  ])
+
+  (log :message "Flash loan providers:" :value (length flash_loan_providers))
+
+  ;; Find cheapest provider for our size
+  (define target_loan_size 10.0)
+  (define best_provider null)
+  (define lowest_fee 999999.0)
+
+  (for (provider flash_loan_providers)
+    (define name (get provider "name"))
+    (define max_amount (get provider "max_amount"))
+    (define fee_bps (get provider "fee_bps"))
+    (define fee_amount (* target_loan_size (/ fee_bps 10000)))
+
+    (when (>= max_amount target_loan_size)
+      (log :message name)
+      (log :message "  Max:" :value max_amount)
+      (log :message "  Fee:" :value fee_amount)
+
+      (when (< fee_amount lowest_fee)
+        (set! lowest_fee fee_amount)
+        (set! best_provider name))))
+
+  (log :message "Best provider:" :value best_provider)
+  (log :message "Flash loan fee:" :value lowest_fee)
+
+  (log :message "\n=== LEVERAGED SNIPE STRATEGY ===")
+
+  ;; Use flash loan to 10x our snipe power
+  (define our_capital 1.0)
+  (define flash_loan_amount 9.0)
+  (define total_buying_power (+ our_capital flash_loan_amount))
+
+  (log :message "Our capital:" :value our_capital)
+  (log :message "Flash loan:" :value flash_loan_amount)
+  (log :message "Total buying power:" :value total_buying_power)
+
+  ;; Calculate leverage ratio
+  (define leverage_ratio (/ total_buying_power our_capital))
+  (log :message "Leverage ratio:" :value leverage_ratio)
+
+  (log :message "\n=== FLASH LOAN EXECUTION FLOW ===")
+
+  ;; Atomic transaction steps
+  (define flash_loan_steps [
+    {:step 1 :action "borrow" :amount 9.0 :desc "Flash loan borrow"}
+    {:step 2 :action "snipe_buy" :amount 10.0 :desc "Buy token"}
+    {:step 3 :action "wait_pump" :duration_ms 500 :desc "Wait for price pump"}
+    {:step 4 :action "sell" :amount 10.0 :desc "Sell tokens"}
+    {:step 5 :action "repay" :amount 9.0 :desc "Repay flash loan + fee"}
+    {:step 6 :action "profit" :desc "Keep the profit"}
+  ])
+
+  (log :message "Flash loan execution steps:" :value (length flash_loan_steps))
+
+  (for (step flash_loan_steps)
+    (define step_num (get step "step"))
+    (define action (get step "action"))
+    (define desc (get step "desc"))
+
+    (log :message "Step" :value step_num)
+    (log :message " " :value desc))
+
+  (log :message "\n=== PROFITABILITY CALCULATION ===")
+
+  ;; Simulate leveraged snipe
+  (define entry_price 0.0001)
+  (define pump_multiplier 1.5)  ;; 50% pump
+  (define exit_price (* entry_price pump_multiplier))
+
+  (log :message "Entry price:" :value entry_price)
+  (log :message "Exit price:" :value exit_price)
+
+  ;; Calculate tokens acquired
+  (define tokens_bought (/ total_buying_power entry_price))
+  (log :message "Tokens bought:" :value tokens_bought)
+
+  ;; Calculate sell revenue
+  (define sell_revenue (* tokens_bought exit_price))
+  (log :message "Sell revenue:" :value sell_revenue)
+
+  ;; Calculate profit
+  (define gross_profit (- sell_revenue total_buying_power))
+  (define flash_loan_cost (+ flash_loan_amount lowest_fee))
+  (define net_profit (- gross_profit lowest_fee))
+
+  (log :message "Gross profit:" :value gross_profit)
+  (log :message "Flash loan cost:" :value flash_loan_cost)
+  (log :message "Net profit:" :value net_profit)
+
+  ;; ROI on our actual capital
+  (define roi (* (/ net_profit our_capital) 100))
+  (log :message "ROI on capital:" :value roi)
+
+  (log :message "\n=== RISK ANALYSIS ===")
+
+  ;; Flash loan liquidation risk
+  (define min_pump_required (+ 1.0 (/ lowest_fee total_buying_power)))
+  (log :message "Min pump to break even:" :value min_pump_required)
+
+  ;; If pump is less than this, we lose money
+  (define pump_shortfall_risk (- min_pump_required pump_multiplier))
+
+  (when (> pump_shortfall_risk 0)
+    (log :message "⚠️ WARNING: Pump insufficient to cover flash loan"))
+
+  ;; Slippage impact on leveraged position
+  (define slippage_pct 2.0)
+  (define slippage_cost (* total_buying_power (/ slippage_pct 100)))
+
+  (log :message "Slippage cost:" :value slippage_cost)
+
+  ;; Adjusted profit after slippage
+  (define profit_after_slippage (- net_profit slippage_cost))
+  (log :message "Profit after slippage:" :value profit_after_slippage)
+
+  (log :message "\n=== MULTI-HOP FLASH LOAN ARBITRAGE ===")
+
+  ;; Complex arbitrage using flash loans
+  (define arb_path [
+    {:dex "PumpSwap" :action "buy" :price 0.0001 :liquidity 20}
+    {:dex "Raydium" :action "sell" :price 0.00012 :liquidity 50}
+  ])
+
+  (log :message "Arbitrage path hops:" :value (length arb_path))
+
+  ;; Calculate multi-hop profit
+  (define hop1 (first arb_path))
+  (define hop2 (first (drop arb_path 1)))
+
+  (define buy_price (get hop1 "price"))
+  (define sell_price (get hop2 "price"))
+
+  (define arb_spread (* (/ (- sell_price buy_price) buy_price) 100))
+  (log :message "Arbitrage spread:" :value arb_spread)
+
+  ;; Calculate arbitrage profit with flash loan
+  (define arb_buy_cost (* total_buying_power buy_price))
+  (define tokens_from_arb (/ total_buying_power buy_price))
+  (define arb_sell_revenue (* tokens_from_arb sell_price))
+
+  (define arb_gross_profit (- arb_sell_revenue total_buying_power))
+  (define arb_net_profit (- arb_gross_profit lowest_fee))
+
+  (log :message "Arb gross profit:" :value arb_gross_profit)
+  (log :message "Arb net profit:" :value arb_net_profit)
+
+  (log :message "\n=== FLASH LOAN SANDWICH ATTACK ===")
+
+  ;; Use flash loan to sandwich large victim trade
+  (define victim_trade_size 15.0)
+  (define pool_reserves 30.0)
+
+  ;; Step 1: Flash loan frontrun
+  (define frontrun_size total_buying_power)
+  (define k (* pool_reserves 1000000))
+
+  (define after_frontrun_sol (+ pool_reserves frontrun_size))
+  (define after_frontrun_tokens (/ k after_frontrun_sol))
+  (define frontrun_tokens (- 1000000 after_frontrun_tokens))
+
+  (log :message "Frontrun tokens acquired:" :value frontrun_tokens)
+
+  ;; Step 2: Victim trade executes
+  (define after_victim_sol (+ after_frontrun_sol victim_trade_size))
+  (define after_victim_tokens (/ k after_victim_sol))
+
+  ;; Step 3: Backrun sell our tokens
+  (define backrun_tokens_remaining (- after_victim_tokens frontrun_tokens))
+  (define backrun_sol (/ k backrun_tokens_remaining))
+  (define backrun_revenue (- backrun_sol after_victim_sol))
+
+  (log :message "Backrun revenue:" :value backrun_revenue)
+
+  ;; Sandwich profit
+  (define sandwich_profit (- backrun_revenue frontrun_size))
+  (define sandwich_net (- sandwich_profit lowest_fee))
+
+  (log :message "Sandwich gross profit:" :value sandwich_profit)
+  (log :message "Sandwich net profit:" :value sandwich_net)
+
+  (log :message "\n=== FLASH LOAN FAILURE SCENARIOS ===")
+
+  ;; Scenario 1: Transaction reverts
+  (define revert_probability 0.15)
+  (log :message "Revert probability:" :value revert_probability)
+
+  ;; Cost of revert (transaction fees lost)
+  (define tx_fee_cost 0.002)
+  (define expected_revert_cost (* revert_probability tx_fee_cost))
+
+  (log :message "Expected revert cost:" :value expected_revert_cost)
+
+  ;; Scenario 2: Price moves against us
+  (define adverse_move_probability 0.25)
+  (define adverse_move_loss 0.5)
+
+  (log :message "Adverse move probability:" :value adverse_move_probability)
+  (define expected_adverse_loss (* adverse_move_probability adverse_move_loss))
+
+  (log :message "Expected adverse loss:" :value expected_adverse_loss)
+
+  ;; Total expected loss from failures
+  (define total_expected_loss (+ expected_revert_cost expected_adverse_loss))
+  (log :message "Total expected loss:" :value total_expected_loss)
+
+  ;; Adjusted expected value
+  (define ev_adjusted (- profit_after_slippage total_expected_loss))
+  (log :message "Risk-adjusted EV:" :value ev_adjusted)
+
+  (log :message "\n=== OPTIMAL FLASH LOAN SIZE ===")
+
+  ;; Find optimal loan size for max profit
+  (define loan_sizes [5.0 10.0 15.0 20.0 25.0])
+
+  (define optimal_size 0.0)
+  (define max_profit 0.0)
+
+  (for (size loan_sizes)
+    (define size_fee (* size (/ 5 10000)))  ;; 5 bps
+    (define size_capital (+ our_capital size))
+
+    ;; Simulate profit at this size
+    (define size_tokens (/ size_capital entry_price))
+    (define size_revenue (* size_tokens exit_price))
+    (define size_profit (- (- size_revenue size_capital) size_fee))
+
+    (log :message "Size:" :value size)
+    (log :message "  Profit:" :value size_profit)
+
+    (when (> size_profit max_profit)
+      (set! max_profit size_profit)
+      (set! optimal_size size)))
+
+  (log :message "Optimal flash loan size:" :value optimal_size)
+  (log :message "Maximum profit:" :value max_profit)
+
+  (log :message "\n=== FLASH LOAN APPROVAL REQUIREMENTS ===")
+
+  ;; Check if we meet flash loan requirements
+  (define requirements [
+    {:check "sufficient_collateral" :required 0.1 :have 1.0 :pass true}
+    {:check "no_bad_debt" :required 0 :have 0 :pass true}
+    {:check "health_factor" :required 1.0 :have 1.5 :pass true}
+  ])
+
+  (define all_pass true)
+  (for (req requirements)
+    (define check (get req "check"))
+    (define pass (get req "pass"))
+
+    (log :message check :value (if pass "✅" "❌"))
+
+    (when (not pass)
+      (set! all_pass false)))
+
+  (log :message "Flash loan eligible:" :value all_pass)
+
+  (log :message "\n=== ATOMIC TRANSACTION VALIDATION ===")
+
+  ;; Ensure entire flash loan is atomic
+  (define atomic_checks [
+    "Borrow instruction present"
+    "Repay instruction present"
+    "Net SOL change = 0 (except fees)"
+    "No intermediate state persistence"
+  ])
+
+  (log :message "Atomicity checks:" :value (length atomic_checks))
+
+  (for (check atomic_checks)
+    (log :message "✓" :value check))
+
+  (log :message "\n=== FLASH LOAN vs REGULAR SNIPE ===")
+
+  ;; Compare leveraged vs normal snipe
+  (define regular_snipe_profit (* our_capital (- pump_multiplier 1)))
+  (define leveraged_snipe_profit profit_after_slippage)
+
+  (log :message "Regular snipe profit:" :value regular_snipe_profit)
+  (log :message "Leveraged snipe profit:" :value leveraged_snipe_profit)
+
+  (define leverage_advantage (- leveraged_snipe_profit regular_snipe_profit))
+  (log :message "Leverage advantage:" :value leverage_advantage)
+
+  (define advantage_multiplier (/ leveraged_snipe_profit regular_snipe_profit))
+  (log :message "Profit multiplier:" :value advantage_multiplier)
+
+  (log :message "\n=== FINAL FLASH LOAN DECISION ===")
+
+  ;; Aggregate decision factors
+  (define flash_score 0.0)
+
+  ;; Positive risk-adjusted EV (40%)
+  (when (> ev_adjusted 0.2) (set! flash_score (+ flash_score 0.4)))
+
+  ;; Sufficient arbitrage spread (30%)
+  (when (> arb_spread 10) (set! flash_score (+ flash_score 0.3)))
+
+  ;; Low revert risk (20%)
+  (when (< revert_probability 0.2) (set! flash_score (+ flash_score 0.2)))
+
+  ;; Flash loan eligible (10%)
+  (when all_pass (set! flash_score (+ flash_score 0.1)))
+
+  (log :message "Flash loan score:" :value flash_score)
+
+  (define flash_decision (if (>= flash_score 0.75)
+                             "🚀 EXECUTE FLASH LOAN SNIPE"
+                             (if (>= flash_score 0.5)
+                                 "⚠️ RISKY - Reduce leverage"
+                                 "❌ SKIP - Use regular snipe")))
+
+  (log :message "Flash Loan Decision:" :value flash_decision)
+
+  (when (>= flash_score 0.5)
+    (log :message "\nFlash Loan Configuration:")
+    (log :message "  Provider:" :value best_provider)
+    (log :message "  Loan amount:" :value optimal_size)
+    (log :message "  Fee:" :value lowest_fee)
+    (log :message "  Expected profit:" :value profit_after_slippage)
+    (log :message "  ROI:" :value roi)
+    (log :message "  Risk-adjusted EV:" :value ev_adjusted))
+
+  "✅ Flash loan sniping analysis complete!")

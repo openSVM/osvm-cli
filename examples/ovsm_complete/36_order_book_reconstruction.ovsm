@@ -1,0 +1,299 @@
+;; ============================================
+;; OVSM Example 36: Order Book Reconstruction
+;; ============================================
+;;
+;; THEORY: Rebuilding Market Microstructure from Trade Tape
+;; --------------------------------------------------------
+;; Order book reconstruction infers market depth and pressure
+;; from the sequence of executed trades (trade tape).
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. TRADE TAPE VS ORDER BOOK:
+;;    - Trade Tape: Executed transactions (price, size, side, time)
+;;    - Order Book: Live quotes (bid/ask levels, sizes)
+;;    - Trade tape is always available; order book may not be
+;;    - Goal: Infer order book state from trade history
+;;
+;; 2. VOLUME DELTA:
+;;    - Delta = Buy Volume - Sell Volume
+;;    - Positive delta → accumulation (bullish)
+;;    - Negative delta → distribution (bearish)
+;;    - Large delta → strong directional pressure
+;;
+;; 3. PRICE LEVEL VOLUME PROFILE:
+;;    - Aggregates volume at each price level
+;;    - High volume = support/resistance
+;;    - Volume at price (VAP) identifies key levels
+;;    - Point of Control (POC) = highest volume price
+;;
+;; 4. TRADE VELOCITY:
+;;    - Trades per second (execution rate)
+;;    - High velocity = increased urgency/interest
+;;    - Low velocity = patient limit orders
+;;    - Spikes indicate institutional activity
+;;
+;; WHY RECONSTRUCT ORDER BOOKS?
+;; - Historical analysis (order book not recorded)
+;; - Real-time inference when only trades available
+;; - Detect institutional footprints
+;; - Identify support/resistance zones
+;; - Measure buying/selling pressure
+;;
+;; IMPLEMENTATION:
+;; Processes trade tape to calculate volume delta, identify
+;; market pressure, and measure trade velocity.
+;;
+(do
+  (log :message "=== ORDER BOOK RECONSTRUCTION ===")
+
+  ;; ============================================
+  ;; TRADE TAPE (SEQUENCE OF EXECUTED TRADES)
+  ;; ============================================
+  ;;
+  ;; Each trade represents an executed transaction:
+  ;;
+  ;; Trade 1: 10 shares bought at $100.50 at time 1000ms
+  ;; - Aggressive buy (taker crossed spread)
+  ;; - Small size = retail or test order
+  ;;
+  ;; Trade 2: 15 shares bought at $100.60 at time 1050ms
+  ;; - Aggressive buy at higher price (upward pressure)
+  ;; - Price moved up 10 cents (+10 bps)
+  ;; - 50ms later = fast execution
+  ;;
+  ;; Trade 3: 8 shares sold at $100.50 at time 1100ms
+  ;; - Aggressive sell back to $100.50
+  ;; - Smaller size = partial retracement
+  ;; - 50ms later = continued activity
+  ;;
+  ;; Trade 4: 20 shares bought at $100.70 at time 1150ms
+  ;; - Aggressive buy at new high ($100.70)
+  ;; - Largest trade = conviction/size
+  ;; - 50ms later = consistent velocity
+  ;;
+  ;; PATTERN RECOGNITION:
+  ;; - Net buying: 3 buys (45) vs 1 sell (8)
+  ;; - Rising prices: $100.50 → $100.70 (+20 cents)
+  ;; - Consistent velocity: ~50ms between trades
+  ;; - Suggests strong bullish institutional flow
+  ;;
+  (define trades [
+    {:price 100.5 :size 10 :side "buy" :time 1000}
+    {:price 100.6 :size 15 :side "buy" :time 1050}
+    {:price 100.5 :size 8 :side "sell" :time 1100}
+    {:price 100.7 :size 20 :side "buy" :time 1150}
+  ])
+
+  ;; ============================================
+  ;; VOLUME PROFILE CONSTRUCTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Price-level volume aggregation
+  ;; - Group trades by price level
+  ;; - Accumulate buy/sell volume separately
+  ;; - Identifies key price levels by activity
+  ;;
+  ;; IMPLEMENTATION NOTE:
+  ;; - price_levels dictionary would track volume at each price
+  ;; - Production systems use hash map: price → {buy_vol, sell_vol}
+  ;; - Simplified here for demonstration
+  ;;
+  ;; EXPECTED PROFILE:
+  ;; - $100.50: 10 buy + 8 sell = net +2 (contested)
+  ;; - $100.60: 15 buy + 0 sell = net +15 (support)
+  ;; - $100.70: 20 buy + 0 sell = net +20 (strong level)
+  ;;
+  (define price_levels {})  ;; Placeholder for price-level aggregation
+
+  ;; ============================================
+  ;; TRADE TAPE ANALYSIS LOOP
+  ;; ============================================
+  ;;
+  ;; THEORY: Extract information from each trade
+  ;; - Price: Indicates executed level
+  ;; - Size: Magnitude of transaction
+  ;; - Side: Buy (aggressive on ask) or Sell (aggressive on bid)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; Iterate through trade tape and log each transaction
+  ;; (In production, would aggregate into price_levels)
+  ;;
+  (for (trade trades)
+    ;; Extract trade attributes
+    (define price (get trade "price"))
+    (define size (get trade "size"))
+    (define side (get trade "side"))
+
+    ;; Log trade details for transparency
+    (log :message "Trade:" :value price)
+    (log :message "  Size:" :value size)
+    (log :message "  Side:" :value side))
+
+  ;; ============================================
+  ;; VOLUME DELTA CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Net directional flow indicator
+  ;; - Buy Volume: Sum of all aggressive buy trades
+  ;; - Sell Volume: Sum of all aggressive sell trades
+  ;; - Volume Delta = Buy Volume - Sell Volume
+  ;;
+  ;; CALCULATION:
+  ;; - Buy trades: 10 + 15 + 20 = 45 shares
+  ;; - Sell trades: 8 shares
+  ;; - Delta: 45 - 8 = +37 shares
+  ;;
+  ;; INTERPRETATION:
+  ;; - Positive delta (+37) = net accumulation
+  ;; - 37/53 total volume = 70% buy pressure
+  ;; - Strong bullish signal
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - Delta reveals order flow imbalance
+  ;; - Large positive delta = institutional buying
+  ;; - Predicts short-term price direction
+  ;; - Used by tape readers and scalpers
+  ;;
+  ;; ACADEMIC BASIS:
+  ;; - Lee & Ready (1991): Trade classification algorithm
+  ;; - Easley et al. (1996): Probability of Informed Trading (PIN)
+  ;;
+  (define buy_volume 45)   ;; Sum: 10 + 15 + 20
+  (define sell_volume 8)   ;; Sum: 8
+  (define volume_delta (- buy_volume sell_volume))
+
+  (log :message "\nVolume delta:" :value volume_delta)
+
+  ;; ============================================
+  ;; MARKET PRESSURE CLASSIFICATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Categorize order flow imbalance
+  ;; - STRONG BUY (delta > 20): Significant buying pressure
+  ;; - BUY (delta > 0): Moderate buying pressure
+  ;; - SELL (delta ≤ 0): Selling pressure
+  ;;
+  ;; THRESHOLDS RATIONALE:
+  ;; - 20 shares = ~40% of total volume (45+8=53)
+  ;; - Institutional-level threshold
+  ;; - Below 20 could be retail noise
+  ;;
+  ;; CALCULATION:
+  ;; - volume_delta = +37
+  ;; - 37 > 20? → Yes
+  ;; - Classification: STRONG BUY
+  ;;
+  ;; TRADING IMPLICATIONS:
+  ;; - STRONG BUY → Look for long entries
+  ;; - Expect price to move higher
+  ;; - Avoid selling into strong demand
+  ;; - May indicate institutional accumulation
+  ;;
+  ;; RISK MANAGEMENT:
+  ;; - Strong pressure can reverse quickly
+  ;; - Watch for delta divergence (price up, delta down)
+  ;; - Set stops below recent swing low
+  ;;
+  (define pressure (if (> volume_delta 20)
+                       "🟢 STRONG BUY"
+                       (if (> volume_delta 0)
+                           "✅ BUY"
+                           "🔴 SELL")))
+
+  (log :message "Market pressure:" :value pressure)
+
+  ;; ============================================
+  ;; TRADE VELOCITY CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Execution rate indicates urgency
+  ;; - Velocity = Trades / Time
+  ;; - High velocity = market orders (urgency)
+  ;; - Low velocity = limit orders (patience)
+  ;;
+  ;; CALCULATION:
+  ;; - Time span: 1150ms - 1000ms = 150ms
+  ;; - Convert to seconds: 150 / 1000 = 0.15 sec
+  ;; - Number of trades: 4
+  ;; - Velocity: 4 / 0.15 ≈ 26.67 trades/sec
+  ;;
+  ;; INTERPRETATION:
+  ;; - 26.67 trades/sec = extremely high velocity
+  ;; - Normal market: 1-5 trades/sec
+  ;; - High frequency: 10-50 trades/sec
+  ;; - This suggests HFT or institutional algorithm
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - High velocity + positive delta = strong signal
+  ;; - Institutional algorithms show consistent velocity
+  ;; - Sudden velocity spikes = breaking news
+  ;; - Declining velocity = interest fading
+  ;;
+  ;; EDGE CASE PROTECTION:
+  ;; - Division by zero check (if time_span = 0)
+  ;; - Falls back to trade count if zero time
+  ;;
+  (define time_span 150)  ;; Milliseconds between first and last trade
+  (define time_in_sec (/ time_span 1000))  ;; Convert to seconds
+
+  ;; Calculate trades per second with zero-protection
+  (define trades_per_sec (if (> time_in_sec 0)
+                             (/ (length trades) time_in_sec)
+                             (length trades)))
+
+  (log :message "Trade velocity:" :value trades_per_sec)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Price-level volume aggregation
+  ;;    - Build full order book snapshot
+  ;;    - Track cumulative volume at each level
+  ;;    - Identify Point of Control (POC)
+  ;;
+  ;; 2. Time-weighted volume delta
+  ;;    - Recent trades weighted more heavily
+  ;;    - Exponential decay for old trades
+  ;;    - Adaptive to changing conditions
+  ;;
+  ;; 3. Trade classification algorithms
+  ;;    - Lee-Ready algorithm (tick test)
+  ;;    - Quote rule (bid/ask comparison)
+  ;;    - Hybrid methods for accuracy
+  ;;
+  ;; 4. Volume Profile indicators
+  ;;    - Volume at Price (VAP)
+  ;;    - Value Area (70% of volume)
+  ;;    - High Volume Nodes (support/resistance)
+  ;;
+  ;; 5. Order flow imbalance metrics
+  ;;    - VPIN (Volume-synchronized PIN)
+  ;;    - Order book imbalance ratio
+  ;;    - Bid-ask spread analysis
+  ;;
+  ;; 6. Real-time order book reconstruction
+  ;;    - Maintain live state from trade stream
+  ;;    - Infer hidden liquidity
+  ;;    - Detect iceberg orders
+  ;;
+  ;; 7. Market impact estimation
+  ;;    - Price impact per unit volume
+  ;;    - Liquidity depth curves
+  ;;    - Resilience measurement
+  ;;
+  ;; 8. Institutional footprint detection
+  ;;    - Algorithm signature recognition
+  ;;    - Cluster analysis of trades
+  ;;    - Size/frequency patterns
+  ;;
+  ;; ACADEMIC REFERENCES:
+  ;; - Lee & Ready (1991): "Inferring Trade Direction from Intraday Data"
+  ;; - Easley et al. (1996): "Liquidity, Information, and Infrequently Traded Stocks"
+  ;; - Cont et al. (2014): "The Price Impact of Order Book Events"
+  ;; - Cartea et al. (2015): "Algorithmic and High-Frequency Trading"
+  ;;
+
+  "✅ Book reconstruction complete!")

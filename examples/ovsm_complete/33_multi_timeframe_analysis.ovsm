@@ -1,0 +1,207 @@
+;; ============================================
+;; OVSM Example 33: Multi-Timeframe Analysis
+;; ============================================
+;;
+;; THEORY: Elder's Triple Screen Trading System
+;; ----------------------------------------------
+;; Multi-timeframe analysis (MTA) uses multiple chart timeframes to confirm
+;; trend direction and improve entry timing. Elder's Triple Screen (1986)
+;; systematizes this: use higher timeframe for trend, lower for entry.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. TIMEFRAME HIERARCHY:
+;;    - Higher timeframe (1H): Determines overall trend direction
+;;    - Medium timeframe (15M): Confirms momentum alignment
+;;    - Lower timeframe (5M): Precise entry timing
+;;    - Rule: Trade in direction of higher timeframes
+;;
+;; 2. ELDER'S TRIPLE SCREEN:
+;;    - Screen 1 (Long-term): Identify trend (1H chart)
+;;    - Screen 2 (Medium-term): Confirm momentum (15M chart)
+;;    - Screen 3 (Short-term): Time entry (5M chart)
+;;    - Only trade when all screens align
+;;
+;; 3. TREND WEIGHTING:
+;;    - Higher timeframes get more weight
+;;    - Example weights: 1M=1, 5M=2, 15M=3, 1H=4
+;;    - Score = Σ(trend_i × weight_i)
+;;    - Threshold: Score ≥ 8 for strong trend
+;;
+;; 4. CONFLUENCE ZONES:
+;;    - Multiple timeframes agree → high probability
+;;    - Conflicting signals → wait for alignment
+;;    - Avoid trading during timeframe divergence
+;;
+;; 5. BENEFITS:
+;;    - Reduces false signals (noise filtering)
+;;    - Improves win rate (trend confirmation)
+;;    - Better risk/reward (enter with momentum)
+;;    - Avoids counter-trend trades
+;;
+;; ACADEMIC REFERENCES:
+;; - Elder (1993): "Trading for a Living" - Triple Screen method
+;; - Murphy (1999): "Technical Analysis of Financial Markets"
+;; - Covel (2005): "Trend Following" - Multi-timeframe confirmation
+;;
+;; IMPLEMENTATION:
+;; Analyzes trends across 1M, 5M, 15M, and 1H timeframes,
+;; scores alignment, and generates trading signals.
+;;
+(do
+  (log :message "=== MULTI-TIMEFRAME TRENDS ===")
+
+  ;; ============================================
+  ;; TIMEFRAME TREND DATA
+  ;; ============================================
+  ;;
+  ;; Current trend direction on each timeframe:
+  ;; - 1M: bullish (short-term noise favoring upside)
+  ;; - 5M: bullish (5-min trend up)
+  ;; - 15M: neutral (consolidating, no clear direction)
+  ;; - 1H: bullish (hourly trend up)
+  ;;
+  ;; INTERPRETATION:
+  ;; - 3 out of 4 timeframes bullish
+  ;; - 15M neutral suggests potential pause/consolidation
+  ;; - Overall bias: Bullish (higher timeframes agree)
+  ;;
+  (define tf_1m_trend "bullish")
+  (define tf_5m_trend "bullish")
+  (define tf_15m_trend "neutral")
+  (define tf_1h_trend "bullish")
+
+  (log :message "1M trend:" :value tf_1m_trend)
+  (log :message "5M trend:" :value tf_5m_trend)
+  (log :message "15M trend:" :value tf_15m_trend)
+  (log :message "1H trend:" :value tf_1h_trend)
+
+  ;; ============================================
+  ;; WEIGHTED TREND SCORING
+  ;; ============================================
+  ;;
+  ;; THEORY: Higher timeframes matter more
+  ;; - 1M weight: 1 (lowest, just noise)
+  ;; - 5M weight: 2 (short-term momentum)
+  ;; - 15M weight: 3 (medium-term trend)
+  ;; - 1H weight: 4 (most important, primary trend)
+  ;;
+  ;; SCORING RULES:
+  ;; - Bullish: +weight points
+  ;; - Neutral: 0 points
+  ;; - Bearish: -weight points (not in this example)
+  ;;
+  ;; CALCULATION:
+  ;; - 1M bullish: +1 point
+  ;; - 5M bullish: +2 points
+  ;; - 15M neutral: +0 points
+  ;; - 1H bullish: +4 points
+  ;; - Total: 1 + 2 + 0 + 4 = 7 points
+  ;;
+  (define trend_score 0)
+
+  ;; 1M contribution (weight = 1)
+  (when (= tf_1m_trend "bullish")
+    (set! trend_score (+ trend_score 1)))
+
+  ;; 5M contribution (weight = 2)
+  (when (= tf_5m_trend "bullish")
+    (set! trend_score (+ trend_score 2)))
+
+  ;; 15M contribution (weight = 3)
+  (when (= tf_15m_trend "bullish")
+    (set! trend_score (+ trend_score 3)))
+
+  ;; 1H contribution (weight = 4)
+  (when (= tf_1h_trend "bullish")
+    (set! trend_score (+ trend_score 4)))
+
+  (log :message "\n=== TREND SCORING ===")
+  (log :message "Trend score:" :value trend_score)
+  (log :message "Max possible:" :value 10)
+  (log :message "Score (%):" :value (* (/ trend_score 10) 100))
+
+  ;; ============================================
+  ;; SIGNAL GENERATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Thresholds for trading decisions
+  ;; - Score ≥ 8: STRONG BUY (high alignment)
+  ;; - Score 5-7: BUY (moderate alignment)
+  ;; - Score < 5: WAIT (insufficient alignment)
+  ;;
+  ;; CURRENT SCORE: 7
+  ;; - Interpretation: BUY (moderate bullish alignment)
+  ;; - 3 out of 4 timeframes bullish
+  ;; - 15M neutral suggests caution (consolidation)
+  ;;
+  ;; RATIONALE:
+  ;; - Primary trend (1H) is bullish → trade with trend
+  ;; - Lower timeframes mostly confirm → good setup
+  ;; - Not perfect (15M neutral) → moderate confidence
+  ;;
+  (define mtf_signal (if (>= trend_score 8)
+                         "STRONG BUY"
+                         (if (>= trend_score 5)
+                             "BUY"
+                             "WAIT")))
+
+  (log :message "\n=== MTF SIGNAL ===")
+  (log :message "Signal:" :value mtf_signal)
+
+  (when (= mtf_signal "STRONG BUY")
+    (log :message "Rationale: All timeframes aligned bullish")
+    (log :message "Action: Enter long position aggressively")
+    (log :message "Stop: Below 1H swing low"))
+
+  (when (= mtf_signal "BUY")
+    (log :message "Rationale: Majority timeframes bullish")
+    (log :message "Action: Enter long position, monitor 15M")
+    (log :message "Stop: Below 15M swing low"))
+
+  (when (= mtf_signal "WAIT")
+    (log :message "Rationale: Timeframes not aligned")
+    (log :message "Action: Wait for clearer setup")
+    (log :message "Risk: Counter-trend whipsaw"))
+
+  ;; ============================================
+  ;; TIMEFRAME ALIGNMENT CHECK
+  ;; ============================================
+  ;;
+  ;; THEORY: Perfect alignment vs partial alignment
+  ;; - Perfect: All timeframes same direction
+  ;; - Partial: Some timeframes agree
+  ;; - Divergent: Timeframes conflicting
+  ;;
+  ;; CALCULATION:
+  ;; - Score 7 out of 10 possible
+  ;; - 70% alignment
+  ;; - Threshold: ≥ 70% for "aligned"
+  ;;
+  (define timeframe_alignment (>= trend_score 7))
+
+  (log :message "\n=== ALIGNMENT STATUS ===")
+  (log :message "Timeframes aligned:" :value timeframe_alignment)
+
+  (when timeframe_alignment
+    (log :message "Status: Good alignment (≥70%)"))
+
+  (when (not timeframe_alignment)
+    (log :message "Status: Poor alignment (<70%)"))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real multi-timeframe systems would add:
+  ;; 1. Dynamic timeframe ratios (not fixed weights)
+  ;; 2. Momentum oscillators on each timeframe
+  ;; 3. Support/resistance confluence zones
+  ;; 4. Volume confirmation across timeframes
+  ;; 5. Divergence detection (RSI, MACD)
+  ;; 6. Fibonacci alignment across scales
+  ;; 7. Adaptive entry sizing based on alignment strength
+  ;; 8. Real-time timeframe monitoring and alerts
+  ;;
+
+  "✅ MTF analysis complete!")

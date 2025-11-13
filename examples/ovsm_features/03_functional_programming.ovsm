@@ -1,0 +1,45 @@
+;; ============================================
+;; OVSM Example 3: Functional Programming
+;; ============================================
+
+(do
+  (log :message "=== MAP, FILTER ===")
+  
+  (define numbers [1 2 3 4 5])
+  (define doubled (map numbers (lambda (x) (* x 2))))
+  (log :message "Doubled:" :value doubled)
+  
+  (define evens (filter numbers (lambda (x) (= (% x 2) 0))))
+  (log :message "Evens:" :value evens)
+  
+  (log :message "\n=== LAMBDAS ===")
+  
+  (define square (lambda (x) (* x x)))
+  (log :message "Square of 7:" :value (square 7))
+  
+  (define add (lambda (a b) (+ a b)))
+  (log :message "3 + 4 =" :value (add 3 4))
+  
+  (log :message "\n=== ARRAY OPERATIONS ===")
+  
+  (define first_three (take numbers 3))
+  (define after_two (drop numbers 2))
+  (log :message "First 3:" :value first_three)
+  (log :message "After 2:" :value after_two)
+  
+  (define combined (concat [1 2] [3 4] [5 6]))
+  (log :message "Concatenated:" :value combined)
+  
+  (log :message "\n=== STRING OPERATIONS ===")
+  
+  (define text "Hello World")
+  (define lower (toLowerCase text))
+  (log :message "Lowercase:" :value lower)
+  
+  (define full_name (concat "John" " " "Doe"))
+  (log :message "Full name:" :value full_name)
+  
+  (define has_world (string-contains text "World"))
+  (log :message "Contains 'World':" :value has_world)
+  
+  "✅ Functional programming demo complete!")

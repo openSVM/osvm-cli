@@ -1,0 +1,526 @@
+;; ============================================
+;; OVSM Example 45: Dispersion Trading
+;; ============================================
+;;
+;; THEORY: Index vs Components Correlation Arbitrage
+;; ---------------------------------------------------
+;; Dispersion trading exploits the relationship between an index's implied
+;; volatility and the weighted average implied volatility of its components.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. VOLATILITY RELATIONSHIP:
+;;    - Index realized vol² = Σ(wᵢ² × σᵢ²) + ΣΣ(wᵢwⱼρᵢⱼσᵢσⱼ)
+;;    - First term: individual stock variances
+;;    - Second term: correlation contribution
+;;    - Lower correlation → higher dispersion opportunity
+;;
+;; 2. DISPERSION TRADE:
+;;    - Long volatility: Buy options on index components (single stocks)
+;;    - Short volatility: Sell index options (SPX, NDX, etc.)
+;;    - Profit when: Component vols > Index vol (correlation breaks down)
+;;
+;; 3. CORRELATION REGIMES:
+;;    - Low correlation (< 0.3): High dispersion, profitable
+;;    - Medium correlation (0.3-0.7): Normal conditions
+;;    - High correlation (> 0.7): Compression, unprofitable
+;;    - Crisis periods: Correlations → 1.0 (all stocks move together)
+;;
+;; 4. GREEK MANAGEMENT:
+;;    - Delta hedge: Keep beta-neutral to index
+;;    - Vega neutral: Match vega exposure on both sides
+;;    - Gamma scalping: Rehedge individual positions
+;;
+;; ACADEMIC REFERENCES:
+;; - Derman et al. (1999): "Correlation in the Marketplace"
+;; - Driessen, Maenhout & Vilkov (2009): "The Price of Correlation Risk"
+;; - Deng & Mallett (2020): "Dispersion Trading Based on Index Options"
+;;
+;; IMPLEMENTATION:
+;; This example simulates dispersion trading on 5-stock index with
+;; correlation regime detection and P&L tracking.
+;;
+(do
+  (log :message "=== DISPERSION TRADING STRATEGY ===")
+
+  ;; ============================================
+  ;; INDEX COMPOSITION & SETUP
+  ;; ============================================
+  ;;
+  ;; Trading universe:
+  ;; - 5-stock equally-weighted index
+  ;; - Index level: $100
+  ;; - Each stock: $20 (20% weight)
+  ;;
+  ;; Option details:
+  ;; - 30 days to expiration
+  ;; - ATM strikes (at-the-money)
+  ;; - Trade straddles (long call + long put)
+  ;;
+  (define index_level 100)
+  (define num_stocks 5)
+  (define weight_per_stock 0.20)
+  (define days_to_expiry 30)
+
+  (log :message "\n=== INDEX SETUP ===")
+  (log :message "Index level:" :value index_level)
+  (log :message "Number of stocks:" :value num_stocks)
+  (log :message "Weight per stock:" :value weight_per_stock)
+
+  ;; ============================================
+  ;; IMPLIED VOLATILITIES
+  ;; ============================================
+  ;;
+  ;; THEORY: Market prices reveal expected volatility
+  ;; - Index IV: What market expects for index moves
+  ;; - Component IV: What market expects for individual stocks
+  ;; - Dispersion = Average(Component IVs) - Index IV
+  ;;
+  ;; CALCULATION:
+  ;; Stock IVs: 45%, 50%, 48%, 52%, 55%
+  ;; - Average component IV = (45+50+48+52+55)/5 = 50%
+  ;; - Index IV = 35% (lower due to diversification)
+  ;; - Dispersion = 50% - 35% = 15% (significant opportunity!)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - High dispersion → stocks move independently
+  ;; - Low index vol → components cancel out when combined
+  ;; - Trade: Buy component vol (50%), sell index vol (35%)
+  ;;
+  (define stock_ivs [45 50 48 52 55])
+  (define index_iv 35)
+
+  ;; Calculate average component IV
+  (define sum_ivs (+ (+ (+ (+ 45 50) 48) 52) 55))
+  (define avg_component_iv (/ sum_ivs 5))
+  (define dispersion_spread (- avg_component_iv index_iv))
+
+  (log :message "\n=== IMPLIED VOLATILITIES ===")
+  (log :message "Stock IVs:" :value stock_ivs)
+  (log :message "Average component IV:" :value avg_component_iv)
+  (log :message "Index IV:" :value index_iv)
+  (log :message "Dispersion spread:" :value dispersion_spread)
+
+  ;; ============================================
+  ;; CORRELATION MATRIX
+  ;; ============================================
+  ;;
+  ;; THEORY: Correlation drives dispersion profitability
+  ;; - Perfect correlation (ρ=1): Index vol = avg component vol
+  ;; - Zero correlation (ρ=0): Maximum dispersion opportunity
+  ;; - Negative correlation (ρ<0): Even better (rare!)
+  ;;
+  ;; CURRENT CORRELATION REGIME:
+  ;; Average pairwise correlation = 0.30 (low, favorable)
+  ;; - Stocks 1-2: 0.35
+  ;; - Stocks 1-3: 0.28
+  ;; - Stocks 2-4: 0.32
+  ;; - Stocks 3-5: 0.25
+  ;; - Average: ~0.30
+  ;;
+  ;; INTERPRETATION:
+  ;; - Low correlation environment (< 0.5)
+  ;; - Individual stock moves don't align
+  ;; - Index volatility suppressed by diversification
+  ;; - ✅ Excellent setup for dispersion trade
+  ;;
+  (define correlation_12 0.35)
+  (define correlation_13 0.28)
+  (define correlation_24 0.32)
+  (define correlation_35 0.25)
+  (define avg_correlation 0.30)
+
+  (log :message "\n=== CORRELATION ANALYSIS ===")
+  (log :message "Average correlation:" :value avg_correlation)
+
+  (define correlation_regime (if (< avg_correlation 0.3)
+                                 "LOW - Excellent for dispersion"
+                                 (if (< avg_correlation 0.7)
+                                     "MEDIUM - Acceptable"
+                                     "HIGH - Avoid dispersion trades")))
+  (log :message "Correlation regime:" :value correlation_regime)
+
+  ;; ============================================
+  ;; POSITION CONSTRUCTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Construct vega-neutral, beta-neutral portfolio
+  ;;
+  ;; LONG SIDE (Buy component volatility):
+  ;; - Buy 20 straddles on each of 5 stocks
+  ;; - Total component vega = 100 straddles
+  ;; - Vega per straddle = $50 per 1% vol change
+  ;; - Total component vega = 100 × $50 = $5,000
+  ;;
+  ;; SHORT SIDE (Sell index volatility):
+  ;; - Sell index straddles to match vega
+  ;; - Need: 5000 / 50 = 100 index straddles
+  ;; - Total index vega = -$5,000 (short)
+  ;;
+  ;; NET POSITION:
+  ;; - Long component vega: +$5,000
+  ;; - Short index vega: -$5,000
+  ;; - Net vega: 0 (vega neutral)
+  ;;
+  (define straddles_per_stock 20)
+  (define total_component_straddles (* straddles_per_stock num_stocks))
+  (define vega_per_straddle 50)
+  (define component_vega (* total_component_straddles vega_per_straddle))
+  (define index_straddles (/ component_vega vega_per_straddle))
+  (define index_vega (* index_straddles vega_per_straddle -1))
+
+  (log :message "\n=== POSITION CONSTRUCTION ===")
+  (log :message "Component straddles (total):" :value total_component_straddles)
+  (log :message "Index straddles (short):" :value index_straddles)
+  (log :message "Component vega:" :value component_vega)
+  (log :message "Index vega:" :value index_vega)
+  (log :message "Net vega:" :value (+ component_vega index_vega))
+
+  ;; ============================================
+  ;; COST ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Entry cost = Net premium paid
+  ;; - Pay for component options (higher IV)
+  ;; - Receive premium from index options (lower IV)
+  ;; - Net debit = initial cost to enter trade
+  ;;
+  ;; CALCULATION:
+  ;; Component options cost:
+  ;; - 100 straddles × average IV 50% × $50 vega = $250,000
+  ;; - (Simplified: premium ≈ vega × IV)
+  ;;
+  ;; Index options premium received:
+  ;; - 100 straddles × IV 35% × $50 vega = $175,000
+  ;;
+  ;; Net debit: $250,000 - $175,000 = $75,000
+  ;; - This is our maximum loss (if realized vols converge)
+  ;;
+  (define component_premium_cost (* (* total_component_straddles avg_component_iv) vega_per_straddle))
+  (define index_premium_received (* (* index_straddles index_iv) vega_per_straddle))
+  (define net_debit (- component_premium_cost index_premium_received))
+
+  (log :message "\n=== COST ANALYSIS ===")
+  (log :message "Component premium paid:" :value component_premium_cost)
+  (log :message "Index premium received:" :value index_premium_received)
+  (log :message "Net debit (entry cost):" :value net_debit)
+
+  ;; ============================================
+  ;; SCENARIO 1: REALIZED VOLATILITIES
+  ;; ============================================
+  ;;
+  ;; THEORY: Profit depends on realized volatility relationship
+  ;; - If realized component vol > realized index vol → Profit
+  ;; - If realized vols converge → Loss
+  ;;
+  ;; SIMULATION (30 days):
+  ;; Stock realized vols: 48%, 52%, 50%, 54%, 56%
+  ;; - Average realized component vol = 52%
+  ;; - Higher than implied (50%) → gain on long side
+  ;;
+  ;; Index realized vol: 32%
+  ;; - Lower than implied (35%) → gain on short side
+  ;;
+  ;; DOUBLE BENEFIT:
+  ;; - Long components: Realized (52%) > Implied (50%) → +$2 vol gain
+  ;; - Short index: Realized (32%) < Implied (35%) → +$3 vol gain
+  ;;
+  (define realized_stock_vols [48 52 50 54 56])
+  (define realized_index_vol 32)
+
+  (define sum_realized (+ (+ (+ (+ 48 52) 50) 54) 56))
+  (define avg_realized_component (/ sum_realized 5))
+
+  (log :message "\n=== REALIZED VOLATILITIES ===")
+  (log :message "Stock realized vols:" :value realized_stock_vols)
+  (log :message "Avg realized component:" :value avg_realized_component)
+  (log :message "Index realized vol:" :value realized_index_vol)
+
+  ;; ============================================
+  ;; P&L CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Option P&L from volatility changes
+  ;; - Vega P&L = Vega × (Realized IV - Implied IV)
+  ;; - Long vega: Profit if realized > implied
+  ;; - Short vega: Profit if realized < implied
+  ;;
+  ;; COMPONENT P&L:
+  ;; - Vega = +$5,000
+  ;; - Vol gain = 52% - 50% = +2%
+  ;; - P&L = $5,000 × 2 = +$10,000
+  ;;
+  ;; INDEX P&L:
+  ;; - Vega = -$5,000 (short)
+  ;; - Vol gain = 32% - 35% = -3% (index vol decreased)
+  ;; - P&L = -$5,000 × (-3) = +$15,000 (profit on short)
+  ;;
+  ;; TOTAL P&L:
+  ;; - Component side: +$10,000
+  ;; - Index side: +$15,000
+  ;; - Total: +$25,000
+  ;; - Return on capital: $25,000 / $75,000 = 33.3%
+  ;;
+  (define component_vol_gain (- avg_realized_component avg_component_iv))
+  (define index_vol_gain (- realized_index_vol index_iv))
+
+  (define component_pnl (* component_vega component_vol_gain))
+  (define index_pnl (* index_vega index_vol_gain))
+  (define total_pnl (+ component_pnl index_pnl))
+
+  (log :message "\n=== P&L CALCULATION ===")
+  (log :message "Component vol gain:" :value component_vol_gain)
+  (log :message "Index vol gain:" :value index_vol_gain)
+  (log :message "Component P&L:" :value component_pnl)
+  (log :message "Index P&L:" :value index_pnl)
+  (log :message "Total P&L:" :value total_pnl)
+
+  (define return_on_capital (* (/ total_pnl net_debit) 100))
+  (log :message "Return on capital (%):" :value return_on_capital)
+
+  ;; ============================================
+  ;; SCENARIO 2: CORRELATION SPIKE
+  ;; ============================================
+  ;;
+  ;; THEORY: Correlation risk is the primary danger
+  ;; - Market stress → correlations spike to 0.9+
+  ;; - All stocks move with index
+  ;; - Component vols and index vol converge
+  ;; - Dispersion trade loses money
+  ;;
+  ;; CRISIS SCENARIO:
+  ;; - Market crash/panic event
+  ;; - Correlations jump: 0.30 → 0.90
+  ;; - Realized component vol: 65% (stocks volatile)
+  ;; - Realized index vol: 68% (index also volatile)
+  ;; - Dispersion collapses: 65% - 68% = -3% (negative!)
+  ;;
+  ;; P&L IMPACT:
+  ;; Component side:
+  ;; - Vol change: 65% - 50% = +15%
+  ;; - P&L: $5,000 × 15 = +$75,000 (benefit from long vol)
+  ;;
+  ;; Index side:
+  ;; - Vol change: 68% - 35% = +33%
+  ;; - P&L: -$5,000 × 33 = -$165,000 (loss from short vol)
+  ;;
+  ;; NET P&L: +$75,000 - $165,000 = -$90,000 (LOSS!)
+  ;; - Loss exceeds initial debit of $75,000
+  ;; - This is correlation risk in action
+  ;;
+  (define crisis_correlation 0.90)
+  (define crisis_component_vol 65)
+  (define crisis_index_vol 68)
+
+  (log :message "\n=== CRISIS SCENARIO (Correlation Spike) ===")
+  (log :message "Correlation jumps to:" :value crisis_correlation)
+  (log :message "Realized component vol:" :value crisis_component_vol)
+  (log :message "Realized index vol:" :value crisis_index_vol)
+
+  (define crisis_component_gain (- crisis_component_vol avg_component_iv))
+  (define crisis_index_gain (- crisis_index_vol index_iv))
+
+  (define crisis_component_pnl (* component_vega crisis_component_gain))
+  (define crisis_index_pnl (* index_vega crisis_index_gain))
+  (define crisis_total_pnl (+ crisis_component_pnl crisis_index_pnl))
+
+  (log :message "Component P&L:" :value crisis_component_pnl)
+  (log :message "Index P&L:" :value crisis_index_pnl)
+  (log :message "Total P&L:" :value crisis_total_pnl)
+
+  ;; ============================================
+  ;; RISK MANAGEMENT
+  ;; ============================================
+  ;;
+  ;; THEORY: Dispersion trades need active risk management
+  ;;
+  ;; KEY RISKS:
+  ;; 1. Correlation risk: Biggest danger (as shown above)
+  ;; 2. Volatility level risk: Both sides move up/down together
+  ;; 3. Gamma risk: Need to delta hedge all positions
+  ;; 4. Skew risk: Index skew vs component skew differences
+  ;;
+  ;; RISK METRICS:
+  ;; - Max loss: Initial net debit ($75,000) in convergence
+  ;; - Correlation threshold: Exit if ρ > 0.70
+  ;; - VIX spike: Monitor for regime change
+  ;; - Position limit: Cap at 2% of portfolio
+  ;;
+  (define max_loss_estimate net_debit)
+  (define correlation_exit_threshold 0.70)
+
+  (log :message "\n=== RISK MANAGEMENT ===")
+  (log :message "Max theoretical loss:" :value max_loss_estimate)
+  (log :message "Correlation exit threshold:" :value correlation_exit_threshold)
+
+  (define should_exit_correlation (> crisis_correlation correlation_exit_threshold))
+  (log :message "Should exit (correlation):" :value should_exit_correlation)
+
+  ;; ============================================
+  ;; DELTA HEDGING REQUIREMENTS
+  ;; ============================================
+  ;;
+  ;; THEORY: Must remain delta/beta neutral
+  ;; - Component options have delta exposure
+  ;; - Index options have delta exposure
+  ;; - Need to hedge net delta to zero
+  ;;
+  ;; CALCULATION:
+  ;; Component deltas (straddles are near-zero, but not exactly):
+  ;; - Each stock straddle: ~0 delta (call + put cancel)
+  ;; - But as prices move, rehedging needed
+  ;;
+  ;; Hedging instruments:
+  ;; - Short stock baskets (for individual stocks)
+  ;; - Long/short index futures (for index exposure)
+  ;; - Rebalance when delta > 100 shares equivalent
+  ;;
+  (define delta_threshold 100)
+  (define current_net_delta 45)  ;; Some drift from price moves
+
+  (log :message "\n=== DELTA HEDGING ===")
+  (log :message "Current net delta:" :value current_net_delta)
+  (log :message "Delta threshold:" :value delta_threshold)
+
+  (define needs_rehedge (> current_net_delta delta_threshold))
+  (log :message "Needs rehedge:" :value needs_rehedge)
+
+  ;; ============================================
+  ;; THETA DECAY ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Time decay affects both sides differently
+  ;; - Component straddles: Pay theta (long options)
+  ;; - Index straddles: Earn theta (short options)
+  ;; - Net theta can be positive or negative
+  ;;
+  ;; CALCULATION:
+  ;; Component theta:
+  ;; - 100 straddles × -$15 per day = -$1,500/day (pay)
+  ;;
+  ;; Index theta:
+  ;; - 100 straddles × +$20 per day = +$2,000/day (earn)
+  ;; - (ATM index options have higher theta due to higher value)
+  ;;
+  ;; Net theta: +$2,000 - $1,500 = +$500/day (earn)
+  ;; - Positive carry! Time works in our favor
+  ;; - Over 30 days: +$500 × 30 = +$15,000
+  ;;
+  (define component_theta_per_straddle -15)
+  (define index_theta_per_straddle 20)
+
+  (define component_theta_total (* total_component_straddles component_theta_per_straddle))
+  (define index_theta_total (* index_straddles index_theta_per_straddle))
+  (define net_theta (+ component_theta_total index_theta_total))
+
+  (log :message "\n=== THETA DECAY ===")
+  (log :message "Component theta/day:" :value component_theta_total)
+  (log :message "Index theta/day:" :value index_theta_total)
+  (log :message "Net theta/day:" :value net_theta)
+
+  (define theta_over_30_days (* net_theta 30))
+  (log :message "Theta profit (30 days):" :value theta_over_30_days)
+
+  ;; ============================================
+  ;; HISTORICAL ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Dispersion trades perform in specific regimes
+  ;;
+  ;; HISTORICAL PERFORMANCE (SPX components):
+  ;; - 2008 Crisis: -50% (correlation spike killed trade)
+  ;; - 2010-2017: +15% annual (low correlation, steady)
+  ;; - 2018 Vol spike: +30% (dispersion widened)
+  ;; - 2020 COVID: -40% (correlation spike again)
+  ;; - 2021-2022: +20% (normalization after crisis)
+  ;;
+  ;; KEY INSIGHTS:
+  ;; - Works best in calm, low-correlation markets
+  ;; - Fails catastrophically in crises
+  ;; - Need tight risk management (stop losses)
+  ;; - Diversify across multiple indices (SPX, NDX, RUT)
+  ;;
+  (log :message "\n=== HISTORICAL PERFORMANCE ===")
+  (log :message "Avg annual return (calm):" :value 15)
+  (log :message "Avg crisis loss:" :value -45)
+  (log :message "Win rate:" :value 0.65)
+  (log :message "Max drawdown:" :value -50)
+
+  ;; ============================================
+  ;; TRADE EXECUTION CONSIDERATIONS
+  ;; ============================================
+  ;;
+  ;; THEORY: Execution quality matters significantly
+  ;;
+  ;; EXECUTION CHALLENGES:
+  ;; 1. Legging risk: Can't execute all 100+ options simultaneously
+  ;; 2. Bid-ask spreads: Wide spreads on some single stock options
+  ;; 3. Pin risk: Near expiry, stocks can "pin" to strikes
+  ;; 4. Early assignment: Short index options might be assigned
+  ;;
+  ;; BEST PRACTICES:
+  ;; - Use block trading desks for large positions
+  ;; - Execute index side first (more liquid)
+  ;; - Scale into position over 2-3 days
+  ;; - Monitor implied correlation metrics during entry
+  ;; - Use limit orders (never market orders)
+  ;;
+  (define execution_cost_bps 5)  ;; 5 basis points slippage
+  (define total_notional (+ component_premium_cost index_premium_received))
+  (define execution_cost (* (* total_notional execution_cost_bps) 0.0001))
+
+  (log :message "\n=== EXECUTION COSTS ===")
+  (log :message "Estimated slippage (bps):" :value execution_cost_bps)
+  (log :message "Total execution cost:" :value execution_cost)
+
+  (define adjusted_pnl (- total_pnl execution_cost))
+  (log :message "P&L after execution costs:" :value adjusted_pnl)
+
+  ;; ============================================
+  ;; STRATEGY ASSESSMENT
+  ;; ============================================
+  ;;
+  ;; EVALUATION:
+  ;; - Base case P&L: +$25,000 (33% return) ✅
+  ;; - With theta: +$40,000 (53% return) ✅
+  ;; - Crisis scenario: -$90,000 (-120% return) 🔴
+  ;; - Execution adjusted: +$22,500 (30% return) ✅
+  ;;
+  ;; RECOMMENDATION:
+  ;; - Trade in low-correlation environments only
+  ;; - Size small (max 2-3% of portfolio)
+  ;; - Use tight stops (exit if correlation > 0.70)
+  ;; - Monitor VIX and correlation indices daily
+  ;; - Consider crisis hedges (tail puts on index)
+  ;;
+  (define strategy_recommendation
+    (if (< avg_correlation 0.4)
+        (if (> return_on_capital 20)
+            "✅ ENTER - Low correlation + High dispersion"
+            "⚠️ MARGINAL - Monitor for better entry")
+        "🔴 AVOID - Correlation too high"))
+
+  (log :message "\n=== STRATEGY ASSESSMENT ===")
+  (log :message "Current correlation:" :value avg_correlation)
+  (log :message "Expected return:" :value return_on_capital)
+  (log :message "Recommendation:" :value strategy_recommendation)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real-world dispersion trading requires:
+  ;;
+  ;; 1. **Implied correlation calculation**: Use options market data
+  ;; 2. **Real-time correlation monitoring**: Track regime changes
+  ;; 3. **Multi-index diversification**: SPX, NDX, RUT, STOXX50
+  ;; 4. **Automated delta hedging**: Sub-second rebalancing
+  ;; 5. **Skew management**: Monitor and hedge volatility skew
+  ;; 6. **Liquidity screening**: Only trade liquid single stock options
+  ;; 7. **Crisis hedges**: Tail risk protection (far OTM puts)
+  ;; 8. **Earnings calendar**: Avoid stocks with near-term earnings
+  ;; 9. **Factor exposure**: Hedge sector/factor tilts
+  ;; 10. **Regulatory compliance**: Large position reporting
+  ;;
+
+  "✅ Dispersion trading analysis complete!")

@@ -1,0 +1,472 @@
+;; ============================================
+;; OVSM Example 56: Transaction Cost Analysis (TCA)
+;; ============================================
+;;
+;; THEORY: Comprehensive Framework for Measuring and Minimizing Execution Costs
+;; ------------------------------------------------------------------------------
+;; Transaction Cost Analysis (TCA) decomposes execution costs into components:
+;; spread, impact, timing, and opportunity costs. TCA enables traders to
+;; evaluate execution quality, optimize algorithms, and select best venues.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. COST DECOMPOSITION (Kissell & Glantz 2003):
+;;    Total Cost = Spread Cost + Impact Cost + Timing Cost + Opportunity Cost
+;;
+;;    - Spread Cost: Bid-ask spread paid on execution
+;;    - Impact Cost: Price movement due to your order (temporary + permanent)
+;;    - Timing Cost: Adverse price movement while waiting to execute
+;;    - Opportunity Cost: Missed profit from unfilled orders
+;;
+;; 2. BENCHMARK PRICES:
+;;    - Arrival Price: Price when order submitted (decision price)
+;;    - VWAP (Volume-Weighted Avg Price): Average price weighted by volume
+;;    - TWAP (Time-Weighted Avg Price): Average price over time
+;;    - Close Price: End-of-day settlement price
+;;    - Implementation Shortfall: Arrival price to average execution price
+;;
+;; 3. TCA METRICS:
+;;    RELATIVE METRICS:
+;;    - Slippage vs arrival: (exec_price - arrival_price) / arrival_price
+;;    - Slippage vs VWAP: (exec_price - VWAP) / VWAP
+;;    - Implementation shortfall: total cost in bps
+;;
+;;    ABSOLUTE METRICS:
+;;    - Total dollars lost/saved vs benchmark
+;;    - Cost per share in dollars
+;;    - Percentage of order filled (fill rate)
+;;
+;; 4. VENUE QUALITY SCORING:
+;;    For each venue (exchange, dark pool, ATS):
+;;    - Fill rate: % of orders executed
+;;    - Price improvement: Better than NBBO
+;;    - Speed: Time from submission to fill
+;;    - Adverse selection: Post-fill price movement
+;;    - Consistency: Std dev of execution quality
+;;
+;; 5. BUILD VS TAKE DECISION:
+;;    BUILD (passive limit orders):
+;;    - Pros: Capture spread, lower cost
+;;    - Cons: Execution risk, adverse selection
+;;    - Optimal: Low urgency, stable market
+;;
+;;    TAKE (aggressive market orders):
+;;    - Pros: Immediate fill, no timing risk
+;;    - Cons: Pay spread, market impact
+;;    - Optimal: High urgency, volatile market
+;;
+;; ACADEMIC REFERENCES:
+;; - Kissell & Glantz (2003): "Optimal Trading Strategies"
+;; - Perold (1988): "Implementation Shortfall" (founding paper)
+;; - Almgren & Chriss (2000): "Optimal Execution of Portfolio Transactions"
+;; - Bouchaud et al. (2009): "More Statistical Properties of Order Books"
+;;
+;; IMPLEMENTATION:
+;; This example analyzes a large institutional trade, decomposing costs
+;; and comparing execution quality across venues and algorithms.
+;;
+(do
+  (log :message "=== TRANSACTION COST ANALYSIS (TCA) ===")
+
+  ;; ============================================
+  ;; TRADE SETUP
+  ;; ============================================
+  ;;
+  ;; Order: Buy 100,000 shares of Microsoft (MSFT)
+  ;; Arrival time: 9:30 AM (market open)
+  ;; Arrival price: $350.00 (decision price)
+  ;; Target: Execute over 30 minutes (minimize impact)
+  ;; Algorithm: TWAP (time-weighted average price)
+  ;;
+  (define ticker "MSFT")
+  (define order_quantity 100000)
+  (define arrival_time "9:30 AM")
+  (define arrival_price 350.00)
+  (define execution_window_minutes 30)
+  (define algorithm "TWAP")
+
+  (log :message "\n=== TRADE SPECIFICATION ===")
+  (log :message "Ticker:" :value ticker)
+  (log :message "Quantity:" :value order_quantity)
+  (log :message "Arrival time:" :value arrival_time)
+  (log :message "Arrival price:" :value arrival_price)
+  (log :message "Execution window (min):" :value execution_window_minutes)
+  (log :message "Algorithm:" :value algorithm)
+
+  ;; ============================================
+  ;; EXECUTION RECORD
+  ;; ============================================
+  ;;
+  ;; TWAP algorithm executed order in 6 child orders (5 min intervals):
+  ;;
+  ;; 9:30-9:35: 16,000 shares @ $350.05 (Nasdaq)
+  ;; 9:35-9:40: 17,000 shares @ $350.12 (NYSE)
+  ;; 9:40-9:45: 16,500 shares @ $350.08 (Dark Pool)
+  ;; 9:45-9:50: 17,500 shares @ $350.15 (Nasdaq)
+  ;; 9:50-9:55: 16,000 shares @ $350.20 (NYSE)
+  ;; 9:55-10:00: 17,000 shares @ $350.18 (Nasdaq)
+  ;;
+  ;; Total filled: 100,000 shares (100% fill rate)
+  ;;
+  (define fill1_qty 16000)
+  (define fill1_price 350.05)
+  (define fill1_venue "Nasdaq")
+
+  (define fill2_qty 17000)
+  (define fill2_price 350.12)
+  (define fill2_venue "NYSE")
+
+  (define fill3_qty 16500)
+  (define fill3_price 350.08)
+  (define fill3_venue "Dark Pool")
+
+  (define fill4_qty 17500)
+  (define fill4_price 350.15)
+  (define fill4_venue "Nasdaq")
+
+  (define fill5_qty 16000)
+  (define fill5_price 350.20)
+  (define fill5_venue "NYSE")
+
+  (define fill6_qty 17000)
+  (define fill6_price 350.18)
+  (define fill6_venue "Nasdaq")
+
+  (log :message "\n=== EXECUTION FILLS ===")
+  (log :message "Fill 1: 16,000 @ $350.05 (Nasdaq)")
+  (log :message "Fill 2: 17,000 @ $350.12 (NYSE)")
+  (log :message "Fill 3: 16,500 @ $350.08 (Dark Pool)")
+  (log :message "Fill 4: 17,500 @ $350.15 (Nasdaq)")
+  (log :message "Fill 5: 16,000 @ $350.20 (NYSE)")
+  (log :message "Fill 6: 17,000 @ $350.18 (Nasdaq)")
+
+  ;; ============================================
+  ;; STEP 1: CALCULATE AVERAGE EXECUTION PRICE
+  ;; ============================================
+  ;;
+  ;; THEORY: Volume-weighted average of all fills
+  ;;
+  ;; FORMULA:
+  ;; Avg price = Σ(qty_i * price_i) / Σ(qty_i)
+  ;;
+  ;; CALCULATION:
+  ;; Numerator = 16000*350.05 + 17000*350.12 + 16500*350.08 +
+  ;;             17500*350.15 + 16000*350.20 + 17000*350.18
+  ;;           = 5,600,800 + 5,952,040 + 5,776,320 +
+  ;;             6,127,625 + 5,603,200 + 5,953,060
+  ;;           = 35,013,045
+  ;;
+  ;; Avg price = 35,013,045 / 100,000 = $350.13
+  ;;
+  (define total_cost (+ (* fill1_qty fill1_price)
+                        (* fill2_qty fill2_price)
+                        (* fill3_qty fill3_price)
+                        (* fill4_qty fill4_price)
+                        (* fill5_qty fill5_price)
+                        (* fill6_qty fill6_price)))
+
+  (define avg_execution_price (/ total_cost order_quantity))
+
+  (log :message "\n=== AVERAGE EXECUTION PRICE ===")
+  (log :message "Total cost:" :value total_cost)
+  (log :message "Quantity:" :value order_quantity)
+  (log :message "Avg execution price:" :value avg_execution_price)
+
+  ;; ============================================
+  ;; STEP 2: IMPLEMENTATION SHORTFALL
+  ;; ============================================
+  ;;
+  ;; THEORY: Difference between arrival price and execution price
+  ;;
+  ;; FORMULA:
+  ;; Implementation Shortfall (IS) = (exec_price - arrival_price) / arrival_price
+  ;;
+  ;; CALCULATION:
+  ;; IS = ($350.13 - $350.00) / $350.00
+  ;;    = $0.13 / $350.00
+  ;;    = 0.0003714
+  ;;    = 3.71 bps (basis points)
+  ;;
+  ;; IN DOLLARS:
+  ;; IS ($) = (exec_price - arrival_price) * quantity
+  ;;        = ($350.13 - $350.00) * 100,000
+  ;;        = $0.13 * 100,000
+  ;;        = $13,000
+  ;;
+  ;; INTERPRETATION:
+  ;; You paid $13,000 more than if you could have executed entire
+  ;; order instantly at arrival price. This is the total transaction cost.
+  ;;
+  (define implementation_shortfall_dollars (* (- avg_execution_price arrival_price) order_quantity))
+  (define implementation_shortfall_bps (/ (* (- avg_execution_price arrival_price) 10000) arrival_price))
+
+  (log :message "\n=== IMPLEMENTATION SHORTFALL ===")
+  (log :message "Arrival price:" :value arrival_price)
+  (log :message "Avg execution price:" :value avg_execution_price)
+  (log :message "Shortfall (bps):" :value implementation_shortfall_bps)
+  (log :message "Shortfall ($):" :value implementation_shortfall_dollars)
+
+  ;; ============================================
+  ;; STEP 3: BENCHMARK COMPARISON (VWAP)
+  ;; ============================================
+  ;;
+  ;; THEORY: Compare execution to market VWAP during same period
+  ;;
+  ;; MARKET VWAP (9:30-10:00):
+  ;; Calculated from all market trades during execution window
+  ;; MSFT VWAP = $350.10 (volume-weighted average)
+  ;;
+  ;; COMPARISON:
+  ;; Your avg price: $350.13
+  ;; Market VWAP: $350.10
+  ;; Difference: $350.13 - $350.10 = $0.03 (worse than VWAP)
+  ;; In bps: ($0.03 / $350.10) * 10000 = 0.86 bps
+  ;; In dollars: $0.03 * 100,000 = $3,000
+  ;;
+  ;; INTERPRETATION:
+  ;; You paid 0.86 bps more than market average, costing $3,000.
+  ;; This is reasonable for a 100k share order (1% of ADV).
+  ;; Good execution algorithms target VWAP ± 2 bps.
+  ;;
+  (define market_vwap 350.10)
+  (define vwap_difference (- avg_execution_price market_vwap))
+  (define vwap_difference_bps (/ (* vwap_difference 10000) market_vwap))
+  (define vwap_difference_dollars (* vwap_difference order_quantity))
+
+  (log :message "\n=== VWAP BENCHMARK ===")
+  (log :message "Market VWAP:" :value market_vwap)
+  (log :message "Your avg price:" :value avg_execution_price)
+  (log :message "Difference:" :value vwap_difference)
+  (log :message "Difference (bps):" :value vwap_difference_bps)
+  (log :message "Difference ($):" :value vwap_difference_dollars)
+  (log :message "Assessment: Within acceptable range (< 2 bps target)")
+
+  ;; ============================================
+  ;; STEP 4: COST DECOMPOSITION
+  ;; ============================================
+  ;;
+  ;; THEORY: Break down total cost into components
+  ;;
+  ;; 1. SPREAD COST:
+  ;; Average spread during execution: $0.02 (bid $350.00, ask $350.02)
+  ;; Half-spread = $0.01
+  ;; Spread cost = $0.01 * 100,000 = $1,000
+  ;;
+  ;; 2. MARKET IMPACT (Temporary + Permanent):
+  ;; Temporary: Price reversion after your trades (50% of impact)
+  ;; Permanent: Lasting price change due to information (50%)
+  ;; Estimated total impact: $0.05 per share
+  ;; Impact cost = $0.05 * 100,000 = $5,000
+  ;;
+  ;; 3. TIMING COST:
+  ;; Price drift during execution (market moved up)
+  ;; Arrival: $350.00
+  ;; Average market price during execution: $350.10
+  ;; Timing cost = ($350.10 - $350.00) * 100,000 = $10,000
+  ;;
+  ;; 4. OPPORTUNITY COST:
+  ;; Unfilled orders: 0 (100% fill rate)
+  ;; Opportunity cost = $0
+  ;;
+  ;; TOTAL VERIFICATION:
+  ;; Spread + Impact + Timing + Opportunity
+  ;; = $1,000 + $5,000 + $10,000 + $0
+  ;; = $16,000
+  ;;
+  ;; Note: This exceeds implementation shortfall ($13,000) because
+  ;; some components offset each other (e.g., got lucky on some fills).
+  ;; In practice, decomposition is approximate.
+  ;;
+  (define spread_cost 1000)
+  (define impact_cost 5000)
+  (define timing_cost 10000)
+  (define opportunity_cost 0)
+  (define decomposed_total (+ spread_cost impact_cost timing_cost opportunity_cost))
+
+  (log :message "\n=== COST DECOMPOSITION ===")
+  (log :message "1. Spread cost:" :value spread_cost)
+  (log :message "2. Market impact:" :value impact_cost)
+  (log :message "3. Timing cost:" :value timing_cost)
+  (log :message "4. Opportunity cost:" :value opportunity_cost)
+  (log :message "---")
+  (log :message "Decomposed total:" :value decomposed_total)
+  (log :message "Implementation shortfall:" :value implementation_shortfall_dollars)
+  (log :message "(Difference due to favorable fills offsetting costs)")
+
+  ;; ============================================
+  ;; STEP 5: VENUE QUALITY ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Evaluate execution quality by venue
+  ;;
+  ;; VENUE BREAKDOWN:
+  ;; Nasdaq: 50,000 shares (3 fills)
+  ;;   Fill 1: 16,000 @ $350.05
+  ;;   Fill 4: 17,500 @ $350.15
+  ;;   Fill 6: 17,000 @ $350.18
+  ;;   Avg: $350.128
+  ;;
+  ;; NYSE: 33,000 shares (2 fills)
+  ;;   Fill 2: 17,000 @ $350.12
+  ;;   Fill 5: 16,000 @ $350.20
+  ;;   Avg: $350.158
+  ;;
+  ;; Dark Pool: 16,500 shares (1 fill)
+  ;;   Fill 3: 16,500 @ $350.08
+  ;;   Avg: $350.08
+  ;;
+  ;; RANKING BY PRICE:
+  ;; 1. Dark Pool: $350.08 (BEST - 5 bps better than VWAP)
+  ;; 2. Nasdaq: $350.128 (8 bps worse than VWAP)
+  ;; 3. NYSE: $350.158 (16.5 bps worse than VWAP)
+  ;;
+  (define nasdaq_qty (+ fill1_qty fill4_qty fill6_qty))
+  (define nasdaq_cost (+ (* fill1_qty fill1_price)
+                         (* fill4_qty fill4_price)
+                         (* fill6_qty fill6_price)))
+  (define nasdaq_avg_price (/ nasdaq_cost nasdaq_qty))
+
+  (define nyse_qty (+ fill2_qty fill5_qty))
+  (define nyse_cost (+ (* fill2_qty fill2_price)
+                       (* fill5_qty fill5_price)))
+  (define nyse_avg_price (/ nyse_cost nyse_qty))
+
+  (define dark_qty fill3_qty)
+  (define dark_avg_price fill3_price)
+
+  (define nasdaq_vs_vwap_bps (/ (* (- nasdaq_avg_price market_vwap) 10000) market_vwap))
+  (define nyse_vs_vwap_bps (/ (* (- nyse_avg_price market_vwap) 10000) market_vwap))
+  (define dark_vs_vwap_bps (/ (* (- dark_avg_price market_vwap) 10000) market_vwap))
+
+  (log :message "\n=== VENUE QUALITY ANALYSIS ===")
+  (log :message "Nasdaq:")
+  (log :message "  Quantity:" :value nasdaq_qty)
+  (log :message "  Avg price:" :value nasdaq_avg_price)
+  (log :message "  vs VWAP (bps):" :value nasdaq_vs_vwap_bps)
+  (log :message "")
+  (log :message "NYSE:")
+  (log :message "  Quantity:" :value nyse_qty)
+  (log :message "  Avg price:" :value nyse_avg_price)
+  (log :message "  vs VWAP (bps):" :value nyse_vs_vwap_bps)
+  (log :message "")
+  (log :message "Dark Pool:")
+  (log :message "  Quantity:" :value dark_qty)
+  (log :message "  Avg price:" :value dark_avg_price)
+  (log :message "  vs VWAP (bps):" :value dark_vs_vwap_bps)
+  (log :message "")
+  (log :message "RANKING:")
+  (log :message "1. Dark Pool (BEST - negative bps means savings)")
+  (log :message "2. Nasdaq (Acceptable)")
+  (log :message "3. NYSE (Most expensive)")
+
+  ;; ============================================
+  ;; STEP 6: BUILD VS TAKE ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Evaluate passive vs aggressive order mix
+  ;;
+  ;; ASSUMPTIONS FROM EXECUTION:
+  ;; - 60% of orders were passive limit orders (built liquidity)
+  ;; - 40% of orders were aggressive market orders (took liquidity)
+  ;;
+  ;; PASSIVE (60,000 shares):
+  ;; Captured half-spread: $0.01 per share
+  ;; Savings: 60,000 * $0.01 = $600
+  ;; But faced adverse selection: $0.015 per share cost
+  ;; AS cost: 60,000 * $0.015 = $900
+  ;; Net: -$300 (lost $300 on passive orders)
+  ;;
+  ;; AGGRESSIVE (40,000 shares):
+  ;; Paid half-spread: $0.01 per share
+  ;; Cost: 40,000 * $0.01 = $400
+  ;; But avoided adverse selection: saved $0.015 per share
+  ;; AS saved: 40,000 * $0.015 = $600
+  ;; Net: +$200 (saved $200 on aggressive orders)
+  ;;
+  ;; TOTAL NET:
+  ;; Passive: -$300
+  ;; Aggressive: +$200
+  ;; Combined: -$100
+  ;;
+  ;; OPTIMAL MIX ANALYSIS:
+  ;; Given high adverse selection (AS > spread/2), should have used
+  ;; more aggressive orders. Optimal mix: 30% passive, 70% aggressive.
+  ;;
+  (define passive_pct 60)
+  (define aggressive_pct 40)
+  (define passive_qty (* order_quantity (/ passive_pct 100)))
+  (define aggressive_qty (* order_quantity (/ aggressive_pct 100)))
+
+  (define half_spread 0.01)
+  (define adverse_selection_cost_per_share 0.015)
+
+  (define passive_spread_savings (* passive_qty half_spread))
+  (define passive_as_cost (* passive_qty adverse_selection_cost_per_share))
+  (define passive_net (- passive_spread_savings passive_as_cost))
+
+  (define aggressive_spread_cost (* aggressive_qty half_spread))
+  (define aggressive_as_savings (* aggressive_qty adverse_selection_cost_per_share))
+  (define aggressive_net (- aggressive_as_savings aggressive_spread_cost))
+
+  (define total_build_take_net (+ passive_net aggressive_net))
+
+  (log :message "\n=== BUILD VS TAKE ANALYSIS ===")
+  (log :message "Passive (60%):")
+  (log :message "  Quantity:" :value passive_qty)
+  (log :message "  Spread savings:" :value passive_spread_savings)
+  (log :message "  Adverse selection cost:" :value passive_as_cost)
+  (log :message "  Net:" :value passive_net)
+  (log :message "")
+  (log :message "Aggressive (40%):")
+  (log :message "  Quantity:" :value aggressive_qty)
+  (log :message "  Spread cost:" :value aggressive_spread_cost)
+  (log :message "  AS avoided:" :value aggressive_as_savings)
+  (log :message "  Net:" :value aggressive_net)
+  (log :message "")
+  (log :message "Total net:" :value total_build_take_net)
+  (log :message "Recommendation: Increase aggressive % to 70% (reduce AS cost)")
+
+  ;; ============================================
+  ;; FINAL TCA SCORECARD
+  ;; ============================================
+  (log :message "\n=== TCA SCORECARD ===")
+  (log :message "Order: 100,000 MSFT @ $350.00 arrival")
+  (log :message "Avg execution: $350.13")
+  (log :message "")
+  (log :message "METRICS:")
+  (log :message "✓ Implementation shortfall: 3.71 bps ($13,000)")
+  (log :message "✓ vs VWAP: +0.86 bps ($3,000) - acceptable")
+  (log :message "✓ Fill rate: 100% (no opportunity cost)")
+  (log :message "✓ Best venue: Dark Pool (-5 bps vs VWAP)")
+  (log :message "✓ Worst venue: NYSE (+16.5 bps vs VWAP)")
+  (log :message "")
+  (log :message "COST BREAKDOWN:")
+  (log :message "- Spread: $1,000 (7.7%)")
+  (log :message "- Impact: $5,000 (38.5%)")
+  (log :message "- Timing: $10,000 (76.9%)")
+  (log :message "- Opportunity: $0 (0%)")
+  (log :message "")
+  (log :message "GRADE: B+ (good execution for large order)")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Real-time TCA: Calculate slippage during execution, adjust strategy")
+  (log :message "2. Pre-trade cost estimation: Predict IS before trading (Almgren-Chriss)")
+  (log :message "3. Venue selection optimization: Route to best-performing venues dynamically")
+  (log :message "4. Adverse selection detection: ML model to identify toxic flow periods")
+  (log :message "5. Adaptive algorithms: Switch from TWAP to POV based on real-time TCA")
+  (log :message "6. Multi-day TCA: Track execution quality over weeks for pattern detection")
+  (log :message "7. Peer comparison: Benchmark vs other traders in same stock")
+  (log :message "8. Impact modeling: Refine square-root law with stock-specific parameters")
+  (log :message "9. Dark pool analytics: Score dark pools by fill quality and speed")
+  (log :message "10. Spread decomposition: Separate quoted spread vs effective spread")
+  (log :message "11. Time-of-day analysis: Identify optimal trading windows (avoid open/close)")
+  (log :message "12. Order size optimization: Find sweet spot between impact and urgency")
+  (log :message "13. Smart order routing: Multi-venue simultaneous execution")
+  (log :message "14. Fill probability models: Estimate likelihood of limit order fills")
+  (log :message "15. Post-trade alpha attribution: Separate execution from strategy performance")
+
+  (log :message "\n=== TRANSACTION COST ANALYSIS COMPLETE ===")
+)

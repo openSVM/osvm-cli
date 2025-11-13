@@ -1,0 +1,450 @@
+;; ============================================
+;; OVSM Example 22: Deep Learning Pattern Recognition
+;; ============================================
+
+(do
+  (log :message "=== CONVOLUTIONAL PATTERN DETECTION ===")
+
+  ;; Price candle patterns (OHLC data)
+  (define candles [
+    [100 105 98 103]    ;; [open, high, low, close]
+    [103 108 102 107]
+    [107 110 105 106]
+    [106 108 104 105]
+    [105 112 104 111]
+    [111 115 110 114]
+    [114 118 113 116]
+    [116 120 115 119]
+  ])
+
+  (log :message "Analyzing" :value (length candles))
+  (log :message "price candles\n")
+
+  ;; Convolutional filter for bullish pattern
+  (define bullish_filter [
+    [0.1 0.2]    ;; Detect rising close prices
+    [0.3 0.4]
+  ])
+
+  ;; Apply convolution
+  (define pattern_scores [])
+  (define i 0)
+
+  (while (< i (- (length candles) 1))
+    (define candle1 (first (drop candles i)))
+    (define candle2 (first (drop candles (+ i 1))))
+
+    (define close1 (first (drop candle1 3)))
+    (define close2 (first (drop candle2 3)))
+
+    ;; Simple convolution
+    (define conv_score (+
+      (* close1 0.1)
+      (* close2 0.4)))
+
+    (set! pattern_scores (concat pattern_scores [conv_score]))
+    (set! i (+ i 1)))
+
+  (log :message "Convolution scores:" :value (length pattern_scores))
+
+  ;; Find highest pattern score
+  (define max_score 0.0)
+  (for (score pattern_scores)
+    (when (> score max_score)
+      (set! max_score score)))
+
+  (log :message "Max pattern score:" :value max_score)
+
+  (log :message "\n=== LSTM SEQUENCE PREDICTION ===")
+
+  ;; LSTM for time series prediction
+  (define price_sequence [100 103 107 106 105 111 114 116 119])
+
+  (log :message "Price sequence length:" :value (length price_sequence))
+
+  ;; LSTM cell parameters (simplified)
+  (define lstm_weights {:forget 0.5
+                         :input 0.4
+                         :output 0.6})
+
+  (define cell_state 0.0)
+  (define hidden_state 0.0)
+
+  ;; Process sequence
+  (define predictions [])
+
+  (for (price price_sequence)
+    ;; Normalize price
+    (define norm_price (/ price 100))
+
+    ;; Forget gate
+    (define forget_gate (* (get lstm_weights "forget") hidden_state))
+
+    ;; Input gate
+    (define input_gate (* (get lstm_weights "input") norm_price))
+
+    ;; Update cell state
+    (set! cell_state (+ (* cell_state forget_gate) input_gate))
+
+    ;; Output gate
+    (define output_gate (* (get lstm_weights "output") cell_state))
+    (set! hidden_state output_gate)
+
+    ;; Prediction
+    (define predicted_price (* hidden_state 100))
+    (set! predictions (concat predictions [predicted_price])))
+
+  ;; Final prediction (next price)
+  (define next_prediction (last predictions))
+  (log :message "LSTM next price prediction:" :value next_prediction)
+
+  (define current_price (last price_sequence))
+  (define predicted_change (* (/ (- next_prediction current_price) current_price) 100))
+  (log :message "Predicted change:" :value predicted_change)
+
+  (log :message "\n=== ATTENTION MECHANISM ===")
+
+  ;; Multi-head attention for feature importance
+  (define features [
+    {:name "liquidity" :value 25.0}
+    {:name "volume" :value 500.0}
+    {:name "holders" :value 8000.0}
+    {:name "age" :value 12.0}
+  ])
+
+  (log :message "Applying attention to features...")
+
+  ;; Calculate attention scores
+  (define attention_scores [])
+
+  (for (feature features)
+    (define name (get feature "name"))
+    (define value (get feature "value"))
+
+    ;; Query-Key similarity (simplified)
+    (define query_weight 0.7)
+    (define key_weight 0.3)
+    (define attention_score (* value (+ query_weight key_weight)))
+
+    (log :message name :value attention_score)
+    (set! attention_scores (concat attention_scores [
+      {:name name :score attention_score}
+    ])))
+
+  ;; Softmax normalization
+  (define total_attention 0.0)
+  (for (att attention_scores)
+    (define score (get att "score"))
+    (set! total_attention (+ total_attention score)))
+
+  (log :message "\nNormalized attention weights:")
+  (for (att attention_scores)
+    (define name (get att "name"))
+    (define score (get att "score"))
+    (define normalized (/ score total_attention))
+    (log :message name :value normalized))
+
+  (log :message "\n=== TRANSFORMER ENCODER ===")
+
+  ;; Simplified transformer for token classification
+  (define token_features [
+    [0.8 0.6 0.7]   ;; Feature vector 1
+    [0.6 0.7 0.5]   ;; Feature vector 2
+    [0.9 0.8 0.85]  ;; Feature vector 3
+  ])
+
+  (log :message "Processing" :value (length token_features))
+  (log :message "feature vectors")
+
+  ;; Self-attention scores
+  (define self_attention_matrix [])
+
+  (for (vec1 token_features)
+    (define attention_row [])
+
+    (for (vec2 token_features)
+      ;; Dot product attention
+      (define dot_product 0.0)
+      (define idx 0)
+      (while (< idx (length vec1))
+        (define v1 (first (drop vec1 idx)))
+        (define v2 (first (drop vec2 idx)))
+        (set! dot_product (+ dot_product (* v1 v2)))
+        (set! idx (+ idx 1)))
+
+      (set! attention_row (concat attention_row [dot_product])))
+
+    (set! self_attention_matrix (concat self_attention_matrix [attention_row])))
+
+  (log :message "Self-attention matrix computed")
+
+  ;; Find most important token
+  (define max_attention 0.0)
+  (define most_important 0)
+
+  (define row_idx 0)
+  (while (< row_idx (length self_attention_matrix))
+    (define row (first (drop self_attention_matrix row_idx)))
+    (define row_sum 0.0)
+
+    (for (val row)
+      (set! row_sum (+ row_sum val)))
+
+    (when (> row_sum max_attention)
+      (set! max_attention row_sum)
+      (set! most_important row_idx))
+
+    (set! row_idx (+ row_idx 1)))
+
+  (log :message "Most important feature vector:" :value most_important)
+  (log :message "Attention score:" :value max_attention)
+
+  (log :message "\n=== GAN ANOMALY DETECTION ===")
+
+  ;; Generative Adversarial Network for scam detection
+  (define normal_patterns [
+    {:liquidity 20 :volume 400 :holders 6000}
+    {:liquidity 25 :volume 500 :holders 8000}
+    {:liquidity 30 :volume 600 :holders 10000}
+  ])
+
+  (define test_token {:liquidity 50 :volume 100 :holders 1000})
+
+  (log :message "Testing token for anomaly...")
+
+  ;; Calculate distance from normal patterns
+  (define min_dist 999999.0)
+
+  (for (pattern normal_patterns)
+    (define liq_diff (- (get test_token "liquidity") (get pattern "liquidity")))
+    (define vol_diff (- (get test_token "volume") (get pattern "volume")))
+    (define hold_diff (- (get test_token "holders") (get pattern "holders")))
+
+    (define distance (+
+      (* liq_diff liq_diff)
+      (* (/ vol_diff 100) (/ vol_diff 100))
+      (* (/ hold_diff 1000) (/ hold_diff 1000))))
+
+    (when (< distance min_dist)
+      (set! min_dist distance)))
+
+  (log :message "Anomaly distance:" :value min_dist)
+
+  (define anomaly_threshold 500)
+  (define is_scam (> min_dist anomaly_threshold))
+
+  (log :message "Scam detected:" :value is_scam)
+
+  (log :message "\n=== REINFORCEMENT LEARNING Q-TABLE ===")
+
+  ;; Q-learning for optimal buy/sell timing
+  (define states [
+    "price_rising"
+    "price_falling"
+    "price_stable"
+  ])
+
+  (define actions [
+    "buy"
+    "sell"
+    "hold"
+  ])
+
+  ;; Q-table (state-action values)
+  (define q_table [
+    [0.8 0.2 0.5]   ;; price_rising: [buy, sell, hold]
+    [0.3 0.7 0.4]   ;; price_falling: [buy, sell, hold]
+    [0.5 0.5 0.6]   ;; price_stable: [buy, sell, hold]
+  ])
+
+  (log :message "Q-Learning States:" :value (length states))
+  (log :message "Q-Learning Actions:" :value (length actions))
+
+  ;; Current state: price_rising (index 0)
+  (define current_state 0)
+  (define q_values (first q_table))
+
+  (log :message "\nQ-values for price_rising:")
+  (log :message "  buy:" :value (first q_values))
+  (log :message "  sell:" :value (first (drop q_values 1)))
+  (log :message "  hold:" :value (first (drop q_values 2)))
+
+  ;; Select best action (highest Q-value)
+  (define best_action "buy")
+  (define max_q_value (first q_values))
+
+  (when (> (first (drop q_values 1)) max_q_value)
+    (set! best_action "sell")
+    (set! max_q_value (first (drop q_values 1))))
+
+  (when (> (first (drop q_values 2)) max_q_value)
+    (set! best_action "hold")
+    (set! max_q_value (first (drop q_values 2))))
+
+  (log :message "RL Recommended action:" :value best_action)
+  (log :message "Expected reward:" :value max_q_value)
+
+  (log :message "\n=== POLICY GRADIENT ===")
+
+  ;; Policy network for continuous action space
+  (define policy_params {:mean 0.6 :std 0.2})
+
+  (define policy_mean (get policy_params "mean"))
+  (define policy_std (get policy_params "std"))
+
+  (log :message "Policy distribution:")
+  (log :message "  Mean:" :value policy_mean)
+  (log :message "  Std dev:" :value policy_std)
+
+  ;; Sample action from policy (simplified)
+  (define sampled_action policy_mean)
+  (log :message "Sampled position size:" :value sampled_action)
+
+  ;; Scale to SOL amount
+  (define max_position 10.0)
+  (define recommended_position (* max_position sampled_action))
+
+  (log :message "Recommended position (SOL):" :value recommended_position)
+
+  (log :message "\n=== ACTOR-CRITIC ARCHITECTURE ===")
+
+  ;; Actor: Policy network
+  (define actor_output 0.7)  ;; Probability of buying
+
+  ;; Critic: Value network
+  (define state_value 0.65)  ;; Expected return from current state
+
+  (log :message "Actor (policy) output:" :value actor_output)
+  (log :message "Critic (value) estimate:" :value state_value)
+
+  ;; Advantage function
+  (define reward 0.8)
+  (define advantage (- reward state_value))
+
+  (log :message "Advantage:" :value advantage)
+
+  (define should_take_action (> advantage 0))
+  (log :message "Should execute trade:" :value should_take_action)
+
+  (log :message "\n=== DEEP Q-NETWORK (DQN) ===")
+
+  ;; Neural network approximation of Q-function
+  (define state_features [0.7 0.6 0.8])  ;; Current market state
+
+  ;; Network weights
+  (define dqn_weights [[0.3 0.4 0.3] [0.2 0.5 0.3] [0.4 0.3 0.3]])
+
+  (define dqn_q_values [])
+
+  ;; Calculate Q-value for each action
+  (for (action_weights dqn_weights)
+    (define q_val 0.0)
+    (define idx 0)
+
+    (while (< idx (length state_features))
+      (define feat (first (drop state_features idx)))
+      (define weight (first (drop action_weights idx)))
+      (set! q_val (+ q_val (* feat weight)))
+      (set! idx (+ idx 1)))
+
+    (set! dqn_q_values (concat dqn_q_values [q_val])))
+
+  (log :message "DQN Q-values:")
+  (log :message "  buy:" :value (first dqn_q_values))
+  (log :message "  sell:" :value (first (drop dqn_q_values 1)))
+  (log :message "  hold:" :value (first (drop dqn_q_values 2)))
+
+  ;; Select max Q-value action
+  (define dqn_best_action "buy")
+  (define dqn_max_q (first dqn_q_values))
+
+  (when (> (first (drop dqn_q_values 1)) dqn_max_q)
+    (set! dqn_best_action "sell")
+    (set! dqn_max_q (first (drop dqn_q_values 1))))
+
+  (when (> (first (drop dqn_q_values 2)) dqn_max_q)
+    (set! dqn_best_action "hold")
+    (set! dqn_max_q (first (drop dqn_q_values 2))))
+
+  (log :message "DQN Best action:" :value dqn_best_action)
+
+  (log :message "\n=== ENSEMBLE DEEP LEARNING ===")
+
+  ;; Combine multiple deep learning models
+  (define model_outputs [
+    {:model "CNN" :action "buy" :confidence 0.85}
+    {:model "LSTM" :action "buy" :confidence 0.78}
+    {:model "Transformer" :action "hold" :confidence 0.65}
+    {:model "DQN" :action "buy" :confidence 0.72}
+  ])
+
+  (define buy_votes 0)
+  (define sell_votes 0)
+  (define hold_votes 0)
+  (define total_confidence 0.0)
+
+  (for (output model_outputs)
+    (define action (get output "action"))
+    (define conf (get output "confidence"))
+
+    (when (= action "buy") (set! buy_votes (+ buy_votes 1)))
+    (when (= action "sell") (set! sell_votes (+ sell_votes 1)))
+    (when (= action "hold") (set! hold_votes (+ hold_votes 1)))
+
+    (set! total_confidence (+ total_confidence conf)))
+
+  (define avg_confidence (/ total_confidence (length model_outputs)))
+
+  (log :message "Ensemble voting:")
+  (log :message "  Buy votes:" :value buy_votes)
+  (log :message "  Sell votes:" :value sell_votes)
+  (log :message "  Hold votes:" :value hold_votes)
+  (log :message "  Avg confidence:" :value avg_confidence)
+
+  (define ensemble_decision (if (>= buy_votes 3)
+                                "🚀 BUY - Strong consensus"
+                                (if (>= hold_votes 3)
+                                    "⏸️ HOLD - Wait for signal"
+                                    "❌ SELL - Weak consensus")))
+
+  (log :message "Ensemble decision:" :value ensemble_decision)
+
+  (log :message "\n=== FINAL DEEP LEARNING DECISION ===")
+
+  ;; Aggregate all deep learning signals
+  (define dl_score 0.0)
+
+  ;; LSTM prediction positive (25%)
+  (when (> predicted_change 5) (set! dl_score (+ dl_score 0.25)))
+
+  ;; High attention on important features (20%)
+  (when (> max_attention 1.5) (set! dl_score (+ dl_score 0.2)))
+
+  ;; No scam detected (25%)
+  (when (not is_scam) (set! dl_score (+ dl_score 0.25)))
+
+  ;; RL recommends action (15%)
+  (when (= best_action "buy") (set! dl_score (+ dl_score 0.15)))
+
+  ;; Ensemble consensus (15%)
+  (when (>= buy_votes 3) (set! dl_score (+ dl_score 0.15)))
+
+  (log :message "Deep Learning Score:" :value dl_score)
+
+  (define dl_recommendation (if (>= dl_score 0.75)
+                                "🚀 STRONG BUY - AI confidence high"
+                                (if (>= dl_score 0.5)
+                                    "✅ BUY - Moderate AI signals"
+                                    "⏸️ WAIT - Weak AI signals")))
+
+  (log :message "DL Recommendation:" :value dl_recommendation)
+
+  (when (>= dl_score 0.5)
+    (log :message "\nDL Model Insights:")
+    (log :message "  LSTM prediction:" :value predicted_change)
+    (log :message "  Pattern strength:" :value max_score)
+    (log :message "  Scam risk:" :value is_scam)
+    (log :message "  RL action:" :value best_action)
+    (log :message "  Ensemble confidence:" :value avg_confidence))
+
+  "✅ Deep learning pattern recognition complete!")

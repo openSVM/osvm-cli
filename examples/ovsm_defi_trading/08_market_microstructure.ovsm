@@ -1,0 +1,245 @@
+;; ============================================
+;; OVSM Example 8: Market Microstructure & Order Flow
+;; ============================================
+
+(do
+  (log :message "=== ORDER BOOK ANALYSIS ===")
+
+  ;; Mock order book: [[price, size], ...]
+  (define bids [
+    [49.95 100]
+    [49.90 250]
+    [49.85 180]
+    [49.80 300]
+    [49.75 220]
+  ])
+
+  (define asks [
+    [50.05 120]
+    [50.10 200]
+    [50.15 150]
+    [50.20 280]
+    [50.25 190]
+  ])
+
+  ;; Best bid/ask
+  (define best_bid (first (first bids)))
+  (define best_ask (first (first asks)))
+  (define spread (- best_ask best_bid))
+  (define spread_pct (* (/ spread best_bid) 100))
+
+  (log :message "Best bid:" :value best_bid)
+  (log :message "Best ask:" :value best_ask)
+  (log :message "Spread:" :value spread)
+  (log :message "Spread %:" :value spread_pct)
+
+  ;; Calculate liquidity depth
+  (define bid_depth 0)
+  (for (level bids)
+    (define size (last level))
+    (set! bid_depth (+ bid_depth size)))
+
+  (define ask_depth 0)
+  (for (level asks)
+    (define size (last level))
+    (set! ask_depth (+ ask_depth size)))
+
+  (log :message "Bid depth (5 levels):" :value bid_depth)
+  (log :message "Ask depth (5 levels):" :value ask_depth)
+
+  ;; Order book imbalance (buy pressure indicator)
+  (define bid_depth_f (* bid_depth 1.0))
+  (define ask_depth_f (* ask_depth 1.0))
+  (define imbalance (/ (- bid_depth_f ask_depth_f) (+ bid_depth_f ask_depth_f)))
+  (log :message "Order book imbalance:" :value imbalance)
+
+  (define pressure_signal (if (> imbalance 0.2)
+                              "STRONG BUY PRESSURE"
+                              (if (< imbalance -0.2)
+                                  "STRONG SELL PRESSURE"
+                                  "BALANCED")))
+  (log :message "Market pressure:" :value pressure_signal)
+
+  (log :message "\n=== VOLUME PROFILE ===")
+
+  ;; Volume at each price level
+  (define volume_profile [
+    [49.50 1200]
+    [49.75 2500]
+    [50.00 4800]  ;; POC (Point of Control)
+    [50.25 2200]
+    [50.50 1100]
+  ])
+
+  ;; Find Point of Control (highest volume)
+  (define poc_price 0)
+  (define max_volume 0)
+
+  (for (level volume_profile)
+    (define price (first level))
+    (define volume (last level))
+    (when (> volume max_volume)
+      (set! max_volume volume)
+      (set! poc_price price)))
+
+  (log :message "Point of Control (POC):" :value poc_price)
+  (log :message "POC Volume:" :value max_volume)
+
+  ;; Value area (70% of volume)
+  (define total_volume 0)
+  (for (level volume_profile)
+    (set! total_volume (+ total_volume (last level))))
+
+  (define target_volume (* total_volume 0.7))
+  (log :message "Value Area target (70%):" :value target_volume)
+
+  (log :message "\n=== TIME & SALES ANALYSIS ===")
+
+  ;; Recent trades: [[time, price, size, side], ...]
+  (define trades [
+    [1000 50.05 100 "buy"]
+    [1001 50.06 150 "buy"]
+    [1002 50.04 80 "sell"]
+    [1003 50.07 200 "buy"]
+    [1004 50.03 120 "sell"]
+  ])
+
+  ;; Calculate aggressor volume
+  (define buy_volume 0)
+  (define sell_volume 0)
+
+  (for (trade trades)
+    (define size (first (drop trade 2)))
+    (define side (last trade))
+    (if (= side "buy")
+        (set! buy_volume (+ buy_volume size))
+        (set! sell_volume (+ sell_volume size))))
+
+  (log :message "Aggressive buy volume:" :value buy_volume)
+  (log :message "Aggressive sell volume:" :value sell_volume)
+
+  (define delta (* 1.0 (- buy_volume sell_volume)))
+  (log :message "Volume delta:" :value delta)
+
+  (define flow_signal (if (> delta 100.0)
+                          "STRONG BUYING FLOW"
+                          (if (< delta -100.0)
+                              "STRONG SELLING FLOW"
+                              "NEUTRAL FLOW")))
+  (log :message "Order flow:" :value flow_signal)
+
+  (log :message "\n=== MARKET IMPACT MODEL ===")
+
+  ;; Estimate market impact of large order
+  (define order_size 1000)
+  (define daily_volume 50000)
+  (define current_price 50.0)
+  (define volatility 0.02)  ;; 2% daily vol
+
+  ;; Square-root impact model: impact = volatility * sqrt(order_size / daily_volume)
+  (define participation_rate (/ order_size daily_volume))
+  ;; Approximate sqrt
+  (define guess (/ participation_rate 2))
+  (define impact_factor (/ (+ guess (/ participation_rate (if (= guess 0) 0.001 guess))) 2))
+  (define price_impact (* volatility impact_factor current_price))
+
+  (log :message "Order size:" :value order_size)
+  (log :message "Daily volume:" :value daily_volume)
+  (log :message "Estimated price impact:" :value price_impact)
+  (log :message "Expected execution price:" :value (+ current_price price_impact))
+
+  ;; Slippage cost
+  (define slippage_cost (* order_size price_impact))
+  (log :message "Estimated slippage cost:" :value slippage_cost)
+
+  (log :message "\n=== TWAP vs VWAP EXECUTION ===")
+
+  ;; TWAP (Time-Weighted Average Price) - simple average
+  (define execution_prices [50.0 50.1 49.9 50.2 50.0])
+  (define twap_sum 0)
+
+  (for (price execution_prices)
+    (set! twap_sum (+ twap_sum price)))
+
+  (define twap (/ twap_sum (length execution_prices)))
+  (log :message "TWAP:" :value twap)
+
+  ;; VWAP (Volume-Weighted Average Price)
+  (define execution_slices [
+    [50.0 200]
+    [50.1 300]
+    [49.9 150]
+    [50.2 250]
+    [50.0 100]
+  ])
+
+  (define vwap_pv 0)
+  (define vwap_vol 0)
+
+  (for (slice execution_slices)
+    (define price (first slice))
+    (define volume (last slice))
+    (set! vwap_pv (+ vwap_pv (* price volume)))
+    (set! vwap_vol (+ vwap_vol volume)))
+
+  (define vwap (/ vwap_pv vwap_vol))
+  (log :message "VWAP:" :value vwap)
+
+  ;; Compare to benchmark
+  (define benchmark_price 50.05)
+  (define twap_performance (- benchmark_price twap))
+  (define vwap_performance (- benchmark_price vwap))
+
+  (log :message "TWAP vs benchmark:" :value twap_performance)
+  (log :message "VWAP vs benchmark:" :value vwap_performance)
+
+  (log :message "\n=== LIQUIDITY DETECTION ===")
+
+  ;; Detect hidden liquidity patterns
+  (define recent_fills [
+    [50.0 100 "limit"]
+    [50.0 500 "iceberg"]   ;; Large fill at same price
+    [50.0 200 "limit"]
+    [50.0 300 "iceberg"]
+  ])
+
+  (define fills_at_price 0)
+  (define total_filled 0.0)
+
+  (for (fill recent_fills)
+    (set! fills_at_price (+ fills_at_price 1))
+    (set! total_filled (+ total_filled (first (drop fill 1)))))
+
+  (log :message "Fills at 50.0:" :value fills_at_price)
+  (log :message "Total filled:" :value total_filled)
+
+  (when (> total_filled 800.0)
+    (log :message "⚠️ Hidden liquidity detected - possible iceberg orders"))
+
+  (log :message "\n=== MICROSTRUCTURE NOISE ===")
+
+  ;; Measure bid-ask bounce (noise in price)
+  (define tick_prices [50.0 50.05 50.0 50.05 50.0 50.05])
+  (define bounces 0)
+
+  (define i 0)
+  (while (< i (- (length tick_prices) 2))
+    (define curr (first (drop tick_prices i)))
+    (define next (first (drop tick_prices (+ i 1))))
+    (define next2 (first (drop tick_prices (+ i 2)))
+
+    ;; Detect bounce pattern (up then down or down then up)
+    (when (or (and (< curr next) (> next next2))
+              (and (> curr next) (< next next2)))
+      (set! bounces (+ bounces 1)))
+
+    (set! i (+ i 1)))
+
+  (define noise_ratio (/ (* bounces 1.0) (- (length tick_prices) 2)))
+  (log :message "Bid-ask bounces:" :value bounces)
+  (log :message "Noise ratio:" :value noise_ratio)
+
+  (when (> noise_ratio 0.5)
+    (log :message "⚠️ High microstructure noise - consider longer timeframes"))
+
+  "✅ Market microstructure demo complete!")

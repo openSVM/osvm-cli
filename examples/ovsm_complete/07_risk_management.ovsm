@@ -1,0 +1,114 @@
+;; ============================================
+;; OVSM Example 7: Risk Management & Position Sizing
+;; ============================================
+
+(do
+  (log :message "=== POSITION SIZING (KELLY CRITERION) ===")
+
+  ;; Trading statistics
+  (define win_rate 0.55)
+  (define avg_win 1.8)
+  (define avg_loss 1.0)
+
+  ;; Kelly Criterion: f = (bp - q) / b
+  ;; where b = odds (avg_win/avg_loss), p = win_rate, q = 1 - win_rate
+  (define odds (/ avg_win avg_loss))
+  (define kelly_fraction (/ (- (* odds win_rate) (- 1 win_rate)) odds))
+  (define safe_kelly (* kelly_fraction 0.5))  ;; Half Kelly for safety
+
+  (log :message "Kelly fraction:" :value (* kelly_fraction 100))
+  (log :message "Safe position size (Half Kelly):" :value (* safe_kelly 100))
+
+  (log :message "\n=== STOP LOSS & TAKE PROFIT ===")
+
+  ;; Position parameters
+  (define entry_price 50.0)
+  (define position_size 100)
+  (define risk_per_trade 0.02)  ;; 2% risk
+  (define reward_ratio 2.0)      ;; 2:1 reward:risk
+
+  ;; Calculate stop loss
+  (define max_loss (* position_size entry_price risk_per_trade))
+  (define stop_distance (/ max_loss position_size))
+  (define stop_loss (- entry_price stop_distance))
+
+  ;; Calculate take profit
+  (define target_gain (* max_loss reward_ratio))
+  (define tp_distance (/ target_gain position_size))
+  (define take_profit (+ entry_price tp_distance))
+
+  (log :message "Entry price:" :value entry_price)
+  (log :message "Stop loss:" :value stop_loss)
+  (log :message "Take profit:" :value take_profit)
+  (log :message "Risk amount:" :value max_loss)
+  (log :message "Reward amount:" :value target_gain)
+
+  (log :message "\n=== PORTFOLIO VALUE AT RISK (VaR) ===")
+
+  ;; Pre-sorted daily returns (percentages, worst to best)
+  (define sorted_returns [-3.2 -2.5 -1.7 -1.1 -0.5 0.8 1.3 1.9 2.1 2.8])
+
+  ;; 95% VaR (5th percentile of losses - worst 5%)
+  (define var_index 0)  ;; First element is the worst return
+  (define var_95 (nth sorted_returns var_index))
+
+  (define portfolio_value 100000)
+  (define var_dollar (* portfolio_value (/ var_95 100)))
+
+  (log :message "Portfolio value:" :value portfolio_value)
+  (log :message "VaR (95%):" :value var_95)
+  (log :message "VaR (dollar):" :value var_dollar)
+
+  (log :message "\n=== DRAWDOWN ANALYSIS ===")
+
+  ;; Portfolio values over time
+  (define equity_curve [100000 102000 101000 103000 104500 103000 105000 107000 106000 108000])
+
+  ;; Find max drawdown
+  (define peak 100000)
+  (define max_dd 0.0)
+
+  (for (value equity_curve)
+    (when (> value peak)
+      (set! peak value))
+
+    (define dd (/ (* (- peak value) 100) peak))
+    (when (> dd max_dd)
+      (set! max_dd dd)))
+
+  (log :message "Maximum Drawdown:" :value max_dd)
+  (log :message "Peak value:" :value peak)
+
+  (log :message "\n=== RISK/REWARD METRICS ===")
+
+  ;; Calculate Sharpe ratio
+  (define annual_return 0.15)
+  (define annual_volatility 0.20)
+  (define risk_free_rate 0.05)
+
+  (define sharpe_ratio (/ (- annual_return risk_free_rate) annual_volatility))
+
+  (log :message "Annual Return:" :value annual_return)
+  (log :message "Annual Volatility:" :value annual_volatility)
+  (log :message "Sharpe Ratio:" :value sharpe_ratio)
+
+  ;; Sortino ratio (only downside volatility)
+  (define downside_volatility 0.15)
+  (define sortino_ratio (/ (- annual_return risk_free_rate) downside_volatility))
+
+  (log :message "Sortino Ratio:" :value sortino_ratio)
+
+  (log :message "\n=== POSITION SIZE RECOMMENDATIONS ===")
+
+  (define account_size 100000)
+  (define risk_percent 0.02)  ;; 2% per trade
+
+  (define max_risk_dollar (* account_size risk_percent))
+  (define recommended_position (/ max_risk_dollar stop_distance))
+
+  (log :message "Account size:" :value account_size)
+  (log :message "Risk per trade:" :value (* risk_percent 100))
+  (log :message "Max risk ($):" :value max_risk_dollar)
+  (log :message "Recommended position size:" :value recommended_position)
+
+  "✅ Risk management demo complete!")

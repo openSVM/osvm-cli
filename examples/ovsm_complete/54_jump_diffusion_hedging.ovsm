@@ -1,0 +1,501 @@
+;; ============================================
+;; OVSM Example 54: Jump Diffusion Hedging
+;; ============================================
+;;
+;; THEORY: Tail Risk Protection for Gap Moves and Black Swan Events
+;; ------------------------------------------------------------------
+;; Standard Black-Scholes assumes continuous price paths, but markets
+;; exhibit sudden jumps (gaps) due to news, overnight events, and crises.
+;; The Merton (1976) jump-diffusion model captures both continuous
+;; diffusion and discrete jumps, enabling proper tail risk hedging.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. MERTON JUMP-DIFFUSION MODEL:
+;;    dS/S = μdt + σdW + (J-1)dN
+;;    where:
+;;    - μ = drift (expected return)
+;;    - σ = continuous volatility (diffusion component)
+;;    - dW = Brownian motion (normal shocks)
+;;    - dN = Poisson process (jump arrivals, λ = jump intensity)
+;;    - J = jump size (lognormal distribution, mean k%, std δ)
+;;
+;; 2. JUMP PARAMETERS ESTIMATION:
+;;    - λ (jump intensity): frequency of jumps per year
+;;      Example: λ = 5 means ~5 jumps per year (one every ~50 trading days)
+;;    - k (jump mean): average jump size
+;;      Example: k = -3% (mean downward jump)
+;;    - δ (jump volatility): std dev of jump sizes
+;;      Example: δ = 8% (jumps vary widely)
+;;
+;; 3. TAIL RISK vs COST TRADEOFF:
+;;    - OTM puts provide protection but cost premium (theta decay)
+;;    - Deep OTM puts: cheap but only protect extreme events
+;;    - Moderate OTM puts: expensive but protect more scenarios
+;;    - Optimal strike balances cost vs protection effectiveness
+;;
+;; 4. HEDGE EFFECTIVENESS METRICS:
+;;    - Protection ratio: % of jump loss recovered by hedge
+;;    - Cost efficiency: protection per dollar spent
+;;    - Drag: annual cost as % of portfolio returns
+;;    - Break-even: jump frequency needed to justify cost
+;;
+;; 5. BLACK MONDAY SCENARIOS:
+;;    - October 19, 1987: -20.5% single-day crash
+;;    - Flash crashes: -9% in minutes (May 6, 2010)
+;;    - Overnight gaps: earnings misses, geopolitical shocks
+;;    - Circuit breaker halts: liquidity evaporation
+;;
+;; ACADEMIC REFERENCES:
+;; - Merton (1976): "Option Pricing When Underlying Stock Returns Are Discontinuous"
+;; - Kou (2002): "A Jump-Diffusion Model for Option Pricing"
+;; - Ait-Sahalia & Jacod (2009): "Testing for Jumps in High-Frequency Data"
+;; - Santa-Clara & Yan (2010): "Crashes, Volatility, and the Equity Premium"
+;;
+;; IMPLEMENTATION:
+;; This example estimates jump parameters from historical data and
+;; determines optimal OTM put hedging strategy considering cost vs protection.
+;;
+(do
+  (log :message "=== JUMP DIFFUSION HEDGING ===")
+
+  ;; ============================================
+  ;; PORTFOLIO SETUP
+  ;; ============================================
+  ;;
+  ;; Portfolio: $10M equity long (SPY)
+  ;; Current SPY: $450
+  ;; Target: Protect against tail risk (>5% drops)
+  ;; Budget: Willing to spend up to 2% annually on protection
+  ;;
+  (define portfolio_value 10000000)
+  (define spy_price 450.00)
+  (define portfolio_shares (/ portfolio_value spy_price))
+  (define annual_protection_budget_pct 2.0)
+
+  (log :message "\n=== PORTFOLIO ===")
+  (log :message "Value:" :value portfolio_value)
+  (log :message "SPY price:" :value spy_price)
+  (log :message "Shares:" :value portfolio_shares)
+  (log :message "Annual protection budget (%):" :value annual_protection_budget_pct)
+
+  ;; ============================================
+  ;; STEP 1: ESTIMATE JUMP PARAMETERS
+  ;; ============================================
+  ;;
+  ;; THEORY: Extract jump component from historical returns
+  ;;
+  ;; METHOD:
+  ;; 1. Identify jumps: returns exceeding 2σ threshold
+  ;; 2. Calculate jump intensity λ: jumps per year
+  ;; 3. Estimate jump distribution (mean k, std δ)
+  ;;
+  ;; HISTORICAL DATA (5 years, 1260 trading days):
+  ;; - Total trading days: 1260
+  ;; - Daily returns > 2σ: 18 days (jump candidates)
+  ;; - Extreme drops (< -3%): 7 days
+  ;; - Continuous vol (σ): 15% annual (0.95% daily)
+  ;; - Jump frequency: 18 / 5 years = 3.6 jumps/year
+  ;;
+  ;; JUMP CHARACTERISTICS:
+  ;; - Mean jump size: -3.2% (skewed negative)
+  ;; - Jump std dev: 8.5% (high variability)
+  ;; - Largest observed jump: -20% (Black Monday analog)
+  ;; - 95th percentile jump: -12%
+  ;;
+  (define total_trading_days 1260)
+  (define years_history 5)
+  (define jumps_observed 18)
+  (define extreme_drops 7)
+  (define continuous_vol 15.0)  ;; Annual %
+  (define daily_vol 0.95)       ;; Daily %
+
+  (define lambda (/ jumps_observed years_history))  ;; jumps per year
+  (define jump_mean -3.2)       ;; Average jump size (%)
+  (define jump_std 8.5)         ;; Jump volatility (%)
+  (define max_observed_jump -20.0)
+  (define jump_95pct -12.0)
+
+  (log :message "\n=== JUMP PARAMETER ESTIMATION ===")
+  (log :message "Trading days analyzed:" :value total_trading_days)
+  (log :message "Jumps observed:" :value jumps_observed)
+  (log :message "Jump intensity (λ, per year):" :value lambda)
+  (log :message "Mean jump size (k, %):" :value jump_mean)
+  (log :message "Jump std dev (δ, %):" :value jump_std)
+  (log :message "Max observed jump (%):" :value max_observed_jump)
+  (log :message "95th percentile jump (%):" :value jump_95pct)
+
+  ;; ============================================
+  ;; CALCULATION: Jump Contribution to Volatility
+  ;; ============================================
+  ;;
+  ;; THEORY: Total variance = diffusion variance + jump variance
+  ;;
+  ;; FORMULA:
+  ;; σ_total² = σ_continuous² + λ * (k² + δ²)
+  ;;
+  ;; CALCULATION:
+  ;; σ_continuous² = 15² = 225
+  ;; Jump variance component = λ * (k² + δ²)
+  ;;                        = 3.6 * (3.2² + 8.5²)
+  ;;                        = 3.6 * (10.24 + 72.25)
+  ;;                        = 3.6 * 82.49
+  ;;                        = 296.96
+  ;; σ_total² = 225 + 296.96 = 521.96
+  ;; σ_total = √521.96 = 22.8%
+  ;;
+  ;; INTERPRETATION:
+  ;; - Continuous vol: 15% (65.7% of risk)
+  ;; - Jump vol contribution: 17.2% (34.3% of risk)
+  ;; - Total vol: 22.8% (realized vol will be higher than pure diffusion model)
+  ;;
+  (define cont_variance (* continuous_vol continuous_vol))
+  (define jump_var_component (* lambda (+ (* jump_mean jump_mean)
+                                          (* jump_std jump_std))))
+  (define total_variance (+ cont_variance jump_var_component))
+  (define total_vol (sqrt total_variance))
+  (define jump_vol_contribution (sqrt jump_var_component))
+  (define jump_pct_of_risk (/ jump_vol_contribution total_vol))
+
+  (log :message "\n=== VOLATILITY DECOMPOSITION ===")
+  (log :message "Continuous variance:" :value cont_variance)
+  (log :message "Jump variance component:" :value jump_var_component)
+  (log :message "Total variance:" :value total_variance)
+  (log :message "Continuous vol (%):" :value continuous_vol)
+  (log :message "Jump vol contribution (%):" :value jump_vol_contribution)
+  (log :message "Total vol (%):" :value total_vol)
+  (log :message "Jump % of total risk:" :value (* jump_pct_of_risk 100))
+
+  ;; ============================================
+  ;; STEP 2: PUT OPTION HEDGE DESIGN
+  ;; ============================================
+  ;;
+  ;; THEORY: OTM puts provide asymmetric payoff for tail protection
+  ;;
+  ;; OPTION STRIKES ANALYZED:
+  ;; 1. Deep OTM: 10% below spot (405, 90% moneyness)
+  ;; 2. Moderate OTM: 5% below spot (427.5, 95% moneyness)
+  ;; 3. Near ATM: 2% below spot (441, 98% moneyness)
+  ;;
+  ;; PUT PRICING (Black-Scholes with jumps, 3-month expiry):
+  ;; Risk-free rate: 5%
+  ;; Implied vol: 20% (market prices in some jump risk)
+  ;;
+  ;; Using jump-adjusted Black-Scholes:
+  ;; - Deep OTM (405): $2.80 per share
+  ;; - Moderate OTM (427.5): $6.50 per share
+  ;; - Near ATM (441): $12.20 per share
+  ;;
+  (define risk_free_rate 5.0)
+  (define implied_vol 20.0)
+  (define expiry_months 3)
+  (define expiry_years (/ expiry_months 12.0))
+
+  (define strike_deep 405.00)       ;; 10% OTM
+  (define strike_moderate 427.50)   ;; 5% OTM
+  (define strike_near 441.00)       ;; 2% OTM
+
+  (define put_price_deep 2.80)
+  (define put_price_moderate 6.50)
+  (define put_price_near 12.20)
+
+  (log :message "\n=== PUT OPTION HEDGE OPTIONS ===")
+  (log :message "Expiry (months):" :value expiry_months)
+  (log :message "Risk-free rate (%):" :value risk_free_rate)
+  (log :message "Implied vol (%):" :value implied_vol)
+  (log :message "")
+  (log :message "Deep OTM (10% down) - Strike $405:")
+  (log :message "  Premium:" :value put_price_deep)
+  (log :message "Moderate OTM (5% down) - Strike $427.50:")
+  (log :message "  Premium:" :value put_price_moderate)
+  (log :message "Near ATM (2% down) - Strike $441:")
+  (log :message "  Premium:" :value put_price_near)
+
+  ;; ============================================
+  ;; CALCULATION: Annualized Hedge Cost
+  ;; ============================================
+  ;;
+  ;; THEORY: Cost drag = (premium / spot) * (12 / months) * 100%
+  ;;
+  ;; FORMULA: Annual cost % = (put_premium / spot_price) * 4 * 100
+  ;;   (multiply by 4 because 3-month options rolled quarterly)
+  ;;
+  ;; DEEP OTM (405):
+  ;; Cost per period = ($2.80 / $450) * 100% = 0.622%
+  ;; Annual cost = 0.622% * 4 = 2.49% (exceeds budget!)
+  ;;
+  ;; MODERATE OTM (427.5):
+  ;; Cost per period = ($6.50 / $450) * 100% = 1.444%
+  ;; Annual cost = 1.444% * 4 = 5.78% (way over budget!)
+  ;;
+  ;; NEAR ATM (441):
+  ;; Cost per period = ($12.20 / $450) * 100% = 2.711%
+  ;; Annual cost = 2.711% * 4 = 10.84% (prohibitively expensive!)
+  ;;
+  ;; REALITY CHECK:
+  ;; Even "cheap" deep OTM puts cost 2.5% annually, exceeding
+  ;; our 2% budget. Need to optimize hedge ratio (not 100% coverage).
+  ;;
+  (define rolls_per_year 4)
+  (define cost_pct_deep (/ (* put_price_deep 100) spy_price))
+  (define annual_cost_deep (* cost_pct_deep rolls_per_year))
+
+  (define cost_pct_moderate (/ (* put_price_moderate 100) spy_price))
+  (define annual_cost_moderate (* cost_pct_moderate rolls_per_year))
+
+  (define cost_pct_near (/ (* put_price_near 100) spy_price))
+  (define annual_cost_near (* cost_pct_near rolls_per_year))
+
+  (log :message "\n=== ANNUALIZED HEDGE COSTS (100% coverage) ===")
+  (log :message "Deep OTM (405):")
+  (log :message "  Cost per quarter (%):" :value cost_pct_deep)
+  (log :message "  Annual cost (%):" :value annual_cost_deep)
+  (log :message "  vs Budget: OVER (2.49% > 2.00%)")
+  (log :message "")
+  (log :message "Moderate OTM (427.5):")
+  (log :message "  Cost per quarter (%):" :value cost_pct_moderate)
+  (log :message "  Annual cost (%):" :value annual_cost_moderate)
+  (log :message "  vs Budget: OVER (5.78% > 2.00%)")
+  (log :message "")
+  (log :message "Near ATM (441):")
+  (log :message "  Cost per quarter (%):" :value cost_pct_near)
+  (log :message "  Annual cost (%):" :value annual_cost_near)
+  (log :message "  vs Budget: OVER (10.84% > 2.00%)")
+
+  ;; ============================================
+  ;; STEP 3: OPTIMIZE HEDGE RATIO
+  ;; ============================================
+  ;;
+  ;; THEORY: Don't hedge 100% - optimize coverage to fit budget
+  ;;
+  ;; APPROACH: Use deep OTM puts (cheapest) but reduce coverage
+  ;;
+  ;; CALCULATION:
+  ;; Target annual cost = 2.0%
+  ;; Deep OTM annual cost (100%) = 2.49%
+  ;; Optimal hedge ratio = 2.0% / 2.49% = 0.803 = 80.3%
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Hedge 80.3% of portfolio (protect $8.03M of $10M)
+  ;; - Buy puts on 17,844 shares (80.3% of 22,222 shares)
+  ;; - Annual cost = 2.0% of portfolio = $200,000
+  ;; - Quarterly cost = $50,000
+  ;;
+  (define optimal_hedge_ratio (/ annual_protection_budget_pct annual_cost_deep))
+  (define hedged_value (* portfolio_value optimal_hedge_ratio))
+  (define hedged_shares (* portfolio_shares optimal_hedge_ratio))
+  (define quarterly_cost_dollars (* portfolio_value (/ annual_protection_budget_pct 100) 0.25))
+  (define annual_cost_dollars (* portfolio_value (/ annual_protection_budget_pct 100)))
+
+  (log :message "\n=== OPTIMAL HEDGE RATIO ===")
+  (log :message "Target annual cost (%):" :value annual_protection_budget_pct)
+  (log :message "Deep OTM cost (100% coverage, %):" :value annual_cost_deep)
+  (log :message "Optimal hedge ratio:" :value optimal_hedge_ratio)
+  (log :message "Hedged portfolio value:" :value hedged_value)
+  (log :message "Hedged shares:" :value hedged_shares)
+  (log :message "Quarterly cost ($):" :value quarterly_cost_dollars)
+  (log :message "Annual cost ($):" :value annual_cost_dollars)
+
+  ;; ============================================
+  ;; STEP 4: JUMP SCENARIO ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Analyze hedge performance under various jump scenarios
+  ;;
+  ;; SCENARIOS:
+  ;; 1. Small jump: -5% drop (SPY 450 → 427.5)
+  ;; 2. Medium jump: -10% drop (SPY 450 → 405)
+  ;; 3. Large jump: -15% drop (SPY 450 → 382.5)
+  ;; 4. Black Monday: -20% drop (SPY 450 → 360)
+  ;;
+  ;; PUT PAYOFF FORMULA:
+  ;; Payoff per share = max(strike - spot_new, 0)
+  ;; Total payoff = payoff_per_share * hedged_shares
+  ;;
+  ;; SCENARIO 1: -5% DROP (SPY → $427.50)
+  ;; New price = $427.50
+  ;; Deep OTM put (405): out of money, payoff = $0
+  ;; Portfolio loss (unhedged) = $10M * -5% = -$500k
+  ;; Hedged loss = -$500k (no protection yet)
+  ;; Net loss = -$500k
+  ;;
+  (define scenario1_drop -5.0)
+  (define scenario1_price (* spy_price (+ 1 (/ scenario1_drop 100))))
+  (define scenario1_put_payoff (- strike_deep scenario1_price))
+  (define scenario1_put_payoff_adj (if (> scenario1_put_payoff 0) scenario1_put_payoff 0))
+  (define scenario1_total_payoff (* scenario1_put_payoff_adj hedged_shares))
+  (define scenario1_portfolio_loss (* portfolio_value (/ scenario1_drop 100)))
+  (define scenario1_net_loss (+ scenario1_portfolio_loss scenario1_total_payoff))
+
+  (log :message "\n=== SCENARIO 1: -5% Jump (Small) ===")
+  (log :message "New SPY price:" :value scenario1_price)
+  (log :message "Put payoff per share:" :value scenario1_put_payoff_adj)
+  (log :message "Total hedge payoff:" :value scenario1_total_payoff)
+  (log :message "Portfolio loss:" :value scenario1_portfolio_loss)
+  (log :message "Net loss (after hedge):" :value scenario1_net_loss)
+  (log :message "Protection: None (OTM)")
+
+  ;; SCENARIO 2: -10% DROP (SPY → $405)
+  ;; New price = $405
+  ;; Deep OTM put (405): at the money, payoff = $0
+  ;; Portfolio loss = $10M * -10% = -$1M
+  ;; Net loss = -$1M (strike just reached)
+  ;;
+  (define scenario2_drop -10.0)
+  (define scenario2_price (* spy_price (+ 1 (/ scenario2_drop 100))))
+  (define scenario2_put_payoff (- strike_deep scenario2_price))
+  (define scenario2_put_payoff_adj (if (> scenario2_put_payoff 0) scenario2_put_payoff 0))
+  (define scenario2_total_payoff (* scenario2_put_payoff_adj hedged_shares))
+  (define scenario2_portfolio_loss (* portfolio_value (/ scenario2_drop 100)))
+  (define scenario2_net_loss (+ scenario2_portfolio_loss scenario2_total_payoff))
+
+  (log :message "\n=== SCENARIO 2: -10% Jump (Medium) ===")
+  (log :message "New SPY price:" :value scenario2_price)
+  (log :message "Put payoff per share:" :value scenario2_put_payoff_adj)
+  (log :message "Total hedge payoff:" :value scenario2_total_payoff)
+  (log :message "Portfolio loss:" :value scenario2_portfolio_loss)
+  (log :message "Net loss (after hedge):" :value scenario2_net_loss)
+  (log :message "Protection: Minimal (ATM)")
+
+  ;; SCENARIO 3: -15% DROP (SPY → $382.50)
+  ;; New price = $382.50
+  ;; Deep OTM put (405): in the money!
+  ;; Put payoff = $405 - $382.50 = $22.50 per share
+  ;; Total payoff = $22.50 * 17,844 = $401,490
+  ;; Portfolio loss = $10M * -15% = -$1.5M
+  ;; Net loss = -$1.5M + $401k = -$1.099M
+  ;; Protection = 26.8% of loss recovered
+  ;;
+  (define scenario3_drop -15.0)
+  (define scenario3_price (* spy_price (+ 1 (/ scenario3_drop 100))))
+  (define scenario3_put_payoff (- strike_deep scenario3_price))
+  (define scenario3_put_payoff_adj (if (> scenario3_put_payoff 0) scenario3_put_payoff 0))
+  (define scenario3_total_payoff (* scenario3_put_payoff_adj hedged_shares))
+  (define scenario3_portfolio_loss (* portfolio_value (/ scenario3_drop 100)))
+  (define scenario3_net_loss (+ scenario3_portfolio_loss scenario3_total_payoff))
+  (define scenario3_protection_pct (/ (* scenario3_total_payoff -100) scenario3_portfolio_loss))
+
+  (log :message "\n=== SCENARIO 3: -15% Jump (Large) ===")
+  (log :message "New SPY price:" :value scenario3_price)
+  (log :message "Put payoff per share:" :value scenario3_put_payoff_adj)
+  (log :message "Total hedge payoff:" :value scenario3_total_payoff)
+  (log :message "Portfolio loss:" :value scenario3_portfolio_loss)
+  (log :message "Net loss (after hedge):" :value scenario3_net_loss)
+  (log :message "Protection (% recovered):" :value scenario3_protection_pct)
+
+  ;; SCENARIO 4: -20% DROP - BLACK MONDAY (SPY → $360)
+  ;; New price = $360
+  ;; Deep OTM put (405): deeply in the money
+  ;; Put payoff = $405 - $360 = $45 per share
+  ;; Total payoff = $45 * 17,844 = $802,980
+  ;; Portfolio loss = $10M * -20% = -$2M
+  ;; Net loss = -$2M + $803k = -$1.197M
+  ;; Protection = 40.1% of loss recovered
+  ;;
+  (define scenario4_drop -20.0)
+  (define scenario4_price (* spy_price (+ 1 (/ scenario4_drop 100))))
+  (define scenario4_put_payoff (- strike_deep scenario4_price))
+  (define scenario4_put_payoff_adj (if (> scenario4_put_payoff 0) scenario4_put_payoff 0))
+  (define scenario4_total_payoff (* scenario4_put_payoff_adj hedged_shares))
+  (define scenario4_portfolio_loss (* portfolio_value (/ scenario4_drop 100)))
+  (define scenario4_net_loss (+ scenario4_portfolio_loss scenario4_total_payoff))
+  (define scenario4_protection_pct (/ (* scenario4_total_payoff -100) scenario4_portfolio_loss))
+
+  (log :message "\n=== SCENARIO 4: -20% Jump - BLACK MONDAY ===")
+  (log :message "New SPY price:" :value scenario4_price)
+  (log :message "Put payoff per share:" :value scenario4_put_payoff_adj)
+  (log :message "Total hedge payoff:" :value scenario4_total_payoff)
+  (log :message "Portfolio loss:" :value scenario4_portfolio_loss)
+  (log :message "Net loss (after hedge):" :value scenario4_net_loss)
+  (log :message "Protection (% recovered):" :value scenario4_protection_pct)
+
+  ;; ============================================
+  ;; STEP 5: BREAK-EVEN ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: How many jumps justify the hedge cost?
+  ;;
+  ;; ANALYSIS:
+  ;; Annual hedge cost = $200,000
+  ;; Average jump scenario payoff (weighted):
+  ;;   - 40% probability: -5% (no payoff) = $0
+  ;;   - 30% probability: -10% (no payoff) = $0
+  ;;   - 20% probability: -15% payoff = $401k
+  ;;   - 10% probability: -20% payoff = $803k
+  ;; Expected payoff per jump = 0.40*0 + 0.30*0 + 0.20*401k + 0.10*803k
+  ;;                          = 0 + 0 + 80.2k + 80.3k
+  ;;                          = $160,500
+  ;;
+  ;; Break-even jumps per year = $200k / $160.5k = 1.25 jumps/year
+  ;;
+  ;; COMPARISON TO HISTORICAL:
+  ;; Historical jump intensity (λ) = 3.6 jumps/year
+  ;; Break-even needed = 1.25 jumps/year
+  ;; Ratio = 3.6 / 1.25 = 2.88x
+  ;;
+  ;; INTERPRETATION:
+  ;; Historical jumps occur 2.88x more frequently than break-even rate.
+  ;; This hedge is EXPECTED to be profitable over long term if history repeats.
+  ;;
+  (define jump_prob_small 0.40)
+  (define jump_prob_medium 0.30)
+  (define jump_prob_large 0.20)
+  (define jump_prob_black_monday 0.10)
+
+  (define expected_payoff_per_jump (+ (* jump_prob_small 0)
+                                      (* jump_prob_medium 0)
+                                      (* jump_prob_large scenario3_total_payoff)
+                                      (* jump_prob_black_monday scenario4_total_payoff)))
+
+  (define breakeven_jumps_per_year (/ annual_cost_dollars expected_payoff_per_jump))
+  (define historical_vs_breakeven (/ lambda breakeven_jumps_per_year))
+
+  (log :message "\n=== BREAK-EVEN ANALYSIS ===")
+  (log :message "Annual hedge cost:" :value annual_cost_dollars)
+  (log :message "Expected payoff per jump:" :value expected_payoff_per_jump)
+  (log :message "Break-even jumps/year:" :value breakeven_jumps_per_year)
+  (log :message "Historical jumps/year:" :value lambda)
+  (log :message "Historical vs break-even ratio:" :value historical_vs_breakeven)
+  (log :message "Verdict: PROFITABLE (2.88x over break-even)")
+
+  ;; ============================================
+  ;; FINAL ASSESSMENT
+  ;; ============================================
+  (log :message "\n=== HEDGE STRATEGY RECOMMENDATION ===")
+  (log :message "✓ Use deep OTM puts (10% below spot)")
+  (log :message "✓ Hedge 80.3% of portfolio (fit 2% budget)")
+  (log :message "✓ Strike: $405 (90% moneyness)")
+  (log :message "✓ Quarterly cost: $50,000 (0.5%)")
+  (log :message "✓ Protection starts at -10% moves")
+  (log :message "✓ Recovers 40% of Black Monday loss")
+  (log :message "✓ Expected profit: 2.88x over break-even")
+  (log :message "")
+  (log :message "WHY THIS WORKS:")
+  (log :message "- Deep OTM minimizes theta decay drag")
+  (log :message "- Partial hedge fits budget constraint")
+  (log :message "- Jump intensity (3.6/yr) justifies cost")
+  (log :message "- Protects against true catastrophes (>10% drops)")
+  (log :message "- Expected positive value from tail risk premium")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  (log :message "\n=== PRODUCTION ENHANCEMENTS ===")
+  (log :message "1. Dynamic strike adjustment: Move strike with vol regime")
+  (log :message "2. Jump intensity forecasting: Use VIX, put skew signals")
+  (log :message "3. Put spread structures: Buy 405, sell 380 to reduce cost")
+  (log :message "4. Calendar spread: Use longer-dated puts (cheaper theta)")
+  (log :message "5. Event-driven hedging: Add protection before FOMC, earnings")
+  (log :message "6. Tail risk parity: Scale hedge with portfolio leverage")
+  (log :message "7. Cross-asset hedging: Use VIX futures, bonds for diversification")
+  (log :message "8. Variance swap overlay: Direct jump exposure without strike risk")
+  (log :message "9. Recovery swaps: Payoff tied to realized volatility post-crash")
+  (log :message "10. Credit protection: CDS on systemic risk (banks, sovereigns)")
+  (log :message "11. Implied correlation: Monitor correlation jumps as early warning")
+  (log :message "12. Jump diffusion MLE: Maximum likelihood estimation for parameters")
+  (log :message "13. Regime switching: Use Markov models for crisis/normal periods")
+  (log :message "14. Risk reversal: Finance puts by selling calls (zero cost collar)")
+  (log :message "15. Greeks monitoring: Track vega exposure for vol sensitivity")
+
+  (log :message "\n=== JUMP DIFFUSION HEDGING COMPLETE ===")
+)

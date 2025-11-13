@@ -1,0 +1,186 @@
+;; ============================================
+;; OVSM Example 13: AI Sentiment Analysis Trading
+;; ============================================
+
+(do
+  (log :message "=== SENTIMENT-BASED TRADING STRATEGY ===")
+
+  ;; Mock news API responses (in production, would use http-get)
+  (define news_items [
+    {:title "Bitcoin Breaks All-Time High" :sentiment "positive" :score 0.85}
+    {:title "Regulatory Concerns Impact Crypto" :sentiment "negative" :score -0.65}
+    {:title "Major Institution Adopts Blockchain" :sentiment "positive" :score 0.75}
+    {:title "Market Volatility Increases" :sentiment "negative" :score -0.45}
+    {:title "DeFi TVL Reaches New Peak" :sentiment "positive" :score 0.90}
+  ])
+
+  ;; Calculate aggregate sentiment score
+  (define total_sentiment 0.0)
+  (define positive_count 0)
+  (define negative_count 0)
+
+  (for (item news_items)
+    (define score (get item "score"))
+    (define sentiment (get item "sentiment"))
+
+    (set! total_sentiment (+ total_sentiment score))
+
+    (if (= sentiment "positive")
+        (set! positive_count (+ positive_count 1))
+        (set! negative_count (+ negative_count 1))))
+
+  (define avg_sentiment (/ total_sentiment (length news_items)))
+  (log :message "Average sentiment:" :value avg_sentiment)
+  (log :message "Positive news:" :value positive_count)
+  (log :message "Negative news:" :value negative_count)
+
+  ;; Sentiment-based trading signal
+  (define sentiment_threshold 0.3)
+  (define signal (if (> avg_sentiment sentiment_threshold)
+                     "BUY - Bullish sentiment"
+                     (if (< avg_sentiment (- sentiment_threshold))
+                         "SELL - Bearish sentiment"
+                         "HOLD - Neutral sentiment")))
+
+  (log :message "Trading signal:" :value signal)
+
+  (log :message "\n=== SENTIMENT MOMENTUM ===")
+
+  ;; Track sentiment changes over time
+  (define sentiment_history [0.2 0.3 0.25 0.4 0.5 0.45 0.6 0.7])
+
+  ;; Calculate sentiment momentum (rate of change)
+  (define recent_sentiment (last sentiment_history))
+  (define prev_sentiment (first (drop sentiment_history (- (length sentiment_history) 2))))
+  (define sentiment_momentum (- recent_sentiment prev_sentiment))
+
+  (log :message "Recent sentiment:" :value recent_sentiment)
+  (log :message "Previous sentiment:" :value prev_sentiment)
+  (log :message "Sentiment momentum:" :value sentiment_momentum)
+
+  ;; Combined signal: sentiment + momentum
+  (define momentum_signal (if (and (> recent_sentiment 0.4) (> sentiment_momentum 0.0))
+                              "STRONG BUY - Positive sentiment + momentum"
+                              (if (and (< recent_sentiment -0.4) (< sentiment_momentum 0.0))
+                                  "STRONG SELL - Negative sentiment + momentum"
+                                  "NEUTRAL")))
+
+  (log :message "Momentum signal:" :value momentum_signal)
+
+  (log :message "\n=== NEWS IMPACT SCORING ===")
+
+  ;; Weight news by recency and source credibility
+  (define weighted_news [
+    {:sentiment 0.8 :age_hours 2 :credibility 0.9}
+    {:sentiment -0.6 :age_hours 12 :credibility 0.7}
+    {:sentiment 0.7 :age_hours 24 :credibility 0.8}
+  ])
+
+  (define weighted_score 0.0)
+  (define total_weight 0.0)
+
+  (for (news weighted_news)
+    (define sentiment (get news "sentiment"))
+    (define age (get news "age_hours"))
+    (define credibility (get news "credibility"))
+
+    ;; Decay weight based on age (exponential decay)
+    (define age_weight (/ 1.0 (+ 1.0 (* age 0.05))))
+
+    ;; Combined weight
+    (define weight (* credibility age_weight))
+
+    (set! weighted_score (+ weighted_score (* sentiment weight)))
+    (set! total_weight (+ total_weight weight)))
+
+  (define final_sentiment (/ weighted_score total_weight))
+  (log :message "Weighted sentiment:" :value final_sentiment)
+
+  (log :message "\n=== SOCIAL MEDIA SENTIMENT ===")
+
+  ;; Aggregate social media mentions
+  (define social_data [
+    {:platform "Twitter" :mentions 15000 :sentiment 0.65}
+    {:platform "Reddit" :mentions 8000 :sentiment 0.72}
+    {:platform "Discord" :mentions 5000 :sentiment 0.58}
+  ])
+
+  (define social_score 0.0)
+  (define total_mentions 0)
+
+  (for (platform social_data)
+    (define mentions (get platform "mentions"))
+    (define sentiment (get platform "sentiment"))
+
+    (set! social_score (+ social_score (* mentions sentiment)))
+    (set! total_mentions (+ total_mentions mentions)))
+
+  (define social_sentiment (/ social_score total_mentions))
+  (log :message "Social media sentiment:" :value social_sentiment)
+  (log :message "Total mentions:" :value total_mentions)
+
+  ;; Volume-adjusted signal
+  (define high_volume_threshold 20000)
+  (define volume_signal (if (> total_mentions high_volume_threshold)
+                            (if (> social_sentiment 0.6)
+                                "HIGH VOLUME BUY"
+                                "HIGH VOLUME SELL")
+                            "LOW VOLUME - Caution"))
+
+  (log :message "Volume signal:" :value volume_signal)
+
+  (log :message "\n=== FEAR & GREED INDEX ===")
+
+  ;; Combine multiple sentiment indicators
+  (define market_indicators {
+    :news_sentiment 0.45
+    :social_sentiment 0.68
+    :price_momentum 0.72
+    :volatility_index -0.35
+    :volume_trend 0.55
+  })
+
+  ;; Calculate fear & greed score
+  (define fg_score 0.0)
+  (define count 0.0)
+
+  (define news_sent (get market_indicators "news_sentiment"))
+  (define social_sent (get market_indicators "social_sentiment"))
+  (define price_mom (get market_indicators "price_momentum"))
+  (define vol_idx (get market_indicators "volatility_index"))
+  (define vol_trend (get market_indicators "volume_trend"))
+
+  (set! fg_score (+ fg_score news_sent social_sent price_mom vol_idx vol_trend))
+  (set! count 5.0)
+
+  (define fear_greed (/ (+ (* (/ fg_score count) 50.0) 50.0) 1.0))
+
+  (log :message "Fear & Greed Index:" :value fear_greed)
+
+  (define market_emotion (if (> fear_greed 75.0)
+                             "EXTREME GREED - Consider taking profits"
+                             (if (> fear_greed 55.0)
+                                 "GREED - Bullish market"
+                                 (if (> fear_greed 45.0)
+                                     "NEUTRAL - Wait for clear signal"
+                                     (if (> fear_greed 25.0)
+                                         "FEAR - Buying opportunity"
+                                         "EXTREME FEAR - Strong buy signal")))))
+
+  (log :message "Market emotion:" :value market_emotion)
+
+  (log :message "\n=== SENTIMENT-DRIVEN POSITION SIZING ===")
+
+  ;; Adjust position size based on sentiment confidence
+  (define base_position 1000)
+  (define sentiment_confidence 0.75)
+
+  ;; Higher confidence = larger position
+  (define position_multiplier (+ 0.5 (* sentiment_confidence 0.5)))
+  (define adjusted_position (* base_position position_multiplier))
+
+  (log :message "Base position:" :value base_position)
+  (log :message "Confidence:" :value sentiment_confidence)
+  (log :message "Adjusted position:" :value adjusted_position)
+
+  "✅ AI sentiment trading demo complete!")

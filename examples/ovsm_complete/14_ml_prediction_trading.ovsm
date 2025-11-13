@@ -1,0 +1,241 @@
+;; ============================================
+;; OVSM Example 14: ML Prediction & Automated Trading
+;; ============================================
+
+(do
+  (log :message "=== LINEAR REGRESSION PRICE PREDICTION ===")
+
+  ;; Historical price data
+  (define prices [48.0 49.0 50.0 51.0 52.0 53.0 54.0 55.0])
+  (define time_steps [1 2 3 4 5 6 7 8])
+
+  ;; Simple linear regression: y = mx + b
+  ;; Calculate mean
+  (define sum_x 0.0)
+  (define sum_y 0.0)
+  (for (x time_steps)
+    (set! sum_x (+ sum_x x)))
+  (for (y prices)
+    (set! sum_y (+ sum_y y)))
+
+  (define mean_x (/ sum_x (length time_steps)))
+  (define mean_y (/ sum_y (length prices)))
+
+  ;; Calculate slope (m) and intercept (b)
+  (define numerator 0.0)
+  (define denominator 0.0)
+
+  (define i 0)
+  (while (< i (length time_steps))
+    (define x (first (drop time_steps i)))
+    (define y (first (drop prices i)))
+    (set! numerator (+ numerator (* (- x mean_x) (- y mean_y))))
+    (set! denominator (+ denominator (* (- x mean_x) (- x mean_x))))
+    (set! i (+ i 1)))
+
+  (define slope (/ numerator denominator))
+  (define intercept (- mean_y (* slope mean_x)))
+
+  (log :message "Slope (m):" :value slope)
+  (log :message "Intercept (b):" :value intercept)
+
+  ;; Predict next price
+  (define next_time 9)
+  (define predicted_price (+ (* slope next_time) intercept))
+
+  (log :message "Predicted price (t=9):" :value predicted_price)
+
+  ;; Calculate prediction confidence (R-squared)
+  (define ss_total 0.0)
+  (define ss_residual 0.0)
+
+  (define j 0)
+  (while (< j (length prices))
+    (define actual (first (drop prices j)))
+    (define x_val (first (drop time_steps j)))
+    (define predicted (+ (* slope x_val) intercept))
+
+    (set! ss_total (+ ss_total (* (- actual mean_y) (- actual mean_y))))
+    (set! ss_residual (+ ss_residual (* (- actual predicted) (- actual predicted))))
+    (set! j (+ j 1)))
+
+  (define r_squared (- 1.0 (/ ss_residual ss_total)))
+  (log :message "R-squared (confidence):" :value r_squared)
+
+  (log :message "\n=== MOVING AVERAGE CONVERGENCE ===")
+
+  ;; Exponential Moving Average (EMA) prediction
+  (define price_data [50.0 51.0 49.5 52.0 53.0 52.5 54.0 55.0 54.5 56.0])
+  (define alpha 0.3)  ;; Smoothing factor
+
+  ;; Calculate EMA
+  (define ema (first price_data))
+  (for (price (drop price_data 1))
+    (set! ema (+ (* alpha price) (* (- 1.0 alpha) ema))))
+
+  (log :message "Current EMA:" :value ema)
+  (log :message "Current price:" :value (last price_data))
+
+  ;; Trading signal based on price vs EMA
+  (define ema_signal (if (> (last price_data) ema)
+                         "BULLISH - Price above EMA"
+                         "BEARISH - Price below EMA"))
+
+  (log :message "EMA Signal:" :value ema_signal)
+
+  (log :message "\n=== PATTERN RECOGNITION ===")
+
+  ;; Detect bullish/bearish patterns
+  (define candles [
+    [50.0 51.0 49.5 50.5]   ;; [open, high, low, close]
+    [50.5 52.0 50.0 51.5]
+    [51.5 52.5 51.0 52.0]
+    [52.0 53.0 51.5 52.5]
+  ])
+
+  ;; Detect consecutive higher highs (uptrend)
+  (define uptrend_confirmed false)
+  (define k 0)
+  (while (< k (- (length candles) 1))
+    (define curr_candle (first (drop candles k)))
+    (define next_candle (first (drop candles (+ k 1))))
+
+    (define curr_high (first (drop curr_candle 1)))
+    (define next_high (first (drop next_candle 1)))
+
+    (when (> next_high curr_high)
+      (set! uptrend_confirmed true))
+
+    (set! k (+ k 1)))
+
+  (log :message "Uptrend confirmed:" :value uptrend_confirmed)
+
+  (log :message "\n=== MOMENTUM PREDICTION ===")
+
+  ;; Predict price direction using momentum
+  (define recent_prices [52.0 53.0 54.0 55.0 56.0])
+
+  ;; Calculate momentum (rate of change)
+  (define momentum_period 3)
+  (define current_price (last recent_prices))
+  (define past_price (first (drop recent_prices (- (length recent_prices) momentum_period 1))))
+
+  (define momentum (/ (- current_price past_price) past_price))
+  (log :message "Momentum (3-period):" :value momentum)
+
+  ;; Momentum-based prediction
+  (define momentum_threshold 0.05)  ;; 5%
+  (define momentum_prediction (if (> momentum momentum_threshold)
+                                  "STRONG UPWARD MOMENTUM"
+                                  (if (< momentum (- momentum_threshold))
+                                      "STRONG DOWNWARD MOMENTUM"
+                                      "WEAK MOMENTUM")))
+
+  (log :message "Momentum prediction:" :value momentum_prediction)
+
+  (log :message "\n=== NEURAL NETWORK SIMULATION ===")
+
+  ;; Simple perceptron for binary classification (buy/sell)
+  (define features [
+    0.7   ;; RSI normalized
+    0.6   ;; MACD signal
+    0.8   ;; Volume indicator
+    0.5   ;; Sentiment score
+  ])
+
+  (define weights [0.3 0.25 0.2 0.25])  ;; Trained weights
+  (define bias 0.1)
+
+  ;; Calculate weighted sum
+  (define activation 0.0)
+  (define m 0)
+  (while (< m (length features))
+    (define feature (first (drop features m)))
+    (define weight (first (drop weights m)))
+    (set! activation (+ activation (* feature weight)))
+    (set! m (+ m 1)))
+
+  (set! activation (+ activation bias))
+
+  ;; Sigmoid activation
+  (define e 2.71828)
+  ;; Approximation: sigmoid(x) ≈ x / (1 + |x|) for small x
+  (define sigmoid_output (/ activation (+ 1.0 (if (< activation 0.0) (- activation) activation))))
+
+  (log :message "Neural network output:" :value sigmoid_output)
+
+  (define nn_signal (if (> sigmoid_output 0.5)
+                        "BUY - Model predicts upward"
+                        "SELL - Model predicts downward"))
+
+  (log :message "Neural network signal:" :value nn_signal)
+
+  (log :message "\n=== ENSEMBLE MODEL ===")
+
+  ;; Combine multiple models
+  (define model_predictions {
+    :linear_regression 0.75    ;; Bullish
+    :random_forest 0.68        ;; Bullish
+    :gradient_boost 0.82       ;; Strong bullish
+    :lstm 0.65                 ;; Moderate bullish
+    :svm 0.55                  ;; Weak bullish
+  })
+
+  ;; Weighted average of models
+  (define lr_pred (get model_predictions "linear_regression"))
+  (define rf_pred (get model_predictions "random_forest"))
+  (define gb_pred (get model_predictions "gradient_boost"))
+  (define lstm_pred (get model_predictions "lstm"))
+  (define svm_pred (get model_predictions "svm"))
+
+  (define ensemble_score (/ (+ lr_pred rf_pred gb_pred lstm_pred svm_pred) 5.0))
+
+  (log :message "Ensemble prediction:" :value ensemble_score)
+
+  ;; High confidence if models agree
+  (define model_agreement (if (> ensemble_score 0.7)
+                              "HIGH CONFIDENCE BUY"
+                              (if (< ensemble_score 0.3)
+                                  "HIGH CONFIDENCE SELL"
+                                  "LOW CONFIDENCE - No consensus")))
+
+  (log :message "Model agreement:" :value model_agreement)
+
+  (log :message "\n=== AUTOMATED TRADING DECISION ===")
+
+  ;; Combine all signals for final decision
+  (define signals [
+    [:prediction r_squared]
+    [:momentum (* momentum 100.0)]
+    [:neural_net sigmoid_output]
+    [:ensemble ensemble_score]
+  ])
+
+  ;; Score each signal
+  (define total_score 0.0)
+  (define signal_count 4.0)
+
+  (set! total_score (+ total_score r_squared))
+  (set! total_score (+ total_score (/ (+ momentum 1.0) 2.0)))  ;; Normalize momentum
+  (set! total_score (+ total_score sigmoid_output))
+  (set! total_score (+ total_score ensemble_score))
+
+  (define final_score (/ total_score signal_count))
+
+  (log :message "Final ML score:" :value final_score)
+
+  (define trade_decision (if (> final_score 0.7)
+                             "EXECUTE BUY - Strong signals"
+                             (if (< final_score 0.3)
+                                 "EXECUTE SELL - Weak signals"
+                                 "NO TRADE - Wait for clearer signal")))
+
+  (log :message "Automated decision:" :value trade_decision)
+
+  ;; Position sizing based on confidence
+  (define max_position 10000)
+  (define ml_position (* max_position final_score))
+
+  (log :message "Recommended position:" :value ml_position)
+
+  "✅ ML prediction trading demo complete!")

@@ -1,0 +1,194 @@
+;; ============================================
+;; OVSM Example 31: Grid Trading Bot
+;; ============================================
+;;
+;; THEORY: Range-Bound Market Making Strategy
+;; --------------------------------------------
+;; Grid trading places buy/sell orders at regular intervals within a range.
+;; Profits from volatility oscillations without predicting direction.
+;; Optimal for range-bound, mean-reverting markets.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. GRID STRUCTURE:
+;;    - Define price range: [lower, upper]
+;;    - Divide into N equal intervals (grids)
+;;    - Grid step = (upper - lower) / N
+;;    - Place orders at each grid level
+;;
+;; 2. ORDER PLACEMENT:
+;;    - Buy orders below current price
+;;    - Sell orders above current price
+;;    - As price moves, orders fill automatically
+;;    - Rebalance: Place new order when one fills
+;;
+;; 3. PROFIT MECHANISM:
+;;    - Buy low, sell high within range
+;;    - Each grid step = 1 profit unit
+;;    - More oscillations = more profit
+;;    - No directional bet required
+;;
+;; 4. GRID DENSITY OPTIMIZATION:
+;;    - Wide spacing: Fewer trades, larger profits per trade
+;;    - Narrow spacing: More trades, smaller profits per trade
+;;    - Optimal: Match to volatility (ATR-based)
+;;
+;; 5. RISKS:
+;;    - Trend risk: Price breaks out of range
+;;    - Drawdown: Accumulate inventory at range edge
+;;    - Optimal range: Use Bollinger Bands or ATR
+;;
+;; ACADEMIC REFERENCES:
+;; - Kavajecz & Odders-White (2004): "Technical Analysis and Liquidity Provision"
+;; - Hendershott & Riordan (2013): "Algorithmic Trading and Market Quality"
+;;
+;; IMPLEMENTATION:
+;; Constructs grid levels, places orders, and calculates expected profit
+;; from range-bound price oscillations.
+;;
+(do
+  (log :message "=== GRID SETUP ===")
+
+  ;; ============================================
+  ;; GRID PARAMETERS
+  ;; ============================================
+  ;;
+  ;; Range definition:
+  ;; - Lower bound: $95 (support level)
+  ;; - Upper bound: $105 (resistance level)
+  ;; - Current price: $100 (mid-range)
+  ;; - Grid count: 10 levels
+  ;;
+  ;; CALCULATION:
+  ;; - Range width: 105 - 95 = 10
+  ;; - Grid step: 10 / 10 = 1.0
+  ;; - Levels: 95, 96, 97, 98, 99, 100, 101, 102, 103, 104
+  ;;
+  (define grid_lower 95.0)
+  (define grid_upper 105.0)
+  (define num_grids 10)
+  (define current_price 100.0)
+
+  (define grid_step (/ (- grid_upper grid_lower) num_grids))
+
+  (log :message "Grid range:" :value grid_lower)
+  (log :message "  to:" :value grid_upper)
+  (log :message "Grid levels:" :value num_grids)
+  (log :message "Grid step:" :value grid_step)
+  (log :message "Current price:" :value current_price)
+
+  ;; ============================================
+  ;; GRID LEVEL GENERATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Create array of price levels
+  ;; - Start at lower bound
+  ;; - Add grid_step for each level
+  ;; - Stop at upper bound
+  ;;
+  ;; LEVELS:
+  ;; - Level 0: 95.0
+  ;; - Level 1: 96.0
+  ;; - Level 2: 97.0
+  ;; - ...
+  ;; - Level 9: 104.0
+  ;;
+  (define grid_levels [])
+  (define i 0)
+
+  (while (< i num_grids)
+    (define level (+ grid_lower (* i grid_step)))
+    (set! grid_levels (concat grid_levels [level]))
+    (set! i (+ i 1)))
+
+  (log :message "Grid levels generated:" :value (length grid_levels))
+
+  ;; ============================================
+  ;; ORDER PLACEMENT LOGIC
+  ;; ============================================
+  ;;
+  ;; THEORY: Place buy orders below price, sell above
+  ;; - Current price: 100
+  ;; - Buy orders: All levels < 100 (95, 96, 97, 98, 99)
+  ;; - Sell orders: All levels >= 100 (100, 101, 102, 103, 104)
+  ;;
+  ;; CALCULATION:
+  ;; - Count buy orders (levels < current_price)
+  ;; - These are active buy orders
+  ;;
+  (define active_orders 0)
+
+  (for (level grid_levels)
+    (when (< level current_price)
+      (set! active_orders (+ active_orders 1))))
+
+  (log :message "\n=== ORDER DISTRIBUTION ===")
+  (log :message "Active buy orders:" :value active_orders)
+  (log :message "Active sell orders:" :value (- num_grids active_orders))
+
+  ;; ============================================
+  ;; PROFIT ESTIMATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Profit from each grid crossing
+  ;; - Each buy order filled → place sell order 1 grid above
+  ;; - Profit = grid_step (e.g., $1.0 per round trip)
+  ;; - Total profit = active_orders × grid_step × avg_fills
+  ;;
+  ;; ASSUMPTION:
+  ;; - Price oscillates 10 times through range
+  ;; - Each buy order fills 10 times
+  ;; - Total round trips: 5 buy orders × 10 fills = 50
+  ;;
+  ;; CALCULATION:
+  ;; - Profit per round trip: $1.0
+  ;; - Total profit: 5 orders × $1.0 × 10 fills = $50
+  ;;
+  (define avg_fills_per_level 10)
+  (define profit_per_trip grid_step)
+  (define grid_profit (* active_orders profit_per_trip avg_fills_per_level))
+
+  (log :message "\n=== PROFIT ESTIMATION ===")
+  (log :message "Profit per round trip:" :value profit_per_trip)
+  (log :message "Avg fills per level:" :value avg_fills_per_level)
+  (log :message "Estimated profit:" :value grid_profit)
+
+  ;; ============================================
+  ;; RISK ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Grid trading risks
+  ;; - Trend risk: Price breaks above/below range
+  ;; - Inventory risk: Accumulate position at range edge
+  ;; - Opportunity cost: Capital locked in grid
+  ;;
+  ;; MITIGATION:
+  ;; - Stop-loss: Exit if price breaks range by X%
+  ;; - Position limits: Cap inventory accumulation
+  ;; - Dynamic rebalancing: Adjust grid as range shifts
+  ;;
+  (log :message "\n=== RISK MANAGEMENT ===")
+  (log :message "Range breakout risk:")
+  (log :message "  Stop-loss above:" :value (* grid_upper 1.05))
+  (log :message "  Stop-loss below:" :value (* grid_lower 0.95))
+
+  (log :message "Max inventory risk:")
+  (log :message "  Max long (if price → 95):" :value (* active_orders 100))
+  (log :message "  Max short (if price → 105):" :value (* (- num_grids active_orders) 100))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real grid trading bots would add:
+  ;; 1. Dynamic grid adjustment (ATR-based spacing)
+  ;; 2. Trailing grids that follow price
+  ;; 3. Asymmetric grids (wider on one side)
+  ;; 4. Multi-timeframe grid combinations
+  ;; 5. Inventory-weighted order sizing
+  ;; 6. Automatic range detection (Bollinger Bands)
+  ;; 7. Breakout detection and grid shutdown
+  ;; 8. Fee optimization (maker rebates)
+  ;;
+
+  "✅ Grid bot complete!")

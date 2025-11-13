@@ -1,0 +1,198 @@
+;; ============================================
+;; OVSM Example 7: Risk Management & Position Sizing
+;; ============================================
+
+(do
+  (log :message "=== POSITION SIZING (KELLY CRITERION) ===")
+
+  ;; Trading statistics
+  (define win_rate 0.55)
+  (define avg_win 1.8)
+  (define avg_loss 1.0)
+
+  ;; Kelly Criterion: f = (bp - q) / b
+  ;; where b = odds (avg_win/avg_loss), p = win_rate, q = 1 - win_rate
+  (define odds (/ avg_win avg_loss))
+  (define kelly_fraction (/ (- (* odds win_rate) (- 1 win_rate)) odds))
+  (define safe_kelly (* kelly_fraction 0.5))  ;; Half Kelly for safety
+
+  (log :message "Kelly fraction:" :value (* kelly_fraction 100))
+  (log :message "Safe position size (Half Kelly):" :value (* safe_kelly 100))
+
+  (log :message "\n=== STOP LOSS & TAKE PROFIT ===")
+
+  ;; Position parameters
+  (define entry_price 50.0)
+  (define position_size 100)
+  (define risk_per_trade 0.02)  ;; 2% risk
+  (define reward_ratio 2.0)      ;; 2:1 reward:risk
+
+  ;; Calculate stop loss
+  (define max_loss (* position_size entry_price risk_per_trade))
+  (define stop_distance (/ max_loss position_size))
+  (define stop_loss (- entry_price stop_distance))
+
+  ;; Calculate take profit
+  (define target_gain (* max_loss reward_ratio))
+  (define tp_distance (/ target_gain position_size))
+  (define take_profit (+ entry_price tp_distance))
+
+  (log :message "Entry price:" :value entry_price)
+  (log :message "Stop loss:" :value stop_loss)
+  (log :message "Take profit:" :value take_profit)
+  (log :message "Risk amount:" :value max_loss)
+  (log :message "Reward amount:" :value target_gain)
+
+  (log :message "\n=== PORTFOLIO VALUE AT RISK (VaR) ===")
+
+  ;; Daily returns (percentages)
+  (define returns [-2.5 1.3 -1.1 2.8 -0.5 1.9 -3.2 0.8 2.1 -1.7])
+
+  ;; Sort returns (simple bubble sort for demo)
+  (define sorted_returns returns)
+  (define n (length sorted_returns))
+
+  (define i 0)
+  (while (< i (- n 1))
+    (define j 0)
+    (while (< j (- n i 1))
+      (define current (first (drop sorted_returns j)))
+      (define next (first (drop sorted_returns (+ j 1))))
+      (when (> current next)
+        ;; Swap (simplified)
+        (set! sorted_returns (concat
+          (take sorted_returns j)
+          [next]
+          [current]
+          (drop sorted_returns (+ j 2)))))
+      (set! j (+ j 1)))
+    (set! i (+ i 1)))
+
+  ;; 95% VaR (5th percentile of losses)
+  (define var_index 1)  ;; Approximate 5th percentile in 10 samples
+  (define var_95 (first (drop sorted_returns var_index)))
+
+  (define portfolio_value 100000)
+  (define var_amount (* portfolio_value (/ var_95 100)))
+
+  (log :message "Portfolio value:" :value portfolio_value)
+  (log :message "95% VaR (daily):" :value var_95)
+  (log :message "Max expected loss (95%):" :value var_amount)
+
+  (log :message "\n=== DRAWDOWN ANALYSIS ===")
+
+  ;; Portfolio values over time
+  (define portfolio_values [100000 102000 101000 105000 103000 107000 104000 106000 108000 105000])
+
+  (define peak 100000)
+  (define max_drawdown 0)
+
+  (for (value portfolio_values)
+    ;; Update peak
+    (when (> value peak)
+      (set! peak value))
+
+    ;; Calculate drawdown from peak
+    (define drawdown (* (/ (- peak value) peak) 100))
+
+    ;; Update max drawdown
+    (when (> drawdown max_drawdown)
+      (set! max_drawdown drawdown)))
+
+  (log :message "Maximum drawdown:" :value max_drawdown)
+
+  (log :message "\n=== SHARPE RATIO ===")
+
+  ;; Calculate Sharpe Ratio (return / risk)
+  (define portfolio_returns [2.5 -1.3 3.1 -0.5 1.9 2.8 -1.2 1.5 2.2 -0.8])
+
+  ;; Calculate mean return
+  (define sum_returns 0)
+  (for (ret portfolio_returns)
+    (set! sum_returns (+ sum_returns ret)))
+
+  (define mean_return (/ sum_returns (length portfolio_returns)))
+
+  ;; Calculate standard deviation
+  (define sum_squared_diff 0)
+  (for (ret portfolio_returns)
+    (define diff (- ret mean_return))
+    (set! sum_squared_diff (+ sum_squared_diff (* diff diff))))
+
+  (define variance (/ sum_squared_diff (length portfolio_returns)))
+  ;; Approximate sqrt using Babylonian method
+  (define sqrt_guess (/ variance 2))
+  (define std_dev (/ (+ sqrt_guess (/ variance (if (= sqrt_guess 0) 0.001 sqrt_guess))) 2))
+
+  ;; Sharpe Ratio (assuming 0% risk-free rate)
+  (define sharpe (/ mean_return std_dev))
+
+  (log :message "Mean return:" :value mean_return)
+  (log :message "Volatility (std dev):" :value std_dev)
+  (log :message "Sharpe ratio:" :value sharpe)
+
+  (define sharpe_rating (if (> sharpe 2.0)
+                            "EXCELLENT"
+                            (if (> sharpe 1.0)
+                                "GOOD"
+                                (if (> sharpe 0.5)
+                                    "ACCEPTABLE"
+                                    "POOR"))))
+  (log :message "Rating:" :value sharpe_rating)
+
+  (log :message "\n=== CORRELATION RISK ===")
+
+  ;; Returns for two assets
+  (define asset_a [2.1 -1.5 3.2 -0.8 1.9])
+  (define asset_b [2.5 -1.2 3.0 -1.0 2.1])
+
+  ;; Calculate means
+  (define sum_a 0)
+  (define sum_b 0)
+  (for (ret asset_a)
+    (set! sum_a (+ sum_a ret)))
+  (for (ret asset_b)
+    (set! sum_b (+ sum_b ret)))
+
+  (define mean_a (/ sum_a (length asset_a)))
+  (define mean_b (/ sum_b (length asset_b)))
+
+  ;; Calculate correlation
+  (define covariance 0)
+  (define i 0)
+  (while (< i (length asset_a))
+    (define diff_a (- (first (drop asset_a i)) mean_a))
+    (define diff_b (- (first (drop asset_b i)) mean_b))
+    (set! covariance (+ covariance (* diff_a diff_b)))
+    (set! i (+ i 1)))
+
+  ;; Calculate standard deviations
+  (define var_a 0)
+  (define var_b 0)
+  (for (ret asset_a)
+    (define d (- ret mean_a))
+    (set! var_a (+ var_a (* d d))))
+  (for (ret asset_b)
+    (define d (- ret mean_b))
+    (set! var_b (+ var_b (* d d))))
+
+  ;; Approximate sqrt for std_a
+  (define var_a_norm (/ var_a (length asset_a)))
+  (define guess_a (/ var_a_norm 2))
+  (define std_a (/ (+ guess_a (/ var_a_norm (if (= guess_a 0) 0.001 guess_a))) 2))
+
+  ;; Approximate sqrt for std_b
+  (define var_b_norm (/ var_b (length asset_b)))
+  (define guess_b (/ var_b_norm 2))
+  (define std_b (/ (+ guess_b (/ var_b_norm (if (= guess_b 0) 0.001 guess_b))) 2))
+
+  (define correlation (/ covariance (* (length asset_a) std_a std_b)))
+
+  (log :message "Correlation:" :value correlation)
+
+  (define corr_warning (if (> correlation 0.8)
+                           "⚠️ HIGH CORRELATION - Low diversification!"
+                           "✅ Good diversification"))
+  (log :message corr_warning)
+
+  "✅ Risk management demo complete!")

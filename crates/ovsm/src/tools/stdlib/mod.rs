@@ -23,6 +23,7 @@ pub mod loop_full;
 pub mod loop_utilities;
 pub mod math;
 pub mod method_combinations;
+pub mod network;
 pub mod multiple_values;
 pub mod numeric;
 pub mod objects;

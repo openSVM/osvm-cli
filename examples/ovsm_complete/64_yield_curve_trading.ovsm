@@ -1,0 +1,51 @@
+;; ============================================================================
+;; OVSM LISP Example 64: YIELD CURVE TRADING
+;; ============================================================================
+
+(do
+  (log :message "=== YIELD CURVE TRADING ANALYSIS ===" :value "")
+
+  ;; Yield curve data
+  (define yields [4.5 4.6 4.8 5.0 5.1 5.2 5.25 5.3 5.4 5.5])
+  (define maturities [3 6 12 24 36 60 84 120 240 360])
+
+  (log :message "Yields:" :value yields)
+  (log :message "Maturities:" :value maturities)
+
+  ;; Calculate 2s10s spread
+  (define spot_2y (nth yields 3))
+  (define spot_10y (nth yields 7))
+  (define spread_2s10s (- spot_10y spot_2y))
+
+  (log :message "2-Year Yield:" :value spot_2y)
+  (log :message "10-Year Yield:" :value spot_10y)
+  (log :message "2s10s Spread:" :value spread_2s10s)
+
+  ;; Calculate butterfly spread
+  (define spot_5y (nth yields 5))
+  (define spot_30y (nth yields 9))
+  (define butterfly (- (* 2 spot_10y) (+ spot_5y spot_30y)))
+
+  (log :message "5-Year Yield:" :value spot_5y)
+  (log :message "30-Year Yield:" :value spot_30y)
+  (log :message "Butterfly:" :value butterfly)
+
+  ;; Trading signal
+  (define signal (if (> spread_2s10s 0.3)
+                     "STEEPENING - Go long duration"
+                     (if (< spread_2s10s 0.1)
+                         "FLATTENING - Go short duration"
+                         "NEUTRAL")))
+
+  (log :message "Signal:" :value signal)
+
+  ;; Risk metrics
+  (define dv01 0.0932)
+  (define position_size 1000000)
+  (define risk (* position_size dv01 0.01))
+
+  (log :message "DV01:" :value dv01)
+  (log :message "Position Size:" :value position_size)
+  (log :message "Risk (1bp move):" :value risk)
+
+  "✅ Yield curve trading analysis complete!")

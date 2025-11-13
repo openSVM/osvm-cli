@@ -1,0 +1,547 @@
+;; ============================================
+;; OVSM Example 48: Sentiment-Driven Momentum Trading
+;; ============================================
+;;
+;; THEORY: Combining NLP Sentiment Analysis with Price Momentum
+;; -------------------------------------------------------------
+;; Sentiment-driven momentum trading combines natural language processing
+;; of news/social media with traditional momentum signals to identify
+;; assets with strong narrative support for continued price trends.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. SENTIMENT ANALYSIS:
+;;    - NLP processing of news articles, tweets, Reddit posts
+;;    - Scoring: -1 (very negative) to +1 (very positive)
+;;    - Volume weighting: More mentions = higher confidence
+;;    - Source credibility: Institutional sources weighted higher
+;;
+;; 2. SENTIMENT-MOMENTUM ALIGNMENT:
+;;    - Bullish sentiment + Upward momentum → Strong buy
+;;    - Bearish sentiment + Downward momentum → Strong sell
+;;    - Sentiment-price divergence → Potential reversal
+;;    - Neutral sentiment → Ignore (no edge)
+;;
+;; 3. NEWS IMPACT DECAY:
+;;    - Exponential decay: Impact(t) = Impact₀ × e^(-λt)
+;;    - Half-life typically 2-6 hours for intraday
+;;    - Breaking news has largest immediate impact
+;;    - Gradual information absorption into prices
+;;
+;; 4. SOCIAL SENTIMENT METRICS:
+;;    - Twitter mentions/hour (volume indicator)
+;;    - Reddit upvote/downvote ratio (crowd opinion)
+;;    - StockTwits bull/bear percentage
+;;    - Google Trends search volume (retail interest)
+;;
+;; ACADEMIC REFERENCES:
+;; - Bollen, Mao & Zeng (2011): "Twitter mood predicts the stock market"
+;; - Tetlock (2007): "Giving Content to Investor Sentiment"
+;; - Da, Engelberg & Gao (2015): "The Sum of All FEARS: Investor Sentiment"
+;; - Antweiler & Frank (2004): "Is All That Talk Just Noise?"
+;;
+;; IMPLEMENTATION:
+;; This example aggregates sentiment from multiple sources and combines
+;; with momentum signals to generate high-conviction trading signals.
+;;
+(do
+  (log :message "=== SENTIMENT-DRIVEN MOMENTUM STRATEGY ===")
+
+  ;; ============================================
+  ;; ASSET SETUP
+  ;; ============================================
+  ;;
+  ;; Trading asset: Growth technology stock
+  ;; - Current price: $250
+  ;; - 20-day SMA: $240 (uptrend)
+  ;; - 50-day SMA: $230 (strong uptrend)
+  ;; - Momentum score: +0.85 (strong positive)
+  ;;
+  (define current_price 250)
+  (define sma_20 240)
+  (define sma_50 230)
+  (define price_momentum 0.85)
+
+  (log :message "\n=== ASSET SETUP ===")
+  (log :message "Current price:" :value current_price)
+  (log :message "20-day SMA:" :value sma_20)
+  (log :message "50-day SMA:" :value sma_50)
+  (log :message "Price momentum:" :value price_momentum)
+
+  ;; ============================================
+  ;; NEWS SENTIMENT ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Process news articles using NLP models
+  ;;
+  ;; NEWS SOURCES (last 24 hours):
+  ;; 1. Bloomberg: "Company beats earnings by 15%" → +0.85
+  ;; 2. Reuters: "New product launch well-received" → +0.65
+  ;; 3. WSJ: "CEO announces expansion plans" → +0.75
+  ;; 4. CNBC: "Analysts raise price targets" → +0.80
+  ;; 5. FT: "Market share gains in key segment" → +0.70
+  ;;
+  ;; SENTIMENT SCORING:
+  ;; - Use pre-trained FinBERT model (financial domain)
+  ;; - Classify: Positive, Negative, Neutral
+  ;; - Extract entities: Company names, products, metrics
+  ;; - Context window: 512 tokens per article
+  ;;
+  ;; AGGREGATION:
+  ;; - Average sentiment: (0.85+0.65+0.75+0.80+0.70)/5 = 0.75
+  ;; - Weighted by source credibility (Bloomberg = 1.2x)
+  ;; - Weighted average: 0.78
+  ;; - News volume: 5 articles (above average)
+  ;;
+  (define news_sentiments [0.85 0.65 0.75 0.80 0.70])
+  (define news_sources ["Bloomberg" "Reuters" "WSJ" "CNBC" "FT"])
+  (define news_weights [1.2 1.0 1.1 0.9 1.0])
+
+  (log :message "\n=== NEWS SENTIMENT ===")
+  (log :message "Article sentiments:" :value news_sentiments)
+  (log :message "Sources:" :value news_sources)
+
+  ;; Calculate weighted average
+  (define weighted_sum (* 0.85 1.2))
+  (define weighted_sum (+ weighted_sum (* 0.65 1.0)))
+  (define weighted_sum (+ weighted_sum (* 0.75 1.1)))
+  (define weighted_sum (+ weighted_sum (* 0.80 0.9)))
+  (define weighted_sum (+ weighted_sum (* 0.70 1.0)))
+
+  (define weight_total (+ (+ (+ (+ 1.2 1.0) 1.1) 0.9) 1.0))
+  (define news_sentiment_avg (/ weighted_sum weight_total))
+
+  (log :message "Weighted avg sentiment:" :value news_sentiment_avg)
+
+  ;; ============================================
+  ;; TWITTER SENTIMENT ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Aggregate real-time social sentiment
+  ;;
+  ;; TWITTER METRICS (last 6 hours):
+  ;; - Total mentions: 12,500 tweets
+  ;; - Positive tweets: 8,750 (70%)
+  ;; - Negative tweets: 2,500 (20%)
+  ;; - Neutral tweets: 1,250 (10%)
+  ;;
+  ;; SENTIMENT SCORE:
+  ;; - Score = (Positive - Negative) / Total
+  ;; - Score = (8750 - 2500) / 12500 = 0.50
+  ;;
+  ;; VOLUME INDICATOR:
+  ;; - Normal hourly mentions: 1,500
+  ;; - Current rate: 2,083/hour (12,500 / 6 hours)
+  ;; - Volume ratio: 2,083 / 1,500 = 1.39x (elevated)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Positive sentiment (0.50) with high volume
+  ;; - Indicates growing retail interest
+  ;; - Strong narrative support for upward momentum
+  ;;
+  (define twitter_mentions 12500)
+  (define twitter_positive 8750)
+  (define twitter_negative 2500)
+  (define twitter_neutral 1250)
+
+  (define twitter_sentiment (/ (- twitter_positive twitter_negative) twitter_mentions))
+
+  (log :message "\n=== TWITTER SENTIMENT ===")
+  (log :message "Total mentions:" :value twitter_mentions)
+  (log :message "Positive:" :value twitter_positive)
+  (log :message "Negative:" :value twitter_negative)
+  (log :message "Sentiment score:" :value twitter_sentiment)
+
+  ;; Volume analysis
+  (define normal_hourly_mentions 1500)
+  (define current_hourly_rate (/ twitter_mentions 6))
+  (define volume_ratio (/ current_hourly_rate normal_hourly_mentions))
+
+  (log :message "Hourly mention rate:" :value current_hourly_rate)
+  (log :message "Volume ratio:" :value volume_ratio)
+
+  ;; ============================================
+  ;; REDDIT SENTIMENT ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Extract crowd sentiment from Reddit
+  ;;
+  ;; REDDIT DATA (r/stocks, r/wallstreetbets, 24 hours):
+  ;; - Total posts/comments: 450
+  ;; - Average upvote ratio: 0.82 (82% upvoted)
+  ;; - Most upvoted post: "This stock is undervalued" (850 upvotes)
+  ;; - Comment sentiment (using VADER): +0.65
+  ;;
+  ;; REDDIT METRICS:
+  ;; - Upvote ratio > 0.70 → Positive community sentiment
+  ;; - High engagement (450 mentions) → Strong interest
+  ;; - Bullish posts dominate front page
+  ;;
+  ;; SENTIMENT SCORE:
+  ;; - Upvote ratio: 0.82
+  ;; - Comment sentiment: +0.65
+  ;; - Combined: (0.82 + 0.65) / 2 = 0.735
+  ;;
+  (define reddit_posts 450)
+  (define reddit_upvote_ratio 0.82)
+  (define reddit_comment_sentiment 0.65)
+
+  (define reddit_sentiment (/ (+ reddit_upvote_ratio reddit_comment_sentiment) 2))
+
+  (log :message "\n=== REDDIT SENTIMENT ===")
+  (log :message "Posts/comments:" :value reddit_posts)
+  (log :message "Upvote ratio:" :value reddit_upvote_ratio)
+  (log :message "Comment sentiment:" :value reddit_comment_sentiment)
+  (log :message "Combined sentiment:" :value reddit_sentiment)
+
+  ;; ============================================
+  ;; STOCKTWITS SENTIMENT
+  ;; ============================================
+  ;;
+  ;; THEORY: StockTwits bull/bear indicator
+  ;;
+  ;; STOCKTWITS DATA:
+  ;; - Total messages: 3,200
+  ;; - Bullish messages: 2,400 (75%)
+  ;; - Bearish messages: 800 (25%)
+  ;; - Sentiment score: (75 - 25) / 100 = 0.50
+  ;;
+  ;; HISTORICAL CONTEXT:
+  ;; - Normal bull%: 55%
+  ;; - Current bull%: 75% (extreme optimism)
+  ;; - Divergence: +20 percentage points
+  ;;
+  ;; CONTRARIAN SIGNAL?
+  ;; - Extreme sentiment can signal reversal
+  ;; - But with momentum, it confirms trend
+  ;; - Watch for >85% bull (euphoria warning)
+  ;;
+  (define stocktwits_messages 3200)
+  (define stocktwits_bullish 2400)
+  (define stocktwits_bearish 800)
+
+  (define stocktwits_bull_pct (* (/ stocktwits_bullish stocktwits_messages) 100))
+  (define stocktwits_sentiment (/ (- stocktwits_bull_pct 50) 50))
+
+  (log :message "\n=== STOCKTWITS SENTIMENT ===")
+  (log :message "Total messages:" :value stocktwits_messages)
+  (log :message "Bull percentage:" :value stocktwits_bull_pct)
+  (log :message "Sentiment score:" :value stocktwits_sentiment)
+
+  ;; ============================================
+  ;; GOOGLE TRENDS ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Search volume indicates retail interest
+  ;;
+  ;; GOOGLE TRENDS DATA:
+  ;; - Search interest: 85/100 (very high)
+  ;; - 7-day average: 60/100
+  ;; - Trend: +42% week-over-week
+  ;; - Related queries: "buy", "price target", "earnings"
+  ;;
+  ;; INTERPRETATION:
+  ;; - Spike in search volume (85 vs 60)
+  ;; - Related queries are bullish ("buy", "price target")
+  ;; - Indicates retail FOMO (Fear Of Missing Out)
+  ;; - Can drive additional buying pressure
+  ;;
+  (define google_trends_current 85)
+  (define google_trends_avg 60)
+  (define google_trends_change (* (/ (- google_trends_current google_trends_avg) google_trends_avg) 100))
+
+  (log :message "\n=== GOOGLE TRENDS ===")
+  (log :message "Current interest:" :value google_trends_current)
+  (log :message "7-day average:" :value google_trends_avg)
+  (log :message "Change (%):" :value google_trends_change)
+
+  ;; ============================================
+  ;; COMPOSITE SENTIMENT SCORE
+  ;; ============================================
+  ;;
+  ;; THEORY: Aggregate all sentiment sources
+  ;;
+  ;; WEIGHTING SCHEME:
+  ;; - News: 30% (institutional, high quality)
+  ;; - Twitter: 25% (real-time, high volume)
+  ;; - Reddit: 20% (community depth)
+  ;; - StockTwits: 15% (trading-focused)
+  ;; - Google Trends: 10% (retail interest)
+  ;;
+  ;; CALCULATION:
+  ;; - News: 0.78 × 0.30 = 0.234
+  ;; - Twitter: 0.50 × 0.25 = 0.125
+  ;; - Reddit: 0.735 × 0.20 = 0.147
+  ;; - StockTwits: 0.50 × 0.15 = 0.075
+  ;; - Google: Normalize to 0.42 (85/100 - 50/100) × 0.10 = 0.042
+  ;; - Composite: 0.234 + 0.125 + 0.147 + 0.075 + 0.042 = 0.623
+  ;;
+  ;; INTERPRETATION:
+  ;; - Composite sentiment: +0.623 (strong bullish)
+  ;; - All sources agree (no divergence)
+  ;; - High confidence in sentiment signal
+  ;;
+  (define weight_news 0.30)
+  (define weight_twitter 0.25)
+  (define weight_reddit 0.20)
+  (define weight_stocktwits 0.15)
+  (define weight_google 0.10)
+
+  (define google_normalized (* (/ (- google_trends_current 50) 100) 2))
+
+  (define composite_sentiment (* news_sentiment_avg weight_news))
+  (define composite_sentiment (+ composite_sentiment (* twitter_sentiment weight_twitter)))
+  (define composite_sentiment (+ composite_sentiment (* reddit_sentiment weight_reddit)))
+  (define composite_sentiment (+ composite_sentiment (* stocktwits_sentiment weight_stocktwits)))
+  (define composite_sentiment (+ composite_sentiment (* google_normalized weight_google)))
+
+  (log :message "\n=== COMPOSITE SENTIMENT ===")
+  (log :message "News contribution:" :value (* news_sentiment_avg weight_news))
+  (log :message "Twitter contribution:" :value (* twitter_sentiment weight_twitter))
+  (log :message "Reddit contribution:" :value (* reddit_sentiment weight_reddit))
+  (log :message "Composite score:" :value composite_sentiment)
+
+  ;; ============================================
+  ;; SENTIMENT-MOMENTUM ALIGNMENT
+  ;; ============================================
+  ;;
+  ;; THEORY: Check if sentiment and momentum agree
+  ;;
+  ;; ALIGNMENT SCORING:
+  ;; - Both positive (>0.5): Strong buy signal
+  ;; - Both negative (<-0.5): Strong sell signal
+  ;; - Divergence: Wait for convergence
+  ;;
+  ;; CURRENT STATE:
+  ;; - Price momentum: +0.85 (strong uptrend)
+  ;; - Composite sentiment: +0.623 (strong bullish)
+  ;; - Alignment score: min(0.85, 0.623) = 0.623
+  ;; - ✅ STRONG ALIGNMENT → High conviction buy
+  ;;
+  (log :message "\n=== SENTIMENT-MOMENTUM ALIGNMENT ===")
+  (log :message "Price momentum:" :value price_momentum)
+  (log :message "Sentiment score:" :value composite_sentiment)
+
+  (define alignment_score (if (< price_momentum composite_sentiment)
+                              price_momentum
+                              composite_sentiment))
+
+  (log :message "Alignment score:" :value alignment_score)
+
+  ;; Classification
+  (define signal_type
+    (if (and (> price_momentum 0.5) (> composite_sentiment 0.5))
+        "✅ STRONG BUY - Momentum + Sentiment aligned"
+        (if (and (< price_momentum -0.5) (< composite_sentiment -0.5))
+            "🔴 STRONG SELL - Downtrend + Bearish sentiment"
+            (if (> price_momentum (* composite_sentiment -1))
+                "⚠️ DIVERGENCE - Wait for convergence"
+                "⚠️ WEAK SIGNAL - Low conviction"))))
+
+  (log :message "Signal type:" :value signal_type)
+
+  ;; ============================================
+  ;; NEWS IMPACT DECAY MODELING
+  ;; ============================================
+  ;;
+  ;; THEORY: Model how quickly news impact fades
+  ;;
+  ;; EXPONENTIAL DECAY:
+  ;; - Impact(t) = Impact₀ × e^(-λt)
+  ;; - Half-life: t₁/₂ = ln(2) / λ
+  ;; - For intraday: λ = 0.3 (half-life ~2.3 hours)
+  ;;
+  ;; EXAMPLE: Earnings beat announced 4 hours ago
+  ;; - Initial impact: +0.85 sentiment
+  ;; - After 4 hours: 0.85 × e^(-0.3×4) = 0.85 × 0.301 = 0.256
+  ;; - Impact decayed by 70% already
+  ;;
+  ;; CURRENT POSITION:
+  ;; - Most news is fresh (< 6 hours old)
+  ;; - Average age: 3 hours
+  ;; - Decay factor: e^(-0.3×3) = 0.407 (41% of original)
+  ;;
+  (define decay_lambda 0.3)
+  (define news_avg_age_hours 3)
+  (define decay_factor 0.407)  ;; e^(-0.3*3)
+
+  (log :message "\n=== NEWS IMPACT DECAY ===")
+  (log :message "Decay rate (lambda):" :value decay_lambda)
+  (log :message "Avg news age (hours):" :value news_avg_age_hours)
+  (log :message "Decay factor:" :value decay_factor)
+
+  ;; Adjust sentiment for decay
+  (define decayed_news_sentiment (* news_sentiment_avg decay_factor))
+  (log :message "Decayed news sentiment:" :value decayed_news_sentiment)
+
+  ;; ============================================
+  ;; POSITION SIZING
+  ;; ============================================
+  ;;
+  ;; THEORY: Size position based on signal confidence
+  ;;
+  ;; KELLY CRITERION (simplified):
+  ;; - f* = (p × b - q) / b
+  ;; - p = win probability, q = 1-p, b = win/loss ratio
+  ;;
+  ;; ESTIMATED PARAMETERS:
+  ;; - Win rate: 65% (based on alignment score)
+  ;; - Avg win: 3.5%
+  ;; - Avg loss: 2.0%
+  ;; - Win/loss ratio: 1.75
+  ;;
+  ;; KELLY CALCULATION:
+  ;; - f* = (0.65 × 1.75 - 0.35) / 1.75
+  ;; - f* = (1.1375 - 0.35) / 1.75 = 0.45 (45% of capital)
+  ;; - Conservative: Use 25% of Kelly = 11.25% position
+  ;;
+  (define win_probability 0.65)
+  (define avg_win_pct 3.5)
+  (define avg_loss_pct 2.0)
+  (define win_loss_ratio (/ avg_win_pct avg_loss_pct))
+
+  (define kelly_fraction (/ (- (* win_probability win_loss_ratio) (- 1 win_probability)) win_loss_ratio))
+  (define conservative_kelly (* kelly_fraction 0.25))
+
+  (log :message "\n=== POSITION SIZING ===")
+  (log :message "Win probability:" :value win_probability)
+  (log :message "Win/loss ratio:" :value win_loss_ratio)
+  (log :message "Kelly fraction:" :value kelly_fraction)
+  (log :message "Conservative position:" :value conservative_kelly)
+
+  ;; Position size
+  (define portfolio_value 1000000)
+  (define position_size_dollars (* portfolio_value conservative_kelly))
+  (define shares_to_buy (/ position_size_dollars current_price))
+
+  (log :message "Portfolio value:" :value portfolio_value)
+  (log :message "Position size ($):" :value position_size_dollars)
+  (log :message "Shares to buy:" :value shares_to_buy)
+
+  ;; ============================================
+  ;; ENTRY AND EXIT RULES
+  ;; ============================================
+  ;;
+  ;; ENTRY TRIGGER:
+  ;; - Sentiment score > 0.60 ✅
+  ;; - Momentum score > 0.60 ✅
+  ;; - Volume ratio > 1.2x ✅
+  ;; - Price above 20-day SMA ✅
+  ;; - ALL CONDITIONS MET → Enter long
+  ;;
+  ;; EXIT TRIGGERS:
+  ;; 1. Profit target: +3.5% (avg win)
+  ;; 2. Stop loss: -2.0% (risk management)
+  ;; 3. Sentiment reversal: Score drops below 0.30
+  ;; 4. Momentum loss: Price crosses below 20-day SMA
+  ;; 5. Time stop: 5 days maximum hold
+  ;;
+  (define entry_threshold_sentiment 0.60)
+  (define entry_threshold_momentum 0.60)
+  (define entry_threshold_volume 1.20)
+
+  (define meets_entry_criteria
+    (and (> composite_sentiment entry_threshold_sentiment)
+         (and (> price_momentum entry_threshold_momentum)
+              (> volume_ratio entry_threshold_volume))))
+
+  (log :message "\n=== ENTRY/EXIT RULES ===")
+  (log :message "Entry criteria met:" :value meets_entry_criteria)
+
+  (define profit_target (* current_price 1.035))
+  (define stop_loss (* current_price 0.98))
+  (define sentiment_exit_threshold 0.30)
+
+  (log :message "Entry price:" :value current_price)
+  (log :message "Profit target:" :value profit_target)
+  (log :message "Stop loss:" :value stop_loss)
+
+  ;; ============================================
+  ;; SIMULATED OUTCOME
+  ;; ============================================
+  ;;
+  ;; SCENARIO: Hold for 3 days
+  ;;
+  ;; DAY 1:
+  ;; - Price: $255 (+2%)
+  ;; - Sentiment: 0.65 (still strong)
+  ;; - Hold position
+  ;;
+  ;; DAY 2:
+  ;; - Price: $258 (+3.2%)
+  ;; - Sentiment: 0.60 (slightly declining)
+  ;; - Close to profit target
+  ;;
+  ;; DAY 3:
+  ;; - Price: $260 (+4%)
+  ;; - Sentiment: 0.55 (declining)
+  ;; - Exit at $259.50 (profit target hit)
+  ;;
+  ;; RESULT:
+  ;; - Entry: $250
+  ;; - Exit: $259.50
+  ;; - Profit: +3.8%
+  ;; - Position: 450 shares
+  ;; - P&L: 450 × ($259.50 - $250) = $4,275
+  ;;
+  (define exit_price 259.50)
+  (define holding_period_days 3)
+  (define profit_per_share (- exit_price current_price))
+  (define total_profit (* shares_to_buy profit_per_share))
+
+  (log :message "\n=== TRADE OUTCOME ===")
+  (log :message "Holding period (days):" :value holding_period_days)
+  (log :message "Exit price:" :value exit_price)
+  (log :message "Profit per share:" :value profit_per_share)
+  (log :message "Total profit:" :value total_profit)
+
+  (define return_pct (* (/ profit_per_share current_price) 100))
+  (log :message "Return (%):" :value return_pct)
+
+  ;; ============================================
+  ;; STRATEGY ASSESSMENT
+  ;; ============================================
+  ;;
+  ;; EVALUATION:
+  ;; - Signal strength: Very strong (0.623 composite)
+  ;; - Alignment: Perfect (momentum + sentiment)
+  ;; - Execution: Successful (+3.8% return)
+  ;; - Risk management: Proper sizing (11.25% of portfolio)
+  ;;
+  ;; PERFORMANCE METRICS:
+  ;; - Win rate (backtested): ~65%
+  ;; - Avg win: 3.5%
+  ;; - Avg loss: 2.0%
+  ;; - Sharpe ratio: 1.8 (good)
+  ;; - Max drawdown: -12% (acceptable)
+  ;;
+  ;; RECOMMENDATION:
+  ;; - Strategy works best in trending markets
+  ;; - Requires real-time sentiment feeds
+  ;; - Monitor for sentiment-momentum divergence
+  ;; - Scale position size with signal confidence
+  ;;
+  (log :message "\n=== STRATEGY ASSESSMENT ===")
+  (log :message "Signal strength:" :value composite_sentiment)
+  (log :message "Trade outcome: SUCCESS (+3.8%)")
+  (log :message "Recommendation: EXECUTE with proper sizing")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real-world sentiment-momentum trading requires:
+  ;;
+  ;; 1. **Real-time NLP pipeline**: Sub-second news processing
+  ;; 2. **Multi-source aggregation**: 20+ data sources
+  ;; 3. **Entity recognition**: Track company, product, executive mentions
+  ;; 4. **Contextual analysis**: Sarcasm detection, negation handling
+  ;; 5. **Sentiment decay modeling**: Time-weighted impact curves
+  ;; 6. **Cross-asset correlation**: Sentiment spillover effects
+  ;; 7. **Fake news filtering**: Source credibility scoring
+  ;; 8. **Regulatory monitoring**: Track SEC filings, insider trades
+  ;; 9. **Social network analysis**: Influencer identification
+  ;; 10. **Backtesting framework**: Historical sentiment reconstruction
+  ;;
+
+  "✅ Sentiment-driven momentum analysis complete!")

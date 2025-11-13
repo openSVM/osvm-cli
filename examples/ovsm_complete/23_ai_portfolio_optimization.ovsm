@@ -1,0 +1,391 @@
+;; ============================================
+;; OVSM Example 23: AI-Powered Portfolio Optimization
+;; ============================================
+
+(do
+  (log :message "=== MEMECOIN PORTFOLIO CONSTRUCTION ===")
+
+  ;; Available memecoins
+  (define memecoin_universe [
+    {:symbol "PEPE2" :expected_return 0.45 :volatility 0.35 :correlation 0.6}
+    {:symbol "DOGE3" :expected_return 0.38 :volatility 0.28 :correlation 0.5}
+    {:symbol "SHIB2" :expected_return 0.32 :volatility 0.25 :correlation 0.4}
+    {:symbol "BONK2" :expected_return 0.50 :volatility 0.42 :correlation 0.7}
+    {:symbol "WIF" :expected_return 0.40 :volatility 0.30 :correlation 0.55}
+  ])
+
+  (log :message "Universe size:" :value (length memecoin_universe))
+
+  (log :message "\n=== MEAN-VARIANCE OPTIMIZATION ===")
+
+  ;; Markowitz portfolio theory
+  (define total_capital 100.0)
+  (define portfolio_allocations [])
+
+  ;; Calculate Sharpe ratio for each token
+  (define risk_free_rate 0.05)
+
+  (for (token memecoin_universe)
+    (define symbol (get token "symbol"))
+    (define ret (get token "expected_return"))
+    (define vol (get token "volatility"))
+
+    (define excess_return (- ret risk_free_rate))
+    (define sharpe_ratio (/ excess_return vol))
+
+    (log :message symbol)
+    (log :message "  Expected return:" :value ret)
+    (log :message "  Volatility:" :value vol)
+    (log :message "  Sharpe ratio:" :value sharpe_ratio)
+
+    (set! portfolio_allocations (concat portfolio_allocations [
+      {:symbol symbol :sharpe sharpe_ratio :token token}
+    ])))
+
+  ;; Normalize allocations based on Sharpe ratios
+  (define total_sharpe 0.0)
+  (for (alloc portfolio_allocations)
+    (define sharpe (get alloc "sharpe"))
+    (set! total_sharpe (+ total_sharpe sharpe)))
+
+  (log :message "\nOptimized allocations:")
+
+  (for (alloc portfolio_allocations)
+    (define symbol (get alloc "symbol"))
+    (define sharpe (get alloc "sharpe"))
+    (define weight (/ sharpe total_sharpe))
+    (define allocation (* total_capital weight))
+
+    (log :message symbol)
+    (log :message "  Weight:" :value weight)
+    (log :message "  Allocation:" :value allocation))
+
+  (log :message "\n=== BLACK-LITTERMAN MODEL ===")
+
+  ;; Combine market equilibrium with investor views
+  (define market_weights [0.25 0.20 0.18 0.22 0.15])
+  (define investor_views [
+    {:asset "PEPE2" :expected_return 0.50 :confidence 0.8}
+    {:asset "BONK2" :expected_return 0.45 :confidence 0.6}
+  ])
+
+  (log :message "Market equilibrium weights:")
+  (define idx 0)
+  (for (token memecoin_universe)
+    (define symbol (get token "symbol"))
+    (define mkt_weight (first (drop market_weights idx)))
+    (log :message symbol :value mkt_weight)
+    (set! idx (+ idx 1)))
+
+  ;; Blend market views with investor views
+  (define tau 0.3)  ;; Confidence in views
+  (define blended_returns [])
+
+  (for (token memecoin_universe)
+    (define symbol (get token "symbol"))
+    (define market_ret (get token "expected_return"))
+
+    ;; Find investor view if exists
+    (define view_ret market_ret)
+    (define view_conf 0.0)
+
+    (for (view investor_views)
+      (define view_asset (get view "asset"))
+      (when (= view_asset symbol)
+        (set! view_ret (get view "expected_return"))
+        (set! view_conf (get view "confidence"))))
+
+    ;; Blend
+    (define blended_ret (+
+      (* (- 1 (* tau view_conf)) market_ret)
+      (* tau view_conf view_ret)))
+
+    (log :message symbol :value blended_ret)
+
+    (set! blended_returns (concat blended_returns [blended_ret])))
+
+  (log :message "\n=== RISK PARITY ALLOCATION ===")
+
+  ;; Equal risk contribution from each asset
+  (define risk_contributions [])
+
+  (for (token memecoin_universe)
+    (define symbol (get token "symbol"))
+    (define vol (get token "volatility"))
+
+    ;; Inverse volatility weighting
+    (define inv_vol (/ 1.0 vol))
+
+    (log :message symbol :value inv_vol)
+    (set! risk_contributions (concat risk_contributions [
+      {:symbol symbol :inv_vol inv_vol}
+    ])))
+
+  ;; Normalize
+  (define total_inv_vol 0.0)
+  (for (contrib risk_contributions)
+    (define inv_vol (get contrib "inv_vol"))
+    (set! total_inv_vol (+ total_inv_vol inv_vol)))
+
+  (log :message "\nRisk parity weights:")
+  (for (contrib risk_contributions)
+    (define symbol (get contrib "symbol"))
+    (define inv_vol (get contrib "inv_vol"))
+    (define risk_parity_weight (/ inv_vol total_inv_vol))
+    (define allocation (* total_capital risk_parity_weight))
+
+    (log :message symbol)
+    (log :message "  Weight:" :value risk_parity_weight)
+    (log :message "  Allocation:" :value allocation))
+
+  (log :message "\n=== GENETIC ALGORITHM OPTIMIZATION ===")
+
+  ;; Evolve optimal portfolio through generations
+  (define population_size 5)
+  (define generations 3)
+
+  (define population [
+    [0.3 0.2 0.2 0.2 0.1]   ;; Chromosome 1
+    [0.2 0.25 0.25 0.15 0.15]
+    [0.15 0.3 0.2 0.25 0.1]
+    [0.25 0.15 0.3 0.2 0.1]
+    [0.2 0.2 0.2 0.2 0.2]
+  ])
+
+  (log :message "Initial population size:" :value (length population))
+
+  ;; Fitness function: Sharpe ratio
+  (define fitness_scores [])
+
+  (for (chromosome population)
+    (define portfolio_return 0.0)
+    (define portfolio_risk 0.0)
+
+    (define i 0)
+    (while (< i (length chromosome))
+      (define weight (first (drop chromosome i)))
+      (define token (first (drop memecoin_universe i)))
+      (define ret (get token "expected_return"))
+      (define vol (get token "volatility"))
+
+      (set! portfolio_return (+ portfolio_return (* weight ret)))
+      (set! portfolio_risk (+ portfolio_risk (* weight weight vol vol)))
+
+      (set! i (+ i 1)))
+
+    ;; Portfolio volatility (simplified)
+    (define portfolio_vol (/ portfolio_risk 2))  ;; Approximation
+
+    (define fitness (/ (- portfolio_return risk_free_rate) portfolio_vol))
+    (set! fitness_scores (concat fitness_scores [fitness])))
+
+  (log :message "Fitness scores:")
+  (for (score fitness_scores)
+    (log :message " " :value score))
+
+  ;; Find best chromosome
+  (define best_fitness 0.0)
+  (define best_chromosome null)
+  (define chrom_idx 0)
+
+  (while (< chrom_idx (length population))
+    (define fitness (first (drop fitness_scores chrom_idx)))
+    (when (> fitness best_fitness)
+      (set! best_fitness fitness)
+      (set! best_chromosome (first (drop population chrom_idx))))
+    (set! chrom_idx (+ chrom_idx 1)))
+
+  (log :message "Best portfolio found:")
+  (log :message "  Fitness (Sharpe):" :value best_fitness)
+
+  (log :message "  Allocations:")
+  (set! i 0)
+  (while (< i (length best_chromosome))
+    (define weight (first (drop best_chromosome i)))
+    (define token (first (drop memecoin_universe i)))
+    (define symbol (get token "symbol"))
+    (log :message symbol :value weight)
+    (set! i (+ i 1)))
+
+  (log :message "\n=== MONTE CARLO SIMULATION ===")
+
+  ;; Simulate portfolio outcomes
+  (define num_simulations 10)
+  (define time_horizon 30)  ;; days
+
+  (log :message "Running" :value num_simulations)
+  (log :message "simulations")
+
+  (define simulation_results [])
+
+  (define sim_idx 0)
+  (while (< sim_idx num_simulations)
+    (define portfolio_value total_capital)
+
+    ;; Simulate 30 days
+    (define day 0)
+    (while (< day time_horizon)
+      ;; Random return (simplified)
+      (define daily_return (+
+        (* 0.015 (- sim_idx 5))  ;; Pseudo-random
+        0.01))
+
+      (set! portfolio_value (* portfolio_value (+ 1 daily_return)))
+      (set! day (+ day 1)))
+
+    (set! simulation_results (concat simulation_results [portfolio_value]))
+    (set! sim_idx (+ sim_idx 1)))
+
+  ;; Calculate statistics
+  (define total_sim_value 0.0)
+  (for (result simulation_results)
+    (set! total_sim_value (+ total_sim_value result)))
+
+  (define avg_outcome (/ total_sim_value num_simulations))
+
+  (log :message "Average outcome:" :value avg_outcome)
+  (log :message "Expected return:" :value (* (/ (- avg_outcome total_capital) total_capital) 100))
+
+  ;; Find best and worst outcomes
+  (define best_outcome 0.0)
+  (define worst_outcome 999999.0)
+
+  (for (result simulation_results)
+    (when (> result best_outcome) (set! best_outcome result))
+    (when (< result worst_outcome) (set! worst_outcome result)))
+
+  (log :message "Best case:" :value best_outcome)
+  (log :message "Worst case:" :value worst_outcome)
+
+  (log :message "\n=== KELLY CRITERION FOR MEMECO INS ===")
+
+  ;; Optimal position sizing
+  (for (token memecoin_universe)
+    (define symbol (get token "symbol"))
+    (define ret (get token "expected_return"))
+    (define vol (get token "volatility"))
+
+    ;; Win probability (simplified)
+    (define win_prob 0.6)
+    (define loss_prob 0.4)
+
+    ;; Kelly fraction = (p*b - q) / b
+    ;; Where p = win_prob, q = loss_prob, b = win/loss ratio
+    (define win_loss_ratio (/ ret vol))
+    (define kelly_fraction (/ (- (* win_prob win_loss_ratio) loss_prob) win_loss_ratio))
+
+    ;; Half-Kelly for safety
+    (define half_kelly (* kelly_fraction 0.5))
+
+    ;; Cap at 30%
+    (define capped_kelly (if (> half_kelly 0.3) 0.3 half_kelly))
+
+    (log :message symbol)
+    (log :message "  Kelly fraction:" :value kelly_fraction)
+    (log :message "  Half-Kelly:" :value half_kelly)
+    (log :message "  Recommended:" :value capped_kelly))
+
+  (log :message "\n=== REBALANCING STRATEGY ===")
+
+  ;; Dynamic rebalancing based on performance
+  (define current_holdings [
+    {:symbol "PEPE2" :value 30.0 :target 25.0}
+    {:symbol "DOGE3" :value 18.0 :target 20.0}
+    {:symbol "SHIB2" :value 22.0 :target 18.0}
+    {:symbol "BONK2" :value 20.0 :target 22.0}
+    {:symbol "WIF" :value 10.0 :target 15.0}
+  ])
+
+  (log :message "Rebalancing analysis:")
+
+  (define rebalancing_trades [])
+
+  (for (holding current_holdings)
+    (define symbol (get holding "symbol"))
+    (define current (get holding "value"))
+    (define target (get holding "target"))
+
+    (define difference (- target current))
+    (define action (if (> difference 0) "BUY" "SELL"))
+    (define abs_diff (if (< difference 0) (- difference) difference))
+
+    (when (> abs_diff 1.0)  ;; Only rebalance if >1 SOL difference
+      (log :message symbol)
+      (log :message "  " :value action)
+      (log :message "  Amount:" :value abs_diff)
+
+      (set! rebalancing_trades (concat rebalancing_trades [
+        {:symbol symbol :action action :amount abs_diff}
+      ]))))
+
+  (log :message "Total rebalancing trades:" :value (length rebalancing_trades))
+
+  (log :message "\n=== CORRELATION MATRIX ===")
+
+  ;; Diversification analysis
+  (log :message "Analyzing correlations...")
+
+  (define high_correlation_pairs [])
+
+  (define i 0)
+  (while (< i (length memecoin_universe))
+    (define token1 (first (drop memecoin_universe i)))
+    (define symbol1 (get token1 "symbol"))
+
+    (define j (+ i 1))
+    (while (< j (length memecoin_universe))
+      (define token2 (first (drop memecoin_universe j)))
+      (define symbol2 (get token2 "symbol"))
+
+      ;; Simplified correlation
+      (define corr1 (get token1 "correlation"))
+      (define corr2 (get token2 "correlation"))
+      (define avg_corr (/ (+ corr1 corr2) 2))
+
+      (when (> avg_corr 0.6)
+        (log :message symbol1 :value symbol2)
+        (log :message "  Correlation:" :value avg_corr)
+        (set! high_correlation_pairs (concat high_correlation_pairs [1])))
+
+      (set! j (+ j 1)))
+
+    (set! i (+ i 1)))
+
+  (log :message "High correlation pairs:" :value (length high_correlation_pairs))
+
+  (log :message "\n=== FINAL PORTFOLIO RECOMMENDATION ===")
+
+  ;; Combine all optimization techniques
+  (define optimization_score 0.0)
+
+  ;; Positive Sharpe ratios (30%)
+  (when (> best_fitness 1.0) (set! optimization_score (+ optimization_score 0.3)))
+
+  ;; Diversification (25%)
+  (when (< (length high_correlation_pairs) 3) (set! optimization_score (+ optimization_score 0.25)))
+
+  ;; Positive expected return (25%)
+  (when (> avg_outcome total_capital) (set! optimization_score (+ optimization_score 0.25)))
+
+  ;; Reasonable downside (20%)
+  (define downside_pct (* (/ (- total_capital worst_outcome) total_capital) 100))
+  (when (< downside_pct 30) (set! optimization_score (+ optimization_score 0.2)))
+
+  (log :message "Portfolio Quality Score:" :value optimization_score)
+
+  (define portfolio_recommendation (if (>= optimization_score 0.75)
+                                       "🌟 EXCELLENT - Deploy portfolio"
+                                       (if (>= optimization_score 0.5)
+                                           "✅ GOOD - Portfolio viable"
+                                           "⚠️ WEAK - Needs improvement")))
+
+  (log :message "Recommendation:" :value portfolio_recommendation)
+
+  (when (>= optimization_score 0.5)
+    (log :message "\nPortfolio Metrics:")
+    (log :message "  Expected return:" :value (* (/ (- avg_outcome total_capital) total_capital) 100))
+    (log :message "  Sharpe ratio:" :value best_fitness)
+    (log :message "  Max drawdown:" :value downside_pct)
+    (log :message "  Diversification:" :value (- 5 (length high_correlation_pairs))))
+
+  "✅ AI portfolio optimization complete!")

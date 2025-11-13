@@ -1,0 +1,209 @@
+;; ============================================
+;; OVSM Example 43: Advanced Risk Metrics
+;; ============================================
+;;
+;; THEORY: Modern Portfolio Theory Risk Measurement
+;; ------------------------------------------------
+;; This example implements institutional-grade risk metrics used by
+;; hedge funds and risk management teams:
+;;
+;; 1. VaR (Value at Risk): Maximum expected loss at confidence level
+;;    - Answers: "What's the worst loss we expect 95% of the time?"
+;;    - Calculated via historical simulation (sorting returns)
+;;
+;; 2. CVaR/ES (Conditional VaR / Expected Shortfall): Average loss beyond VaR
+;;    - Answers: "If we hit that worst 5%, how bad is the average loss?"
+;;    - More conservative than VaR, accounts for tail risk
+;;
+;; 3. Maximum Drawdown: Peak-to-trough decline
+;;    - Answers: "What's the worst peak-to-valley loss we've seen?"
+;;    - Critical for investor psychology and capital requirements
+;;
+;; 4. Calmar Ratio: Return / Max Drawdown
+;;    - Answers: "Are we compensated enough for the drawdown risk?"
+;;    - Higher is better, >1.5 is excellent
+;;
+;; 5. Sortino Ratio: Return / Downside Deviation
+;;    - Like Sharpe, but only penalizes downside volatility
+;;    - Better for asymmetric return distributions
+;;
+;; IMPLEMENTATION NOTES:
+;; - Uses historical simulation (non-parametric)
+;; - Handles division-by-zero edge cases
+;; - Aggregates into composite risk score
+;; - Maps to actionable risk levels (LOW/MEDIUM/HIGH)
+;;
+(do
+  (log :message "=== ADVANCED RISK METRICS ===")
+
+  ;; Portfolio returns (7-day sample, decimal format: -0.02 = -2%)
+  (define returns [-0.02 0.03 -0.01 0.04 -0.03 0.05 -0.02])
+
+  ;; ============================================
+  ;; VALUE AT RISK (VaR) - 95% Confidence Level
+  ;; ============================================
+  ;;
+  ;; THEORY: VaR answers "What is the maximum loss we expect 95% of the time?"
+  ;; - Historical simulation method: Sort returns, find 5th percentile
+  ;; - 95% confidence = 5th percentile (worst 5% of outcomes)
+  ;; - Non-parametric (no distribution assumptions)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Pre-sorted returns array (ascending order)
+  ;; - Index 1 ≈ 5th percentile for 7 observations
+  ;; - Use `drop` + `first` to access by index
+  ;;
+  (define sorted_returns [-0.03 -0.02 -0.02 -0.01 0.03 0.04 0.05])
+  (define var_95_idx 1)  ;; 5th percentile ≈ index 1 (1/7 = 14% ≈ closest to 5%)
+  (define var_95 (first (drop sorted_returns var_95_idx)))
+
+  (log :message "VaR 95%:" :value var_95)
+
+  ;; ============================================
+  ;; CONDITIONAL VaR (CVaR / Expected Shortfall)
+  ;; ============================================
+  ;;
+  ;; THEORY: CVaR answers "Given we're in the worst 5%, what's the average loss?"
+  ;; - More conservative than VaR (captures tail risk)
+  ;; - Basel III uses Expected Shortfall for bank capital requirements
+  ;; - Coherent risk measure (unlike VaR, which is not subadditive)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Average of all returns worse than VaR threshold
+  ;; - For our data: average of [-0.03, -0.02] = -0.025
+  ;; - Production systems would use dynamic calculation over sorted array
+  ;;
+  (define cvar_95 (/ (+ -0.03 -0.02) 2))
+
+  (log :message "CVaR 95%:" :value cvar_95)
+
+  ;; ============================================
+  ;; MAXIMUM DRAWDOWN
+  ;; ============================================
+  ;;
+  ;; THEORY: Largest peak-to-trough decline in portfolio value
+  ;; - Critical for:
+  ;;   * Investor psychology (pain tolerance)
+  ;;   * Capital requirements (margin calls)
+  ;;   * Strategy viability (recovery time)
+  ;; - Formula: (Peak - Trough) / Peak × 100
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Track running maximum (peak)
+  ;; - Find worst subsequent value (trough)
+  ;; - Calculate percentage decline
+  ;; - Here: 100 → 92 = 8% drawdown
+  ;; - Real systems track this continuously in equity curve
+  ;;
+  (define peak 100)
+  (define trough 92)
+  (define max_dd (* (/ (- peak trough) peak) 100))
+
+  (log :message "Max drawdown:" :value max_dd)
+
+  ;; ============================================
+  ;; CALMAR RATIO
+  ;; ============================================
+  ;;
+  ;; THEORY: Return / Maximum Drawdown
+  ;; - Measures return per unit of drawdown risk
+  ;; - Interpretation:
+  ;;   * <1.0 = Poor (not compensated for drawdown)
+  ;;   * 1.0-1.5 = Acceptable
+  ;;   * >1.5 = Excellent (high return relative to max loss)
+  ;; - Useful for comparing strategies with different risk profiles
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - annual_return / (max_dd / 100)
+  ;; - Edge case: If max_dd = 0, return annual_return (perfect)
+  ;; - Division-by-zero protection critical for production
+  ;;
+  (define annual_return 0.15)
+  (define calmar (if (> max_dd 0)
+                     (/ annual_return (/ max_dd 100))
+                     annual_return))
+
+  (log :message "Calmar ratio:" :value calmar)
+
+  ;; ============================================
+  ;; SORTINO RATIO (Downside Deviation)
+  ;; ============================================
+  ;;
+  ;; THEORY: Like Sharpe Ratio, but only penalizes downside volatility
+  ;; - Formula: Return / Downside Deviation
+  ;; - Downside deviation = sqrt(mean(negative_returns²))
+  ;; - Better for strategies with asymmetric returns (positive skew)
+  ;; - Doesn't penalize upside volatility (unlike Sharpe)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - Filter only negative returns
+  ;; - Calculate squared deviations
+  ;; - Approximate sqrt (we use simple average for demonstration)
+  ;; - Real systems would use proper sqrt calculation
+  ;;
+  (define downside_returns [-0.02 -0.01 -0.03 -0.02])
+  (define downside_sum 0.0)
+  (for (ret downside_returns)
+    (set! downside_sum (+ downside_sum (* ret ret))))
+
+  ;; Approximate downside volatility (simplified for demonstration)
+  (define downside_vol (/ (+ (/ downside_sum (length downside_returns)) 1) 2))
+  (define sortino (/ annual_return downside_vol))
+
+  (log :message "Sortino ratio:" :value sortino)
+
+  ;; ============================================
+  ;; TAIL RISK (99% VaR)
+  ;; ============================================
+  ;;
+  ;; THEORY: Extreme worst-case scenario (1-in-100 event)
+  ;; - 99% VaR = worst 1% of outcomes
+  ;; - Used for stress testing and extreme event planning
+  ;; - Regulatory requirement for many institutions
+  ;;
+  ;; IMPLEMENTATION:
+  ;; - For small sample, use worst observed return
+  ;; - Production systems use longer history (250+ days)
+  ;;
+  (define var_99 -0.03)
+  (log :message "Tail risk (VaR 99%):" :value var_99)
+
+  ;; ============================================
+  ;; COMPOSITE RISK SCORING SYSTEM
+  ;; ============================================
+  ;;
+  ;; THEORY: Aggregate multiple risk metrics into single score
+  ;; - Each metric contributes weighted component
+  ;; - Allows holistic risk assessment
+  ;; - Maps to actionable risk levels (LOW/MEDIUM/HIGH)
+  ;;
+  ;; SCORING CRITERIA (0-1 scale):
+  ;; - VaR < -2.5% → +0.3 (low tail risk)
+  ;; - Max DD < 10% → +0.3 (manageable drawdown)
+  ;; - Calmar > 1.5 → +0.2 (good risk-adjusted return)
+  ;; - Sortino > 1.0 → +0.2 (acceptable downside risk)
+  ;;
+  ;; RISK LEVELS:
+  ;; - ≥0.75 = LOW RISK (3+ green signals)
+  ;; - ≥0.50 = MEDIUM RISK (2 green signals)
+  ;; - <0.50 = HIGH RISK (0-1 green signals)
+  ;;
+  (define risk_score 0.0)
+
+  (when (> var_95 -0.025) (set! risk_score (+ risk_score 0.3)))
+  (when (< max_dd 10) (set! risk_score (+ risk_score 0.3)))
+  (when (> calmar 1.5) (set! risk_score (+ risk_score 0.2)))
+  (when (> sortino 1.0) (set! risk_score (+ risk_score 0.2)))
+
+  (log :message "Risk score:" :value risk_score)
+
+  ;; Map risk score to human-readable level
+  (define risk_level (if (>= risk_score 0.75)
+                         "✅ LOW RISK"
+                         (if (>= risk_score 0.5)
+                             "⚠️ MEDIUM RISK"
+                             "🔴 HIGH RISK")))
+
+  (log :message "Risk level:" :value risk_level)
+
+  "✅ Advanced risk metrics complete!")

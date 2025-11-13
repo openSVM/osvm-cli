@@ -1,0 +1,194 @@
+;; ============================================
+;; OVSM Example 32: DCA with AI Timing
+;; ============================================
+;;
+;; THEORY: AI-Enhanced Dollar-Cost Averaging
+;; -------------------------------------------
+;; Dollar-cost averaging (DCA) reduces timing risk by spreading purchases
+;; over time. Adding AI timing signals can enhance returns by increasing
+;; allocation during optimal entry points (oversold, high sentiment).
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. TRADITIONAL DCA:
+;;    - Fixed amount invested at regular intervals
+;;    - Reduces timing risk (average entry price)
+;;    - Formula: shares = fixed_amount / current_price
+;;    - Benefit: Lower average cost in declining markets
+;;
+;; 2. AI TIMING ENHANCEMENT:
+;;    - Use ML score to adjust DCA amount
+;;    - Formula: dca_amount = base × (1 + α×(ai_score - 0.5))
+;;    - α = sensitivity parameter (0.5 = moderate)
+;;    - AI score range: [0, 1] where 1 = strong buy
+;;
+;; 3. SIGNAL COMBINATION:
+;;    - RSI: Relative Strength Index (oversold < 30)
+;;    - Sentiment: Market sentiment score (bullish > 0.5)
+;;    - AI score: ML model prediction
+;;    - Combined: Boost allocation when all align
+;;
+;; 4. RISK MANAGEMENT:
+;;    - Cap maximum multiplier (e.g., 1.5x)
+;;    - Minimum allocation floor (never skip)
+;;    - Budget constraints per period
+;;
+;; ACADEMIC REFERENCES:
+;; - Constantinides (1979): "A Note on the Suboptimality of Dollar-Cost Averaging"
+;; - Dubil (2005): "An Analytic Solution for the Average Investment"
+;; - Rozeff (1984): "Market Timing: Better to be Out or In?"
+;;
+;; IMPLEMENTATION:
+;; Combines base DCA with AI timing signals (RSI, sentiment, ML score)
+;; to optimize allocation amounts.
+;;
+(do
+  (log :message "=== AI-ENHANCED DCA ===")
+
+  ;; ============================================
+  ;; DCA PARAMETERS
+  ;; ============================================
+  ;;
+  ;; Base strategy:
+  ;; - Weekly budget: $100
+  ;; - Regular interval: Every 7 days
+  ;; - No timing (traditional DCA)
+  ;;
+  ;; AI enhancement:
+  ;; - AI score: 0.75 (bullish signal)
+  ;; - Sensitivity: 0.5 (moderate adjustment)
+  ;;
+  (define weekly_budget 100.0)
+  (define ai_score 0.75)
+
+  (log :message "Weekly budget:" :value weekly_budget)
+  (log :message "AI score:" :value ai_score)
+
+  ;; ============================================
+  ;; TIMING MULTIPLIER CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Adjust allocation based on AI confidence
+  ;; - Multiplier = 1.0 + sensitivity × (score - 0.5)
+  ;; - score = 0.5 → multiplier = 1.0 (neutral)
+  ;; - score = 1.0 → multiplier = 1.25 (max bullish)
+  ;; - score = 0.0 → multiplier = 0.75 (max bearish)
+  ;;
+  ;; CALCULATION:
+  ;; - AI score: 0.75
+  ;; - Multiplier: 1.0 + 0.5 × (0.75 - 0.5)
+  ;;            = 1.0 + 0.5 × 0.25
+  ;;            = 1.0 + 0.125 = 1.125
+  ;;
+  (define timing_multiplier (+ 1.0 (* (- ai_score 0.5) 0.5)))
+
+  (log :message "Timing multiplier:" :value timing_multiplier)
+
+  ;; ============================================
+  ;; ADJUSTED DCA AMOUNT
+  ;; ============================================
+  ;;
+  ;; THEORY: Scale base allocation by multiplier
+  ;; - Base: $100
+  ;; - Multiplier: 1.125
+  ;; - Adjusted: $100 × 1.125 = $112.50
+  ;;
+  ;; INTERPRETATION:
+  ;; - AI sees bullish opportunity (score 0.75)
+  ;; - Increase allocation by 12.5%
+  ;; - Buy more during favorable conditions
+  ;;
+  (define dca_amount (* weekly_budget timing_multiplier))
+
+  (log :message "\n=== ALLOCATION ADJUSTMENT ===")
+  (log :message "Base DCA:" :value weekly_budget)
+  (log :message "AI-adjusted DCA:" :value dca_amount)
+  (log :message "Adjustment:" :value (- dca_amount weekly_budget))
+
+  ;; ============================================
+  ;; TECHNICAL INDICATORS
+  ;; ============================================
+  ;;
+  ;; THEORY: Combine multiple signals
+  ;; - RSI: 35 (slightly oversold, good entry)
+  ;; - Sentiment: 0.6 (moderately bullish)
+  ;; - Both support increasing allocation
+  ;;
+  ;; RSI INTERPRETATION:
+  ;; - < 30: Oversold (strong buy)
+  ;; - 30-70: Normal range
+  ;; - > 70: Overbought (reduce allocation)
+  ;;
+  ;; SENTIMENT INTERPRETATION:
+  ;; - > 0.5: Bullish (increase allocation)
+  ;; - < 0.5: Bearish (decrease allocation)
+  ;;
+  (define rsi 35)
+  (define sentiment 0.6)
+
+  (log :message "\n=== SIGNAL ANALYSIS ===")
+  (log :message "RSI:" :value rsi)
+  (log :message "Sentiment:" :value sentiment)
+
+  (define oversold (< rsi 30))
+  (define bullish_sentiment (> sentiment 0.5))
+
+  (log :message "Oversold:" :value oversold)
+  (log :message "Bullish sentiment:" :value bullish_sentiment)
+
+  ;; ============================================
+  ;; BONUS ALLOCATION LOGIC
+  ;; ============================================
+  ;;
+  ;; THEORY: Extra allocation when all signals align
+  ;; - Condition: Oversold RSI + Bullish sentiment
+  ;; - Bonus: 1.5x multiplier (50% extra)
+  ;; - Rationale: High-conviction setup
+  ;;
+  ;; CALCULATION:
+  ;; - Base adjusted: $112.50
+  ;; - Oversold: Yes (RSI = 35 < 30? No, actually false)
+  ;; - Sentiment: Yes (0.6 > 0.5)
+  ;; - No bonus (RSI not < 30)
+  ;;
+  ;; IF oversold was true:
+  ;; - Bonus: $112.50 × 1.5 = $168.75
+  ;;
+  (when (and oversold bullish_sentiment)
+    (set! dca_amount (* dca_amount 1.5))
+    (log :message "\n🎯 BONUS ALLOCATION")
+    (log :message "  Reason: Oversold + Bullish sentiment")
+    (log :message "  Multiplier: 1.5x"))
+
+  ;; ============================================
+  ;; FINAL ALLOCATION DECISION
+  ;; ============================================
+  ;;
+  ;; THEORY: Final DCA amount after all adjustments
+  ;; - Base: $100
+  ;; - AI adjustment: +$12.50
+  ;; - Bonus: N/A (not oversold enough)
+  ;; - Final: $112.50
+  ;;
+  (log :message "\n=== FINAL ALLOCATION ===")
+  (log :message "Weekly budget:" :value weekly_budget)
+  (log :message "Final DCA amount:" :value dca_amount)
+  (log :message "Total adjustment:" :value (- dca_amount weekly_budget))
+  (log :message "Adjustment (%):" :value (* (/ (- dca_amount weekly_budget) weekly_budget) 100))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real AI-enhanced DCA systems would add:
+  ;; 1. Machine learning models (LSTM, XGBoost) for timing
+  ;; 2. Multi-timeframe signal aggregation
+  ;; 3. Volatility-adjusted position sizing
+  ;; 4. Correlation analysis across assets
+  ;; 5. Bayesian updating of AI confidence
+  ;; 6. Backtest performance metrics
+  ;; 7. Risk parity allocation across portfolio
+  ;; 8. Tax-loss harvesting integration
+  ;;
+
+  "✅ AI DCA complete!")

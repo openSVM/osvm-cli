@@ -1,0 +1,646 @@
+;; ============================================
+;; OVSM Example 24: Order Flow Imbalance Trading
+;; ============================================
+;;
+;; THEORY: Market Microstructure and Order Flow Analysis
+;; ------------------------------------------------------
+;; Order Flow Imbalance (OFI) measures buying vs selling pressure
+;; through limit order book dynamics. Pioneered by Cont et al. (2014)
+;; and refined by Harris (2003).
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. ORDER FLOW IMBALANCE (OFI):
+;;    - Measures net buying/selling pressure in limit order book
+;;    - Formula: OFI = (bid_volume - ask_volume) / (bid_volume + ask_volume)
+;;    - Range: [-1, +1] where +1 = pure buy pressure, -1 = pure sell pressure
+;;    - Predictive of short-term price movements (10-100ms lead time)
+;;
+;; 2. VOLUME-WEIGHTED MID PRICE (VWMP):
+;;    - More accurate than simple mid price
+;;    - Weights each level by available liquidity
+;;    - Formula: VWMP = Σ(price × size) / Σ(size)
+;;    - Leads mid price by milliseconds (Stoikov 2018)
+;;
+;; 3. MICROPRICE:
+;;    - Best estimate of "true" price at ultra-short timescales
+;;    - Formula: (bid × ask_size + ask × bid_size) / (bid_size + ask_size)
+;;    - Weights prices by opposite side depth
+;;    - Used by HFT market makers for quote positioning
+;;
+;; 4. TOXICITY INDEX:
+;;    - Measures informed vs uninformed order flow
+;;    - High aggressive ratio = toxic flow (adverse selection risk)
+;;    - Market makers widen spreads when toxicity detected
+;;    - Based on Easley et al. (2012) probability of informed trading
+;;
+;; WHY THIS MATTERS:
+;; - OFI predicts price movements 10-100ms ahead
+;; - Microprice provides edge over mid price
+;; - Detecting toxic flow prevents adverse selection
+;; - Queue position affects fill probability and profit
+;;
+;; ACADEMIC REFERENCES:
+;; - Cont et al. (2014): "The Price Impact of Order Book Events"
+;; - Harris (2003): "Trading and Exchanges" - Chapter 7
+;; - Stoikov (2018): "The Microprice: A High Frequency Estimator"
+;; - Easley et al. (2012): "Flow Toxicity and Liquidity"
+;;
+;; IMPLEMENTATION:
+;; Analyzes real-time order book to detect imbalances and recommend
+;; optimal limit order placement strategy.
+;;
+(do
+  (log :message "=== ORDER BOOK SNAPSHOT ===")
+
+  ;; ============================================
+  ;; ORDER BOOK DATA STRUCTURE
+  ;; ============================================
+  ;;
+  ;; Real-time level-2 order book data
+  ;; Each level contains:
+  ;; - price: Limit price for this level
+  ;; - size: Total shares available at this price
+  ;; - orders: Number of individual orders (for queue analysis)
+  ;;
+  ;; MARKET CONTEXT:
+  ;; - Bid side: 750 shares across 43 orders
+  ;; - Ask side: 605 shares across 35 orders
+  ;; - Imbalance: More bid volume suggests upward pressure
+  ;;
+  (define bids [
+    {:price 100.5 :size 50 :orders 3}   ;; Best bid - closest to mid
+    {:price 100.4 :size 80 :orders 5}   ;; 2nd level
+    {:price 100.3 :size 120 :orders 8}  ;; 3rd level
+    {:price 100.2 :size 200 :orders 12} ;; 4th level
+    {:price 100.1 :size 300 :orders 15} ;; 5th level (deep support)
+  ])
+
+  (define asks [
+    {:price 100.6 :size 45 :orders 2}   ;; Best ask - potential resistance
+    {:price 100.7 :size 70 :orders 4}   ;; 2nd level
+    {:price 100.8 :size 90 :orders 6}   ;; 3rd level
+    {:price 100.9 :size 150 :orders 9}  ;; 4th level
+    {:price 101.0 :size 250 :orders 14} ;; 5th level (supply zone)
+  ])
+
+  (log :message "Bid levels:" :value (length bids))
+  (log :message "Ask levels:" :value (length asks))
+
+  ;; ============================================
+  ;; TOTAL VOLUME CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Aggregate liquidity on each side
+  ;; - Total bid volume = buying pressure
+  ;; - Total ask volume = selling pressure
+  ;; - Difference indicates dominant force
+  ;;
+  ;; CALCULATION:
+  ;; - Bid: 50 + 80 + 120 + 200 + 300 = 750 shares
+  ;; - Ask: 45 + 70 + 90 + 150 + 250 = 605 shares
+  ;; - Net: +145 shares bid excess
+  ;;
+  (define total_bid_volume 0)
+  (define total_ask_volume 0)
+
+  (for (bid bids)
+    (define size (get bid "size"))
+    (set! total_bid_volume (+ total_bid_volume size)))
+
+  (for (ask asks)
+    (define size (get ask "size"))
+    (set! total_ask_volume (+ total_ask_volume size)))
+
+  (log :message "Total bid volume:" :value total_bid_volume)
+  (log :message "Total ask volume:" :value total_ask_volume)
+
+  (log :message "\n=== ORDER FLOW IMBALANCE ===")
+
+  ;; ============================================
+  ;; OFI CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Core metric for flow imbalance
+  ;; - OFI = (bid_vol - ask_vol) / (bid_vol + ask_vol)
+  ;; - Normalized to [-1, +1] range
+  ;; - Shows relative pressure independent of absolute size
+  ;;
+  ;; CALCULATION:
+  ;; - Numerator: 750 - 605 = 145 (net bid excess)
+  ;; - Denominator: 750 + 605 = 1355 (total liquidity)
+  ;; - OFI: 145 / 1355 ≈ 0.107 (10.7% bid dominance)
+  ;;
+  ;; INTERPRETATION:
+  ;; - OFI > 0.1: Bullish signal (strong buy pressure)
+  ;; - OFI < -0.1: Bearish signal (strong sell pressure)
+  ;; - |OFI| < 0.1: Neutral (balanced book)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - OFI > 0.1 predicts upward price movement
+  ;; - Expected move: ~5-10 bps in next 10-100ms
+  ;; - Strategy: Join bid queue to capture edge
+  ;;
+  (define total_volume (+ total_bid_volume total_ask_volume))
+  (define ofi (/ (- total_bid_volume total_ask_volume) total_volume))
+
+  (log :message "Order Flow Imbalance:" :value ofi)
+
+  (define ofi_signal (if (> ofi 0.1)
+                         "🟢 BULLISH - Buy pressure"
+                         (if (< ofi -0.1)
+                             "🔴 BEARISH - Sell pressure"
+                             "🟡 NEUTRAL - Balanced")))
+
+  (log :message "OFI Signal:" :value ofi_signal)
+
+  (log :message "\n=== BID-ASK SPREAD ANALYSIS ===")
+
+  ;; ============================================
+  ;; SPREAD COST AND LIQUIDITY
+  ;; ============================================
+  ;;
+  ;; THEORY: Spread measures transaction cost
+  ;; - Spread = ask - bid (absolute cost)
+  ;; - Spread (bps) = (spread / mid) × 10000
+  ;; - Basis points normalize across price levels
+  ;;
+  ;; CALCULATION:
+  ;; - Best bid: 100.5
+  ;; - Best ask: 100.6
+  ;; - Spread: 0.1
+  ;; - Mid: 100.55
+  ;; - Spread (bps): (0.1 / 100.55) × 10000 ≈ 9.95 bps
+  ;;
+  ;; INTERPRETATION:
+  ;; - <10 bps: Tight spread, highly liquid
+  ;; - 10-20 bps: Normal spread, moderate liquidity
+  ;; - >20 bps: Wide spread, illiquid (risky)
+  ;;
+  ;; LIQUIDITY ASSESSMENT:
+  ;; - Target: <15 bps for safe execution
+  ;; - Current: ~10 bps = acceptable liquidity
+  ;;
+  (define best_bid_price (get (first bids) "price"))
+  (define best_ask_price (get (first asks) "price"))
+  (define spread (- best_ask_price best_bid_price))
+  (define mid_price (/ (+ best_bid_price best_ask_price) 2))
+  (define spread_bps (* (/ spread mid_price) 10000))
+
+  (log :message "Best bid:" :value best_bid_price)
+  (log :message "Best ask:" :value best_ask_price)
+  (log :message "Spread:" :value spread)
+  (log :message "Spread (bps):" :value spread_bps)
+
+  ;; Wide spread = low liquidity (adverse selection risk)
+  (define spread_threshold 15)  ;; 15 bps threshold
+  (define is_liquid (< spread_bps spread_threshold))
+
+  (log :message "Sufficient liquidity:" :value is_liquid)
+
+  (log :message "\n=== VOLUME-WEIGHTED MID PRICE ===")
+
+  ;; ============================================
+  ;; VWMP CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Superior price estimate vs simple mid
+  ;; - Weights each price level by available size
+  ;; - Accounts for depth distribution
+  ;; - Formula: VWMP = Σ(price × size) / Σ(size)
+  ;;
+  ;; CALCULATION:
+  ;; Bid side:
+  ;; - 100.5 × 50 = 5,025
+  ;; - 100.4 × 80 = 8,032
+  ;; - 100.3 × 120 = 12,036
+  ;; - 100.2 × 200 = 20,040
+  ;; - 100.1 × 300 = 30,030
+  ;; - Sum: 75,163
+  ;;
+  ;; Ask side:
+  ;; - 100.6 × 45 = 4,527
+  ;; - 100.7 × 70 = 7,049
+  ;; - 100.8 × 90 = 9,072
+  ;; - 100.9 × 150 = 15,135
+  ;; - 101.0 × 250 = 25,250
+  ;; - Sum: 61,033
+  ;;
+  ;; VWMP = (75,163 + 61,033) / 1,355 ≈ 100.44
+  ;;
+  ;; INTERPRETATION:
+  ;; - VWMP > mid: More bid depth (buy pressure)
+  ;; - VWMP < mid: More ask depth (sell pressure)
+  ;; - Used for reference price in execution
+  ;;
+  (define weighted_bid_sum 0.0)
+  (define weighted_ask_sum 0.0)
+
+  (for (bid bids)
+    (define price (get bid "price"))
+    (define size (get bid "size"))
+    (set! weighted_bid_sum (+ weighted_bid_sum (* price size))))
+
+  (for (ask asks)
+    (define price (get ask "price"))
+    (define size (get ask "size"))
+    (set! weighted_ask_sum (+ weighted_ask_sum (* price size))))
+
+  (define vwmp (/ (+ weighted_bid_sum weighted_ask_sum) total_volume))
+
+  (log :message "VWMP:" :value vwmp)
+  (log :message "Mid price:" :value mid_price)
+  (log :message "VWMP vs Mid:" :value (- vwmp mid_price))
+
+  ;; VWMP > mid = more bid pressure (bullish)
+  (define vwmp_signal (if (> vwmp mid_price)
+                          "Buy pressure (VWMP > mid)"
+                          "Sell pressure (VWMP < mid)"))
+
+  (log :message "VWMP Signal:" :value vwmp_signal)
+
+  (log :message "\n=== DEPTH IMBALANCE ===")
+
+  ;; ============================================
+  ;; TOP-OF-BOOK DEPTH ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Near-market depth predicts short-term moves
+  ;; - Top 3 levels capture ~70% of execution flow
+  ;; - More predictive than total depth
+  ;; - Focus on actionable liquidity
+  ;;
+  ;; CALCULATION:
+  ;; - Top 3 bids: 50 + 80 + 120 = 250 shares
+  ;; - Top 3 asks: 45 + 70 + 90 = 205 shares
+  ;; - Imbalance: (250 - 205) / (250 + 205) = 0.099
+  ;;
+  ;; INTERPRETATION:
+  ;; - 9.9% imbalance confirms bullish OFI
+  ;; - Consistent with overall book imbalance
+  ;; - High confidence in upward pressure
+  ;;
+  (define top_n 3)
+  (define top_bid_volume 0)
+  (define top_ask_volume 0)
+
+  (define i 0)
+  (while (< i top_n)
+    (define bid (first (drop bids i)))
+    (define ask (first (drop asks i)))
+    (set! top_bid_volume (+ top_bid_volume (get bid "size")))
+    (set! top_ask_volume (+ top_ask_volume (get ask "size")))
+    (set! i (+ i 1)))
+
+  (define depth_imbalance (/ (- top_bid_volume top_ask_volume) (+ top_bid_volume top_ask_volume)))
+
+  (log :message "Top 3 bid volume:" :value top_bid_volume)
+  (log :message "Top 3 ask volume:" :value top_ask_volume)
+  (log :message "Depth imbalance:" :value depth_imbalance)
+
+  (log :message "\n=== MICROPRICE CALCULATION ===")
+
+  ;; ============================================
+  ;; MICROPRICE: THE TRUE PRICE
+  ;; ============================================
+  ;;
+  ;; THEORY: Stoikov (2018) optimal price estimator
+  ;; - Microprice = (bid × ask_size + ask × bid_size) / (bid_size + ask_size)
+  ;; - Weights prices by opposite side depth
+  ;; - Leads mid price by 5-50 milliseconds
+  ;;
+  ;; CALCULATION:
+  ;; - Best bid: 100.5, size: 50
+  ;; - Best ask: 100.6, size: 45
+  ;; - Numerator: (100.5 × 45) + (100.6 × 50)
+  ;;            = 4,522.5 + 5,030 = 9,552.5
+  ;; - Denominator: 50 + 45 = 95
+  ;; - Microprice: 9,552.5 / 95 ≈ 100.553
+  ;;
+  ;; INTERPRETATION:
+  ;; - Mid price: 100.55
+  ;; - Microprice: 100.553
+  ;; - Edge: +0.003 (0.3 bps)
+  ;; - Microprice > mid suggests upward bias
+  ;;
+  ;; WHY IT MATTERS:
+  ;; - HFT firms trade on microprice edge
+  ;; - 0.3 bps × 1M shares = $300 profit
+  ;; - Predictive of next trade direction
+  ;;
+  (define best_bid_size (get (first bids) "size"))
+  (define best_ask_size (get (first asks) "size"))
+
+  (define microprice (/ (+
+    (* best_bid_price best_ask_size)
+    (* best_ask_price best_bid_size))
+    (+ best_bid_size best_ask_size)))
+
+  (log :message "Microprice:" :value microprice)
+  (log :message "Mid price:" :value mid_price)
+
+  ;; Microprice leads mid price by milliseconds
+  (define price_edge (- microprice mid_price))
+  (log :message "Price edge:" :value price_edge)
+
+  (log :message "\n=== AGGRESSIVE ORDER DETECTION ===")
+
+  ;; ============================================
+  ;; MARKET TAKER ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Aggressive orders reveal urgency
+  ;; - Market orders = immediate execution (aggressive)
+  ;; - Limit orders = patient execution (passive)
+  ;; - Aggressive imbalance predicts direction
+  ;;
+  ;; DATA:
+  ;; Recent trades (last 10 seconds):
+  ;; - Buy aggressor: 30 + 40 + 25 = 95 shares
+  ;; - Sell aggressor: 20 shares
+  ;; - Net: +75 shares buy aggression
+  ;;
+  ;; INTERPRETATION:
+  ;; - Strong buy urgency (4.75:1 ratio)
+  ;; - Suggests informed buyers
+  ;; - Confirms bullish OFI signal
+  ;;
+  (define recent_trades [
+    {:price 100.6 :size 30 :side "buy" :aggressive true}   ;; Buyer lifted offer
+    {:price 100.5 :size 20 :side "sell" :aggressive true}  ;; Seller hit bid
+    {:price 100.6 :size 40 :side "buy" :aggressive true}   ;; Strong buy
+    {:price 100.6 :size 25 :side "buy" :aggressive true}   ;; Continued buying
+  ])
+
+  (define aggressive_buy_volume 0)
+  (define aggressive_sell_volume 0)
+
+  (for (trade recent_trades)
+    (define side (get trade "side"))
+    (define size (get trade "size"))
+    (define aggressive (get trade "aggressive"))
+
+    (when aggressive
+      (when (= side "buy")
+        (set! aggressive_buy_volume (+ aggressive_buy_volume size)))
+      (when (= side "sell")
+        (set! aggressive_sell_volume (+ aggressive_sell_volume size)))))
+
+  (log :message "Aggressive buy volume:" :value aggressive_buy_volume)
+  (log :message "Aggressive sell volume:" :value aggressive_sell_volume)
+
+  (define aggressive_imbalance (/ (- aggressive_buy_volume aggressive_sell_volume)
+                                   (+ aggressive_buy_volume aggressive_sell_volume)))
+
+  (log :message "Aggressive imbalance:" :value aggressive_imbalance)
+
+  (log :message "\n=== TOXICITY INDEX ===")
+
+  ;; ============================================
+  ;; FLOW TOXICITY MEASUREMENT
+  ;; ============================================
+  ;;
+  ;; THEORY: Easley et al. (2012) - VPIN metric
+  ;; - Toxic flow = informed traders (adverse selection)
+  ;; - Measured by aggressive trade concentration
+  ;; - High toxicity → widen spreads or skip trading
+  ;;
+  ;; CALCULATION:
+  ;; - Total aggressive volume: 95 + 20 = 115 shares
+  ;; - Average trade size: 30 shares (115 / 4 trades)
+  ;; - Expected volume: 4 trades × 30 = 120 shares
+  ;; - Aggressive ratio: 115 / 120 ≈ 0.96
+  ;;
+  ;; INTERPRETATION:
+  ;; - Ratio < 1.0: Normal flow (uninformed)
+  ;; - Ratio 1.0-1.5: Elevated toxicity
+  ;; - Ratio > 1.5: Highly toxic (informed trading)
+  ;;
+  ;; RISK:
+  ;; - Current: 0.96 (safe to trade)
+  ;; - Threshold: 1.2 (warning level)
+  ;; - No adverse selection risk detected
+  ;;
+  (define total_trades (length recent_trades))
+  (define aggressive_ratio (/ (+ aggressive_buy_volume aggressive_sell_volume)
+                               (* total_trades 30)))  ;; Avg size baseline
+
+  (log :message "Aggressive ratio:" :value aggressive_ratio)
+
+  ;; High aggressive ratio = informed traders (toxic flow)
+  (define toxicity_threshold 1.2)
+  (define is_toxic (> aggressive_ratio toxicity_threshold))
+
+  (log :message "Toxic flow detected:" :value is_toxic)
+
+  (log :message "\n=== QUEUE POSITION ADVANTAGE ===")
+
+  ;; ============================================
+  ;; PRIORITY IN PRICE-TIME QUEUE
+  ;; ============================================
+  ;;
+  ;; THEORY: Order priority in limit order book
+  ;; - FIFO (First In, First Out) matching
+  ;; - Early position = higher fill probability
+  ;; - Queue jumping requires price improvement
+  ;;
+  ;; CALCULATION:
+  ;; - Our order: 2nd position out of 3 orders
+  ;; - Position: 2 / 3 = 67th percentile
+  ;; - Target: Top 30% for good fills
+  ;;
+  ;; INTERPRETATION:
+  ;; - 67% position = back of queue (poor)
+  ;; - Need 1st or 2nd position for reliable fills
+  ;; - Consider price improvement (+0.01)
+  ;;
+  ;; FILL PROBABILITY:
+  ;; - 1st position: ~90% fill rate
+  ;; - 2nd-3rd: ~60% fill rate
+  ;; - 4th+: ~30% fill rate
+  ;;
+  (define our_order_position 2)  ;; 2nd in queue
+  (define total_orders_ahead (get (first bids) "orders"))
+
+  (define queue_position_pct (* (/ our_order_position total_orders_ahead) 100))
+
+  (log :message "Our queue position:" :value our_order_position)
+  (log :message "Queue position %:" :value queue_position_pct)
+
+  ;; Top 30% of queue = good fill probability
+  (define good_position (< queue_position_pct 30))
+
+  (log :message "Good queue position:" :value good_position)
+
+  (log :message "\n=== SMART ORDER PLACEMENT ===")
+
+  ;; ============================================
+  ;; MULTI-FACTOR PLACEMENT SCORING
+  ;; ============================================
+  ;;
+  ;; THEORY: Combine multiple signals for decision
+  ;; - Weight each factor by predictive power
+  ;; - Score range: [0, 1]
+  ;; - Threshold: 0.75 for execution
+  ;;
+  ;; FACTORS:
+  ;; 1. OFI (30% weight): Order flow direction
+  ;; 2. Depth imbalance (25%): Near-market pressure
+  ;; 3. Aggressive imbalance (25%): Urgency signal
+  ;; 4. Non-toxic flow (20%): Safety check
+  ;;
+  ;; SCORING:
+  ;; - OFI > 0.1: +0.30 (bullish flow)
+  ;; - Depth > 0.1: +0.25 (bid depth)
+  ;; - Aggressive > 0.2: +0.25 (buy urgency)
+  ;; - Not toxic: +0.20 (safe flow)
+  ;; - Total: 1.00 (maximum bullish)
+  ;;
+  (define placement_score 0.0)
+
+  ;; Positive OFI (30%)
+  (when (> ofi 0.1) (set! placement_score (+ placement_score 0.3)))
+
+  ;; Positive depth imbalance (25%)
+  (when (> depth_imbalance 0.1) (set! placement_score (+ placement_score 0.25)))
+
+  ;; Positive aggressive imbalance (25%)
+  (when (> aggressive_imbalance 0.2) (set! placement_score (+ placement_score 0.25)))
+
+  ;; Not toxic (20%)
+  (when (not is_toxic) (set! placement_score (+ placement_score 0.2)))
+
+  (log :message "Placement score:" :value placement_score)
+
+  (define placement_strategy (if (>= placement_score 0.75)
+                                 "🎯 BUY at BID - Join queue"
+                                 (if (>= placement_score 0.5)
+                                     "✅ BUY at MID - Passive"
+                                     "⏸️ WAIT - Poor conditions")))
+
+  (log :message "Placement strategy:" :value placement_strategy)
+
+  (log :message "\n=== EXECUTION SIMULATION ===")
+
+  ;; ============================================
+  ;; ORDER EXECUTION MODELING
+  ;; ============================================
+  ;;
+  ;; THEORY: Pre-trade fill probability estimation
+  ;; - Depends on queue position and OFI
+  ;; - Good position + bullish OFI = high probability
+  ;; - Back of queue + neutral OFI = low probability
+  ;;
+  ;; FILL PROBABILITY MODEL:
+  ;; - Good position + OFI > 0.1: 85%
+  ;; - Good position + neutral OFI: 65%
+  ;; - Poor position + OFI > 0.1: 60%
+  ;; - Poor position + neutral OFI: 40%
+  ;;
+  (define order_price best_bid_price)
+  (define order_size 50)
+
+  (log :message "Order price:" :value order_price)
+  (log :message "Order size:" :value order_size)
+
+  ;; Estimate fill probability based on position and OFI
+  (define fill_probability (if good_position
+                                (if (> ofi 0.1) 0.85 0.65)
+                                (if (> ofi 0.1) 0.60 0.40)))
+
+  (log :message "Fill probability:" :value fill_probability)
+
+  ;; ============================================
+  ;; EXPECTED PROFIT CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Expected value = Profit × Probability
+  ;; - Buy at bid (100.5)
+  ;; - Sell at microprice (100.553)
+  ;; - Profit per share: 0.053
+  ;; - Expected: 0.053 × 50 shares × 0.60 prob ≈ 1.59
+  ;;
+  ;; RISK-ADJUSTED RETURN:
+  ;; - Gross profit: $2.65 (if filled)
+  ;; - Fill probability: 60%
+  ;; - Expected profit: $1.59
+  ;; - Return on capital: ~0.05% per trade
+  ;;
+  (define expected_sell_price microprice)  ;; Use microprice edge
+  (define profit_per_unit (- expected_sell_price order_price))
+  (define expected_profit (* (* profit_per_unit order_size) fill_probability))
+
+  (log :message "Expected profit:" :value expected_profit)
+
+  (log :message "\n=== FINAL DECISION ===")
+
+  ;; ============================================
+  ;; EXECUTION DECISION FRAMEWORK
+  ;; ============================================
+  ;;
+  ;; THEORY: Multi-criteria decision making
+  ;; - Combine placement score, liquidity, fills, profit
+  ;; - Weight by importance to P&L
+  ;; - Execute only when all conditions favorable
+  ;;
+  ;; CRITERIA:
+  ;; 1. Strong placement (40%): Flow signals aligned
+  ;; 2. Liquid market (20%): Low execution risk
+  ;; 3. High fill probability (20%): Capital efficiency
+  ;; 4. Positive expected profit (20%): P&L positive
+  ;;
+  ;; DECISION THRESHOLDS:
+  ;; - Score ≥ 0.75: Execute (high confidence)
+  ;; - Score 0.50-0.75: Place order (acceptable)
+  ;; - Score < 0.50: Skip (wait for better setup)
+  ;;
+  (define decision_score 0.0)
+
+  ;; Strong placement score (40%)
+  (when (>= placement_score 0.7) (set! decision_score (+ decision_score 0.4)))
+
+  ;; Liquid market (20%)
+  (when is_liquid (set! decision_score (+ decision_score 0.2)))
+
+  ;; High fill probability (20%)
+  (when (> fill_probability 0.7) (set! decision_score (+ decision_score 0.2)))
+
+  ;; Positive expected profit (20%)
+  (when (> expected_profit 5) (set! decision_score (+ decision_score 0.2)))
+
+  (log :message "Decision score:" :value decision_score)
+
+  (define final_decision (if (>= decision_score 0.75)
+                             "🚀 EXECUTE - High probability setup"
+                             (if (>= decision_score 0.5)
+                                 "✅ PLACE ORDER - Acceptable risk"
+                                 "❌ SKIP - Wait for better setup")))
+
+  (log :message "Final Decision:" :value final_decision)
+
+  (when (>= decision_score 0.5)
+    (log :message "\nOrder Details:")
+    (log :message "  Side: BUY")
+    (log :message "  Price:" :value order_price)
+    (log :message "  Size:" :value order_size)
+    (log :message "  Fill prob:" :value fill_probability)
+    (log :message "  Expected profit:" :value expected_profit))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Multi-level OFI (weighted by distance from mid)
+  ;; 2. Time-decay adjustments (recent orders matter more)
+  ;; 3. Cancel-replace optimization (queue position maintenance)
+  ;; 4. Adverse selection monitoring (post-trade analysis)
+  ;; 5. Cross-venue OFI aggregation (all exchanges)
+  ;; 6. Machine learning for fill probability prediction
+  ;; 7. Real-time P&L tracking and risk limits
+  ;; 8. Adaptive thresholds based on volatility regime
+  ;; 9. Integration with execution algos (TWAP/VWAP)
+  ;; 10. Market maker detection (recognize patterns)
+  ;;
+
+  "✅ Order flow imbalance analysis complete!")

@@ -1,0 +1,89 @@
+;; ============================================
+;; OVSM Example 1: Data Structures
+;; ============================================
+
+(do
+  (log :message "=== BASIC DATA TYPES ===")
+  
+  ;; Numbers
+  (define int_num 42)
+  (define float_num 3.14159)
+  (log :message "Integer:" :value int_num)
+  (log :message "Float:" :value float_num)
+  
+  ;; Strings
+  (define greeting "Hello, OVSM!")
+  (define multiline "Line 1\nLine 2")
+  (log :message "String:" :value greeting)
+  
+  ;; Booleans
+  (define is_true true)
+  (define is_false false)
+  (log :message "Boolean:" :value is_true)
+  
+  ;; Null
+  (define empty_val null)
+  (log :message "Null:" :value empty_val)
+  
+  (log :message "\n=== ARRAYS ===")
+  
+  ;; Array creation
+  (define numbers [1 2 3 4 5])
+  (define mixed [1 "two" 3.0 true null])
+  (define nested [[1 2] [3 4] [5 6]])
+  
+  (log :message "Numbers:" :value numbers)
+  (log :message "Mixed types:" :value mixed)
+  (log :message "Nested:" :value nested)
+  
+  ;; Array operations
+  (define first_num (first numbers))
+  (define last_num (last numbers))
+  (define arr_length (length numbers))
+  
+  (log :message "First:" :value first_num)
+  (log :message "Last:" :value last_num)
+  (log :message "Length:" :value arr_length)
+  
+  (log :message "\n=== OBJECTS ===")
+  
+  ;; Object creation
+  (define person {:name "Alice" :age 30 :active true})
+  (define config {:host "localhost" :port 8080 :debug false})
+  
+  (log :message "Person:" :value person)
+  (log :message "Config:" :value config)
+  
+  ;; Object access
+  (define name (get person "name"))
+  (define port (get config "port"))
+  
+  (log :message "Name:" :value name)
+  (log :message "Port:" :value port)
+  
+  ;; Dynamic keys with set
+  (define key "email")
+  (define updated_person (set person key "alice@example.com"))
+  (log :message "Updated person:" :value updated_person)
+  
+  (log :message "\n=== NESTED STRUCTURES ===")
+  
+  ;; Complex nested data
+  (define api_response 
+    {:status "success"
+     :data {:users [
+       {:id 1 :name "Alice" :scores [95 87 92]}
+       {:id 2 :name "Bob" :scores [88 91 85]}
+     ]}
+     :metadata {:count 2 :page 1}})
+  
+  (log :message "API Response:" :value api_response)
+  
+  ;; Deep access
+  (define users (get (get api_response "data") "users"))
+  (define first_user (first users))
+  (define first_name (get first_user "name"))
+  
+  (log :message "First user name:" :value first_name)
+  
+  "✅ Data structures demo complete!")

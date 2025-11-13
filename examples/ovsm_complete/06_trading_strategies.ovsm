@@ -1,0 +1,79 @@
+;; ============================================
+;; OVSM Example 6: Algorithmic Trading Strategies
+;; ============================================
+
+(do
+  (log :message "=== MOVING AVERAGE CROSSOVER ===")
+
+  ;; Mock price history
+  (define prices [48 49 50 51 52 51 50 49 50 51 52 53 54 55 56])
+  (log :message "Price series:" :value prices)
+
+  ;; Calculate Simple Moving Average manually
+  (define sma_period 5)
+  (define recent_sum (+ 52 53 54 55 56))  ;; Last 5 prices
+  (define sma (/ recent_sum sma_period))
+  (log :message "SMA(5):" :value sma)
+
+  ;; Trading signal
+  (define current_price (last prices))
+  (define signal (if (> current_price sma) "BUY" "SELL"))
+  (log :message "Current price:" :value current_price)
+  (log :message "Signal:" :value signal)
+
+  (log :message "\n=== RSI INDICATOR ===")
+
+  ;; Calculate Relative Strength Index
+  (define price_changes [1 1 1 -1 -1 1 1 2 1 1])
+
+  (define gains 0.0)
+  (define losses 0.0)
+
+  (for (change price_changes)
+    (if (> change 0)
+        (set! gains (+ gains change))
+        (set! losses (+ losses (if (< change 0) (- change) 0)))))
+
+  (define avg_gain (/ gains (length price_changes)))
+  (define avg_loss (/ losses (length price_changes)))
+  (define rs (/ avg_gain (if (= avg_loss 0) 0.0001 avg_loss)))
+  (define rsi (- 100 (/ 100 (+ 1 rs))))
+
+  (log :message "RSI:" :value rsi)
+
+  (define rsi_signal (if (< rsi 30.0)
+                         "OVERSOLD - BUY"
+                         (if (> rsi 70.0)
+                             "OVERBOUGHT - SELL"
+                             "NEUTRAL")))
+
+  (log :message "RSI Signal:" :value rsi_signal)
+
+  (log :message "\n=== BOLLINGER BANDS ===")
+
+  ;; Simplified Bollinger Bands
+  (define bb_period 5)
+  (define bb_sma 54.0)
+  (define std_dev 2.5)
+
+  (define upper_band (+ bb_sma (* 2 std_dev)))
+  (define lower_band (- bb_sma (* 2 std_dev)))
+
+  (log :message "Upper Band:" :value upper_band)
+  (log :message "Middle (SMA):" :value bb_sma)
+  (log :message "Lower Band:" :value lower_band)
+
+  (define bb_signal (if (< current_price lower_band)
+                        "OVERSOLD - BUY"
+                        (if (> current_price upper_band)
+                            "OVERBOUGHT - SELL"
+                            "WITHIN BANDS")))
+
+  (log :message "BB Signal:" :value bb_signal)
+
+  (log :message "\n=== SUMMARY ===")
+  (log :message "MA Signal:" :value signal)
+  (log :message "RSI Signal:" :value rsi_signal)
+  (log :message "BB Signal:" :value bb_signal)
+
+  "✅ Trading strategies demo complete!")

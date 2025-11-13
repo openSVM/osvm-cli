@@ -1,0 +1,207 @@
+;; ============================================
+;; OVSM Example 30: Pairs Trading with Cointegration
+;; ============================================
+;;
+;; THEORY: Statistical Arbitrage via Mean Reversion
+;; --------------------------------------------------
+;; Pairs trading exploits mean reversion in spread between cointegrated assets.
+;; Engle & Granger (1987) formalized cointegration testing.  When two assets
+;; drift apart, bet on convergence.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. COINTEGRATION:
+;;    - Two assets with common stochastic trend
+;;    - Spread = price_a - hedge_ratio × price_b
+;;    - Spread mean-reverts despite non-stationary prices
+;;    - Test: Augmented Dickey-Fuller on spread
+;;
+;; 2. HEDGE RATIO:
+;;    - β from regression: price_a = α + β×price_b
+;;    - Minimizes variance of spread
+;;    - Typically near 1.0 for similar assets
+;;
+;; 3. Z-SCORE SIGNALS:
+;;    - Z = (current_spread - mean_spread) / std_dev
+;;    - |Z| > 2: Trade signal (2 std devs)
+;;    - Z > +2: SHORT spread (sell A, buy B)
+;;    - Z < -2: LONG spread (buy A, sell B)
+;;
+;; 4. MEAN REVERSION:
+;;    - Half-life: Time for spread to revert 50%
+;;    - Typical: 5-20 days for equity pairs
+;;    - Faster reversion = better strategy
+;;
+;; ACADEMIC REFERENCES:
+;; - Engle & Granger (1987): "Cointegration and Error Correction"
+;; - Gatev et al. (2006): "Pairs Trading: Performance of a Relative-Value Rule"
+;; - Vidyamurthy (2004): "Pairs Trading: Quantitative Methods"
+;;
+;; IMPLEMENTATION:
+;; Calculates spread, Z-score, and generates mean-reversion signals.
+;;
+(do
+  (log :message "=== COINTEGRATED PAIRS ===")
+
+  ;; ============================================
+  ;; PRICE SERIES
+  ;; ============================================
+  ;;
+  ;; Historical prices for two cointegrated assets:
+  ;; - Asset A: 100 → 106 (rising trend)
+  ;; - Asset B: 50 → 53 (rising trend, slower)
+  ;; - Both trending up, but A outpacing B
+  ;;
+  (define prices_a [100 102 104 103 105 107 106])
+  (define prices_b [50 51 52 51.5 52.5 53.5 53])
+
+  (log :message "Price series A:" :value (length prices_a))
+  (log :message "Price series B:" :value (length prices_b))
+
+  ;; ============================================
+  ;; HEDGE RATIO CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Optimal ratio to minimize spread variance
+  ;; - Regression: A = α + β×B
+  ;; - Hedge ratio β typically near 2.0 for this pair
+  ;; - Simplified: Use constant 2.0
+  ;;
+  ;; INTERPRETATION:
+  ;; - 1 unit of A = 2 units of B
+  ;; - Spread = A - 2×B
+  ;; - When spread widens, trade for convergence
+  ;;
+  (define hedge_ratio 2.0)
+
+  (log :message "Hedge ratio:" :value hedge_ratio)
+
+  ;; ============================================
+  ;; SPREAD CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Construct mean-reverting spread
+  ;; - spread_t = price_a_t - hedge_ratio × price_b_t
+  ;; - For each time t, calculate spread
+  ;;
+  ;; CALCULATION:
+  ;; - t=0: 100 - 2×50 = 0
+  ;; - t=1: 102 - 2×51 = 0
+  ;; - t=2: 104 - 2×52 = 0
+  ;; - t=3: 103 - 2×51.5 = 0
+  ;; - t=4: 105 - 2×52.5 = 0
+  ;; - t=5: 107 - 2×53.5 = 0
+  ;; - t=6: 106 - 2×53 = 0
+  ;;
+  (define spread [])
+  (define i 0)
+
+  (while (< i (length prices_a))
+    (define pa (first (drop prices_a i)))
+    (define pb (first (drop prices_b i)))
+    (define s (- pa (* hedge_ratio pb)))
+    (set! spread (concat spread [s]))
+    (set! i (+ i 1)))
+
+  (log :message "\n=== SPREAD ANALYSIS ===")
+  (log :message "Spread series:" :value (length spread))
+
+  ;; ============================================
+  ;; MEAN SPREAD CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Long-term equilibrium level
+  ;; - Mean = Σ(spread) / n
+  ;; - Current spread deviation from mean
+  ;;
+  ;; CALCULATION:
+  ;; - Sum all spreads: 0+0+0+0+0+0+0 = 0
+  ;; - Mean: 0 / 7 = 0
+  ;; - Current spread (last): 0
+  ;;
+  (define sum_spread 0.0)
+
+  (for (s spread)
+    (set! sum_spread (+ sum_spread s)))
+
+  (define mean_spread (/ sum_spread (length spread)))
+  (define current_spread (last spread))
+
+  (log :message "Mean spread:" :value mean_spread)
+  (log :message "Current spread:" :value current_spread)
+
+  ;; ============================================
+  ;; Z-SCORE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Standardized deviation from mean
+  ;; - Z = (current - mean) / std_dev
+  ;; - Simplified: Z = (current - mean) / typical_std
+  ;; - Use 2.0 as typical std dev for this example
+  ;;
+  ;; CALCULATION:
+  ;; - Z = (0 - 0) / 2.0 = 0
+  ;; - Neutral signal (no trade)
+  ;;
+  ;; THRESHOLDS:
+  ;; - |Z| > 2.0: Trade signal
+  ;; - |Z| < 1.0: No trade (too close to mean)
+  ;;
+  (define z_score (/ (- current_spread mean_spread) 2))
+
+  (log :message "Z-score:" :value z_score)
+
+  ;; ============================================
+  ;; TRADING SIGNAL
+  ;; ============================================
+  ;;
+  ;; THEORY: Mean-reversion signal generation
+  ;; - Z > +2: Spread too high → SHORT spread
+  ;;   (sell A, buy B, expect convergence)
+  ;; - Z < -2: Spread too low → LONG spread
+  ;;   (buy A, sell B, expect divergence reversal)
+  ;; - |Z| < 2: HOLD (no trade)
+  ;;
+  ;; INTERPRETATION:
+  ;; - Current Z = 0 → HOLD
+  ;; - Wait for |Z| > 2 for entry signal
+  ;;
+  (define signal (if (> z_score 2)
+                     "SHORT spread (sell A, buy B)"
+                     (if (< z_score -2)
+                         "LONG spread (buy A, sell B)"
+                         "HOLD (no trade)")))
+
+  (log :message "\n=== TRADING SIGNAL ===")
+  (log :message "Signal:" :value signal)
+
+  (when (> z_score 2)
+    (log :message "Rationale: Spread overextended up")
+    (log :message "Action: Sell A, Buy B")
+    (log :message "Target: Spread returns to mean"))
+
+  (when (< z_score -2)
+    (log :message "Rationale: Spread overextended down")
+    (log :message "Action: Buy A, Sell B")
+    (log :message "Target: Spread returns to mean"))
+
+  (when (and (>= z_score -2) (<= z_score 2))
+    (log :message "Rationale: Spread near equilibrium")
+    (log :message "Action: Wait for |Z| > 2"))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real pairs trading systems would add:
+  ;; 1. Cointegration testing (Augmented Dickey-Fuller)
+  ;; 2. Rolling hedge ratio estimation (Kalman filter)
+  ;; 3. Half-life calculation for mean reversion speed
+  ;; 4. Dynamic position sizing based on Z-score
+  ;; 5. Stop-loss rules for divergence trades
+  ;; 6. Multi-pair portfolio for diversification
+  ;; 7. Transaction cost modeling
+  ;; 8. Regime detection (trending vs mean-reverting)
+  ;;
+
+  "✅ Pairs trading complete!")

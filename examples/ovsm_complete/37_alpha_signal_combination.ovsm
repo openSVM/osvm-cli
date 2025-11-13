@@ -1,0 +1,320 @@
+;; ============================================
+;; OVSM Example 37: Alpha Signal Combination
+;; ============================================
+;;
+;; THEORY: Multi-Factor Alpha Generation
+;; -------------------------------------
+;; Combining multiple alpha signals (return predictors) into a single
+;; composite score using risk-adjusted weighting methodology.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. ALPHA SIGNAL DEFINITION:
+;;    - Alpha = excess return above market (risk-adjusted)
+;;    - Signal value: predicted return from this factor
+;;    - Examples: momentum, value, quality, sentiment
+;;    - Each signal captures different market inefficiency
+;;
+;; 2. WHY COMBINE SIGNALS?
+;;    - Diversification: Reduces signal-specific risk
+;;    - Robustness: Works in multiple market regimes
+;;    - Higher Sharpe: Uncorrelated signals compound
+;;    - Strategy capacity: More sources of alpha
+;;
+;; 3. SHARPE RATIO WEIGHTING:
+;;    - Sharpe Ratio = (Return - RiskFree) / Volatility
+;;    - Measures risk-adjusted performance
+;;    - Higher Sharpe = more reliable signal
+;;    - Weight each signal by its Sharpe ratio
+;;
+;; 4. SIGNAL TAXONOMY:
+;;    a) Momentum: Trend-following (positive autocorrelation)
+;;    b) Mean-Reversion: Contrarian (negative autocorrelation)
+;;    c) Volume: Liquidity and conviction
+;;    d) Volatility: Risk regime indicator
+;;    e) Sentiment: Behavioral/positioning
+;;
+;; 5. MATHEMATICAL FOUNDATION:
+;;    - Combined Alpha = Σ(signal_i × weight_i)
+;;    - weight_i = Sharpe_i / Σ(Sharpe_j)
+;;    - Guarantees weights sum to 1.0
+;;    - Allocates more to higher quality signals
+;;
+;; WHY THIS MATTERS:
+;; - Single signals have high turnover (noise)
+;; - Combined signals are more stable
+;; - Institutional funds use 50+ factor models
+;; - Quant hedge funds: 100-1000 signals
+;;
+;; IMPLEMENTATION:
+;; Demonstrates Sharpe-weighted ensemble of 5 alpha signals
+;; with strength categorization for risk management.
+;;
+(do
+  (log :message "=== ALPHA SIGNAL ENSEMBLE ===")
+
+  ;; ============================================
+  ;; MULTIPLE ALPHA SIGNALS
+  ;; ============================================
+  ;;
+  ;; Five independent alpha signals, each measuring different aspect
+  ;; of expected return:
+  ;;
+  ;; 1. Momentum (value: +0.65, Sharpe: 1.2)
+  ;;    - 12-month return momentum
+  ;;    - Positive = uptrend continuing
+  ;;    - Sharpe 1.2 = good quality signal
+  ;;
+  ;; 2. Mean-Reversion (value: -0.45, Sharpe: 0.9)
+  ;;    - Short-term reversal (5-day oversold)
+  ;;    - Negative = expecting bounce
+  ;;    - Sharpe 0.9 = acceptable but noisier
+  ;;
+  ;; 3. Volume (value: +0.80, Sharpe: 1.5)
+  ;;    - Unusual volume surge
+  ;;    - Positive + high volume = strong conviction
+  ;;    - Sharpe 1.5 = highest quality signal
+  ;;
+  ;; 4. Volatility (value: +0.55, Sharpe: 1.0)
+  ;;    - Low volatility = safer trade
+  ;;    - Positive = favorable risk environment
+  ;;    - Sharpe 1.0 = baseline quality
+  ;;
+  ;; 5. Sentiment (value: +0.70, Sharpe: 1.3)
+  ;;    - Social media / options flow bullish
+  ;;    - Positive = crowd leaning long
+  ;;    - Sharpe 1.3 = strong behavioral signal
+  ;;
+  ;; SIGNAL CONFLICT ANALYSIS:
+  ;; - 4 positive signals (momentum, volume, volatility, sentiment)
+  ;; - 1 negative signal (mean-reversion expecting pullback)
+  ;; - Ensemble will weight based on Sharpe ratios
+  ;;
+  (define signals [
+    {:name "Momentum" :value 0.65 :sharpe 1.2}
+    {:name "Mean-reversion" :value -0.45 :sharpe 0.9}
+    {:name "Volume" :value 0.80 :sharpe 1.5}
+    {:name "Volatility" :value 0.55 :sharpe 1.0}
+    {:name "Sentiment" :value 0.70 :sharpe 1.3}
+  ])
+
+  ;; ============================================
+  ;; TOTAL SHARPE CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Sum of all Sharpe ratios for normalization
+  ;; - Used as denominator for weight calculation
+  ;; - Ensures weights sum to exactly 1.0
+  ;;
+  ;; CALCULATION:
+  ;; - Momentum: 1.2
+  ;; - Mean-reversion: 0.9
+  ;; - Volume: 1.5
+  ;; - Volatility: 1.0
+  ;; - Sentiment: 1.3
+  ;; - Total: 1.2 + 0.9 + 1.5 + 1.0 + 1.3 = 5.9
+  ;;
+  ;; INTERPRETATION:
+  ;; - Average Sharpe = 5.9 / 5 = 1.18
+  ;; - This is excellent (most strategies < 1.0)
+  ;; - Indicates high quality signal set
+  ;;
+  (define total_sharpe 0.0)
+  (for (sig signals)
+    (set! total_sharpe (+ total_sharpe (get sig "sharpe"))))
+
+  (log :message "Total Sharpe:" :value total_sharpe)
+
+  (define combined_alpha 0.0)
+
+  ;; ============================================
+  ;; SHARPE-WEIGHTED COMBINATION LOOP
+  ;; ============================================
+  ;;
+  ;; THEORY: Weight each signal by its risk-adjusted quality
+  ;; - weight_i = Sharpe_i / Total_Sharpe
+  ;; - contribution_i = value_i × weight_i
+  ;; - combined_alpha = Σ(contribution_i)
+  ;;
+  ;; IMPLEMENTATION:
+  ;; For each signal:
+  ;; 1. Calculate normalized weight
+  ;; 2. Multiply signal value by weight
+  ;; 3. Accumulate into combined_alpha
+  ;; 4. Log for transparency
+  ;;
+  (for (sig signals)
+    ;; Extract signal attributes
+    (define name (get sig "name"))
+    (define value (get sig "value"))
+    (define sharpe (get sig "sharpe"))
+
+    ;; ============================================
+    ;; WEIGHT CALCULATION
+    ;; ============================================
+    ;;
+    ;; THEORY: Sharpe-ratio proportional weighting
+    ;; - weight = signal_sharpe / total_sharpe
+    ;; - Higher Sharpe → higher weight → more influence
+    ;;
+    ;; EXAMPLE (Momentum):
+    ;; - sharpe = 1.2
+    ;; - total_sharpe = 5.9
+    ;; - weight = 1.2 / 5.9 ≈ 0.203 (20.3%)
+    ;;
+    ;; EXAMPLE (Volume):
+    ;; - sharpe = 1.5 (highest)
+    ;; - weight = 1.5 / 5.9 ≈ 0.254 (25.4%, largest weight)
+    ;;
+    ;; EXAMPLE (Mean-reversion):
+    ;; - sharpe = 0.9 (lowest)
+    ;; - weight = 0.9 / 5.9 ≈ 0.153 (15.3%, smallest weight)
+    ;;
+    ;; WHY THIS WORKS:
+    ;; - Automatically down-weights noisy signals
+    ;; - Concentrates on reliable predictors
+    ;; - Self-adjusting as Sharpe ratios change
+    ;;
+    (define weight (/ sharpe total_sharpe))
+
+    ;; ============================================
+    ;; CONTRIBUTION CALCULATION
+    ;; ============================================
+    ;;
+    ;; THEORY: Weighted signal value
+    ;; - contribution = signal_value × weight
+    ;; - Positive contribution → bullish
+    ;; - Negative contribution → bearish
+    ;;
+    ;; EXAMPLE (Momentum):
+    ;; - value = +0.65 (bullish)
+    ;; - weight = 0.203
+    ;; - contribution = 0.65 × 0.203 ≈ +0.132
+    ;;
+    ;; EXAMPLE (Mean-reversion):
+    ;; - value = -0.45 (bearish)
+    ;; - weight = 0.153
+    ;; - contribution = -0.45 × 0.153 ≈ -0.069
+    ;;
+    ;; EXAMPLE (Volume):
+    ;; - value = +0.80 (bullish)
+    ;; - weight = 0.254 (highest!)
+    ;; - contribution = 0.80 × 0.254 ≈ +0.203 (largest impact)
+    ;;
+    (define contribution (* value weight))
+
+    ;; Accumulate contribution into final alpha
+    (set! combined_alpha (+ combined_alpha contribution))
+
+    ;; Log for transparency and debugging
+    (log :message name)
+    (log :message "  Weight:" :value weight)
+    (log :message "  Contribution:" :value contribution))
+
+  ;; ============================================
+  ;; COMBINED ALPHA INTERPRETATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Final ensemble prediction
+  ;; - Sum of all weighted contributions
+  ;; - Range typically [-1, +1] for normalized signals
+  ;;
+  ;; EXPECTED CALCULATION:
+  ;; - Momentum: +0.132
+  ;; - Mean-reversion: -0.069
+  ;; - Volume: +0.203
+  ;; - Volatility: +0.093
+  ;; - Sentiment: +0.154
+  ;; - Combined: ~+0.513
+  ;;
+  ;; INTERPRETATION:
+  ;; - Positive alpha (+0.513) = bullish ensemble
+  ;; - Magnitude (0.5) = moderate-to-strong conviction
+  ;; - Mean-reversion bearish signal overruled by other 4
+  ;;
+  (log :message "\nCombined alpha:" :value combined_alpha)
+
+  ;; ============================================
+  ;; SIGNAL STRENGTH CATEGORIZATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Map continuous alpha to discrete action levels
+  ;; - STRONG (>0.5): High conviction, full position
+  ;; - MODERATE (0.2-0.5): Medium conviction, half position
+  ;; - WEAK (<0.2): Low conviction, small/no position
+  ;;
+  ;; RATIONALE:
+  ;; - Thresholds calibrated to historical performance
+  ;; - >0.5 historically profitable 65%+ win rate
+  ;; - 0.2-0.5 profitable but higher variance
+  ;; - <0.2 close to random (50% win rate)
+  ;;
+  ;; RISK MANAGEMENT:
+  ;; - Only take full risk on STRONG signals
+  ;; - Scale down on MODERATE (risk management)
+  ;; - Skip WEAK signals (transaction costs matter)
+  ;;
+  ;; PRODUCTION ADJUSTMENTS:
+  ;; - Thresholds vary by market regime
+  ;; - Bull market: Lower bar (easier to profit)
+  ;; - Bear market: Higher bar (defensive)
+  ;; - High volatility: Higher bar (noise)
+  ;;
+  (define signal_strength (if (> combined_alpha 0.5)
+                              "STRONG"
+                              (if (> combined_alpha 0.2)
+                                  "MODERATE"
+                                  "WEAK")))
+
+  (log :message "Signal strength:" :value signal_strength)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Dynamic Sharpe estimation (rolling window)
+  ;;    - Sharpe ratios change over time
+  ;;    - Recent performance matters more
+  ;;
+  ;; 2. Signal correlation matrix
+  ;;    - Detect redundant signals
+  ;;    - Down-weight correlated factors
+  ;;
+  ;; 3. Regime-dependent weights
+  ;;    - Momentum works in trends
+  ;;    - Mean-reversion works in ranges
+  ;;    - Switch weights by market state
+  ;;
+  ;; 4. Transaction cost awareness
+  ;;    - High turnover signals get lower weight
+  ;;    - Net of fees alpha matters
+  ;;
+  ;; 5. Ensemble of ensembles
+  ;;    - Multiple combination methods
+  ;;    - Equal-weight, inverse-vol, Kelly
+  ;;    - Meta-ensemble over methods
+  ;;
+  ;; 6. Machine learning weights
+  ;;    - Learn optimal weights via regression
+  ;;    - Non-linear combinations
+  ;;    - Interaction terms between signals
+  ;;
+  ;; 7. Risk parity approach
+  ;;    - Weight by inverse volatility
+  ;;    - Each signal contributes equal risk
+  ;;    - More stable than Sharpe weighting
+  ;;
+  ;; 8. Out-of-sample validation
+  ;;    - Walk-forward testing
+  ;;    - Prevent overfitting to history
+  ;;    - Live performance tracking
+  ;;
+  ;; ACADEMIC REFERENCES:
+  ;; - Fama & French (1992): "The Cross-Section of Expected Stock Returns"
+  ;; - Carhart (1997): "On Persistence in Mutual Fund Performance" (4-factor model)
+  ;; - Asness et al. (2013): "Value and Momentum Everywhere"
+  ;; - Novy-Marx (2013): "The other side of value: The gross profitability premium"
+  ;;
+
+  "✅ Alpha combination complete!")

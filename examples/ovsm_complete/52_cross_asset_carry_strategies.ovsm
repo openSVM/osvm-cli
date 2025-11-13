@@ -1,0 +1,572 @@
+;; ============================================
+;; OVSM Example 52: Cross-Asset Carry Strategies
+;; ============================================
+;;
+;; THEORY: Harvesting Yield Differentials Across Asset Classes
+;; -------------------------------------------------------------
+;; Carry strategies exploit predictable yield differentials across
+;; assets, funding low-yielding positions with high-yielding ones.
+;; Cross-asset carry extends this to FX, crypto, fixed income, and
+;; DeFi protocols, optimizing risk-adjusted returns globally.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. CARRY DEFINITION:
+;;    - Carry = Expected return from holding an asset
+;;    - FX carry: Interest rate differential minus expected depreciation
+;;    - Crypto carry: Funding rates on perpetual futures
+;;    - DeFi carry: LP fees + token rewards - impermanent loss
+;;    - Fixed income: Yield to maturity - funding cost
+;;
+;; 2. UNCOVERED INTEREST PARITY (UIP) VIOLATION:
+;;    - Theory: High-yield currencies should depreciate
+;;    - Reality: High-yield currencies often appreciate (carry premium)
+;; - Fama puzzle: Forward premium predicts opposite of actual move
+;;    - Explanation: Risk premium, peso problem, behavioral biases
+;;
+;; 3. RISK-ADJUSTED CARRY:
+;;    - Carry-to-risk ratio = Carry / Volatility
+;;    - Sharpe-optimal: Maximize carry per unit of volatility
+;;    - Diversification: Low correlation across carry sources
+;;
+;; 4. DRAWDOWN PROTECTION:
+;;    - Carry strategies have negative skewness (crash risk)
+;;    - Tail hedging: Buy OTM puts on high-carry assets
+;;    - Dynamic scaling: Reduce exposure in high-vol regimes
+;;
+;; ACADEMIC REFERENCES:
+;; - Lustig & Verdelhan (2007): "The Cross Section of FX Expected Returns"
+;; - Burnside et al. (2011): "Carry Trade and Momentum in Currency Markets"
+;; - Koijen et al. (2018): "Carry" (general framework across assets)
+;; - Moskowitz et al. (2012): "Time Series Momentum" (trend + carry)
+;;
+;; IMPLEMENTATION:
+;; This example constructs a diversified carry portfolio across FX,
+;; crypto, and DeFi, with dynamic risk management and correlation hedging.
+;;
+(do
+  (log :message "=== CROSS-ASSET CARRY STRATEGIES ===")
+
+  ;; ============================================
+  ;; PORTFOLIO SETUP
+  ;; ============================================
+  ;;
+  ;; Capital allocation:
+  ;; - Total capital: $1,000,000
+  ;; - FX carry: 40% ($400k)
+  ;; - Crypto carry: 30% ($300k)
+  ;; - DeFi carry: 20% ($200k)
+  ;; - Cash reserve: 10% ($100k for margin calls)
+  ;;
+  (define total_capital 1000000)
+  (define fx_allocation 0.40)
+  (define crypto_allocation 0.30)
+  (define defi_allocation 0.20)
+  (define cash_reserve 0.10)
+
+  (log :message "\n=== PORTFOLIO ALLOCATION ===")
+  (log :message "Total capital:" :value total_capital)
+  (log :message "FX allocation (%):" :value (* fx_allocation 100))
+  (log :message "Crypto allocation (%):" :value (* crypto_allocation 100))
+  (log :message "DeFi allocation (%):" :value (* defi_allocation 100))
+  (log :message "Cash reserve (%):" :value (* cash_reserve 100))
+
+  ;; ============================================
+  ;; FX CARRY TRADE SETUP
+  ;; ============================================
+  ;;
+  ;; THEORY: Classic currency carry trade
+  ;;
+  ;; CURRENCY PAIRS (sorted by interest rate differential):
+  ;; 1. Long MXN (Mexican Peso): 11.25% rate
+  ;;    Short USD: 5.50% rate
+  ;;    Net carry: 5.75% annual
+  ;;
+  ;; 2. Long BRL (Brazilian Real): 13.75% rate
+  ;;    Short USD: 5.50% rate
+  ;;    Net carry: 8.25% annual
+  ;;
+  ;; 3. Long TRY (Turkish Lira): 25.00% rate (high risk!)
+  ;;    Short USD: 5.50% rate
+  ;;    Net carry: 19.50% annual
+  ;;
+  ;; 4. Long AUD (Australian Dollar): 4.35% rate
+  ;;    Short JPY (Japanese Yen): -0.10% rate
+  ;;    Net carry: 4.45% annual
+  ;;
+  ;; POSITION SIZING:
+  ;; - MXN/USD: $100k (25% of FX allocation)
+  ;; - BRL/USD: $100k (25%)
+  ;; - TRY/USD: $80k (20%, reduced due to high risk)
+  ;; - AUD/JPY: $120k (30%, safer pair)
+  ;;
+  (define mxn_usd_rate_diff 5.75)
+  (define brl_usd_rate_diff 8.25)
+  (define try_usd_rate_diff 19.50)
+  (define aud_jpy_rate_diff 4.45)
+
+  (define fx_capital (* total_capital fx_allocation))
+  (define mxn_position 100000)
+  (define brl_position 100000)
+  (define try_position 80000)
+  (define aud_position 120000)
+
+  (log :message "\n=== FX CARRY TRADES ===")
+  (log :message "MXN/USD carry (%):" :value mxn_usd_rate_diff)
+  (log :message "BRL/USD carry (%):" :value brl_usd_rate_diff)
+  (log :message "TRY/USD carry (%):" :value try_usd_rate_diff)
+  (log :message "AUD/JPY carry (%):" :value aud_jpy_rate_diff)
+
+  ;; Calculate expected annual carry
+  (define fx_expected_carry (* mxn_position (/ mxn_usd_rate_diff 100)))
+  (define fx_expected_carry (+ fx_expected_carry (* brl_position (/ brl_usd_rate_diff 100))))
+  (define fx_expected_carry (+ fx_expected_carry (* try_position (/ try_usd_rate_diff 100))))
+  (define fx_expected_carry (+ fx_expected_carry (* aud_position (/ aud_jpy_rate_diff 100))))
+
+  (log :message "FX annual carry:" :value fx_expected_carry)
+
+  ;; ============================================
+  ;; CRYPTO FUNDING RATE CARRY
+  ;; ============================================
+  ;;
+  ;; THEORY: Exploit perpetual futures funding rates
+  ;;
+  ;; CRYPTO MARKETS:
+  ;; - BTC perpetual: Funding rate +0.05% per 8h (+4.5% annual)
+  ;; - ETH perpetual: Funding rate +0.03% per 8h (+2.7% annual)
+  ;; - SOL perpetual: Funding rate +0.08% per 8h (+7.2% annual)
+  ;;
+  ;; STRATEGY:
+  ;; - Short perpetual futures (earn funding)
+  ;; - Long spot (hedge price risk)
+  ;; - Net position: Delta-neutral, earn funding rate
+  ;;
+  ;; POSITION SIZING:
+  ;; - BTC: $120k (40% of crypto allocation)
+  ;; - ETH: $90k (30%)
+  ;; - SOL: $90k (30%)
+  ;;
+  ;; COSTS:
+  ;; - Borrowing cost for spot: 2% annual (prime brokerage)
+  ;; - Exchange fees: 0.5% annual (rolling futures)
+  ;;
+  ;; NET CARRY:
+  ;; - BTC: 4.5% - 2% - 0.5% = 2.0% annual
+  ;; - ETH: 2.7% - 2% - 0.5% = 0.2% annual
+  ;; - SOL: 7.2% - 2% - 0.5% = 4.7% annual
+  ;;
+  (define btc_funding_rate 4.5)
+  (define eth_funding_rate 2.7)
+  (define sol_funding_rate 7.2)
+  (define borrowing_cost 2.0)
+  (define exchange_fees 0.5)
+
+  (define btc_net_carry (- (- btc_funding_rate borrowing_cost) exchange_fees))
+  (define eth_net_carry (- (- eth_funding_rate borrowing_cost) exchange_fees))
+  (define sol_net_carry (- (- sol_funding_rate borrowing_cost) exchange_fees))
+
+  (define crypto_capital (* total_capital crypto_allocation))
+  (define btc_position 120000)
+  (define eth_position 90000)
+  (define sol_position 90000)
+
+  (log :message "\n=== CRYPTO FUNDING CARRY ===")
+  (log :message "BTC net carry (%):" :value btc_net_carry)
+  (log :message "ETH net carry (%):" :value eth_net_carry)
+  (log :message "SOL net carry (%):" :value sol_net_carry)
+
+  ;; Calculate expected annual carry
+  (define crypto_expected_carry (* btc_position (/ btc_net_carry 100)))
+  (define crypto_expected_carry (+ crypto_expected_carry (* eth_position (/ eth_net_carry 100))))
+  (define crypto_expected_carry (+ crypto_expected_carry (* sol_position (/ sol_net_carry 100))))
+
+  (log :message "Crypto annual carry:" :value crypto_expected_carry)
+
+  ;; ============================================
+  ;; DEFI LIQUIDITY PROVIDER CARRY
+  ;; ============================================
+  ;;
+  ;; THEORY: Earn fees from providing liquidity to AMMs
+  ;;
+  ;; DEFI PROTOCOLS:
+  ;; 1. Uniswap V3 ETH/USDC (0.05% fee tier)
+  ;;    - Fee APR: 12%
+  ;;    - Token rewards: 3% (UNI incentives)
+  ;;    - Impermanent loss: -2% (estimated)
+  ;;    - Net yield: 13%
+  ;;
+  ;; 2. Raydium SOL/USDC
+  ;;    - Fee APR: 18%
+  ;;    - Token rewards: 8% (RAY emissions)
+  ;;    - Impermanent loss: -3% (higher vol)
+  ;;    - Net yield: 23%
+  ;;
+  ;; 3. Aave USDC lending
+  ;;    - Supply APR: 4%
+  ;;    - Token rewards: 1% (stkAAVE)
+  ;;    - Risk: Smart contract risk
+  ;;    - Net yield: 5%
+  ;;
+  ;; POSITION SIZING:
+  ;; - Uniswap: $80k (40% of DeFi allocation)
+  ;; - Raydium: $60k (30%, higher risk)
+  ;; - Aave: $60k (30%, lower risk, stable)
+  ;;
+  (define uniswap_yield 13.0)
+  (define raydium_yield 23.0)
+  (define aave_yield 5.0)
+
+  (define defi_capital (* total_capital defi_allocation))
+  (define uniswap_position 80000)
+  (define raydium_position 60000)
+  (define aave_position 60000)
+
+  (log :message "\n=== DEFI LP CARRY ===")
+  (log :message "Uniswap yield (%):" :value uniswap_yield)
+  (log :message "Raydium yield (%):" :value raydium_yield)
+  (log :message "Aave yield (%):" :value aave_yield)
+
+  ;; Calculate expected annual carry
+  (define defi_expected_carry (* uniswap_position (/ uniswap_yield 100)))
+  (define defi_expected_carry (+ defi_expected_carry (* raydium_position (/ raydium_yield 100))))
+  (define defi_expected_carry (+ defi_expected_carry (* aave_position (/ aave_yield 100))))
+
+  (log :message "DeFi annual carry:" :value defi_expected_carry)
+
+  ;; ============================================
+  ;; TOTAL PORTFOLIO CARRY
+  ;; ============================================
+  ;;
+  ;; AGGREGATE CARRY:
+  ;; - FX carry: $28,940
+  ;; - Crypto carry: $8,220
+  ;; - DeFi carry: $28,200
+  ;; - Total annual carry: $65,360
+  ;; - Portfolio yield: 6.54%
+  ;;
+  (define total_expected_carry (+ (+ fx_expected_carry crypto_expected_carry) defi_expected_carry))
+  (define portfolio_yield (* (/ total_expected_carry total_capital) 100))
+
+  (log :message "\n=== TOTAL PORTFOLIO CARRY ===")
+  (log :message "FX carry:" :value fx_expected_carry)
+  (log :message "Crypto carry:" :value crypto_expected_carry)
+  (log :message "DeFi carry:" :value defi_expected_carry)
+  (log :message "Total annual carry:" :value total_expected_carry)
+  (log :message "Portfolio yield (%):" :value portfolio_yield)
+
+  ;; ============================================
+  ;; VOLATILITY & RISK ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: Assess risk-adjusted returns
+  ;;
+  ;; VOLATILITY BY ASSET CLASS:
+  ;; - FX: 8% annual volatility (moderate)
+  ;; - Crypto: 45% annual volatility (high)
+  ;; - DeFi: 25% annual volatility (moderate-high)
+  ;;
+  ;; POSITION-WEIGHTED VOLATILITY:
+  ;; - FX contribution: 0.40 × 8% = 3.2%
+  ;; - Crypto contribution: 0.30 × 45% = 13.5%
+  ;; - DeFi contribution: 0.20 × 25% = 5.0%
+  ;;
+  ;; CORRELATION ASSUMPTIONS:
+  ;; - FX-Crypto: 0.15 (low correlation)
+  ;; - FX-DeFi: 0.20 (low correlation)
+  ;; - Crypto-DeFi: 0.60 (moderate, both crypto-native)
+  ;;
+  ;; PORTFOLIO VOLATILITY (simplified):
+  ;; - σ_portfolio ≈ √(3.2² + 13.5² + 5.0² + 2×correlations)
+  ;; - σ_portfolio ≈ 16.8% annual
+  ;;
+  (define fx_volatility 8.0)
+  (define crypto_volatility 45.0)
+  (define defi_volatility 25.0)
+
+  (define fx_vol_contribution (* fx_allocation fx_volatility))
+  (define crypto_vol_contribution (* crypto_allocation crypto_volatility))
+  (define defi_vol_contribution (* defi_allocation defi_volatility))
+
+  (define portfolio_volatility 16.8)  ;; Simplified calculation
+
+  (log :message "\n=== RISK ANALYSIS ===")
+  (log :message "FX volatility (%):" :value fx_volatility)
+  (log :message "Crypto volatility (%):" :value crypto_volatility)
+  (log :message "DeFi volatility (%):" :value defi_volatility)
+  (log :message "Portfolio volatility (%):" :value portfolio_volatility)
+
+  ;; ============================================
+  ;; CARRY-TO-RISK RATIO
+  ;; ============================================
+  ;;
+  ;; THEORY: Risk-adjusted carry performance
+  ;;
+  ;; FORMULA:
+  ;; Carry-to-Risk = Expected Carry / Volatility
+  ;;
+  ;; BY ASSET CLASS:
+  ;; - FX: 28,940 / (400,000 × 0.08) = 28,940 / 32,000 = 0.90
+  ;; - Crypto: 8,220 / (300,000 × 0.45) = 8,220 / 135,000 = 0.06
+  ;; - DeFi: 28,200 / (200,000 × 0.25) = 28,200 / 50,000 = 0.56
+  ;;
+  ;; PORTFOLIO:
+  ;; - Carry-to-Risk = 65,360 / (1,000,000 × 0.168) = 0.39
+  ;;
+  ;; INTERPRETATION:
+  ;; - FX has best risk-adjusted carry (0.90)
+  ;; - Crypto has worst (0.06, high vol destroys ratio)
+  ;; - DeFi is moderate (0.56)
+  ;; - Portfolio benefits from diversification
+  ;;
+  (define fx_carry_to_risk 0.90)
+  (define crypto_carry_to_risk 0.06)
+  (define defi_carry_to_risk 0.56)
+  (define portfolio_carry_to_risk 0.39)
+
+  (log :message "\n=== CARRY-TO-RISK RATIOS ===")
+  (log :message "FX:" :value fx_carry_to_risk)
+  (log :message "Crypto:" :value crypto_carry_to_risk)
+  (log :message "DeFi:" :value defi_carry_to_risk)
+  (log :message "Portfolio:" :value portfolio_carry_to_risk)
+
+  ;; ============================================
+  ;; SHARPE RATIO ESTIMATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Risk-adjusted returns including risk-free rate
+  ;;
+  ;; FORMULA:
+  ;; Sharpe = (Expected Return - Risk-Free Rate) / Volatility
+  ;;
+  ;; CALCULATION:
+  ;; - Expected return: 6.54% (carry)
+  ;; - Risk-free rate: 5.50% (USD Treasury)
+  ;; - Excess return: 1.04%
+  ;; - Volatility: 16.8%
+  ;; - Sharpe ratio: 1.04% / 16.8% = 0.062
+  ;;
+  ;; INTERPRETATION:
+  ;; - Sharpe of 0.062 is LOW (< 0.5 threshold)
+  ;; - Carry strategies typically have low Sharpe
+  ;; - But: Negative skewness (crash risk not captured)
+  ;; - Need tail hedging to improve risk profile
+  ;;
+  (define risk_free_rate 5.50)
+  (define excess_return (- portfolio_yield risk_free_rate))
+  (define sharpe_ratio (/ excess_return portfolio_volatility))
+
+  (log :message "\n=== SHARPE RATIO ===")
+  (log :message "Expected return (%):" :value portfolio_yield)
+  (log :message "Risk-free rate (%):" :value risk_free_rate)
+  (log :message "Excess return (%):" :value excess_return)
+  (log :message "Sharpe ratio:" :value sharpe_ratio)
+
+  ;; ============================================
+  ;; TAIL RISK HEDGING
+  ;; ============================================
+  ;;
+  ;; THEORY: Protect against carry trade unwinds
+  ;;
+  ;; HEDGE INSTRUMENTS:
+  ;; 1. VIX call options: Cost 1% of capital annually
+  ;;    - Protection in market stress
+  ;;    - Payoff when correlations spike to 1
+  ;;
+  ;; 2. FX put options on high-carry currencies:
+  ;;    - TRY puts: Cost 3% annually (expensive!)
+  ;;    - BRL puts: Cost 2% annually
+  ;;    - Protection against currency crashes
+  ;;
+  ;; 3. Crypto downside puts:
+  ;;    - SOL puts (25% OTM): Cost 4% annually
+  ;;    - High cost, but prevents wipeout
+  ;;
+  ;; TOTAL HEDGE COST:
+  ;; - VIX calls: $10,000 (1%)
+  ;; - FX puts: $18,000 (2% weighted avg)
+  ;; - Crypto puts: $12,000 (4% on SOL position)
+  ;; - Total: $40,000 (4% of capital)
+  ;;
+  ;; NET EXPECTED RETURN:
+  ;; - Gross carry: 6.54%
+  ;; - Hedge cost: 4.00%
+  ;; - Net carry: 2.54%
+  ;;
+  (define vix_hedge_cost 10000)
+  (define fx_hedge_cost 18000)
+  (define crypto_hedge_cost 12000)
+  (define total_hedge_cost (+ (+ vix_hedge_cost fx_hedge_cost) crypto_hedge_cost))
+
+  (define hedge_cost_pct (* (/ total_hedge_cost total_capital) 100))
+  (define net_portfolio_yield (- portfolio_yield hedge_cost_pct))
+
+  (log :message "\n=== TAIL HEDGING ===")
+  (log :message "VIX calls cost:" :value vix_hedge_cost)
+  (log :message "FX puts cost:" :value fx_hedge_cost)
+  (log :message "Crypto puts cost:" :value crypto_hedge_cost)
+  (log :message "Total hedge cost (%):" :value hedge_cost_pct)
+  (log :message "Net portfolio yield (%):" :value net_portfolio_yield)
+
+  ;; ============================================
+  ;; DYNAMIC SCALING
+  ;; ============================================
+  ;;
+  ;; THEORY: Reduce exposure in high-volatility regimes
+  ;;
+  ;; VOLATILITY REGIME DETECTION:
+  ;; - VIX < 15: Low vol → Full position (100%)
+  ;; - VIX 15-25: Medium vol → 75% position
+  ;; - VIX 25-35: High vol → 50% position
+  ;; - VIX > 35: Crisis → 25% position
+  ;;
+  ;; CURRENT STATE: VIX = 18 (medium vol)
+  ;; - Scale to 75% of target positions
+  ;; - Expected return: 2.54% × 0.75 = 1.91%
+  ;; - Volatility: 16.8% × 0.75 = 12.6%
+  ;; - Sharpe improves: 1.91% / 12.6% = 0.15 (better!)
+  ;;
+  (define current_vix 18)
+  (define scaling_factor 0.75)
+
+  (define scaled_return (* net_portfolio_yield scaling_factor))
+  (define scaled_volatility (* portfolio_volatility scaling_factor))
+  (define scaled_sharpe (/ (- scaled_return risk_free_rate) scaled_volatility))
+
+  (log :message "\n=== DYNAMIC SCALING ===")
+  (log :message "Current VIX:" :value current_vix)
+  (log :message "Scaling factor:" :value scaling_factor)
+  (log :message "Scaled return (%):" :value scaled_return)
+  (log :message "Scaled volatility (%):" :value scaled_volatility)
+  (log :message "Scaled Sharpe:" :value scaled_sharpe)
+
+  ;; ============================================
+  ;; REBALANCING STRATEGY
+  ;; ============================================
+  ;;
+  ;; THEORY: Maintain target allocations and harvest carry
+  ;;
+  ;; REBALANCING TRIGGERS:
+  ;; 1. Allocation drift > 10% (e.g., FX goes from 40% to 45%)
+  ;; 2. Carry differential changes significantly (>2%)
+  ;; 3. Correlation regime shift (>0.20 change)
+  ;; 4. Time-based: Monthly rebalancing minimum
+  ;;
+  ;; CURRENT POSITIONS VS TARGETS:
+  ;; - FX: 42% (target 40%) → Sell $20k
+  ;; - Crypto: 28% (target 30%) → Buy $20k
+  ;; - DeFi: 20% (target 20%) → No change
+  ;; - Cash: 10% (target 10%) → No change
+  ;;
+  (define current_fx_pct 42)
+  (define current_crypto_pct 28)
+  (define current_defi_pct 20)
+  (define current_cash_pct 10)
+
+  (define fx_drift (- current_fx_pct (* fx_allocation 100)))
+  (define crypto_drift (- current_crypto_pct (* crypto_allocation 100)))
+
+  (log :message "\n=== REBALANCING ===")
+  (log :message "FX drift (pp):" :value fx_drift)
+  (log :message "Crypto drift (pp):" :value crypto_drift)
+
+  (define rebalance_amount 20000)
+  (log :message "Rebalance: Sell FX $20k, Buy Crypto $20k")
+
+  ;; ============================================
+  ;; SCENARIO ANALYSIS
+  ;; ============================================
+  ;;
+  ;; SCENARIO 1: FAVORABLE (60% probability)
+  ;; - Carry accrues normally
+  ;; - Low volatility (VIX < 20)
+  ;; - No major drawdowns
+  ;; - Expected return: +2.54%
+  ;;
+  ;; SCENARIO 2: NEUTRAL (30% probability)
+  ;; - Some currency depreciation offsets carry
+  ;; - Medium volatility (VIX 20-30)
+  ;; - Small drawdowns (-5%)
+  ;; - Expected return: +0.50%
+  ;;
+  ;; SCENARIO 3: CRISIS (10% probability)
+  ;; - Carry trade unwind (flight to safety)
+  ;; - High volatility (VIX > 40)
+  ;; - Large drawdown (-20% unhedged, -10% hedged)
+  ;; - Expected return: -10%
+  ;;
+  ;; EXPECTED VALUE:
+  ;; EV = 0.60 × 2.54% + 0.30 × 0.50% + 0.10 × (-10%)
+  ;; EV = 1.52% + 0.15% - 1.00% = 0.67%
+  ;;
+  (define prob_favorable 0.60)
+  (define prob_neutral 0.30)
+  (define prob_crisis 0.10)
+
+  (define return_favorable 2.54)
+  (define return_neutral 0.50)
+  (define return_crisis -10.0)
+
+  (define expected_value (* prob_favorable return_favorable))
+  (define expected_value (+ expected_value (* prob_neutral return_neutral)))
+  (define expected_value (+ expected_value (* prob_crisis return_crisis)))
+
+  (log :message "\n=== SCENARIO ANALYSIS ===")
+  (log :message "Favorable (60%):" :value return_favorable)
+  (log :message "Neutral (30%):" :value return_neutral)
+  (log :message "Crisis (10%):" :value return_crisis)
+  (log :message "Expected value (%):" :value expected_value)
+
+  ;; ============================================
+  ;; STRATEGY ASSESSMENT
+  ;; ============================================
+  ;;
+  ;; EVALUATION:
+  ;; - Gross carry: 6.54% (attractive)
+  ;; - Net carry (after hedges): 2.54% (moderate)
+  ;; - Expected value: 0.67% (modest after tail risk)
+  ;; - Sharpe ratio: 0.15 (low but positive)
+  ;;
+  ;; STRENGTHS:
+  ;; - Diversified across uncorrelated assets
+  ;; - Positive carry in multiple markets
+  ;; - Tail hedging protects against crisis
+  ;; - Dynamic scaling reduces drawdowns
+  ;;
+  ;; WEAKNESSES:
+  ;; - Low Sharpe ratio (drag from hedges)
+  ;; - Negative skewness (crash risk)
+  ;; - Requires active management
+  ;; - High complexity (multiple markets)
+  ;;
+  ;; RECOMMENDATION:
+  ;; - Suitable for sophisticated investors
+  ;; - Allocate 10-20% of portfolio maximum
+  ;; - Combine with trend-following (crisis alpha)
+  ;; - Monitor correlations and VIX daily
+  ;; - Rebalance monthly or on regime shifts
+  ;;
+  (log :message "\n=== STRATEGY ASSESSMENT ===")
+  (log :message "Net carry (%):" :value net_portfolio_yield)
+  (log :message "Expected value (%):" :value expected_value)
+  (log :message "Sharpe ratio:" :value scaled_sharpe)
+  (log :message "Recommendation: IMPLEMENT with 10-20% allocation")
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real-world cross-asset carry requires:
+  ;;
+  ;; 1. **Real-time carry monitoring**: Track interest rates, funding rates
+  ;; 2. **Correlation matrix**: Dynamic estimation across all assets
+  ;; 3. **Optimal position sizing**: Mean-variance optimization
+  ;; 4. **Regime detection**: Identify risk-on vs risk-off environments
+  ;; 5. **Smart rebalancing**: Tax-loss harvesting, minimize turnover
+  ;; 6. **Leverage management**: Use futures for capital efficiency
+  ;; 7. **Tail hedge sizing**: Options Greeks management
+  ;; 8. **Multi-currency accounting**: Handle FX in P&L
+  ;; 9. **Regulatory compliance**: Cross-border reporting
+  ;; 10. **Backtesting**: Historical carry performance across regimes
+  ;;
+
+  "✅ Cross-asset carry strategies analysis complete!")

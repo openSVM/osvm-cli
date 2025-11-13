@@ -1,0 +1,163 @@
+;; ============================================
+;; OVSM Example 29: Volatility Trading Strategies
+;; ============================================
+;;
+;; THEORY: Volatility Regime Detection and Trading
+;; -------------------------------------------------
+;; Volatility clustering (Mandelbrot 1963) shows that high-volatility periods
+;; follow high-volatility periods. GARCH models (Engle 1982) formalize this.
+;; Trading strategy: Sell options in low vol, buy in high vol.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. REALIZED VOLATILITY:
+;;    - Historical volatility from past returns
+;;    - Formula: √(Σ(returns²) / n) × √(252) for annualized
+;;    - Measures actual price movement
+;;
+;; 2. VOLATILITY CLUSTERING:
+;;    - GARCH(1,1): vol_t = α + β×vol_t-1 + γ×shock_t-1
+;;    - High vol today → high vol tomorrow (persistence)
+;;    - Mean reversion over longer periods
+;;
+;; 3. VOLATILITY REGIMES:
+;;    - LOW: <20% annualized (sell volatility)
+;;    - MEDIUM: 20-60% (neutral)
+;;    - HIGH: >60% (buy volatility, protective strategies)
+;;
+;; 4. TRADING STRATEGIES:
+;;    - Low vol: Sell straddles, collect premium
+;;    - High vol: Buy straddles, tail risk protection
+;;    - Vol arbitrage: Trade realized vs implied spread
+;;
+;; ACADEMIC REFERENCES:
+;; - Engle (1982): "Autoregressive Conditional Heteroskedasticity"
+;; - Bollerslev (1986): "Generalized ARCH (GARCH)"
+;; - Mandelbrot (1963): "The Variation of Certain Speculative Prices"
+;;
+;; IMPLEMENTATION:
+;; Calculates realized volatility from returns, classifies regime,
+;; and recommends volatility trading strategy.
+;;
+(do
+  (log :message "=== REALIZED VOLATILITY ===")
+
+  ;; ============================================
+  ;; RETURN SERIES
+  ;; ============================================
+  ;;
+  ;; Daily returns for past week:
+  ;; - Mix of positive and negative returns
+  ;; - Range: -2% to +3%
+  ;; - Standard deviation will determine volatility
+  ;;
+  (define returns [0.02 -0.015 0.03 -0.01 0.025 -0.02 0.015])
+
+  (log :message "Return count:" :value (length returns))
+
+  ;; ============================================
+  ;; VOLATILITY CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Realized volatility from squared returns
+  ;; - variance = Σ(returns²) / n
+  ;; - daily_vol = √(variance)
+  ;; - annual_vol = daily_vol × √(252 trading days)
+  ;;
+  ;; CALCULATION:
+  ;; - Sum of squared returns
+  ;; - Variance = sum / 7
+  ;; - Daily vol ≈ sqrt(variance) (using approximation)
+  ;; - Annual vol = daily_vol × 15.87 (√252 ≈ 15.87)
+  ;;
+  (define sum_sq 0.0)
+
+  (for (ret returns)
+    (set! sum_sq (+ sum_sq (* ret ret))))
+
+  (define variance (/ sum_sq (length returns)))
+
+  ;; Simplified sqrt approximation
+  (define daily_vol (/ (+ variance 1) 2))
+
+  ;; Annualize: multiply by sqrt(252) ≈ 15.87
+  (define annual_vol (* daily_vol 15.87))
+
+  (log :message "Sum of squared returns:" :value sum_sq)
+  (log :message "Variance:" :value variance)
+  (log :message "Daily volatility:" :value daily_vol)
+  (log :message "Annual volatility:" :value annual_vol)
+
+  ;; ============================================
+  ;; VOLATILITY REGIME CLASSIFICATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Categorize market state
+  ;; - LOW (<0.3): Calm markets, range-bound
+  ;; - MEDIUM (0.3-0.6): Normal volatility
+  ;; - HIGH (>0.6): Crisis, panic, large moves
+  ;;
+  ;; THRESHOLDS:
+  ;; - 30% annual vol: Typical for stocks
+  ;; - 60% annual vol: Elevated risk
+  ;; - 100%+ annual vol: Extreme crisis
+  ;;
+  (define vol_regime (if (> annual_vol 0.6)
+                         "HIGH"
+                         (if (> annual_vol 0.3)
+                             "MEDIUM"
+                             "LOW")))
+
+  (log :message "\n=== VOLATILITY REGIME ===")
+  (log :message "Regime:" :value vol_regime)
+
+  ;; ============================================
+  ;; TRADING STRATEGY
+  ;; ============================================
+  ;;
+  ;; THEORY: Mean reversion in volatility
+  ;; - High vol → Sell options (collect premium)
+  ;; - Low vol → Buy options (cheap protection)
+  ;; - Profit from vol returning to mean
+  ;;
+  ;; RATIONALE:
+  ;; - High vol: Implied vol elevated, sell rich options
+  ;; - Low vol: Cheap insurance, buy tail protection
+  ;; - Medium vol: Directional strategies instead
+  ;;
+  (define strategy (if (= vol_regime "HIGH")
+                       "Sell options (high premium)"
+                       (if (= vol_regime "LOW")
+                           "Buy options (cheap protection)"
+                           "Directional trading (neutral vol)")))
+
+  (log :message "Strategy:" :value strategy)
+
+  (when (= vol_regime "HIGH")
+    (log :message "Rationale: Premium elevated, sell vol")
+    (log :message "Risk: Further volatility expansion"))
+
+  (when (= vol_regime "LOW")
+    (log :message "Rationale: Options cheap, buy protection")
+    (log :message "Risk: Vol stays low, theta decay"))
+
+  (when (= vol_regime "MEDIUM")
+    (log :message "Rationale: Normal volatility, no vol edge")
+    (log :message "Strategy: Focus on directional trades"))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real volatility trading systems would add:
+  ;; 1. GARCH model for volatility forecasting
+  ;; 2. Implied vs realized volatility spread
+  ;; 3. VIX-style volatility index construction
+  ;; 4. Options Greeks calculation and hedging
+  ;; 5. Volatility surface modeling
+  ;; 6. Regime switching detection (Markov models)
+  ;; 7. Multi-asset volatility correlations
+  ;; 8. Dynamic position sizing based on vol
+  ;;
+
+  "✅ Vol trading complete!")

@@ -1,0 +1,407 @@
+;; ============================================
+;; OVSM Example 38: Regime-Switching Strategies
+;; ============================================
+;;
+;; THEORY: Adaptive Trading Based on Market State
+;; ----------------------------------------------
+;; Market regime detection identifies distinct market states
+;; (trending, mean-reverting, volatile) and adapts strategy
+;; accordingly. Different regimes require different approaches.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. MARKET REGIMES:
+;;    - TRENDING: Persistent directional movement
+;;      * Characteristics: High trend strength, low volatility
+;;      * Best strategy: Momentum (follow the trend)
+;;      * Example: Bull markets, Fed easing cycles
+;;
+;;    - MEAN-REVERTING: Oscillation around mean
+;;      * Characteristics: Low trend, low-moderate volatility
+;;      * Best strategy: Contrarian (fade extremes)
+;;      * Example: Range-bound, sideways markets
+;;
+;;    - VOLATILE/CHAOTIC: High uncertainty
+;;      * Characteristics: High volatility, unstable correlations
+;;      * Best strategy: Reduce risk, defensive
+;;      * Example: Crisis periods, major news events
+;;
+;;    - BREAKOUT: Regime transition starting
+;;      * Characteristics: Volume spike + strong trend
+;;      * Best strategy: Aggressive entry (catch momentum)
+;;      * Example: Earnings beats, policy announcements
+;;
+;; 2. REGIME INDICATORS:
+;;    - Volatility: Realized or implied (VIX-like)
+;;    - Trend Strength: R-squared of linear fit
+;;    - Volume: Current vs average (conviction)
+;;    - Correlation: Cross-asset relationships
+;;
+;; 3. WHY REGIME-SWITCHING MATTERS:
+;;    - Momentum strategies fail in mean-reverting regimes
+;;    - Mean-reversion strategies fail in trending regimes
+;;    - Fixed strategies underperform adaptive ones
+;;    - Risk management differs by regime
+;;
+;; 4. POSITION SIZING BY REGIME:
+;;    - TRENDING: Increase size (trends persist)
+;;    - BREAKOUT: Increase size (early entry advantage)
+;;    - VOLATILE: Decrease size (high risk)
+;;    - NEUTRAL: Baseline size (no edge)
+;;
+;; IMPLEMENTATION:
+;; Classifies current market regime from indicators and
+;; recommends strategy + position sizing adjustments.
+;;
+(do
+  (log :message "=== MARKET REGIME DETECTION ===")
+
+  ;; ============================================
+  ;; MARKET INDICATORS (CURRENT STATE)
+  ;; ============================================
+  ;;
+  ;; Real-time measurements of market conditions:
+  ;;
+  ;; 1. Volatility: 0.35 (35% annualized)
+  ;;    - Moderate-high volatility
+  ;;    - Above long-term average (~20%)
+  ;;    - Below crisis levels (>50%)
+  ;;    - Measured: 20-day realized volatility
+  ;;
+  ;; 2. Trend Strength: 0.75 (75%)
+  ;;    - Strong trending behavior
+  ;;    - R-squared > 0.7 = persistent trend
+  ;;    - Measured: Linear regression fit quality
+  ;;
+  ;; 3. Volume Spike: 2.5x
+  ;;    - Volume 2.5x average
+  ;;    - Indicates strong conviction
+  ;;    - Institutional participation
+  ;;    - Measured: Current / 20-day average
+  ;;
+  ;; 4. Correlation: 0.65
+  ;;    - Assets moving together (65%)
+  ;;    - Above 0.8 = crisis (everything correlated)
+  ;;    - Below 0.3 = dispersion (stock picking works)
+  ;;    - Measured: Cross-asset correlation matrix
+  ;;
+  ;; PATTERN RECOGNITION:
+  ;; - High trend (0.75) + moderate vol (0.35) = trending regime
+  ;; - High volume (2.5x) confirms trend conviction
+  ;; - This setup favors momentum strategies
+  ;;
+  (define volatility 0.35)
+  (define trend_strength 0.75)
+  (define volume_spike 2.5)
+  (define correlation 0.65)
+
+  (log :message "Volatility:" :value volatility)
+  (log :message "Trend strength:" :value trend_strength)
+  (log :message "Volume spike:" :value volume_spike)
+
+  ;; ============================================
+  ;; REGIME CLASSIFICATION LOGIC
+  ;; ============================================
+  ;;
+  ;; THEORY: Sequential classification with priority
+  ;; - Most specific regimes checked first (BREAKOUT)
+  ;; - More general regimes checked later (TRENDING)
+  ;; - Default to NEUTRAL if no clear regime
+  ;;
+  ;; IMPLEMENTATION:
+  ;; Uses sequential when statements (later regimes override earlier)
+  ;; Final set value determines the regime
+  ;;
+  (define regime null)
+
+  ;; ============================================
+  ;; TRENDING REGIME DETECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Strong persistent directional movement
+  ;; - Criteria: trend_strength > 0.6 AND volatility < 0.4
+  ;; - Trend must be stable (low volatility)
+  ;; - High volatility breaks trend reliability
+  ;;
+  ;; CALCULATION:
+  ;; - trend_strength = 0.75 > 0.6 ✓
+  ;; - volatility = 0.35 < 0.4 ✓
+  ;; - Both conditions met → TRENDING
+  ;;
+  ;; WHY THESE THRESHOLDS?
+  ;; - 0.6 trend strength = 60% R-squared (good fit)
+  ;; - 0.4 volatility = 40% annualized (manageable)
+  ;; - Empirically optimized over historical data
+  ;;
+  ;; TRADING IMPLICATIONS:
+  ;; - Use momentum strategies
+  ;; - Follow the trend
+  ;; - Add to winners
+  ;; - Don't fight the tape
+  ;;
+  (when (and (> trend_strength 0.6) (< volatility 0.4))
+    (set! regime "TRENDING"))
+
+  ;; ============================================
+  ;; MEAN-REVERTING REGIME DETECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Oscillation around stable mean
+  ;; - Criteria: trend_strength < 0.4 AND volatility < 0.3
+  ;; - No strong trend (choppy, sideways)
+  ;; - Low volatility (stable range)
+  ;;
+  ;; CALCULATION:
+  ;; - trend_strength = 0.75 NOT < 0.4 ✗
+  ;; - Condition not met → Skip
+  ;;
+  ;; TRADING IMPLICATIONS (when active):
+  ;; - Use mean-reversion strategies
+  ;; - Buy dips, sell rips
+  ;; - Fade extremes
+  ;; - Set profit targets
+  ;;
+  (when (and (< trend_strength 0.4) (< volatility 0.3))
+    (set! regime "MEAN_REVERT"))
+
+  ;; ============================================
+  ;; VOLATILE/CHAOTIC REGIME DETECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: High uncertainty and risk
+  ;; - Criteria: volatility > 0.5
+  ;; - Elevated risk environment
+  ;; - Trends unreliable in high volatility
+  ;;
+  ;; CALCULATION:
+  ;; - volatility = 0.35 NOT > 0.5 ✗
+  ;; - Condition not met → Skip
+  ;;
+  ;; WHY 0.5 THRESHOLD?
+  ;; - 50% annualized volatility = crisis levels
+  ;; - VIX equivalent: ~40-50 (fear)
+  ;; - Most strategies break down above this
+  ;;
+  ;; TRADING IMPLICATIONS (when active):
+  ;; - Reduce position sizes dramatically
+  ;; - Widen stops
+  ;; - Defensive posture
+  ;; - Cash is a position
+  ;;
+  (when (> volatility 0.5)
+    (set! regime "VOLATILE"))
+
+  ;; ============================================
+  ;; BREAKOUT REGIME DETECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Regime transition with strong conviction
+  ;; - Criteria: volume_spike > 2.0 AND trend_strength > 0.7
+  ;; - Unusual volume confirms breakout
+  ;; - Strong trend indicates direction
+  ;;
+  ;; CALCULATION:
+  ;; - volume_spike = 2.5 > 2.0 ✓
+  ;; - trend_strength = 0.75 > 0.7 ✓
+  ;; - Both conditions met → BREAKOUT
+  ;;
+  ;; WHY BREAKOUT OVERRIDES TRENDING?
+  ;; - Later when statement overwrites earlier regime
+  ;; - Breakout is more specific/actionable
+  ;; - Represents highest conviction setup
+  ;;
+  ;; INTERPRETATION:
+  ;; - Major players entering
+  ;; - Likely institutional flow
+  ;; - Early stage of strong move
+  ;; - Highest profit potential
+  ;;
+  ;; TRADING IMPLICATIONS:
+  ;; - Aggressive entry (don't wait)
+  ;; - Larger position size
+  ;; - Wider stops (give room to work)
+  ;; - Trail stops as move develops
+  ;;
+  (when (and (> volume_spike 2.0) (> trend_strength 0.7))
+    (set! regime "BREAKOUT"))
+
+  ;; ============================================
+  ;; NEUTRAL REGIME (DEFAULT)
+  ;; ============================================
+  ;;
+  ;; THEORY: No clear regime identified
+  ;; - Fall back when no specific pattern detected
+  ;; - Avoids forced trades
+  ;; - Better to wait for clarity
+  ;;
+  ;; CALCULATION:
+  ;; - regime already set to "BREAKOUT"
+  ;; - This branch skipped
+  ;;
+  ;; TRADING IMPLICATIONS (when active):
+  ;; - Don't force trades
+  ;; - Wait for clearer signals
+  ;; - Reduce activity
+  ;; - Preserve capital
+  ;;
+  (when (null? regime)
+    (set! regime "NEUTRAL"))
+
+  (log :message "Market regime:" :value regime)
+
+  ;; ============================================
+  ;; REGIME-SPECIFIC STRATEGY SELECTION
+  ;; ============================================
+  ;;
+  ;; THEORY: Match strategy to market conditions
+  ;; - Each regime has optimal approach
+  ;; - Fighting the regime = losing money
+  ;; - Adaptation is key to long-term success
+  ;;
+  ;; STRATEGY MAPPING:
+  ;;
+  ;; TRENDING → Momentum
+  ;; - Buy strength, sell weakness
+  ;; - Add to winners
+  ;; - Let profits run
+  ;;
+  ;; MEAN_REVERT → Fade moves
+  ;; - Buy dips, sell rips
+  ;; - Take profits quickly
+  ;; - Contrarian approach
+  ;;
+  ;; BREAKOUT → Aggressive entry
+  ;; - Enter early in move
+  ;; - Large position
+  ;; - Capture majority of move
+  ;;
+  ;; VOLATILE → Reduce size
+  ;; - Defensive posture
+  ;; - Preserve capital
+  ;; - Wait for regime change
+  ;;
+  ;; NEUTRAL → Wait
+  ;; - No clear edge
+  ;; - Avoid overtrading
+  ;; - Cash is safe
+  ;;
+  ;; CURRENT REGIME: BREAKOUT
+  ;; - Strategy: Enter aggressively
+  ;; - Rationale: High volume + strong trend = conviction
+  ;;
+  (define strategy (if (= regime "TRENDING")
+                       "📈 Momentum - Follow trend"
+                       (if (= regime "MEAN_REVERT")
+                           "↔️ Mean-reversion - Fade moves"
+                           (if (= regime "BREAKOUT")
+                               "🚀 Breakout - Enter aggressively"
+                               (if (= regime "VOLATILE")
+                                   "⚠️ Reduce size - High risk"
+                                   "⏸️ Wait - No clear regime")))))
+
+  (log :message "Strategy:" :value strategy)
+
+  ;; ============================================
+  ;; POSITION SIZING MULTIPLIER
+  ;; ============================================
+  ;;
+  ;; THEORY: Scale position by regime confidence
+  ;; - High conviction regimes = larger positions
+  ;; - Uncertain regimes = smaller positions
+  ;; - Multiplies baseline position size
+  ;;
+  ;; MULTIPLIER RATIONALE:
+  ;;
+  ;; TRENDING: 1.5x
+  ;; - Trends persist (autocorrelation)
+  ;; - Low volatility = lower risk
+  ;; - Can afford larger size
+  ;;
+  ;; BREAKOUT: 1.3x
+  ;; - High conviction setup
+  ;; - Early entry advantage
+  ;; - Slightly conservative vs trending (newer move)
+  ;;
+  ;; VOLATILE: 0.5x
+  ;; - High risk environment
+  ;; - Half normal size
+  ;; - Protect capital
+  ;;
+  ;; Others: 1.0x
+  ;; - Baseline sizing
+  ;; - No adjustment
+  ;;
+  ;; CALCULATION:
+  ;; - regime = "BREAKOUT"
+  ;; - size_multiplier = 1.3
+  ;;
+  ;; IMPLEMENTATION EXAMPLE:
+  ;; - Baseline position: $10,000
+  ;; - BREAKOUT multiplier: 1.3
+  ;; - Actual position: $10,000 × 1.3 = $13,000
+  ;;
+  ;; RISK MANAGEMENT:
+  ;; - Total portfolio risk stays constant
+  ;; - Multiplier adjusts individual trade size
+  ;; - Combined with wider stops in volatile regimes
+  ;; - Maintains consistent volatility exposure
+  ;;
+  (define size_multiplier (if (= regime "TRENDING") 1.5
+                              (if (= regime "BREAKOUT") 1.3
+                                  (if (= regime "VOLATILE") 0.5 1.0))))
+
+  (log :message "Size multiplier:" :value size_multiplier)
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real systems would add:
+  ;; 1. Hidden Markov Models (HMM)
+  ;;    - Probabilistic regime classification
+  ;;    - State transition probabilities
+  ;;    - Smooth regime changes
+  ;;
+  ;; 2. Multiple timeframe analysis
+  ;;    - Daily, weekly, monthly regimes
+  ;;    - Nested regime hierarchy
+  ;; - Align trades with higher timeframe
+  ;;
+  ;; 3. Machine learning classification
+  ;;    - Train on historical regimes
+  ;;    - Non-linear feature combinations
+  ;;    - Adaptive thresholds
+  ;;
+  ;; 4. Real-time regime probability
+  ;;    - % confidence in each regime
+  ;;    - Blend strategies by probability
+  ;;    - Gradual transitions
+  ;;
+  ;; 5. Regime persistence metrics
+  ;;    - Expected regime duration
+  ;;    - Transition likelihood
+  ;;    - Early exit signals
+  ;;
+  ;; 6. Cross-asset regime detection
+  ;;    - Stocks, bonds, commodities
+  ;;    - Risk-on / risk-off
+  ;;    - Flight-to-quality indicators
+  ;;
+  ;; 7. Macro regime overlays
+  ;;    - Expansion, recession, recovery
+  ;;    - Fed policy stance
+  ;; - Inflation regime
+  ;;
+  ;; 8. Adaptive parameter tuning
+  ;;    - Volatility targeting
+  ;;    - Dynamic stop distances
+  ;;    - Regime-specific entry rules
+  ;;
+  ;; ACADEMIC REFERENCES:
+  ;; - Hamilton (1989): "A New Approach to the Economic Analysis of Nonstationary Time Series"
+  ;; - Ang & Timmermann (2012): "Regime Changes and Financial Markets"
+  ;; - Kritzman et al. (2012): "Regime Shifts: Implications for Dynamic Strategies"
+  ;; - Guidolin & Timmermann (2007): "Asset Allocation under Multivariate Regime Switching"
+  ;;
+
+  "✅ Regime switching complete!")

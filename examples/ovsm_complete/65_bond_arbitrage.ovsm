@@ -1,0 +1,45 @@
+;; ============================================================================
+;; OVSM LISP Example 65: BOND ARBITRAGE
+;; ============================================================================
+
+(do
+  (log :message "=== BOND ARBITRAGE ANALYSIS ===" :value "")
+
+  ;; Bond prices
+  (define bond_a_price 99.5)
+  (define bond_b_price 100.2)
+  (define bond_a_coupon 5.0)
+  (define bond_b_coupon 5.25)
+
+  (log :message "Bond A Price:" :value bond_a_price)
+  (log :message "Bond A Coupon:" :value bond_a_coupon)
+  (log :message "Bond B Price:" :value bond_b_price)
+  (log :message "Bond B Coupon:" :value bond_b_coupon)
+
+  ;; Calculate yields
+  (define bond_a_yield (/ bond_a_coupon bond_a_price))
+  (define bond_b_yield (/ bond_b_coupon bond_b_price))
+
+  (log :message "Bond A Yield:" :value bond_a_yield)
+  (log :message "Bond B Yield:" :value bond_b_yield)
+
+  ;; Arbitrage opportunity
+  (define yield_spread (- bond_a_yield bond_b_yield))
+  (log :message "Yield Spread:" :value yield_spread)
+
+  (define signal (if (> yield_spread 0.01)
+                     "BUY Bond A, SELL Bond B"
+                     (if (< yield_spread -0.01)
+                         "SELL Bond A, BUY Bond B"
+                         "NO ARBITRAGE")))
+
+  (log :message "Arbitrage Signal:" :value signal)
+
+  ;; Profit calculation
+  (define notional 1000000)
+  (define profit (* notional yield_spread))
+
+  (log :message "Notional:" :value notional)
+  (log :message "Expected Profit:" :value profit)
+
+  "✅ Bond arbitrage analysis complete!")

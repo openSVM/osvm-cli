@@ -1,0 +1,50 @@
+;; ============================================================================
+;; OVSM LISP Example 66: CREDIT SPREAD STRATEGIES
+;; ============================================================================
+
+(do
+  (log :message "=== CREDIT SPREAD ANALYSIS ===" :value "")
+
+  ;; Credit spreads (bps over treasury)
+  (define investment_grade_spread 150)
+  (define high_yield_spread 450)
+  (define treasury_yield 5.0)
+
+  (log :message "Treasury Yield:" :value treasury_yield)
+  (log :message "Investment Grade Spread:" :value investment_grade_spread)
+  (log :message "High Yield Spread:" :value high_yield_spread)
+
+  ;; Calculate all-in yields
+  (define ig_yield (+ treasury_yield (/ investment_grade_spread 100)))
+  (define hy_yield (+ treasury_yield (/ high_yield_spread 100)))
+
+  (log :message "IG All-in Yield:" :value ig_yield)
+  (log :message "HY All-in Yield:" :value hy_yield)
+
+  ;; Risk premium
+  (define risk_premium (- hy_yield ig_yield))
+  (log :message "Risk Premium:" :value risk_premium)
+
+  ;; Trading signal
+  (define signal (if (> high_yield_spread 500)
+                     "BUY High Yield - Oversold"
+                     (if (< high_yield_spread 350)
+                         "SELL High Yield - Expensive"
+                         "HOLD")))
+
+  (log :message "Signal:" :value signal)
+
+  ;; Position sizing
+  (define portfolio_value 1000000)
+  (define allocation 0.15)
+  (define position_size (* portfolio_value allocation))
+
+  (log :message "Portfolio Value:" :value portfolio_value)
+  (log :message "Allocation:" :value allocation)
+  (log :message "Position Size:" :value position_size)
+
+  ;; Expected return
+  (define expected_return (* position_size (/ hy_yield 100)))
+  (log :message "Expected Annual Return:" :value expected_return)
+
+  "✅ Credit spread analysis complete!")

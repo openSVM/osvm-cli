@@ -1,0 +1,539 @@
+;; ============================================
+;; OVSM Example 15: PumpSwap Sniper & Frontrunning
+;; ============================================
+;;
+;; THEORY: MEV (Maximal Extractable Value) & Sniping Strategy
+;;
+;; This example demonstrates sophisticated memecoin sniping strategies on PumpSwap,
+;; combining frontrunning detection, sandwich attacks, and anti-rug checks.
+;;
+;; KEY CONCEPTS:
+;; 1. New Token Detection: Monitor program logs for CreateToken events
+;; 2. Liquidity Analysis: Initial SOL reserves determine price stability
+;; 3. Frontrunning: Detect pending large buys and insert transaction ahead
+;; 4. Sandwich Attacks: Frontrun + backrun victim trades for guaranteed profit
+;; 5. MEV Bundles: Atomic transaction groups that execute or fail together
+;; 6. Anti-Rug Checks: Verify token safety (mint authority, LP burn, holder distribution)
+;;
+;; WHY THIS MATTERS:
+;; - First 10 buyers of new memecoins can capture 50-500% gains in seconds
+;; - Frontrunning large buys provides risk-free profit through price manipulation
+;; - Sandwich attacks exploit AMM mechanics for guaranteed returns
+;; - Anti-rug checks prevent honeypot scams that lock your funds
+;;
+;; IMPLEMENTATION NOTES:
+;; - This is a SIMULATION of MEV strategies for educational purposes
+;; - Real implementation requires RPC websocket subscriptions and sub-100ms latency
+;; - Frontrunning is highly competitive; success requires dedicated infrastructure
+;; - Always test with small amounts first; sniping carries high risk
+;;
+;; ACADEMIC REFERENCES:
+;; - Daian et al. (2019): "Flash Boys 2.0: Frontrunning, Transaction Reordering,
+;;   and Consensus Instability in Decentralized Exchanges"
+;; - Flashbots Research: MEV-Boost and Builder API specifications
+;; - Solana Validator documentation on transaction ordering and priority fees
+
+(do
+  (log :message "=== PUMPSWAP NEW LISTING DETECTION ===")
+  ;;
+  ;; THEORY: Event-Driven Token Discovery
+  ;;
+  ;; PumpSwap emits CreateToken events when new memecoins launch.
+  ;; Snipers monitor program logs in real-time to detect opportunities
+  ;; within milliseconds of token creation.
+  ;;
+  ;; DETECTION METHOD:
+  ;; 1. Subscribe to PumpSwap program account (6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)
+  ;; 2. Parse instruction data for "create_token" discriminator
+  ;; 3. Extract token mint address and initial liquidity
+  ;; 4. Execute buy within same slot (400ms window)
+  ;;
+  ;; CALCULATION:
+  ;; Detection Speed = RPC Latency + Parsing Time + Transaction Construction
+  ;; Target: <100ms total (faster than 95% of competitors)
+
+  ;; Monitor PumpSwap program for new token creation events
+  (define pumpswap_program "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+
+  ;; Simulated recent transactions (in production, use getSignatures with websocket)
+  (define recent_txs [
+    {:signature "sig1" :type "create_token" :timestamp 1704067200 :token "TokenA"}
+    {:signature "sig2" :type "swap" :timestamp 1704067201 :token "TokenB"}
+    {:signature "sig3" :type "create_token" :timestamp 1704067205 :token "TokenC"}
+  ])
+  ;;
+  ;; WHY THIS STRUCTURE:
+  ;; - :type discriminates event types (create_token is our target)
+  ;; - :timestamp enables time-based filtering (only snipe fresh launches)
+  ;; - :token provides mint address for immediate buy execution
+
+  ;; Filter for token creation events (our sniping targets)
+  (define new_tokens [])
+  (for (tx recent_txs)
+    (define tx_type (get tx "type"))
+    (when (= tx_type "create_token")
+      ;; FOUND: New token launch detected
+      (define token_addr (get tx "token"))
+      (define timestamp (get tx "timestamp"))
+      (log :message "🎯 NEW TOKEN DETECTED:" :value token_addr)
+      ;; Add to candidates list for analysis
+      (set! new_tokens (concat new_tokens [tx]))))
+
+  (log :message "New tokens found:" :value (length new_tokens))
+
+  (log :message "\n=== LIQUIDITY ANALYSIS ===")
+  ;;
+  ;; THEORY: Initial Liquidity & Market Cap Assessment
+  ;;
+  ;; Token snipability depends on initial liquidity conditions:
+  ;; - Too low (<5 SOL): High slippage, likely abandoned
+  ;; - Optimal (5-50 SOL): Good slippage, real community potential
+  ;; - Too high (>50 SOL): Expensive to move price, lower ROI
+  ;;
+  ;; CALCULATION: Initial Price & Market Cap
+  ;; Price = SOL_Reserves / Token_Supply
+  ;; Market_Cap = Price × Total_Supply
+  ;;
+  ;; WHY IT MATTERS:
+  ;; Initial price determines entry cost and potential 10x-100x zones.
+  ;; Low initial liquidity = higher volatility = higher profit potential.
+
+  ;; Analyze initial liquidity for sniping viability
+  (define token_data {:token "TokenA"
+                       :sol_liquidity 10.0        ;; SOL in liquidity pool
+                       :token_supply 1000000000   ;; Total token supply
+                       :initial_buyers 5})        ;; Competitors already in
+
+  (define sol_liq (get token_data "sol_liquidity"))
+  (define supply (get token_data "token_supply"))
+  (define initial_buyers (get token_data "initial_buyers"))
+
+  ;; Calculate initial market cap (simplified AMM pricing)
+  ;; THEORY: In constant product AMM (x*y=k), price = x/y where x=SOL, y=tokens
+  (define initial_price (/ sol_liq supply))
+  (define market_cap (* initial_price supply))
+  ;;
+  ;; INTERPRETATION:
+  ;; - initial_price: Cost per token in SOL
+  ;; - market_cap: Total value if you bought entire supply (theoretical)
+  ;; Example: 10 SOL / 1B tokens = 0.00000001 SOL per token
+
+  (log :message "SOL Liquidity:" :value sol_liq)
+  (log :message "Market Cap:" :value market_cap)
+  (log :message "Initial Buyers:" :value initial_buyers)
+
+  ;; Sniping criteria (optimal conditions for profitable entry)
+  (define min_liquidity 5.0)    ;; Below this: too much slippage
+  (define max_liquidity 50.0)   ;; Above this: too expensive to pump
+  (define max_initial_buyers 10) ;; More buyers = missed the early wave
+
+  (define should_snipe (and
+    (>= sol_liq min_liquidity)
+    (<= sol_liq max_liquidity)
+    (<= initial_buyers max_initial_buyers)))
+  ;;
+  ;; WHY THESE THRESHOLDS:
+  ;; - min_liquidity: Prevents getting rekt by 50%+ slippage
+  ;; - max_liquidity: Large pools are slower to pump (whale territory)
+  ;; - max_initial_buyers: If >10 people are in, you're already late
+
+  (log :message "Should snipe:" :value should_snipe)
+
+  (log :message "\n=== FRONTRUNNING DETECTION ===")
+  ;;
+  ;; THEORY: Mempool Analysis & Frontrunning Strategy
+  ;;
+  ;; Frontrunning exploits the time gap between transaction broadcast and inclusion:
+  ;; 1. Victim broadcasts large buy with priority fee X
+  ;; 2. Sniper detects pending transaction in mempool
+  ;; 3. Sniper broadcasts buy with fee > X (lands first)
+  ;; 4. Victim's buy executes at higher price (sniper profits)
+  ;;
+  ;; CALCULATION: Optimal Frontrun Fee
+  ;; Optimal_Fee = Victim_Fee × 1.1 to 1.2 (10-20% higher)
+  ;; But capped at: Max_Fee = Expected_Profit × 0.3 (30% of gains)
+  ;;
+  ;; WHY IT WORKS:
+  ;; Solana validators prioritize transactions by fee within each slot.
+  ;; Higher fee = earlier execution = frontrun successful.
+  ;;
+  ;; REFERENCE:
+  ;; Solana scheduler sorts transactions by compute_unit_price (priority fee)
+  ;; within each slot's 400ms window.
+
+  ;; Detect pending large buys in mempool (requires RPC subscription)
+  (define pending_txs [
+    {:buyer "WalletA" :amount 5.0 :priority_fee 0.01}
+    {:buyer "WalletB" :amount 1.0 :priority_fee 0.001}
+    {:buyer "WalletC" :amount 15.0 :priority_fee 0.005}
+  ])
+
+  ;; Find whale entries (targets for frontrunning)
+  (define whale_threshold 10.0)  ;; Buys >= 10 SOL are worth frontrunning
+  (define whale_txs [])
+
+  (for (tx pending_txs)
+    (define amount (get tx "amount"))
+    (when (>= amount whale_threshold)
+      ;; WHALE DETECTED: Large buy creates frontrunning opportunity
+      (define buyer (get tx "buyer"))
+      (define fee (get tx "priority_fee"))
+      (log :message "🐋 WHALE BUY DETECTED:" :value buyer)
+      (log :message "  Amount:" :value amount)
+      (log :message "  Priority Fee:" :value fee)
+      (set! whale_txs (concat whale_txs [tx]))))
+
+  (log :message "Whale transactions:" :value (length whale_txs))
+
+  ;; Calculate optimal frontrun fee (must outbid whale)
+  (define frontrun_fee 0.0)
+  (when (> (length whale_txs) 0)
+    (define first_whale (first whale_txs))
+    (define whale_fee (get first_whale "priority_fee"))
+    ;; STRATEGY: Outbid by 10% to ensure frontrun
+    (set! frontrun_fee (* whale_fee 1.1))
+    (log :message "Optimal frontrun fee:" :value frontrun_fee))
+  ;;
+  ;; INTERPRETATION:
+  ;; If whale pays 0.01 SOL fee, we pay 0.011 SOL to land first.
+  ;; Our buy executes at lower price, whale's buy pushes price up, we profit.
+
+  (log :message "\n=== SANDWICH ATTACK ANALYSIS ===")
+  ;;
+  ;; THEORY: Sandwich Attack Mechanics (Advanced MEV Strategy)
+  ;;
+  ;; A sandwich attack profits from both sides of a victim's trade:
+  ;; 1. FRONTRUN: Buy tokens before victim (push price up)
+  ;; 2. VICTIM: Their buy executes at inflated price
+  ;; 3. BACKRUN: Sell tokens after victim (capture profit)
+  ;;
+  ;; MATHEMATICS: Constant Product AMM (x*y=k)
+  ;; Given pool with x SOL and y tokens:
+  ;; - Buying Δx SOL → Receive Δy tokens
+  ;; - New state: (x+Δx) * (y-Δy) = k
+  ;; - Price impact: Δy = y - k/(x+Δx)
+  ;;
+  ;; PROFIT CALCULATION:
+  ;; Sandwich_Profit = Backrun_SOL_Received - Frontrun_SOL_Spent - Fees
+  ;;
+  ;; WHY IT WORKS:
+  ;; Victim's trade provides guaranteed price movement we can exploit.
+  ;; We profit from the slippage THEY create.
+  ;;
+  ;; REFERENCE:
+  ;; Constant product formula from Uniswap v2 whitepaper,
+  ;; adapted for Solana AMMs (Raydium, Orca, PumpSwap).
+
+  ;; Simulate sandwich attack profitability
+  (define victim_buy_amount 8.0)   ;; Victim buys 8 SOL worth
+  (define pool_sol 50.0)            ;; Pool reserves: 50 SOL
+  (define pool_tokens 1000000.0)   ;; Pool reserves: 1M tokens
+
+  ;; Calculate constant product k
+  (define k (* pool_sol pool_tokens))
+  ;; k = 50 * 1,000,000 = 50,000,000
+  ;; This constant maintains AMM invariant across all trades
+
+  ;; STEP 1: Front-run buy (we buy before victim)
+  (define frontrun_amount 2.0)  ;; We buy 2 SOL worth first
+  (define new_pool_sol (+ pool_sol frontrun_amount))
+  ;; new_pool_sol = 50 + 2 = 52 SOL
+
+  (define new_pool_tokens (/ k new_pool_sol))
+  ;; new_pool_tokens = 50,000,000 / 52 ≈ 961,538 tokens
+
+  (define frontrun_tokens (- pool_tokens new_pool_tokens))
+  ;; frontrun_tokens = 1,000,000 - 961,538 = 38,462 tokens
+  ;; WE RECEIVED: 38,462 tokens for 2 SOL
+
+  (log :message "Front-run tokens acquired:" :value frontrun_tokens)
+
+  ;; STEP 2: Victim's transaction executes (at worse price due to our frontrun)
+  (define pool_sol_after_frontrun new_pool_sol)
+  (define pool_tokens_after_frontrun new_pool_tokens)
+  (define k_after_frontrun (* pool_sol_after_frontrun pool_tokens_after_frontrun))
+  ;; k still = 50,000,000 (invariant maintained)
+
+  (define victim_new_sol (+ pool_sol_after_frontrun victim_buy_amount))
+  ;; victim_new_sol = 52 + 8 = 60 SOL
+
+  (define victim_new_tokens (/ k_after_frontrun victim_new_sol))
+  ;; victim_new_tokens = 50,000,000 / 60 ≈ 833,333 tokens
+
+  (define victim_tokens (- pool_tokens_after_frontrun victim_new_tokens))
+  ;; victim_tokens = 961,538 - 833,333 = 128,205 tokens
+  ;; VICTIM RECEIVED: 128,205 tokens for 8 SOL (worse price than expected!)
+
+  ;; STEP 3: Back-run sell (we sell our tokens at inflated price)
+  (define pool_sol_final victim_new_sol)
+  (define pool_tokens_final victim_new_tokens)
+  (define k_final (* pool_sol_final pool_tokens_final))
+
+  ;; We sell our 38,462 tokens back to pool
+  (define backrun_new_tokens (- pool_tokens_final frontrun_tokens))
+  ;; backrun_new_tokens = 833,333 - 38,462 = 794,871 tokens (in pool)
+
+  (define backrun_new_sol (/ k_final backrun_new_tokens))
+  ;; backrun_new_sol = 50,000,000 / 794,871 ≈ 62.9 SOL
+
+  (define backrun_sol (- backrun_new_sol pool_sol_final))
+  ;; backrun_sol = 62.9 - 60 = 2.9 SOL
+  ;; WE RECEIVED: 2.9 SOL from selling our tokens
+
+  ;; FINAL PROFIT CALCULATION
+  (define sandwich_profit (- backrun_sol frontrun_amount))
+  ;; sandwich_profit = 2.9 - 2.0 = 0.9 SOL PROFIT
+
+  (define sandwich_profit_pct (* (/ sandwich_profit frontrun_amount) 100))
+  ;; sandwich_profit_pct = 0.9 / 2.0 * 100 = 45% ROI
+  ;;
+  ;; INTERPRETATION:
+  ;; By sandwiching victim's 8 SOL buy with our 2 SOL frontrun/backrun,
+  ;; we extracted 0.9 SOL profit (45% ROI) in a single transaction bundle.
+  ;; Victim paid the price (literally) through increased slippage.
+
+  (log :message "Sandwich profit:" :value sandwich_profit)
+  (log :message "Profit percentage:" :value sandwich_profit_pct)
+
+  (log :message "\n=== BUNDLE TRANSACTION STRATEGY ===")
+  ;;
+  ;; THEORY: Atomic Transaction Bundles
+  ;;
+  ;; Bundles group multiple transactions that execute together or fail together.
+  ;; Critical for sandwich attacks and complex MEV strategies.
+  ;;
+  ;; STRUCTURE:
+  ;; 1. Tip transaction (pays bundle builder/validator)
+  ;; 2. Core transactions (your actual trades)
+  ;; 3. All-or-nothing execution (protects from partial fills)
+  ;;
+  ;; WHY IT MATTERS:
+  ;; Without bundles, frontrun could succeed but backrun fail → loss.
+  ;; Bundles guarantee atomic execution → risk-free profit.
+
+  ;; Create atomic bundle (all transactions execute or none do)
+  (define bundle [
+    {:type "buy" :amount 1.0 :slippage 0.5}
+    {:type "add_liquidity" :amount 0.5}
+    {:type "remove_liquidity" :amount 0.5}
+    {:type "sell" :amount 0.5}
+  ])
+
+  (log :message "Bundle size:" :value (length bundle))
+
+  ;; Calculate bundle profitability (all steps must succeed)
+  (define bundle_cost 1.0)       ;; Total SOL spent
+  (define expected_return 1.3)   ;; Expected SOL received
+  (define bundle_profit (- expected_return bundle_cost))
+  (define bundle_roi (* (/ bundle_profit bundle_cost) 100))
+  ;;
+  ;; CALCULATION:
+  ;; ROI = (1.3 - 1.0) / 1.0 * 100 = 30%
+  ;; If any transaction fails, entire bundle reverts (lose only tx fees)
+
+  (log :message "Expected bundle ROI:" :value bundle_roi)
+
+  (log :message "\n=== SNIPER BOT DECISION MATRIX ===")
+  ;;
+  ;; THEORY: Multi-Factor Scoring System
+  ;;
+  ;; Combine multiple signals into single decision score:
+  ;; - Liquidity: Optimal range for price movement
+  ;; - Competition: Fewer early buyers = more profit
+  ;; - Whale Activity: Large buys create frontrun opportunities
+  ;; - Sandwich Profit: ROI from sandwich attack
+  ;;
+  ;; SCORING:
+  ;; Each factor contributes to score (0.0 to 1.0)
+  ;; Threshold: >= 0.7 = Execute, >= 0.5 = Caution, < 0.5 = Skip
+  ;;
+  ;; WHY THIS APPROACH:
+  ;; Single factor can be misleading. Combined score reduces false positives
+  ;; and maximizes expected value across many trades.
+
+  ;; Combine all signals into unified snipe score
+  (define snipe_score 0.0)
+
+  ;; Liquidity score (30% weight): Is liquidity in optimal range?
+  (when (and (>= sol_liq 5) (<= sol_liq 50))
+    (set! snipe_score (+ snipe_score 0.3)))
+  ;; +0.3 if liquidity between 5-50 SOL (optimal zone)
+
+  ;; Competition score (20% weight): Are we early?
+  (when (<= initial_buyers 10)
+    (set! snipe_score (+ snipe_score 0.2)))
+  ;; +0.2 if fewer than 10 buyers (early wave)
+
+  ;; Whale activity score (30% weight): Frontrun opportunities?
+  (when (> (length whale_txs) 0)
+    (set! snipe_score (+ snipe_score 0.3)))
+  ;; +0.3 if whales detected (can frontrun)
+
+  ;; Sandwich opportunity score (20% weight): Profitable attack possible?
+  (when (> sandwich_profit_pct 5)
+    (set! snipe_score (+ snipe_score 0.2)))
+  ;; +0.2 if sandwich attack yields >5% profit
+
+  (log :message "Final snipe score:" :value snipe_score)
+  ;;
+  ;; INTERPRETATION:
+  ;; 1.0 = Perfect setup (rare)
+  ;; 0.7+ = Execute snipe (high confidence)
+  ;; 0.5-0.7 = Proceed with caution
+  ;; <0.5 = Skip (poor risk/reward)
+
+  (define snipe_decision (if (>= snipe_score 0.7)
+                             "🚀 EXECUTE SNIPE - High probability"
+                             (if (>= snipe_score 0.5)
+                                 "⚠️ CAUTION - Moderate risk"
+                                 "❌ SKIP - Poor conditions")))
+
+  (log :message "Bot decision:" :value snipe_decision)
+
+  ;; Position sizing based on confidence
+  (define max_snipe_amount 5.0)
+  (define recommended_amount (* max_snipe_amount snipe_score))
+  ;;
+  ;; CALCULATION:
+  ;; If score = 0.8, recommended = 5.0 * 0.8 = 4.0 SOL
+  ;; Higher confidence = larger position = more profit
+  ;; Lower confidence = smaller position = risk management
+
+  (log :message "Recommended snipe amount:" :value recommended_amount)
+
+  (log :message "\n=== ANTI-RUG CHECKS ===")
+  ;;
+  ;; THEORY: Honeypot & Rug Pull Detection
+  ;;
+  ;; Many new memecoins are scams designed to steal your SOL:
+  ;; 1. MINT AUTHORITY: Developer can mint infinite tokens (dump on you)
+  ;; 2. FREEZE AUTHORITY: Developer can freeze your tokens (can't sell)
+  ;; 3. LP NOT BURNED: Developer can remove liquidity (rug pull)
+  ;; 4. CONCENTRATED HOLDERS: Developer controls most supply (dump risk)
+  ;;
+  ;; SAFETY SCORING:
+  ;; Start with 100 points, deduct for each risk:
+  ;; - Mint authority: -30 (can dilute your holdings)
+  ;; - Freeze authority: -30 (can lock your tokens)
+  ;; - LP not burned: -20 (can steal liquidity)
+  ;; - Top 10 holders >50%: -20 (dump risk)
+  ;;
+  ;; THRESHOLD: >= 60 = Acceptable risk, < 60 = Likely scam
+  ;;
+  ;; WHY THIS MATTERS:
+  ;; 90% of new memecoins are honeypots. These checks prevent total loss.
+  ;;
+  ;; REFERENCE:
+  ;; Token-2022 program documentation (Solana SPL Token standard)
+
+  ;; Verify token safety before sniping (CRITICAL for avoiding scams)
+  (define token_checks {:mint_authority true       ;; BAD: Can mint more
+                        :freeze_authority true     ;; BAD: Can freeze accounts
+                        :lp_burned false           ;; BAD: LP can be removed
+                        :top_10_holders_pct 65.0}) ;; BAD: Concentrated holdings
+
+  (define mint_auth (get token_checks "mint_authority"))
+  (define freeze_auth (get token_checks "freeze_authority"))
+  (define lp_burned (get token_checks "lp_burned"))
+  (define top_holders_pct (get token_checks "top_10_holders_pct"))
+
+  (log :message "Mint authority enabled:" :value mint_auth)
+  (log :message "Freeze authority enabled:" :value freeze_auth)
+  (log :message "LP burned:" :value lp_burned)
+  (log :message "Top 10 holders:" :value top_holders_pct)
+
+  ;; Safety score calculation (100 = perfect, 0 = honeypot)
+  (define safety_score 100.0)
+  (when mint_auth (set! safety_score (- safety_score 30)))
+  ;; -30 points: Developer can print infinite tokens and dump
+
+  (when freeze_auth (set! safety_score (- safety_score 30)))
+  ;; -30 points: Developer can freeze your account (can't sell)
+
+  (when (not lp_burned) (set! safety_score (- safety_score 20)))
+  ;; -20 points: Developer can remove all liquidity (rug pull)
+
+  (when (> top_holders_pct 50) (set! safety_score (- safety_score 20)))
+  ;; -20 points: Whales control majority (coordinated dump risk)
+
+  (log :message "Safety score:" :value safety_score)
+  ;;
+  ;; INTERPRETATION:
+  ;; 100 = Perfect (renounced, LP burned, distributed)
+  ;; 60-100 = Acceptable risk (proceed with caution)
+  ;; 0-60 = Likely honeypot (AVOID)
+
+  (define is_safe (>= safety_score 60))
+  (define safety_verdict (if is_safe
+                             "✅ SAFE - Proceed with caution"
+                             "🚨 DANGEROUS - High rug risk"))
+
+  (log :message "Safety verdict:" :value safety_verdict)
+
+  ;; Final decision combines snipe score and safety
+  (define final_decision (if (and is_safe should_snipe (>= snipe_score 0.7))
+                             "🎯 EXECUTE SNIPE NOW"
+                             "⏸️ WAIT - Conditions not met"))
+  ;;
+  ;; LOGIC:
+  ;; All three conditions must be true:
+  ;; 1. is_safe: Token passes anti-rug checks
+  ;; 2. should_snipe: Liquidity conditions optimal
+  ;; 3. snipe_score >= 0.7: Strong multi-factor signals
+  ;;
+  ;; Missing any condition = too risky to proceed
+
+  (log :message "\n=== FINAL DECISION ===" )
+  (log :message final_decision)
+
+  "✅ PumpSwap sniper analysis complete!")
+
+;;
+;; PRODUCTION ENHANCEMENTS:
+;;
+;; 1. REAL-TIME MONITORING:
+;;    - Replace simulated data with WebSocket subscriptions
+;;    - Subscribe to: geyser, accountSubscribe, logsSubscribe
+;;    - Target: <50ms detection latency
+;;
+;; 2. ADVANCED ANTI-RUG:
+;;    - Check for honeypot contracts (getAccountInfo + bytecode analysis)
+;;    - Verify renounced ownership (authority = null address)
+;;    - Analyze holder distribution (top 10 < 30%)
+;;    - Check liquidity lock time (>30 days)
+;;
+;; 3. MEV OPTIMIZATION:
+;;    - Use Jito Block Engine for MEV bundles
+;;    - Implement multi-bundle strategy (different fees)
+;;    - Add failure detection and retry logic
+;;    - Monitor bundle landing rate (target >70%)
+;;
+;; 4. RISK MANAGEMENT:
+;;    - Implement dynamic position sizing (Kelly Criterion)
+;;    - Set hard stop-loss at -20% (protect capital)
+;;    - Take profits at 2x, 5x, 10x milestones (ladder exits)
+;;    - Never risk >2% of portfolio on single snipe
+;;
+;; 5. COMPETITION DEFENSE:
+;;    - Use private RPC endpoints (avoid mempool exposure)
+;;    - Randomize transaction timing (avoid patterns)
+;;    - Implement fake transactions (confuse copycats)
+;;    - Monitor and adapt to competitor strategies
+;;
+;; 6. PERFORMANCE METRICS:
+;;    - Track win rate, average ROI, Sharpe ratio
+;;    - Monitor: detection speed, execution speed, success rate
+;;    - Target KPIs: 60%+ win rate, 30%+ avg ROI
+;;    - A/B test different strategies and thresholds
+;;
+;; DISCLAIMER:
+;; This example is for EDUCATIONAL PURPOSES ONLY. Memecoin sniping
+;; involves substantial risk including:
+;; - Total loss of capital (honeypots, rugs)
+;; - High competition (dedicated MEV infrastructure)
+;; - Regulatory risk (frontrunning may violate laws)
+;; - Technical complexity (requires low-latency systems)
+;;
+;; Always test strategies with small amounts first. Never invest
+;; more than you can afford to lose. Past performance does not
+;; guarantee future results.

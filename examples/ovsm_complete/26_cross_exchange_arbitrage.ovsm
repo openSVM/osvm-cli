@@ -1,0 +1,357 @@
+;; ============================================
+;; OVSM Example 26: Cross-Exchange Arbitrage
+;; ============================================
+;;
+;; THEORY: Multi-Venue Price Discrepancy Exploitation
+;; ----------------------------------------------------
+;; Cross-exchange arbitrage exploits price differences for the same asset
+;; across different trading venues. When exchange A has a higher bid than
+;; exchange B's ask, buy on B and simultaneously sell on A for risk-free profit.
+;;
+;; KEY CONCEPTS:
+;;
+;; 1. ARBITRAGE FUNDAMENTALS:
+;;    - Law of one price: Same asset should have same price everywhere
+;;    - Reality: Temporary price discrepancies across venues
+;;    - Opportunity: Buy low on one exchange, sell high on another
+;;    - Risk-free profit (in theory): No directional market exposure
+;;
+;; 2. TRIANGULAR ARBITRAGE:
+;;    - Three-leg trade across currency/token pairs
+;;    - Example: SOL/USDC → USDC/BONK → BONK/SOL
+;;    - Exploits pricing inefficiencies in cross-rates
+;;    - Must execute all three legs simultaneously
+;;
+;; 3. EXECUTION RISK:
+;;    - Latency: Price moves before completing both sides
+;;    - Partial fills: Only one side executes, leaving exposure
+;;    - Exchange failures: API errors, downtime, network issues
+;;    - Competition: Other arb bots racing for same opportunity
+;;
+;; 4. TRANSACTION COSTS:
+;;    - Trading fees: Maker/taker fees on each exchange
+;;    - Network fees: Blockchain gas costs for token transfers
+;;    - Withdrawal fees: Moving assets between exchanges
+;;    - Spread costs: Crossing bid-ask on both sides
+;;
+;; 5. CAPITAL EFFICIENCY:
+;;    - Prefunding: Hold capital on all exchanges
+;;    - Transfer time: Hours to move funds (kills opportunities)
+;;    - Opportunity cost: Capital tied up earning nothing
+;;    - Leverage: Some exchanges allow margin for arb
+;;
+;; WHY THIS MATTERS:
+;; - Arbitrage keeps markets efficient (price discovery)
+;; - High-frequency traders capture most opportunities
+;; - Window of opportunity: 100ms to few seconds
+;; - Competition has reduced profit margins to <5 bps
+;;
+;; ACADEMIC REFERENCES:
+;; - Fama (1970): "Efficient Capital Markets" - Arbitrage theory
+;; - Shleifer & Vishny (1997): "The Limits of Arbitrage"
+;; - Marshall et al. (2013): "The Cross-Exchange Spot Arbitrage"
+;; - Makarov & Schoar (2020): "Trading and Arbitrage in Cryptocurrency Markets"
+;;
+;; IMPLEMENTATION:
+;; Identifies arbitrage opportunities across three exchanges,
+;; calculates net profit after fees, and sizes position optimally.
+;;
+(do
+  (log :message "=== CROSS-EXCHANGE PRICE FEED ===")
+
+  ;; ============================================
+  ;; MULTI-VENUE MARKET DATA
+  ;; ============================================
+  ;;
+  ;; Real-time quotes from three major DeFi exchanges
+  ;; Each exchange has:
+  ;; - bid: Best buying price (what they'll pay you)
+  ;; - ask: Best selling price (what you must pay them)
+  ;; - fee_bps: Trading fee in basis points
+  ;;
+  ;; MARKET SNAPSHOT:
+  ;; - Raydium: 100.5 / 100.6 (10 bps spread, 25 bps fee)
+  ;; - Orca: 100.7 / 100.8 (10 bps spread, 30 bps fee)
+  ;; - Jupiter: 100.65 / 100.75 (10 bps spread, 20 bps fee)
+  ;;
+  ;; OBSERVATION:
+  ;; - Orca has highest bid (100.7)
+  ;; - Raydium has lowest ask (100.6)
+  ;; - Potential arbitrage: Buy Raydium, sell Orca
+  ;;
+  (define exchanges [
+    {:name "Raydium" :bid 100.5 :ask 100.6 :fee_bps 25}
+    {:name "Orca" :bid 100.7 :ask 100.8 :fee_bps 30}
+    {:name "Jupiter" :bid 100.65 :ask 100.75 :fee_bps 20}
+  ])
+
+  (log :message "Exchange count:" :value (length exchanges))
+
+  ;; ============================================
+  ;; BEST BID/ASK DISCOVERY
+  ;; ============================================
+  ;;
+  ;; THEORY: Find optimal buy and sell venues
+  ;; - Best bid: Highest price someone will buy from us
+  ;; - Best ask: Lowest price someone will sell to us
+  ;; - Arbitrage exists when: best_bid > best_ask
+  ;;
+  ;; ALGORITHM:
+  ;; - Iterate through all exchanges
+  ;; - Track maximum bid and minimum ask
+  ;; - Record which exchange offers each
+  ;;
+  ;; RESULT:
+  ;; - Best bid: 100.7 on Orca (highest buying price)
+  ;; - Best ask: 100.6 on Raydium (lowest selling price)
+  ;; - Gross spread: 100.7 - 100.6 = 0.1 ($0.10 per token)
+  ;;
+  (define best_bid_price 0.0)
+  (define best_bid_exchange null)
+  (define best_ask_price 999999.0)
+  (define best_ask_exchange null)
+
+  (for (exchange exchanges)
+    (define name (get exchange "name"))
+    (define bid (get exchange "bid"))
+    (define ask (get exchange "ask"))
+
+    ;; Update best bid (highest bid wins)
+    (when (> bid best_bid_price)
+      (set! best_bid_price bid)
+      (set! best_bid_exchange name))
+
+    ;; Update best ask (lowest ask wins)
+    (when (< ask best_ask_price)
+      (set! best_ask_price ask)
+      (set! best_ask_exchange name)))
+
+  (log :message "\n=== BEST BID/ASK ===")
+  (log :message "Best bid:" :value best_bid_price)
+  (log :message "  On:" :value best_bid_exchange)
+  (log :message "Best ask:" :value best_ask_price)
+  (log :message "  On:" :value best_ask_exchange)
+
+  ;; ============================================
+  ;; GROSS SPREAD CALCULATION
+  ;; ============================================
+  ;;
+  ;; THEORY: Price difference before costs
+  ;; - Gross spread = best_bid - best_ask
+  ;; - Positive spread = arbitrage opportunity
+  ;; - Negative spread = no arbitrage (normal market)
+  ;;
+  ;; CALCULATION:
+  ;; - Best bid: 100.7 (Orca will buy from us)
+  ;; - Best ask: 100.6 (Raydium will sell to us)
+  ;; - Gross spread: 100.7 - 100.6 = 0.1
+  ;;
+  ;; INTERPRETATION:
+  ;; - $0.10 profit per token (before fees)
+  ;; - 0.1 / 100.6 ≈ 0.0995% = 9.95 bps gross
+  ;; - Still need to subtract transaction costs
+  ;;
+  (define gross_spread (- best_bid_price best_ask_price))
+
+  (log :message "\n=== ARBITRAGE OPPORTUNITY ===")
+  (log :message "Gross spread:" :value gross_spread)
+  (log :message "Gross spread (bps):" :value (* (/ gross_spread best_ask_price) 10000))
+
+  ;; ============================================
+  ;; TRANSACTION COST ANALYSIS
+  ;; ============================================
+  ;;
+  ;; THEORY: All costs must be subtracted from gross profit
+  ;; - Buy fee: Charged by selling exchange (Raydium: 25 bps)
+  ;; - Sell fee: Charged by buying exchange (Orca: 30 bps)
+  ;; - Total fee: 25 + 30 = 55 bps
+  ;;
+  ;; CALCULATION:
+  ;; - Buy on Raydium at 100.6, fee = 25 bps
+  ;; - Fee cost: 100.6 × 0.0025 = 0.2515
+  ;; - Sell on Orca at 100.7, fee = 30 bps
+  ;; - Fee cost: 100.7 × 0.0030 = 0.3021
+  ;; - Total fees: ~0.25 (using ask price for simplicity)
+  ;;
+  ;; SIMPLIFIED CALCULATION (used here):
+  ;; - Fee in bps: 20 (buy) + 25 (sell) = 45 bps
+  ;; - Fee cost: 100.6 × 0.0045 ≈ 0.45
+  ;;
+  ;; NOTE: Real systems would calculate exact fees
+  ;;
+  (define buy_fee_bps 20)    ;; Simplified buy fee
+  (define sell_fee_bps 25)   ;; Simplified sell fee
+  (define total_fee_bps (+ buy_fee_bps sell_fee_bps))
+
+  (log :message "\n=== TRANSACTION COSTS ===")
+  (log :message "Buy fee (bps):" :value buy_fee_bps)
+  (log :message "Sell fee (bps):" :value sell_fee_bps)
+  (log :message "Total fee (bps):" :value total_fee_bps)
+
+  (define fee_cost (* best_ask_price (/ total_fee_bps 10000)))
+  (log :message "Fee cost per token:" :value fee_cost)
+
+  ;; ============================================
+  ;; NET SPREAD AND PROFITABILITY
+  ;; ============================================
+  ;;
+  ;; THEORY: Net profit after all costs
+  ;; - Net spread = Gross spread - Transaction costs
+  ;; - Must be positive for profitable arbitrage
+  ;; - Typical threshold: >5 bps to be worth execution
+  ;;
+  ;; CALCULATION:
+  ;; - Gross spread: 0.1 (9.95 bps)
+  ;; - Fee cost: ~0.45
+  ;; - Net spread: 0.1 - 0.45 = -0.35 (NEGATIVE!)
+  ;;
+  ;; INTERPRETATION:
+  ;; - This arbitrage is NOT profitable
+  ;; - Fees exceed the price difference
+  ;; - Would lose $0.35 per token
+  ;; - Decision: Skip this opportunity
+  ;;
+  ;; NOTE: In practice, we'd look for gross spread > 50 bps
+  ;; to ensure profitability after fees
+  ;;
+  (define net_spread (- gross_spread fee_cost))
+
+  (log :message "\n=== NET PROFITABILITY ===")
+  (log :message "Gross spread:" :value gross_spread)
+  (log :message "Less fees:" :value fee_cost)
+  (log :message "Net spread:" :value net_spread)
+  (log :message "Net spread (bps):" :value (* (/ net_spread best_ask_price) 10000))
+
+  ;; ============================================
+  ;; PROFITABILITY DECISION
+  ;; ============================================
+  ;;
+  ;; THEORY: Minimum profit threshold
+  ;; - Need net profit > 0 (obvious)
+  ;; - Industry standard: >5 bps to cover risks
+  ;; - Risks: Execution risk, latency, partial fills
+  ;;
+  ;; THRESHOLDS:
+  ;; - Net spread < 0: Guaranteed loss
+  ;; - Net spread 0-5 bps: Risk not worth reward
+  ;; - Net spread 5-10 bps: Marginal (execute if fast)
+  ;; - Net spread >10 bps: Good arbitrage opportunity
+  ;;
+  (define min_spread_threshold 0.05)  ;; 5 bps minimum
+  (define is_profitable (> net_spread min_spread_threshold))
+
+  (log :message "\n=== ARBITRAGE DECISION ===")
+  (log :message "Min threshold:" :value min_spread_threshold)
+  (log :message "Is profitable:" :value is_profitable)
+
+  (when is_profitable
+    (log :message "\n🎯 ARBITRAGE OPPORTUNITY FOUND")
+    (log :message "  BUY on:" :value best_ask_exchange)
+    (log :message "  SELL on:" :value best_bid_exchange)
+    (log :message "  Net profit per token:" :value net_spread)
+    (log :message "  Expected return (bps):" :value (* (/ net_spread best_ask_price) 10000)))
+
+  (when (not is_profitable)
+    (log :message "\n❌ NO PROFITABLE ARBITRAGE")
+    (log :message "  Reason: Fees exceed price difference")
+    (log :message "  Loss per token:" :value net_spread)
+    (log :message "  Action: Skip this opportunity"))
+
+  ;; ============================================
+  ;; POSITION SIZING
+  ;; ============================================
+  ;;
+  ;; THEORY: Optimal arbitrage size
+  ;; - Too large: Slippage increases, profit decreases
+  ;; - Too small: Fixed costs dominate, not worth effort
+  ;; - Optimal: Maximize profit while staying within liquidity
+  ;;
+  ;; SLIPPAGE MODEL:
+  ;; - Slippage = size² / liquidity (square relationship)
+  ;; - Price impact grows non-linearly with size
+  ;; - Formula: optimal_size = net_spread / slippage_factor
+  ;;
+  ;; CALCULATION:
+  ;; - Net spread: -0.35 (negative, so this is theoretical)
+  ;; - Slippage impact: 0.02 (2% per 100 tokens)
+  ;; - Optimal size: -0.35 / 0.02 = -17.5 (invalid)
+  ;;
+  ;; REALITY:
+  ;; - Since net spread is negative, optimal size is 0
+  ;; - If positive, we'd cap at max_position (100 tokens)
+  ;;
+  (define max_position 100)           ;; Capital constraint
+  (define slippage_impact 0.02)       ;; Price impact coefficient
+
+  (log :message "\n=== POSITION SIZING ===")
+  (log :message "Max position:" :value max_position)
+  (log :message "Slippage factor:" :value slippage_impact)
+
+  ;; Calculate optimal size (assuming positive spread)
+  (define optimal_size (if (> net_spread 0)
+                           (/ net_spread slippage_impact)
+                           0))
+
+  ;; Cap at maximum position
+  (define final_size (if (> optimal_size max_position)
+                         max_position
+                         optimal_size))
+
+  (log :message "Optimal size (theory):" :value optimal_size)
+  (log :message "Final size (capped):" :value final_size)
+
+  ;; ============================================
+  ;; EXECUTION PLAN
+  ;; ============================================
+  ;;
+  ;; THEORY: Simultaneous execution to minimize risk
+  ;; - Submit both orders at the same time
+  ;; - Use limit orders to control price
+  ;; - Monitor fills to ensure both complete
+  ;; - Cancel remaining if only one side fills
+  ;;
+  ;; TIMING:
+  ;; - T+0ms: Submit buy order on Raydium
+  ;; - T+0ms: Submit sell order on Orca (parallel)
+  ;; - T+50ms: Check fill status
+  ;; - T+100ms: Cancel unfilled side if asymmetric
+  ;;
+  ;; RISK MANAGEMENT:
+  ;; - Set tight limits on price (max slippage: 5 bps)
+  ;; - Use post-only orders to avoid taker fees
+  ;; - Monitor for partial fills
+  ;; - Have kill switch for exchange outages
+  ;;
+  (when is_profitable
+    (log :message "\n=== EXECUTION PLAN ===")
+    (log :message "Step 1: Buy" :value final_size)
+    (log :message "  Exchange:" :value best_ask_exchange)
+    (log :message "  Price:" :value best_ask_price)
+    (log :message "  Type: Limit order")
+
+    (log :message "Step 2: Sell" :value final_size)
+    (log :message "  Exchange:" :value best_bid_exchange)
+    (log :message "  Price:" :value best_bid_price)
+    (log :message "  Type: Limit order")
+
+    (log :message "Expected profit:" :value (* net_spread final_size))
+    (log :message "Expected return (%):" :value (* (/ net_spread best_ask_price) 100)))
+
+  ;; ============================================
+  ;; PRODUCTION ENHANCEMENTS
+  ;; ============================================
+  ;;
+  ;; Real arbitrage systems would add:
+  ;; 1. Real-time order book depth analysis (beyond top-of-book)
+  ;; 2. Triangular arbitrage detection (3+ leg opportunities)
+  ;; 3. Network latency measurement and routing optimization
+  ;; 4. Exchange-specific quirks and API reliability tracking
+  ;; 5. Dynamic slippage models based on market conditions
+  ;; 6. Capital allocation across multiple opportunities
+  ;; 7. Risk limits per exchange (counterparty risk)
+  ;; 8. Automated rebalancing of exchange account balances
+  ;; 9. Historical arbitrage database for pattern analysis
+  ;; 10. Machine learning for opportunity prediction
+  ;;
+
+  "✅ Cross-exchange arbitrage complete!")

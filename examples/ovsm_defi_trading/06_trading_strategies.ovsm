@@ -1,0 +1,155 @@
+;; ============================================
+;; OVSM Example 6: Algorithmic Trading Strategies
+;; ============================================
+
+(do
+  (log :message "=== MOVING AVERAGE CROSSOVER ===")
+
+  ;; Mock price history
+  (define prices [48 49 50 51 52 51 50 49 50 51 52 53 54 55 56])
+
+  ;; Calculate Simple Moving Average (SMA)
+  (define sma_period 5)
+  (define recent_prices (take (drop prices (- (length prices) sma_period)) sma_period))
+
+  (define sum 0)
+  (for (price recent_prices)
+    (set! sum (+ sum price)))
+
+  (define sma (/ sum sma_period))
+  (log :message "SMA(5):" :value sma)
+
+  ;; Trading signal
+  (define current_price (last prices))
+  (define signal (if (> current_price sma) "BUY" "SELL"))
+  (log :message "Current price:" :value current_price)
+  (log :message "Signal:" :value signal)
+
+  (log :message "\n=== RSI INDICATOR ===")
+
+  ;; Calculate Relative Strength Index
+  (define price_changes [1 1 1 -1 -1 1 1 2 1 1])
+
+  (define gains 0)
+  (define losses 0)
+
+  (for (change price_changes)
+    (if (> change 0)
+        (set! gains (+ gains change))
+        (set! losses (+ losses (- change)))))
+
+  (define avg_gain (/ gains (length price_changes)))
+  (define avg_loss (/ losses (length price_changes)))
+  (define rs (/ avg_gain (if (= avg_loss 0) 0.0001 avg_loss)))
+  (define rsi (- 100 (/ 100 (+ 1 rs))))
+
+  (log :message "RSI:" :value rsi)
+
+  (define rsi_signal (if (< rsi 30.0)
+                         "OVERSOLD - BUY"
+                         (if (> rsi 70.0)
+                             "OVERBOUGHT - SELL"
+                             "NEUTRAL")))
+  (log :message "RSI Signal:" :value rsi_signal)
+
+  (log :message "\n=== BOLLINGER BANDS ===")
+
+  ;; Calculate Bollinger Bands (SMA ± 2 * StdDev)
+  (define bb_prices [50 51 49 52 50 51 53 52 54 55])
+  (define bb_sum 0)
+
+  (for (p bb_prices)
+    (set! bb_sum (+ bb_sum p)))
+
+  (define bb_mean (/ bb_sum (length bb_prices)))
+
+  ;; Calculate variance
+  (define variance 0)
+  (for (p bb_prices)
+    (define diff (- p bb_mean))
+    (set! variance (+ variance (* diff diff))))
+
+  ;; Approximate sqrt using Babylonian method (one iteration)
+  (define variance_val (/ variance (length bb_prices)))
+  (define std_dev_guess (/ variance_val 2))
+  (define std_dev (/ (+ std_dev_guess (/ variance_val (if (= std_dev_guess 0) 0.001 std_dev_guess))) 2))
+  (define upper_band (+ bb_mean (* 2 std_dev)))
+  (define lower_band (- bb_mean (* 2 std_dev)))
+
+  (log :message "Upper band:" :value upper_band)
+  (log :message "Middle band (SMA):" :value bb_mean)
+  (log :message "Lower band:" :value lower_band)
+
+  (define bb_current (last bb_prices))
+  (define bb_signal (if (< bb_current lower_band)
+                        "OVERSOLD"
+                        (if (> bb_current upper_band)
+                            "OVERBOUGHT"
+                            "NORMAL")))
+  (log :message "Current price:" :value bb_current)
+  (log :message "BB Signal:" :value bb_signal)
+
+  (log :message "\n=== PORTFOLIO REBALANCING ===")
+
+  ;; Current portfolio
+  (define portfolio {
+    :SOL 100
+    :USDC 5000
+    :target_sol_pct 0.6
+  })
+
+  (define sol_price 55)
+  (define sol_value (* (get portfolio "SOL") sol_price))
+  (define usdc_value (get portfolio "USDC"))
+  (define total_value (+ sol_value usdc_value))
+
+  (define current_sol_pct (/ sol_value total_value))
+  (define target_sol_pct (get portfolio "target_sol_pct"))
+
+  (log :message "Total portfolio value:" :value total_value)
+  (log :message "Current SOL allocation:" :value (* current_sol_pct 100))
+  (log :message "Target SOL allocation:" :value (* target_sol_pct 100))
+
+  ;; Calculate rebalancing trade
+  (define target_sol_value (* total_value target_sol_pct))
+  (define sol_diff (- target_sol_value sol_value))
+  (define sol_to_trade (/ sol_diff sol_price))
+
+  (if (> sol_to_trade 0.0)
+      (do
+        (log :message "Action: BUY" :value sol_to_trade)
+        (log :message "SOL at price:" :value sol_price))
+      (do
+        (log :message "Action: SELL" :value (- sol_to_trade))
+        (log :message "SOL at price:" :value sol_price)))
+
+  (log :message "\n=== VOLUME-WEIGHTED AVERAGE PRICE (VWAP) ===")
+
+  ;; Mock trade data: [price, volume]
+  (define trades [
+    [50.0 100]
+    [51.0 150]
+    [49.0 200]
+    [52.0 120]
+    [50.0 180]
+  ])
+
+  (define total_pv 0)
+  (define total_vol 0)
+
+  (for (trade trades)
+    (define price (first trade))
+    (define volume (last trade))
+    (set! total_pv (+ total_pv (* price volume)))
+    (set! total_vol (+ total_vol volume)))
+
+  (define vwap (/ total_pv total_vol))
+  (log :message "VWAP:" :value vwap)
+  (log :message "Current price:" :value 52)
+
+  (define vwap_signal (if (> 52.0 vwap)
+                          "PRICE ABOVE VWAP - BULLISH"
+                          "PRICE BELOW VWAP - BEARISH"))
+  (log :message "Signal:" :value vwap_signal)
+
+  "✅ Trading strategies demo complete!")

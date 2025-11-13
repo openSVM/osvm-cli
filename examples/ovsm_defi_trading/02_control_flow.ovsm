@@ -1,0 +1,78 @@
+;; ============================================
+;; OVSM Example 2: Control Flow
+;; ============================================
+
+(do
+  (log :message "=== CONDITIONALS ===")
+  
+  ;; Basic if
+  (define x 10)
+  (define result (if (> x 5)
+                     "Greater than 5"
+                     "Less than or equal to 5"))
+  (log :message "Result:" :value result)
+  
+  ;; Nested if
+  (define score 85)
+  (define grade (if (>= score 90)
+                    "A"
+                    (if (>= score 80)
+                        "B"
+                        (if (>= score 70)
+                            "C"
+                            "F"))))
+  (log :message "Grade:" :value grade)
+  
+  ;; When (executes only if true)
+  (define flag true)
+  (when flag
+    (log :message "Flag is true!"))
+  
+  ;; Unless (executes only if false)
+  (define error false)
+  (unless error
+    (log :message "No errors!"))
+  
+  (log :message "\n=== LOOPS ===")
+  
+  ;; While loop
+  (define i 0)
+  (define sum 0)
+  (while (< i 5)
+    (set! sum (+ sum i))
+    (set! i (+ i 1)))
+  (log :message "Sum 0-4:" :value sum)
+  
+  ;; For loop (iterate array)
+  (define fruits ["apple" "banana" "cherry"])
+  (log :message "Fruits:")
+  (for (fruit fruits)
+    (log :value fruit))
+  
+  ;; For with range
+  (define squares [])
+  (for (n (range 1 6))
+    (set! squares (append squares [(* n n)])))
+  (log :message "Squares:" :value squares)
+  
+  (log :message "\n=== PATTERN MATCHING (case) ===")
+  
+  ;; Case expression
+  (define color "blue")
+  (define meaning (case color
+                    ("red" "passion")
+                    ("blue" "calm")
+                    ("green" "nature")
+                    (else "unknown")))
+  (log :message "Blue means:" :value meaning)
+  
+  ;; Type-based dispatch
+  (define val 42)
+  (define type_desc (typecase val
+                      (int "It's an integer")
+                      (string "It's a string")
+                      (array "It's an array")
+                      (else "Unknown type")))
+  (log :message "Type:" :value type_desc)
+  
+  "✅ Control flow demo complete!")
