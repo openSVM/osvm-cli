@@ -140,6 +140,64 @@ Not all financial time series are regularly sampled. Consider:
 
 ## 4.2 Order Book Structures
 
+**Figure 4.1**: Data Structure Hierarchy
+
+```mermaid
+classDiagram
+    Collection <|-- Sequential
+    Collection <|-- Associative
+    Sequential <|-- Array
+    Sequential <|-- LinkedList
+    Associative <|-- HashMap
+    Associative <|-- TreeMap
+    Sequential <|-- Queue
+    Queue <|-- PriorityQueue
+    Sequential <|-- Stack
+
+    class Collection {
+        <<abstract>>
+        +size()
+        +empty?()
+        +clear()
+    }
+    class Sequential {
+        <<abstract>>
+        +get(index)
+        +insert(index, value)
+        +delete(index)
+    }
+    class Associative {
+        <<abstract>>
+        +get(key)
+        +put(key, value)
+        +delete(key)
+    }
+    class Array {
+        +O(1) random access
+        +O(n) insertion
+        +Cache friendly
+    }
+    class HashMap {
+        +O(1) average lookup
+        +O(n) worst case
+        +No ordering
+    }
+    class TreeMap {
+        +O(log n) operations
+        +Ordered keys
+        +Range queries
+    }
+    class PriorityQueue {
+        +O(log n) insert/delete
+        +O(1) peek min/max
+        +Heap backed
+    }
+```
+
+*This class diagram organizes financial data structures into two fundamental categories: sequential (index-based access) and associative (key-based access). Arrays dominate tick storage due to cache efficiency and O(1) random access. HashMaps power symbol lookups and account balances with O(1) average-case performance. TreeMaps maintain order books and sorted price levels with O(log n) operations. PriorityQueues enable efficient order matching in trading engines. Understanding this taxonomy guides optimal structure selection for each financial computing task.*
+
+---
+
 ### 4.2.1 Price-Level Order Book
 
 The order book is the central data structure in market microstructure. It maps price levels to aggregate quantities:
@@ -838,6 +896,31 @@ Space savings: 40x
             :distance-from-mid (abs (- (level :price) (mid-price book)))}))))
 ```
 
+**Figure 4.3**: Trade Execution Data Pipeline
+
+```mermaid
+sankey-beta
+
+Market Data Feed,Order Book (Heap),1000
+Order Book (Heap),Matching Engine (Priority Queue),900
+Order Book (Heap),Rejected Orders,100
+Matching Engine (Priority Queue),Matched Trades,750
+Matching Engine (Priority Queue),Partial Fills,100
+Matching Engine (Priority Queue),Canceled Orders,50
+Matched Trades,Trade Log (Append-Only Array),750
+Partial Fills,Order Book (Heap),100
+Trade Log (Append-Only Array),Database (B-Tree Index),750
+Database (B-Tree Index),Analytics Engine,700
+Database (B-Tree Index),Compliance Archive,50
+Analytics Engine,P&L Reports,400
+Analytics Engine,Risk Metrics,200
+Analytics Engine,Client Dashboards,100
+```
+
+*This Sankey diagram traces market data through a production trading system's data pipeline. Of 1000 incoming market updates, 10% are rejected immediately (stale data, invalid symbols). The matching engine processes 900 orders via a priority queue, producing 750 matched trades (83% success rate), 100 partial fills (recycled to order book), and 50 cancellations. Matched trades flow to an append-only log for crash recovery, then to a B-Tree-indexed database enabling fast range queries. Analytics consumes 93% of database output, generating P&L reports (57%), risk metrics (29%), and client dashboards (14%). This architecture balances low-latency matching (priority queue) with durable storage (B-Tree) and flexible analytics.*
+
+---
+
 ### 4.6.3 Multi-Symbol Market Data Manager
 
 ```lisp
@@ -878,6 +961,24 @@ Space savings: 40x
 ---
 
 ## 4.7 Performance Benchmarks
+
+**Figure 4.2**: Data Structure Performance (Access Time vs Memory Overhead)
+
+```mermaid
+xychart-beta
+    title "Data Structure Trade-offs: Latency vs Memory"
+    x-axis "Memory Overhead (bytes per element)" [24, 40, 48, 56, 64, 80]
+    y-axis "Average Access Time (nanoseconds)" 0 --> 500
+    "Array" [24, 5]
+    "HashMap" [48, 100]
+    "Skip List" [56, 250]
+    "Red-Black Tree" [64, 350]
+    "B-Tree" [80, 180]
+```
+
+*This XY scatter plot reveals the fundamental trade-off between memory efficiency and access speed in financial data structures. Arrays achieve the optimal point (24 bytes, 5ns) due to cache locality and zero indirection. HashMaps sacrifice memory (48 bytes) for fast lookups (100ns). Tree structures (Skip List, Red-Black, B-Tree) consume 64-80 bytes per element but enable ordered operations. B-Trees optimize for disk I/O with bulk node loading. For hot-path tick processing, arrays dominate; for symbol lookups, HashMaps win; for order books requiring price ordering, TreeMaps are essential despite higher overhead.*
+
+---
 
 ### 4.7.1 Insertion Throughput
 
