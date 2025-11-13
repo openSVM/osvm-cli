@@ -80,6 +80,36 @@ High-frequency trading strategies fall into several categories:
 
 By 2010, HFT firms accounted for 50-60% of U.S. equity trading volume. This dominance raised concerns about market quality, culminating in the May 6, 2010 "Flash Crash" when algorithms amplified a sell imbalance, causing a 600-point Dow Jones drop in minutes.
 
+### 1.1.5 Timeline: The Evolution of Trading (1792-2025)
+
+```mermaid
+timeline
+    title Financial Markets Evolution: From Floor Trading to AI-Powered Algorithms
+    section Early Era (1792-1970)
+        1792 : Buttonwood Agreement (NYSE Founded)
+        1896 : Dow Jones Industrial Average Created
+        1934 : SEC Established (Securities Exchange Act)
+        1960 : First Computer Used (Quote Dissemination)
+    section Electronic Era (1971-2000)
+        1971 : NASDAQ Electronic Exchange Launched
+        1987 : Black Monday (22% Crash in One Day)
+        1992 : CME Globex After-Hours Trading
+        2000 : Internet Brokers (E*TRADE, Ameritrade)
+    section Algorithmic Era (2001-2010)
+        2001 : Decimalization (Spreads Narrow 68%)
+        2005 : VWAP/TWAP Execution Algos Standard
+        2007 : Reg NMS (Multi-Venue Routing)
+        2010 : Flash Crash (HFT 60% of Volume)
+    section Modern Era (2011-2025)
+        2015 : IEX Speed Bump (Anti-HFT Exchange)
+        2018 : MiFID II (European HFT Regulation)
+        2020 : COVID Volatility (Record Volumes)
+        2023 : AI/ML Trading (GPT-Powered Strategies)
+        2025 : Quantum Computing Research Begins
+```
+
+**Figure 1.1**: The 233-year evolution of financial markets shows accelerating technological disruption. Note the compression of innovation cycles: 179 years from NYSE to NASDAQ (1792-1971), but only 9 years from decimalization to flash crash (2001-2010). Modern algorithmic trading represents the culmination of incremental improvements in speed, cost efficiency, and information processing—but also introduces systemic risks absent in human-mediated markets.
+
 ---
 
 ## 1.2 Regulatory Landscape and Market Structure
@@ -143,6 +173,34 @@ Smart order routing (SOR) algorithms handle this complexity, dynamically routing
 
 The debate over market fragmentation remains heated. Proponents argue competition among venues reduces costs and improves service. Critics contend fragmentation impairs price discovery, creates complexity favoring sophisticated traders over retail investors, and introduces latency arbitrage opportunities.
 
+### 1.2.3 Sankey Diagram: U.S. Equity Order Flow (2023 Daily Average)
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': { 'fontSize':'14px'}}}%%
+sankey-beta
+
+Retail Orders,Citadel Securities,3500
+Retail Orders,Virtu Americas,1800
+Retail Orders,Two Sigma,900
+Retail Orders,NYSE,500
+Retail Orders,NASDAQ,300
+
+Institutional Orders,Dark Pools,2500
+Institutional Orders,NYSE,1500
+Institutional Orders,NASDAQ,1200
+Institutional Orders,HFT Market Makers,800
+
+Dark Pools,Final Execution,2500
+Citadel Securities,Final Execution,3500
+Virtu Americas,Final Execution,1800
+Two Sigma,Final Execution,900
+NYSE,Final Execution,2000
+NASDAQ,Final Execution,1500
+HFT Market Makers,Final Execution,800
+```
+
+**Figure 1.2**: Daily U.S. equity order flow (millions of shares). Retail order flow (47% of volume) routes primarily to wholesale market makers (Citadel, Virtu) via payment-for-order-flow (PFOF) arrangements. Institutional orders (53%) fragment across dark pools (28%), lit exchanges (30%), and HFT market makers (9%). This bifurcation creates a two-tier market structure where retail never interacts with institutional flow directly. Note: Citadel Securities alone handles 27% of ALL U.S. equity volume—more than NASDAQ.
+
 ---
 
 ## 1.3 Types of Algorithmic Trading Strategies
@@ -199,7 +257,35 @@ Directional strategies scale better (position sizes limited by market cap, not a
 
 The time horizon determines technology requirements, data needs, and strategy feasibility. Ultra-HFT strategies are inaccessible to most participants due to infrastructure costs (millions in hardware/software, co-location fees, specialized expertise). Retail and small institutional traders operate primarily in medium and low frequency ranges.
 
-### 1.3.4 Strategy Examples Across Categories
+### 1.3.4 Quadrant Chart: Algorithmic Strategy Classification
+
+```mermaid
+%%{init: {'theme':'base', 'themeVariables': {'quadrant1Fill':'#e8f4f8', 'quadrant2Fill':'#fff4e6', 'quadrant3Fill':'#ffe6e6', 'quadrant4Fill':'#f0f0f0'}}}%%
+quadrantChart
+    title Algorithmic Trading Strategy Landscape
+    x-axis Low Alpha Potential --> High Alpha Potential
+    y-axis Low Frequency (Days-Months) --> High Frequency (Microseconds-Seconds)
+    quadrant-1 High-Skill/High-Tech
+    quadrant-2 Capital Intensive
+    quadrant-3 Accessible Entry
+    quadrant-4 Commoditized
+    HFT Market Making: [0.85, 0.95]
+    Latency Arbitrage: [0.75, 0.98]
+    Stat Arb (HF): [0.70, 0.80]
+    News Trading: [0.65, 0.75]
+    Pairs Trading: [0.55, 0.25]
+    Momentum (Intraday): [0.60, 0.50]
+    Factor Investing: [0.45, 0.15]
+    VWAP Execution: [0.20, 0.40]
+    TWAP Execution: [0.15, 0.35]
+    Index Rebalancing: [0.30, 0.10]
+```
+
+**Figure 1.3**: Algorithmic strategy positioning by alpha potential (X-axis) and trading frequency (Y-axis). **Quadrant 1 (High-Skill/High-Tech)**: HFT strategies offer high alpha but require millions in infrastructure—dominated by Citadel, Virtu, Jump Trading. **Quadrant 2 (Capital Intensive)**: Lower-frequency alpha strategies (pairs trading, factor investing) accessible to well-capitalized participants. **Quadrant 3 (Accessible Entry)**: Low-frequency, moderate-alpha strategies where retail quants can compete. **Quadrant 4 (Commoditized)**: Execution algorithms generate minimal alpha but provide essential service—profit margins compressed by competition.
+
+**Strategic Insight**: Most profitable strategies (Q1) have highest barriers to entry. Beginners should target Q2-Q3, building capital and expertise before attempting HFT.
+
+### 1.3.5 Strategy Examples Across Categories
 
 To make this taxonomy concrete, consider specific strategy examples:
 
@@ -555,6 +641,47 @@ To succeed in quantitative finance, build expertise progressively:
 - Make strategic decisions on research directions
 - Manage P&L and risk for portfolios
 - Consider starting own fund or moving to executive roles
+
+### 1.5.6 Journey Diagram: Quantitative Researcher Career Progression
+
+```mermaid
+journey
+    title Quant Researcher Career: From PhD to Fund Manager (10-15 Year Journey)
+    section Year 1-2: PhD Graduate Entry
+        Complete PhD (Physics/CS/Math): 5: PhD Student
+        Technical interviews (8 rounds): 2: Candidate
+        Accept offer at Two Sigma: 5: Junior Quant
+        Onboarding and infrastructure: 3: Junior Quant
+        First strategy backtest: 4: Junior Quant
+    section Year 3-4: Strategy Development
+        Deploy first production strategy: 5: Quant Researcher
+        Strategy generates consistent P&L: 5: Quant Researcher
+        Present to investment committee: 4: Quant Researcher
+        Receive $400K total comp: 5: Quant Researcher
+        Mentor incoming junior quants: 4: Quant Researcher
+    section Year 5-7: Specialization
+        Develop ML-powered alpha signals: 5: Senior Quant
+        Manage $50M AUM portfolio: 4: Senior Quant
+        Publish internal research papers: 4: Senior Quant
+        Total comp reaches $1M+: 5: Senior Quant
+        Consider job offers from competitors: 3: Senior Quant
+    section Year 8-10: Leadership
+        Promoted to Portfolio Manager: 5: PM
+        Manage $500M strategy: 4: PM
+        Hire and lead 5-person team: 3: PM
+        Total comp $2-5M (P&L dependent): 5: PM
+        Industry recognition and speaking: 4: PM
+    section Year 11-15: Fund Launch
+        Leave to start own fund: 3: Founder
+        Raise $100M from investors: 4: Founder
+        Build 10-person team: 3: Founder
+        First year: 25% returns: 5: Founder
+        Total comp $5-20M+ (2/20 fees): 5: Founder
+```
+
+**Figure 1.4**: Typical quant researcher journey from PhD to fund manager. Key inflection points: (1) **Year 1-2**: Steep learning curve, low job satisfaction until first successful strategy; (2) **Year 3-4**: Confidence builds with consistent P&L, compensation jumps; (3) **Year 5-7**: Specialization decision (ML, HFT, fundamental) determines long-term trajectory; (4) **Year 8-10**: Management vs. technical track fork—PMs manage people and capital, senior researchers go deeper technically; (5) **Year 11-15**: Fund launch requires $50M+ AUM to be viable (2% management fee = $1M revenue for salaries/infrastructure).
+
+**Reality Check**: Only 10-15% of PhD quants reach senior PM level. 1-2% successfully launch funds. Median outcome: plateau at $300-600K as senior researcher—still exceptional compared to academia ($80-150K), but far from the $10M+ headlines.
 
 Success in quantitative finance requires balancing technical skills (mathematics, programming, statistics) with domain knowledge (markets, instruments, regulations) and soft skills (communication, judgment, teamwork). The most successful quants are "T-shaped": broad knowledge across domains with deep expertise in one or two areas.
 
