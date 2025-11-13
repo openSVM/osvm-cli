@@ -145,12 +145,38 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
     format!(r#";; Wallet analysis script
 (do
   (define target "{}")
-  (define resp (get_account_transactions {{:address target :limit 100}}))
-  (define txs (get resp "transactions"))
+  ;; Fetch transactions with pagination to get up to 10,000 txs
+  (define all_txs [])
+  (define batch_size 100)
+  (define max_txs 10000)
+  (define before null)
+  (define keep_fetching true)
 
-  ;; Track SOL inflow/outflow
-  (define sol_inflow {{}})
-  (define sol_outflow {{}})
+  (while (and keep_fetching (< (count all_txs) max_txs))
+    (define params
+      (if (null? before)
+        {{:address target :limit batch_size}}
+        {{:address target :limit batch_size :before before}}))
+
+    (define resp (get_account_transactions params))
+    (define batch (get resp "transactions"))
+
+    (when (array? batch)
+      (set! all_txs (concat all_txs batch))
+
+      ;; Get last signature for pagination
+      (when (> (count batch) 0)
+        (define last_tx (get batch (- (count batch) 1)))
+        (set! before (get last_tx "signature")))
+
+      ;; Stop if we got fewer than batch_size (no more txs)
+      (when (< (count batch) batch_size)
+        (set! keep_fetching false))))
+
+  (define txs all_txs)
+
+  ;; Track all token flows (not just SOL)
+  (define token_flows {{}})
 
   (for (tx txs)
     (define xfers (get tx "transfers"))
@@ -160,28 +186,52 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
         (define chg (get xf "change"))
         (define mnt (get xf "mint"))
 
-        (when (and addr (== mnt "So11111111111111111111111111111111111111112") (!= addr target))
-          (if (< chg 0)
-            (do
-              (define prev_amt (get sol_inflow addr))
-              (define new_amt (+ (if (null? prev_amt) 0 prev_amt) (- 0 chg)))
-              (set! sol_inflow (set sol_inflow addr new_amt)))
-            (do
-              (define prev_amt (get sol_outflow addr))
-              (define new_amt (+ (if (null? prev_amt) 0 prev_amt) chg))
-              (set! sol_outflow (set sol_outflow addr new_amt))))))))
+        (when (and addr mnt (!= addr target))
+          ;; Initialize token if not exists
+          (when (null? (get token_flows mnt))
+            (set! token_flows (set token_flows mnt {{:inflow {{}} :outflow {{}}}})))
 
-  (define inf_list (entries sol_inflow))
-  (define out_list (entries sol_outflow))
+          (define tok_data (get token_flows mnt))
+
+          (if (< chg 0)
+            ;; Inflow (negative change = sent TO target)
+            (do
+              (define inf_map (get tok_data "inflow"))
+              (define prev (get inf_map addr))
+              (set! inf_map (set inf_map addr (+ (if (null? prev) 0 prev) (- 0 chg))))
+              (set! tok_data (set tok_data "inflow" inf_map))
+              (set! token_flows (set token_flows mnt tok_data)))
+            ;; Outflow (positive change = received FROM target)
+            (do
+              (define out_map (get tok_data "outflow"))
+              (define prev (get out_map addr))
+              (set! out_map (set out_map addr (+ (if (null? prev) 0 prev) chg)))
+              (set! tok_data (set tok_data "outflow" out_map))
+              (set! token_flows (set token_flows mnt tok_data))))))))
+
+  ;; Format results per token
+  (define token_results [])
+  (define mints (keys token_flows))
+
+  (for (mint mints)
+    (define tok_data (get token_flows mint))
+    (define inf_map (get tok_data "inflow"))
+    (define out_map (get tok_data "outflow"))
+    (define inf_list (entries inf_map))
+    (define out_list (entries out_map))
+
+    (set! token_results (append token_results {{
+      :token mint
+      :top_5_inflow (take 5 inf_list)
+      :top_5_outflow (take 5 out_list)
+      :total_inflow_addresses (count inf_list)
+      :total_outflow_addresses (count out_list)
+    }})))
 
   {{:wallet target
    :total_txs (count txs)
-   :SOL_analysis {{
-     :top_5_inflow (take 5 inf_list)
-     :top_5_outflow (take 5 out_list)
-     :total_inflow_addresses (count inf_list)
-     :total_outflow_addresses (count out_list)
-   }}}})
+   :tokens_analyzed (count mints)
+   :token_analysis token_results}})
 "#, wallet)
 }
 
@@ -194,18 +244,25 @@ Wallet Address: {}
 Raw Analysis Data:
 {}
 
-Create a markdown report with:
-1. **Executive Summary** - brief overview of wallet activity
-2. **SOL Token Activity**:
-   - Top 5 addresses that sent SOL TO this wallet (inflow) with amounts in SOL
-   - Top 5 addresses that received SOL FROM this wallet (outflow) with amounts in SOL
-3. **Statistics** - total transactions, unique counterparties
-4. **Key Observations** - notable patterns or insights
+The data includes per-token analysis with inflow/outflow addresses and amounts.
 
-Convert lamports to SOL (1 SOL = 1,000,000,000 lamports).
-Format addresses as monospace code blocks.
-Use tables where appropriate.
-Keep it concise and professional."#, wallet, raw_output);
+Create a comprehensive markdown report with:
+1. **Executive Summary** - brief overview of wallet activity and key findings
+2. **Token Analysis** (for each token found):
+   - Token address/mint
+   - Top 5 addresses that sent this token TO the wallet (inflow) with amounts
+   - Top 5 addresses that received this token FROM the wallet (outflow) with amounts
+   - Total unique inflow/outflow addresses
+3. **Overall Statistics** - total transactions analyzed, number of tokens, unique counterparties
+4. **Key Observations** - notable patterns, suspicious activity, concentration risks
+
+Notes:
+- Convert lamports to human-readable amounts (1 SOL = 1,000,000,000 lamports)
+- Identify SOL token as "So11111111111111111111111111111111111111112"
+- Format addresses as monospace code blocks
+- Use tables where appropriate
+- Highlight unusual patterns (e.g., mirror transactions, dust, concentration)
+- Keep it professional but insightful"#, wallet, raw_output);
 
     ai_service.query(&prompt).await
         .context("Failed to format analysis with AI")
