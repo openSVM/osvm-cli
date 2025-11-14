@@ -206,80 +206,80 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
       (entries dedup_map)
       (lambda (entry) (get entry 1))))
 
-  ;; Now aggregate by token mint
-  (define by_mint (group-by unique_transfers (lambda (tx) (get tx "mint"))))
+  ;; Split all transfers by direction
+  (define all_inflows (filter unique_transfers (lambda (t) (= (get t "transferType") "IN"))))
+  (define all_outflows (filter unique_transfers (lambda (t) (= (get t "transferType") "OUT"))))
 
-  ;; For each token, aggregate senders/receivers
-  (define token_summaries
-    (map
-      (entries by_mint)
-      (lambda (mint_pair)
+  ;; Count unique tokens
+  (define unique_tokens (group-by unique_transfers (lambda (tx) (get tx "mint"))))
+  (define num_tokens (length (entries unique_tokens)))
+
+  ;; Aggregate ALL inflows by sender (with token details)
+  (define global_senders
+    (reduce
+      all_inflows
+      {{}}
+      (lambda (acc tx)
         (do
-          (define mint (get mint_pair 0))
-          (define txs (get mint_pair 1))
+          (define from (get tx "from"))
+          (define symbol (get tx "tokenSymbol"))
+          (define amt (float (get tx "tokenAmount")))
 
-          ;; Get token symbol from first tx
-          (define symbol (if (> (length txs) 0)
-                            (get (get txs 0) "tokenSymbol")
-                            mint))
+          ;; Get or create sender record
+          (define existing (get acc from))
+          (define sender_record (if existing existing {{}}))
 
-          ;; Split by direction
-          (define inflows (filter txs (lambda (t) (= (get t "transferType") "IN"))))
-          (define outflows (filter txs (lambda (t) (= (get t "transferType") "OUT"))))
+          ;; Add token amount to sender's token list
+          (define token_existing (get sender_record symbol))
+          (define token_current (if token_existing token_existing 0))
+          (define updated_record (put sender_record symbol (+ token_current amt)))
 
-          ;; Aggregate inflows by sender
-          (define inflow_agg
-            (reduce
-              inflows
-              {{}}
-              (lambda (acc tx)
-                (do
-                  (define from (get tx "from"))
-                  (define amt (float (get tx "tokenAmount")))
-                  (define existing (get acc from))
-                  (define current (if existing existing 0))
-                  (put acc from (+ current amt))))))
+          (put acc from updated_record)))))
 
-          ;; Aggregate outflows by receiver
-          (define outflow_agg
-            (reduce
-              outflows
-              {{}}
-              (lambda (acc tx)
-                (do
-                  (define to (get tx "to"))
-                  (define amt (float (get tx "tokenAmount")))
-                  (define existing (get acc to))
-                  (define current (if existing existing 0))
-                  (put acc to (+ current amt))))))
+  ;; Aggregate ALL outflows by receiver (with token details)
+  (define global_receivers
+    (reduce
+      all_outflows
+      {{}}
+      (lambda (acc tx)
+        (do
+          (define to (get tx "to"))
+          (define symbol (get tx "tokenSymbol"))
+          (define amt (float (get tx "tokenAmount")))
 
-          ;; Sort and take top 5
-          (define top_senders
-            (take 5
-              (sort
-                (entries inflow_agg)
-                (lambda (a b) (> (get a 1) (get b 1))))))
+          ;; Get or create receiver record
+          (define existing (get acc to))
+          (define receiver_record (if existing existing {{}}))
 
-          (define top_receivers
-            (take 5
-              (sort
-                (entries outflow_agg)
-                (lambda (a b) (> (get a 1) (get b 1))))))
+          ;; Add token amount to receiver's token list
+          (define token_existing (get receiver_record symbol))
+          (define token_current (if token_existing token_existing 0))
+          (define updated_record (put receiver_record symbol (+ token_current amt)))
 
-          {{:mint mint
-           :symbol symbol
-           :transfer_count (length txs)
-           :inflow_count (length inflows)
-           :outflow_count (length outflows)
-           :top_senders top_senders
-           :top_receivers top_receivers}})))
+          (put acc to updated_record)))))
 
-  ;; Return AGGREGATED summaries (NOT raw transfers!)
+  ;; Convert to sorted arrays and take top 3
+  (define top_senders
+    (take 3
+      (sort
+        (entries global_senders)
+        (lambda (a b) (> (length (entries (get a 1))) (length (entries (get b 1))))))))
+
+  (define top_receivers
+    (take 3
+      (sort
+        (entries global_receivers)
+        (lambda (a b) (> (length (entries (get a 1))) (length (entries (get b 1))))))))
+
+  ;; Return MINIMAL summary (no per-token details!)
   {{:wallet target
    :total_transfers_raw (length all_transfers)
    :total_transfers_unique (length unique_transfers)
-   :num_tokens (length token_summaries)
-   :tokens token_summaries}})
+   :num_tokens num_tokens
+   :inflow_count (length all_inflows)
+   :outflow_count (length all_outflows)
+   :top_senders top_senders
+   :top_receivers top_receivers}})
 "#, wallet)
 }
 
@@ -305,82 +305,70 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
         .and_then(|v| v.as_int().ok())
         .unwrap_or(0);
 
-    let tokens_array = obj.get("tokens")
-        .ok_or_else(|| anyhow::anyhow!("Expected tokens key"))?
+    let inflow_count = obj.get("inflow_count")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0);
+
+    let outflow_count = obj.get("outflow_count")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0);
+
+    // Extract top senders: [[address, {symbol: amount, ...}], ...]
+    let top_senders_array = obj.get("top_senders")
+        .ok_or_else(|| anyhow::anyhow!("Expected top_senders key"))?
         .as_array()?;
 
-    let mut tokens_summary = Vec::new();
+    let mut top_senders = Vec::new();
+    for sender_pair in top_senders_array {
+        let pair = sender_pair.as_array()?;
+        if pair.len() == 2 {
+            let address = pair[0].as_string().ok().unwrap_or("unknown");
+            let tokens_obj = pair[1].as_object()?;
 
-    for token in tokens_array {
-        let token_obj = token.as_object()?;
+            let mut tokens = Vec::new();
+            for (symbol, amount) in tokens_obj.iter() {
+                if let Ok(amt) = amount.as_float() {
+                    tokens.push(json!({
+                        "symbol": symbol,
+                        "amount": amt
+                    }));
+                }
+            }
 
-        let symbol = token_obj.get("symbol")
-            .and_then(|v| v.as_string().ok())
-            .unwrap_or("unknown");
+            top_senders.push(json!({
+                "address": address,
+                "tokens": tokens
+            }));
+        }
+    }
 
-        let mint = token_obj.get("mint")
-            .and_then(|v| v.as_string().ok())
-            .unwrap_or("unknown");
+    // Extract top receivers: [[address, {symbol: amount, ...}], ...]
+    let top_receivers_array = obj.get("top_receivers")
+        .ok_or_else(|| anyhow::anyhow!("Expected top_receivers key"))?
+        .as_array()?;
 
-        let transfer_count = token_obj.get("transfer_count")
-            .and_then(|v| v.as_int().ok())
-            .unwrap_or(0);
+    let mut top_receivers = Vec::new();
+    for receiver_pair in top_receivers_array {
+        let pair = receiver_pair.as_array()?;
+        if pair.len() == 2 {
+            let address = pair[0].as_string().ok().unwrap_or("unknown");
+            let tokens_obj = pair[1].as_object()?;
 
-        let inflow_count = token_obj.get("inflow_count")
-            .and_then(|v| v.as_int().ok())
-            .unwrap_or(0);
+            let mut tokens = Vec::new();
+            for (symbol, amount) in tokens_obj.iter() {
+                if let Ok(amt) = amount.as_float() {
+                    tokens.push(json!({
+                        "symbol": symbol,
+                        "amount": amt
+                    }));
+                }
+            }
 
-        let outflow_count = token_obj.get("outflow_count")
-            .and_then(|v| v.as_int().ok())
-            .unwrap_or(0);
-
-        // Extract top senders (address, amount pairs)
-        let top_senders = token_obj.get("top_senders")
-            .and_then(|v| v.as_array().ok())
-            .map(|arr| {
-                arr.iter().filter_map(|pair| {
-                    pair.as_array().ok().and_then(|p| {
-                        if p.len() == 2 {
-                            Some(json!({
-                                "address": p[0].as_string().ok().unwrap_or("unknown"),
-                                "amount": p[1].as_float().ok().unwrap_or(0.0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                }).collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        // Extract top receivers
-        let top_receivers = token_obj.get("top_receivers")
-            .and_then(|v| v.as_array().ok())
-            .map(|arr| {
-                arr.iter().filter_map(|pair| {
-                    pair.as_array().ok().and_then(|p| {
-                        if p.len() == 2 {
-                            Some(json!({
-                                "address": p[0].as_string().ok().unwrap_or("unknown"),
-                                "amount": p[1].as_float().ok().unwrap_or(0.0)
-                            }))
-                        } else {
-                            None
-                        }
-                    })
-                }).collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-
-        tokens_summary.push(json!({
-            "symbol": symbol,
-            "mint": mint,
-            "transfer_count": transfer_count,
-            "inflow_count": inflow_count,
-            "outflow_count": outflow_count,
-            "top_senders": top_senders,
-            "top_receivers": top_receivers
-        }));
+            top_receivers.push(json!({
+                "address": address,
+                "tokens": tokens
+            }));
+        }
     }
 
     let summary = json!({
@@ -388,7 +376,10 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
         "total_transfers_raw": total_raw,
         "total_transfers_unique": total_unique,
         "num_tokens": num_tokens,
-        "tokens": tokens_summary
+        "inflow_count": inflow_count,
+        "outflow_count": outflow_count,
+        "top_senders": top_senders,
+        "top_receivers": top_receivers
     });
 
     Ok(serde_json::to_string_pretty(&summary)?)
@@ -399,28 +390,23 @@ async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summar
     // System prompt for custom formatting (bypass planning mode)
     let system_prompt = r#"You are a markdown formatter. The blockchain analysis is ALREADY COMPLETE.
 
-Your ONLY job: Convert the provided JSON into clean markdown tables.
+Your ONLY job: Convert the provided JSON into clean markdown.
 
 DO NOT analyze, interpret, or add commentary. ONLY format what's given:
 
-For each token in the JSON, create:
+**Wallet Summary**
+- Total: {total_transfers_unique} unique transfers ({inflow_count} in, {outflow_count} out)
+- Tokens: {num_tokens} different tokens
 
-**{symbol} ({mint})**
-- Transfers: {transfer_count} ({inflow_count} in, {outflow_count} out)
+**Top 3 Senders** (addresses sending TO this wallet)
+| Address | Tokens Sent |
+|---------|-------------|
+[For each sender in top_senders array, list address and all tokens with amounts]
 
-Top Inflows:
-| Address | Amount |
-|---------|--------|
-[list top_senders array]
-
-Top Outflows:
-| Address | Amount |
-|---------|--------|
-[list top_receivers array]
-
-Summary at top:
-- Total: {total_transfers_unique} unique transfers
-- Tokens: {num_tokens}
+**Top 3 Receivers** (addresses receiving FROM this wallet)
+| Address | Tokens Received |
+|---------|-----------------|
+[For each receiver in top_receivers array, list address and all tokens with amounts]
 
 NO analysis. NO interpretation. ONLY formatting the JSON into tables."#.to_string();
 
