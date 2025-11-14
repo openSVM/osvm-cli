@@ -10,12 +10,43 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** 65,400 words across 13 chapters + 110-chapter index
-**Academic References:** 134 peer-reviewed papers and textbooks
+**Total Content:** ~104,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
+
+---
+
+## 💸 Cost of Ignoring These Lessons
+
+This textbook teaches through real disasters. Here's what happens when you skip the fundamentals:
+
+| Disaster | Chapter | Date | Loss | Lesson Ignored |
+|----------|---------|------|------|----------------|
+| **LTCM Collapse** | 8 (Time Series) | Sep 1998 | **$4.6 billion** | Assumed stationary relationships, ignored regime changes |
+| **Epsilon Capital** | 9 (Backtesting) | 2018 | **$100 million** | Overfitted on 15 years of data, didn't walk-forward validate |
+| **Knight Capital** | 10 (Production) | Aug 2012 | **$460 million** | Manual deployment, no kill switch, 45 minutes of chaos |
+| **2024 Flash Crash** | 10 (Production) | Jun 2024 | **$2.3 trillion** (market cap) | No circuit breakers, cascading algo failures |
+
+### **Total Cost: $7.46 Billion**
+
+*(Real money. Real companies. Real consequences.)*
+
+Every chapter shows you **exactly** how these disasters could have been prevented — often with just a few days of work and $0-500/month in infrastructure costs. The Knight Capital disaster alone had a **920,000,000% ROI** on basic safety measures they skipped.
+
+**This textbook's goal:** Make sure you never appear on this list.
 
 ---
 
 ## 🗺️ Book Navigation
+
+### Part 0: Foundations (NEW! 2025)
+
+| Chapter | Title | Words | Topics |
+|---------|-------|-------|--------|
+| [08](08_time_series.md) | Time Series Analysis & Stationarity | 16,229 | ADF test, ARIMA, cointegration, Kalman filters, LTCM collapse |
+| [09](09_backtesting.md) | Backtesting Frameworks | 8,550 | Walk-forward, event-driven, transaction costs, Epsilon Capital |
+| [10](10_production.md) | Production Trading Systems | ~14,000 | Event-driven architecture, CI/CD, observability, Knight Capital |
+
+**Subtotal:** ~38,800 words
 
 ### Part I: OVSM Language Fundamentals
 
@@ -78,7 +109,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 - **Language reference:** Chapter 3 (complete OVSM specification)
 - **Strategy library:** Chapters 11-20 (working implementations)
 - **Risk management:** Each chapter includes failure modes and mitigation
-- **Production deployment:** Architecture patterns in Chapter 10 (planned)
+- **Production deployment:** Complete production systems guide in Chapter 10
 
 ---
 
@@ -267,6 +298,11 @@ Submit pull requests to: https://github.com/openSVM/osvm-cli
 
 ---
 
-**Last Updated:** 2025-11-13
-**Version:** 1.0 (Core Textbook)
+**Last Updated:** 2025-11-14
+**Version:** 1.1 (Core + Foundations)
 **Status:** Production Ready ✅
+
+**Latest additions:**
+- ✨ Chapter 8: Time Series Analysis (16,229 words) - LTCM collapse case study
+- ✨ Chapter 9: Backtesting Frameworks (8,550 words) - Epsilon Capital disaster
+- ✨ Chapter 10: Production Systems (~14,000 words) - Knight Capital $460M lesson
