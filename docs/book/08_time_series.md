@@ -37,6 +37,25 @@ On August 17, 1998, Russia defaulted on its domestic debt. What LTCM's models pr
 - Federal Reserve orchestrated a $3.6B bailout by 14 banks
 - Spreads that "always" converged took **months** to revert, not days
 
+```mermaid
+timeline
+    title LTCM Collapse Timeline - When Stationarity Broke
+    section 1994-1997
+        1994 : Fund Launch : $1.25B capital : Nobel laureates join
+        1995-1996 : Glory Years : 40%+ annual returns : $7B under management
+        1997 : Peak Performance : 17% return : Models validated
+    section 1998 Crisis
+        Jan-Jul 1998 : Warning Signs : Asia crisis : Volatility rising : Models still profitable
+        Aug 17 : Russian Default : 3-sigma event : Spreads widen 300%
+        Aug 17-21 : Week 1 : $550M loss (12%) : Mean reversion expected
+        Aug 24-28 : Week 2 : $750M loss (20%) : Correlations collapse
+        Sep 1-15 : Acceleration : Daily 5-sigma events : Liquidity vanishes
+        Sep 23 : Bailout : $400M remains (91% loss) : Fed orchestrates $3.6B rescue
+    section Aftermath
+        1999-2000 : Liquidation : Positions unwound over months : Spreads finally converge
+        2000 : Lessons : Liquidity risk recognized : Tail risk management born
+```
+
 ### What Went Wrong: Three Fatal Statistical Assumptions
 
 **1. Stationarity Assumption**
@@ -836,6 +855,21 @@ By using both tests, we get four possible outcomes:
 | ✗ (Unit root) | ✓ (Unit root) | **Non-stationary** (both agree) |
 | ✓ (Stationary) | ✓ (Unit root) | **Trend-stationary** (detrend first) |
 | ✗ (Unit root) | ✗ (Stationary) | **Inconclusive** (increase sample size) |
+
+```mermaid
+quadrantChart
+    title Stationarity Test Decision Matrix
+    x-axis "ADF: Non-Stationary" --> "ADF: Stationary"
+    y-axis "KPSS: Stationary" --> "KPSS: Non-Stationary"
+    quadrant-1 "⚠️ TREND-STATIONARY<br/>Detrend before modeling"
+    quadrant-2 "✓ STATIONARY<br/>Safe to model (BEST)"
+    quadrant-3 "? INCONCLUSIVE<br/>Increase sample size"
+    quadrant-4 "✗ NON-STATIONARY<br/>Difference or abandon"
+    SPY Returns: [0.85, 0.15]
+    SPY Prices: [0.15, 0.85]
+    BTC Returns: [0.80, 0.20]
+    GDP: [0.20, 0.80]
+```
 
 **Worked Example: SPY Returns**
 
@@ -1786,6 +1820,57 @@ Where $R_t'$ is the differenced series.
 
 George Box and Gwilym Jenkins (1970) developed a 3-step procedure for ARIMA model building:
 
+```mermaid
+stateDiagram-v2
+    [*] --> LoadData: Raw Time Series
+    LoadData --> CheckStationarity: Visual Inspection
+
+    CheckStationarity --> Difference: ADF p > 0.05<br/>(Non-stationary)
+    CheckStationarity --> IdentifyOrders: ADF p < 0.05<br/>(Stationary)
+    Difference --> CheckStationarity: d = d + 1
+
+    IdentifyOrders --> PlotACF_PACF: Examine Patterns
+    PlotACF_PACF --> SelectModel: ACF/PACF Analysis
+
+    SelectModel --> EstimateAR: PACF cuts off<br/>ACF decays
+    SelectModel --> EstimateMA: ACF cuts off<br/>PACF decays
+    SelectModel --> EstimateARMA: Both decay
+
+    EstimateAR --> Diagnostics: MLE/OLS
+    EstimateMA --> Diagnostics: MLE
+    EstimateARMA --> Diagnostics: MLE
+
+    Diagnostics --> LjungBox: Test Residuals
+    LjungBox --> PassedDiagnostics: p > 0.05<br/>(White noise)
+    LjungBox --> SelectModel: p < 0.05<br/>(Try different p,q)
+
+    PassedDiagnostics --> OutOfSample: Walk-forward test
+    OutOfSample --> DeployModel: RMSE_test ≈ RMSE_train
+    OutOfSample --> SelectModel: RMSE_test >> RMSE_train<br/>(Overfitting)
+
+    DeployModel --> [*]: Production Ready
+
+    note right of CheckStationarity
+        Use ADF + KPSS
+        d=0 for returns
+        d=1 for prices
+    end note
+
+    note right of PlotACF_PACF
+        Look for patterns:
+        - Sharp cutoff
+        - Exponential decay
+        - Significance bounds
+    end note
+
+    note right of Diagnostics
+        Check:
+        1. Ljung-Box (residuals)
+        2. Jarque-Bera (normality)
+        3. AIC/BIC (parsimony)
+    end note
+```
+
 **STEP 1: IDENTIFICATION**
 *Goal: Determine orders p, d, q*
 
@@ -2406,6 +2491,30 @@ Interpretation:
 - High turnover → need low transaction costs
 ```
 
+```mermaid
+---
+config:
+  themeVariables:
+    xyChart:
+      backgroundColor: transparent
+---
+xychart-beta
+    title "ETH/BTC Spread Mean Reversion (2023)"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+    y-axis "Spread ($)" -80 --> 100
+    line "Spread" [5, -15, 45, 75, 35, -10, 25, 60, 85, 40, -5, 15]
+    line "Mean (0)" [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    line "+2σ (Entry)" [47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47, 47]
+    line "-2σ (Entry)" [-47, -47, -47, -47, -47, -47, -47, -47, -47, -47, -47, -47]
+```
+
+**Chart Interpretation:**
+- **Blue line (Spread):** ETH - 0.0621×BTC oscillates around zero
+- **Red line (Mean):** Long-run equilibrium at $0
+- **Green lines (±2σ):** Entry thresholds at ±$47
+- **Pattern:** Clear mean reversion - spread crosses +2σ in Mar, Aug, Sep → SHORT signals
+- **Half-life (3.4 days):** Visible in rapid reversions after peaks
+
 **STEP 5: Backtest (Simplified)**
 
 ```lisp
@@ -3016,6 +3125,21 @@ Out-of-sample validation: RMSE_test ≈ RMSE_train (within 10%)
 - ✓ Stable relationships (cointegration in >80% of rolling windows)
 - ✓ Low transaction costs (<0.05% per leg)
 - ✓ Fast mean reversion (half-life < 10 periods)
+
+```mermaid
+quadrantChart
+    title Time Series Strategy Selection Matrix
+    x-axis "Weak Pattern (|φ| < 0.1)" --> "Strong Pattern (|φ| > 0.2)"
+    y-axis "Slow Reversion (τ > 20d)" --> "Fast Reversion (τ < 5d)"
+    quadrant-1 "🚀 HIGH FREQUENCY<br/>Momentum + Quick Scalp<br/>BTC hourly, limit orders"
+    quadrant-2 "✓ PAIRS TRADING<br/>ETH/BTC cointegration<br/>Best risk/reward"
+    quadrant-3 "✗ AVOID<br/>Weak + Slow<br/>Not tradeable"
+    quadrant-4 "⚠️ POSITION TRADING<br/>Weekly equity momentum<br/>High cost risk"
+    ETH/BTC Pairs: [0.75, 0.80]
+    BTC Hourly AR: [0.65, 0.25]
+    SPY Weekly: [0.35, 0.15]
+    Random Walk: [0.10, 0.50]
+```
 
 **Success Examples:**
 - **Pairs trading:** ETH/BTC, equity sector pairs (XLE/XLF)
