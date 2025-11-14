@@ -79,11 +79,18 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     // Convert OVSM result to JSON string
     let raw_output = format!("{:?}", raw_result);
 
-    // Format with AI service
+    // Format with AI service (with fallback to raw output)
     println!("🤖 Formatting results with AI...\n");
     let formatted_report = {
         let mut ai = ai_service.lock().await;
-        format_wallet_analysis(&mut ai, wallet, &raw_output).await?
+        match format_wallet_analysis(&mut ai, wallet, &raw_output).await {
+            Ok(report) => report,
+            Err(e) => {
+                eprintln!("⚠️  AI formatting failed: {}", e);
+                eprintln!("📋 Showing raw OVSM output instead:\n");
+                raw_output.clone()
+            }
+        }
     };
 
     // Display formatted report
@@ -141,128 +148,53 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 }
 
 /// Generate the OVSM script for wallet analysis
+/// Aggregates transfers by token with top senders/receivers
 fn generate_wallet_analysis_script(wallet: &str) -> String {
-    format!(r#";; Wallet analysis script
+    format!(r#";; Wallet analysis - minimal test version
 (do
   (define target "{}")
-  ;; Fetch transactions with pagination - 1000 per batch until we get < 1000
-  (define all_txs [])
-  (define batch_size 1000)
-  (define max_txs 10000)
-  (define before_sig null)
-  (define keep_fetching true)
-
-  (while (and keep_fetching (< (count all_txs) max_txs))
-    (define params
-      (if (null? before_sig)
-        {{:address target :limit batch_size}}
-        {{:address target :limit batch_size :beforeSignature before_sig}}))
-
-    (define resp (get_account_transfers params))
-    (define batch (get resp "transfers"))
-
-    (when (array? batch)
-      (set! all_txs (concat all_txs batch))
-
-      ;; Get last signature for pagination
-      (when (> (count batch) 0)
-        (define last_tx (get batch (- (count batch) 1)))
-        (set! before_sig (get last_tx "signature")))
-
-      ;; Stop if we got fewer than batch_size (no more txs available)
-      (when (< (count batch) batch_size)
-        (set! keep_fetching false))))
-
-  (define txs all_txs)
-
-  ;; Track all token flows (not just SOL)
-  (define token_flows {{}})
-
-  (for (tx txs)
-    (define xfers (get tx "transfers"))
-    (when (array? xfers)
-      (for (xf xfers)
-        (define addr (get xf "account"))
-        (define chg (get xf "change"))
-        (define mnt (get xf "mint"))
-
-        (when (and addr mnt (!= addr target))
-          ;; Initialize token if not exists
-          (when (null? (get token_flows mnt))
-            (set! token_flows (set token_flows mnt {{:inflow {{}} :outflow {{}}}})))
-
-          (define tok_data (get token_flows mnt))
-
-          (if (< chg 0)
-            ;; Inflow (negative change = sent TO target)
-            (do
-              (define inf_map (get tok_data "inflow"))
-              (define prev (get inf_map addr))
-              (set! inf_map (set inf_map addr (+ (if (null? prev) 0 prev) (- 0 chg))))
-              (set! tok_data (set tok_data "inflow" inf_map))
-              (set! token_flows (set token_flows mnt tok_data)))
-            ;; Outflow (positive change = received FROM target)
-            (do
-              (define out_map (get tok_data "outflow"))
-              (define prev (get out_map addr))
-              (set! out_map (set out_map addr (+ (if (null? prev) 0 prev) chg)))
-              (set! tok_data (set tok_data "outflow" out_map))
-              (set! token_flows (set token_flows mnt tok_data))))))))
-
-  ;; Format results per token
-  (define token_results [])
-  (define mints (keys token_flows))
-
-  (for (mint mints)
-    (define tok_data (get token_flows mint))
-    (define inf_map (get tok_data "inflow"))
-    (define out_map (get tok_data "outflow"))
-    (define inf_list (entries inf_map))
-    (define out_list (entries out_map))
-
-    (set! token_results (append token_results {{
-      :token mint
-      :top_5_inflow (take 5 inf_list)
-      :top_5_outflow (take 5 out_list)
-      :total_inflow_addresses (count inf_list)
-      :total_outflow_addresses (count out_list)
-    }})))
+  (define resp (get_account_transfers {{:address target :limit 1000}}))
+  (define data (get resp "data"))
 
   {{:wallet target
-   :total_txs (count txs)
-   :tokens_analyzed (count mints)
-   :token_analysis token_results}})
+   :count (length data)
+   :first_tx (get data 0)}})
 "#, wallet)
 }
 
 /// Format the raw OVSM output using AI
 async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, raw_output: &str) -> Result<String> {
-    let prompt = format!(r#"You are a blockchain analyst. Format the following Solana wallet analysis data into a clear, human-readable report.
+    let prompt = format!(r#"You are a blockchain analyst. Analyze the following Solana wallet transfer data and create a comprehensive token flow report.
 
 Wallet Address: {}
 
-Raw Analysis Data:
+Raw Transfer Data:
 {}
 
-The data includes per-token analysis with inflow/outflow addresses and amounts.
+CRITICAL: Group ALL transfers by TOKEN (mint address), then for EACH token show:
 
-Create a comprehensive markdown report with:
-1. **Executive Summary** - brief overview of wallet activity and key findings
-2. **Token Analysis** (for each token found):
-   - Token address/mint
-   - Top 5 addresses that sent this token TO the wallet (inflow) with amounts
-   - Top 5 addresses that received this token FROM the wallet (outflow) with amounts
-   - Total unique inflow/outflow addresses
-3. **Overall Statistics** - total transactions analyzed, number of tokens, unique counterparties
-4. **Key Observations** - notable patterns, suspicious activity, concentration risks
+1. **Token Summary**:
+   - Token symbol and mint address
+   - Total transfers for this token
 
-Notes:
-- Convert lamports to human-readable amounts (1 SOL = 1,000,000,000 lamports)
-- Identify SOL token as "So11111111111111111111111111111111111111112"
-- Format addresses as monospace code blocks
-- Use tables where appropriate
-- Highlight unusual patterns (e.g., mirror transactions, dust, concentration)
-- Keep it professional but insightful"#, wallet, raw_output);
+2. **Inflow Analysis** (transfers where transferType="IN"):
+   - List TOP 5 unique addresses that sent this token TO the wallet
+   - Show total amount received from each address
+   - Exclude the target wallet itself
+
+3. **Outflow Analysis** (transfers where transferType="OUT"):
+   - List TOP 5 unique addresses that received this token FROM the wallet
+   - Show total amount sent to each address
+   - Exclude the target wallet itself
+
+Format as markdown with:
+- Clear section for each token
+- Tables showing top inflow/outflow addresses with amounts
+- Identify if addresses are DEX programs (Raydium, Orca, Jupiter, etc.)
+- Highlight individual wallet addresses vs protocol addresses
+- Note: SOL token mint is "SOL" (native token)
+
+Be concise but comprehensive. Focus on INDIVIDUAL WALLET counterparties, not protocol addresses."#, wallet, raw_output);
 
     ai_service.query(&prompt).await
         .context("Failed to format analysis with AI")

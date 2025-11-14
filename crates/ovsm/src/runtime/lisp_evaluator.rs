@@ -333,6 +333,8 @@ impl LispEvaluator {
                     "entries" => self.eval_object_entries(args),      // JS: Object.entries()
                     "items" => self.eval_object_entries(args),        // Python: dict.items()
                     "merge" => self.eval_merge(args),
+                    "put" => self.eval_put(args),           // Set object property: (put obj "key" val)
+                    "assoc-in" => self.eval_put(args),      // Clojure-style alias
                     "get" => self.eval_get(args),
                     "get-path" => self.eval_get_path(args),
                     "discover" => self.eval_discover(args),
@@ -5102,56 +5104,118 @@ impl LispEvaluator {
         Ok(Value::Object(Arc::new(result)))
     }
 
-    /// get(object, key) - Safely get object property, returns null if not found
+    /// put(obj, key, value) - Set object property with dynamic key
+    /// Returns new object with property set (immutable operation)
+    /// Example: (put {:a 1} "b" 2) → {:a 1, :b 2}
+    fn eval_put(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 3 {
+            return Err(Error::InvalidArguments {
+                tool: "put".to_string(),
+                reason: "Expected 3 arguments: object, key, value".to_string(),
+            });
+        }
+
+        // Get the object
+        let obj_val = self.evaluate_expression(&args[0].value)?;
+        let obj = obj_val.as_object()?;
+
+        // Get the key (convert to string)
+        let key_val = self.evaluate_expression(&args[1].value)?;
+        let key = match key_val {
+            Value::String(s) => s,
+            Value::Int(i) => i.to_string(),
+            Value::Float(f) => f.to_string(),
+            _ => return Err(Error::TypeError {
+                expected: "string or number for key".to_string(),
+                got: key_val.type_name(),
+            }),
+        };
+
+        // Get the value
+        let value = self.evaluate_expression(&args[2].value)?;
+
+        // Create new object with property set
+        let mut result = obj.clone();
+        result.insert(key, value);
+
+        Ok(Value::Object(Arc::new(result)))
+    }
+
+    /// get(collection, key/index) - Safely get from object (by key) or array (by index)
+    /// Returns null if not found
     fn eval_get(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 2 {
             return Err(Error::InvalidArguments {
                 tool: "get".to_string(),
-                reason: "Expected 2 arguments: object, key".to_string(),
+                reason: "Expected 2 arguments: collection, key/index".to_string(),
             });
         }
 
-        let obj_val = self.evaluate_expression(&args[0].value)?;
-        let obj = obj_val.as_object()?;
+        let collection_val = self.evaluate_expression(&args[0].value)?;
+        let accessor_val = self.evaluate_expression(&args[1].value)?;
 
-        let key_val = self.evaluate_expression(&args[1].value)?;
-        let key_str = key_val.as_string()?;
+        // Check if we're accessing an array by numeric index
+        match &collection_val {
+            Value::Array(arr) => {
+                // Array indexing: second argument must be an integer
+                let idx = accessor_val.as_int().map_err(|_| Error::InvalidArguments {
+                    tool: "get".to_string(),
+                    reason: "Array index must be an integer".to_string(),
+                })? as usize;
 
-        // Strip leading colon from keywords (e.g., ":age" -> "age")
-        let key = if key_str.starts_with(':') {
-            &key_str[1..]
-        } else {
-            key_str
-        };
+                if idx >= arr.len() {
+                    // Return null for out-of-bounds (Ruby-like behavior)
+                    return Ok(Value::Null);
+                }
 
-        // Try direct access first
-        if let Some(value) = obj.get(key) {
-            return Ok(value.clone());
+                Ok(arr[idx].clone())
+            }
+            Value::Object(_) => {
+                // Object key access: second argument must be a string
+                let obj = collection_val.as_object()?;
+                let key_str = accessor_val.as_string()?;
+
+                // Strip leading colon from keywords (e.g., ":age" -> "age")
+                let key = if key_str.starts_with(':') {
+                    &key_str[1..]
+                } else {
+                    key_str
+                };
+
+                // Try direct access first
+                if let Some(value) = obj.get(key) {
+                    return Ok(value.clone());
+                }
+
+                // Get config for lazy field access
+                let config = self.lazy_field_config.borrow();
+                let strict = config.strict;
+                let max_depth = config.max_depth;
+                let breadth_first = config.breadth_first;
+                drop(config); // Release borrow before recursive search
+
+                // If not found, recursively search nested objects (lazy field access)
+                if let Some(value) =
+                    self.recursive_field_search_with_config(obj, key, 0, max_depth, breadth_first)
+                {
+                    return Ok(value);
+                }
+
+                // Handle strict mode
+                if strict {
+                    return Err(Error::InvalidArguments {
+                        tool: "get".to_string(),
+                        reason: format!("Field '{}' not found in object (strict mode enabled)", key),
+                    });
+                }
+
+                Ok(Value::Null)
+            }
+            _ => Err(Error::TypeError {
+                expected: "object or array".to_string(),
+                got: format!("{:?}", collection_val),
+            }),
         }
-
-        // Get config for lazy field access
-        let config = self.lazy_field_config.borrow();
-        let strict = config.strict;
-        let max_depth = config.max_depth;
-        let breadth_first = config.breadth_first;
-        drop(config); // Release borrow before recursive search
-
-        // If not found, recursively search nested objects (lazy field access)
-        if let Some(value) =
-            self.recursive_field_search_with_config(obj, key, 0, max_depth, breadth_first)
-        {
-            return Ok(value);
-        }
-
-        // Handle strict mode
-        if strict {
-            return Err(Error::InvalidArguments {
-                tool: "get".to_string(),
-                reason: format!("Field '{}' not found in object (strict mode enabled)", key),
-            });
-        }
-
-        Ok(Value::Null)
     }
 
     /// Recursively search for a field with configuration options

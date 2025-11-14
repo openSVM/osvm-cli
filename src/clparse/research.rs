@@ -53,7 +53,6 @@ pub fn build_research_command() -> Command {
         )
         .arg(
             Arg::new("agent")
-                .short('a')
                 .long("agent")
                 .help("Use advanced multi-iteration research agent (more thorough but slower)")
                 .action(clap::ArgAction::SetTrue)

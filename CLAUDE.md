@@ -149,11 +149,21 @@ OVSM is a LISP-dialect that the AI agent uses to plan and execute blockchain inv
 (map balances :function getTokenAmount)        ; Transformations
 (sort results :by "amount" :desc true)         ; Sorting
 (aggregate data :by "program" :sum "fees")     ; Aggregations
+
+;; 🆕 Array indexing (Ruby-like resilience)
+(define transfers (get response "data"))       ; Get array from object
+(define first_tx (get transfers 0))            ; Access by index
+(define tx_type (get first_tx "transferType")) ; Object key access
+(get transfers 999)                            ; Returns null if out-of-bounds
 ```
 
 **Key Points:**
 - LISP S-expression syntax (parentheses-based)
-- 356/356 tests passing, production-ready
+- **Polymorphic `get` function**: works with both objects AND arrays
+  - `(get object "key")` → object property access
+  - `(get array 0)` → array element access
+  - Out-of-bounds and missing keys return `null` (graceful failure)
+- 469/469 tests passing, production-ready
 - See `docs/ovsm/` for full documentation
 
 ---
