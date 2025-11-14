@@ -10,7 +10,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** ~112,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Total Content:** ~116,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
 **Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
 
 ---
@@ -63,9 +63,9 @@ Every chapter shows you **exactly** how these disasters could have been prevente
 | Chapter | Title | Words | Topics |
 |---------|-------|-------|--------|
 | [11](11_pairs_trading.md) | Statistical Arbitrage — Pairs Trading | 13,831 | Cointegration, O-U process, Kalman filter, risk mgmt, Aug 2007 |
-| [12](12_options_volatility.md) | Options Pricing and Volatility Surface | 6,311 | Black-Scholes, Greeks, vol smile/skew |
+| [12](12_options_volatility.md) | Options Pricing and Volatility Surface | 10,514 | Black-Scholes, Greeks, vega/gamma risk, LTCM/GameStop/XIV |
 
-**Subtotal:** 20,142 words
+**Subtotal:** 24,345 words
 
 ### Part III: Machine Learning & AI
 
