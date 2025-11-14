@@ -10,7 +10,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** ~116,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Total Content:** ~119,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
 **Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
 
 ---
@@ -71,10 +71,10 @@ Every chapter shows you **exactly** how these disasters could have been prevente
 
 | Chapter | Title | Words | Topics |
 |---------|-------|-------|--------|
-| [13](13_ai_sentiment_trading.md) | AI-Powered Sentiment Trading | 5,664 | NLP, BERT, FinBERT, social media signals |
+| [13](13_ai_sentiment_trading.md) | AI-Powered Sentiment Trading | 9,362 | NLP, multi-source verification, AP hack, Musk tweets |
 | [14](14_ml_prediction_trading.md) | Machine Learning for Price Prediction | 6,116 | Feature engineering, LSTM, overfitting prevention |
 
-**Subtotal:** 11,780 words
+**Subtotal:** 15,478 words
 
 ### Part IV: DeFi & MEV Strategies
 
