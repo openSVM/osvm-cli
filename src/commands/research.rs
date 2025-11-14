@@ -158,9 +158,14 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
   (define all_transfers [])
   (define next_cursor null)
   (define is_first_page true)
+  (define prev_cursor null)
+  (define max_iterations 100)
+  (define iteration_count 0)
 
-  (while (or is_first_page next_cursor)
+  (while (and (or is_first_page next_cursor) (< iteration_count max_iterations))
     (do
+      (set! iteration_count (+ iteration_count 1))
+
       ;; Build request params based on whether we have a cursor
       (define params
         (if is_first_page
@@ -170,16 +175,39 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
       ;; Fetch batch
       (define resp (get_account_transfers params))
       (define batch (get resp "data"))
+      (define new_cursor (get resp "nextPageSignature"))
 
-      ;; Append to results
-      (set! all_transfers (append all_transfers batch))
+      ;; Append data if we got any
+      (if (> (length batch) 0)
+          (set! all_transfers (append all_transfers batch))
+          null)
 
-      ;; Get next cursor for pagination
-      (set! next_cursor (get resp "nextPageSignature"))
+      ;; Stop if cursor hasn't changed (prevents infinite loop with same cursor)
+      (if (and (not is_first_page) (= new_cursor prev_cursor))
+          (set! next_cursor null)
+          (do
+            (set! prev_cursor next_cursor)
+            (set! next_cursor new_cursor)))
+
       (set! is_first_page false)))
 
+  ;; Deduplicate transfers by transaction ID + from + to (same tx can have multiple token transfers)
+  (define dedup_map
+    (reduce
+      all_transfers
+      {{}}
+      (lambda (acc tx)
+        (do
+          (define key (+ (get tx "txId") "_" (get tx "from") "_" (get tx "to")))
+          (put acc key tx)))))
+
+  (define unique_transfers
+    (map
+      (entries dedup_map)
+      (lambda (entry) (get entry 1))))
+
   ;; Now aggregate by token mint
-  (define by_mint (group-by all_transfers (lambda (tx) (get tx "mint"))))
+  (define by_mint (group-by unique_transfers (lambda (tx) (get tx "mint"))))
 
   ;; For each token, aggregate senders/receivers
   (define token_summaries
@@ -248,7 +276,8 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
 
   ;; Return AGGREGATED summaries (NOT raw transfers!)
   {{:wallet target
-   :total_transfers (length all_transfers)
+   :total_transfers_raw (length all_transfers)
+   :total_transfers_unique (length unique_transfers)
    :num_tokens (length token_summaries)
    :tokens token_summaries}})
 "#, wallet)
