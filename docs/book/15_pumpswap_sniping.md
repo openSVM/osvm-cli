@@ -973,6 +973,579 @@ Bottom 90% (11,106 addresses): -$13.4M total loss
 
 ---
 
+## 15.9 Production MEV Sniping System
+
+This section presents production-ready OVSM implementations for MEV sniping on Solana, incorporating all disaster lessons from Section 15.8. The code follows defensive programming principles: verify everything, assume nothing, fail safely.
+
+### 15.9.1 Mempool Monitoring with WebSocket Streaming
+
+**WHAT**: Real-time transaction monitoring via WebSocket RPC subscriptions
+**WHY**: Detect token launches 0-400ms before first block (critical advantage)
+**HOW**: Subscribe to logs, filter by program ID, extract token metadata
+
+```lisp
+(defun create-mempool-monitor (:rpc-url "https://api.mainnet-beta.solana.com"
+                                :filter-programs ["Token2022Program" "PumpSwapProgram"]
+                                :min-liquidity-sol 10.0
+                                :callback on-token-detected)
+  "Real-time mempool monitoring for new token launches.
+   WHAT: WebSocket subscription to Solana RPC logs
+   WHY: Detect launches before confirmation (0-400ms edge)
+   HOW: logsSubscribe → filter by program → extract metadata → callback"
+
+  (do
+    ;; STEP 1: Establish WebSocket connection
+    (define ws (websocket-connect rpc-url))
+    (log :message "WebSocket connected" :url rpc-url)
+
+    ;; STEP 2: Subscribe to logs mentioning token programs
+    (for (program filter-programs)
+      (do
+        (websocket-subscribe ws "logsSubscribe"
+          {:mentions [program]
+           :commitment "processed"})  ;; Fastest commitment level
+        (log :message "Subscribed to program" :program program)))
+
+    ;; STEP 3: Process incoming log stream
+    (define stream (websocket-stream ws))
+    (for (log-entry stream)
+      (do
+        ;; STEP 4: Check if this is a token creation event
+        (if (detect-token-creation log-entry)
+            (do
+              ;; STEP 5: Extract token metadata
+              (define metadata (extract-token-metadata log-entry))
+              (log :message "Token detected" :metadata metadata)
+
+              ;; STEP 6: Quick liquidity check
+              (define liquidity (get metadata :initial-liquidity-sol))
+              (if (>= liquidity min-liquidity-sol)
+                  (do
+                    (log :message "Liquidity threshold met" :sol liquidity)
+                    ;; STEP 7: Trigger callback for further analysis
+                    (callback metadata))
+                  (log :warning "Insufficient liquidity" :sol liquidity)))
+            null)))
+
+    ;; Return WebSocket handle for cleanup
+    ws))
+
+(defun detect-token-creation (log-entry)
+  "Detect if log entry represents new token creation.
+   WHAT: Pattern matching on program logs
+   WHY: Filter noise (99% of logs are not token launches)
+   HOW: Check for createAccount + initializeMint instructions"
+
+  (do
+    (define logs (get log-entry :logs))
+    (define has-create (contains-any logs ["Program log: Instruction: CreateAccount"
+                                            "Program log: create_account"]))
+    (define has-mint (contains-any logs ["Program log: Instruction: InitializeMint"
+                                          "Program log: initialize_mint"]))
+
+    ;; Both instructions must be present
+    (and has-create has-mint)))
+
+(defun extract-token-metadata (log-entry)
+  "Extract token metadata from log entry.
+   WHAT: Parse logs and transaction data for token details
+   WHY: Need metadata for rug pull risk assessment
+   HOW: Extract signature → fetch full transaction → parse accounts"
+
+  (do
+    (define signature (get log-entry :signature))
+
+    ;; Fetch full transaction (includes all accounts and data)
+    (define tx (getTransaction signature))
+
+    ;; Extract relevant fields
+    {:token-address (get-token-address-from-tx tx)
+     :deployer (get-deployer-address tx)
+     :initial-liquidity-sol (calculate-initial-liquidity tx)
+     :signature signature
+     :timestamp (now)
+     :slot (get tx :slot)}))
+```
+
+### 15.9.2 Multi-Factor Rug Pull Detection
+
+**WHAT**: 10-factor risk scoring system for new tokens
+**WHY**: Prevent SQUID/AnubisDAO scenarios (100% loss on rug pull)
+**HOW**: Check LP lock, anti-sell, deployer history, ownership, honeypot
+
+```lisp
+(defun assess-rug-pull-risk (token-address metadata)
+  "Comprehensive rug pull risk assessment (10 factors).
+   WHAT: Multi-factor scoring system returning risk score 0-100
+   WHY: 80% of memecoins rug within 24 hours—must filter
+   HOW: Check each factor, accumulate risk points, classify"
+
+  (do
+    (define risk-score 0)
+    (define risk-factors {})
+
+    ;; FACTOR 1: LP Lock Status (30 points if not locked)
+    (define lp-locked (check-lp-lock-status token-address))
+    (if (not lp-locked)
+        (do
+          (set! risk-score (+ risk-score 30))
+          (set! risk-factors (assoc risk-factors :lp-not-locked true)))
+        (set! risk-factors (assoc risk-factors :lp-locked true)))
+
+    ;; FACTOR 2: Anti-Sell Mechanism (40 points if present)
+    ;;  Lesson: SQUID Token had this, 100% loss for snipers
+    (define contract-code (fetch-contract-code token-address))
+    (define has-anti-sell (contains contract-code "disable_sell")
+                          (contains contract-code "canSell")
+                          (contains contract-code "transfer-hook"))
+    (if has-anti-sell
+        (do
+          (set! risk-score (+ risk-score 40))
+          (set! risk-factors (assoc risk-factors :anti-sell-detected true)))
+        (set! risk-factors (assoc risk-factors :anti-sell-ok true)))
+
+    ;; FACTOR 3: Deployer History (50 points if prior rugs)
+    ;;  Lesson: AnubisDAO deployer had history of abandoned projects
+    (define deployer (get metadata :deployer))
+    (define deployer-history (fetch-deployer-history deployer))
+    (define rug-count (count-rug-pulls deployer-history))
+    (if (> rug-count 0)
+        (do
+          (set! risk-score (+ risk-score 50))
+          (set! risk-factors (assoc risk-factors :deployer-rug-count rug-count)))
+        (set! risk-factors (assoc risk-factors :deployer-clean true)))
+
+    ;; FACTOR 4: Ownership Renounced (20 points if not renounced)
+    (define ownership-renounced (check-ownership-renounced token-address))
+    (if (not ownership-renounced)
+        (do
+          (set! risk-score (+ risk-score 20))
+          (set! risk-factors (assoc risk-factors :ownership-not-renounced true)))
+        (set! risk-factors (assoc risk-factors :ownership-renounced true)))
+
+    ;; FACTOR 5: Honeypot Test (60 points if can't sell)
+    ;;  Lesson: SQUID snipers couldn't sell, lost 100%
+    (define honeypot-result (simulate-buy-sell-test token-address 0.001))
+    (if (not (get honeypot-result :can-sell))
+        (do
+          (set! risk-score (+ risk-score 60))
+          (set! risk-factors (assoc risk-factors :honeypot-detected true)))
+        (set! risk-factors (assoc risk-factors :honeypot-ok true)))
+
+    ;; FACTOR 6: Mint Authority Active (30 points if active)
+    (define mint-authority-active (check-mint-authority token-address))
+    (if mint-authority-active
+        (do
+          (set! risk-score (+ risk-score 30))
+          (set! risk-factors (assoc risk-factors :mint-authority-active true)))
+        (set! risk-factors (assoc risk-factors :mint-authority-disabled true)))
+
+    ;; FACTOR 7: Freeze Authority Active (30 points if active)
+    (define freeze-authority-active (check-freeze-authority token-address))
+    (if freeze-authority-active
+        (do
+          (set! risk-score (+ risk-score 30))
+          (set! risk-factors (assoc risk-factors :freeze-authority-active true)))
+        (set! risk-factors (assoc risk-factors :freeze-authority-disabled true)))
+
+    ;; FACTOR 8: Concentrated Holdings (20 points if >50% in top 5 wallets)
+    (define top-holders (fetch-top-holders token-address 5))
+    (define top5-pct (calculate-percentage-held top-holders))
+    (if (> top5-pct 0.50)
+        (do
+          (set! risk-score (+ risk-score 20))
+          (set! risk-factors (assoc risk-factors :concentrated-holdings top5-pct)))
+        (set! risk-factors (assoc risk-factors :holdings-distributed true)))
+
+    ;; FACTOR 9: Liquidity Amount (10 points if < 5 SOL)
+    (define liquidity (get metadata :initial-liquidity-sol))
+    (if (< liquidity 5.0)
+        (do
+          (set! risk-score (+ risk-score 10))
+          (set! risk-factors (assoc risk-factors :low-liquidity liquidity)))
+        (set! risk-factors (assoc risk-factors :adequate-liquidity liquidity)))
+
+    ;; FACTOR 10: Social Presence (15 points if no website/Twitter/Telegram)
+    (define social-links (fetch-social-links token-address))
+    (if (< (length social-links) 2)
+        (do
+          (set! risk-score (+ risk-score 15))
+          (set! risk-factors (assoc risk-factors :no-social-presence true)))
+        (set! risk-factors (assoc risk-factors :social-presence social-links)))
+
+    ;; STEP 2: Classify risk level
+    (define risk-level
+      (if (>= risk-score 70) "EXTREME"
+          (if (>= risk-score 50) "HIGH"
+              (if (>= risk-score 30) "MEDIUM"
+                  "LOW"))))
+
+    ;; STEP 3: Return comprehensive assessment
+    {:risk-score risk-score
+     :risk-level risk-level
+     :factors risk-factors
+     :recommendation (if (>= risk-score 70)
+                         "REJECT - Do not snipe, almost certain rug pull"
+                         (if (>= risk-score 50)
+                             "EXTREME CAUTION - Only tiny position if at all"
+                             (if (>= risk-score 30)
+                                 "PROCEED WITH CAUTION - Small position, fast exit"
+                                 "ACCEPTABLE RISK - Standard position sizing")))}))
+
+(defun simulate-buy-sell-test (token-address test-amount-sol)
+  "Simulate buy + sell to detect honeypots.
+   WHAT: Execute test buy, attempt test sell, check if sell succeeds
+   WHY: SQUID Token lesson—couldn't sell after buying
+   HOW: Use Solana simulate transaction (no actual execution)"
+
+  (do
+    ;; STEP 1: Simulate buy transaction
+    (define buy-tx (create-buy-transaction token-address test-amount-sol))
+    (define buy-sim (simulate-transaction buy-tx))
+
+    (if (not (get buy-sim :success))
+        (return {:can-buy false :can-sell false :reason "Buy simulation failed"})
+        null)
+
+    ;; STEP 2: Extract token amount received from buy simulation
+    (define tokens-received (get buy-sim :token-amount))
+
+    ;; STEP 3: Simulate sell transaction
+    (define sell-tx (create-sell-transaction token-address tokens-received))
+    (define sell-sim (simulate-transaction sell-tx))
+
+    ;; STEP 4: Check if sell succeeded
+    {:can-buy true
+     :can-sell (get sell-sim :success)
+     :reason (if (get sell-sim :success)
+                 "Both buy and sell successful"
+                 "HONEYPOT DETECTED - Can buy but cannot sell")}))
+```
+
+### 15.9.3 Priority Fee Optimization
+
+**WHAT**: Dynamic priority fee calculation based on competition
+**WHY**: Underbid → lose snipe, overbid → negative EV
+**HOW**: Estimate competition, scale fee by liquidity and urgency
+
+```lisp
+(defun calculate-optimal-priority-fee (competition-level liquidity-sol)
+  "Calculate priority fee to maximize snipe success probability.
+   WHAT: Dynamic fee = base + (competition × liquidity × urgency)
+   WHY: Too low = lose to faster bots, too high = negative EV
+   HOW: Tiered system based on mempool activity and pool size"
+
+  (do
+    ;; BASE FEE: Minimum to get included in block
+    (define base-fee 0.0005)  ;; 0.0005 SOL ≈ $0.05 @ $100/SOL
+
+    ;; COMPETITION MULTIPLIER
+    ;; Detected by counting pending transactions in mempool
+    (define competition-multiplier
+      (if (= competition-level "EXTREME") 10.0   ;; 50+ bots competing
+          (if (= competition-level "HIGH") 5.0    ;; 20-50 bots
+              (if (= competition-level "MEDIUM") 2.5  ;; 5-20 bots
+                  1.0))))                          ;; <5 bots (LOW)
+
+    ;; LIQUIDITY-BASED FEE ADJUSTMENT
+    ;;  Bigger pools = bigger profits = worth paying more
+    (define liquidity-factor (* liquidity-sol 0.0001))
+
+    ;; URGENCY BOOST (time-sensitive)
+    ;; If token just launched (< 5 seconds ago), add urgency premium
+    (define urgency-boost 0.001)  ;; Extra 0.001 SOL for speed
+
+    ;; CALCULATE TOTAL FEE
+    (define total-fee (+ base-fee
+                         (* base-fee competition-multiplier)
+                         liquidity-factor
+                         urgency-boost))
+
+    ;; CAP AT MAX REASONABLE FEE
+    ;; Prevent runaway fees (MEV war escalation)
+    (define max-fee 0.05)  ;; 0.05 SOL ≈ $5 max
+    (define final-fee (if (> total-fee max-fee) max-fee total-fee))
+
+    (log :message "Priority fee calculated"
+         :competition competition-level
+         :liquidity liquidity-sol
+         :fee final-fee)
+
+    final-fee))
+```
+
+### 15.9.4 Jito Bundle Construction and Submission
+
+**WHAT**: Atomic transaction bundles via Jito Block Engine
+**WHY**: Public mempool → frontrun by faster bots
+**HOW**: Bundle = [tip tx, snipe tx], submitted to validators privately
+
+```lisp
+(defun execute-snipe-via-jito (token-address amount-sol priority-fee rug-assessment)
+  "Execute token snipe using Jito bundles for MEV protection.
+   WHAT: Construct atomic bundle, submit to Jito Block Engine
+   WHY: Public mempool submission → frontrun risk
+   HOW: Create buy transaction + tip transaction, bundle atomically"
+
+  (do
+    ;; PRE-CHECK: Risk assessment
+    (if (>= (get rug-assessment :risk-score) 70)
+        (return {:success false
+                 :reason "Risk score too high, aborting snipe"
+                 :risk-score (get rug-assessment :risk-score)})
+        null)
+
+    ;; STEP 1: Construct buy transaction
+    (define buy-tx (create-buy-transaction
+                     {:token token-address
+                      :amount-sol amount-sol
+                      :slippage-tolerance 0.15  ;; 15% slippage max
+                      :priority-fee priority-fee}))
+
+    (log :message "Buy transaction created" :token token-address)
+
+    ;; STEP 2: Construct Jito tip transaction
+    ;;  Tip goes to validators for priority inclusion
+    (define jito-tip-amount 0.001)  ;; 0.001 SOL tip
+    (define jito-tip-address "Tip-Address-Here-Jito-Validator")
+    (define tip-tx (create-tip-transaction
+                     {:recipient jito-tip-address
+                      :amount jito-tip-amount}))
+
+    (log :message "Jito tip transaction created" :tip jito-tip-amount)
+
+    ;; STEP 3: Create atomic bundle
+    ;;  Bundle ensures both transactions execute together or not at all
+    (define bundle (create-jito-bundle [tip-tx buy-tx]))
+
+    (log :message "Bundle created" :transactions 2)
+
+    ;; STEP 4: Submit bundle to Jito Block Engine
+    (define jito-rpc "https://mainnet.block-engine.jito.wtf")
+    (define result (submit-jito-bundle bundle
+                     {:rpc jito-rpc
+                      :max-retries 3
+                      :timeout-ms 2000}))
+
+    ;; STEP 5: Check execution result
+    (if (get result :confirmed)
+        (do
+          (log :message "SNIPE SUCCESSFUL"
+               :signature (get result :signature)
+               :slot (get result :slot))
+
+          {:success true
+           :signature (get result :signature)
+           :slot (get result :slot)
+           :timestamp (now)
+           :total-cost (+ amount-sol priority-fee jito-tip-amount)})
+
+        (do
+          (log :error "SNIPE FAILED"
+               :reason (get result :error))
+
+          {:success false
+           :reason (get result :error)
+           :cost-wasted (+ priority-fee jito-tip-amount)}))))
+```
+
+### 15.9.5 Dynamic Exit Strategy
+
+**WHAT**: Real-time price monitoring with profit target and stop-loss
+**WHY**: Memecoins pump fast, dump faster—holding too long = -100%
+**HOW**: WebSocket price tracking, auto-sell at thresholds
+
+```lisp
+(defun create-exit-strategy (token-address entry-price entry-amount
+                              :take-profit-multiplier 2.0
+                              :stop-loss-pct 0.50
+                              :max-holding-minutes 30)
+  "Dynamic exit strategy with profit targets and stop-loss.
+   WHAT: Monitor price real-time, auto-sell at thresholds
+   WHY: Memecoin lifecycle: pump (15 min) → dump (next 45 min)
+   HOW: WebSocket price stream → check conditions → execute sell"
+
+  (do
+    (define entry-time (now))
+
+    ;; Calculate exit thresholds
+    (define take-profit-price (* entry-price take-profit-multiplier))  ;; 2x
+    (define stop-loss-price (* entry-price (- 1.0 stop-loss-pct)))     ;; -50%
+
+    (log :message "Exit strategy initialized"
+         :entry-price entry-price
+         :take-profit take-profit-price
+         :stop-loss stop-loss-price
+         :max-hold-min max-holding-minutes)
+
+    ;; STEP 1: Connect to price feed
+    (define price-feed (create-price-feed-websocket token-address))
+
+    ;; STEP 2: Monitor price continuously
+    (while true
+      (do
+        (define current-price (get-current-price price-feed))
+        (define elapsed-minutes (/ (- (now) entry-time) 60))
+
+        ;; CONDITION 1: Take profit hit (2x)
+        (if (>= current-price take-profit-price)
+            (do
+              (log :message "🎯 TAKE PROFIT HIT" :price current-price)
+              (execute-sell-order token-address entry-amount :reason "take-profit")
+              (return {:exit-reason "take-profit"
+                       :entry-price entry-price
+                       :exit-price current-price
+                       :profit-pct (pct-change entry-price current-price)
+                       :holding-time-min elapsed-minutes}))
+            null)
+
+        ;; CONDITION 2: Stop-loss hit (-50%)
+        (if (<= current-price stop-loss-price)
+            (do
+              (log :message "🛑 STOP LOSS HIT" :price current-price)
+              (execute-sell-order token-address entry-amount :reason "stop-loss")
+              (return {:exit-reason "stop-loss"
+                       :entry-price entry-price
+                       :exit-price current-price
+                       :loss-pct (pct-change entry-price current-price)
+                       :holding-time-min elapsed-minutes}))
+            null)
+
+        ;; CONDITION 3: Max holding time exceeded
+        (if (>= elapsed-minutes max-holding-minutes)
+            (do
+              (log :message "⏰ MAX HOLDING TIME" :minutes elapsed-minutes)
+              (execute-sell-order token-address entry-amount :reason "time-limit")
+              (return {:exit-reason "time-limit"
+                       :entry-price entry-price
+                       :exit-price current-price
+                       :profit-pct (pct-change entry-price current-price)
+                       :holding-time-min elapsed-minutes}))
+            null)
+
+        ;; Wait 1 second before next price check
+        (sleep 1000)))))
+```
+
+### 15.9.6 Comprehensive Risk Management System
+
+**WHAT**: Multi-layered risk management with position limits and circuit breakers
+**WHY**: Prevent total wipeout (Black Thursday, rug pulls)
+**HOW**: Pre-trade checks, position limits, daily loss caps
+
+```lisp
+(defun create-mev-risk-manager (:max-position-size-sol 2.0
+                                 :max-daily-snipes 10
+                                 :max-rug-risk-score 30
+                                 :max-total-capital-sol 50.0
+                                 :circuit-breaker-loss-pct 0.20
+                                 :min-liquidity-sol 5.0)
+  "Production-grade risk management for MEV sniping.
+   WHAT: Position limits, trade caps, circuit breakers, risk filtering
+   WHY: Prevent Black Thursday scenario (total capital loss)
+   HOW: Check all limits before trade, halt trading on threshold breach"
+
+  (do
+    ;; STATE: Track daily activity
+    (define daily-snipes-count 0)
+    (define daily-pnl 0.0)
+    (define total-capital-deployed 0.0)
+    (define circuit-breaker-triggered false)
+
+    (defun can-execute-snipe (token-metadata rug-assessment amount-sol)
+      "Pre-trade risk check: returns {:approved true/false :reason \"...\"}."
+
+      (do
+        ;; CHECK 1: Circuit breaker status
+        (if circuit-breaker-triggered
+            (return {:approved false
+                     :reason "CIRCUIT BREAKER ACTIVE - Trading halted"
+                     :daily-loss daily-pnl})
+            null)
+
+        ;; CHECK 2: Daily snipe limit
+        (if (>= daily-snipes-count max-daily-snipes)
+            (return {:approved false
+                     :reason "Daily snipe limit reached"
+                     :count daily-snipes-count
+                     :limit max-daily-snipes})
+            null)
+
+        ;; CHECK 3: Rug pull risk score
+        (define risk-score (get rug-assessment :risk-score))
+        (if (> risk-score max-rug-risk-score)
+            (return {:approved false
+                     :reason "Rug pull risk too high"
+                     :score risk-score
+                     :threshold max-rug-risk-score})
+            null)
+
+        ;; CHECK 4: Position size limit (per snipe)
+        (if (> amount-sol max-position-size-sol)
+            (return {:approved false
+                     :reason "Position size exceeds limit"
+                     :requested amount-sol
+                     :max max-position-size-sol})
+            null)
+
+        ;; CHECK 5: Capital allocation (% of total)
+        (define pct-of-capital (/ amount-sol max-total-capital-sol))
+        (if (> pct-of-capital 0.04)  ;; Max 4% per trade
+            (return {:approved false
+                     :reason "Trade exceeds 4% of total capital"
+                     :pct pct-of-capital})
+            null)
+
+        ;; CHECK 6: Liquidity minimum
+        (define liquidity (get token-metadata :initial-liquidity-sol))
+        (if (< liquidity min-liquidity-sol)
+            (return {:approved false
+                     :reason "Insufficient liquidity"
+                     :liquidity liquidity
+                     :minimum min-liquidity-sol})
+            null)
+
+        ;; CHECK 7: Daily P&L circuit breaker
+        (define loss-pct (/ daily-pnl max-total-capital-sol))
+        (if (<= loss-pct (- circuit-breaker-loss-pct))
+            (do
+              (set! circuit-breaker-triggered true)
+              (log :error "🔴 CIRCUIT BREAKER TRIGGERED"
+                   :daily-loss daily-pnl
+                   :threshold-pct circuit-breaker-loss-pct)
+              (return {:approved false
+                       :reason "CIRCUIT BREAKER - Daily loss limit exceeded"
+                       :daily-loss daily-pnl
+                       :threshold-pct circuit-breaker-loss-pct}))
+            null)
+
+        ;; ALL CHECKS PASSED
+        {:approved true
+         :reason "All risk checks passed"
+         :risk-score risk-score
+         :position-size amount-sol
+         :daily-snipes-remaining (- max-daily-snipes daily-snipes-count)}))
+
+    (defun record-trade-outcome (pnl-sol)
+      "Update state after trade completion."
+      (do
+        (set! daily-snipes-count (+ daily-snipes-count 1))
+        (set! daily-pnl (+ daily-pnl pnl-sol))
+        (log :message "Trade recorded"
+             :pnl pnl-sol
+             :daily-snipes daily-snipes-count
+             :daily-pnl daily-pnl)))
+
+    ;; Return risk manager object with methods
+    {:can-execute-snipe can-execute-snipe
+     :record-trade-outcome record-trade-outcome
+     :get-daily-stats (fn () {:snipes daily-snipes-count
+                              :pnl daily-pnl
+                              :circuit-breaker circuit-breaker-triggered})}))
+```
+
+---
+
 ## 15.11 Conclusion
 
 MEV extraction represents a fundamental property of blockchain systems with transparent mempools and scarce block space. It cannot be eliminated—only mitigated, redistributed, or made more efficient. The $600M+ annual MEV market (Ethereum) and $50M+ (Solana) proves its economic significance.
