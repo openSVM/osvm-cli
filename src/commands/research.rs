@@ -154,24 +154,29 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
 (do
   (define target "{}")
 
-  ;; Fetch ALL transfers with pagination (1000 at a time)
+  ;; Fetch ALL transfers with cursor-based pagination
   (define all_transfers [])
-  (define keep_fetching true)
-  (define batch_num 0)
+  (define next_cursor null)
+  (define is_first_page true)
 
-  (while keep_fetching
+  (while (or is_first_page next_cursor)
     (do
-      (define resp (get_account_transfers {{:address target :limit 1000 :offset (* batch_num 1000)}}))
-      (define batch (get resp "data"))
-      (define batch_size (length batch))
+      ;; Build request params based on whether we have a cursor
+      (define params
+        (if is_first_page
+            {{:address target :limit 1000}}
+            {{:address target :limit 1000 :beforeSignature next_cursor}}))
 
-      ;; Append this batch to all_transfers
+      ;; Fetch batch
+      (define resp (get_account_transfers params))
+      (define batch (get resp "data"))
+
+      ;; Append to results
       (set! all_transfers (append all_transfers batch))
 
-      ;; Stop if we got less than 1000 (last batch)
-      (if (< batch_size 1000)
-          (set! keep_fetching false)
-          (set! batch_num (+ batch_num 1)))))
+      ;; Get next cursor for pagination
+      (set! next_cursor (get resp "nextPageSignature"))
+      (set! is_first_page false)))
 
   ;; Now aggregate by token mint
   (define by_mint (group-by all_transfers (lambda (tx) (get tx "mint"))))

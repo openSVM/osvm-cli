@@ -72,9 +72,9 @@ Every chapter shows you **exactly** how these disasters could have been prevente
 | Chapter | Title | Words | Topics |
 |---------|-------|-------|--------|
 | [13](13_ai_sentiment_trading.md) | AI-Powered Sentiment Trading | 9,362 | NLP, multi-source verification, AP hack, Musk tweets |
-| [14](14_ml_prediction_trading.md) | Machine Learning for Price Prediction | 6,116 | Feature engineering, LSTM, overfitting prevention |
+| [14](14_ml_prediction_trading.md) | Machine Learning for Price Prediction | 5,443 | RIEF vs Medallion, prediction decay, replication crisis, walk-forward |
 
-**Subtotal:** 15,478 words
+**Subtotal:** 14,805 words
 
 ### Part IV: DeFi & MEV Strategies
 
