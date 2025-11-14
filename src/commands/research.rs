@@ -116,7 +116,41 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 
     // Initialize services
     let ai_service = Arc::new(Mutex::new(AiService::new()));
-    let ovsm_service = Arc::new(Mutex::new(OvsmService::new()));
+
+    // Initialize OVSM with MCP tools
+    println!("\n🔧 Initializing OVSM with MCP tools...");
+    let mut registry = {
+        use crate::utils::rpc_bridge::create_rpc_registry;
+        create_rpc_registry()
+    };
+
+    // Load MCP service and register tools
+    let mut mcp_service = McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+    let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+
+    // Discover and register MCP tools
+    {
+        let mut svc = mcp_arc.lock().await;
+        let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+
+        for server_id in servers {
+            if svc.initialize_server(&server_id).await.is_err() {
+                continue;
+            }
+
+            if let Ok(tools) = svc.list_tools(&server_id).await {
+                drop(svc);
+                for tool in tools {
+                    registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
+                }
+                svc = mcp_arc.lock().await;
+            }
+        }
+    }
+
+    let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
+    println!("✅ OVSM initialized with blockchain tools\n");
 
     // Create research agent
     let agent = ResearchAgent::new(ai_service, ovsm_service, wallet.to_string());
