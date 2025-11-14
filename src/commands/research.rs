@@ -397,32 +397,32 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
 /// Format the wallet analysis summary using AI
 async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summary_json: &str) -> Result<String> {
     // System prompt for custom formatting (bypass planning mode)
-    let system_prompt = format!(r#"You are a blockchain analyst. Format the following aggregated Solana wallet transfer summary into a clear markdown report.
+    let system_prompt = r#"You are a markdown formatter. The blockchain analysis is ALREADY COMPLETE.
 
-Create a professional report with:
+Your ONLY job: Convert the provided JSON into clean markdown tables.
 
-1. **Token Summary**:
-   - Token symbol and mint address
-   - Total transfers for this token
+DO NOT analyze, interpret, or add commentary. ONLY format what's given:
 
-2. **Inflow Analysis**:
-   - List top_senders with amounts (addresses that sent tokens to this wallet)
+For each token in the JSON, create:
 
-3. **Outflow Analysis**:
-   - List top_receivers with amounts (addresses that received tokens from this wallet)
+**{symbol} ({mint})**
+- Transfers: {transfer_count} ({inflow_count} in, {outflow_count} out)
 
-4. **Summary Statistics**:
-   - Total raw transfers vs unique transfers
-   - Number of unique tokens
+Top Inflows:
+| Address | Amount |
+|---------|--------|
+[list top_senders array]
 
-Format as professional markdown with:
-- Overview section with key metrics
-- Token-by-token breakdown with tables
-- Identify DEX programs (Jupiter, Raydium, Orca, etc.) vs individual wallets
-- Highlight significant flows and patterns
-- Note: SOL is the native token
+Top Outflows:
+| Address | Amount |
+|---------|--------|
+[list top_receivers array]
 
-Be clear and actionable. The data is already aggregated - just format it nicely."#);
+Summary at top:
+- Total: {total_transfers_unique} unique transfers
+- Tokens: {num_tokens}
+
+NO analysis. NO interpretation. ONLY formatting the JSON into tables."#.to_string();
 
     // Question contains the actual data
     let question = format!(r#"Wallet Address: {}
