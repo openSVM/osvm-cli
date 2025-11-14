@@ -1301,6 +1301,1142 @@ Dependencies: Phase 1, 2
 
 ---
 
+## Part 11: Implementation Roadmap - From Research to Production
+
+### 11.1 Overview: Three-Phase Approach
+
+This section provides a **detailed implementation plan** for building the autonomous sBPF runtime, broken into three phases over **7-8 months**. Each phase builds on the previous, with clear milestones and success criteria.
+
+```
+Timeline:
+├─ Phase 1: Core Infrastructure (Months 1-3)
+│   └─ Timers + Ring Buffers + Program Scheduler Thread
+│
+├─ Phase 2: Event System (Months 4-5)
+│   └─ Account Watchers + Work Queues
+│
+└─ Phase 3: Program Composition (Months 6-7)
+    └─ Tail Calls + Full Integration + Testnet Deployment
+```
+
+---
+
+## Phase 1: Core Infrastructure (Months 1-3)
+
+### 11.2 Phase 1 Objectives
+
+**Primary Goal:** Prove autonomous execution model on local validator
+
+**Core Deliverables:**
+1. ✅ Fork `agave` (Solana validator codebase)
+2. ✅ Implement `sol_timer_*` syscall family
+3. ✅ Add `BPF_MAP_TYPE_RINGBUF` equivalent for Solana
+4. ✅ Create Program Scheduler Thread alongside Banking Stage
+5. ✅ Basic verifier extensions for timer safety
+
+### 11.3 Month 1: Agave Fork and Timer Syscalls
+
+**Week 1-2: Repository Setup**
+
+```bash
+# Fork and setup development environment
+git clone https://github.com/anza-xyz/agave.git solana-autonomous
+cd solana-autonomous
+git checkout -b feature/autonomous-runtime
+
+# Build and verify baseline
+cargo build --release
+cargo test
+
+# Setup development branch
+git remote add upstream https://github.com/anza-xyz/agave.git
+```
+
+**Key Files to Modify:**
+```
+solana-autonomous/
+├── runtime/
+│   ├── src/bank.rs                    # Add Program Scheduler Thread
+│   └── src/bank/program_timing.rs     # Timer management
+├── programs/bpf_loader/
+│   └── src/syscalls/mod.rs            # Add timer syscalls
+├── sdk/
+│   └── src/program_timer.rs           # Timer API (NEW)
+└── validator/
+    └── src/banking_stage.rs           # Integrate scheduler worker
+```
+
+**Week 3-4: Implement Timer Syscalls**
+
+**Syscall Signatures:**
+
+```rust
+// File: programs/bpf_loader/src/syscalls/mod.rs
+
+/// Initialize timer structure
+///
+/// # Safety
+/// - timer must point to valid map value
+/// - map must be BPF_MAP_TYPE_HASH or BPF_MAP_TYPE_ARRAY
+/// - timer must be zeroed before first init
+pub fn sol_timer_init(
+    timer: *mut SolTimer,
+    map_fd: u64,
+    flags: u64,
+    _arg4: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    // Validate timer pointer within map bounds
+    let timer_ref = translate_slice_mut::<SolTimer>(
+        memory_mapping,
+        timer as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    // Initialize timer state
+    timer_ref[0] = SolTimer {
+        state: TimerState::Initialized,
+        map_key: 0,
+        callback: None,
+        next_fire_slot: 0,
+        flags,
+    };
+
+    Ok(0)  // Success
+}
+
+/// Set timer callback instruction
+pub fn sol_timer_set_callback(
+    timer: *mut SolTimer,
+    callback_data: *const u8,
+    callback_len: u64,
+    _arg4: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    let timer_ref = translate_slice_mut::<SolTimer>(
+        memory_mapping,
+        timer as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    let callback_bytes = translate_slice::<u8>(
+        memory_mapping,
+        callback_data as u64,
+        callback_len,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    // Deserialize instruction
+    let instruction: Instruction = bincode::deserialize(callback_bytes)
+        .map_err(|_| InstructionError::InvalidInstructionData)?;
+
+    timer_ref[0].callback = Some(instruction);
+    Ok(0)
+}
+
+/// Start timer to fire after N slots
+pub fn sol_timer_start(
+    timer: *mut SolTimer,
+    slots_from_now: u64,
+    flags: u64,
+    _arg4: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    let timer_ref = translate_slice_mut::<SolTimer>(
+        memory_mapping,
+        timer as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    let current_slot = invoke_context.get_sysvar_cache()
+        .get_clock()
+        .slot;
+
+    timer_ref[0].next_fire_slot = current_slot + slots_from_now;
+    timer_ref[0].state = TimerState::Armed;
+
+    // Register with Program Scheduler Thread
+    invoke_context
+        .program_scheduler
+        .register_timer(timer_ref[0].clone())?;
+
+    Ok(0)
+}
+
+/// Cancel running timer
+pub fn sol_timer_cancel(
+    timer: *mut SolTimer,
+    _arg2: u64,
+    _arg3: u64,
+    _arg4: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    let timer_ref = translate_slice_mut::<SolTimer>(
+        memory_mapping,
+        timer as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    timer_ref[0].state = TimerState::Cancelled;
+
+    // Unregister from Program Scheduler Thread
+    invoke_context
+        .program_scheduler
+        .unregister_timer(timer_ref[0].clone())?;
+
+    Ok(0)
+}
+```
+
+**Timer Data Structure:**
+
+```rust
+// File: sdk/src/program_timer.rs
+
+#[repr(C)]
+#[derive(Clone, Debug, PartialEq)]
+pub struct SolTimer {
+    /// Current state of the timer
+    pub state: TimerState,
+
+    /// Map key where this timer is stored
+    pub map_key: u64,
+
+    /// Callback instruction to execute
+    pub callback: Option<Instruction>,
+
+    /// Slot when timer should fire
+    pub next_fire_slot: u64,
+
+    /// Flags (reserved for future use)
+    pub flags: u64,
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TimerState {
+    Uninitialized = 0,
+    Initialized = 1,
+    Armed = 2,
+    Fired = 3,
+    Cancelled = 4,
+}
+```
+
+**Milestone 1.1 Success Criteria:**
+- ✅ All 4 timer syscalls compile and link
+- ✅ Basic unit tests pass for timer state transitions
+- ✅ Timer structures can be stored in map values
+- ✅ No performance regression in existing tests
+
+### 11.4 Month 2: Ring Buffer and Program Scheduler Thread
+
+**Week 5-6: Ring Buffer Implementation**
+
+**Ring Buffer Map Type:**
+
+```rust
+// File: runtime/src/accounts_db.rs (add new map type)
+
+pub enum BpfMapType {
+    Hash,
+    Array,
+    // ... existing types
+    RingBuf,  // NEW
+}
+
+// File: runtime/src/bank/ring_buffer.rs (NEW)
+
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+pub struct SolanaRingBuffer {
+    /// Backing buffer (1MB default)
+    buffer: Arc<UnsafeCell<[u8; 1_048_576]>>,
+
+    /// Producer head (write position)
+    head: AtomicUsize,
+
+    /// Consumer tail (read position)
+    tail: AtomicUsize,
+
+    /// Event counter for debugging
+    event_counter: AtomicU64,
+}
+
+impl SolanaRingBuffer {
+    /// Reserve space for event (lock-free)
+    pub fn reserve(&self, size: usize) -> Result<*mut u8, RingBufError> {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
+
+        let capacity = 1_048_576;
+        let available = if head >= tail {
+            capacity - (head - tail)
+        } else {
+            tail - head
+        };
+
+        if available < size + 8 {
+            return Err(RingBufError::Full);
+        }
+
+        // Reserve space atomically
+        let new_head = (head + size + 8) % capacity;
+        if !self.head.compare_exchange(
+            head,
+            new_head,
+            Ordering::Release,
+            Ordering::Relaxed,
+        ).is_ok() {
+            return Err(RingBufError::Contention);
+        }
+
+        unsafe {
+            let buffer_ptr = self.buffer.get() as *mut u8;
+            let write_pos = head % capacity;
+
+            // Write size header
+            std::ptr::write_unaligned(
+                buffer_ptr.add(write_pos) as *mut u64,
+                size as u64
+            );
+
+            Ok(buffer_ptr.add(write_pos + 8))
+        }
+    }
+
+    /// Pop next event (single consumer only)
+    pub fn pop(&self) -> Option<Vec<u8>> {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
+
+        if head == tail {
+            return None;  // Empty
+        }
+
+        unsafe {
+            let buffer_ptr = self.buffer.get() as *const u8;
+            let read_pos = tail % 1_048_576;
+
+            // Read size header
+            let size = std::ptr::read_unaligned(
+                buffer_ptr.add(read_pos) as *const u64
+            ) as usize;
+
+            // Read event data
+            let mut data = vec![0u8; size];
+            std::ptr::copy_nonoverlapping(
+                buffer_ptr.add(read_pos + 8),
+                data.as_mut_ptr(),
+                size
+            );
+
+            // Advance tail
+            self.tail.store(
+                (tail + size + 8) % 1_048_576,
+                Ordering::Release
+            );
+
+            Some(data)
+        }
+    }
+}
+```
+
+**Week 7-8: Program Scheduler Thread**
+
+**Integration with Banking Stage:**
+
+```rust
+// File: validator/src/banking_stage.rs
+
+pub struct BankingStage {
+    // ... existing fields
+
+    /// NEW: Program Scheduler Thread handle
+    program_scheduler: Option<JoinHandle<()>>,
+
+    /// NEW: Scheduler control channel
+    scheduler_exit: Arc<AtomicBool>,
+}
+
+impl BankingStage {
+    pub fn new(/* ... existing params ... */) -> Self {
+        // ... existing initialization ...
+
+        // NEW: Spawn Program Scheduler Thread
+        let scheduler_exit = Arc::new(AtomicBool::new(false));
+        let program_scheduler = Some(Self::spawn_program_scheduler(
+            bank.clone(),
+            scheduler_exit.clone(),
+        ));
+
+        Self {
+            // ... existing fields ...
+            program_scheduler,
+            scheduler_exit,
+        }
+    }
+
+    fn spawn_program_scheduler(
+        bank: Arc<Bank>,
+        exit: Arc<AtomicBool>,
+    ) -> JoinHandle<()> {
+        Builder::new()
+            .name("solPrgSchd".to_string())
+            .spawn(move || {
+                let mut scheduler = ProgramScheduler::new(bank);
+
+                info!("Program Scheduler Thread started");
+
+                while !exit.load(Ordering::Relaxed) {
+                    // Process events for current slot
+                    if let Err(e) = scheduler.process_slot() {
+                        error!("Program Scheduler error: {:?}", e);
+                    }
+
+                    // Sleep until next slot (~400ms)
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+
+                info!("Program Scheduler Thread exiting");
+            })
+            .unwrap()
+    }
+}
+```
+
+**Program Scheduler Core Logic:**
+
+```rust
+// File: runtime/src/bank/program_scheduler.rs (NEW)
+
+pub struct ProgramScheduler {
+    /// Event queue (priority queue by slot)
+    event_queue: BinaryHeap<ScheduledEvent>,
+
+    /// Timer registry (timer_id → timer)
+    timers: HashMap<u64, SolTimer>,
+
+    /// Ring buffer for async events
+    ring_buffer: Arc<SolanaRingBuffer>,
+
+    /// Compute budget for autonomous execution (400K CU per slot)
+    slot_compute_budget: u64,
+
+    /// Reference to bank for account access
+    bank: Arc<Bank>,
+}
+
+impl ProgramScheduler {
+    pub fn process_slot(&mut self) -> Result<()> {
+        let current_slot = self.bank.slot();
+        let mut compute_used = 0u64;
+
+        // Step 1: Fire timers for this slot
+        while let Some(event) = self.event_queue.peek() {
+            if event.target_slot > current_slot {
+                break;  // No more events for this slot
+            }
+
+            let event = self.event_queue.pop().unwrap();
+
+            // Check compute budget
+            if compute_used + event.compute_budget > self.slot_compute_budget {
+                warn!(
+                    "Slot {} compute budget exhausted ({} CU used)",
+                    current_slot,
+                    compute_used
+                );
+                break;
+            }
+
+            // Execute timer callback
+            match self.execute_autonomous_instruction(&event.instruction) {
+                Ok(cu_consumed) => {
+                    compute_used += cu_consumed;
+                    info!(
+                        "Timer callback executed: {} CU consumed",
+                        cu_consumed
+                    );
+                }
+                Err(e) => {
+                    error!("Timer callback failed: {:?}", e);
+                }
+            }
+        }
+
+        // Step 2: Process ring buffer events
+        while let Some(event_data) = self.ring_buffer.pop() {
+            // Route to subscribed programs
+            self.route_async_event(event_data)?;
+        }
+
+        Ok(())
+    }
+
+    fn execute_autonomous_instruction(
+        &self,
+        instruction: &Instruction,
+    ) -> Result<u64> {
+        // Create synthetic transaction (no signature)
+        let synthetic_tx = SyntheticTransaction {
+            program_id: instruction.program_id,
+            accounts: instruction.accounts.clone(),
+            data: instruction.data.clone(),
+            compute_budget: 100_000,  // Default 100K CU
+        };
+
+        // Execute in isolated sBPF VM
+        let result = self.bank.process_synthetic_transaction(synthetic_tx)?;
+
+        Ok(result.compute_units_consumed)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ScheduledEvent {
+    target_slot: u64,
+    instruction: Instruction,
+    compute_budget: u64,
+}
+
+impl Ord for ScheduledEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.target_slot.cmp(&self.target_slot)  // Min-heap
+    }
+}
+
+impl PartialOrd for ScheduledEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+```
+
+**Milestone 1.2 Success Criteria:**
+- ✅ Program Scheduler Thread runs alongside Banking Stage
+- ✅ Ring buffer handles 1000 events/second without blocking
+- ✅ Timer callbacks execute at correct slots (±1 slot accuracy)
+- ✅ Compute budget enforcement prevents runaway execution
+- ✅ Zero impact on normal transaction processing latency
+
+### 11.5 Month 3: Testing and Benchmarking
+
+**Week 9-10: Autonomous Heartbeat Program**
+
+**Test Program (OVSM):**
+
+```lisp
+;;; heartbeat.ovsm - Autonomous heartbeat program
+;;; Executes every 10 slots (~4 seconds) indefinitely
+
+(define-map timer-map
+  :type ARRAY
+  :max-entries 1
+  :key u32
+  :value {:timer (struct SolTimer)
+          :counter u64})
+
+(define-program heartbeat-callback
+  (lambda ()
+    (do
+      ;; Load timer state
+      (define state (map-lookup timer-map 0))
+      (define counter (get state "counter"))
+
+      ;; Increment counter
+      (set! (get state "counter") (+ counter 1))
+
+      ;; Log heartbeat
+      (log :message "💓 Heartbeat"
+           :slot (get-current-slot)
+           :counter (get state "counter"))
+
+      ;; Reschedule for 10 slots later
+      (sol-timer-start
+        (get state "timer")
+        10
+        0))))
+
+(define-program heartbeat-init
+  (lambda ()
+    (do
+      ;; Initialize timer state
+      (define state (map-lookup timer-map 0))
+
+      (sol-timer-init (get state "timer") timer-map 0)
+      (sol-timer-set-callback
+        (get state "timer")
+        heartbeat-callback)
+
+      ;; Start timer (first beat in 10 slots)
+      (sol-timer-start (get state "timer") 10 0)
+
+      (log :message "Heartbeat initialized"))))
+```
+
+**Compile and Deploy:**
+
+```bash
+# Compile OVSM to sBPF
+osvm ovsm compile heartbeat.ovsm \
+  --output heartbeat.so \
+  --target bpf
+
+# Deploy to localnet
+solana program deploy heartbeat.so \
+  --url http://localhost:8899 \
+  --keypair ~/.config/solana/id.json
+
+# Initialize (starts autonomous execution)
+solana program call <PROGRAM_ID> initialize
+
+# Observe logs
+solana logs <PROGRAM_ID>
+
+# Expected output:
+# Program log: Heartbeat initialized
+# Program log: 💓 Heartbeat slot=1000 counter=1
+# Program log: 💓 Heartbeat slot=1010 counter=2
+# Program log: 💓 Heartbeat slot=1020 counter=3
+# ... (continues indefinitely)
+```
+
+**Week 11-12: Performance Benchmarking**
+
+**Benchmark Suite:**
+
+```rust
+// File: benches/autonomous_runtime.rs
+
+#[bench]
+fn bench_timer_fire_latency(b: &mut Bencher) {
+    // Measure latency from timer expiry to callback start
+    b.iter(|| {
+        // Timer expires at slot 1000
+        // Callback should execute within 1 slot
+    });
+
+    // Target: <100ms latency
+}
+
+#[bench]
+fn bench_ring_buffer_throughput(b: &mut Bencher) {
+    let rb = SolanaRingBuffer::new();
+
+    b.iter(|| {
+        // Write 1000 events
+        for i in 0..1000 {
+            let event = vec![0u8; 128];  // 128-byte event
+            rb.reserve(128).unwrap();
+        }
+    });
+
+    // Target: >10,000 events/second
+}
+
+#[bench]
+fn bench_scheduler_overhead(b: &mut Bencher) {
+    // Measure scheduler processing time per slot
+    b.iter(|| {
+        scheduler.process_slot();
+    });
+
+    // Target: <20ms per slot (<5% of 400ms slot time)
+}
+```
+
+**Performance Targets:**
+
+| Metric | Target | Rationale |
+|--------|--------|-----------|
+| **Timer Latency** | <100ms | Callback should fire within same slot |
+| **Ring Buffer Throughput** | >10K events/sec | Handle high-frequency program events |
+| **Scheduler Overhead** | <20ms/slot | <5% of 400ms slot time |
+| **Compute Budget Accuracy** | ±1% | Prevent CU exhaustion or waste |
+| **Transaction Latency Impact** | <1% | No degradation to normal tx processing |
+
+**Milestone 1.3 Success Criteria:**
+- ✅ Heartbeat program runs autonomously for 10,000+ slots
+- ✅ No memory leaks (Valgrind clean)
+- ✅ All performance targets met
+- ✅ Validator stability (99.9% uptime over 7 days)
+
+---
+
+## Phase 2: Event System (Months 4-5)
+
+### 11.6 Phase 2 Objectives
+
+**Primary Goal:** Add account watchers and work queues for comprehensive event-driven execution
+
+**Core Deliverables:**
+1. ✅ Implement `sol_watch_account` syscall
+2. ✅ Add work queue infrastructure (`sol_wq_*` syscalls)
+3. ✅ Account change notification system
+4. ✅ Background task execution engine
+
+### 11.7 Month 4: Account Watchers
+
+**Week 13-14: Account Watcher Syscall**
+
+```rust
+// File: programs/bpf_loader/src/syscalls/mod.rs
+
+pub struct WatchCriteria {
+    /// Byte offset in account data to monitor
+    offset: usize,
+
+    /// Comparison operator
+    comparison: ComparisonOp,
+
+    /// Threshold value (up to 8 bytes)
+    threshold: [u8; 8],
+
+    /// Byte mask (for selective byte checking)
+    mask: [u8; 8],
+}
+
+pub enum ComparisonOp {
+    Equal,
+    NotEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    ChangePercent,  // % change from previous value
+}
+
+pub fn sol_watch_account(
+    account_pubkey: *const Pubkey,
+    criteria_ptr: *const WatchCriteria,
+    callback_data: *const u8,
+    callback_len: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    let account = translate_slice::<Pubkey>(
+        memory_mapping,
+        account_pubkey as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?[0];
+
+    let criteria = translate_slice::<WatchCriteria>(
+        memory_mapping,
+        criteria_ptr as u64,
+        1,
+        &bpf_loader_deprecated::id(),
+    )?[0];
+
+    let callback_bytes = translate_slice::<u8>(
+        memory_mapping,
+        callback_data as u64,
+        callback_len,
+        &bpf_loader_deprecated::id(),
+    )?;
+
+    let instruction: Instruction = bincode::deserialize(callback_bytes)?;
+
+    // Register watcher with Program Scheduler
+    let watcher_id = invoke_context
+        .program_scheduler
+        .register_watcher(account, criteria, instruction)?;
+
+    Ok(watcher_id)
+}
+```
+
+**Week 15-16: Account Change Notifications**
+
+Integration with `AccountsDB`:
+
+```rust
+// File: runtime/src/accounts_db.rs
+
+impl AccountsDB {
+    pub fn store_cached(&self, /* ... */) {
+        // ... existing store logic ...
+
+        // NEW: Notify watchers of account change
+        if let Some(scheduler) = self.program_scheduler.as_ref() {
+            scheduler.notify_account_change(&account.pubkey, &account.data);
+        }
+    }
+}
+
+// File: runtime/src/bank/program_scheduler.rs
+
+impl ProgramScheduler {
+    pub fn notify_account_change(
+        &mut self,
+        account: &Pubkey,
+        new_data: &[u8],
+    ) -> Result<()> {
+        if let Some(watchers) = self.account_watchers.get(account) {
+            for watcher in watchers {
+                if watcher.criteria.matches(new_data) {
+                    // Queue callback for execution
+                    self.event_queue.push(ScheduledEvent {
+                        target_slot: self.bank.slot(),  // Execute immediately
+                        instruction: watcher.callback.clone(),
+                        compute_budget: 50_000,  // Default 50K CU
+                    });
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+```
+
+**Milestone 2.1 Success Criteria:**
+- ✅ Watchers detect account changes within 1 slot
+- ✅ Criteria matching is accurate (100% precision)
+- ✅ No false positives or missed events
+- ✅ Handles 1000+ active watchers per validator
+
+### 11.8 Month 5: Work Queues
+
+**Week 17-18: Work Queue Syscalls**
+
+```rust
+pub fn sol_wq_init(/* ... */) -> Result<u64, Error> {
+    // Initialize work queue in map
+}
+
+pub fn sol_wq_set_callback(/* ... */) -> Result<u64, Error> {
+    // Register background work callback
+}
+
+pub fn sol_wq_start(/* ... */) -> Result<u64, Error> {
+    // Queue work for async execution by worker pool
+}
+```
+
+**Work Queue Thread Pool:**
+
+```rust
+// File: runtime/src/bank/work_queue.rs (NEW)
+
+pub struct WorkQueuePool {
+    /// Worker threads (4 threads default)
+    workers: Vec<JoinHandle<()>>,
+
+    /// Work queue (FIFO)
+    work_queue: Arc<Mutex<VecDeque<WorkItem>>>,
+
+    /// Condvar for worker notification
+    work_available: Arc<Condvar>,
+}
+
+struct WorkItem {
+    instruction: Instruction,
+    compute_budget: u64,
+    enqueued_at: Instant,
+}
+
+impl WorkQueuePool {
+    pub fn new(bank: Arc<Bank>, num_workers: usize) -> Self {
+        let work_queue = Arc::new(Mutex::new(VecDeque::new()));
+        let work_available = Arc::new(Condvar::new());
+
+        let workers = (0..num_workers)
+            .map(|i| Self::spawn_worker(
+                i,
+                bank.clone(),
+                work_queue.clone(),
+                work_available.clone(),
+            ))
+            .collect();
+
+        Self {
+            workers,
+            work_queue,
+            work_available,
+        }
+    }
+
+    fn spawn_worker(/* ... */) -> JoinHandle<()> {
+        Builder::new()
+            .name(format!("solWrkQ{}", worker_id))
+            .spawn(move || {
+                loop {
+                    let work_item = {
+                        let mut queue = work_queue.lock().unwrap();
+                        while queue.is_empty() {
+                            queue = work_available.wait(queue).unwrap();
+                        }
+                        queue.pop_front().unwrap()
+                    };
+
+                    // Execute work item
+                    let start = Instant::now();
+                    match Self::execute_work(&bank, &work_item) {
+                        Ok(cu) => {
+                            info!(
+                                "Work item completed: {} CU, {} ms",
+                                cu,
+                                start.elapsed().as_millis()
+                            );
+                        }
+                        Err(e) => {
+                            error!("Work item failed: {:?}", e);
+                        }
+                    }
+                }
+            })
+            .unwrap()
+    }
+
+    pub fn enqueue(&self, work_item: WorkItem) {
+        let mut queue = self.work_queue.lock().unwrap();
+        queue.push_back(work_item);
+        self.work_available.notify_one();
+    }
+}
+```
+
+**Milestone 2.2 Success Criteria:**
+- ✅ Work queue handles 100+ items/second
+- ✅ Background execution doesn't block normal transactions
+- ✅ Work items complete within 5 seconds (99th percentile)
+- ✅ Graceful degradation under load (queue depth limit)
+
+---
+
+## Phase 3: Program Composition (Months 6-7)
+
+### 11.9 Phase 3 Objectives
+
+**Primary Goal:** Enable tail calls for modular program architecture and deploy to testnet
+
+**Core Deliverables:**
+1. ✅ Implement `sol_tail_call` syscall
+2. ✅ Add `BPF_MAP_TYPE_PROG_ARRAY` for program storage
+3. ✅ Tail call depth tracking (max 33)
+4. ✅ Integration testing with complete autonomous strategies
+5. ✅ Testnet deployment and community testing
+
+### 11.10 Month 6: Tail Calls
+
+**Week 19-20: Tail Call Implementation**
+
+```rust
+pub fn sol_tail_call(
+    ctx: *mut u8,
+    prog_array_map: u64,
+    index: u32,
+    _arg4: u64,
+    _arg5: u64,
+    memory_mapping: &MemoryMapping,
+    result: &mut ProgramResult,
+) -> Result<u64, Error> {
+    // Check tail call depth (max 33)
+    if invoke_context.tail_call_depth >= 33 {
+        return Err(InstructionError::CallDepthExceeded);
+    }
+
+    // Lookup program in array
+    let program_id = invoke_context
+        .get_program_array_entry(prog_array_map, index)?;
+
+    // Transfer execution (no return)
+    invoke_context.tail_call_depth += 1;
+    invoke_context.execute_program(&program_id)?;
+
+    // Never reached if tail call succeeds
+    unreachable!()
+}
+```
+
+**Week 21-22: Integration Testing**
+
+**Complete Autonomous Pairs Trading Strategy:**
+
+```lisp
+;;; Autonomous pairs trading with full pipeline
+;;; Demonstrates: timers + watchers + work queue + tail calls
+
+;; Stage 1: Monitor (heartbeat every 10 slots)
+(define-program monitor
+  (lambda ()
+    (do
+      (define sol-price (pyth-get-price SOL-ORACLE))
+      (define msol-price (pyth-get-price MSOL-ORACLE))
+
+      ;; Queue work for heavy analysis
+      (sol-wq-start spread-analyzer)
+
+      ;; Reschedule
+      (sol-timer-start monitor-timer 10 0))))
+
+;; Stage 2: Analyze (background work queue)
+(define-program spread-analyzer
+  (lambda ()
+    (define spread (calculate-spread sol-price msol-price))
+    (define z-score (calculate-z-score spread))
+
+    (if (> (abs z-score) 2.0)
+        ;; Tail call to signal generator
+        (sol-tail-call strategy-pipeline SIGNAL-GENERATOR)
+        null)))
+
+;; Stage 3: Signal (tail call chain)
+(define-program signal-generator
+  (lambda (z-score)
+    (if (check-risk-limits z-score)
+        (sol-tail-call strategy-pipeline POSITION-SIZER)
+        null)))
+
+;; Stage 4: Size (tail call chain)
+(define-program position-sizer
+  (lambda (z-score)
+    (define size (calculate-position-size z-score))
+    (sol-tail-call strategy-pipeline TRADE-EXECUTOR)))
+
+;; Stage 5: Execute (tail call chain)
+(define-program trade-executor
+  (lambda (size)
+    (execute-jupiter-swap size)
+    (sol-tail-call strategy-pipeline LOGGER)))
+
+;; Stage 6: Log (final stage)
+(define-program logger
+  (lambda (trade-result)
+    (log :message "Trade executed" :result trade-result)))
+```
+
+**Milestone 3.1 Success Criteria:**
+- ✅ Tail call depth enforcement works (rejects 34th call)
+- ✅ Complete strategy executes end-to-end
+- ✅ All stages chain correctly
+- ✅ Total execution time <2 seconds
+
+### 11.11 Month 7: Testnet Deployment
+
+**Week 23-24: Testnet Rollout**
+
+**Deployment Checklist:**
+
+```bash
+# 1. Build release binary
+cargo build --release --bin solana-validator
+
+# 2. Deploy to testnet validator cluster
+solana-test-validator \
+  --enable-autonomous-runtime \
+  --max-autonomous-compute-per-slot 400000 \
+  --reset
+
+# 3. Deploy example programs
+solana program deploy heartbeat.so --url testnet
+solana program deploy pairs-trading.so --url testnet
+
+# 4. Initialize autonomous execution
+solana program call <HEARTBEAT_ID> initialize --url testnet
+solana program call <PAIRS_TRADING_ID> start --url testnet
+
+# 5. Monitor metrics
+curl http://localhost:8899/metrics | grep autonomous
+```
+
+**Monitoring Dashboard:**
+
+```yaml
+# Prometheus metrics
+autonomous_events_fired_total
+autonomous_compute_used_per_slot
+autonomous_timer_latency_ms
+autonomous_watcher_matches_total
+autonomous_work_queue_depth
+autonomous_tail_call_depth_max
+```
+
+**Week 25-26: Community Testing**
+
+**Developer SDK (Rust):**
+
+```rust
+// Autonomous program SDK for Rust developers
+use solana_autonomous_sdk::*;
+
+#[autonomous_program]
+fn my_autonomous_strategy() {
+    // Timer-based execution
+    timer::schedule(10, |_| {
+        let price = oracle::get_price(SOL_ORACLE);
+        if price > 100.0 {
+            trading::execute_swap(/* ... */);
+        }
+    });
+
+    // Account watcher
+    watcher::watch(
+        ORACLE_ACCOUNT,
+        WatchCriteria::greater_than(offset=208, value=100_000_000),
+        |account_data| {
+            // Trigger callback
+        }
+    );
+}
+```
+
+**Milestone 3.2 Success Criteria:**
+- ✅ 100+ developers deploy autonomous programs on testnet
+- ✅ Zero critical security vulnerabilities found
+- ✅ Testnet stability: 99.9% uptime over 30 days
+- ✅ No performance degradation compared to baseline
+
+---
+
+## 11.12 Phase 4: Mainnet Preparation (Month 8+)
+
+**Mainnet Governance Process:**
+
+1. **SIMD Proposal** (Month 8)
+   - Write Solana Improvement Document
+   - Community review period (30 days)
+   - Address feedback and concerns
+
+2. **Security Audit** (Month 9)
+   - Hire Neodyme or OtterSec
+   - Comprehensive audit of autonomous runtime
+   - Fix all critical and high-severity issues
+
+3. **Economic Analysis** (Month 10)
+   - Model compute budget allocation
+   - Analyze fee structures
+   - Simulate network impact
+
+4. **Governance Vote** (Month 11)
+   - Present to validator community
+   - Require 67% validator stake approval
+   - Set activation epoch
+
+5. **Mainnet-Beta Deployment** (Month 12)
+   - Gradual rollout with feature flag
+   - Monitor for 60 days
+   - Full activation if stable
+
+---
+
 ## Conclusion
 
 The eBPF documentation reveals a **mature event-driven architecture** for kernel-space autonomous execution that directly applies to Solana's sBPF runtime. The combination of:
