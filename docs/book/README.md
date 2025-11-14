@@ -10,7 +10,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** ~119,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Total Content:** ~118,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
 **Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
 
 ---
