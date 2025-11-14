@@ -76,19 +76,19 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     let raw_result = ovsm_service.execute_code(&ovsm_script)
         .context("Failed to execute OVSM analysis")?;
 
-    // Convert OVSM result to JSON string
-    let raw_output = format!("{:?}", raw_result);
+    // Extract ONLY the aggregated summary (not raw transfers!)
+    let summary_json = extract_summary_json(&raw_result)?;
 
     // Format with AI service (with fallback to raw output)
     println!("🤖 Formatting results with AI...\n");
     let formatted_report = {
         let mut ai = ai_service.lock().await;
-        match format_wallet_analysis(&mut ai, wallet, &raw_output).await {
+        match format_wallet_analysis(&mut ai, wallet, &summary_json).await {
             Ok(report) => report,
             Err(e) => {
                 eprintln!("⚠️  AI formatting failed: {}", e);
-                eprintln!("📋 Showing raw OVSM output instead:\n");
-                raw_output.clone()
+                eprintln!("📋 Showing aggregated summary instead:\n");
+                summary_json.clone()
             }
         }
     };
@@ -283,39 +283,150 @@ fn generate_wallet_analysis_script(wallet: &str) -> String {
 "#, wallet)
 }
 
-/// Format the raw OVSM output using AI
-async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, raw_output: &str) -> Result<String> {
-    let prompt = format!(r#"You are a blockchain analyst. Analyze the following Solana wallet transfer data and create a comprehensive token flow report.
+/// Extract compact summary JSON from OVSM result (no raw transfers!)
+fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
+    use serde_json::json;
+
+    let obj = result.as_object()?;
+
+    let wallet = obj.get("wallet")
+        .and_then(|v| v.as_string().ok())
+        .unwrap_or("unknown");
+
+    let total_raw = obj.get("total_transfers_raw")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0);
+
+    let total_unique = obj.get("total_transfers_unique")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0);
+
+    let num_tokens = obj.get("num_tokens")
+        .and_then(|v| v.as_int().ok())
+        .unwrap_or(0);
+
+    let tokens_array = obj.get("tokens")
+        .ok_or_else(|| anyhow::anyhow!("Expected tokens key"))?
+        .as_array()?;
+
+    let mut tokens_summary = Vec::new();
+
+    for token in tokens_array {
+        let token_obj = token.as_object()?;
+
+        let symbol = token_obj.get("symbol")
+            .and_then(|v| v.as_string().ok())
+            .unwrap_or("unknown");
+
+        let mint = token_obj.get("mint")
+            .and_then(|v| v.as_string().ok())
+            .unwrap_or("unknown");
+
+        let transfer_count = token_obj.get("transfer_count")
+            .and_then(|v| v.as_int().ok())
+            .unwrap_or(0);
+
+        let inflow_count = token_obj.get("inflow_count")
+            .and_then(|v| v.as_int().ok())
+            .unwrap_or(0);
+
+        let outflow_count = token_obj.get("outflow_count")
+            .and_then(|v| v.as_int().ok())
+            .unwrap_or(0);
+
+        // Extract top senders (address, amount pairs)
+        let top_senders = token_obj.get("top_senders")
+            .and_then(|v| v.as_array().ok())
+            .map(|arr| {
+                arr.iter().filter_map(|pair| {
+                    pair.as_array().ok().and_then(|p| {
+                        if p.len() == 2 {
+                            Some(json!({
+                                "address": p[0].as_string().ok().unwrap_or("unknown"),
+                                "amount": p[1].as_float().ok().unwrap_or(0.0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                }).collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        // Extract top receivers
+        let top_receivers = token_obj.get("top_receivers")
+            .and_then(|v| v.as_array().ok())
+            .map(|arr| {
+                arr.iter().filter_map(|pair| {
+                    pair.as_array().ok().and_then(|p| {
+                        if p.len() == 2 {
+                            Some(json!({
+                                "address": p[0].as_string().ok().unwrap_or("unknown"),
+                                "amount": p[1].as_float().ok().unwrap_or(0.0)
+                            }))
+                        } else {
+                            None
+                        }
+                    })
+                }).collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        tokens_summary.push(json!({
+            "symbol": symbol,
+            "mint": mint,
+            "transfer_count": transfer_count,
+            "inflow_count": inflow_count,
+            "outflow_count": outflow_count,
+            "top_senders": top_senders,
+            "top_receivers": top_receivers
+        }));
+    }
+
+    let summary = json!({
+        "wallet": wallet,
+        "total_transfers_raw": total_raw,
+        "total_transfers_unique": total_unique,
+        "num_tokens": num_tokens,
+        "tokens": tokens_summary
+    });
+
+    Ok(serde_json::to_string_pretty(&summary)?)
+}
+
+/// Format the wallet analysis summary using AI
+async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summary_json: &str) -> Result<String> {
+    let prompt = format!(r#"You are a blockchain analyst. Format the following aggregated Solana wallet transfer summary into a clear markdown report.
 
 Wallet Address: {}
 
-Raw Transfer Data:
+Aggregated Transfer Summary (JSON):
 {}
 
-CRITICAL: Group ALL transfers by TOKEN (mint address), then for EACH token show:
+Create a professional report with:
 
 1. **Token Summary**:
    - Token symbol and mint address
    - Total transfers for this token
 
-2. **Inflow Analysis** (transfers where transferType="IN"):
-   - List TOP 5 unique addresses that sent this token TO the wallet
-   - Show total amount received from each address
-   - Exclude the target wallet itself
+2. **Inflow Analysis**:
+   - List top_senders with amounts (addresses that sent tokens to this wallet)
 
-3. **Outflow Analysis** (transfers where transferType="OUT"):
-   - List TOP 5 unique addresses that received this token FROM the wallet
-   - Show total amount sent to each address
-   - Exclude the target wallet itself
+3. **Outflow Analysis**:
+   - List top_receivers with amounts (addresses that received tokens from this wallet)
 
-Format as markdown with:
-- Clear section for each token
-- Tables showing top inflow/outflow addresses with amounts
-- Identify if addresses are DEX programs (Raydium, Orca, Jupiter, etc.)
-- Highlight individual wallet addresses vs protocol addresses
-- Note: SOL token mint is "SOL" (native token)
+4. **Summary Statistics**:
+   - Total raw transfers vs unique transfers
+   - Number of unique tokens
 
-Be concise but comprehensive. Focus on INDIVIDUAL WALLET counterparties, not protocol addresses."#, wallet, raw_output);
+Format as professional markdown with:
+- Overview section with key metrics
+- Token-by-token breakdown with tables
+- Identify DEX programs (Jupiter, Raydium, Orca, etc.) vs individual wallets
+- Highlight significant flows and patterns
+- Note: SOL is the native token
+
+Be clear and actionable. The data is already aggregated - just format it nicely."#, wallet, summary_json);
 
     ai_service.query(&prompt).await
         .context("Failed to format analysis with AI")
