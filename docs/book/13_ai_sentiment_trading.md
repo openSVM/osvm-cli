@@ -22,25 +22,25 @@
 
 ```mermaid
 timeline
-    title The AP Twitter Hack Flash Crash: April 23, 2013
+    title AP Twitter Hack Flash Crash - April 23 2013
     section Pre-Hack (Normal Trading)
-        1:00-1:06 PM: Normal market activity, Dow at 14,697
-        1:07 PM: Syrian Electronic Army gains access to AP Twitter
+        1300-1306 : Normal market activity, Dow at 14,697
+        1307 : Syrian Electronic Army gains access to AP Twitter
     section The Hack
-        1:07:45 PM: Hackers compose fake tweet
-        1:08:00 PM: Tweet posted to AP's 2M followers
-        1:08:15 PM: Retweeted 4,000+ times in 15 seconds
+        130745 : Hackers compose fake tweet
+        1308 : Tweet posted to AP 2M followers
+        130815 : Retweeted 4,000+ times in 15 seconds
     section Algorithmic Cascade
-        1:08:30 PM: HFT algorithms detect keywords (explosion, White House, injured)
-        1:08:45 PM: Sentiment scores → maximum negative
-        1:09:00 PM: Automated sell orders flood market
-        1:09:30 PM: Dow -50 points (30 seconds)
-        1:10:00 PM: Dow -143 points total, **$136B market cap evaporated**
+        130830 : HFT algorithms detect keywords (explosion, White House, injured)
+        130845 : Sentiment scores to maximum negative
+        1309 : Automated sell orders flood market
+        130930 : Dow -50 points (30 seconds)
+        1310 : Dow -143 points total, $136B market cap evaporated
     section Human Recovery
-        1:10:15 PM: AP confirms hack via alternate channels
-        1:10:30 PM: First human traders recognize false signal
-        1:11-1:13 PM: Manual buying begins
-        1:13-1:18 PM: Dow recovers fully to 14,697
+        131015 : AP confirms hack via alternate channels
+        131030 : First human traders recognize false signal
+        1311-1313 : Manual buying begins
+        1313-1318 : Dow recovers fully to 14,697
 ```
 
 **Figure 13.0**: The AP Twitter hack flash crash timeline. From fake tweet to $136B loss took 120 seconds. Recovery took 10 minutes—the time required for humans to verify the information and override the algorithms.
