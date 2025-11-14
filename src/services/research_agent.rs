@@ -343,12 +343,24 @@ impl TransferGraph {
         visited: &mut HashSet<String>,
         is_origin: bool,
     ) {
+        self.render_node_with_prefix(output, addr, depth, visited, is_origin, String::new());
+    }
+
+    fn render_node_with_prefix(
+        &self,
+        output: &mut String,
+        addr: &str,
+        depth: usize,
+        visited: &mut HashSet<String>,
+        is_origin: bool,
+        parent_prefix: String,
+    ) {
         if visited.contains(addr) {
             return;
         }
         visited.insert(addr.to_string());
 
-        let indent = "      ".repeat(depth);  // 6 spaces per level
+        let indent = "      ".repeat(depth);
         let node = self.nodes.get(addr);
         let cfg = &self.render_config;
 
@@ -356,9 +368,9 @@ impl TransferGraph {
         if is_origin {
             output.push_str(&cfg.origin_icon);
         } else if Some(addr) == self.target.as_deref() {
-            output.push_str(&format!("{}{}", indent, cfg.target_icon));
+            output.push_str(&format!("{}{}", parent_prefix, cfg.target_icon));
         } else {
-            output.push_str(&format!("{}{}", indent, cfg.node_icon));
+            output.push_str(&format!("{}{}", parent_prefix, cfg.node_icon));
         }
 
         // Node label or address
@@ -374,17 +386,20 @@ impl TransferGraph {
             let outgoing_count = node.outgoing.len();
             for (idx, transfer) in node.outgoing.iter().enumerate() {
                 let is_last = idx == outgoing_count - 1;
-                let pipe = if is_last { " " } else { "│" };
                 let connector = if is_last { "└" } else { "├" };
+
+                // Current level pipe (for this branch)
+                let current_pipe = if is_last { " " } else { "│" };
 
                 // Add vertical guide line before transfer
                 if outgoing_count > 1 {
-                    output.push_str(&format!("{}      {}\n", indent, pipe));
+                    output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
                 }
 
                 // Transfer line with amount and metadata
                 output.push_str(&format!(
-                    "{}      {}──────→ [{} {}]",
+                    "{}{}      {}──────→ [{} {}]",
+                    parent_prefix,
                     indent,
                     connector,
                     self.format_amount(transfer.amount),
@@ -401,32 +416,39 @@ impl TransferGraph {
 
                 output.push_str("\n");
 
-                // Arrow pointing to destination with guide line
+                // Arrow pointing to destination - ALWAYS use │ for non-last branches
                 output.push_str(&format!(
-                    "{}      {}         ↓\n",
-                    indent,
-                    pipe
+                    "{}{}      │         ↓\n",
+                    parent_prefix,
+                    indent
                 ));
                 output.push_str(&format!(
-                    "{}      {}      {} {}\n",
+                    "{}{}      │      {} {}\n",
+                    parent_prefix,
                     indent,
-                    pipe,
                     "TO:",
                     self.truncate_address(&transfer.to, cfg.address_truncate_length)
                 ));
 
                 // Add spacing line before child node
                 if !visited.contains(&transfer.to) {
-                    output.push_str(&format!("{}      {}\n", indent, pipe));
+                    output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
                 }
 
-                // Recursively render child nodes
-                if !visited.contains(&transfer.to) {
-                    self.render_node(output, &transfer.to, depth + 1, visited, false);
+                // Build prefix for child nodes (carry forward parent pipes)
+                let child_prefix = if is_last {
+                    format!("{}{}       ", parent_prefix, indent)
+                } else {
+                    format!("{}{}      │", parent_prefix, indent)
+                };
 
-                    // Add blank lines after each child node for better visual separation
+                // Recursively render child nodes with proper prefix
+                if !visited.contains(&transfer.to) {
+                    self.render_node_with_prefix(output, &transfer.to, depth + 1, visited, false, child_prefix);
+
+                    // Add spacing line after child subtree (only for non-last branches)
                     if !is_last {
-                        output.push_str("\n");
+                        output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
                     }
                 }
             }
@@ -2858,3 +2880,106 @@ mod tests {
         assert!(output.contains("PATH #1:"));
     }
 }
+    #[test]
+    fn test_transfer_graph_very_complex_network() {
+        // Multi-level network: Exchange → Mixer → 3 intermediates → 6 outputs → 1 convergence
+        let config = RenderConfig {
+            title: "MULTI-LEVEL MONEY LAUNDERING NETWORK".to_string(),
+            origin_icon: "💰 EXCHANGE".to_string(),
+            target_icon: "🎯 MIXER".to_string(),
+            node_icon: "◉".to_string(),
+            show_header: true,
+            show_paths_summary: true,
+            show_stats_summary: true,
+            address_truncate_length: 6,
+        };
+
+        let mut graph = TransferGraph::with_config(config);
+        graph.origin = Some("ExchangeWallet_ORIGIN".to_string());
+        graph.target = Some("MixerHub_TARGET".to_string());
+        graph.token_name = Some("USDT".to_string());
+
+        // Level 1: Exchange → Mixer
+        graph.add_transfer(Transfer {
+            from: "ExchangeWallet_ORIGIN".to_string(),
+            to: "MixerHub_TARGET".to_string(),
+            amount: 1000000.0,
+            token_symbol: "USDT".to_string(),
+            timestamp: Some("2024-01-01T10:00:00Z".to_string()),
+            note: Some("Initial deposit".to_string()),
+        });
+
+        // Level 2: Mixer → 3 Intermediates
+        for i in 1..=3 {
+            graph.add_transfer(Transfer {
+                from: "MixerHub_TARGET".to_string(),
+                to: format!("Intermediate_L2_{}", i),
+                amount: 300000.0,
+                token_symbol: "USDT".to_string(),
+                timestamp: Some(format!("2024-01-02T{:02}:00:00Z", 10 + i)),
+                note: Some(format!("Split {}/3", i)),
+            });
+        }
+
+        // Level 3: Each intermediate → 2 outputs
+        for i in 1..=3 {
+            for j in 1..=2 {
+                graph.add_transfer(Transfer {
+                    from: format!("Intermediate_L2_{}", i),
+                    to: format!("Output_L3_{}_{}", i, j),
+                    amount: 140000.0,
+                    token_symbol: "USDT".to_string(),
+                    timestamp: Some(format!("2024-01-03T{:02}:{:02}:00Z", 10 + i, j * 15)),
+                    note: Some(format!("Distribution {}-{}", i, j)),
+                });
+            }
+        }
+
+        // Level 4: 2 outputs converge to final destination
+        graph.add_transfer(Transfer {
+            from: "Output_L3_1_1".to_string(),
+            to: "FinalDestination_COLD".to_string(),
+            amount: 130000.0,
+            token_symbol: "USDT".to_string(),
+            timestamp: Some("2024-01-04T15:00:00Z".to_string()),
+            note: Some("Consolidation 1".to_string()),
+        });
+
+        graph.add_transfer(Transfer {
+            from: "Output_L3_2_2".to_string(),
+            to: "FinalDestination_COLD".to_string(),
+            amount: 130000.0,
+            token_symbol: "USDT".to_string(),
+            timestamp: Some("2024-01-04T15:30:00Z".to_string()),
+            note: Some("Consolidation 2".to_string()),
+        });
+
+        // Set labels
+        graph.set_node_label("ExchangeWallet_ORIGIN", "Binance Hot Wallet".to_string());
+        graph.set_node_label("MixerHub_TARGET", "TornadoCash Proxy".to_string());
+        graph.set_node_label("Intermediate_L2_1", "Burner Wallet A".to_string());
+        graph.set_node_label("Intermediate_L2_2", "Burner Wallet B".to_string());
+        graph.set_node_label("Intermediate_L2_3", "Burner Wallet C".to_string());
+        graph.set_node_label("Output_L3_1_1", "DEX Trader 1".to_string());
+        graph.set_node_label("Output_L3_1_2", "DEX Trader 2".to_string());
+        graph.set_node_label("Output_L3_2_1", "NFT Flipper 1".to_string());
+        graph.set_node_label("Output_L3_2_2", "NFT Flipper 2".to_string());
+        graph.set_node_label("Output_L3_3_1", "Yield Farmer 1".to_string());
+        graph.set_node_label("Output_L3_3_2", "Yield Farmer 2".to_string());
+        graph.set_node_label("FinalDestination_COLD", "Cold Storage Vault".to_string());
+
+        let output = graph.render_ascii();
+
+        println!("\n╔══════════════════════════════════════════════════════════════╗");
+        println!("║        VERY COMPLEX NETWORK VISUALIZATION DEMO               ║");
+        println!("╚══════════════════════════════════════════════════════════════╝\n");
+        println!("{}", output);
+
+        // Verify complex scenario elements
+        assert!(output.contains("MULTI-LEVEL MONEY LAUNDERING NETWORK"));
+        assert!(output.contains("USDT"));
+        assert!(output.contains("1,000,000.00"));
+        assert!(output.contains("TornadoCash Proxy"));
+        assert!(output.contains("Burner Wallet"));
+        assert!(output.contains("Cold Storage Vault"));
+    }
