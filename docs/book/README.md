@@ -10,7 +10,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** ~136,500 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Total Content:** ~144,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
 **Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
 
 ---
@@ -82,12 +82,12 @@ Every chapter shows you **exactly** how these disasters could have been prevente
 |---------|-------|-------|--------|
 | [15](15_pumpswap_sniping.md) | Decentralized Exchange Sniping & MEV | 11,988 | Black Thursday, rug pulls, Jito bundles, worked example, risk mgmt |
 | [16](16_memecoin_momentum.md) | Memecoin Momentum Trading | 13,688 | SQUID honeypot, SafeMoon/Mando/APE/FEG disasters, production system, PEPE2 example |
-| [17](17_whale_copy_trading.md) | Whale Tracking and Copy Trading | 3,549 | Wallet clustering, transaction analysis, copy trading |
+| [17](17_whale_copy_trading.md) | Whale Tracking and Copy Trading | 10,891 | DeFi Degen Sybil, Nansen/3AC/Pump.fun/wash trading disasters, Sybil-resistant system |
 | [18](18_mev_bundle_sniping.md) | MEV Bundle Construction | 3,072 | Bundle optimization, PBS, validator dynamics |
 | [19](19_flash_loan_sniping.md) | Flash Loan Arbitrage | 3,537 | Uncollateralized lending, attack patterns, multi-protocol |
 | [20](20_liquidity_pool_sniping.md) | Liquidity Pool Analysis | 3,122 | AMM math, impermanent loss, concentrated liquidity |
 
-**Subtotal:** 38,956 words
+**Subtotal:** 46,298 words
 
 ---
 
