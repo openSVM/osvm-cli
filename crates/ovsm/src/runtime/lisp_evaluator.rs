@@ -334,7 +334,6 @@ impl LispEvaluator {
                     "items" => self.eval_object_entries(args),        // Python: dict.items()
                     "merge" => self.eval_merge(args),
                     "put" => self.eval_put(args),           // Set object property: (put obj "key" val)
-                    "assoc-in" => self.eval_put(args),      // Clojure-style alias
                     "get" => self.eval_get(args),
                     "get-path" => self.eval_get_path(args),
                     "discover" => self.eval_discover(args),
