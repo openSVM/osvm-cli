@@ -396,12 +396,8 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
 
 /// Format the wallet analysis summary using AI
 async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summary_json: &str) -> Result<String> {
-    let prompt = format!(r#"You are a blockchain analyst. Format the following aggregated Solana wallet transfer summary into a clear markdown report.
-
-Wallet Address: {}
-
-Aggregated Transfer Summary (JSON):
-{}
+    // System prompt for custom formatting (bypass planning mode)
+    let system_prompt = format!(r#"You are a blockchain analyst. Format the following aggregated Solana wallet transfer summary into a clear markdown report.
 
 Create a professional report with:
 
@@ -426,9 +422,16 @@ Format as professional markdown with:
 - Highlight significant flows and patterns
 - Note: SOL is the native token
 
-Be clear and actionable. The data is already aggregated - just format it nicely."#, wallet, summary_json);
+Be clear and actionable. The data is already aggregated - just format it nicely."#);
 
-    ai_service.query(&prompt).await
+    // Question contains the actual data
+    let question = format!(r#"Wallet Address: {}
+
+Aggregated Transfer Summary (JSON):
+{}"#, wallet, summary_json);
+
+    // Use ownPlan=true to bypass planning and use our custom system prompt directly
+    ai_service.query_osvm_ai_with_options(&question, Some(system_prompt), Some(true), false).await
         .context("Failed to format analysis with AI")
 }
 
