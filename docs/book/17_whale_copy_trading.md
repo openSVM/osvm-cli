@@ -1621,7 +1621,447 @@ Benefit: Avoid $700M+ in disasters
 
 ---
 
-## 17.11 Conclusion
+## 17.11 Production Sybil-Resistant Copy Trading System
+
+The previous section documented **$700M+ in preventable copy trading disasters**. Each had a trivial prevention method (Sybil clustering, liquidity checks, anomaly detection) taking 0-60 seconds. Yet copy traders continue to lose money because **manual vigilance fails under FOMO pressure**.
+
+The solution: **Automate all safety checks.** This section presents a production-grade copy trading system integrating Sybil detection, liquidity validation, anomaly monitoring, and intelligent consensus calculation into a single automated pipeline.
+
+### 17.11.1 Sybil-Resistant Whale Clustering
+
+**Objective:** Detect when multiple "independent" whales are actually controlled by the same entity (DeFi Degen prevention).
+
+```lisp
+;; ====================================================================
+;; SYBIL-RESISTANT WALLET CLUSTERING
+;; Prevents DeFi Degen-style fake multi-whale consensus
+;; ====================================================================
+
+(defun detect-wallet-clustering (whale-wallets)
+  "Identify Sybil wallet networks masquerading as independent whales.
+   WHAT: Multi-factor clustering based on token overlap, timing, fund flow
+   WHY: DeFi Degen attack used 8 Sybil wallets for fake consensus
+   HOW: Jaccard similarity + temporal correlation + transfer graph analysis"
+
+  (do
+    (log :message "🔍 SYBIL CLUSTERING ANALYSIS")
+    (log :message "   Analyzing" :value (length whale-wallets) :unit "whales")
+
+    ;; Store clustering scores for all pairs
+    (define clustering-matrix {})
+    (define clusters [])
+
+    ;; STEP 1: Calculate pairwise clustering scores
+    (for (wallet-a whale-wallets)
+      (for (wallet-b whale-wallets)
+        (when (not (= wallet-a wallet-b))
+          (do
+            ;; FACTOR 1: Token Overlap (Jaccard Similarity)
+            (define tokens-a (get-wallet-token-holdings wallet-a))
+            (define tokens-b (get-wallet-token-holdings wallet-b))
+
+            (define common-tokens (intersection tokens-a tokens-b))
+            (define all-tokens (union tokens-a tokens-b))
+            (define jaccard-similarity
+              (if (> (length all-tokens) 0)
+                  (/ (length common-tokens) (length all-tokens))
+                  0.0))
+
+            ;; FACTOR 2: Temporal Correlation
+            (define trades-a (get-wallet-trades wallet-a :last-30-days true))
+            (define trades-b (get-wallet-trades wallet-b :last-30-days true))
+            (define temporal-corr (calculate-temporal-correlation trades-a trades-b))
+
+            ;; FACTOR 3: Direct Fund Transfers
+            (define has-transfer-link (check-transfer-history wallet-a wallet-b))
+            (define transfer-score (if has-transfer-link 1.0 0.0))
+
+            ;; COMPOSITE CLUSTERING SCORE
+            (define cluster-score
+              (+ (* 0.30 jaccard-similarity)   ;; 30% weight: token overlap
+                 (* 0.50 temporal-corr)         ;; 50% weight: timing correlation
+                 (* 0.20 transfer-score)))      ;; 20% weight: direct transfers
+
+            ;; Store if significant clustering detected
+            (when (>= cluster-score 0.70)
+              (do
+                (set! clustering-matrix
+                  (assoc clustering-matrix
+                    (format "~a-~a" wallet-a wallet-b)
+                    {:wallet-a wallet-a
+                     :wallet-b wallet-b
+                     :score cluster-score
+                     :jaccard jaccard-similarity
+                     :temporal temporal-corr
+                     :transfer transfer-score}))
+
+                (log :message "")
+                (log :message "🚨 CLUSTER DETECTED")
+                (log :message "   Wallet A:" :value (substring wallet-a 0 8))
+                (log :message "   Wallet B:" :value (substring wallet-b 0 8))
+                (log :message "   Score:" :value cluster-score)
+                (log :message "   Token overlap:" :value (* jaccard-similarity 100) :unit "%")
+                (log :message "   Temporal corr:" :value (* temporal-corr 100) :unit "%")))))))
+
+    ;; STEP 2: Build cluster groups (connected components)
+    (define visited {})
+
+    (for (wallet whale-wallets)
+      (when (not (get visited wallet))
+        (do
+          ;; Start new cluster from this wallet
+          (define current-cluster [wallet])
+          (define to-visit [wallet])
+          (set! visited (assoc visited wallet true))
+
+          ;; BFS to find all connected wallets
+          (while (> (length to-visit) 0)
+            (do
+              (define current (first to-visit))
+              (set! to-visit (rest to-visit))
+
+              ;; Check for connections to unvisited wallets
+              (for (other whale-wallets)
+                (when (and (not (get visited other))
+                           (or (get clustering-matrix (format "~a-~a" current other))
+                               (get clustering-matrix (format "~a-~a" other current))))
+                  (do
+                    (set! current-cluster (append current-cluster [other]))
+                    (set! to-visit (append to-visit [other]))
+                    (set! visited (assoc visited other true)))))))
+
+          ;; Store cluster if it has multiple wallets
+          (when (> (length current-cluster) 1)
+            (set! clusters (append clusters [current-cluster]))))))
+
+    ;; STEP 3: Report clusters
+    (log :message "")
+    (log :message "═══════════════════════════════════════════════")
+    (log :message "CLUSTERING ANALYSIS COMPLETE")
+    (log :message "═══════════════════════════════════════════════")
+    (log :message "   Total whales analyzed:" :value (length whale-wallets))
+    (log :message "   Clusters detected:" :value (length clusters))
+    (log :message "   Independent whales:" :value (- (length whale-wallets)
+                                                      (sum (map clusters length))
+                                                      (- (length clusters))))
+
+    (when (> (length clusters) 0)
+      (do
+        (log :message "")
+        (log :message "CLUSTER DETAILS:")
+        (for (i (range 0 (length clusters)))
+          (define cluster (get clusters i))
+          (log :message "")
+          (log :message "   Cluster" :value (+ i 1))
+          (log :message "     Wallets:" :value (length cluster))
+          (log :message "     Members:" :value (map cluster
+                                                    (lambda (w) (substring w 0 12)))))))
+
+    {:clusters clusters
+     :num-clusters (length clusters)
+     :clustering-matrix clustering-matrix}))
+```
+
+**How it prevents DeFi Degen:**
+- DeFi Degen: 12 wallets → clustering analysis reveals 2-3 clusters
+- Token overlap: 8/12 wallets shared 70%+ tokens = high Jaccard similarity
+- Temporal correlation: All 12 bought BONK2 within 60 seconds = 0.95+ correlation
+- Result: True consensus = 2-3 entities (not 12 independent whales)
+
+---
+
+### 17.11.2 Liquidity Safety Validation
+
+**Objective:** Prevent illiquid token traps like DeFi Degen ($120K liquidity vs $2.88M buy pressure).
+
+```lisp
+;; ====================================================================
+;; LIQUIDITY-AWARE SIGNAL VALIDATION
+;; Prevents DeFi Degen-style illiquidity traps
+;; ====================================================================
+
+(defun validate-signal-liquidity (token-address
+                                   whale-buy-volume
+                                   num-copy-traders
+                                   avg-copy-size)
+  "Check if token has sufficient liquidity for safe copy trading exits.
+   WHAT: Compare pool liquidity to estimated total buy pressure
+   WHY: DeFi Degen had $120K liquidity vs $2.88M copy volume (0.04x ratio)
+   HOW: Calculate safety ratio (liquidity / total pressure), require 3x minimum"
+
+  (do
+    (log :message "")
+    (log :message "💧 LIQUIDITY SAFETY VALIDATION")
+
+    ;; Get current pool liquidity
+    (define pool-info (get-dex-pool-info token-address))
+    (define pool-liquidity-usd (get pool-info :liquidity-usd))
+    (define pool-volume-24h (get pool-info :volume-24h))
+
+    ;; Estimate copy trader volume
+    (define estimated-copier-volume (* num-copy-traders avg-copy-size))
+
+    ;; Total buy pressure
+    (define total-buy-pressure (+ whale-buy-volume estimated-copier-volume))
+
+    ;; Safety ratio (higher = safer)
+    (define safety-ratio (/ pool-liquidity-usd total-buy-pressure))
+
+    (log :message "   Pool liquidity:" :value pool-liquidity-usd :unit "USD")
+    (log :message "   Whale volume:" :value whale-buy-volume :unit "USD")
+    (log :message "   Estimated copiers:" :value num-copy-traders)
+    (log :message "   Avg copy size:" :value avg-copy-size :unit "USD")
+    (log :message "   Total pressure:" :value total-buy-pressure :unit "USD")
+    (log :message "   Safety ratio:" :value safety-ratio :unit "x")
+
+    ;; DeFi Degen comparison
+    (when (< safety-ratio 0.50)
+      (log :message "")
+      (log :message "   ⚠️ WORSE than DeFi Degen (0.04x ratio)"))
+
+    ;; Risk classification
+    (if (>= safety-ratio 3.0)
+        (do
+          (log :message "   ✅ SAFE - Sufficient exit liquidity")
+          {:safe true
+           :ratio safety-ratio
+           :max-position-pct 100})
+
+        (if (>= safety-ratio 1.5)
+            (do
+              (log :message "   ⚠️ MARGINAL - Reduce position size")
+              {:safe "marginal"
+               :ratio safety-ratio
+               :max-position-pct 25})  ;; Only 25% of normal position
+
+            (do
+              (log :message "   🚨 DANGEROUS - Insufficient liquidity")
+              (log :message "   Ratio" :value safety-ratio :unit "x vs 3.0x required")
+              (log :message "   ⛔ REJECT SIGNAL")
+              {:safe false
+               :ratio safety-ratio
+               :max-position-pct 0})))))
+```
+
+**Thresholds:**
+- **≥ 3.0x:** ✅ SAFE (full position allowed)
+- **1.5-3.0x:** ⚠️ MARGINAL (25% position max)
+- **< 1.5x:** 🚨 DANGEROUS (reject signal)
+
+**DeFi Degen would have been rejected:**
+- Pool liquidity: $120K
+- Total pressure: $2.88M
+- Ratio: 0.04x (way below 1.5x threshold)
+- Result: **REJECT** ✅
+
+---
+
+### 17.11.3 Consensus Calculation with Clustering Discount
+
+**Objective:** Calculate true whale consensus after discounting Sybil clusters.
+
+```lisp
+;; ====================================================================
+;; CLUSTER-AWARE CONSENSUS CALCULATION
+;; Converts fake multi-whale consensus to true independent count
+;; ====================================================================
+
+(defun calculate-true-consensus (whale-signals clustering-data)
+  "Aggregate multi-whale signals with Sybil cluster discounting.
+   WHAT: Count independent whale groups, not individual wallets
+   WHY: DeFi Degen 12 whales = 2-3 entities after clustering
+   HOW: Each cluster counts as 1 whale (not N whales)"
+
+  (do
+    (log :message "")
+    (log :message "🧮 CLUSTER-AWARE CONSENSUS CALCULATION")
+
+    ;; Get detected clusters
+    (define clusters (get clustering-data :clusters))
+
+    (log :message "   Raw whale signals:" :value (length whale-signals))
+    (log :message "   Detected clusters:" :value (length clusters))
+
+    ;; Build wallet-to-cluster mapping
+    (define wallet-cluster-map {})
+    (for (i (range 0 (length clusters)))
+      (define cluster (get clusters i))
+      (for (wallet cluster)
+        (set! wallet-cluster-map (assoc wallet-cluster-map wallet i))))
+
+    ;; Count independent entities
+    (define cluster-volumes {})  ;; Total volume per cluster
+    (define independent-wallets [])  ;; Wallets not in any cluster
+    (define independent-whale-count 0)
+    (define total-volume 0)
+
+    (for (signal whale-signals)
+      (define wallet (get signal :wallet))
+      (define volume (get signal :volume))
+
+      (define cluster-id (get wallet-cluster-map wallet))
+
+      (if cluster-id
+          ;; Part of a cluster
+          (do
+            (define current-vol (get cluster-volumes cluster-id 0))
+            (set! cluster-volumes
+              (assoc cluster-volumes cluster-id (+ current-vol volume))))
+
+          ;; Independent wallet
+          (do
+            (set! independent-wallets (append independent-wallets [wallet]))
+            (set! total-volume (+ total-volume volume)))))
+
+    ;; Count cluster groups as single whales
+    (define num-cluster-groups (length (keys cluster-volumes)))
+
+    ;; Add cluster volumes to total
+    (for (cluster-id (keys cluster-volumes))
+      (set! total-volume (+ total-volume (get cluster-volumes cluster-id))))
+
+    ;; True independent count
+    (set! independent-whale-count
+      (+ num-cluster-groups (length independent-wallets)))
+
+    ;; Log cluster details
+    (when (> num-cluster-groups 0)
+      (do
+        (log :message "")
+        (log :message "   CLUSTER BREAKDOWN:")
+        (for (cluster-id (keys cluster-volumes))
+          (define cluster-vol (get cluster-volumes cluster-id))
+          (define cluster-wallets (get clusters cluster-id))
+          (log :message "")
+          (log :message "   Cluster" :value (+ cluster-id 1))
+          (log :message "     Wallets:" :value (length cluster-wallets))
+          (log :message "     Combined volume:" :value cluster-vol :unit "USD")
+          (log :message "     Counted as: 1 whale (not" :value (length cluster-wallets) :unit ")"))))
+
+    ;; Consensus strength classification
+    (define consensus-strength
+      (if (>= independent-whale-count 6) "VERY STRONG"
+          (if (>= independent-whale-count 4) "STRONG"
+              (if (>= independent-whale-count 2) "MODERATE"
+                  "WEAK"))))
+
+    (log :message "")
+    (log :message "═══════════════════════════════════════════════")
+    (log :message "FINAL CONSENSUS")
+    (log :message "═══════════════════════════════════════════════")
+    (log :message "   Raw whale count:" :value (length whale-signals))
+    (log :message "   Independent whales:" :value independent-whale-count)
+    (log :message "   Total volume:" :value total-volume :unit "USD")
+    (log :message "   Strength:" :value consensus-strength)
+
+    ;; DeFi Degen comparison
+    (when (< independent-whale-count (* (length whale-signals) 0.5))
+      (log :message "")
+      (log :message "   ⚠️ >50% reduction after clustering")
+      (log :message "   Similar to DeFi Degen: 12 → 4 real whales"))
+
+    {:raw-count (length whale-signals)
+     :independent-count independent-whale-count
+     :total-volume total-volume
+     :consensus-strength consensus-strength
+     :approved (>= independent-whale-count 2)}))  ;; Need 2+ independent
+```
+
+**Example (DeFi Degen scenario):**
+```
+Input: 12 whale signals
+
+Clustering detects:
+- Cluster 1: Wallets [W1, W2, W3, W4, W5, W6, W7, W8] (8 wallets)
+- Cluster 2: Wallets [W9, W10] (2 wallets)
+- Independent: [W11, W12]
+
+Consensus calculation:
+- Cluster 1 = 1 whale (not 8)
+- Cluster 2 = 1 whale (not 2)
+- Independent = 2 whales
+- Total: 4 independent whales (not 12!)
+
+Strength: 4 whales = "STRONG" (not "VERY STRONG")
+Decision: Approve but with caution (not max conviction)
+```
+
+---
+
+### 17.11.4 Integrated Copy Trading Decision Engine
+
+**Objective:** Combine all safety checks into single automated decision pipeline.
+
+```lisp
+;; ====================================================================
+;; INTEGRATED COPY TRADING DECISION ENGINE
+;; Complete automation: Sybil detection → Liquidity → Consensus
+;; ====================================================================
+
+(defun evaluate-copy-signal (token-address whale-signals)
+  "Complete multi-stage validation for copy trading signals.
+   WHAT: Run all safety checks, calculate true consensus, make decision
+   WHY: $700M+ disasters preventable with automated checks
+   HOW: Sybil clustering → liquidity check → consensus → decision"
+
+  (do
+    (log :message "")
+    (log :message "╔═══════════════════════════════════════════════╗")
+    (log :message "║  COPY TRADING SIGNAL EVALUATION               ║")
+    (log :message "╚═══════════════════════════════════════════════╝")
+    (log :message "")
+    (log :message "Token:" :value token-address)
+    (log :message "Raw whale signals:" :value (length whale-signals))
+
+    ;; ================================================================
+    ;; STAGE 1: SYBIL CLUSTERING ANALYSIS
+    ;; ================================================================
+
+    (log :message "")
+    (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    (log :message "STAGE 1: SYBIL DETECTION")
+    (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    (define whale-wallets (map whale-signals (lambda (s) (get s :wallet))))
+    (define clustering-result (detect-wallet-clustering whale-wallets))
+
+    ;; ================================================================
+    ;; STAGE 2: LIQUIDITY SAFETY CHECK
+    ;; ================================================================
+
+    (log :message "")
+    (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    (log :message "STAGE 2: LIQUIDITY VALIDATION")
+    (log :message "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    (define total-whale-volume (sum (map whale-signals
+                                          (lambda (s) (get s :volume)))))
+
+    ;; Estimate copy trader volume (assume 2000 copiers, $1000 avg)
+    (define estimated-copiers 2000)
+    (define avg-copy-size 1000)
+
+    (define liquidity-check (validate-signal-liquidity
+                              token-address
+                              total-whale-volume
+                              estimated-copiers
+                              avg-copy-size))
+
+    (define liquidity-safe (get liquidity-check :safe))
+    (define max-position-pct (get liquidity-check :max-position-pct))
+
+    ;; Early exit if liquidity is insufficient
+    (when (= liquidity-safe false)
+      (do
+        (log :message "")
+        (log :message "⛔ SIGNAL REJECTED - Insufficient liquidity")
+        (return {:approved false
+                 :reason "liquidity"
+                 :recommendation "REJECT - DeFi Degen-style trap"})))
+
+    ;; ================================================================
+    ;; STAGE 3: TRUE CONSENSUS CALCULATION
+    ;; ================================================================
 
 Whale copy trading exploits information asymmetry and skill differentials in crypto markets. By identifying consistently profitable traders and replicating their positions with optimal timing and sizing, systematic alpha generation is achievable.
 
