@@ -148,17 +148,104 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 }
 
 /// Generate the OVSM script for wallet analysis
-/// Aggregates transfers by token with top senders/receivers
+/// Fetches ALL transfers with pagination, then aggregates by token
 fn generate_wallet_analysis_script(wallet: &str) -> String {
-    format!(r#";; Wallet analysis - minimal test version
+    format!(r#";; Wallet analysis - fetch ALL transfers and aggregate by token
 (do
   (define target "{}")
-  (define resp (get_account_transfers {{:address target :limit 1000}}))
-  (define data (get resp "data"))
 
+  ;; Fetch ALL transfers with pagination (1000 at a time)
+  (define all_transfers [])
+  (define keep_fetching true)
+  (define batch_num 0)
+
+  (while keep_fetching
+    (do
+      (define resp (get_account_transfers {{:address target :limit 1000 :offset (* batch_num 1000)}}))
+      (define batch (get resp "data"))
+      (define batch_size (length batch))
+
+      ;; Append this batch to all_transfers
+      (set! all_transfers (append all_transfers batch))
+
+      ;; Stop if we got less than 1000 (last batch)
+      (if (< batch_size 1000)
+          (set! keep_fetching false)
+          (set! batch_num (+ batch_num 1)))))
+
+  ;; Now aggregate by token mint
+  (define by_mint (group-by all_transfers (lambda (tx) (get tx "mint"))))
+
+  ;; For each token, aggregate senders/receivers
+  (define token_summaries
+    (map
+      (entries by_mint)
+      (lambda (mint_pair)
+        (do
+          (define mint (get mint_pair 0))
+          (define txs (get mint_pair 1))
+
+          ;; Get token symbol from first tx
+          (define symbol (if (> (length txs) 0)
+                            (get (get txs 0) "tokenSymbol")
+                            mint))
+
+          ;; Split by direction
+          (define inflows (filter txs (lambda (t) (= (get t "transferType") "IN"))))
+          (define outflows (filter txs (lambda (t) (= (get t "transferType") "OUT"))))
+
+          ;; Aggregate inflows by sender
+          (define inflow_agg
+            (reduce
+              inflows
+              {{}}
+              (lambda (acc tx)
+                (do
+                  (define from (get tx "from"))
+                  (define amt (float (get tx "tokenAmount")))
+                  (define existing (get acc from))
+                  (define current (if existing existing 0))
+                  (put acc from (+ current amt))))))
+
+          ;; Aggregate outflows by receiver
+          (define outflow_agg
+            (reduce
+              outflows
+              {{}}
+              (lambda (acc tx)
+                (do
+                  (define to (get tx "to"))
+                  (define amt (float (get tx "tokenAmount")))
+                  (define existing (get acc to))
+                  (define current (if existing existing 0))
+                  (put acc to (+ current amt))))))
+
+          ;; Sort and take top 5
+          (define top_senders
+            (take 5
+              (sort
+                (entries inflow_agg)
+                (lambda (a b) (> (get a 1) (get b 1))))))
+
+          (define top_receivers
+            (take 5
+              (sort
+                (entries outflow_agg)
+                (lambda (a b) (> (get a 1) (get b 1))))))
+
+          {{:mint mint
+           :symbol symbol
+           :transfer_count (length txs)
+           :inflow_count (length inflows)
+           :outflow_count (length outflows)
+           :top_senders top_senders
+           :top_receivers top_receivers}})))
+
+  ;; Return AGGREGATED summaries (NOT raw transfers!)
   {{:wallet target
-   :count (length data)
-   :first_tx (get data 0)}})
+   :total_transfers (length all_transfers)
+   :num_tokens (length token_summaries)
+   :tokens token_summaries}})
 "#, wallet)
 }
 
