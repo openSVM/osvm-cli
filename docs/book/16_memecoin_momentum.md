@@ -2280,7 +2280,432 @@ graph TD
 
 ---
 
-## 16.11 Conclusion
+## 16.11 Worked Example: PEPE2 Memecoin Momentum Trade
+
+This section presents a complete, minute-by-minute walkthrough of a successful memecoin momentum trade using the production system from Section 16.10. The token is "PEPE2" (fictional but based on real patterns), launched during the PEPE memecoin hype cycle when traders were seeking "the next PEPE."
+
+**Disclaimer:** This trade succeeded due to favorable conditions and disciplined execution. **Most memecoin trades lose money.** The 68% win rate from Section 16.5 means 32% of trades still lose. This example shows the system working correctly, not a guaranteed outcome.
+
+### 16.11.1 Pre-Trade Context (March 2024)
+
+**Market conditions:**
+- Original PEPE memecoin had pumped +21,000% over 30 days
+- Dozens of copycat tokens launching daily ("PEPE2", "PEPE3", "PEPE420", etc.)
+- High retail FOMO for "missing the next 100x"
+- Scanner detecting 40-60 new memecoins per day on Raydium
+
+**Portfolio status:**
+- Total capital: $50,000
+- Available for new positions: $35,000 (30% in existing positions)
+- Win/loss record (last 30 days): 18 wins, 9 losses (67% win rate)
+- Monthly P&L: +$42,300 (+84.6% monthly return)
+
+### 16.11.2 Discovery Phase (10:14 AM UTC)
+
+**Scanner detection:**
+
+```
+═══════════════════════════════════════════════
+🆕 NEW MEMECOIN DETECTED
+═══════════════════════════════════════════════
+   DEX: Raydium
+   Token: PEPE2TokenAddress...XYZ
+   Liquidity: $87,500 USD
+   Age: 0.25 hours (15 minutes old)
+
+   Triggering safety assessment...
+```
+
+**Initial observations:**
+- Launched 15 minutes ago at 10:00 AM UTC
+- Liquidity $87.5K (above $50K minimum threshold)
+- Name "PEPE2" capitalizes on PEPE hype (copycat pattern)
+- Volume already $125K in first 15 minutes (high activity)
+
+### 16.11.3 Safety Assessment Phase (10:14-10:17 AM UTC)
+
+**Running 10-factor safety checks:**
+
+```lisp
+🔍 SAFETY ASSESSMENT BEGIN
+   Token: PEPE2TokenAddress...XYZ
+
+[1/10] SELL SIMULATION TEST (SQUID prevention)
+   Testing $1,000 sell transaction...
+   ✅ PASS - Can sell (honeypot check passed)
+   Simulated output: $987 USDC (1.3% slippage)
+
+[2/10] LP LOCK DURATION CHECK (Mando prevention)
+   Querying LP lock contract...
+   ✅ PASS - LP locked for 180 days
+   Lock expires: September 14, 2024
+
+[3/10] TEAM ALLOCATION CHECK (SafeMoon prevention)
+   Team allocation: 8.5%
+   ✅ PASS - Team allocation: 8.5% (below 15% threshold)
+   Vesting schedule: 12-month linear vest
+   ✅ PASS - Vesting schedule exists
+
+[4/10] GINI COEFFICIENT CHECK (FEG prevention)
+   Analyzing holder distribution (523 holders)...
+   Gini coefficient: 0.61
+   ✅ PASS - Gini coefficient: 0.61
+   Distribution: Moderate concentration (acceptable)
+
+[5/10] TOP HOLDER CONCENTRATION CHECK
+   Top 10 holders: 38.2% of supply
+   ✅ PASS - Top 10 holders: 38.2% (below 50% threshold)
+
+[6/10] INSIDER FRONT-RUN CHECK (APE prevention)
+   Analyzing first 50 holders for suspicious patterns...
+   New wallets (<7 days old): 4 wallets, 2.8% of supply
+   CEX-funded wallets: 3 wallets, 1.9% of supply
+   ✅ PASS - No obvious insider front-running
+   Suspicious holdings: 2.8% (below 5% threshold)
+
+[7/10] CONTRACT VERIFICATION CHECK
+   ✅ PASS - Contract verified on Solscan
+   Contract: Standard SPL Token (Metaplex metadata)
+
+[8/10] MINT AUTHORITY CHECK
+   ✅ PASS - Mint authority revoked
+   Freeze authority: Also revoked
+
+[9/10] ECOSYSTEM RISK CHECK (SHIB prevention)
+   ✅ PASS - Standalone token, no ecosystem risk
+   Not part of multi-token system
+
+[10/10] CELEBRITY BACKING CHECK
+   ✅ PASS - No celebrity hype (organic launch)
+   No verified influencer mentions yet
+
+═══════════════════════════════════════════════
+SAFETY ASSESSMENT COMPLETE
+═══════════════════════════════════════════════
+   Score: 88/100
+   Level: SAFE
+
+   ⚠️ ISSUES DETECTED: 0
+
+RECOMMENDATION: ✅ APPROVED for momentum trading
+═══════════════════════════════════════════════
+```
+
+**Assessment summary:**
+- **Safety score: 88/100** (SAFE classification, above 85 threshold)
+- **All 10 checks passed** - no red flags
+- **Key positives:** LP locked 180 days, Gini 0.61 (healthy), sell simulation passed
+- **Time elapsed:** 3 minutes (automated checks)
+
+### 16.11.4 Momentum Signal Generation (10:17-10:18 AM UTC)
+
+**Multi-factor analysis:**
+
+```lisp
+📊 MOMENTUM SIGNAL GENERATION
+   Token: PEPE2TokenAddress...XYZ
+
+[Factor 1/4] Multi-Timeframe Momentum Analysis
+   1-minute velocity: +142% (parabolic)
+   5-minute velocity: +95% (strong acceleration)
+   15-minute velocity: +87% (sustained trend)
+
+   Technical score: 0.89/1.0 (weighted average)
+   Score: 0.89/1.0
+
+[Factor 2/4] Volume Confirmation
+   Current 24h volume: $125,000 USD (actually 15-min volume)
+   7-day average: $0 (newly launched)
+   Adjusting baseline to launch hour estimate: $40,000
+   Ratio: 3.1x
+
+   Volume score: 1.0/1.0 (above 3.0x threshold)
+
+[Factor 3/4] Holder Flow Analysis
+   Current holders: 523
+   1h ago: N/A (token only 15 minutes old)
+   Adjusting to per-hour rate: 523 holders in 0.25h = 2,092/hour projected
+   Net growth: +2,092/hour (exceptional)
+   Growth rate: N/A (baseline)
+
+   Whale change (since launch): +1.2% of supply (accumulation)
+
+   Holder score: 1.0/1.0 (100+ holders/hour threshold exceeded)
+
+[Factor 4/4] Social Sentiment Analysis
+   Twitter sentiment: 78/100 (PEPE hype spillover)
+   Telegram activity: 85/100 (523 members, 45 messages/min)
+   Influencer mentions: 2 (small accounts, 5K-10K followers)
+
+   Social score: 0.82/1.0
+
+═══════════════════════════════════════════════
+COMPOSITE SIGNAL
+═══════════════════════════════════════════════
+   Momentum (40%): 0.356  (0.89 × 0.40)
+   Volume (20%): 0.200  (1.00 × 0.20)
+   Holders (25%): 0.250  (1.00 × 0.25)
+   Social (15%): 0.123  (0.82 × 0.15)
+   ─────────────────────────────────────────
+   TOTAL SCORE: 0.929/1.0
+
+   SIGNAL: STRONG BUY (above 0.75 threshold)
+═══════════════════════════════════════════════
+```
+
+**Signal summary:**
+- **Composite score: 0.929/1.0** (exceptional, top 5% of signals)
+- **Classification: STRONG BUY** (above 0.75 threshold)
+- **Strongest factors:** Volume (1.0), Holders (1.0), Momentum (0.89)
+- **Time elapsed:** 60 seconds
+
+**Decision:** ✅ **APPROVED for entry** (safety 88/100 + signal 0.929)
+
+### 16.11.5 Position Sizing and Entry Execution (10:18 AM UTC)
+
+**Kelly Criterion calculation:**
+
+```lisp
+[STEP 1/5] Position Sizing (Kelly Criterion)
+
+Historical stats (last 30 days):
+   Win probability: 0.67 (18 wins / 27 trades)
+   Average win: +127%
+   Average loss: -18%
+
+Full Kelly calculation:
+   b = (win/loss ratio) = 127% / 18% = 7.06
+   p = 0.67
+   q = 0.33
+
+   f* = (p×b - q) / b
+      = (0.67×7.06 - 0.33) / 7.06
+      = (4.73 - 0.33) / 7.06
+      = 4.40 / 7.06
+      = 0.623 (62.3% of portfolio!)
+
+Fractional Kelly (25% of full):
+   0.623 × 0.25 = 0.156 (15.6% of portfolio)
+
+   Kelly suggests: $7,780 USD (15.6% × $50,000)
+   10% portfolio cap: $5,000 USD
+   Final position: $5,000 USD (capped for safety)
+```
+
+**Entry execution:**
+
+```lisp
+[STEP 2/5] Entry Execution (Jito Bundle)
+
+Building swap transaction:
+   Input: $5,000 USDC
+   Output: PEPE2 tokens
+   Slippage tolerance: 3.0%
+
+Computing priority fee:
+   Recent median: 0.00025 SOL
+   Competition factor: 1.5x (aggressive)
+   Priority fee: 0.000375 SOL
+
+Submitting Jito bundle:
+   Bundle ID: 8f7e9d...3a2b
+   Tip: 0.01 SOL ($1.85)
+
+   ⏳ Waiting for confirmation...
+
+   ✅ Entry executed (slot 234,567,891)
+   Price: $0.00005234 per PEPE2
+   Tokens: 95,531,202 PEPE2
+   Slippage: 2.1% (acceptable)
+   Total cost: $5,105 ($5,000 + $105 fees)
+
+[10:18:47 AM UTC] Position opened
+```
+
+**Entry summary:**
+- **Position size:** $5,000 (10% portfolio cap, below Kelly suggestion)
+- **Entry price:** $0.00005234
+- **Tokens acquired:** 95.5M PEPE2
+- **Entry age:** 18 minutes post-launch (excellent timing)
+- **Total cost:** $5,105 (including $105 fees and tips)
+
+### 16.11.6 Position Monitoring and Exit Execution (10:18 AM - 2:45 PM UTC)
+
+**Tiered exit configuration:**
+
+```lisp
+[STEP 3/5] Exit Strategy Configuration
+
+Profit tiers:
+   Tier 1: 2x ($0.0001047) → Sell 25%
+   Tier 2: 5x ($0.0002617) → Sell 25%
+   Tier 3: 10x ($0.0005234) → Sell 25%
+   Tier 4: 20x ($0.0010468) → Sell 25%
+
+Trailing stop: 15% from peak price
+```
+
+**Timeline of events:**
+
+**10:18 AM - Entry completed**
+- Price: $0.00005234
+- Position: 95.5M PEPE2 = $5,000 value
+
+**10:42 AM (24 minutes later) - Tier 1 triggered (2x)**
+- Price: $0.0001055 (2.02x)
+- Action: Sell 25% (23.9M PEPE2)
+- Proceeds: $2,521
+- Profit locked: $1,271 (+25.4% of total position)
+- Remaining: 71.6M PEPE2 = $7,554 value
+
+**11:28 AM (1h 10m since entry) - Tier 2 triggered (5x)**
+- Price: $0.0002687 (5.13x)
+- Action: Sell 25% (23.9M PEPE2)
+- Proceeds: $6,420
+- Cumulative profit locked: $3,691 (+73.8%)
+- Remaining: 47.8M PEPE2 = $12,840 value
+
+**12:53 PM (2h 35m since entry) - Peak price reached**
+- Price: $0.0003982 (7.61x)
+- Position value: $19,030 at peak
+- **Did NOT hit Tier 3 (10x)** — realistic outcome
+- Trailing stop now active at: $0.0003382 (15% below peak)
+
+**1:15 PM (2h 57m since entry) - Consolidation phase**
+- Price: $0.0003750 (7.16x, -5.8% from peak)
+- Position value: $17,925
+- Trailing stop: $0.0003382
+- Status: Monitoring, no action (above stop)
+
+**2:18 PM (4h since entry) - Profit-taking begins**
+- Price: $0.0003512 (6.71x, -11.8% from peak)
+- Position value: $16,786
+- Trailing stop: $0.0003382
+- **Price approaching stop level**
+
+**2:45 PM (4h 27m since entry) - Trailing stop triggered**
+- Price: $0.0003365 (6.43x, -15.5% from peak)
+- **STOP TRIGGERED** (below $0.0003382)
+- Action: Sell remaining 50% (47.8M PEPE2)
+- Proceeds: $16,084
+- **Position fully exited**
+
+### 16.11.7 Trade Performance Analysis
+
+**Final accounting:**
+
+| Exit Event | Time | Price | PEPE2 Sold | Proceeds | Multiple |
+|------------|------|-------|------------|----------|----------|
+| Tier 1 (25%) | 10:42 AM | $0.0001055 | 23.9M | $2,521 | 2.02x |
+| Tier 2 (25%) | 11:28 AM | $0.0002687 | 23.9M | $6,420 | 5.13x |
+| Trailing Stop (50%) | 2:45 PM | $0.0003365 | 47.8M | $16,084 | 6.43x |
+| **Total** | 4h 27m | Weighted | 95.5M | **$25,025** | **4.90x** |
+
+**Performance metrics:**
+
+```
+═══════════════════════════════════════════════
+TRADE PERFORMANCE SUMMARY
+═══════════════════════════════════════════════
+Entry Details:
+   Time: 10:18 AM UTC
+   Price: $0.00005234
+   Position: $5,000 (10% portfolio)
+   Cost basis: $5,105 (including fees)
+
+Exit Details:
+   Time: 2:45 PM UTC (4h 27m hold)
+   Weighted avg price: $0.0002621
+   Total proceeds: $25,025
+   Exit fees: $78
+
+Financial Results:
+   Gross profit: $20,025
+   Net profit: $19,842 (after all fees)
+   Return: +390% (3.90x)
+   Holding time: 4.43 hours
+
+Peak Analysis:
+   Peak price: $0.0003982 (7.61x)
+   Peak value: $19,030
+   Exit price: Weighted $0.0002621 (5.01x weighted)
+   Captured: 65.8% of peak gain (excellent)
+
+Risk Management:
+   Max drawdown: -15.5% (from peak to exit)
+   Trailing stop protected: $2,946 in gains
+   Avoided crash: Price fell to $0.0001204 (-70% from peak) by next day
+
+Strategy Validation:
+   Safety score: 88/100 (system approved)
+   Signal score: 0.929 (STRONG BUY confirmed)
+   Win probability: 68% (this trade won)
+   Position sizing: Capped at 10% (Kelly wanted 15.6%)
+
+═══════════════════════════════════════════════
+RESULT: ✅ WINNING TRADE (+390%)
+═══════════════════════════════════════════════
+```
+
+**What went right:**
+
+1. ✅ **Early detection:** Scanner caught PEPE2 at 15 minutes post-launch
+2. ✅ **Safety checks passed:** All 10 checks cleared (88/100 score)
+3. ✅ **Strong signal:** 0.929 composite score (top 5%)
+4. ✅ **Disciplined entry:** Followed Kelly with 10% cap
+5. ✅ **Tiered exits:** Locked in 50% of position at 2x and 5x
+6. ✅ **Trailing stop protected:** Avoided -70% crash the next day
+7. ✅ **Position sizing:** 10% cap prevented overexposure
+
+**What could have been better:**
+
+1. ⚠️ **Didn't hit 10x/20x tiers:** Peak was 7.61x (realistic—most don't hit 10x)
+2. ⚠️ **Left 34% of peak on table:** Exited at 6.43x vs 7.61x peak
+   - **But:** This is **correct behavior**—can't time the peak perfectly
+   - **Avoiding -70% crash saved:** Holding would have turned +390% into -40%
+3. ⚠️ **High volatility:** -15.5% drawdown from peak (expected for memecoins)
+
+### 16.11.8 Comparison to Manual Trading (What Most Traders Did)
+
+**Scenario A: FOMO buyer (entered at +200% pump)**
+- Bought at $0.0001568 (3x from launch, "I don't want to miss it!")
+- Rode to peak $0.0003982 (+154%)
+- No exit plan, held for "10x"
+- Crashed to $0.0001204 (-70% from peak)
+- **Final: -23% loss** vs our +390% gain
+
+**Scenario B: Diamond hands (entered at launch, never sold)**
+- Bought at launch $0.00003500
+- Rode to peak $0.0003982 (+1037%)
+- "HODL to $1!" mentality
+- Crashed to $0.0001204 (-70%)
+- **Final: +244%** vs our +390%
+  - **BUT:** Gave back $26,530 in paper profits from peak
+
+**Scenario C: Sold at first 2x (weak hands)**
+- Bought at launch $0.00003500
+- Sold at $0.00007000 (2x, "take profit and run")
+- **Final: +100%** vs our +390%
+  - Missed 80% of available gains
+
+**Why the system won:**
+
+| Approach | Entry Quality | Exit Discipline | Result | Reason |
+|----------|---------------|-----------------|--------|---------|
+| **Production System (Us)** | 88/100 safety + 0.929 signal | Tiered (25/25/50) + 15% trailing | **+390%** | Systematic checks + disciplined exits |
+| FOMO Manual Buyer | No checks, entered late (+200%) | No plan, emotion | **-23%** | Bought high, sold low |
+| Diamond Hands | Good entry, no safety checks | No exit, greed | **+244%** | Gave back 73% of peak |
+| Weak Hands | Good entry | Sold too early | **+100%** | Missed 75% of move |
+
+**The lesson:**
+> Systematic safety checks (Section 16.10.3) + tiered exits (Section 16.10.5) beat:
+> - Late FOMO entries: +390% vs -23% (413% outperformance)
+> - Diamond hands: +390% vs +244% (preserved 60% more profit)
+> - Weak hands: +390% vs +100% (290% additional gain)
+
+---
+
+## 16.12 Conclusion
 
 Memecoin momentum trading exploits behavioral biases, attention dynamics, and coordination failures in highly speculative markets. While risky and ephemeral, systematic strategies with rigorous risk management extract consistent alpha.
 
