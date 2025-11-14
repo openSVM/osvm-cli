@@ -387,18 +387,11 @@ impl ResearchAgent {
   ;; Deep analysis phase - placeholder until advanced tools available
   (define target "{}")
 
-  ;; Return stub data for now
-  ;; Note: includes MEV analysis placeholders for sandwich, arbitrage, wash, multi-hop
+  ;; Return minimal placeholder - NO fake data keys
   {{:wallet target
-   :mev_activity {{}}
-   :sandwich 0
-   :arbitrage {{:count 0 :total_profit 0}}
-   :multi-hop 0
-   :wash_trading_detected false
-   :gas_optimization_score 0
-   :protocol_complexity 0
    :analysis_phase "DeepAnalysis"
-   :note "Advanced MEV analysis pending tool implementation"}}
+   :status "pending_tool_implementation"
+   :note "Advanced MEV analysis requires specialized MCP tools"}}
 )"#,
             state.target_wallet
         )
@@ -411,17 +404,11 @@ impl ResearchAgent {
   ;; Pattern recognition phase - placeholder until advanced tools available
   (define target "{}")
 
-  ;; Return stub data for now
+  ;; Return minimal placeholder - NO fake data keys
   {{:wallet target
-   :periodic_activity {{}}
-   :volume_distribution {{}}
-   :program_interaction_patterns {{}}
-   :token_flow_patterns {{}}
-   :behavioral_clusters {{}}
-   :anomalies []
-   :pattern_confidence 0
    :analysis_phase "PatternRecognition"
-   :note "Pattern analysis pending tool implementation"}}
+   :status "pending_tool_implementation"
+   :note "Pattern analysis requires temporal data and behavioral clustering tools"}}
 )"#,
             state.target_wallet
         )
@@ -434,19 +421,13 @@ impl ResearchAgent {
   ;; Hypothesis testing phase - placeholder until advanced tools available
   (define target "{}")
 
-  ;; Return stub data for now
+  ;; Return minimal placeholder - NO fake data keys
   {{:wallet target
-   :hypotheses_tested {}
-   :test_results []
-   :statistical_validation {{}}
-   :correlations {{}}
-   :counter_evidence []
-   :overall_confidence 0
    :analysis_phase "HypothesisTesting"
-   :note "Hypothesis testing pending tool implementation"}}
+   :status "pending_tool_implementation"
+   :note "Hypothesis validation requires comprehensive transaction graph analysis"}}
 )"#,
-            state.target_wallet,
-            state.hypotheses.len()
+            state.target_wallet
         )
     }
 
@@ -457,28 +438,13 @@ impl ResearchAgent {
   ;; Synthesis phase - placeholder until advanced tools available
   (define target "{}")
 
-  ;; Return stub data for now
+  ;; Return minimal placeholder - NO fake data keys
   {{:wallet target
-   :investigation_summary {{
-     :phases_completed {}
-     :findings_count {}
-     :hypotheses_tested {}
-     :iteration {}}}
-   :final_profile {{}}
-   :metrics {{}}
-   :network_analysis {{}}
-   :risk_assessment {{}}
-   :key_insights []
-   :confidence_scores {{}}
-   :recommendations []
    :analysis_phase "Synthesis"
-   :note "Synthesis pending tool implementation"}}
+   :status "pending_tool_implementation"
+   :note "Final synthesis requires complete data from all investigation phases"}}
 )"#,
-            state.target_wallet,
-            format!("{:?}", state.phase),
-            state.findings.len(),
-            state.hypotheses.len(),
-            state.iteration
+            state.target_wallet
         )
     }
 
