@@ -10,7 +10,7 @@ This textbook provides comprehensive coverage of algorithmic trading strategies,
 
 **Level:** Graduate (MFE, MQF, MS in Computational Finance)
 **Prerequisites:** Calculus, probability theory, basic programming
-**Total Content:** ~175,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
+**Total Content:** ~184,000 words across 16 chapters (13 original + 3 NEW foundational chapters)
 **Academic References:** 156 peer-reviewed papers and textbooks (134 original + 22 NEW)
 
 ---
@@ -85,9 +85,9 @@ Every chapter shows you **exactly** how these disasters could have been prevente
 | [17](17_whale_copy_trading.md) | Whale Tracking and Copy Trading | 10,891 | DeFi Degen Sybil, Nansen/3AC/Pump.fun/wash trading disasters, Sybil-resistant system |
 | [18](18_mev_bundle_sniping.md) | MEV Bundle Construction | 16,072 | Black Thursday zero-bid, $208M+ MEV disasters, production bundle system, 700+ lines OVSM |
 | [19](19_flash_loan_sniping.md) | Flash Loan Arbitrage | 13,400 | Beanstalk $182M governance attack, $633M flash loan disasters, production system, worked example |
-| [20](20_liquidity_pool_sniping.md) | Liquidity Pool Analysis | 11,074 | Iron Finance $2B death spiral, impermanent loss, AMM math, concentrated liquidity |
+| [20](20_liquidity_pool_sniping.md) | Liquidity Pool Analysis | 19,964 | Iron Finance $2B + 5 LP disasters ($5.85B total), production system, 30-day worked example |
 
-**Subtotal:** 77,113 words
+**Subtotal:** 86,003 words
 
 ---
 
