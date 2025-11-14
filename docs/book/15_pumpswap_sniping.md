@@ -16,22 +16,22 @@ MakerDAO wakes up to a **$4.5 million protocol deficit**. Emergency governance d
 
 ```mermaid
 timeline
-    title Black Thursday: The $8M Zero-Bid Liquidation
+    title Black Thursday - The $8M Zero-Bid Liquidation
     section Market Crash
-        07:00 AM UTC : ETH Price $194 (normal)
-        12:00 PM UTC : COVID Panic Selling Begins
-        02:30 PM UTC : ETH Crashes to $100 (-48% in 4 hours)
+        0700 UTC : ETH Price $194 (normal)
+        1200 UTC : COVID Panic Selling Begins
+        1430 UTC : ETH Crashes to $100 (-48% in 4 hours)
     section Network Congestion
-        02:35 PM UTC : Gas Prices Spike to 200 Gwei (20x normal)
-        02:40 PM UTC : MakerDAO Vaults Under-collateralized
-        02:45 PM UTC : Liquidation Auctions Begin
+        1435 UTC : Gas Prices Spike to 200 Gwei (20x normal)
+        1440 UTC : MakerDAO Vaults Under-collateralized
+        1445 UTC : Liquidation Auctions Begin
     section The Attack
-        02:50 PM UTC : Most Liquidation Bots Fail (out-of-gas errors)
-        03:00 PM UTC : One Bot Submits 0 DAI Bids (no competition)
-        03:05 PM UTC : Auctions Close → $8.32M ETH Won for Free
+        1450 UTC : Most Liquidation Bots Fail (out-of-gas errors)
+        1500 UTC : One Bot Submits 0 DAI Bids (no competition)
+        1505 UTC : Auctions Close - $8.32M ETH Won for Free
     section Aftermath
-        03:30 PM UTC : MakerDAO $4.5M Deficit Discovered
-        03:31 PM UTC : Community Outrage
+        1530 UTC : MakerDAO $4.5M Deficit Discovered
+        1531 UTC : Community Outrage
         Next Day : Emergency Shutdown Discussion
         Week Later : Auction Mechanism Redesigned
 ```
