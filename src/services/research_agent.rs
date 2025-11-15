@@ -119,6 +119,22 @@ pub struct GraphNode {
     pub outgoing: Vec<Transfer>,
 }
 
+/// Aggregated transfer data for horizontal pipeline rendering
+#[derive(Debug, Clone)]
+struct AggregatedTransfer {
+    to: String,
+    tokens: HashMap<String, TokenAggregate>,
+}
+
+/// Aggregated token transfer statistics
+#[derive(Debug, Clone)]
+struct TokenAggregate {
+    total_amount: f64,
+    tx_count: usize,
+    first_timestamp: Option<String>,
+    last_timestamp: Option<String>,
+}
+
 /// Configuration for rendering ASCII output
 #[derive(Debug, Clone)]
 pub struct RenderConfig {
@@ -487,6 +503,252 @@ impl TransferGraph {
         }
 
         format!("{}.{}", result, decimal_part)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HORIZONTAL PIPELINE RENDERER - LEFT→RIGHT Columnar Layout
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Compute depth of each wallet using BFS from origin
+    fn compute_depths(&self, origin: &str) -> HashMap<String, usize> {
+        use std::collections::VecDeque;
+
+        let mut depths = HashMap::new();
+        let mut queue = VecDeque::new();
+
+        depths.insert(origin.to_string(), 0);
+        queue.push_back((origin.to_string(), 0));
+
+        while let Some((addr, depth)) = queue.pop_front() {
+            if let Some(node) = self.nodes.get(&addr) {
+                for transfer in &node.outgoing {
+                    if !depths.contains_key(&transfer.to) {
+                        depths.insert(transfer.to.clone(), depth + 1);
+                        queue.push_back((transfer.to.clone(), depth + 1));
+                    }
+                }
+            }
+        }
+
+        depths
+    }
+
+    /// Get aggregated transfers from a wallet
+    fn get_aggregated_transfers(&self, from_addr: &str) -> Vec<AggregatedTransfer> {
+        use std::collections::HashMap;
+
+        let node = match self.nodes.get(from_addr) {
+            Some(n) => n,
+            None => return Vec::new(),
+        };
+
+        // Group by destination address
+        let mut by_destination: HashMap<String, HashMap<String, Vec<&Transfer>>> = HashMap::new();
+
+        for transfer in &node.outgoing {
+            by_destination
+                .entry(transfer.to.clone())
+                .or_insert_with(HashMap::new)
+                .entry(transfer.token_symbol.clone())
+                .or_insert_with(Vec::new)
+                .push(transfer);
+        }
+
+        // Aggregate each (destination, token) pair
+        let mut result = Vec::new();
+        for (to_addr, tokens_map) in by_destination {
+            let mut token_aggregates = HashMap::new();
+
+            for (token_symbol, transfers) in tokens_map {
+                let total_amount: f64 = transfers.iter().map(|t| t.amount).sum();
+                let tx_count = transfers.len();
+
+                // Find first and last timestamps
+                let mut timestamps: Vec<&Option<String>> = transfers.iter().map(|t| &t.timestamp).collect();
+                timestamps.sort();
+                let first_timestamp = timestamps.first().and_then(|t| t.as_ref()).cloned();
+                let last_timestamp = timestamps.last().and_then(|t| t.as_ref()).cloned();
+
+                token_aggregates.insert(
+                    token_symbol,
+                    TokenAggregate {
+                        total_amount,
+                        tx_count,
+                        first_timestamp,
+                        last_timestamp,
+                    },
+                );
+            }
+
+            result.push(AggregatedTransfer {
+                to: to_addr,
+                tokens: token_aggregates,
+            });
+        }
+
+        result
+    }
+
+    /// Get visual icon based on wallet label
+    fn get_wallet_icon(&self, addr: &str) -> &str {
+        if let Some(node) = self.nodes.get(addr) {
+            if let Some(label) = &node.label {
+                let label_lower = label.to_lowercase();
+                if label_lower.contains("exchange") || label_lower.contains("binance") || label_lower.contains("coinbase") {
+                    return "🏦";
+                } else if label_lower.contains("mixer") || label_lower.contains("tornado") || label_lower.contains("cyclone") {
+                    return "🌀";
+                } else if label_lower.contains("burner") || label_lower.contains("temp") {
+                    return "🔥";
+                } else if label_lower.contains("cold") || label_lower.contains("vault") || label_lower.contains("storage") {
+                    return "💎";
+                } else if label_lower.contains("dex") || label_lower.contains("swap") {
+                    return "🔄";
+                } else if label_lower.contains("distrib") {
+                    return "📊";
+                } else if label_lower.contains("consolidat") {
+                    return "🔄";
+                }
+            }
+        }
+        "○"
+    }
+
+    /// Render horizontal pipeline with LEFT→RIGHT flow
+    pub fn render_horizontal_pipeline(&self) -> String {
+        let mut output = String::new();
+        let cfg = &self.render_config;
+
+        // Header
+        if cfg.show_header {
+            let title = "HORIZONTAL PIPELINE - WALLET FLOW ANALYSIS";
+            let title_padded = self.center_text(title, 74);
+            output.push_str("╔══════════════════════════════════════════════════════════════════════════╗\n");
+            output.push_str(&format!("║{}║\n", title_padded));
+            output.push_str("╚══════════════════════════════════════════════════════════════════════════╝\n\n");
+        }
+
+        if let Some(token) = &self.token_name {
+            output.push_str(&format!("TOKEN: {}\n", token));
+        }
+
+        output.push_str("LAYOUT: Each depth level = one column, wallets flow LEFT→RIGHT\n");
+        output.push_str("METADATA: Amounts, tx counts, date ranges shown on arrows\n\n");
+        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\n");
+
+        // Compute depths if we have an origin
+        let origin_addr = match &self.origin {
+            Some(addr) => addr,
+            None => {
+                output.push_str("ERROR: No origin wallet set for pipeline rendering\n");
+                return output;
+            }
+        };
+
+        let depths = self.compute_depths(origin_addr);
+        let max_depth = *depths.values().max().unwrap_or(&0);
+
+        // Group wallets by depth
+        let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
+        for (addr, depth) in &depths {
+            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+        }
+
+        // Render depth by depth
+        for depth_level in 0..=max_depth {
+            output.push_str(&format!("\n╔═══════════════ DEPTH {} ═══════════════╗\n", depth_level));
+
+            let wallets_at_depth = by_depth.get(&depth_level).cloned().unwrap_or_default();
+
+            for wallet_addr in &wallets_at_depth {
+                let icon = self.get_wallet_icon(wallet_addr);
+                let label = self.nodes.get(wallet_addr)
+                    .and_then(|n| n.label.as_ref())
+                    .map(|l| format!(" [{}]", l))
+                    .unwrap_or_default();
+
+                // Count incoming transfers (convergence detection)
+                let incoming_count = self.nodes.values()
+                    .flat_map(|n| &n.outgoing)
+                    .filter(|t| &t.to == wallet_addr)
+                    .count();
+
+                let convergence = if incoming_count > 1 {
+                    format!(" [×{} PATHS CONVERGE]", incoming_count)
+                } else {
+                    String::new()
+                };
+
+                // Draw wallet box
+                output.push_str(&format!("\n{}{}{}\n", icon, label, convergence));
+                let box_top = format!("┌{}┐", "─".repeat(wallet_addr.len() + 2));
+                let box_mid = format!("│ {} │", wallet_addr);
+                let box_bot = format!("└{}┘", "─".repeat(wallet_addr.len() + 2));
+                output.push_str(&format!("{}\n", box_top));
+                output.push_str(&format!("{}\n", box_mid));
+                output.push_str(&format!("{}\n", box_bot));
+
+                // Show outgoing transfers with rich metadata
+                let aggregated = self.get_aggregated_transfers(wallet_addr);
+                if !aggregated.is_empty() {
+                    output.push_str("    │\n");
+
+                    for (idx, agg_transfer) in aggregated.iter().enumerate() {
+                        let is_last = idx == aggregated.len() - 1;
+                        let branch_char = if is_last { "└─" } else { "├─" };
+
+                        // Show each token separately
+                        let token_count = agg_transfer.tokens.len();
+                        if token_count == 1 {
+                            // Single token - compact format
+                            let (token_symbol, agg) = agg_transfer.tokens.iter().next().unwrap();
+                            output.push_str(&format!("    {}→ [${}M {}] ────────────────→ {} [DEPTH {}]\n",
+                                branch_char,
+                                (agg.total_amount / 1_000_000.0),
+                                token_symbol,
+                                &agg_transfer.to,
+                                depths.get(&agg_transfer.to).unwrap_or(&0)
+                            ));
+                            output.push_str(&format!("         {} txs\n", agg.tx_count));
+                            if let (Some(first), Some(last)) = (&agg.first_timestamp, &agg.last_timestamp) {
+                                output.push_str(&format!("         {} → {}\n", first, last));
+                            }
+                        } else {
+                            // Multi-token - stacked format
+                            output.push_str(&format!("    {}→ MULTI-TOKEN → {} [DEPTH {}]\n",
+                                branch_char,
+                                &agg_transfer.to,
+                                depths.get(&agg_transfer.to).unwrap_or(&0)
+                            ));
+                            for (token_symbol, agg) in &agg_transfer.tokens {
+                                output.push_str(&format!("         [${}M {}] ({} txs)\n",
+                                    (agg.total_amount / 1_000_000.0),
+                                    token_symbol,
+                                    agg.tx_count
+                                ));
+                            }
+                        }
+
+                        if !is_last {
+                            output.push_str("    │\n");
+                        }
+                    }
+                }
+            }
+        }
+
+        output.push_str("\n\n═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n");
+
+        // Summary
+        if cfg.show_stats_summary {
+            output.push_str("\n┌─────────────────────────────────────────────────────────────────────────┐\n");
+            output.push_str(&format!("│ Max Depth: {:>62} │\n", max_depth));
+            output.push_str(&format!("│ Total Wallets: {:>58} │\n", self.nodes.len()));
+            output.push_str(&format!("│ Total Depth Levels: {:>55} │\n", max_depth + 1));
+            output.push_str("└─────────────────────────────────────────────────────────────────────────┘\n");
+        }
+
+        output
     }
 
     /// Launch interactive TUI viewer for this graph
@@ -3022,4 +3284,76 @@ mod tests {
         assert!(output.contains("TornadoCash Proxy"));
         assert!(output.contains("Burner Wallet"));
         assert!(output.contains("Cold Storage Vault"));
+    }
+
+    #[test]
+    fn test_horizontal_pipeline_renderer() {
+        let mut graph = TransferGraph::new();
+
+        // Origin: Exchange
+        let origin = "ExchangeWallet_Binance_HotWallet_MainUSDT_2025_ABC123XYZ456".to_string();
+        graph.origin = Some(origin.clone());
+        graph.set_node_label(&origin, "Binance Exchange Wallet".to_string());
+
+        // Depth 1: Mixer
+        let mixer = "MixerHub_TornadoCash_PoolAlpha_USDT_2025_DEF789GHI012".to_string();
+        graph.set_node_label(&mixer, "Tornado Cash Mixer A".to_string());
+
+        graph.add_transfer(Transfer {
+            from: origin.clone(),
+            to: mixer.clone(),
+            amount: 5_000_000.0,
+            token_symbol: "USDT".to_string(),
+            timestamp: Some("2025-01-01T00:00:00Z".to_string()),
+            note: Some("Exchange withdrawal".to_string()),
+        });
+
+        // Depth 2: Burner (with multi-token)
+        let burner = "BurnerWallet_Temporary_L2_Keychain_001_JKL345MNO678".to_string();
+        graph.set_node_label(&burner, "Burner Wallet 001".to_string());
+
+        graph.add_transfer(Transfer {
+            from: mixer.clone(),
+            to: burner.clone(),
+            amount: 2_500_000.0,
+            token_symbol: "USDT".to_string(),
+            timestamp: Some("2025-01-02T00:00:00Z".to_string()),
+            note: None,
+        });
+
+        graph.add_transfer(Transfer {
+            from: mixer.clone(),
+            to: burner.clone(),
+            amount: 500_000.0,
+            token_symbol: "SOL".to_string(),
+            timestamp: Some("2025-01-02T01:00:00Z".to_string()),
+            note: None,
+        });
+
+        // Depth 3: Cold Storage
+        let cold_storage = "ColdStorage_HardwareWallet_Ledger_Final_PQR901STU234".to_string();
+        graph.set_node_label(&cold_storage, "Cold Storage Vault - Final Destination".to_string());
+
+        graph.add_transfer(Transfer {
+            from: burner.clone(),
+            to: cold_storage.clone(),
+            amount: 3_000_000.0,
+            token_symbol: "MULTI".to_string(),
+            timestamp: Some("2025-01-03T00:00:00Z".to_string()),
+            note: Some("Final deposit".to_string()),
+        });
+
+        // Render horizontal pipeline
+        let output = graph.render_horizontal_pipeline();
+
+        println!("\n{}", output);
+
+        // Assertions
+        assert!(output.contains("DEPTH 0"));
+        assert!(output.contains("DEPTH 3"));
+        assert!(output.contains("ExchangeWallet_Binance")); // Full address
+        assert!(output.contains("ColdStorage_HardwareWallet")); // Full address
+        assert!(output.contains("[$")); // Dollar amounts
+        assert!(output.contains("txs")); // Transaction counts
+        assert!(output.contains("🏦") || output.contains("○")); // Icons
     }
