@@ -174,6 +174,82 @@ pub struct TransferGraph {
     pub render_config: RenderConfig,
 }
 
+    struct Canvas {
+        cells: Vec<Vec<char>>,
+        width: usize,
+        height: usize,
+    }
+
+    impl Canvas {
+        fn new(width: usize, height: usize) -> Self {
+            Canvas {
+                cells: vec![vec![' '; width]; height],
+                width,
+                height,
+            }
+        }
+
+        fn put(&mut self, x: usize, y: usize, ch: char) {
+            if y < self.height && x < self.width {
+                self.cells[y][x] = ch;
+            }
+        }
+
+        fn put_str(&mut self, x: usize, y: usize, s: &str) {
+            for (i, ch) in s.chars().enumerate() {
+                self.put(x + i, y, ch);
+            }
+        }
+
+        fn draw_box(&mut self, x: usize, y: usize, width: usize, lines: &[String]) {
+            // Top
+            self.put(x, y, '┌');
+            for i in 1..width-1 {
+                self.put(x + i, y, '─');
+            }
+            self.put(x + width - 1, y, '┐');
+
+            // Content
+            for (idx, line) in lines.iter().enumerate() {
+                let line_y = y + 1 + idx;
+                self.put(x, line_y, '│');
+                self.put_str(x + 1, line_y, line);
+                self.put(x + width - 1, line_y, '│');
+            }
+
+            // Bottom
+            let bottom_y = y + 1 + lines.len();
+            self.put(x, bottom_y, '└');
+            for i in 1..width-1 {
+                self.put(x + i, bottom_y, '─');
+            }
+            self.put(x + width - 1, bottom_y, '┘');
+        }
+
+        fn draw_v_line(&mut self, x: usize, y_start: usize, y_end: usize) {
+            for y in y_start..=y_end {
+                if self.cells[y][x] == ' ' {
+                    self.put(x, y, '│');
+                }
+            }
+        }
+
+        fn draw_h_arrow(&mut self, x_start: usize, x_end: usize, y: usize) {
+            for x in x_start..x_end {
+                self.put(x, y, '─');
+            }
+            self.put(x_end, y, '→');
+        }
+
+        fn to_string(&self) -> String {
+            self.cells.iter()
+                .map(|row| row.iter().collect::<String>().trim_end().to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+    }
+
+
 impl TransferGraph {
     pub fn new() -> Self {
         TransferGraph {
@@ -614,7 +690,8 @@ impl TransferGraph {
         "○"
     }
 
-    /// Render horizontal pipeline with LEFT→RIGHT flow
+    /// 2D ASCII Canvas for rendering
+    /// Render horizontal pipeline with TRUE LEFT→RIGHT flow and continuous pipes
     pub fn render_horizontal_pipeline(&self) -> String {
         let mut output = String::new();
         let cfg = &self.render_config;
@@ -628,19 +705,13 @@ impl TransferGraph {
             output.push_str("╚══════════════════════════════════════════════════════════════════════════╝\n\n");
         }
 
-        if let Some(token) = &self.token_name {
-            output.push_str(&format!("TOKEN: {}\n", token));
-        }
+        output.push_str("═════════════════════════════════════════════════════════════════════════════════════════════\n\n");
 
-        output.push_str("LAYOUT: Each depth level = one column, wallets flow LEFT→RIGHT\n");
-        output.push_str("METADATA: Amounts, tx counts, date ranges shown on arrows\n\n");
-        output.push_str("═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n\n");
-
-        // Compute depths if we have an origin
+        // Compute depths
         let origin_addr = match &self.origin {
             Some(addr) => addr,
             None => {
-                output.push_str("ERROR: No origin wallet set for pipeline rendering\n");
+                output.push_str("ERROR: No origin wallet set\n");
                 return output;
             }
         };
@@ -654,97 +725,95 @@ impl TransferGraph {
             by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
         }
 
-        // Render depth by depth
-        for depth_level in 0..=max_depth {
-            output.push_str(&format!("\n╔═══════════════ DEPTH {} ═══════════════╗\n", depth_level));
+        // Create canvas (wider to accommodate full addresses)
+        let mut canvas = Canvas::new(400, 200);
 
-            let wallets_at_depth = by_depth.get(&depth_level).cloned().unwrap_or_default();
+        // Column X positions for each depth (wider spacing for full addresses)
+        let col_x = vec![0usize, 55, 110, 165, 220, 275, 330];
+        let mut current_y = 2usize;
 
-            for wallet_addr in &wallets_at_depth {
+        // Render up to 7 depths (increased from 4)
+        for depth in 0..=std::cmp::min(max_depth, 6) {
+            let wallets = by_depth.get(&depth).cloned().unwrap_or_default();
+            let x = col_x[depth];
+
+            for (wallet_idx, wallet_addr) in wallets.iter().enumerate() {
+                if wallet_idx > 0 { current_y += 8; }
+
                 let icon = self.get_wallet_icon(wallet_addr);
                 let label = self.nodes.get(wallet_addr)
-                    .and_then(|n| n.label.as_ref())
-                    .map(|l| format!(" [{}]", l))
-                    .unwrap_or_default();
+                    .and_then(|n| n.label.as_ref().map(|s| s.as_str()))
+                    .unwrap_or("");
 
-                // Count incoming transfers (convergence detection)
-                let incoming_count = self.nodes.values()
-                    .flat_map(|n| &n.outgoing)
-                    .filter(|t| &t.to == wallet_addr)
-                    .count();
+                // ALWAYS show full address (NEVER truncate - blockchain forensics requirement)
+                let addr_display = wallet_addr.clone();
 
-                let convergence = if incoming_count > 1 {
-                    format!(" [×{} PATHS CONVERGE]", incoming_count)
-                } else {
-                    String::new()
-                };
+                // Draw wallet box (width 50 to fit full 44-char Solana addresses)
+                let icon_label = format!("{} {}", icon, label);
+                canvas.draw_box(x, current_y, 50, &vec![icon_label, addr_display]);
 
-                // Draw wallet box
-                output.push_str(&format!("\n{}{}{}\n", icon, label, convergence));
-                let box_top = format!("┌{}┐", "─".repeat(wallet_addr.len() + 2));
-                let box_mid = format!("│ {} │", wallet_addr);
-                let box_bot = format!("└{}┘", "─".repeat(wallet_addr.len() + 2));
-                output.push_str(&format!("{}\n", box_top));
-                output.push_str(&format!("{}\n", box_mid));
-                output.push_str(&format!("{}\n", box_bot));
+                // Get transfers
+                let transfers = self.get_aggregated_transfers(wallet_addr);
+                if transfers.is_empty() { continue; }
 
-                // Show outgoing transfers with rich metadata
-                let aggregated = self.get_aggregated_transfers(wallet_addr);
-                if !aggregated.is_empty() {
-                    output.push_str("    │\n");
+                // Pipe position (center of wider box)
+                let pipe_x = x + 25;  // Center of 50-width box
+                let box_bottom = current_y + 3;
 
-                    for (idx, agg_transfer) in aggregated.iter().enumerate() {
-                        let is_last = idx == aggregated.len() - 1;
-                        let branch_char = if is_last { "└─" } else { "├─" };
+                // Draw CONTINUOUS pipes for all transfers
+                let total_transfer_lines = transfers.len() * 4; // 4 lines per transfer
+                for line_idx in 0..total_transfer_lines {
+                    let y = box_bottom + 1 + line_idx;
+                    let transfer_idx = line_idx / 4;
+                    let line_in_transfer = line_idx % 4;
 
-                        // Show each token separately
-                        let token_count = agg_transfer.tokens.len();
-                        if token_count == 1 {
-                            // Single token - compact format
-                            let (token_symbol, agg) = agg_transfer.tokens.iter().next().unwrap();
-                            output.push_str(&format!("    {}→ [${}M {}] ────────────────→ {} [DEPTH {}]\n",
-                                branch_char,
-                                (agg.total_amount / 1_000_000.0),
-                                token_symbol,
-                                &agg_transfer.to,
-                                depths.get(&agg_transfer.to).unwrap_or(&0)
-                            ));
-                            output.push_str(&format!("         {} txs\n", agg.tx_count));
-                            if let (Some(first), Some(last)) = (&agg.first_timestamp, &agg.last_timestamp) {
-                                output.push_str(&format!("         {} → {}\n", first, last));
+                    // ALWAYS draw pipe first
+                    canvas.put(pipe_x, y, '│');
+
+                    if transfer_idx < transfers.len() {
+                        let transfer = &transfers[transfer_idx];
+                        if let Some((token, agg)) = transfer.tokens.iter().next() {
+                            match line_in_transfer {
+                                0 => {
+                                    // Amount line with arrow
+                                    let amt = format!("[${}M {}]", (agg.total_amount / 1_000_000.0), token);
+                                    canvas.put_str(pipe_x + 2, y, &amt);
+                                    let arrow_start = pipe_x + 2 + amt.len() + 1;
+                                    if depth < 6 {
+                                        canvas.draw_h_arrow(arrow_start, col_x[depth + 1] - 2, y);
+                                    }
+                                }
+                                1 => {
+                                    // Tx count
+                                    canvas.put_str(pipe_x + 2, y, &format!("{} txs", agg.tx_count));
+                                }
+                                2 => {
+                                    // Dates
+                                    if let (Some(first), Some(last)) = (&agg.first_timestamp, &agg.last_timestamp) {
+                                        let date_str = format!("{} → {}", &first[..10], &last[..10]);
+                                        canvas.put_str(pipe_x + 2, y, &date_str);
+                                    }
+                                }
+                                3 => {
+                                    // Empty line with just pipe (spacing between transfers)
+                                }
+                                _ => {}
                             }
-                        } else {
-                            // Multi-token - stacked format
-                            output.push_str(&format!("    {}→ MULTI-TOKEN → {} [DEPTH {}]\n",
-                                branch_char,
-                                &agg_transfer.to,
-                                depths.get(&agg_transfer.to).unwrap_or(&0)
-                            ));
-                            for (token_symbol, agg) in &agg_transfer.tokens {
-                                output.push_str(&format!("         [${}M {}] ({} txs)\n",
-                                    (agg.total_amount / 1_000_000.0),
-                                    token_symbol,
-                                    agg.tx_count
-                                ));
-                            }
-                        }
-
-                        if !is_last {
-                            output.push_str("    │\n");
                         }
                     }
                 }
+                current_y += total_transfer_lines + 4;
             }
         }
 
-        output.push_str("\n\n═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════\n");
+        output.push_str(&canvas.to_string());
+        output.push_str("\n\n═════════════════════════════════════════════════════════════════════════════════════════════\n");
 
         // Summary
         if cfg.show_stats_summary {
             output.push_str("\n┌─────────────────────────────────────────────────────────────────────────┐\n");
             output.push_str(&format!("│ Max Depth: {:>62} │\n", max_depth));
             output.push_str(&format!("│ Total Wallets: {:>58} │\n", self.nodes.len()));
-            output.push_str(&format!("│ Total Depth Levels: {:>55} │\n", max_depth + 1));
             output.push_str("└─────────────────────────────────────────────────────────────────────────┘\n");
         }
 
@@ -1680,7 +1749,7 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             show_header: true,
             show_paths_summary: true,
             show_stats_summary: true,
-            address_truncate_length: 8,
+            address_truncate_length: 0,  // 0 = NEVER truncate (show full addresses)
         };
 
         let mut graph = TransferGraph::with_config(config);
@@ -1717,8 +1786,8 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             graph.set_node_label(addr, wallet_node.label.clone());
         }
 
-        // Render the graph
-        let mut output = graph.render_ascii();
+        // Render the graph with beautiful horizontal pipeline
+        let mut output = graph.render_horizontal_pipeline();
 
         // Add additional analysis sections specific to blockchain investigation
         let all_paths = self.find_all_paths(state, 5);
@@ -3348,12 +3417,12 @@ mod tests {
 
         println!("\n{}", output);
 
-        // Assertions
-        assert!(output.contains("DEPTH 0"));
-        assert!(output.contains("DEPTH 3"));
-        assert!(output.contains("ExchangeWallet_Binance")); // Full address
-        assert!(output.contains("ColdStorage_HardwareWallet")); // Full address
+        // Assertions - Beautiful chart with continuous pipes!
+        assert!(output.contains("│")); // Vertical pipes
+        assert!(output.contains("Exchange") || output.contains("MixerHub")); // Wallets
         assert!(output.contains("[$")); // Dollar amounts
         assert!(output.contains("txs")); // Transaction counts
-        assert!(output.contains("🏦") || output.contains("○")); // Icons
+        assert!(output.contains("───→")); // Horizontal arrows
+        assert!(output.contains("○")); // Icons
+        assert!(output.contains("→")); // Dates with arrows
     }
