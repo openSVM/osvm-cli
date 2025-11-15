@@ -36,6 +36,7 @@ pub mod input_sanitization;
 pub mod isolation;
 /// Custom keybinding system for agent interfaces
 pub mod keybindings;
+pub mod logger;
 pub mod mcp_bridge;
 /// Network security utilities for safe network operations
 pub mod network_security;
