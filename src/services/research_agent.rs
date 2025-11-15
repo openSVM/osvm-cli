@@ -1026,7 +1026,8 @@ Return as JSON array:
 
     /// Stream a thinking message to show agent's reasoning
     fn stream_thinking(&self, message: &str) {
-        println!("🧠 {}", message);
+        // Log to file only - keep terminal clean
+        tracing::debug!("🧠 {}", message);
     }
 
     /// Update investigation TODO list based on current findings
@@ -1105,19 +1106,18 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
             state.investigation_todos = investigation_plan.clone();
         }
 
-        println!("\n📋 Investigation Plan:");
+        tracing::debug!("📋 Investigation Plan:");
         for (i, todo) in investigation_plan.iter().enumerate() {
-            println!("   {}. [Priority {}] {} - {}",
+            tracing::debug!("   {}. [Priority {}] {} - {}",
                      i + 1, todo.priority, todo.task, todo.reason);
         }
-        println!();
 
         let max_iterations = 15;
 
         for iteration in 0..max_iterations {
-            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("? Iteration #{}", iteration + 1);
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            tracing::debug!("? Iteration #{}", iteration + 1);
+            tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
             // 1. Decide next action based on current state
             self.stream_thinking("Analyzing current findings and deciding next action...");
@@ -1152,8 +1152,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
             }
 
             // 3. Stream findings in real-time
-            println!("\n📊 Findings:");
-            println!("{}", result);
+            tracing::debug!("📊 Findings:");
+            tracing::debug!("{}", result);
 
             // 4. Self-evaluate: What did we learn? What's next?
             self.stream_thinking("Self-evaluating findings...");
@@ -1162,16 +1162,16 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
                 self.evaluate_and_reflect(&result)
             ).await {
                 Ok(Ok(eval)) => {
-                    println!("\n🧠 AI Reflection:");
-                    println!("{}", eval);
+                    tracing::debug!("🧠 AI Reflection:");
+                    tracing::debug!("{}", eval);
                     eval
                 }
                 Ok(Err(e)) => {
-                    println!("\n⚠️  Reflection skipped: {}", e);
+                    tracing::debug!("⚠️  Reflection skipped: {}", e);
                     "Continuing investigation...".to_string()
                 }
                 Err(_) => {
-                    println!("\n⚠️  Reflection timeout - continuing investigation");
+                    tracing::debug!("⚠️  Reflection timeout - continuing investigation");
                     "Timeout - continuing...".to_string()
                 }
             };
@@ -1191,7 +1191,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
             if all_completed && iteration >= 5 {
                 self.stream_thinking("All investigation tasks completed!");
-                println!("\n✅ Investigation complete after {} iterations", iteration + 1);
+                tracing::info!("✅ Investigation complete after {} iterations", iteration + 1);
                 break;
             }
 
@@ -1463,7 +1463,7 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                 .collect()
         };
 
-        println!("\n🔍 Starting CONCURRENT recursive exploration of {} initial wallets (max depth: {})...",
+        tracing::debug!("🔍 Starting CONCURRENT recursive exploration of {} initial wallets (max depth: {})...",
             initial_wallets.len(), max_depth);
 
         // Spawn independent recursive tasks for each wallet
@@ -1485,7 +1485,7 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
 
         // Count successes
         let successful = results.iter().filter(|r| r.is_ok()).count();
-        println!("\n✅ Recursive exploration complete: {}/{} tasks succeeded", successful, results.len());
+        tracing::debug!("✅ Recursive exploration complete: {}/{} tasks succeeded", successful, results.len());
 
         Ok(())
     }
@@ -1518,20 +1518,20 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         };
 
         if should_skip {
-            println!("   [D{}] ⚠️  {} - SKIP (exchange)", current_depth, &wallet[..8]);
+            tracing::debug!("   [D{}] ⚠️  {} - SKIP (exchange)", current_depth, &wallet[..8]);
             return Ok(());
         }
 
         // Fetch transfers for this wallet
-        println!("   [D{}] 🔄 {} - fetching...", current_depth, &wallet[..8]);
+        tracing::debug!("   [D{}] 🔄 {} - fetching...", current_depth, &wallet[..8]);
 
         let transfers_json = match self.fetch_wallet_transfers_filtered(&wallet).await {
             Ok(json) => {
-                println!("   [D{}] ✓ {} - fetched", current_depth, &wallet[..8]);
+                tracing::debug!("   [D{}] ✓ {} - fetched", current_depth, &wallet[..8]);
                 json
             }
             Err(e) => {
-                println!("   [D{}] ✗ {} - failed: {}", current_depth, &wallet[..8], e);
+                tracing::debug!("   [D{}] ✗ {} - failed: {}", current_depth, &wallet[..8], e);
                 return Ok(());
             }
         };
@@ -1548,12 +1548,12 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                     .collect::<Vec<_>>()
             }
             Err(e) => {
-                println!("   [D{}] ✗ {} - processing failed: {}", current_depth, &wallet[..8], e);
+                tracing::debug!("   [D{}] ✗ {} - processing failed: {}", current_depth, &wallet[..8], e);
                 return Ok(());
             }
         };
 
-        println!("   [D{}] ✓ {} - processed, found {} new wallets",
+        tracing::debug!("   [D{}] ✓ {} - processed, found {} new wallets",
             current_depth, &wallet[..8], new_wallets.len());
 
         // If we haven't reached max depth, recursively explore neighbors CONCURRENTLY

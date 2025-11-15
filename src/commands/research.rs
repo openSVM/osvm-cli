@@ -33,7 +33,7 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     let ai_service = Arc::new(Mutex::new(AiService::new()));
 
     // Initialize OVSM with MCP tools for blockchain data access
-    println!("\n🔧 Initializing OVSM with MCP tools...");
+    tracing::info!("🔧 Initializing OVSM with MCP tools...");
     let mut registry = {
         use crate::utils::rpc_bridge::create_rpc_registry;
         create_rpc_registry()
@@ -65,14 +65,14 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     }
 
     let mut ovsm_service = OvsmService::with_registry(registry, false, false);
-    println!("✅ OVSM initialized with blockchain tools");
+    tracing::info!("✅ OVSM initialized with blockchain tools");
 
     // Generate OVSM script for wallet analysis
-    println!("\n📊 Generating OVSM analysis script...");
+    tracing::debug!("📊 Generating OVSM analysis script...");
     let ovsm_script = generate_wallet_analysis_script(wallet);
 
     // Execute OVSM script
-    println!("⚙️  Executing on-chain data analysis...\n");
+    tracing::debug!("⚙️  Executing on-chain data analysis...");
     let raw_result = ovsm_service.execute_code(&ovsm_script)
         .context("Failed to execute OVSM analysis")?;
 
@@ -80,14 +80,14 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     let summary_json = extract_summary_json(&raw_result)?;
 
     // Format with AI service (with fallback to raw output)
-    println!("🤖 Formatting results with AI...\n");
+    tracing::debug!("🤖 Formatting results with AI...");
     let formatted_report = {
         let mut ai = ai_service.lock().await;
         match format_wallet_analysis(&mut ai, wallet, &summary_json).await {
             Ok(report) => report,
             Err(e) => {
-                eprintln!("⚠️  AI formatting failed: {}", e);
-                eprintln!("📋 Showing aggregated summary instead:\n");
+                tracing::warn!("⚠️  AI formatting failed: {}", e);
+                eprintln!("⚠️  AI formatting failed, showing aggregated summary");
                 summary_json.clone()
             }
         }
@@ -118,7 +118,7 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
     let ai_service = Arc::new(Mutex::new(AiService::new()));
 
     // Initialize OVSM with MCP tools
-    println!("\n🔧 Initializing OVSM with MCP tools...");
+    tracing::info!("🔧 Initializing OVSM with MCP tools...");
     let mut registry = {
         use crate::utils::rpc_bridge::create_rpc_registry;
         create_rpc_registry()

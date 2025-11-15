@@ -84,7 +84,6 @@ env_logger = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 tracing-appender = "0.2"
-dirs = "5.0"
 cargo_metadata = "0.22"
 toml = "0.9"
 nix = { version = "0.29", features = ["signal", "process"] }
