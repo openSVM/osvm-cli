@@ -347,6 +347,8 @@ impl TransferGraph {
         self.render_node_with_prefix(output, addr, depth, visited, is_origin, String::new());
     }
 
+    /// Build a convergence-aware visualization
+    /// Shows all paths with proper merging when multiple paths lead to same wallet
     fn render_node_with_prefix(
         &self,
         output: &mut String,
@@ -356,7 +358,10 @@ impl TransferGraph {
         is_origin: bool,
         parent_prefix: String,
     ) {
+        // Check if this wallet has already been rendered (convergence point)
         if visited.contains(addr) {
+            // This is a convergence - show a reference instead of duplicating
+            output.push_str(&format!("{}  ↗ CONVERGES TO: {} (shown above)\n", parent_prefix, addr));
             return;
         }
         visited.insert(addr.to_string());
@@ -364,29 +369,42 @@ impl TransferGraph {
         let node = self.nodes.get(addr);
         let cfg = &self.render_config;
 
-        // Node header - NO TRUNCATION, show full address + label if available
+        // Check how many incoming transfers this wallet has (convergence indicator)
+        let incoming_count = self.nodes.values()
+            .flat_map(|n| &n.outgoing)
+            .filter(|t| t.to == addr)
+            .count();
+
+        let convergence_marker = if incoming_count > 1 {
+            format!(" [×{} PATHS CONVERGE HERE]", incoming_count)
+        } else {
+            String::new()
+        };
+
+        // Node header - NO TRUNCATION, show full address + label
         let label_text = node.and_then(|n| n.label.as_ref()).map(|l| format!(" [{}]", l)).unwrap_or_default();
 
         if is_origin {
-            output.push_str(&format!("{}{}\n{}\n",
+            output.push_str(&format!("{}{}\n",
                 cfg.origin_icon,
-                label_text,
-                addr  // FULL ADDRESS
+                label_text
             ));
+            output.push_str(&format!("   {}{}\n", addr, convergence_marker));
         } else if Some(addr) == self.target.as_deref() {
-            output.push_str(&format!("{}{}{}\n{}{}\n",
+            output.push_str(&format!("{}{}{}{}\n",
                 parent_prefix,
                 cfg.target_icon,
                 label_text,
-                parent_prefix,
-                addr  // FULL ADDRESS
+                convergence_marker
             ));
+            output.push_str(&format!("{}   {}\n", parent_prefix, addr));
         } else {
-            output.push_str(&format!("{}{}{} {}\n",
+            output.push_str(&format!("{}{}{} {}{}\n",
                 parent_prefix,
                 cfg.node_icon,
                 label_text,
-                addr  // FULL ADDRESS
+                addr,
+                convergence_marker
             ));
         }
 
@@ -398,35 +416,35 @@ impl TransferGraph {
 
                 // Build the prefix that will be passed to ALL children of this branch
                 let child_prefix = if is_last {
-                    // Last branch - use spaces (no more siblings)
-                    format!("{}  ", parent_prefix)
+                    format!("{}   ", parent_prefix)
                 } else {
-                    // Not last - keep the pipe going for siblings below
-                    format!("{}│ ", parent_prefix)
+                    format!("{}│  ", parent_prefix)
                 };
 
-                // Transfer line
+                // Show connector line before transfer
+                output.push_str(&format!("{}│\n", parent_prefix));
+
+                // Transfer line with amount and metadata
                 let branch_char = if is_last { "└─" } else { "├─" };
+                let note_text = transfer.note.as_deref().unwrap_or("transfer");
+
                 output.push_str(&format!(
-                    "{}{}→ {} {} [{:?}]\n",
+                    "{}{}→ [{} {}] ──→ {} [{}]\n",
                     parent_prefix,
                     branch_char,
                     self.format_amount(transfer.amount),
                     transfer.token_symbol,
-                    transfer.note.as_deref().unwrap_or("SimpleTransfer")
-                ));
-
-                // Show full destination address with proper prefix
-                output.push_str(&format!(
-                    "{}  ↓ TO: {}\n",
-                    if is_last { format!("{}  ", parent_prefix) } else { format!("{}│ ", parent_prefix) },
-                    transfer.to  // FULL ADDRESS
+                    transfer.to,
+                    note_text
                 ));
 
                 // Recurse to child with the continuous prefix
                 if !visited.contains(&transfer.to) {
-                    output.push_str(&format!("{}  │\n", if is_last { format!("{}  ", parent_prefix) } else { format!("{}│ ", parent_prefix) }));
+                    output.push_str(&format!("{}   │\n", if is_last { parent_prefix.clone() } else { format!("{}│", parent_prefix) }));
                     self.render_node_with_prefix(output, &transfer.to, depth + 1, visited, false, child_prefix);
+                } else {
+                    // Already visited - this is a convergence point, show reference
+                    output.push_str(&format!("{}   ↗ (converges with path above)\n", if is_last { parent_prefix.clone() } else { format!("{}│", parent_prefix) }));
                 }
             }
         }
