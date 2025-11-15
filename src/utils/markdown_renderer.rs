@@ -14,10 +14,19 @@ impl MarkdownRenderer {
     }
 
     /// Create a new markdown renderer with custom theme configuration
+    /// Optimized for blockchain analysis reports
     pub fn with_theme() -> Self {
-        // For now, use default theme since termimad color API is complex
-        // Note: Color configuration deferred until termimad usage patterns are established
-        let skin = MadSkin::default();
+        let mut skin = MadSkin::default();
+
+        // Enhance colors for better readability in blockchain reports
+        // Headers stand out for sections like "Wallet Activity", "Risk Assessment"
+        skin.bold.set_fg(termimad::crossterm::style::Color::Cyan);
+        skin.italic.set_fg(termimad::crossterm::style::Color::Yellow);
+
+        // Code blocks for wallet addresses, transaction IDs
+        skin.code_block.set_fg(termimad::crossterm::style::Color::Green);
+        skin.inline_code.set_fg(termimad::crossterm::style::Color::Green);
+
         Self { skin }
     }
 

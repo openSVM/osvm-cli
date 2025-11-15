@@ -93,9 +93,11 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
         }
     };
 
-    // Display formatted report
+    // Display formatted report with markdown rendering (enhanced colors for blockchain data)
+    use crate::utils::markdown_renderer::MarkdownRenderer;
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("{}", formatted_report);
+    let renderer = MarkdownRenderer::with_theme();
+    renderer.render(&formatted_report);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("\n✅ Research completed successfully!");
 
