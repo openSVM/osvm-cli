@@ -121,7 +121,7 @@ pub struct GraphNode {
 
 /// Aggregated transfer data for horizontal pipeline rendering
 #[derive(Debug, Clone)]
-struct AggregatedTransfer {
+pub struct AggregatedTransfer {
     to: String,
     tokens: HashMap<String, TokenAggregate>,
 }
@@ -586,7 +586,7 @@ impl TransferGraph {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Compute depth of each wallet using BFS from origin
-    fn compute_depths(&self, origin: &str) -> HashMap<String, usize> {
+    pub fn compute_depths(&self, origin: &str) -> HashMap<String, usize> {
         use std::collections::VecDeque;
 
         let mut depths = HashMap::new();
@@ -610,7 +610,7 @@ impl TransferGraph {
     }
 
     /// Get aggregated transfers from a wallet
-    fn get_aggregated_transfers(&self, from_addr: &str) -> Vec<AggregatedTransfer> {
+    pub fn get_aggregated_transfers(&self, from_addr: &str) -> Vec<AggregatedTransfer> {
         use std::collections::HashMap;
 
         let node = match self.nodes.get(from_addr) {
@@ -1145,7 +1145,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
                         // Display ASCII map immediately (no AI needed!)
                         let state = self.state.lock().await;
-                        let ascii_graph = self.render_ascii_graph(&state);
+                        let ascii_graph = self.render_ascii_graph(&state).await;
                         println!("{}", ascii_graph);
                     }
                 }
@@ -1202,7 +1202,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
         // Display ASCII wallet relationship map
         {
             let state = self.state.lock().await;
-            let ascii_graph = self.render_ascii_graph(&state);
+            let ascii_graph = self.render_ascii_graph(&state).await;
             println!("{}", ascii_graph);
         }
 
@@ -1738,8 +1738,86 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         visited.remove(current);
     }
 
+    /// Generate AI-powered horizontal pipeline visualization
+    /// Uses AI to create beautiful ASCII charts instead of manual Canvas rendering
+    async fn generate_ai_pipeline_visualization(&self, graph: &TransferGraph) -> Result<String> {
+        // Load template file as example
+        let template_path = "examples/horizontal_pipeline_template.txt";
+        let template = match tokio::fs::read_to_string(template_path).await {
+            Ok(t) => t,
+            Err(_) => {
+                // Fallback to empty template if file not found
+                tracing::warn!("Template file not found at {}, using minimal example", template_path);
+                String::from("Example horizontal pipeline visualization with wallet boxes and arrows")
+            }
+        };
+
+        // Extract graph data
+        let depths = graph.compute_depths(graph.origin.as_ref().unwrap_or(&"UNKNOWN".to_string()));
+        let max_depth = *depths.values().max().unwrap_or(&0);
+        let total_wallets = graph.nodes.len();
+
+        // Build data summary for AI
+        let mut data_summary = String::new();
+        data_summary.push_str(&format!("Max Depth: {}\n", max_depth));
+        data_summary.push_str(&format!("Total Wallets: {}\n", total_wallets));
+        data_summary.push_str("\nWallets by depth:\n");
+
+        let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
+        for (addr, depth) in &depths {
+            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+        }
+
+        for depth in 0..=std::cmp::min(max_depth, 10) {
+            if let Some(wallets) = by_depth.get(&depth) {
+                data_summary.push_str(&format!("Depth {}: {} wallets\n", depth, wallets.len()));
+                for wallet in wallets.iter().take(5) {
+                    let label = graph.nodes.get(wallet)
+                        .and_then(|n| n.label.as_ref())
+                        .map(|l| format!(" [{}]", l))
+                        .unwrap_or_default();
+                    let transfers = graph.get_aggregated_transfers(wallet);
+                    let transfer_count = transfers.len();
+                    data_summary.push_str(&format!("  - {}{} ({} transfers)\n", wallet, label, transfer_count));
+                }
+            }
+        }
+
+        // Create AI prompt
+        let prompt = format!(
+            r#"Create a beautiful horizontal LEFT→RIGHT ASCII pipeline visualization for this blockchain wallet flow.
+
+DATA TO VISUALIZE:
+{}
+
+REQUIREMENTS:
+1. Show wallets in boxes with full addresses (NEVER truncate!)
+2. Use LEFT→RIGHT flow (like the template example)
+3. Include wallet labels/icons (🏦 exchanges, 🌀 mixers, 🔥 burners, 💎 cold storage)
+4. Show transfer amounts with 2 decimal places
+5. Use continuous pipes (│ ─ →) to connect wallets
+6. Make convergence points clear when multiple paths merge
+7. Keep layout clean and aligned
+
+STYLE EXAMPLE:
+{}
+
+Generate the ASCII visualization ONLY (no explanations):"#,
+            data_summary, template
+        );
+
+        // Call AI service
+        let ai_service = self.ai_service.lock().await;
+        let visualization = ai_service.query_with_system_prompt(
+            "You are an ASCII art generator for blockchain investigations. Return ONLY the ASCII visualization, no markdown, no explanations.",
+            &prompt
+        ).await?;
+
+        Ok(visualization)
+    }
+
     /// Render knowledge graph as PATH-BASED ASCII tree visualization using TransferGraph
-    fn render_ascii_graph(&self, state: &InvestigationState) -> String {
+    async fn render_ascii_graph(&self, state: &InvestigationState) -> String {
         // Create TransferGraph instance with custom config
         let config = RenderConfig {
             title: "WALLET RELATIONSHIP INVESTIGATION".to_string(),
@@ -1786,8 +1864,14 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
             graph.set_node_label(addr, wallet_node.label.clone());
         }
 
-        // Render the graph with beautiful horizontal pipeline
-        let mut output = graph.render_horizontal_pipeline();
+        // Render the graph with AI-generated horizontal pipeline visualization
+        let mut output = match self.generate_ai_pipeline_visualization(&graph).await {
+            Ok(viz) => viz,
+            Err(e) => {
+                tracing::warn!("AI visualization failed ({}), falling back to Canvas renderer", e);
+                graph.render_horizontal_pipeline()
+            }
+        };
 
         // Add additional analysis sections specific to blockchain investigation
         let all_paths = self.find_all_paths(state, 5);
