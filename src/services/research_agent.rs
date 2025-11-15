@@ -775,8 +775,8 @@ impl TransferGraph {
                         if let Some((token, agg)) = transfer.tokens.iter().next() {
                             match line_in_transfer {
                                 0 => {
-                                    // Amount line with arrow
-                                    let amt = format!("[${}M {}]", (agg.total_amount / 1_000_000.0), token);
+                                    // Amount line with arrow (format to 2 decimal places for readability)
+                                    let amt = format!("[${:.2}M {}]", (agg.total_amount / 1_000_000.0), token);
                                     canvas.put_str(pipe_x + 2, y, &amt);
                                     let arrow_start = pipe_x + 2 + amt.len() + 1;
                                     if depth < 6 {
