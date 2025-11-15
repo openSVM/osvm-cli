@@ -148,6 +148,7 @@ impl Default for RenderConfig {
 }
 
 /// Represents the complete transfer graph
+#[derive(Debug, Clone)]
 pub struct TransferGraph {
     pub nodes: HashMap<String, GraphNode>,
     pub origin: Option<String>,
@@ -360,102 +361,78 @@ impl TransferGraph {
         }
         visited.insert(addr.to_string());
 
-        let indent = "      ".repeat(depth);
         let node = self.nodes.get(addr);
         let cfg = &self.render_config;
 
-        // Node header with configurable icons
-        if is_origin {
-            output.push_str(&cfg.origin_icon);
-        } else if Some(addr) == self.target.as_deref() {
-            output.push_str(&format!("{}{}", parent_prefix, cfg.target_icon));
-        } else {
-            output.push_str(&format!("{}{}", parent_prefix, cfg.node_icon));
-        }
+        // Node header - NO TRUNCATION, show full address + label if available
+        let label_text = node.and_then(|n| n.label.as_ref()).map(|l| format!(" [{}]", l)).unwrap_or_default();
 
-        // Node label or address
-        if let Some(node) = node {
-            if let Some(label) = &node.label {
-                output.push_str(&format!(" {}", label));
-            }
+        if is_origin {
+            output.push_str(&format!("{}{}\n{}\n",
+                cfg.origin_icon,
+                label_text,
+                addr  // FULL ADDRESS
+            ));
+        } else if Some(addr) == self.target.as_deref() {
+            output.push_str(&format!("{}{}{}\n{}{}\n",
+                parent_prefix,
+                cfg.target_icon,
+                label_text,
+                parent_prefix,
+                addr  // FULL ADDRESS
+            ));
+        } else {
+            output.push_str(&format!("{}{}{} {}\n",
+                parent_prefix,
+                cfg.node_icon,
+                label_text,
+                addr  // FULL ADDRESS
+            ));
         }
-        output.push_str(&format!(" {}\n", self.truncate_address(addr, cfg.address_truncate_length)));
 
         // Render outgoing transfers
         if let Some(node) = node {
             let outgoing_count = node.outgoing.len();
             for (idx, transfer) in node.outgoing.iter().enumerate() {
                 let is_last = idx == outgoing_count - 1;
-                let connector = if is_last { "└" } else { "├" };
 
-                // Current level pipe (for this branch)
-                let current_pipe = if is_last { " " } else { "│" };
-
-                // Add vertical guide line before transfer
-                if outgoing_count > 1 {
-                    output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
-                }
-
-                // Transfer line with amount and metadata
-                output.push_str(&format!(
-                    "{}{}      {}──────→ [{} {}]",
-                    parent_prefix,
-                    indent,
-                    connector,
-                    self.format_amount(transfer.amount),
-                    transfer.token_symbol
-                ));
-
-                if let Some(ts) = &transfer.timestamp {
-                    output.push_str(&format!(" ({})", ts));
-                }
-
-                if let Some(note) = &transfer.note {
-                    output.push_str(&format!(" [{}]", note));
-                }
-
-                output.push_str("\n");
-
-                // Arrow pointing to destination - ALWAYS use │ for non-last branches
-                output.push_str(&format!(
-                    "{}{}      │         ↓\n",
-                    parent_prefix,
-                    indent
-                ));
-                output.push_str(&format!(
-                    "{}{}      │      {} {}\n",
-                    parent_prefix,
-                    indent,
-                    "TO:",
-                    self.truncate_address(&transfer.to, cfg.address_truncate_length)
-                ));
-
-                // Add spacing line before child node
-                if !visited.contains(&transfer.to) {
-                    output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
-                }
-
-                // Build prefix for child nodes (carry forward parent pipes)
+                // Build the prefix that will be passed to ALL children of this branch
                 let child_prefix = if is_last {
-                    format!("{}{}       ", parent_prefix, indent)
+                    // Last branch - use spaces (no more siblings)
+                    format!("{}  ", parent_prefix)
                 } else {
-                    format!("{}{}      │", parent_prefix, indent)
+                    // Not last - keep the pipe going for siblings below
+                    format!("{}│ ", parent_prefix)
                 };
 
-                // Recursively render child nodes with proper prefix
-                if !visited.contains(&transfer.to) {
-                    self.render_node_with_prefix(output, &transfer.to, depth + 1, visited, false, child_prefix);
+                // Transfer line
+                let branch_char = if is_last { "└─" } else { "├─" };
+                output.push_str(&format!(
+                    "{}{}→ {} {} [{:?}]\n",
+                    parent_prefix,
+                    branch_char,
+                    self.format_amount(transfer.amount),
+                    transfer.token_symbol,
+                    transfer.note.as_deref().unwrap_or("SimpleTransfer")
+                ));
 
-                    // Add spacing line after child subtree (only for non-last branches)
-                    if !is_last {
-                        output.push_str(&format!("{}{}      │\n", parent_prefix, indent));
-                    }
+                // Show full destination address with proper prefix
+                output.push_str(&format!(
+                    "{}  ↓ TO: {}\n",
+                    if is_last { format!("{}  ", parent_prefix) } else { format!("{}│ ", parent_prefix) },
+                    transfer.to  // FULL ADDRESS
+                ));
+
+                // Recurse to child with the continuous prefix
+                if !visited.contains(&transfer.to) {
+                    output.push_str(&format!("{}  │\n", if is_last { format!("{}  ", parent_prefix) } else { format!("{}│ ", parent_prefix) }));
+                    self.render_node_with_prefix(output, &transfer.to, depth + 1, visited, false, child_prefix);
                 }
             }
         }
     }
 
-    fn truncate_address(&self, addr: &str, keep: usize) -> String {
+    pub fn truncate_address(&self, addr: &str, keep: usize) -> String {
         if addr.len() <= keep * 2 {
             addr.to_string()
         } else {
@@ -463,7 +440,7 @@ impl TransferGraph {
         }
     }
 
-    fn format_amount(&self, amount: f64) -> String {
+    pub fn format_amount(&self, amount: f64) -> String {
         let formatted = format!("{:.2}", amount);
         let parts: Vec<&str> = formatted.split('.').collect();
         let integer_part = parts[0];
@@ -480,6 +457,12 @@ impl TransferGraph {
         }
 
         format!("{}.{}", result, decimal_part)
+    }
+
+    /// Launch interactive TUI viewer for this graph
+    pub fn launch_tui(self) -> anyhow::Result<()> {
+        use crate::services::graph_tui::launch_graph_viewer;
+        launch_graph_viewer(self)
     }
 }
 
@@ -1500,6 +1483,33 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         }
 
         output.push_str("\n✅ INVESTIGATION COMPLETE!\n\n");
+
+        // AUTO-SWITCH TO TUI for complex graphs (depth > 4 OR convergence detected)
+        let max_depth = all_paths.iter().map(|p| p.hops.len()).max().unwrap_or(0);
+        let convergence_wallets: HashSet<String> = state.knowledge_graph.relationships.iter()
+            .map(|r| r.to.clone())
+            .filter(|wallet| {
+                state.knowledge_graph.relationships.iter()
+                    .filter(|r| &r.to == wallet)
+                    .count() > 1
+            })
+            .collect();
+
+        let has_convergence = !convergence_wallets.is_empty();
+        let is_complex = max_depth > 4 || has_convergence;
+
+        if is_complex {
+            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            output.push_str(&format!("\n📊 COMPLEX GRAPH DETECTED (depth: {}, convergence points: {})\n", max_depth, convergence_wallets.len()));
+            output.push_str("\n💡 TIP: For better visualization of complex graphs, use interactive TUI mode:\n");
+            output.push_str("   osvm research --agent <WALLET> --tui\n\n");
+            output.push_str("   TUI features:\n");
+            output.push_str("   • Collapsible tree navigation for deep graphs\n");
+            output.push_str("   • Wallet convergence highlighting (multiple paths to same wallet)\n");
+            output.push_str("   • Keyboard navigation (j/k, Enter to expand/collapse)\n");
+            output.push_str("   • Search and filter capabilities\n");
+            output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
+        }
 
         output
     }

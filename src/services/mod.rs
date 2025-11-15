@@ -9,6 +9,7 @@ pub mod chat_ui_test_scenarios;
 pub mod clickhouse_service;
 pub mod cross_validator; // Cross-validation for findings
 pub mod ephemeral_microvm;
+pub mod graph_tui; // Interactive TUI graph viewer for transfer relationships
 pub mod investigation_memory; // Persistent memory with transfer learning
 pub mod isolation_config;
 pub mod ledger_service;

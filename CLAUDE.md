@@ -31,6 +31,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - NEVER modify Solana keypairs or config
 - ALWAYS backup .git before destructive operations
 - Keep root directory clean (docs in /docs)
+- **NEVER truncate or shorten wallet addresses or transaction IDs** - Always display them in full
+  - Blockchain forensics requires exact addresses for verification
+  - Truncated addresses like "5Q544f...e4j1" are useless for investigation
+  - Always show complete base58 strings (e.g., "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1")
 
 ## 🚀 PRIMARY PURPOSE: SOLANA BLOCKCHAIN INVESTIGATION CLI 🚀
 
