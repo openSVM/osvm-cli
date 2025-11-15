@@ -698,7 +698,7 @@ impl AiService {
         let request_body = OpenAiRequest {
             model,
             messages,
-            max_tokens: 4000, // Increased for OVSM plans
+            max_tokens: 128, // Concise responses for faster interactions
             temperature: 0.7,
         };
 

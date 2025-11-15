@@ -172,6 +172,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
+    // Initialize logging to ~/.osvm/logs/log-{timestamp}.log
+    // Log all operations for debugging and audit trail
+    if let Err(e) = crate::utils::logger::init_logging() {
+        eprintln!("⚠️  Warning: Failed to initialize logging: {}", e);
+        eprintln!("   Continuing without file logging...");
+    }
+
     // Capture start time for command logging
     let command_start_time = std::time::Instant::now();
     let command_args: Vec<String> = std::env::args().collect();
