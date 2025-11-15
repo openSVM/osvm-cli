@@ -384,12 +384,20 @@ impl TransferGraph {
         // Node header - NO TRUNCATION, show full address + label
         let label_text = node.and_then(|n| n.label.as_ref()).map(|l| format!(" [{}]", l)).unwrap_or_default();
 
+        // Draw box around wallet address for visual clarity
+        let addr_len = addr.len();
+        let box_top = format!("┌{}┐", "─".repeat(addr_len + 2));
+        let box_mid = format!("│ {} │", addr);
+        let box_bot = format!("└{}┘", "─".repeat(addr_len + 2));
+
         if is_origin {
             output.push_str(&format!("{}{}\n",
                 cfg.origin_icon,
                 label_text
             ));
-            output.push_str(&format!("   {}{}\n", addr, convergence_marker));
+            output.push_str(&format!("   {}\n", box_top));
+            output.push_str(&format!("   {}{}\n", box_mid, convergence_marker));
+            output.push_str(&format!("   {}\n", box_bot));
         } else if Some(addr) == self.target.as_deref() {
             output.push_str(&format!("{}{}{}{}\n",
                 parent_prefix,
@@ -397,15 +405,19 @@ impl TransferGraph {
                 label_text,
                 convergence_marker
             ));
-            output.push_str(&format!("{}   {}\n", parent_prefix, addr));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_top));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_mid));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_bot));
         } else {
-            output.push_str(&format!("{}{}{} {}{}\n",
+            output.push_str(&format!("{}{}{}{}\n",
                 parent_prefix,
                 cfg.node_icon,
                 label_text,
-                addr,
                 convergence_marker
             ));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_top));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_mid));
+            output.push_str(&format!("{}   {}\n", parent_prefix, box_bot));
         }
 
         // Render outgoing transfers
