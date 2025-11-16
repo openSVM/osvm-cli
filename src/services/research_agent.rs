@@ -725,8 +725,9 @@ impl TransferGraph {
             by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
         }
 
-        // Create canvas (wider to accommodate full addresses)
-        let mut canvas = Canvas::new(400, 200);
+        // Create canvas (wider to accommodate full addresses, much taller for all wallets)
+        // Increased from 200 to 2000 rows to show all wallet data without truncation
+        let mut canvas = Canvas::new(400, 2000);
 
         // Column X positions for each depth (wider spacing for full addresses)
         let col_x = vec![0usize, 55, 110, 165, 220, 275, 330];
@@ -760,20 +761,24 @@ impl TransferGraph {
                 let pipe_x = x + 25;  // Center of 50-width box
                 let box_bottom = current_y + 3;
 
-                // Draw CONTINUOUS pipes for all transfers
-                let total_transfer_lines = transfers.len() * 4; // 4 lines per transfer
-                for line_idx in 0..total_transfer_lines {
-                    let y = box_bottom + 1 + line_idx;
-                    let transfer_idx = line_idx / 4;
-                    let line_in_transfer = line_idx % 4;
+                // Draw CONTINUOUS pipes for all transfers AND ALL TOKENS
+                // Calculate total lines needed: sum all tokens across all transfers
+                let mut total_transfer_lines = 0;
+                for transfer in &transfers {
+                    total_transfer_lines += transfer.tokens.len() * 4; // 4 lines per token
+                }
 
-                    // ALWAYS draw pipe first
-                    canvas.put(pipe_x, y, '│');
+                let mut current_line = 0;
+                for transfer in &transfers {
+                    // Iterate through ALL tokens in this transfer (not just first!)
+                    for (token, agg) in &transfer.tokens {
+                        for line_in_token in 0..4 {
+                            let y = box_bottom + 1 + current_line;
 
-                    if transfer_idx < transfers.len() {
-                        let transfer = &transfers[transfer_idx];
-                        if let Some((token, agg)) = transfer.tokens.iter().next() {
-                            match line_in_transfer {
+                            // ALWAYS draw pipe first
+                            canvas.put(pipe_x, y, '│');
+
+                            match line_in_token {
                                 0 => {
                                     // Amount line with arrow (format to 2 decimal places for readability)
                                     let amt = format!("[${:.2}M {}]", (agg.total_amount / 1_000_000.0), token);
@@ -795,10 +800,11 @@ impl TransferGraph {
                                     }
                                 }
                                 3 => {
-                                    // Empty line with just pipe (spacing between transfers)
+                                    // Empty line with just pipe (spacing between tokens)
                                 }
                                 _ => {}
                             }
+                            current_line += 1;
                         }
                     }
                 }
@@ -1771,7 +1777,8 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
         for depth in 0..=std::cmp::min(max_depth, 10) {
             if let Some(wallets) = by_depth.get(&depth) {
                 data_summary.push_str(&format!("Depth {}: {} wallets\n", depth, wallets.len()));
-                for wallet in wallets.iter().take(5) {
+                // SHOW ALL WALLETS - removed .take(5) limit for complete forensic data
+                for wallet in wallets.iter() {
                     let label = graph.nodes.get(wallet)
                         .and_then(|n| n.label.as_ref())
                         .map(|l| format!(" [{}]", l))
@@ -1885,7 +1892,8 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             output.push_str("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
             output.push_str("⚠️  ROUND-TRIP TRANSFER ANALYSIS (Same Owner Detection)\n\n");
 
-            for (idx, path) in roundtrip_paths.iter().take(5).enumerate() {
+            // SHOW ALL ROUND-TRIP PATHS - removed .take(5) limit
+            for (idx, path) in roundtrip_paths.iter().enumerate() {
                 output.push_str(&format!("PATH #{} - BIDIRECTIONAL FLOW (Confidence: 95%)\n", idx + 1));
                 output.push_str(&format!("   Volume: {:.2} tokens\n", path.total_volume));
 
