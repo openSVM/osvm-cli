@@ -154,11 +154,30 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
     let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));
     println!("✅ OVSM initialized with blockchain tools\n");
 
-    // Create research agent
-    let agent = ResearchAgent::new(ai_service, ovsm_service, wallet.to_string());
+    // Create research agent with MCP service
+    let agent = ResearchAgent::new(ai_service, ovsm_service, Arc::clone(&mcp_arc), wallet.to_string());
+
+    // Check if real-time streaming mode is enabled
+    // Note: --realtime is an alias for --stream, so we only check "stream"
+    let use_streaming = matches.get_flag("stream");
 
     // Run investigation with self-evaluation
-    println!("\n🔬 Initiating multi-phase investigation with AI self-evaluation...\n");
+    if use_streaming {
+        println!("\n🌊 Starting REAL-TIME streaming visualization...");
+        println!("Graph will update progressively as data arrives.\n");
+        match agent.investigate_with_streaming().await {
+            Ok(_) => {
+                println!("\n✅ Streaming investigation completed!");
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("❌ Streaming failed: {}", e);
+                return Err(e.into());
+            }
+        }
+    } else {
+        println!("\n🔬 Initiating multi-phase investigation with AI self-evaluation...\n");
+    }
 
     match agent.investigate().await {
         Ok(report) => {
@@ -467,7 +486,13 @@ pub async fn run_research_demo() -> Result<()> {
 
     let ai_service = Arc::new(Mutex::new(AiService::new()));
     let ovsm_service = Arc::new(Mutex::new(OvsmService::new()));
-    let agent = ResearchAgent::new(ai_service, ovsm_service, demo_wallet.to_string());
+
+    // Initialize MCP service for demo
+    let mut mcp_service = McpService::new_with_debug(false);
+    let _ = mcp_service.load_config();
+    let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+
+    let agent = ResearchAgent::new(ai_service, ovsm_service, Arc::clone(&mcp_arc), demo_wallet.to_string());
 
     println!("📊 Demonstrating iterative investigation with self-evaluation:\n");
 

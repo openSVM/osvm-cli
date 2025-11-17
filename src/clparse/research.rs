@@ -57,6 +57,13 @@ pub fn build_research_command() -> Command {
                 .help("Use advanced multi-iteration research agent (more thorough but slower)")
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            Arg::new("stream")
+                .long("stream")
+                .alias("realtime")
+                .help("Enable real-time streaming visualization (graph updates progressively)")
+                .action(clap::ArgAction::SetTrue)
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")

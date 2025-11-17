@@ -225,9 +225,9 @@ impl AiService {
             }
         }
 
-        // Build client with extended timeout for large OVSM planning prompts
+        // Build client with timeout from config
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(120)) // 2 minutes for AI processing
+            .timeout(Duration::from_secs(ai_config.timeout_secs))
             .build()
             .expect("Failed to build HTTP client");
 

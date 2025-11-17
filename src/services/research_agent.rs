@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use crate::services::ai_service::AiService;
 use crate::services::ovsm_service::OvsmService;
+use crate::services::mcp_service::McpService;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ovsm::runtime::Value;
@@ -826,6 +827,161 @@ impl TransferGraph {
         output
     }
 
+    /// Render using enhanced ASCII visualization with advanced features
+    pub fn render_enhanced_visualization(&self) -> String {
+        use crate::services::enhanced_ascii_graph::{EnhancedCanvas, GraphLayoutEngine};
+
+        let mut canvas = EnhancedCanvas::new(500, 300);
+        let mut layout = GraphLayoutEngine::new();
+
+        // Add nodes to layout engine
+        let depths = self.compute_depths(self.origin.as_ref().unwrap_or(&String::new()));
+        for (addr, depth) in &depths {
+            let volume = self.nodes.get(addr)
+                .map(|n| n.outgoing.iter().map(|t| t.amount).sum())
+                .unwrap_or(0.0);
+
+            // Position nodes by depth with force simulation
+            let x = (depth * 100) as f64;
+            let y = 100.0 + (addr.as_bytes()[0] as f64 % 100.0); // Spread vertically
+
+            layout.nodes.insert(addr.clone(), crate::services::enhanced_ascii_graph::NodePosition {
+                x, y, vx: 0.0, vy: 0.0,
+                fixed: *depth == 0,  // Fix origin node
+                depth: *depth,
+                volume,
+            });
+        }
+
+        // Add edges
+        for node in self.nodes.values() {
+            for transfer in &node.outgoing {
+                layout.edges.push(crate::services::enhanced_ascii_graph::Edge {
+                    from: transfer.from.clone(),
+                    to: transfer.to.clone(),
+                    weight: transfer.amount,
+                    bidirectional: self.nodes.get(&transfer.to)
+                        .map(|n| n.outgoing.iter().any(|t| t.to == transfer.from))
+                        .unwrap_or(false),
+                });
+            }
+        }
+
+        // Run force simulation for optimal layout
+        layout.simulate(50);
+
+        // Convert to canvas coordinates
+        let coords = layout.to_canvas_coords(500, 300);
+
+        // Group wallets by depth for clustering
+        let mut by_depth: HashMap<usize, Vec<String>> = HashMap::new();
+        for (addr, depth) in &depths {
+            by_depth.entry(*depth).or_insert_with(Vec::new).push(addr.clone());
+        }
+
+        // Draw depth gradients for 3D effect
+        for depth in 0..=*depths.values().max().unwrap_or(&0) {
+            let x_base = depth * 100;
+            canvas.draw_depth_gradient(x_base, 0, 90, 300, depth as u8);
+        }
+
+        // Draw wallets with enhanced boxes
+        for (addr, (x, y)) in &coords {
+            let node = self.nodes.get(addr).unwrap();
+            let depth = depths.get(addr).copied().unwrap_or(0) as u8;
+
+            let icon = self.get_wallet_icon(addr);
+            let label = node.label.as_ref().map(|s| s.as_str()).unwrap_or("");
+            let transfer_count = node.outgoing.len();
+
+            // Calculate wallet importance for sizing
+            let volume: f64 = node.outgoing.iter().map(|t| t.amount).sum();
+            let box_height = 4 + (volume.log10() as usize).min(4);
+
+            let is_selected = self.target.as_ref().map(|t| t == addr).unwrap_or(false);
+
+            canvas.draw_enhanced_box(
+                *x, *y, 50, box_height,
+                &format!("{} {}", icon, label),
+                vec![
+                    addr.clone(),
+                    format!("Transfers: {}", transfer_count),
+                    format!("Volume: ${:.2}M", volume / 1_000_000.0),
+                ],
+                depth,
+                is_selected,
+            );
+        }
+
+        // Draw flow arrows with volume-based thickness
+        for node in self.nodes.values() {
+            if let Some((from_x, from_y)) = coords.get(&node.address) {
+                for transfer in &node.outgoing {
+                    if let Some((to_x, to_y)) = coords.get(&transfer.to) {
+                        let depth = depths.get(&node.address).copied().unwrap_or(0) as u8;
+
+                        // Check for bidirectional flow
+                        let is_bidirectional = self.nodes.get(&transfer.to)
+                            .map(|n| n.outgoing.iter().any(|t| t.to == node.address))
+                            .unwrap_or(false);
+
+                        canvas.draw_flow_arrow(
+                            from_x + 50, from_y + 2,  // Right side of from box
+                            *to_x, to_y + 2,           // Left side of to box
+                            transfer.amount,
+                            is_bidirectional,
+                            depth,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Draw suspicious clusters if detected
+        let suspicious_wallets = self.detect_suspicious_clusters(&by_depth);
+        if !suspicious_wallets.is_empty() {
+            let cluster_data: Vec<(&str, f64)> = suspicious_wallets.iter()
+                .map(|addr| {
+                    let volume = self.nodes.get(addr)
+                        .map(|n| n.outgoing.iter().map(|t| t.amount).sum())
+                        .unwrap_or(0.0);
+                    (addr.as_str(), volume)
+                })
+                .collect();
+
+            canvas.draw_wallet_cluster(350, 10, cluster_data, "suspicious", 0);
+        }
+
+        // Animate and render
+        canvas.next_frame();
+        canvas.render(true)  // Use colors if terminal supports
+    }
+
+    /// Detect suspicious wallet clusters (round-trips, mixers, etc)
+    fn detect_suspicious_clusters(&self, by_depth: &HashMap<usize, Vec<String>>) -> Vec<String> {
+        let mut suspicious = Vec::new();
+
+        for wallets in by_depth.values() {
+            for wallet in wallets {
+                if let Some(node) = self.nodes.get(wallet) {
+                    // Check for round-trip patterns
+                    for transfer in &node.outgoing {
+                        if let Some(target_node) = self.nodes.get(&transfer.to) {
+                            if target_node.outgoing.iter().any(|t| t.to == *wallet) {
+                                suspicious.push(wallet.clone());
+                                suspicious.push(transfer.to.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        suspicious.sort();
+        suspicious.dedup();
+        suspicious
+    }
+
     /// Launch interactive TUI viewer for this graph
     pub fn launch_tui(self) -> anyhow::Result<()> {
         use crate::services::graph_tui::launch_graph_viewer;
@@ -900,6 +1056,7 @@ pub struct Evidence {
 pub struct ResearchAgent {
     ai_service: Arc<Mutex<AiService>>,
     ovsm_service: Arc<Mutex<OvsmService>>,
+    mcp_service: Arc<tokio::sync::Mutex<McpService>>,
     state: Arc<Mutex<InvestigationState>>,
 }
 
@@ -907,6 +1064,7 @@ impl ResearchAgent {
     pub fn new(
         ai_service: Arc<Mutex<AiService>>,
         ovsm_service: Arc<Mutex<OvsmService>>,
+        mcp_service: Arc<tokio::sync::Mutex<McpService>>,
         target_wallet: String,
     ) -> Self {
         let initial_state = InvestigationState {
@@ -946,6 +1104,7 @@ impl ResearchAgent {
         Self {
             ai_service,
             ovsm_service,
+            mcp_service,
             state: Arc::new(Mutex::new(initial_state)),
         }
     }
@@ -1099,13 +1258,206 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
         Ok(decision)
     }
 
+    /// Main investigation loop with real-time streaming visualization
+    pub async fn investigate_with_streaming(&self) -> Result<String> {
+        use crate::services::realtime_graph_stream::{StreamingGraph, GraphUpdateEvent, NodeType};
+
+        println!("\n🔍 Starting Real-Time Blockchain Investigation...\n");
+        println!("Graph will update progressively as data arrives...\n");
+
+        // Create streaming graph
+        let (graph, event_rx) = StreamingGraph::new();
+        let tx = graph.update_channel.clone();
+
+        // Start rendering in background
+        let render_handle = tokio::spawn(async move {
+            if let Err(e) = graph.start_rendering(event_rx).await {
+                eprintln!("Rendering error: {}", e);
+            }
+        });
+
+        // Run investigation with streaming updates
+        let state_clone = Arc::clone(&self.state);
+        let tx_clone = tx.clone();
+        let _ai_service_clone = Arc::clone(&self.ai_service);
+        let ovsm_service_clone = Arc::clone(&self.ovsm_service);
+        let mcp_service_clone = Arc::clone(&self.mcp_service);
+
+        let investigation_handle = tokio::spawn(async move {
+            // Send initial node for target wallet
+            let state = state_clone.lock().await;
+            tx_clone.send(GraphUpdateEvent::NodeDiscovered {
+                address: state.target_wallet.clone(),
+                label: Some("Investigation Target".to_string()),
+                depth: 0,
+                node_type: NodeType::Target,
+            }).unwrap();
+            drop(state);
+
+            // Run investigation iterations
+            for iteration in 0..15 {
+                // Execute investigation step
+                let decision = Self::decide_next_action_static(&state_clone).await?;
+                let result = Self::execute_dynamic_investigation_static(
+                    &state_clone, &ovsm_service_clone, &mcp_service_clone, &decision).await?;
+
+                // Parse results and send graph updates
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&result) {
+                    Self::send_graph_updates(&tx_clone, &json).await;
+                }
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+            }
+
+            // Signal completion
+            tx_clone.send(GraphUpdateEvent::DataFetchComplete).unwrap();
+            Ok::<String, anyhow::Error>("Investigation complete".to_string())
+        });
+
+        // Wait for both tasks
+        tokio::select! {
+            _ = render_handle => {}
+            result = investigation_handle => {
+                return result?;
+            }
+        }
+
+        Ok("Streaming investigation completed".to_string())
+    }
+
+    /// Helper method to send graph updates from investigation results
+    async fn send_graph_updates(tx: &tokio::sync::mpsc::UnboundedSender<crate::services::realtime_graph_stream::GraphUpdateEvent>, data: &serde_json::Value) {
+        use crate::services::realtime_graph_stream::{GraphUpdateEvent, NodeType};
+
+        // Parse transfers and send as graph events
+        if let Some(transfers) = data.get("transfers").and_then(|t| t.as_array()) {
+            for transfer in transfers {
+                let from = transfer.get("from").and_then(|f| f.as_str()).unwrap_or("");
+                let to = transfer.get("to").and_then(|t| t.as_str()).unwrap_or("");
+                let amount = transfer.get("amount").and_then(|a| a.as_f64()).unwrap_or(0.0);
+                let token = transfer.get("token").and_then(|t| t.as_str()).unwrap_or("Unknown");
+
+                // Send node discovery events
+                if !from.is_empty() {
+                    tx.send(GraphUpdateEvent::NodeDiscovered {
+                        address: from.to_string(),
+                        label: None,
+                        depth: 1,
+                        node_type: NodeType::Normal,
+                    }).ok();
+                }
+
+                if !to.is_empty() {
+                    tx.send(GraphUpdateEvent::NodeDiscovered {
+                        address: to.to_string(),
+                        label: None,
+                        depth: 2,
+                        node_type: NodeType::Normal,
+                    }).ok();
+                }
+
+                // Send edge discovery event
+                if !from.is_empty() && !to.is_empty() {
+                    tx.send(GraphUpdateEvent::EdgeDiscovered {
+                        from: from.to_string(),
+                        to: to.to_string(),
+                        amount,
+                        token: token.to_string(),
+                        timestamp: None,
+                    }).ok();
+                }
+            }
+        }
+    }
+
+    /// Static helper for async spawning
+    async fn decide_next_action_static(state: &Arc<Mutex<InvestigationState>>) -> Result<String> {
+        let state = state.lock().await.clone();
+        Ok(format!("{{\"mcp_tool\": \"get_account_transfers\", \"parameters\": {{\"address\": \"{}\"}}}}", state.target_wallet))
+    }
+
+    /// Static helper for async spawning - Now uses actual MCP queries
+    async fn execute_dynamic_investigation_static(
+        state: &Arc<Mutex<InvestigationState>>,
+        ovsm_service: &Arc<Mutex<OvsmService>>,
+        mcp_service: &Arc<tokio::sync::Mutex<McpService>>,
+        _decision: &str,
+    ) -> Result<String> {
+        let wallet = {
+            let state = state.lock().await;
+            state.target_wallet.clone()
+        };
+
+        // Query blockchain data via MCP
+        let mut mcp = mcp_service.lock().await;
+
+        // Get the first available MCP server
+        let servers = mcp.list_servers();
+        if servers.is_empty() {
+            return Ok(format!(r#"{{"wallet": "{}", "transfers": [], "error": "No MCP servers available"}}"#, wallet));
+        }
+
+        let server_id = servers[0].0.clone();
+
+        // Try to get account transfers
+        let transfers_result = mcp.call_tool(
+            &server_id,
+            "get_account_transfers",
+            Some(serde_json::json!({
+                "address": wallet,
+                "limit": 100
+            }))
+        ).await;
+
+        match transfers_result {
+            Ok(data) => {
+                // Return the raw MCP data as JSON string
+                Ok(serde_json::to_string(&data)?)
+            }
+            Err(e) => {
+                eprintln!("⚠️  MCP query failed: {}", e);
+                // Return error but don't abort
+                Ok(format!(r#"{{"wallet": "{}", "transfers": [], "error": "{}"}}"#, wallet, e))
+            }
+        }
+    }
+
     /// Main investigation loop with TRUE AGENTIC self-direction
     pub async fn investigate(&self) -> Result<String> {
         println!("\n🔬 Initiating Agentic Wallet Investigation...\n");
 
         // Step 1: Generate initial investigation plan (TODO list)
         self.stream_thinking("Creating investigation strategy...");
-        let investigation_plan = self.generate_investigation_plan().await?;
+        let investigation_plan = match self.generate_investigation_plan().await {
+            Ok(plan) => plan,
+            Err(e) => {
+                eprintln!("⚠️  AI planning failed: {}. Using fallback plan with direct blockchain queries.", e);
+                // Use fallback plan that focuses on actual blockchain data
+                vec![
+                    InvestigationTodo {
+                        task: "Query wallet transfer history via MCP".to_string(),
+                        status: TodoStatus::Pending,
+                        priority: 5,
+                        reason: "Get real blockchain data regardless of AI availability".to_string(),
+                        findings_so_far: Vec::new(),
+                    },
+                    InvestigationTodo {
+                        task: "Analyze transfer patterns and counterparties".to_string(),
+                        status: TodoStatus::Pending,
+                        priority: 5,
+                        reason: "Understand wallet's primary activity".to_string(),
+                        findings_so_far: Vec::new(),
+                    },
+                    InvestigationTodo {
+                        task: "Investigate DeFi protocol interactions".to_string(),
+                        status: TodoStatus::Pending,
+                        priority: 4,
+                        reason: "Identify trading strategies".to_string(),
+                        findings_so_far: Vec::new(),
+                    },
+                ]
+            }
+        };
 
         {
             let mut state = self.state.lock().await;
@@ -2622,9 +2974,15 @@ mod tests {
         ));
         let ovsm_service = Arc::new(Mutex::new(OvsmService::new()));
 
+        // Initialize MCP service for tests
+        let mut mcp_service = McpService::new_with_debug(false);
+        let _ = mcp_service.load_config();
+        let mcp_arc = Arc::new(tokio::sync::Mutex::new(mcp_service));
+
         ResearchAgent::new(
             ai_service,
             ovsm_service,
+            mcp_arc,
             "TestWallet123".to_string()
         )
     }
