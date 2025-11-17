@@ -1250,10 +1250,21 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 "#, state.target_wallet, state.iteration, state.findings.len(), state.investigation_todos);
 
         let ai_service = self.ai_service.lock().await;
-        let decision = ai_service.query_with_system_prompt(
+        let decision = match ai_service.query_with_system_prompt(
             "You are a strategic investigator. Return ONLY valid JSON object.",
             &decision_prompt
-        ).await?;
+        ).await {
+            Ok(decision) => decision,
+            Err(e) => {
+                tracing::debug!("⚠️  AI decision failed: {}. Using fallback action.", e);
+                // Fallback: just query transfers on first iteration, then complete
+                if state.iteration == 0 {
+                    r#"{"action": "get_account_transfers", "reason": "Get wallet transfer history", "mcp_tool": "get_account_transfers", "parameters": {}}"#.to_string()
+                } else {
+                    r#"{"action": "complete", "reason": "Investigation complete", "mcp_tool": "none", "parameters": {}}"#.to_string()
+                }
+            }
+        };
 
         Ok(decision)
     }
