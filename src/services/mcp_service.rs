@@ -1649,32 +1649,48 @@ impl McpService {
             let mut line = String::new();
             let mut response_found = false;
 
-            // Skip log lines and find the JSON response
-            while reader.read_line(&mut line).await? > 0 {
-                let line_trimmed = line.trim();
-                if line_trimmed.starts_with("{") {
-                    let mcp_response: Result<McpResponse, _> = serde_json::from_str(line_trimmed);
-                    if let Ok(response) = mcp_response {
-                        if response.id == request.id {
-                            if let Some(error) = response.error {
-                                return Err(anyhow::anyhow!(
-                                    "MCP server initialization error: {} - {}",
-                                    error.code,
-                                    error.message
-                                ));
+            // Skip log lines and find the JSON response with 10 second timeout
+            let read_task = async {
+                while reader.read_line(&mut line).await? > 0 {
+                    let line_trimmed = line.trim();
+                    if line_trimmed.starts_with("{") {
+                        let mcp_response: Result<McpResponse, _> = serde_json::from_str(line_trimmed);
+                        if let Ok(response) = mcp_response {
+                            if response.id == request.id {
+                                if let Some(error) = response.error {
+                                    return Err(anyhow::anyhow!(
+                                        "MCP server initialization error: {} - {}",
+                                        error.code,
+                                        error.message
+                                    ));
+                                }
+                                response_found = true;
+                                return Ok(true);
                             }
-                            response_found = true;
-                            break;
                         }
                     }
+                    line.clear();
                 }
-                line.clear();
-            }
+                Ok(response_found)
+            };
 
-            if !response_found {
-                return Err(anyhow::anyhow!(
-                    "No valid response received from MCP server"
-                ));
+            // Apply 10 second timeout
+            let timeout_duration = std::time::Duration::from_secs(10);
+            match tokio::time::timeout(timeout_duration, read_task).await {
+                Ok(Ok(found)) => {
+                    if !found {
+                        return Err(anyhow::anyhow!(
+                            "No valid response received from MCP server"
+                        ));
+                    }
+                }
+                Ok(Err(e)) => return Err(e),
+                Err(_) => {
+                    return Err(anyhow::anyhow!(
+                        "Timeout waiting for MCP server initialization response (waited {}s)",
+                        timeout_duration.as_secs()
+                    ));
+                }
             }
         }
 

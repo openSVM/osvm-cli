@@ -133,22 +133,34 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
 
     // Discover and register MCP tools
     {
+        eprintln!("🔍 DEBUG: Acquiring MCP lock...");
         let mut svc = mcp_arc.lock().await;
+        eprintln!("🔍 DEBUG: Lock acquired, listing servers...");
         let servers: Vec<String> = svc.list_servers().iter().map(|(id, _)| (*id).clone()).collect();
+        eprintln!("🔍 DEBUG: Found {} servers: {:?}", servers.len(), servers);
 
         for server_id in servers {
+            eprintln!("🔍 DEBUG: Initializing server '{}'...", server_id);
             if svc.initialize_server(&server_id).await.is_err() {
+                eprintln!("⚠️  DEBUG: Failed to initialize server '{}'", server_id);
                 continue;
             }
+            eprintln!("✅ DEBUG: Server '{}' initialized", server_id);
 
+            eprintln!("🔍 DEBUG: Listing tools for server '{}'...", server_id);
             if let Ok(tools) = svc.list_tools(&server_id).await {
+                eprintln!("✅ DEBUG: Found {} tools for server '{}'", tools.len(), server_id);
                 drop(svc);
                 for tool in tools {
+                    eprintln!("  📋 Registering tool: {}", tool.name);
                     registry.register(McpBridgeTool::new(&tool.name, Arc::clone(&mcp_arc)));
                 }
                 svc = mcp_arc.lock().await;
+            } else {
+                eprintln!("⚠️  DEBUG: Failed to list tools for server '{}'", server_id);
             }
         }
+        eprintln!("🔍 DEBUG: MCP initialization loop complete");
     }
 
     let ovsm_service = Arc::new(Mutex::new(OvsmService::with_registry(registry, false, false)));

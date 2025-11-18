@@ -1113,6 +1113,7 @@ impl ResearchAgent {
     async fn generate_investigation_plan(&self) -> Result<Vec<InvestigationTodo>> {
         let state = self.state.lock().await.clone();
 
+        eprintln!("🔍 DEBUG: generate_investigation_plan started");
         let planning_prompt = format!(r#"You are an expert blockchain investigator. Create a high-level investigation plan for wallet:
 {}
 
@@ -1138,11 +1139,14 @@ Generate 5-8 investigation tasks, prioritized 1-5 (5=highest).
 Return as JSON array:
 [{{"task": "...", "priority": 5, "reason": "..."}}, ...]"#, state.target_wallet);
 
+        eprintln!("🔍 DEBUG: Acquiring AI service lock for planning...");
         let ai_service = self.ai_service.lock().await;
+        eprintln!("🔍 DEBUG: Calling AI service query_with_system_prompt...");
         let plan_json = ai_service.query_with_system_prompt(
             "You are a blockchain investigation planner. Return ONLY valid JSON array, no markdown.",
             &planning_prompt
         ).await?;
+        eprintln!("🔍 DEBUG: AI service query returned successfully");
 
         // Parse AI response into TODO list
         let plan_json_clean = plan_json.trim()
@@ -1249,14 +1253,19 @@ What is the single most valuable action to take next? Choose from:
 Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters": {{...}}}}
 "#, state.target_wallet, state.iteration, state.findings.len(), state.investigation_todos);
 
+        eprintln!("🔍 DEBUG: decide_next_action - Acquiring AI service lock...");
         let ai_service = self.ai_service.lock().await;
+        eprintln!("🔍 DEBUG: decide_next_action - Calling AI query...");
         let decision = match ai_service.query_with_system_prompt(
             "You are a strategic investigator. Return ONLY valid JSON object.",
             &decision_prompt
         ).await {
-            Ok(decision) => decision,
+            Ok(decision) => {
+                eprintln!("🔍 DEBUG: decide_next_action - AI query succeeded");
+                decision
+            },
             Err(e) => {
-                tracing::debug!("⚠️  AI decision failed: {}. Using fallback action.", e);
+                eprintln!("⚠️  AI decision failed: {}. Using fallback action.", e);
                 // Fallback: just query transfers on first iteration, then complete
                 if state.iteration == 0 {
                     r#"{"action": "get_account_transfers", "reason": "Get wallet transfer history", "mcp_tool": "get_account_transfers", "parameters": {}}"#.to_string()
@@ -1438,9 +1447,14 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
         println!("\n🔬 Initiating Agentic Wallet Investigation...\n");
 
         // Step 1: Generate initial investigation plan (TODO list)
+        eprintln!("🔍 DEBUG: About to call stream_thinking...");
         self.stream_thinking("Creating investigation strategy...");
+        eprintln!("🔍 DEBUG: stream_thinking completed, calling generate_investigation_plan...");
         let investigation_plan = match self.generate_investigation_plan().await {
-            Ok(plan) => plan,
+            Ok(plan) => {
+                eprintln!("🔍 DEBUG: generate_investigation_plan returned Ok with {} items", plan.len());
+                plan
+            },
             Err(e) => {
                 eprintln!("⚠️  AI planning failed: {}. Using fallback plan with direct blockchain queries.", e);
                 // Use fallback plan that focuses on actual blockchain data
@@ -1470,33 +1484,41 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
             }
         };
 
+        eprintln!("🔍 DEBUG: Storing investigation plan in state...");
         {
             let mut state = self.state.lock().await;
             state.investigation_todos = investigation_plan.clone();
         }
+        eprintln!("🔍 DEBUG: Plan stored, logging plan details...");
 
         tracing::debug!("📋 Investigation Plan:");
         for (i, todo) in investigation_plan.iter().enumerate() {
             tracing::debug!("   {}. [Priority {}] {} - {}",
                      i + 1, todo.priority, todo.task, todo.reason);
         }
+        eprintln!("🔍 DEBUG: Plan logged, starting investigation loop with max {} iterations...", 15);
 
         let max_iterations = 15;
 
         for iteration in 0..max_iterations {
+            eprintln!("🔍 DEBUG: ━━━ Iteration #{} ━━━", iteration + 1);
             tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             tracing::debug!("? Iteration #{}", iteration + 1);
             tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
             // 1. Decide next action based on current state
             self.stream_thinking("Analyzing current findings and deciding next action...");
+            eprintln!("🔍 DEBUG: Calling decide_next_action...");
             let decision = self.decide_next_action().await?;
+            eprintln!("🔍 DEBUG: decide_next_action returned");
 
             self.stream_thinking(&format!("Decision: {}", decision.lines().next().unwrap_or("Investigating...")));
 
             // 2. Execute the chosen action via OVSM + MCP
             self.stream_thinking("Executing investigation step via OVSM...");
+            eprintln!("🔍 DEBUG: Calling execute_dynamic_investigation with decision: {}", decision.lines().next().unwrap_or("?"));
             let result = self.execute_dynamic_investigation(&decision).await?;
+            eprintln!("🔍 DEBUG: execute_dynamic_investigation returned");
 
             // 2.5. Build knowledge graph if we got transfer data
             {
@@ -1623,10 +1645,13 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
         self.stream_thinking(&format!("Calling MCP tool: {}", mcp_tool));
 
+        eprintln!("🔍 DEBUG: execute_dynamic_investigation - Acquiring OVSM lock...");
         // Execute OVSM script
         let mut ovsm = self.ovsm_service.lock().await;
+        eprintln!("🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...", mcp_tool);
         let result_value = ovsm.execute_code(&ovsm_script)
             .context("Failed to execute dynamic investigation")?;
+        eprintln!("🔍 DEBUG: execute_dynamic_investigation - OVSM script executed successfully");
 
         // Convert to JSON for analysis
         let result_json = self.value_to_json(result_value)?;

@@ -133,13 +133,34 @@ impl Tool for McpBridgeTool {
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
-        // Execute the tool with correct server ID
-        let result_json = futures::executor::block_on(
-            svc.call_tool(SERVER_ID, &self.name, arguments),
-        )
-        .map_err(|e| ovsm::error::Error::RpcError {
-            message: format!("MCP call_tool failed: {}", e),
-        })?;
+        // Execute the tool with correct server ID (with 5s timeout to prevent hang)
+        eprintln!("🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...", self.name, SERVER_ID);
+        let result_json = match futures::executor::block_on(async {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(5),
+                svc.call_tool(SERVER_ID, &self.name, arguments.clone())
+            ).await
+        }) {
+            Ok(Ok(json)) => {
+                eprintln!("✅ MCP BRIDGE: Tool '{}' returned successfully", self.name);
+                json
+            },
+            Ok(Err(e)) => {
+                eprintln!("⚠️  MCP BRIDGE: Tool '{}' failed: {}", self.name, e);
+                return Err(ovsm::error::Error::RpcError {
+                    message: format!("MCP call_tool failed: {}", e),
+                });
+            },
+            Err(_timeout) => {
+                eprintln!("⚠️  MCP BRIDGE: Tool '{}' timed out after 5s - MCP server not responding", self.name);
+                // Return empty result instead of failing - allows investigation to continue
+                serde_json::json!({
+                    "error": "MCP server timeout - tool call took longer than 5s",
+                    "tool": self.name,
+                    "data": []
+                })
+            }
+        };
 
         // 🔍 DEBUG: Log what MCP service returned
         if get_verbosity() >= VerbosityLevel::Verbose {
