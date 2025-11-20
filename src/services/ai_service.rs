@@ -23,6 +23,8 @@ struct AiRequest {
     system_prompt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ownPlan")]
     own_plan: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "maxTokens")]
+    max_tokens: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -574,6 +576,7 @@ impl AiService {
             question: question.to_string(),
             system_prompt: system_prompt.clone(),
             own_plan: only_plan,
+            max_tokens: Some(4269),
         };
 
         if debug_mode {
@@ -599,6 +602,13 @@ impl AiService {
             }
         }
 
+        // Debug: Show request body if in debug mode
+        if debug_mode {
+            println!("\n🔍 HTTP REQUEST:");
+            println!("  URL: {}", self.api_url);
+            println!("  Body: {}", serde_json::to_string_pretty(&request_body).unwrap_or_else(|_| "Failed to serialize".to_string()));
+        }
+
         let mut request = self
             .client
             .post(&self.api_url)
@@ -617,8 +627,12 @@ impl AiService {
         let status = response.status();
         let response_text = response.text().await?;
 
-        if debug_mode && get_verbosity() >= VerbosityLevel::Detailed {
-            println!("📥 OSVM AI Response ({}): {}", status, response_text);
+        // Debug: Always show response in debug mode
+        if debug_mode {
+            println!("\n📥 HTTP RESPONSE:");
+            println!("  Status: {}", status);
+            println!("  Body: {}", response_text);
+            println!();
         }
 
         if !status.is_success() {

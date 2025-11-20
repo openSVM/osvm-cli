@@ -133,34 +133,60 @@ impl Tool for McpBridgeTool {
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
-        // Execute the tool with correct server ID (with 5s timeout to prevent hang)
+        // Execute the tool with correct server ID
+        // Note: Using futures::executor::block_on because we may not be in a Tokio context
         eprintln!("🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...", self.name, SERVER_ID);
-        let result_json = match futures::executor::block_on(async {
-            tokio::time::timeout(
-                std::time::Duration::from_secs(5),
-                svc.call_tool(SERVER_ID, &self.name, arguments.clone())
-            ).await
-        }) {
-            Ok(Ok(json)) => {
+        let mut result_json = match futures::executor::block_on(svc.call_tool(SERVER_ID, &self.name, arguments.clone())) {
+            Ok(json) => {
                 eprintln!("✅ MCP BRIDGE: Tool '{}' returned successfully", self.name);
                 json
             },
-            Ok(Err(e)) => {
+            Err(e) => {
                 eprintln!("⚠️  MCP BRIDGE: Tool '{}' failed: {}", self.name, e);
                 return Err(ovsm::error::Error::RpcError {
                     message: format!("MCP call_tool failed: {}", e),
                 });
-            },
-            Err(_timeout) => {
-                eprintln!("⚠️  MCP BRIDGE: Tool '{}' timed out after 5s - MCP server not responding", self.name);
-                // Return empty result instead of failing - allows investigation to continue
-                serde_json::json!({
-                    "error": "MCP server timeout - tool call took longer than 5s",
-                    "tool": self.name,
-                    "data": []
-                })
             }
         };
+
+        // Handle Brotli-compressed responses
+        if let Some(compressed_marker) = result_json.get("_compressed") {
+            if compressed_marker == "brotli" {
+                eprintln!("🗜️  MCP BRIDGE: Decompressing Brotli response...");
+
+                // Extract base64-encoded compressed data
+                let compressed_b64 = result_json.get("data")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| ovsm::error::Error::RpcError {
+                        message: "Compressed response missing 'data' field".to_string(),
+                    })?;
+
+                // Decode base64
+                use base64::Engine;
+                let compressed = base64::engine::general_purpose::STANDARD
+                    .decode(compressed_b64)
+                    .map_err(|e| ovsm::error::Error::RpcError {
+                        message: format!("Failed to decode base64: {}", e),
+                    })?;
+
+                // Decompress with Brotli
+                let mut decompressed = Vec::new();
+                let mut decoder = brotli::Decompressor::new(&compressed[..], 4096);
+                std::io::Read::read_to_end(&mut decoder, &mut decompressed)
+                    .map_err(|e| ovsm::error::Error::RpcError {
+                        message: format!("Failed to decompress Brotli: {}", e),
+                    })?;
+
+                // Parse decompressed JSON
+                result_json = serde_json::from_slice(&decompressed)
+                    .map_err(|e| ovsm::error::Error::RpcError {
+                        message: format!("Failed to parse decompressed JSON: {}", e),
+                    })?;
+
+                eprintln!("✅ MCP BRIDGE: Decompression successful ({} bytes -> {} bytes)",
+                         compressed.len(), decompressed.len());
+            }
+        }
 
         // 🔍 DEBUG: Log what MCP service returned
         if get_verbosity() >= VerbosityLevel::Verbose {

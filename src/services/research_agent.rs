@@ -1250,6 +1250,11 @@ What is the single most valuable action to take next? Choose from:
 
 **IMPORTANT: If you notice simple SOL/SPL transfers or funding patterns, prioritize wallet relationship analysis!**
 
+**REQUIRED: When using get_account_transfers, ALWAYS use these parameters:**
+- `address`: the wallet address (NOT "account")
+- `limit`: 500 (API maximum)
+- `compress`: true (enables Brotli compression)
+
 Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters": {{...}}}}
 "#, state.target_wallet, state.iteration, state.findings.len(), state.investigation_todos);
 
@@ -1268,7 +1273,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
                 eprintln!("⚠️  AI decision failed: {}. Using fallback action.", e);
                 // Fallback: just query transfers on first iteration, then complete
                 if state.iteration == 0 {
-                    r#"{"action": "get_account_transfers", "reason": "Get wallet transfer history", "mcp_tool": "get_account_transfers", "parameters": {}}"#.to_string()
+                    r#"{"action": "get_account_transfers", "reason": "Get wallet transfer history", "mcp_tool": "get_account_transfers", "parameters": {"address": "6e1GCzyBewQdXqQQonLCt2YuMhur6DcyUy4acgymCFZH", "limit": 500, "compress": true}}"#.to_string()
                 } else {
                     r#"{"action": "complete", "reason": "Investigation complete", "mcp_tool": "none", "parameters": {}}"#.to_string()
                 }
@@ -1631,21 +1636,40 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
         // Generate OVSM script to call the chosen MCP tool
         let state = self.state.lock().await.clone();
+
+        // Convert params JSON to OVSM map syntax
+        let params_str = if params.is_object() {
+            let mut pairs = Vec::new();
+            for (key, value) in params.as_object().unwrap() {
+                let val_str = match value {
+                    serde_json::Value::String(s) => format!("\"{}\"", s),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    _ => format!("\"{}\"", value),
+                };
+                pairs.push(format!(r#":{} {}"#, key, val_str));
+            }
+            format!("{{{}}}", pairs.join(" "))
+        } else {
+            format!(r#"{{:address "{}"}}"#, state.target_wallet)
+        };
+
         let ovsm_script = format!(r#"(do
   (define wallet "{}")
 
   ;; Execute dynamically chosen MCP tool: {}
-  (define result ({} {{:address wallet}}))
+  (define result ({} {}))
 
   ;; Return structured findings
   {{:tool "{}"
    :wallet wallet
    :data result}}
-)"#, state.target_wallet, mcp_tool, mcp_tool, mcp_tool);
+)"#, state.target_wallet, mcp_tool, mcp_tool, params_str, mcp_tool);
 
         self.stream_thinking(&format!("Calling MCP tool: {}", mcp_tool));
 
         eprintln!("🔍 DEBUG: execute_dynamic_investigation - Acquiring OVSM lock...");
+        eprintln!("🔍 DEBUG: Generated OVSM script:\n{}", ovsm_script);
         // Execute OVSM script
         let mut ovsm = self.ovsm_service.lock().await;
         eprintln!("🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...", mcp_tool);
@@ -2992,7 +3016,7 @@ impl AiService {
             user_prompt,
             Some(system_prompt.to_string()),
             Some(true),  // ownPlan=true - use custom system prompt, bypass planning
-            false  // debug
+            true  // debug - enable to see prompt sizes
         ).await
     }
 }
