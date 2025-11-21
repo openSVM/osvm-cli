@@ -163,13 +163,20 @@ pub struct IrGenerator {
 
 impl IrGenerator {
     pub fn new() -> Self {
-        Self {
+        let mut gen = Self {
             next_reg: 0,
             label_counter: 0,
             var_map: HashMap::new(),
             strings: Vec::new(),
             instructions: Vec::new(),
-        }
+        };
+        // Pre-allocate registers for Solana builtins (R1=accounts, R2=instruction-data per ABI)
+        let accounts_reg = IrReg::new(1);
+        let instr_data_reg = IrReg::new(2);
+        gen.var_map.insert("accounts".to_string(), accounts_reg);
+        gen.var_map.insert("instruction-data".to_string(), instr_data_reg);
+        gen.next_reg = 3; // Start allocating from R3
+        gen
     }
 
     /// Generate IR from typed program
@@ -429,6 +436,59 @@ impl IrGenerator {
                         self.var_map.insert(var_name.clone(), value_reg);
                         return Ok(Some(value_reg));
                     }
+                }
+
+                // Handle (get array index) - array/object access
+                if name == "get" && args.len() == 2 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("Get base has no result"))?;
+                    let idx_reg = self.generate_expr(&args[1].value)?
+                        .ok_or_else(|| Error::runtime("Get index has no result"))?;
+                    let dst = self.alloc_reg();
+                    // Calculate offset: base + idx * 8
+                    let offset_reg = self.alloc_reg();
+                    let eight_reg = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(eight_reg, 8));
+                    self.emit(IrInstruction::Mul(offset_reg, idx_reg, eight_reg));
+                    let addr_reg = self.alloc_reg();
+                    self.emit(IrInstruction::Add(addr_reg, base_reg, offset_reg));
+                    self.emit(IrInstruction::Load(dst, addr_reg, 0));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-load base offset) - direct memory load
+                if name == "mem-load" && args.len() == 2 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-load base has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => {
+                            let off_reg = self.generate_expr(&args[1].value)?
+                                .ok_or_else(|| Error::runtime("mem-load offset has no result"))?;
+                            let dst = self.alloc_reg();
+                            let addr_reg = self.alloc_reg();
+                            self.emit(IrInstruction::Add(addr_reg, base_reg, off_reg));
+                            self.emit(IrInstruction::Load(dst, addr_reg, 0));
+                            return Ok(Some(dst));
+                        }
+                    };
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Load(dst, base_reg, offset));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (mem-store base offset value) - direct memory store
+                if name == "mem-store" && args.len() == 3 {
+                    let base_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("mem-store base has no result"))?;
+                    let offset = match &args[1].value {
+                        Expression::IntLiteral(n) => *n,
+                        _ => return Err(Error::runtime("mem-store offset must be constant")),
+                    };
+                    let value_reg = self.generate_expr(&args[2].value)?
+                        .ok_or_else(|| Error::runtime("mem-store value has no result"))?;
+                    self.emit(IrInstruction::Store(base_reg, value_reg, offset));
+                    return Ok(None); // Store has no result
                 }
 
                 // Generic tool call

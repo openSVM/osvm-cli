@@ -142,8 +142,13 @@ pub struct TypeChecker {
 
 impl TypeChecker {
     pub fn new() -> Self {
+        let mut env = TypeEnv::new();
+        // Pre-define Solana program builtins
+        env.define("accounts", OvsmType::Array(Box::new(OvsmType::AccountInfo)));
+        env.define("instruction-data", OvsmType::Array(Box::new(OvsmType::I64)));
+
         Self {
-            env: TypeEnv::new(),
+            env,
             warnings: Vec::new(),
         }
     }
@@ -463,5 +468,35 @@ mod tests {
 
         eprintln!("Result: {:?}", result);
         assert!(result.is_ok(), "Should type-check successfully: {:?}", result);
+    }
+
+    #[test]
+    fn test_arithmetic_expression() {
+        use crate::{SExprScanner, SExprParser};
+        use crate::compiler::{Compiler, CompileOptions};
+
+        // Test nested arithmetic like AMM
+        let source = r#"
+(define a 100)
+(define b 200)
+(define c (+ a b))
+c
+"#;
+        let options = CompileOptions {
+            opt_level: 0,  // Disable optimization to see actual IR
+            ..CompileOptions::default()
+        };
+        let compiler = Compiler::new(options);
+        let result = compiler.compile(source);
+
+        eprintln!("Compile result: {:?}", result);
+        assert!(result.is_ok(), "Should compile: {:?}", result);
+
+        let result = result.unwrap();
+        eprintln!("IR instructions: {}", result.ir_instruction_count);
+        eprintln!("sBPF instructions: {}", result.sbpf_instruction_count);
+
+        // Should have more than 3 instructions for the arithmetic
+        assert!(result.ir_instruction_count > 3, "Should have arithmetic IR");
     }
 }

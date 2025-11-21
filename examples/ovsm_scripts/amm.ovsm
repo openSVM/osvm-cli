@@ -1,21 +1,33 @@
 ;;; AMM (Automated Market Maker) - Constant Product Formula
-;;; Implements x * y = k invariant for token swaps
+;;; Solana Program - reads from account data
+;;;
+;;; Account layout:
+;;; 0: Pool state account (reserves_x, reserves_y at offsets 0, 8)
+;;; 1: Instruction data (swap_amount at offset 0)
+
+;; Load pool reserves from account 0
+(define pool_account (get accounts 0))
+(define reserves_x (mem-load pool_account 0))
+(define reserves_y (mem-load pool_account 8))
+
+;; Load swap amount from instruction data
+(define swap_amount (mem-load instruction-data 0))
 
 ;; Constants
 (define FEE_BPS 30)
 (define BPS_DENOMINATOR 10000)
 
-;; Pool state (simulated)
-(define reserves_x 1000000)
-(define reserves_y 1000000)
-(define lp_supply 1000000)
-
-;; Swap calculation (inline)
-(define swap_amount 10000)
+;; Calculate fee: fee = swap_amount * 30 / 10000
 (define fee (/ (* swap_amount FEE_BPS) BPS_DENOMINATOR))
 (define amount_in_after_fee (- swap_amount fee))
+
+;; Constant product formula: dy = y * dx / (x + dx)
 (define new_reserves_x (+ reserves_x amount_in_after_fee))
 (define amount_out (/ (* reserves_y amount_in_after_fee) new_reserves_x))
 
-;; Result
+;; Update pool state
+(mem-store pool_account 0 new_reserves_x)
+(mem-store pool_account 8 (- reserves_y amount_out))
+
+;; Return amount_out
 amount_out

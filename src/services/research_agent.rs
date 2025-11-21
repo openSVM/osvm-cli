@@ -1725,10 +1725,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         // Convert to JSON for analysis
         let result_json = self.value_to_json(result_value)?;
 
-        // Format findings
-        let findings = format!("Tool: {}\nData: {}",
-                               mcp_tool,
-                               serde_json::to_string_pretty(&result_json)?);
+        // Summarize findings instead of dumping raw JSON (which can be huge!)
+        let findings = self.summarize_mcp_result(&mcp_tool, &result_json);
 
         // Store as finding
         {
@@ -3012,6 +3010,84 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         };
 
         Ok(json)
+    }
+
+    /// Summarize MCP result to avoid dumping raw JSON into AI prompts
+    fn summarize_mcp_result(&self, tool_name: &str, result: &serde_json::Value) -> String {
+        let mut summary = format!("Tool: {}\n", tool_name);
+
+        // Handle get_account_transfers specifically
+        if tool_name.contains("get_account_transfers") {
+            if let Some(data) = result.get("data").and_then(|d| d.get("data")).and_then(|d| d.as_array()) {
+                let total_transfers = data.len();
+
+                // Count by direction
+                let inflows: Vec<_> = data.iter().filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("IN")).collect();
+                let outflows: Vec<_> = data.iter().filter(|t| t.get("transferType").and_then(|v| v.as_str()) == Some("OUT")).collect();
+
+                // Count by type
+                let sol_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("sol")).collect();
+                let spl_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("spl")).collect();
+                let defi_transfers: Vec<_> = data.iter().filter(|t| t.get("txType").and_then(|v| v.as_str()) == Some("defi")).collect();
+
+                // Get unique counterparties
+                let mut counterparties: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                for t in data {
+                    if let Some(from) = t.get("from").and_then(|v| v.as_str()) {
+                        counterparties.insert(from);
+                    }
+                    if let Some(to) = t.get("to").and_then(|v| v.as_str()) {
+                        counterparties.insert(to);
+                    }
+                }
+
+                // Get token symbols
+                let mut tokens: std::collections::HashSet<&str> = std::collections::HashSet::new();
+                for t in data {
+                    if let Some(symbol) = t.get("tokenSymbol").and_then(|v| v.as_str()) {
+                        tokens.insert(symbol);
+                    }
+                }
+
+                summary.push_str(&format!("Summary:\n"));
+                summary.push_str(&format!("  - Total transfers: {}\n", total_transfers));
+                summary.push_str(&format!("  - Inflows: {}, Outflows: {}\n", inflows.len(), outflows.len()));
+                summary.push_str(&format!("  - SOL transfers: {}, SPL transfers: {}, DeFi: {}\n",
+                    sol_transfers.len(), spl_transfers.len(), defi_transfers.len()));
+                summary.push_str(&format!("  - Unique counterparties: {}\n", counterparties.len()));
+                summary.push_str(&format!("  - Tokens involved: {:?}\n", tokens.iter().take(10).collect::<Vec<_>>()));
+
+                // Sample top 5 transfers
+                summary.push_str("\nSample transfers (top 5):\n");
+                for (i, t) in data.iter().take(5).enumerate() {
+                    let from = t.get("from").and_then(|v| v.as_str()).unwrap_or("?");
+                    let to = t.get("to").and_then(|v| v.as_str()).unwrap_or("?");
+                    let amount = t.get("tokenAmount").and_then(|v| v.as_str()).unwrap_or("0");
+                    let symbol = t.get("tokenSymbol").and_then(|v| v.as_str()).unwrap_or("?");
+                    let tx_type = t.get("transferType").and_then(|v| v.as_str()).unwrap_or("?");
+                    summary.push_str(&format!("  {}. {} {} {} ({} -> {})\n",
+                        i + 1, amount, symbol, tx_type, &from[..8.min(from.len())], &to[..8.min(to.len())]));
+                }
+            } else {
+                summary.push_str("No transfer data in response\n");
+            }
+        }
+        // Handle get_account_stats
+        else if tool_name.contains("get_account_stats") {
+            summary.push_str(&format!("Account stats retrieved: {}\n",
+                serde_json::to_string(result).unwrap_or_default().chars().take(200).collect::<String>()));
+        }
+        // Default: truncate to reasonable size
+        else {
+            let json_str = serde_json::to_string_pretty(result).unwrap_or_default();
+            if json_str.len() > 500 {
+                summary.push_str(&format!("Data (truncated): {}...\n", &json_str[..500]));
+            } else {
+                summary.push_str(&format!("Data: {}\n", json_str));
+            }
+        }
+
+        summary
     }
 
     /// Generate final investigation report
