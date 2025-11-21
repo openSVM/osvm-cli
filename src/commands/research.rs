@@ -462,27 +462,34 @@ fn extract_summary_json(result: &ovsm::Value) -> Result<String> {
 /// Format the wallet analysis summary using AI
 async fn format_wallet_analysis(ai_service: &mut AiService, wallet: &str, summary_json: &str) -> Result<String> {
     // System prompt for custom formatting (bypass planning mode)
-    let system_prompt = r#"You are a markdown formatter. The blockchain analysis is ALREADY COMPLETE.
+    let system_prompt = r#"You are a blockchain detective presenting findings. Format the JSON data as an engaging terminal report.
 
-Your ONLY job: Convert the provided JSON into clean markdown.
+CRITICAL RULES:
+1. NEVER use <br> or HTML tags - use NEWLINES only
+2. Keep addresses SHORT (first 35 chars + "...")
+3. Be entertaining but concise
 
-DO NOT analyze, interpret, or add commentary. ONLY format what's given:
+FORMAT:
+🔍 WALLET INTEL: [wallet]
+═══════════════════════════════════════════════════
 
-**Wallet Summary**
-- Total: {total_transfers_unique} unique transfers ({inflow_count} in, {outflow_count} out)
-- Tokens: {num_tokens} different tokens
+📊 Activity Snapshot
+• Total moves: X unique transfers (Y in, Z out)
+• Token variety: N different tokens
 
-**Top 3 Senders** (addresses sending TO this wallet)
-| Address | Tokens Sent |
-|---------|-------------|
-[For each sender in top_senders array, list address and all tokens with amounts]
+💰 Top 3 Senders (money flowing IN)
+┌───────────────────────────────────┬────────────────────────────────────────┐
+│              Address              │              Tokens Sent               │
+├───────────────────────────────────┼────────────────────────────────────────┤
+│ [35 chars...]                     │ TOKEN1: 1,234.56                       │
+│                                   │ TOKEN2: 789.01                         │
+└───────────────────────────────────┴────────────────────────────────────────┘
+(Each token on its own line, NO <br> tags!)
 
-**Top 3 Receivers** (addresses receiving FROM this wallet)
-| Address | Tokens Received |
-|---------|-----------------|
-[For each receiver in top_receivers array, list address and all tokens with amounts]
+📤 Top 3 Receivers (money flowing OUT)
+[Same table format]
 
-NO analysis. NO interpretation. ONLY formatting the JSON into tables."#.to_string();
+Add a witty one-liner observation at the end based on the flow pattern."#.to_string();
 
     // Question contains the actual data
     let question = format!(r#"Wallet Address: {}
@@ -556,7 +563,10 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     let logs = Arc::clone(&app.logs);
     let status = Arc::clone(&app.status);
     let phase = Arc::clone(&app.phase);
+    let wallet_graph = app.get_graph_handle();
+    let (token_volumes, transfer_events) = app.get_analytics_handles();
     let wallet_clone = wallet.to_string();
+    let target_wallet_for_callback = wallet.to_string();
 
     // Get Tokio runtime handle for spawning async tasks
     let runtime_handle = tokio::runtime::Handle::current();
@@ -583,12 +593,91 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
 
             *status.lock().unwrap() = "Initializing MCP tools...".to_string();
 
-            // Create research agent
-            let agent = ResearchAgent::new(
+            // Create callbacks for TUI updates
+            let agent_output_clone = Arc::clone(&agent_output);
+            let output_callback: crate::services::research_agent::TuiCallback = Arc::new(move |msg: &str| {
+                if let Ok(mut output) = agent_output_clone.lock() {
+                    output.push(msg.to_string());
+                    if output.len() > 500 {
+                        output.drain(0..250);
+                    }
+                }
+            });
+
+            let logs_clone = Arc::clone(&logs);
+            let logs_callback: crate::services::research_agent::TuiCallback = Arc::new(move |msg: &str| {
+                if let Ok(mut log) = logs_clone.lock() {
+                    log.push(format!("[{}] {}", chrono::Local::now().format("%H:%M:%S"), msg));
+                    if log.len() > 1000 {
+                        log.drain(0..500);
+                    }
+                }
+            });
+
+            // Create graph callback to update TUI wallet graph AND analytics
+            let target_w = target_wallet_for_callback.clone();
+            let graph_callback: crate::services::research_agent::GraphCallback = Arc::new(move |from: &str, to: &str, amount: f64, token: &str, timestamp: &str| {
+                // Update graph
+                if let Ok(mut graph) = wallet_graph.lock() {
+                    use crate::utils::tui::graph::WalletNodeType;
+                    graph.add_transfer(
+                        from.to_string(),
+                        to.to_string(),
+                        amount,
+                        token.to_string(),
+                        WalletNodeType::Funding,
+                        WalletNodeType::Recipient,
+                    );
+                }
+
+                // Update token volumes
+                if let Ok(mut vols) = token_volumes.lock() {
+                    if let Some(existing) = vols.iter_mut().find(|v| v.symbol == token) {
+                        existing.amount += amount;
+                    } else {
+                        vols.push(crate::utils::tui::app::TokenVolume {
+                            symbol: token.to_string(),
+                            amount,
+                        });
+                    }
+                    // Sort by volume descending
+                    vols.sort_by(|a, b| b.amount.partial_cmp(&a.amount).unwrap_or(std::cmp::Ordering::Equal));
+                }
+
+                // Update transfer events with HISTORICAL timestamp
+                if let Ok(mut evts) = transfer_events.lock() {
+                    let direction = if to == target_w { "IN" } else { "OUT" };
+                    // Use historical timestamp if available, else current time
+                    let ts = if !timestamp.is_empty() && timestamp.len() >= 10 {
+                        timestamp[..10].to_string() // Just the date
+                    } else {
+                        chrono::Local::now().format("%Y-%m-%d").to_string()
+                    };
+                    evts.push(crate::utils::tui::app::TransferEvent {
+                        timestamp: ts,
+                        amount,
+                        token: token.to_string(),
+                        direction: direction.to_string(),
+                    });
+                    // Sort by timestamp descending (newest first) and keep last 50
+                    evts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+                    evts.truncate(50);
+                }
+            });
+
+            let tui_callbacks = crate::services::research_agent::TuiCallbacks {
+                output: Some(output_callback),
+                logs: Some(logs_callback),
+                graph: Some(graph_callback),
+            };
+
+            // Create research agent with TUI callbacks
+            let agent = ResearchAgent::new_with_callbacks(
                 ai_service,
                 ovsm_service,
                 Arc::clone(&mcp_arc),
-                wallet_clone.clone()
+                wallet_clone.clone(),
+                tui_callbacks
             );
 
             // Add initialization complete message
@@ -600,11 +689,12 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
             *phase.lock().unwrap() = "PLANNING".to_string();
             *status.lock().unwrap() = "AI generating investigation plan...".to_string();
 
-            // Run investigation (this will take a while)
+            // Run investigation in AUTO mode (deterministic, no AI prompts)
             *phase.lock().unwrap() = "INVESTIGATING".to_string();
-            *status.lock().unwrap() = "Running blockchain queries...".to_string();
+            *status.lock().unwrap() = "BFS graph expansion starting...".to_string();
 
-            match agent.investigate().await {
+            // Use investigate_auto for TUI mode - no AI, just deterministic graph building
+            match agent.investigate_auto().await {
                 Ok(report) => {
                     *phase.lock().unwrap() = "COMPLETE".to_string();
                     *status.lock().unwrap() = "Investigation complete!".to_string();

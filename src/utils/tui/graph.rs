@@ -1,11 +1,10 @@
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Widget, Wrap},
+    widgets::{Block, Borders, Widget, Wrap, canvas::{Canvas, Points, Line as CanvasLine, Circle, Rectangle}},
     Frame,
 };
 use std::collections::HashMap;
-use tui_nodes::{Connection, NodeGraph, NodeLayout};
 
 #[derive(Debug, Clone)]
 pub enum WalletNodeType {
@@ -50,6 +49,38 @@ pub struct WalletGraph {
     nodes: Vec<(String, WalletNode)>, // (address, node_data)
     connections: Vec<(usize, usize, String)>, // (from_idx, to_idx, label)
     target_wallet: String,
+    /// Currently selected node index for keyboard navigation
+    pub selected_node: Option<usize>,
+    /// Collapsed node indices (hidden children)
+    pub collapsed_nodes: std::collections::HashSet<usize>,
+    /// Node positions for canvas rendering (x, y) in graph space
+    pub node_positions: Vec<(f64, f64)>,
+    /// Viewport for large graphs (center_x, center_y, zoom_level)
+    pub viewport: (f64, f64, f64),
+    /// Max depth for BFS exploration (default: 5)
+    pub max_depth: usize,
+    /// Current depth reached
+    pub current_depth: usize,
+}
+
+/// Input event for graph navigation
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GraphInput {
+    Up,
+    Down,
+    Left,
+    Right,
+    Toggle,
+    Select,
+    Escape,
+    ZoomIn,
+    ZoomOut,
+    PanUp,
+    PanDown,
+    PanLeft,
+    PanRight,
+    IncreaseDepth,
+    DecreaseDepth,
 }
 
 impl WalletGraph {
@@ -73,7 +104,153 @@ impl WalletGraph {
             nodes,
             connections: Vec::new(),
             target_wallet,
+            selected_node: Some(0),
+            collapsed_nodes: std::collections::HashSet::new(),
+            node_positions: vec![(0.0, 0.0)], // Target wallet at origin
+            viewport: (0.0, 0.0, 1.0), // (center_x, center_y, zoom=1.0)
+            max_depth: 5, // Default BFS depth
+            current_depth: 0,
         }
+    }
+
+    /// Handle keyboard input for graph navigation
+    pub fn handle_input(&mut self, input: GraphInput) -> Option<String> {
+        match input {
+            // Node selection navigation
+            GraphInput::Up => {
+                if let Some(idx) = self.selected_node {
+                    if idx > 0 {
+                        self.selected_node = Some(idx - 1);
+                    }
+                } else if !self.nodes.is_empty() {
+                    self.selected_node = Some(0);
+                }
+                None
+            }
+            GraphInput::Down => {
+                if let Some(idx) = self.selected_node {
+                    if idx + 1 < self.nodes.len() {
+                        self.selected_node = Some(idx + 1);
+                    }
+                } else if !self.nodes.is_empty() {
+                    self.selected_node = Some(0);
+                }
+                None
+            }
+            GraphInput::Left => {
+                if let Some(idx) = self.selected_node {
+                    if idx > 0 {
+                        self.selected_node = Some(idx - 1);
+                    }
+                }
+                None
+            }
+            GraphInput::Right => {
+                if let Some(idx) = self.selected_node {
+                    if idx + 1 < self.nodes.len() {
+                        self.selected_node = Some(idx + 1);
+                    }
+                }
+                None
+            }
+            // Viewport panning (FASTER for better UX)
+            GraphInput::PanUp => {
+                self.viewport.1 += 20.0 / self.viewport.2;
+                None
+            }
+            GraphInput::PanDown => {
+                self.viewport.1 -= 20.0 / self.viewport.2;
+                None
+            }
+            GraphInput::PanLeft => {
+                self.viewport.0 -= 20.0 / self.viewport.2;
+                None
+            }
+            GraphInput::PanRight => {
+                self.viewport.0 += 20.0 / self.viewport.2;
+                None
+            }
+            // Zoom controls
+            GraphInput::ZoomIn => {
+                self.viewport.2 = (self.viewport.2 * 1.2).min(10.0);
+                None
+            }
+            GraphInput::ZoomOut => {
+                self.viewport.2 = (self.viewport.2 / 1.2).max(0.1);
+                None
+            }
+            GraphInput::Toggle => {
+                if let Some(idx) = self.selected_node {
+                    if self.collapsed_nodes.contains(&idx) {
+                        self.collapsed_nodes.remove(&idx);
+                    } else {
+                        self.collapsed_nodes.insert(idx);
+                    }
+                }
+                None
+            }
+            GraphInput::Select => {
+                self.selected_node
+                    .and_then(|idx| self.nodes.get(idx))
+                    .map(|(addr, _)| addr.clone())
+            }
+            GraphInput::Escape => {
+                self.selected_node = None;
+                None
+            }
+            // Depth control for BFS exploration
+            GraphInput::IncreaseDepth => {
+                if self.max_depth < 20 {
+                    self.max_depth += 1;
+                }
+                None
+            }
+            GraphInput::DecreaseDepth => {
+                if self.max_depth > 1 {
+                    self.max_depth -= 1;
+                }
+                None
+            }
+        }
+    }
+
+    /// Get outgoing connections from a node
+    pub fn get_outgoing(&self, node_idx: usize) -> Vec<usize> {
+        self.connections
+            .iter()
+            .filter(|(from, _, _)| *from == node_idx)
+            .map(|(_, to, _)| *to)
+            .collect()
+    }
+
+    pub fn is_collapsed(&self, node_idx: usize) -> bool {
+        self.collapsed_nodes.contains(&node_idx)
+    }
+
+    pub fn is_selected(&self, node_idx: usize) -> bool {
+        self.selected_node == Some(node_idx)
+    }
+
+    /// Get info about selected node
+    pub fn get_selected_info(&self) -> Option<String> {
+        self.selected_node.and_then(|idx| {
+            self.nodes.get(idx).map(|(addr, node)| {
+                let outgoing = self.get_outgoing(idx);
+                let incoming: Vec<_> = self.connections
+                    .iter()
+                    .filter(|(_, to, _)| *to == idx)
+                    .collect();
+                format!(
+                    "{} {}\nAddress: {}\nIn: {} | Out: {}{}",
+                    node.node_type.symbol(),
+                    node.label,
+                    addr,
+                    incoming.len(),
+                    outgoing.len(),
+                    if self.is_collapsed(idx) { " [▶]" } else { "" }
+                )
+            })
+        })
     }
 
     pub fn add_wallet(
@@ -106,7 +283,16 @@ impl WalletGraph {
             },
         ));
 
-        self.nodes.len() - 1
+        // Add initial random position for new node
+        let idx = self.nodes.len() - 1;
+        let angle = (idx as f64) * 2.0 * std::f64::consts::PI / 20.0;
+        let radius = 10.0 + (idx as f64) * 2.0;
+        self.node_positions.push((
+            radius * angle.cos(),
+            radius * angle.sin(),
+        ));
+
+        idx
     }
 
     pub fn add_connection(
@@ -120,6 +306,73 @@ impl WalletGraph {
 
         if let (Some(from), Some(to)) = (from_idx, to_idx) {
             self.connections.push((from, to, label));
+        }
+    }
+
+    /// Compute hierarchical layout: inflows left, target center, outflows right
+    pub fn compute_hierarchical_layout(&mut self) {
+        if self.nodes.is_empty() {
+            return;
+        }
+
+        // Find target wallet index (should be index 0)
+        let target_idx = 0;
+
+        // Categorize nodes into inflows (send TO target) and outflows (receive FROM target)
+        let mut inflow_nodes = Vec::new();
+        let mut outflow_nodes = Vec::new();
+        let mut other_nodes = Vec::new();
+
+        for (idx, (addr, _)) in self.nodes.iter().enumerate() {
+            if idx == target_idx {
+                continue; // Skip target itself
+            }
+
+            // Check if this node sends to target (inflow)
+            let sends_to_target = self.connections.iter()
+                .any(|(from, to, _)| *from == idx && *to == target_idx);
+
+            // Check if this node receives from target (outflow)
+            let receives_from_target = self.connections.iter()
+                .any(|(from, to, _)| *from == target_idx && *to == idx);
+
+            if sends_to_target {
+                inflow_nodes.push(idx);
+            } else if receives_from_target {
+                outflow_nodes.push(idx);
+            } else {
+                other_nodes.push(idx);
+            }
+        }
+
+        // Clear and rebuild positions
+        self.node_positions.clear();
+        self.node_positions.resize(self.nodes.len(), (0.0, 0.0));
+
+        // Position target at center (0, 0)
+        self.node_positions[target_idx] = (0.0, 0.0);
+
+        // Position inflows on the LEFT (negative X)
+        let inflow_count = inflow_nodes.len();
+        for (i, &idx) in inflow_nodes.iter().enumerate() {
+            let y_offset = (i as f64 - inflow_count as f64 / 2.0) * 15.0;
+            self.node_positions[idx] = (-50.0, y_offset);
+        }
+
+        // Position outflows on the RIGHT (positive X)
+        let outflow_count = outflow_nodes.len();
+        for (i, &idx) in outflow_nodes.iter().enumerate() {
+            let y_offset = (i as f64 - outflow_count as f64 / 2.0) * 15.0;
+            self.node_positions[idx] = (50.0, y_offset);
+        }
+
+        // Position other nodes (secondary connections) further out
+        let other_count = other_nodes.len();
+        for (i, &idx) in other_nodes.iter().enumerate() {
+            // Alternate between left and right
+            let side = if i % 2 == 0 { -1.0 } else { 1.0 };
+            let y_offset = (i as f64 / 2.0 - other_count as f64 / 4.0) * 15.0;
+            self.node_positions[idx] = (side * 80.0, y_offset);
         }
     }
 
@@ -162,76 +415,80 @@ impl WalletGraph {
         self.add_connection(&from, &to, label);
     }
 
-    pub fn render(&self, f: &mut Frame, area: Rect) {
-        use ratatui::widgets::Paragraph;
-        use ratatui::text::{Line, Span, Text};
+    pub fn render(&mut self, f: &mut Frame, area: Rect) {
+        use ratatui::widgets::{Paragraph, canvas::Canvas};
+        use ratatui::text::{Line, Span};
 
-        // Use tui-nodes for visual graph when we have connections
-        if self.connections.len() > 0 && self.nodes.len() > 1 {
-            // Build and calculate the node graph
-            let mut node_graph = self.build_node_graph();
-            node_graph.calculate();  // IMPORTANT: Must call calculate() before rendering
+        // Compute hierarchical layout on every render (cheap operation)
+        if !self.nodes.is_empty() && !self.connections.is_empty() {
+            self.compute_hierarchical_layout();
+        }
 
-            // Render the visual graph
-            f.render_stateful_widget(node_graph, area, &mut ());
+        if self.nodes.is_empty() {
+            let widget = Paragraph::new("  Waiting for transfer data...")
+                .style(Style::default().fg(Color::DarkGray))
+                .block(Block::default()
+                    .title(" Graph │ 0w 0tx ")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Green)));
+            f.render_widget(widget, area);
             return;
         }
 
-        // Fallback to text-based display when no connections
-        let mut lines = Vec::new();
+        // Canvas-based graph for ANY size (scales to 10K+ nodes)
+        let (cx, cy, zoom) = self.viewport;
+        let canvas = Canvas::default()
+            .block(Block::default()
+                .title(format!(" Network Graph │ {}w {}tx │ depth:{}/{} │ zoom:{:.1}x │ ←↑↓→ pan, +/- zoom, [/] depth ",
+                    self.nodes.len(), self.connections.len(),
+                    self.current_depth, self.max_depth, zoom))
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(Color::Green)))
+            .x_bounds([cx - 100.0 / zoom, cx + 100.0 / zoom])
+            .y_bounds([cy - 50.0 / zoom, cy + 50.0 / zoom])
+            .paint(|ctx| {
+                // Draw edges FIRST with HIGH VISIBILITY
+                for (from_idx, to_idx, _label) in &self.connections {
+                    if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
+                        let (x1, y1) = self.node_positions[*from_idx];
+                        let (x2, y2) = self.node_positions[*to_idx];
 
-        // Header
-        lines.push(Line::from(vec![
-            Span::styled("Wallet Transfer Network", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        ]));
-        lines.push(Line::from(""));
+                        // Draw BRIGHT CYAN lines for maximum visibility
+                        ctx.draw(&CanvasLine {
+                            x1, y1, x2, y2,
+                            color: Color::Cyan,
+                        });
+                    }
+                }
 
-        // Target wallet
-        if let Some((addr, target)) = self.nodes.first() {
-            lines.push(Line::from(vec![
-                Span::styled(target.node_type.symbol(), Style::default()),
-                Span::styled(" Target: ", Style::default().fg(Color::White)),
-                Span::styled(&target.label, Style::default().fg(target.node_type.color()).add_modifier(Modifier::BOLD)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("   ", Style::default()),
-                Span::styled(&addr[..20.min(addr.len())], Style::default().fg(Color::DarkGray)),
-                Span::styled("...", Style::default().fg(Color::DarkGray)),
-            ]));
-            lines.push(Line::from(""));
-        }
+                // Draw nodes as LARGER circles
+                for (idx, (_, node)) in self.nodes.iter().enumerate() {
+                    if idx < self.node_positions.len() {
+                        let (x, y) = self.node_positions[idx];
+                        let color = if Some(idx) == self.selected_node {
+                            Color::White  // Highlight selected
+                        } else {
+                            node.node_type.color()
+                        };
 
-        // Empty state
-        lines.push(Line::from(vec![
-            Span::styled("⚠️  No transfer data yet", Style::default().fg(Color::Yellow))
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("   Waiting for investigation...", Style::default().fg(Color::DarkGray))
-        ]));
+                        // Draw node as BIGGER circle (radius 3.0) for better visibility
+                        ctx.draw(&Circle {
+                            x, y,
+                            radius: 3.0,
+                            color,
+                        });
 
-        // Footer stats
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled("────────────────────────────────", Style::default().fg(Color::DarkGray))
-        ]));
-        lines.push(Line::from(vec![
-            Span::styled("Nodes: ", Style::default().fg(Color::Cyan)),
-            Span::styled(format!("{}", self.nodes.len()), Style::default().fg(Color::White)),
-            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Edges: ", Style::default().fg(Color::Cyan)),
-            Span::styled(format!("{}", self.connections.len()), Style::default().fg(Color::White)),
-        ]));
+                        // Always show labels with more spacing
+                        let label = node.label.clone();
+                        ctx.print(x + 4.0, y, label);
+                    }
+                }
+            });
 
-        let widget = Paragraph::new(Text::from(lines))
-            .block(
-                Block::default()
-                    .title("Wallet Transfer Graph")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::Green)),
-            );
-
-        f.render_widget(widget, area);
+        f.render_widget(canvas, area);
     }
+
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
@@ -239,6 +496,11 @@ impl WalletGraph {
 
     pub fn edge_count(&self) -> usize {
         self.connections.len()
+    }
+
+    /// Iterate over nodes (address, node_data)
+    pub fn nodes_iter(&self) -> impl Iterator<Item = (&String, &WalletNode)> {
+        self.nodes.iter().map(|(addr, node)| (addr, node))
     }
 
     // Helper to build graph from research agent data
@@ -271,28 +533,6 @@ impl WalletGraph {
         }
     }
 
-    // Get tui-nodes NodeGraph (lifetime-safe version)
-    pub fn build_node_graph(&self) -> NodeGraph<'_> {
-        let mut node_layouts = Vec::new();
-        let mut tui_connections = Vec::new();
-
-        // Build NodeLayout for each wallet
-        for (idx, (_, node)) in self.nodes.iter().enumerate() {
-            let layout = NodeLayout::new((15, 3))
-                .with_title(&node.label)
-                .with_border_style(Style::default().fg(node.node_type.color()));
-            node_layouts.push(layout);
-        }
-
-        // Build Connection objects
-        for (from_idx, to_idx, _label) in &self.connections {
-            let conn = Connection::new(*from_idx, 0, *to_idx, 0);
-            tui_connections.push(conn);
-        }
-
-        // Create NodeGraph with calculated width and height
-        NodeGraph::new(node_layouts, tui_connections, 100, 50)
-    }
 }
 
 // Data structure for transfer information

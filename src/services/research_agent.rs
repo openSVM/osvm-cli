@@ -1052,12 +1052,32 @@ pub struct Evidence {
     pub reliability: f64,
 }
 
+/// Callback type for sending updates to TUI
+pub type TuiCallback = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// Callback type for sending graph updates (from, to, amount, token)
+/// Graph callback: (from, to, amount, token, timestamp)
+pub type GraphCallback = Arc<dyn Fn(&str, &str, f64, &str, &str) + Send + Sync>;
+
+/// Callbacks for TUI integration
+#[derive(Clone, Default)]
+pub struct TuiCallbacks {
+    /// Callback for agent output (thinking, decisions)
+    pub output: Option<TuiCallback>,
+    /// Callback for debug logs
+    pub logs: Option<TuiCallback>,
+    /// Callback for graph updates (from, to, amount, token)
+    pub graph: Option<GraphCallback>,
+}
+
 #[derive(Clone)]
 pub struct ResearchAgent {
     ai_service: Arc<Mutex<AiService>>,
     ovsm_service: Arc<Mutex<OvsmService>>,
     mcp_service: Arc<tokio::sync::Mutex<McpService>>,
     state: Arc<Mutex<InvestigationState>>,
+    /// Optional callbacks for TUI updates
+    tui_callbacks: TuiCallbacks,
 }
 
 impl ResearchAgent {
@@ -1066,6 +1086,26 @@ impl ResearchAgent {
         ovsm_service: Arc<Mutex<OvsmService>>,
         mcp_service: Arc<tokio::sync::Mutex<McpService>>,
         target_wallet: String,
+    ) -> Self {
+        Self::new_with_callbacks(ai_service, ovsm_service, mcp_service, target_wallet, TuiCallbacks::default())
+    }
+
+    pub fn new_with_callback(
+        ai_service: Arc<Mutex<AiService>>,
+        ovsm_service: Arc<Mutex<OvsmService>>,
+        mcp_service: Arc<tokio::sync::Mutex<McpService>>,
+        target_wallet: String,
+        tui_callback: Option<TuiCallback>,
+    ) -> Self {
+        Self::new_with_callbacks(ai_service, ovsm_service, mcp_service, target_wallet, TuiCallbacks { output: tui_callback, logs: None, graph: None })
+    }
+
+    pub fn new_with_callbacks(
+        ai_service: Arc<Mutex<AiService>>,
+        ovsm_service: Arc<Mutex<OvsmService>>,
+        mcp_service: Arc<tokio::sync::Mutex<McpService>>,
+        target_wallet: String,
+        tui_callbacks: TuiCallbacks,
     ) -> Self {
         let initial_state = InvestigationState {
             target_wallet: target_wallet.clone(),
@@ -1106,6 +1146,7 @@ impl ResearchAgent {
             ovsm_service,
             mcp_service,
             state: Arc::new(Mutex::new(initial_state)),
+            tui_callbacks,
         }
     }
 
@@ -1195,8 +1236,26 @@ Return as JSON array:
 
     /// Stream a thinking message to show agent's reasoning
     fn stream_thinking(&self, message: &str) {
-        // Log to file only - keep terminal clean
-        tracing::debug!("🧠 {}", message);
+        // Send to TUI output if callback is set
+        if let Some(ref callback) = self.tui_callbacks.output {
+            callback(&format!("🧠 {}", message));
+        }
+        // Also log for non-TUI mode
+        if self.tui_callbacks.output.is_none() {
+            tracing::debug!("🧠 {}", message);
+        }
+    }
+
+    /// Stream a log message to TUI logs tab
+    fn stream_log(&self, message: &str) {
+        // Send to TUI logs if callback is set
+        if let Some(ref callback) = self.tui_callbacks.logs {
+            callback(message);
+        }
+        // Also use tracing for non-TUI mode
+        if self.tui_callbacks.logs.is_none() {
+            tracing::debug!("{}", message);
+        }
     }
 
     /// Update investigation TODO list based on current findings
@@ -1449,8 +1508,194 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         }
     }
 
+    /// TUI auto-exploration mode - NO AI, just deterministic graph building
+    /// Recursively expands graph by following SOL/SPL transfers
+    pub async fn investigate_auto(&self) -> Result<String> {
+        self.stream_log("🔄 Auto-exploration mode");
+
+        let target = {
+            let state = self.state.lock().await;
+            state.target_wallet.clone()
+        };
+
+        // Track visited wallets to avoid loops
+        let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut queue: std::collections::VecDeque<(String, usize)> = std::collections::VecDeque::new();
+
+        queue.push_back((target.clone(), 0));
+        visited.insert(target.clone());
+
+        let max_depth = 5; // Expand 5 levels deep
+        let max_wallets = 100; // Cap total wallets explored
+
+        while let Some((wallet, depth)) = queue.pop_front() {
+            if visited.len() > max_wallets {
+                self.stream_log(&format!("⚠️ Reached {} wallet limit", max_wallets));
+                break;
+            }
+
+            let depth_indicator = "→".repeat(depth + 1);
+            self.stream_log(&format!("{} Exploring {}...{}", depth_indicator, &wallet[..8], &wallet[wallet.len()-4..]));
+
+            // Fetch transfers for this wallet
+            let params = serde_json::json!({
+                "address": wallet,
+                "limit": 100,
+                "compress": true
+            });
+
+            let server_id = {
+                let mcp = self.mcp_service.lock().await;
+                mcp.get_first_enabled_server_id().unwrap_or_else(|| "osvm-mcp".to_string())
+            };
+
+            // Call with timeout to avoid hanging
+            self.stream_log(&format!("📡 Fetching {}...", &wallet[..8]));
+
+            let result = {
+                let mcp = self.mcp_service.lock().await;
+                tokio::time::timeout(
+                    tokio::time::Duration::from_secs(15),
+                    mcp.call_tool(&server_id, "get_account_transfers", Some(params))
+                ).await
+            };
+
+            self.stream_log(&format!("📥 Got response for {}", &wallet[..8]));
+
+            let result = match result {
+                Ok(r) => r,
+                Err(_) => {
+                    self.stream_log(&format!("⏱️ Timeout fetching {}", &wallet[..8]));
+                    continue;
+                }
+            };
+
+            if let Ok(data) = result {
+                // Process transfers and collect new wallets to explore
+                let new_wallets = self.process_transfers_for_expansion(&data, &wallet, &target).await;
+
+                // Queue unvisited wallets for next depth level
+                if depth < max_depth {
+                    for new_wallet in new_wallets {
+                        if !visited.contains(&new_wallet) && visited.len() < max_wallets {
+                            visited.insert(new_wallet.clone());
+                            queue.push_back((new_wallet, depth + 1));
+                        }
+                    }
+                }
+            }
+
+            // Small delay to not hammer the API
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+
+        // Report final stats
+        let state = self.state.lock().await;
+        let node_count = state.knowledge_graph.wallets.len();
+        let edge_count = state.knowledge_graph.relationships.len();
+        self.stream_log(&format!("✅ Done: {} wallets, {} connections", node_count, edge_count));
+
+        Ok(format!("Explored {} wallets, {} connections", node_count, edge_count))
+    }
+
+    /// Process transfers and return list of connected wallets (SOL/SPL only)
+    /// Also sends historical transfer data (with real timestamps) to TUI
+    async fn process_transfers_for_expansion(&self, data: &serde_json::Value, current_wallet: &str, target: &str) -> Vec<String> {
+        let mut connected_wallets = Vec::new();
+
+        // MCP returns: {content: [{type: "text", text: "{data: [...]}"}]}
+        // Need to parse the nested JSON string
+        let transfers_array = if let Some(content) = data.get("content").and_then(|c| c.as_array()) {
+            if let Some(first) = content.first() {
+                if let Some(text) = first.get("text").and_then(|t| t.as_str()) {
+                    // Parse the JSON string inside text
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
+                        parsed.get("data").and_then(|d| d.as_array()).cloned()
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            // Fallback: try direct data.data path
+            data.get("data").and_then(|d| d.get("data")).and_then(|d| d.as_array()).cloned()
+                .or_else(|| data.get("data").and_then(|d| d.as_array()).cloned())
+        };
+
+        if let Some(transfers) = transfers_array {
+            for transfer in transfers {
+                let tx_type = transfer["txType"].as_str().unwrap_or("");
+
+                // ONLY process sol/spl transfers
+                if tx_type != "sol" && tx_type != "spl" {
+                    continue;
+                }
+
+                let from = transfer["from"].as_str().unwrap_or("");
+                let to = transfer["to"].as_str().unwrap_or("");
+                let amount = transfer["tokenAmount"].as_str()
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .unwrap_or(0.0);
+                let token = transfer["tokenSymbol"].as_str().unwrap_or("SOL");
+
+                // Get historical timestamp from transfer data
+                let timestamp = transfer["date"].as_str()
+                    .or_else(|| transfer["timestamp"].as_str())
+                    .unwrap_or("");
+
+                if from.is_empty() || to.is_empty() {
+                    continue;
+                }
+
+                // Send to TUI graph callback with historical data
+                if let Some(ref graph_cb) = self.tui_callbacks.graph {
+                    graph_cb(from, to, amount, token, timestamp);
+                }
+
+                // Also log the historical transfer with timestamp
+                if !timestamp.is_empty() {
+                    // Parse and format the date nicely
+                    let date_display = if timestamp.len() >= 10 {
+                        &timestamp[..10] // Just the date part
+                    } else {
+                        timestamp
+                    };
+                    let direction = if to == target { "IN" } else { "OUT" };
+                    self.stream_log(&format!("  {} {} {} {} ({})",
+                        if direction == "IN" { "↓" } else { "↑" },
+                        date_display,
+                        if amount >= 1000.0 { format!("{:.1}K", amount/1000.0) } else { format!("{:.2}", amount) },
+                        token,
+                        direction
+                    ));
+                }
+
+                // Collect connected wallets for expansion
+                if from == current_wallet && to != target {
+                    connected_wallets.push(to.to_string());
+                } else if to == current_wallet && from != target {
+                    connected_wallets.push(from.to_string());
+                }
+            }
+        }
+
+        // Dedupe
+        connected_wallets.sort();
+        connected_wallets.dedup();
+        connected_wallets
+    }
+
     /// Main investigation loop with TRUE AGENTIC self-direction
     pub async fn investigate(&self) -> Result<String> {
+        // If graph callback is set (TUI mode), use auto-exploration
+        if self.tui_callbacks.graph.is_some() {
+            return self.investigate_auto().await;
+        }
+
         crate::tui_log!("\n🔬 Initiating Agentic Wallet Investigation...\n");
 
         // Step 1: Generate initial investigation plan (TODO list)
@@ -1498,20 +1743,16 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
         }
         crate::tui_log!("🔍 DEBUG: Plan stored, logging plan details...");
 
-        tracing::debug!("📋 Investigation Plan:");
+        self.stream_log("📋 Investigation Plan:");
         for (i, todo) in investigation_plan.iter().enumerate() {
-            tracing::debug!("   {}. [Priority {}] {} - {}",
-                     i + 1, todo.priority, todo.task, todo.reason);
+            self.stream_log(&format!("   {}. [Priority {}] {} - {}",
+                     i + 1, todo.priority, todo.task, todo.reason));
         }
-        crate::tui_log!("🔍 DEBUG: Plan logged, starting investigation loop with max {} iterations...", 15);
 
         let max_iterations = 15;
 
         for iteration in 0..max_iterations {
-            crate::tui_log!("🔍 DEBUG: ━━━ Iteration #{} ━━━", iteration + 1);
-            tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            tracing::debug!("? Iteration #{}", iteration + 1);
-            tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            self.stream_log(&format!("━━━ Iteration #{} ━━━", iteration + 1));
 
             // 1. Decide next action based on current state
             self.stream_thinking("Analyzing current findings and deciding next action...");
@@ -1541,17 +1782,21 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         self.build_knowledge_graph_from_transfers(&data).await?;
                         self.stream_thinking("Updated knowledge graph with new relationships");
 
-                        // Display ASCII map immediately (no AI needed!)
-                        let state = self.state.lock().await;
-                        let ascii_graph = self.render_ascii_graph(&state).await;
-                        crate::tui_log!("{}", ascii_graph);
+                        // Only display ASCII graph if NOT in TUI mode (no graph callback)
+                        if self.tui_callbacks.graph.is_none() {
+                            let state = self.state.lock().await;
+                            let ascii_graph = self.render_ascii_graph(&state).await;
+                            crate::tui_log!("{}", ascii_graph);
+                        }
                     }
                 }
             }
 
             // 3. Stream findings in real-time
-            tracing::debug!("📊 Findings:");
-            tracing::debug!("{}", result);
+            self.stream_log("📊 Findings:");
+            // Truncate result for log display (first 500 chars)
+            let result_preview = if result.len() > 500 { format!("{}...", &result[..500]) } else { result.clone() };
+            self.stream_log(&result_preview);
 
             // 4. Self-evaluate: What did we learn? What's next?
             self.stream_thinking("Self-evaluating findings...");
@@ -1560,16 +1805,15 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 self.evaluate_and_reflect(&result)
             ).await {
                 Ok(Ok(eval)) => {
-                    tracing::debug!("🧠 AI Reflection:");
-                    tracing::debug!("{}", eval);
+                    self.stream_log("🧠 AI Reflection received");
                     eval
                 }
                 Ok(Err(e)) => {
-                    tracing::debug!("⚠️  Reflection skipped: {}", e);
+                    self.stream_log(&format!("⚠️  Reflection skipped: {}", e));
                     "Continuing investigation...".to_string()
                 }
                 Err(_) => {
-                    tracing::debug!("⚠️  Reflection timeout - continuing investigation");
+                    self.stream_log("⚠️  Reflection timeout - continuing investigation");
                     "Timeout - continuing...".to_string()
                 }
             };
@@ -1597,8 +1841,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
 
-        // Display ASCII wallet relationship map
-        {
+        // Display ASCII wallet relationship map (only if NOT in TUI mode)
+        if self.tui_callbacks.graph.is_none() {
             let state = self.state.lock().await;
             let ascii_graph = self.render_ascii_graph(&state).await;
             crate::tui_log!("{}", ascii_graph);
@@ -1642,6 +1886,13 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                         "compress": true
                     }))
                 } else {
+                    // FORCE compress=true for get_account_transfers to avoid response size issues
+                    let mut params = params;
+                    if tool == "get_account_transfers" {
+                        if let Some(obj) = params.as_object_mut() {
+                            obj.insert("compress".to_string(), serde_json::json!(true));
+                        }
+                    }
                     crate::tui_log!("✅ DEBUG: Successfully parsed AI decision - tool: {}, params: {}", tool, params);
                     (tool, params)
                 }
@@ -1830,10 +2081,17 @@ Be specific and actionable. Focus on INTELLIGENCE and RELATIONSHIPS, not just da
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(0.0);
                 let transfer_type = transfer["transferType"].as_str().unwrap_or("");
+                let token_symbol = transfer["tokenSymbol"].as_str().unwrap_or("SOL");
+                let timestamp = transfer["date"].as_str().unwrap_or("");
 
                 // Skip if either wallet is empty
                 if from.is_empty() || to.is_empty() {
                     continue;
+                }
+
+                // Send to TUI graph callback if available
+                if let Some(ref graph_cb) = self.tui_callbacks.graph {
+                    graph_cb(from, to, amount, token_symbol, timestamp);
                 }
 
                 // Add wallets to graph with depth tracking

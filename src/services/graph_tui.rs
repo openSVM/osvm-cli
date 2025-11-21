@@ -13,10 +13,15 @@ use cursive::traits::*;
 use cursive::views::{
     Dialog, LinearLayout, Panel, ScrollView, SelectView, TextView,
 };
+use cursive::event::Key;
 use cursive::{Cursive, CursiveExt};
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 use super::research_agent::{Transfer, TransferGraph};
+
+/// Shared state wrapper for callbacks
+type SharedState = Arc<Mutex<GraphViewerState>>;
 
 /// Interactive TUI state for graph navigation
 #[derive(Clone)]
