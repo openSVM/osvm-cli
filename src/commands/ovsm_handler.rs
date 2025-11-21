@@ -169,6 +169,72 @@ pub async fn handle_ovsm_command(
                 }
             }
         }
+        Some(("compile", compile_matches)) => {
+            let script = compile_matches.get_one::<String>("script").expect("required");
+            let output = compile_matches.get_one::<String>("output");
+            let opt_level = *compile_matches.get_one::<u8>("opt-level").unwrap_or(&2);
+            let verify = compile_matches.get_flag("verify");
+            let emit_ir = compile_matches.get_flag("emit-ir");
+
+            use ovsm::compiler::{Compiler, CompileOptions};
+
+            println!("🔧 Compiling OVSM to sBPF: {}", script);
+
+            // Read source
+            let source = std::fs::read_to_string(script)?;
+
+            // Compile
+            let options = CompileOptions {
+                opt_level,
+                compute_budget: 200_000,
+                debug_info: emit_ir,
+                source_map: false,
+            };
+
+            let compiler = Compiler::new(options);
+            match compiler.compile(&source) {
+                Ok(result) => {
+                    // Determine output path
+                    let out_path = output.cloned().unwrap_or_else(|| {
+                        let p = std::path::Path::new(script);
+                        p.with_extension("so").to_string_lossy().to_string()
+                    });
+
+                    // Write ELF
+                    std::fs::write(&out_path, &result.elf_bytes)?;
+
+                    println!("✅ Compiled successfully!");
+                    println!("   Output: {}", out_path);
+                    println!("   Size: {} bytes", result.elf_bytes.len());
+                    println!("   IR instructions: {}", result.ir_instruction_count);
+                    println!("   sBPF instructions: {}", result.sbpf_instruction_count);
+                    println!("   Estimated CU: {}", result.estimated_cu);
+
+                    if !result.warnings.is_empty() {
+                        println!("\n⚠️  Warnings:");
+                        for w in &result.warnings {
+                            println!("   - {}", w);
+                        }
+                    }
+
+                    if verify {
+                        if let Some(ref v) = result.verification {
+                            println!("\n📋 Verification:");
+                            println!("   Valid: {}", v.valid);
+                            if !v.errors.is_empty() {
+                                for e in &v.errors {
+                                    println!("   ❌ {}", e);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("❌ Compilation failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         Some(("check", check_matches)) => {
             let script = check_matches.get_one::<String>("script").expect("required");
 

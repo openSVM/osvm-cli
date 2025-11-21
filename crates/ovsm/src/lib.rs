@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables, missing_docs)]
 //! # OVSM - Open Versatile S-expression Machine
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/ovsm.svg)](https://crates.io/crates/ovsm)
@@ -272,7 +273,7 @@
 #![allow(clippy::manual_strip)] // Existing pattern is clear and works
 #![allow(clippy::needless_range_loop)] // Index needed for error messages
 #![allow(clippy::collapsible_match)] // Separate error handling for clarity
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 
 // Module declarations
 /// Version of the OVSM interpreter

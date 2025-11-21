@@ -36,6 +36,8 @@ pub struct OsvmApp {
     pub iteration: usize,
     pub findings_count: usize,
     pub target_wallet: String,
+    pub status: Arc<Mutex<String>>,
+    pub phase: Arc<Mutex<String>>,
 }
 
 impl OsvmApp {
@@ -50,7 +52,17 @@ impl OsvmApp {
             iteration: 0,
             findings_count: 0,
             target_wallet,
+            status: Arc::new(Mutex::new("Initializing...".to_string())),
+            phase: Arc::new(Mutex::new("INIT".to_string())),
         }
+    }
+
+    pub fn set_status(&self, status: &str) {
+        *self.status.lock().unwrap() = status.to_string();
+    }
+
+    pub fn set_phase(&self, phase: &str) {
+        *self.phase.lock().unwrap() = phase.to_string();
     }
 
     pub fn add_log(&mut self, message: String) {
@@ -123,9 +135,12 @@ impl OsvmApp {
 
     fn event_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         loop {
+            // Increment iteration for spinner animation
+            self.iteration = self.iteration.wrapping_add(1);
+
             terminal.draw(|f| self.ui(f))?;
 
-            // Handle events with timeout
+            // Handle events with short timeout for responsive UI
             if event::poll(Duration::from_millis(100))? {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
@@ -471,14 +486,42 @@ impl OsvmApp {
     }
 
     fn render_status_bar(&self, f: &mut Frame, area: Rect) {
+        // Spinner animation based on iteration
+        let spinner = match self.iteration % 4 {
+            0 => "◐",
+            1 => "◓",
+            2 => "◑",
+            _ => "◒",
+        };
+
+        let phase_str = self.phase.lock().unwrap().clone();
+        let status_str = self.status.lock().unwrap().clone();
+
+        let phase_color = match phase_str.as_str() {
+            "INIT" => Color::Yellow,
+            "PLANNING" => Color::Cyan,
+            "INVESTIGATING" => Color::Green,
+            "ANALYZING" => Color::Magenta,
+            "COMPLETE" => Color::Green,
+            "ERROR" => Color::Red,
+            _ => Color::White,
+        };
+
         let status = Paragraph::new(Line::from(vec![
-            Span::styled("Press ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!(" {} ", spinner), Style::default().fg(Color::Cyan)),
+            Span::styled("[", Style::default().fg(Color::DarkGray)),
+            Span::styled(&phase_str, Style::default().fg(phase_color).add_modifier(Modifier::BOLD)),
+            Span::styled("] ", Style::default().fg(Color::DarkGray)),
+            Span::styled(&status_str, Style::default().fg(Color::White)),
+            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("Iter: {}", self.iteration), Style::default().fg(Color::Yellow)),
+            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("Nodes: {}", self.wallet_graph.node_count()), Style::default().fg(Color::Cyan)),
+            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
             Span::styled("q", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::styled(" to quit • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("Tab", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(" to switch tabs • ", Style::default().fg(Color::DarkGray)),
-            Span::styled("1-4", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(" direct tab access", Style::default().fg(Color::DarkGray)),
+            Span::styled("=quit ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Tab", Style::default().fg(Color::Cyan)),
+            Span::styled("=switch", Style::default().fg(Color::DarkGray)),
         ]))
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)))
         .style(Style::default().bg(Color::Black));

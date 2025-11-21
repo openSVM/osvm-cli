@@ -33,7 +33,7 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     let ai_service = Arc::new(Mutex::new(AiService::new()));
 
     // Initialize OVSM with MCP tools for blockchain data access
-    tracing::info!("🔧 Initializing OVSM with MCP tools...");
+    crate::tui_log!("🔧 Initializing OVSM with MCP tools...");
     let mut registry = {
         use crate::utils::rpc_bridge::create_rpc_registry;
         create_rpc_registry()
@@ -65,14 +65,14 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     }
 
     let mut ovsm_service = OvsmService::with_registry(registry, false, false);
-    tracing::info!("✅ OVSM initialized with blockchain tools");
+    crate::tui_log!("✅ OVSM initialized with blockchain tools");
 
     // Generate OVSM script for wallet analysis
-    tracing::debug!("📊 Generating OVSM analysis script...");
+    crate::tui_log!("📊 Generating OVSM analysis script...");
     let ovsm_script = generate_wallet_analysis_script(wallet);
 
     // Execute OVSM script
-    tracing::debug!("⚙️  Executing on-chain data analysis...");
+    crate::tui_log!("⚙️  Executing on-chain data analysis...");
     let raw_result = ovsm_service.execute_code(&ovsm_script)
         .context("Failed to execute OVSM analysis")?;
 
@@ -80,13 +80,13 @@ pub async fn handle_research_command(matches: &ArgMatches) -> Result<()> {
     let summary_json = extract_summary_json(&raw_result)?;
 
     // Format with AI service (with fallback to raw output)
-    tracing::debug!("🤖 Formatting results with AI...");
+    crate::tui_log!("🤖 Formatting results with AI...");
     let formatted_report = {
         let mut ai = ai_service.lock().await;
         match format_wallet_analysis(&mut ai, wallet, &summary_json).await {
             Ok(report) => report,
             Err(e) => {
-                tracing::warn!("⚠️  AI formatting failed: {}", e);
+                crate::tui_log!("⚠️  AI formatting failed: {}", e);
                 crate::tui_log!("⚠️  AI formatting failed, showing aggregated summary");
                 summary_json.clone()
             }
@@ -127,7 +127,7 @@ async fn handle_agent_research(matches: &ArgMatches, wallet: &str) -> Result<()>
     let ai_service = Arc::new(Mutex::new(AiService::new()));
 
     // Initialize OVSM with MCP tools
-    tracing::info!("🔧 Initializing OVSM with MCP tools...");
+    crate::tui_log!("🔧 Initializing OVSM with MCP tools...");
     let mut registry = {
         use crate::utils::rpc_bridge::create_rpc_registry;
         create_rpc_registry()
@@ -500,22 +500,22 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     use crate::utils::tui::OsvmApp;
     use crate::utils::tui::graph::TransferData;
 
-    crate::tui_log!("🎨 Launching TUI for wallet: {}", wallet);
-    crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    crate::tui_log!("Navigation:");
-    crate::tui_log!("  Tab / Shift+Tab  - Cycle between tabs");
-    crate::tui_log!("  1-4             - Jump to specific tab");
-    crate::tui_log!("  q / Esc         - Quit");
-    crate::tui_log!("");
-    crate::tui_log!("Press Enter to start...");
+    // Set OSVM_QUIET to suppress all console output during TUI mode
+    std::env::set_var("OSVM_QUIET", "1");
 
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+    // Initialize file logger BEFORE any log output - redirects all logs to file
+    let log_path = crate::utils::tui::init_file_logger()
+        .unwrap_or_else(|_| "/tmp/osvm_research.log".to_string());
+
+    // These now go to file, not stdout
+    crate::tui_log!("🎨 Launching TUI for wallet: {}", wallet);
+    crate::tui_log!("Log file: {}", log_path);
 
     // Initialize services (same as regular agent mode)
-    let ai_service = Arc::new(Mutex::new(AiService::new()));
+    // Use debug_mode=false to suppress HTTP request/response logging in TUI
+    let ai_service = Arc::new(Mutex::new(AiService::new_with_debug(false)));
 
-    tracing::info!("🔧 Initializing OVSM with MCP tools...");
+    crate::tui_log!("🔧 Initializing OVSM with MCP tools...");
     let mut registry = {
         use crate::utils::rpc_bridge::create_rpc_registry;
         create_rpc_registry()
@@ -554,6 +554,8 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     // Clone Arc references for background thread
     let agent_output = Arc::clone(&app.agent_output);
     let logs = Arc::clone(&app.logs);
+    let status = Arc::clone(&app.status);
+    let phase = Arc::clone(&app.phase);
     let wallet_clone = wallet.to_string();
 
     // Get Tokio runtime handle for spawning async tasks
@@ -563,6 +565,10 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     let agent_handle = std::thread::spawn(move || {
         // Block on async agent execution
         runtime_handle.block_on(async {
+            // Update status
+            *phase.lock().unwrap() = "INIT".to_string();
+            *status.lock().unwrap() = "Starting wallet research...".to_string();
+
             // Add startup messages
             {
                 let mut output = agent_output.lock().unwrap();
@@ -574,6 +580,8 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
                 log.push(format!("Investigation started for wallet: {}", wallet_clone));
                 log.push("Initializing MCP service...".to_string());
             }
+
+            *status.lock().unwrap() = "Initializing MCP tools...".to_string();
 
             // Create research agent
             let agent = ResearchAgent::new(
@@ -589,9 +597,18 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
                 output.push("✅ MCP tools initialized".to_string());
             }
 
+            *phase.lock().unwrap() = "PLANNING".to_string();
+            *status.lock().unwrap() = "AI generating investigation plan...".to_string();
+
             // Run investigation (this will take a while)
+            *phase.lock().unwrap() = "INVESTIGATING".to_string();
+            *status.lock().unwrap() = "Running blockchain queries...".to_string();
+
             match agent.investigate().await {
                 Ok(report) => {
+                    *phase.lock().unwrap() = "COMPLETE".to_string();
+                    *status.lock().unwrap() = "Investigation complete!".to_string();
+
                     let mut output = agent_output.lock().unwrap();
                     output.push("✅ Investigation complete!".to_string());
                     output.push(format!("📊 Final report generated ({} chars)", report.len()));
@@ -600,6 +617,9 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
                     log.push("Investigation finished successfully".to_string());
                 }
                 Err(e) => {
+                    *phase.lock().unwrap() = "ERROR".to_string();
+                    *status.lock().unwrap() = format!("Failed: {}", e);
+
                     let mut output = agent_output.lock().unwrap();
                     output.push(format!("❌ Investigation failed: {}", e));
 

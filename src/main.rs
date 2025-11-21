@@ -174,9 +174,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize logging to ~/.osvm/logs/log-{timestamp}.log
     // Log all operations for debugging and audit trail
-    if let Err(e) = crate::utils::logger::init_logging() {
-        eprintln!("⚠️  Warning: Failed to initialize logging: {}", e);
-        eprintln!("   Continuing without file logging...");
+    // Use quiet mode (file-only, no console) for TUI mode to keep terminal clean
+    let is_tui_mode = args.iter().any(|a| a == "--tui");
+    let init_result = if is_tui_mode {
+        crate::utils::logger::init_logging_quiet()
+    } else {
+        crate::utils::logger::init_logging()
+    };
+    if let Err(e) = init_result {
+        if !is_tui_mode {
+            eprintln!("⚠️  Warning: Failed to initialize logging: {}", e);
+            eprintln!("   Continuing without file logging...");
+        }
     }
 
     // Capture start time for command logging

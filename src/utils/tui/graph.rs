@@ -163,47 +163,74 @@ impl WalletGraph {
     }
 
     pub fn render(&self, f: &mut Frame, area: Rect) {
-        // Use tui-nodes NodeGraph widget for actual graph rendering
-        if self.nodes.len() > 1 && !self.connections.is_empty() {
-            let node_graph = self.build_node_graph();
+        use ratatui::widgets::Paragraph;
+        use ratatui::text::{Line, Span, Text};
+
+        // Use tui-nodes for visual graph when we have connections
+        if self.connections.len() > 0 && self.nodes.len() > 1 {
+            // Build and calculate the node graph
+            let mut node_graph = self.build_node_graph();
+            node_graph.calculate();  // IMPORTANT: Must call calculate() before rendering
+
+            // Render the visual graph
             f.render_stateful_widget(node_graph, area, &mut ());
-        } else {
-            // Fallback for empty state
-            use ratatui::widgets::Paragraph;
-            use ratatui::text::{Line, Span, Text};
-
-            let mut lines = Vec::new();
-            lines.push(Line::from(vec![
-                Span::styled("Wallet Transfer Network", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-            ]));
-            lines.push(Line::from(""));
-
-            if let Some((_, target)) = self.nodes.first() {
-                lines.push(Line::from(vec![
-                    Span::styled(target.node_type.symbol(), Style::default()),
-                    Span::styled(" Target: ", Style::default().fg(Color::White)),
-                    Span::styled(&target.label, Style::default().fg(target.node_type.color()).add_modifier(Modifier::BOLD)),
-                ]));
-            }
-
-            lines.push(Line::from(""));
-            lines.push(Line::from(vec![
-                Span::styled("⚠️  No transfer data yet", Style::default().fg(Color::Yellow))
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("Waiting for investigation to discover transfers...", Style::default().fg(Color::DarkGray))
-            ]));
-
-            let widget = Paragraph::new(Text::from(lines))
-                .block(
-                    Block::default()
-                        .title("Wallet Transfer Graph")
-                        .borders(Borders::ALL)
-                        .border_style(Style::default().fg(Color::Green)),
-                );
-
-            f.render_widget(widget, area);
+            return;
         }
+
+        // Fallback to text-based display when no connections
+        let mut lines = Vec::new();
+
+        // Header
+        lines.push(Line::from(vec![
+            Span::styled("Wallet Transfer Network", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+        ]));
+        lines.push(Line::from(""));
+
+        // Target wallet
+        if let Some((addr, target)) = self.nodes.first() {
+            lines.push(Line::from(vec![
+                Span::styled(target.node_type.symbol(), Style::default()),
+                Span::styled(" Target: ", Style::default().fg(Color::White)),
+                Span::styled(&target.label, Style::default().fg(target.node_type.color()).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(vec![
+                Span::styled("   ", Style::default()),
+                Span::styled(&addr[..20.min(addr.len())], Style::default().fg(Color::DarkGray)),
+                Span::styled("...", Style::default().fg(Color::DarkGray)),
+            ]));
+            lines.push(Line::from(""));
+        }
+
+        // Empty state
+        lines.push(Line::from(vec![
+            Span::styled("⚠️  No transfer data yet", Style::default().fg(Color::Yellow))
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("   Waiting for investigation...", Style::default().fg(Color::DarkGray))
+        ]));
+
+        // Footer stats
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("────────────────────────────────", Style::default().fg(Color::DarkGray))
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("Nodes: ", Style::default().fg(Color::Cyan)),
+            Span::styled(format!("{}", self.nodes.len()), Style::default().fg(Color::White)),
+            Span::styled(" │ ", Style::default().fg(Color::DarkGray)),
+            Span::styled("Edges: ", Style::default().fg(Color::Cyan)),
+            Span::styled(format!("{}", self.connections.len()), Style::default().fg(Color::White)),
+        ]));
+
+        let widget = Paragraph::new(Text::from(lines))
+            .block(
+                Block::default()
+                    .title("Wallet Transfer Graph")
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Green)),
+            );
+
+        f.render_widget(widget, area);
     }
 
     pub fn node_count(&self) -> usize {

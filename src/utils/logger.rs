@@ -59,6 +59,54 @@ pub fn init_logging() -> Result<PathBuf> {
     Ok(log_path)
 }
 
+/// Initialize logging to file only (no console output) for TUI mode
+///
+/// This suppresses all stdout/stderr logging to keep the TUI clean.
+pub fn init_logging_quiet() -> Result<PathBuf> {
+    // Get home directory
+    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
+
+    // Create ~/.osvm/logs/ directory
+    let logs_dir = home.join(".osvm").join("logs");
+    fs::create_dir_all(&logs_dir)?;
+
+    // Generate timestamp-based log filename
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| anyhow::anyhow!("System time error: {}", e))?
+        .as_secs();
+
+    let log_filename = format!("log-{}.log", timestamp);
+    let log_path = logs_dir.join(&log_filename);
+
+    // Set up file appender
+    let file_appender = tracing_appender::rolling::never(&logs_dir, &log_filename);
+
+    // Create fmt layer for file output ONLY (no console)
+    let file_layer = fmt::layer()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_line_number(true);
+
+    // Set up env filter (default to info level)
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // Initialize subscriber with file output ONLY (no console layer)
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(file_layer)
+        .init();
+
+    // Log initialization (goes to file only)
+    tracing::info!("OSVM logging initialized (quiet mode for TUI)");
+    tracing::info!("Log file: {}", log_path.display());
+
+    Ok(log_path)
+}
+
 /// Get the logs directory path
 pub fn get_logs_dir() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;

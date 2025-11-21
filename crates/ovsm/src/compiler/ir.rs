@@ -411,6 +411,27 @@ impl IrGenerator {
             }
 
             Expression::ToolCall { name, args } => {
+                // Handle (define var value) specially
+                if name == "define" && args.len() == 2 {
+                    if let Expression::Variable(var_name) = &args[0].value {
+                        let value_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("Define value has no result"))?;
+                        self.var_map.insert(var_name.clone(), value_reg);
+                        return Ok(Some(value_reg));
+                    }
+                }
+
+                // Handle (set! var value) specially
+                if name == "set!" && args.len() == 2 {
+                    if let Expression::Variable(var_name) = &args[0].value {
+                        let value_reg = self.generate_expr(&args[1].value)?
+                            .ok_or_else(|| Error::runtime("Set! value has no result"))?;
+                        self.var_map.insert(var_name.clone(), value_reg);
+                        return Ok(Some(value_reg));
+                    }
+                }
+
+                // Generic tool call
                 let mut arg_regs = Vec::new();
                 for arg in args {
                     if let Some(reg) = self.generate_expr(&arg.value)? {

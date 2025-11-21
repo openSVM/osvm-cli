@@ -169,7 +169,23 @@ impl TypeChecker {
 
     fn check_statement(&mut self, stmt: &Statement) -> Result<TypedStatement> {
         let ty = match stmt {
-            Statement::Expression(expr) => self.infer_type(expr)?,
+            Statement::Expression(expr) => {
+                // Check if this is a (define name value) expression
+                if let Expression::ToolCall { name, args } = expr {
+                    if name == "define" && args.len() == 2 {
+                        // Extract variable name from first arg
+                        if let Some(var_name) = self.extract_var_name(&args[0].value) {
+                            let value_ty = self.infer_type(&args[1].value)?;
+                            self.env.define(&var_name, value_ty.clone());
+                            return Ok(TypedStatement {
+                                statement: stmt.clone(),
+                                ty: value_ty,
+                            });
+                        }
+                    }
+                }
+                self.infer_type(expr)?
+            }
 
             Statement::Assignment { name, value } => {
                 let value_ty = self.infer_type(value)?;
@@ -253,6 +269,14 @@ impl TypeChecker {
             statement: stmt.clone(),
             ty,
         })
+    }
+
+    /// Extract variable name from Expression::Variable
+    fn extract_var_name(&self, expr: &Expression) -> Option<String> {
+        match expr {
+            Expression::Variable(name) => Some(name.clone()),
+            _ => None,
+        }
     }
 
     /// Infer the type of an expression
@@ -420,5 +444,24 @@ mod tests {
         assert!(OvsmType::I64.is_primitive());
         assert!(!OvsmType::String.is_primitive());
         assert!(OvsmType::Array(Box::new(OvsmType::I64)).is_heap_allocated());
+    }
+
+    #[test]
+    fn test_define_creates_binding() {
+        use crate::{SExprScanner, SExprParser};
+
+        let source = "(define x 42)\nx";
+        let mut scanner = SExprScanner::new(source);
+        let tokens = scanner.scan_tokens().unwrap();
+        let mut parser = SExprParser::new(tokens);
+        let program = parser.parse().unwrap();
+
+        eprintln!("Parsed program: {:?}", program);
+
+        let mut checker = TypeChecker::new();
+        let result = checker.check(&program);
+
+        eprintln!("Result: {:?}", result);
+        assert!(result.is_ok(), "Should type-check successfully: {:?}", result);
     }
 }

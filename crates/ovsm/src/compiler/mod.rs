@@ -36,7 +36,7 @@ pub use elf::ElfWriter;
 pub use verifier::{Verifier, VerifyResult, VerifyError};
 pub use runtime::{StackFrame, HeapAllocator, StringRuntime, ArrayRuntime};
 
-use crate::{Scanner, Parser, Program, Result, Error};
+use crate::{SExprScanner as Scanner, SExprParser as Parser, Program, Result, Error};
 
 /// Compilation options
 #[derive(Debug, Clone)]

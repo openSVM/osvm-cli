@@ -102,6 +102,45 @@ pub fn build_ovsm_command() -> Command {
                 )
         )
         .subcommand(
+            Command::new("compile")
+                .about("Compile OVSM script to Solana BPF bytecode (.so)")
+                .arg(
+                    Arg::new("script")
+                        .value_name("SCRIPT")
+                        .help("Path to OVSM script file (.ovsm)")
+                        .required(true)
+                        .index(1)
+                )
+                .arg(
+                    Arg::new("output")
+                        .long("output")
+                        .short('o')
+                        .value_name("FILE")
+                        .help("Output .so file path (default: <script>.so)")
+                )
+                .arg(
+                    Arg::new("opt-level")
+                        .long("opt-level")
+                        .short('O')
+                        .value_name("LEVEL")
+                        .default_value("2")
+                        .value_parser(clap::value_parser!(u8).range(0..=3))
+                        .help("Optimization level (0-3)")
+                )
+                .arg(
+                    Arg::new("verify")
+                        .long("verify")
+                        .action(ArgAction::SetTrue)
+                        .help("Run verification after compilation")
+                )
+                .arg(
+                    Arg::new("emit-ir")
+                        .long("emit-ir")
+                        .action(ArgAction::SetTrue)
+                        .help("Emit intermediate representation")
+                )
+        )
+        .subcommand(
             Command::new("check")
                 .about("Check OVSM script syntax without executing")
                 .arg(
