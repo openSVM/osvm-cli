@@ -233,4 +233,28 @@ pub fn build_snapshot_command() -> Command {
                         .help("Path to snapshot directory"),
                 ),
         )
+        .subcommand(
+            Command::new("download")
+                .about("Download mainnet snapshot to remote server via SSH")
+                .arg(
+                    Arg::new("connection")
+                        .value_name("USER@HOST")
+                        .required(true)
+                        .index(1)
+                        .help("SSH connection string (user@host[:port])"),
+                )
+                .arg(
+                    Arg::new("network")
+                        .long("network")
+                        .value_name("NETWORK")
+                        .default_value("mainnet")
+                        .help("Network to download snapshot from (mainnet, devnet, testnet)"),
+                )
+                .arg(
+                    Arg::new("ledger-dir")
+                        .long("ledger-dir")
+                        .value_name("PATH")
+                        .help("Target ledger directory on remote server [default: /opt/osvm/solana/ledger]"),
+                ),
+        )
 }

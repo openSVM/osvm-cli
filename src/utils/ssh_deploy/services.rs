@@ -180,6 +180,17 @@ pub fn create_binary_service_content(
     working_dir: &str,
     description: &str,
 ) -> String {
+    create_binary_service_content_with_user(binary_path, args, working_dir, description, "root")
+}
+
+/// Create a service content for a binary-based service with custom user
+pub fn create_binary_service_content_with_user(
+    binary_path: &str,
+    args: &[&str],
+    working_dir: &str,
+    description: &str,
+    user: &str,
+) -> String {
     let args_str = args.join(" \\\n  ");
 
     format!(
@@ -188,7 +199,7 @@ pub fn create_binary_service_content(
         After=network.target\n\
         \n\
         [Service]\n\
-        User=$(whoami)\n\
+        User={}\n\
         WorkingDirectory={}\n\
         ExecStart={} \\\n\
           {}\n\
@@ -197,6 +208,6 @@ pub fn create_binary_service_content(
         \n\
         [Install]\n\
         WantedBy=multi-user.target\n",
-        description, working_dir, binary_path, args_str
+        description, user, working_dir, binary_path, args_str
     )
 }

@@ -64,6 +64,13 @@ pub fn build_research_command() -> Command {
                 .help("Enable real-time streaming visualization (graph updates progressively)")
                 .action(clap::ArgAction::SetTrue)
         )
+        .arg(
+            Arg::new("tui")
+                .long("tui")
+                .help("Launch interactive TUI (Terminal User Interface) with real-time graph visualization")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("stream")
+        )
         .subcommand(
             Command::new("demo")
                 .about("Run a demonstration of the research agent")

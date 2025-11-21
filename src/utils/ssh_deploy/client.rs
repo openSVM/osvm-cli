@@ -97,10 +97,18 @@ impl SshClient {
                 key_path,
                 passphrase,
             } => {
-                let mut key_file = fs::File::open(key_path).map_err(|e| {
+                // Expand tilde (~) to home directory
+                let expanded_key_path = if key_path.starts_with("~/") {
+                    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                    key_path.replacen("~", &home, 1)
+                } else {
+                    key_path.clone()
+                };
+
+                let mut key_file = fs::File::open(&expanded_key_path).map_err(|e| {
                     DeploymentError::AuthError(format!(
                         "Failed to open key file {}: {}",
-                        key_path, e
+                        expanded_key_path, e
                     ))
                 })?;
 

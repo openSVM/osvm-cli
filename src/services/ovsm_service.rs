@@ -64,8 +64,8 @@ impl OvsmService {
     /// The result value from the OVSM execution
     pub fn execute_code(&mut self, code: &str) -> Result<Value> {
         if self.debug {
-            println!("🔍 Parsing OVSM code:");
-            println!("{}", code);
+            crate::tui_log!("🔍 Parsing OVSM code:");
+            crate::tui_log!("{}", code);
         }
 
         // Auto-correct parenthesis imbalances
@@ -73,7 +73,7 @@ impl OvsmService {
         let (fixed_code, report) = fixer.fix_with_report();
 
         if let Some(msg) = report {
-            println!("{}", msg);
+            crate::tui_log!("{}", msg);
         }
 
         // Tokenize the code (using potentially fixed code)
@@ -83,7 +83,7 @@ impl OvsmService {
             .map_err(|e| anyhow::anyhow!("Tokenization error: {}", e))?;
 
         if self.debug {
-            println!("✅ Tokenization successful ({} tokens)", tokens.len());
+            crate::tui_log!("✅ Tokenization successful ({} tokens)", tokens.len());
         }
 
         // Parse the tokens into an AST
@@ -93,7 +93,7 @@ impl OvsmService {
             .map_err(|e| anyhow::anyhow!("Parse error: {}", e))?;
 
         if self.debug {
-            println!("✅ Parsing successful");
+            crate::tui_log!("✅ Parsing successful");
         }
 
         // Execute the program
@@ -103,7 +103,7 @@ impl OvsmService {
             .map_err(|e| anyhow::anyhow!("Execution error: {}", e.enhanced_message()))?;
 
         if self.verbose {
-            println!("✨ Execution completed successfully");
+            crate::tui_log!("✨ Execution completed successfully");
         }
 
         Ok(result)
@@ -120,7 +120,7 @@ impl OvsmService {
         let path = script_path.as_ref();
 
         if self.verbose {
-            println!("📂 Reading script: {}", path.display());
+            crate::tui_log!("📂 Reading script: {}", path.display());
         }
 
         // Read the script file
@@ -128,7 +128,7 @@ impl OvsmService {
             .with_context(|| format!("Failed to read script file: {}", path.display()))?;
 
         if self.verbose {
-            println!("📜 Script loaded ({} bytes)", code.len());
+            crate::tui_log!("📜 Script loaded ({} bytes)", code.len());
         }
 
         // Execute the code
@@ -154,7 +154,7 @@ impl OvsmService {
         parser.parse().context("Syntax error during parsing")?;
 
         if self.verbose {
-            println!("✅ Syntax check passed");
+            crate::tui_log!("✅ Syntax check passed");
         }
 
         Ok(())
@@ -171,7 +171,7 @@ impl OvsmService {
         let path = script_path.as_ref();
 
         if self.verbose {
-            println!("📂 Checking script: {}", path.display());
+            crate::tui_log!("📂 Checking script: {}", path.display());
         }
 
         let code = fs::read_to_string(path)

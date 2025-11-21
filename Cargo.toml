@@ -102,6 +102,7 @@ imageproc = "0.25"
 ab_glyph = "0.2"
 # Terminal emulation for capturing alternate screen buffer
 vt100 = "0.15"
+tui-nodes = "0.9.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

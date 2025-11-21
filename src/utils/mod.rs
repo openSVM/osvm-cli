@@ -71,6 +71,8 @@ pub mod streaming_agent;
 pub mod theme;
 /// Advanced theme customization system
 pub mod themes;
+/// TUI (Terminal User Interface) with ratatui and tui-nodes
+pub mod tui;
 
 // Core functionality
 /// AST-based code analysis for enhanced fix suggestions

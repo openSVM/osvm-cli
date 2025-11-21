@@ -240,7 +240,7 @@ impl McpService {
         if self.debug_mode {
             debug_error!("{}: {}", message, error);
         } else {
-            eprintln!("❌ {}: {}", message, error);
+            crate::tui_log!("❌ {}: {}", message, error);
         }
     }
 
@@ -343,7 +343,7 @@ impl McpService {
     pub fn new() -> Self {
         // Load isolation config or use default
         let isolation_config = IsolationConfig::load().unwrap_or_else(|e| {
-            eprintln!(
+            crate::tui_log!(
                 "Warning: Failed to load isolation config: {}. Using defaults.",
                 e
             );
@@ -353,7 +353,7 @@ impl McpService {
         // Initialize unikernel runtime
         let unikernel_runtime = UnikernelRuntime::new(PathBuf::from(&isolation_config.unikernel_dir))
             .unwrap_or_else(|e| {
-                eprintln!("Warning: Failed to initialize unikernel runtime: {}. Unikernel execution will be disabled.", e);
+                crate::tui_log!("Warning: Failed to initialize unikernel runtime: {}. Unikernel execution will be disabled.", e);
                 // Create a fallback runtime with a temp directory
                 UnikernelRuntime::new(std::env::temp_dir().join("osvm-unikernels"))
                     .expect("Failed to create fallback unikernel runtime")
@@ -362,7 +362,7 @@ impl McpService {
         // Initialize microVM launcher (graceful fallback if unavailable)
         let microvm_launcher = MicroVmLauncher::new().ok();
         if microvm_launcher.is_none() {
-            eprintln!("Warning: MicroVM launcher unavailable. MicroVM isolation disabled.");
+            crate::tui_log!("Warning: MicroVM launcher unavailable. MicroVM isolation disabled.");
         }
 
         Self {
@@ -734,7 +734,7 @@ impl McpService {
 
         // Display security warning (unless automated setup)
         if !skip_confirmation {
-            eprintln!("{}", GITHUB_CLONE_WARNING);
+            crate::tui_log!("{}", GITHUB_CLONE_WARNING);
 
             // Prompt for confirmation
             if !self.confirm_github_clone(&github_url)? {
@@ -823,9 +823,9 @@ impl McpService {
             // Rust project - check for build.rs and warn user
             let build_rs_path = local_path.join("build.rs");
             if build_rs_path.exists() {
-                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains a build.rs script that will execute during compilation!");
-                eprintln!("Build scripts can run arbitrary code with your user privileges.");
-                eprintln!("Build script location: {:?}\n", build_rs_path);
+                crate::tui_log!("\n⚠️  CRITICAL SECURITY WARNING: This project contains a build.rs script that will execute during compilation!");
+                crate::tui_log!("Build scripts can run arbitrary code with your user privileges.");
+                crate::tui_log!("Build script location: {:?}\n", build_rs_path);
 
                 // Always require confirmation for projects with build scripts, even with --yes
                 if !self.confirm_build_execution("Rust project with build.rs")? {
@@ -882,9 +882,9 @@ impl McpService {
             if package_json_content.contains("\"postinstall\"")
                 || package_json_content.contains("\"preinstall\"")
             {
-                eprintln!("\n⚠️  CRITICAL SECURITY WARNING: This project contains npm install hooks (preinstall/postinstall)!");
-                eprintln!("These scripts will execute arbitrary code during npm install.");
-                eprintln!("Package.json location: {:?}\n", package_json_path);
+                crate::tui_log!("\n⚠️  CRITICAL SECURITY WARNING: This project contains npm install hooks (preinstall/postinstall)!");
+                crate::tui_log!("These scripts will execute arbitrary code during npm install.");
+                crate::tui_log!("Package.json location: {:?}\n", package_json_path);
 
                 // Always require confirmation for projects with install hooks
                 if !self.confirm_build_execution("Node.js project with install hooks")? {
@@ -920,7 +920,7 @@ impl McpService {
 
             // Run npm build for TypeScript projects (if build script exists)
             if package_json_content.contains("\"build\"") {
-                println!("🔨 Building TypeScript MCP server...");
+                crate::tui_log!("🔨 Building TypeScript MCP server...");
                 let build_result = Command::new("npm")
                     .args(["run", "build"])
                     .current_dir(&local_path)
@@ -2167,7 +2167,7 @@ impl McpService {
                     // Try to parse the text as JSON
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
                         if get_verbosity() >= VerbosityLevel::Verbose {
-                            println!("🔍 Extracted nested JSON from content[0].text");
+                            crate::tui_log!("🔍 Extracted nested JSON from content[0].text");
                         }
                         return parsed;
                     }
@@ -2187,13 +2187,13 @@ impl McpService {
         arguments: Option<serde_json::Value>,
     ) -> Result<serde_json::Value> {
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("🔧 MCP SERVICE call_tool ENTRY");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("📍 Server ID: {}", server_id);
-            println!("📍 Tool Name: {}", tool_name);
-            println!("📍 use_ephemeral_vms: {}", self.use_ephemeral_vms);
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("🔧 MCP SERVICE call_tool ENTRY");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("📍 Server ID: {}", server_id);
+            crate::tui_log!("📍 Tool Name: {}", tool_name);
+            crate::tui_log!("📍 use_ephemeral_vms: {}", self.use_ephemeral_vms);
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         let config = self
@@ -2208,7 +2208,7 @@ impl McpService {
         // Priority 1: Use ephemeral microVM for tool execution if enabled
         if self.use_ephemeral_vms {
             if get_verbosity() >= VerbosityLevel::Verbose {
-                println!("🔀 Taking Priority 1: Ephemeral microVM path\n");
+                crate::tui_log!("🔀 Taking Priority 1: Ephemeral microVM path\n");
             }
             if self.debug_mode {
                 debug_print!(
@@ -2227,7 +2227,7 @@ impl McpService {
         // Priority 2: Check if server is running in dedicated microVM
         if let Some(handle) = self.mcp_server_microvms.get(server_id) {
             if get_verbosity() >= VerbosityLevel::Verbose {
-                println!("🔀 Taking Priority 2: Dedicated microVM path\n");
+                crate::tui_log!("🔀 Taking Priority 2: Dedicated microVM path\n");
             }
             return self
                 .call_tool_via_microvm(handle, tool_name, arguments)
@@ -2243,7 +2243,7 @@ impl McpService {
                 .should_use_unikernel(server_id, tool_name)
         {
             if get_verbosity() >= VerbosityLevel::Verbose {
-                println!("🔀 Taking Priority 3: Unikernel path\n");
+                crate::tui_log!("🔀 Taking Priority 3: Unikernel path\n");
             }
             if self.debug_mode {
                 debug_print!(
@@ -2259,7 +2259,7 @@ impl McpService {
 
         // Priority 4: Direct execution based on transport type
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!(
+            crate::tui_log!(
                 "🔀 Taking Priority 4: Direct execution via transport = {:?}\n",
                 config.transport_type
             );
@@ -2441,44 +2441,44 @@ impl McpService {
         };
 
         // 🔍 DETAILED DEBUG LOGGING
-        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("🔧 MCP TOOL CALL DEBUG TRACE");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("📍 Server ID: {}", server_id);
-        println!("📍 Server Name: {}", config.name);
-        println!("📍 Server URL: {}", config.url);
-        println!("📍 Transport: HTTP");
-        println!("📍 Tool Name: {}", tool_name);
-        println!("\n📦 Arguments Sent:");
+        crate::tui_log!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!("🔧 MCP TOOL CALL DEBUG TRACE");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!("📍 Server ID: {}", server_id);
+        crate::tui_log!("📍 Server Name: {}", config.name);
+        crate::tui_log!("📍 Server URL: {}", config.url);
+        crate::tui_log!("📍 Transport: HTTP");
+        crate::tui_log!("📍 Tool Name: {}", tool_name);
+        crate::tui_log!("\n📦 Arguments Sent:");
         if let Some(ref args) = arguments {
-            println!(
+            crate::tui_log!(
                 "{}",
                 serde_json::to_string_pretty(args)
                     .unwrap_or_else(|_| "Failed to serialize".to_string())
             );
         } else {
-            println!("  (no arguments)");
+            crate::tui_log!("  (no arguments)");
         }
-        println!("\n📤 Full Request:");
-        println!(
+        crate::tui_log!("\n📤 Full Request:");
+        crate::tui_log!(
             "{}",
             serde_json::to_string_pretty(&request)
                 .unwrap_or_else(|_| "Failed to serialize".to_string())
         );
-        println!("\n🌐 Endpoint: {}/api/mcp", config.url);
+        crate::tui_log!("\n🌐 Endpoint: {}/api/mcp", config.url);
 
         if let Some(auth) = &config.auth {
-            println!("🔐 Auth Type: {}", auth.auth_type);
+            crate::tui_log!("🔐 Auth Type: {}", auth.auth_type);
             if auth.token.is_some() {
-                println!(
+                crate::tui_log!(
                     "🔐 Auth Token: <present, {} chars>",
                     auth.token.as_ref().unwrap().len()
                 );
             }
         } else {
-            println!("🔐 Auth: None");
+            crate::tui_log!("🔐 Auth: None");
         }
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         let mut req_builder = self
             .client
@@ -2516,25 +2516,25 @@ impl McpService {
         let elapsed = start_time.elapsed();
         let status = response.status();
 
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("📥 MCP RESPONSE DEBUG TRACE");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("⏱️  Response Time: {:?}", elapsed);
-        println!(
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!("📥 MCP RESPONSE DEBUG TRACE");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!("⏱️  Response Time: {:?}", elapsed);
+        crate::tui_log!(
             "📊 HTTP Status: {} {}",
             status.as_u16(),
             status.canonical_reason().unwrap_or("")
         );
-        println!("📊 Success: {}", status.is_success());
+        crate::tui_log!("📊 Success: {}", status.is_success());
 
         if !response.status().is_success() {
             let error_body = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "<failed to read body>".to_string());
-            println!("❌ Error Response Body:");
-            println!("{}", error_body);
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("❌ Error Response Body:");
+            crate::tui_log!("{}", error_body);
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
             return Err(anyhow::anyhow!(
@@ -2549,17 +2549,17 @@ impl McpService {
             .await
             .context("Failed to read response body")?;
 
-        println!("📦 Raw Response Body ({} bytes):", response_text.len());
+        crate::tui_log!("📦 Raw Response Body ({} bytes):", response_text.len());
         if response_text.len() < 2000 {
-            println!("{}", response_text);
+            crate::tui_log!("{}", response_text);
         } else {
-            println!(
+            crate::tui_log!(
                 "{}... (truncated, {} total bytes)",
                 &response_text[..2000],
                 response_text.len()
             );
         }
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         let mcp_response: McpResponse = serde_json::from_str(&response_text)
             .context("Failed to parse MCP tools/call response")?;
@@ -2567,19 +2567,19 @@ impl McpService {
         if let Some(error) = mcp_response.error {
             self.circuit_breaker.on_failure_endpoint(&endpoint_id);
 
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("❌ MCP PROTOCOL ERROR");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("Error Code: {}", error.code);
-            println!("Error Message: {}", error.message);
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("❌ MCP PROTOCOL ERROR");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("Error Code: {}", error.code);
+            crate::tui_log!("Error Message: {}", error.message);
             if let Some(data) = &error.data {
-                println!("Error Data:");
-                println!(
+                crate::tui_log!("Error Data:");
+                crate::tui_log!(
                     "{}",
                     serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data))
                 );
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
@@ -2592,14 +2592,14 @@ impl McpService {
             .result
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
 
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("✅ MCP SUCCESS RESULT");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!(
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!("✅ MCP SUCCESS RESULT");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        crate::tui_log!(
             "{}",
             serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result))
         );
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+        crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
         self.circuit_breaker.on_success_endpoint(&endpoint_id);
 
@@ -2627,25 +2627,25 @@ impl McpService {
     ) -> Result<serde_json::Value> {
         // 🔍 DETAILED DEBUG LOGGING FOR STDIO (only at Verbose level)
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("🔧 MCP STDIO TOOL CALL DEBUG TRACE");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("📍 Server ID: {}", server_id);
-            println!("📍 Server Name: {}", config.name);
-            println!("📍 Server URL/Command: {}", config.url);
-            println!("📍 Transport: STDIO");
-            println!("📍 Tool Name: {}", tool_name);
-            println!("\n📦 Arguments Sent:");
+            crate::tui_log!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("🔧 MCP STDIO TOOL CALL DEBUG TRACE");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("📍 Server ID: {}", server_id);
+            crate::tui_log!("📍 Server Name: {}", config.name);
+            crate::tui_log!("📍 Server URL/Command: {}", config.url);
+            crate::tui_log!("📍 Transport: STDIO");
+            crate::tui_log!("📍 Tool Name: {}", tool_name);
+            crate::tui_log!("\n📦 Arguments Sent:");
             if let Some(ref args) = arguments {
-                println!(
+                crate::tui_log!(
                     "{}",
                     serde_json::to_string_pretty(args)
                         .unwrap_or_else(|_| "Failed to serialize".to_string())
                 );
             } else {
-                println!("  (no arguments)");
+                crate::tui_log!("  (no arguments)");
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         if self.debug_mode {
@@ -2670,10 +2670,10 @@ impl McpService {
         let args: Vec<&str> = parts.collect();
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("🚀 Spawning Process:");
-            println!("   Program: {}", program);
-            println!("   Args: {:?}", args);
-            println!();
+            crate::tui_log!("🚀 Spawning Process:");
+            crate::tui_log!("   Program: {}", program);
+            crate::tui_log!("   Args: {:?}", args);
+            crate::tui_log!("");
         }
 
         let start_time = std::time::Instant::now();
@@ -2691,7 +2691,7 @@ impl McpService {
         if let Some(ref local_path) = config.local_path {
             command.current_dir(local_path);
             if get_verbosity() >= VerbosityLevel::Verbose {
-                println!("   Working Directory: {}", local_path);
+                crate::tui_log!("   Working Directory: {}", local_path);
             }
         }
 
@@ -2729,13 +2729,13 @@ impl McpService {
         let init_request_str = serde_json::to_string(&init_request)?;
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("📤 Sending Initialize Request:");
-            println!(
+            crate::tui_log!("📤 Sending Initialize Request:");
+            crate::tui_log!(
                 "{}",
                 serde_json::to_string_pretty(&init_request)
                     .unwrap_or_else(|_| init_request_str.clone())
             );
-            println!();
+            crate::tui_log!("");
         }
 
         stdin.write_all(init_request_str.as_bytes())?;
@@ -2749,9 +2749,9 @@ impl McpService {
             .context("Failed to read initialization response from stdio MCP server")?;
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("📥 Initialize Response Received:");
-            println!("{}", init_response_str);
-            println!();
+            crate::tui_log!("📥 Initialize Response Received:");
+            crate::tui_log!("{}", init_response_str);
+            crate::tui_log!("");
         }
 
         let _init_response: McpResponse = serde_json::from_str(&init_response_str)
@@ -2773,13 +2773,13 @@ impl McpService {
         let call_request_str = serde_json::to_string(&call_request)?;
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("📤 Sending Tool Call Request:");
-            println!(
+            crate::tui_log!("📤 Sending Tool Call Request:");
+            crate::tui_log!(
                 "{}",
                 serde_json::to_string_pretty(&call_request)
                     .unwrap_or_else(|_| call_request_str.clone())
             );
-            println!();
+            crate::tui_log!("");
         }
 
         stdin.write_all(call_request_str.as_bytes())?;
@@ -2794,21 +2794,21 @@ impl McpService {
         let elapsed = start_time.elapsed();
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("📥 MCP STDIO RESPONSE DEBUG TRACE");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("⏱️  Response Time: {:?}", elapsed);
-            println!("\n📦 Raw Response ({} bytes):", call_response_str.len());
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("📥 MCP STDIO RESPONSE DEBUG TRACE");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("⏱️  Response Time: {:?}", elapsed);
+            crate::tui_log!("\n📦 Raw Response ({} bytes):", call_response_str.len());
             if call_response_str.len() < 5000 {
-                println!("{}", call_response_str);
+                crate::tui_log!("{}", call_response_str);
             } else {
-                println!(
+                crate::tui_log!(
                     "{}... (truncated, {} total bytes)",
                     &call_response_str[..5000],
                     call_response_str.len()
                 );
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         let call_response: McpResponse = serde_json::from_str(&call_response_str)
@@ -2818,19 +2818,19 @@ impl McpService {
         let _ = child.kill();
 
         if let Some(error) = call_response.error {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("❌ MCP STDIO PROTOCOL ERROR");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("Error Code: {}", error.code);
-            println!("Error Message: {}", error.message);
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("❌ MCP STDIO PROTOCOL ERROR");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("Error Code: {}", error.code);
+            crate::tui_log!("Error Message: {}", error.message);
             if let Some(data) = &error.data {
-                println!("Error Data:");
-                println!(
+                crate::tui_log!("Error Data:");
+                crate::tui_log!(
                     "{}",
                     serde_json::to_string_pretty(data).unwrap_or_else(|_| format!("{:?}", data))
                 );
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
             return Err(anyhow::anyhow!(
                 "MCP server tools/call error: {} - {}",
@@ -2844,21 +2844,21 @@ impl McpService {
             .ok_or_else(|| anyhow::anyhow!("MCP server returned no result for tools/call"))?;
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("✅ MCP STDIO SUCCESS RESULT");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("✅ MCP STDIO SUCCESS RESULT");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             let result_str =
                 serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{:?}", result));
             if result_str.len() < 5000 {
-                println!("{}", result_str);
+                crate::tui_log!("{}", result_str);
             } else {
-                println!(
+                crate::tui_log!(
                     "{}... (truncated, {} total bytes)",
                     &result_str[..5000],
                     result_str.len()
                 );
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         if self.debug_mode {

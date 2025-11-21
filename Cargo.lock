@@ -4671,6 +4671,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tui-logger",
+ "tui-nodes",
  "url",
  "urlencoding",
  "uuid",
@@ -9361,6 +9362,16 @@ dependencies = [
  "parking_lot",
  "ratatui",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "tui-nodes"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a48253c4027b483ce44a8318c6b3513fe0bc0692757a6bc7e22a23e76b25b016"
+dependencies = [
+ "log",
+ "ratatui",
 ]
 
 [[package]]

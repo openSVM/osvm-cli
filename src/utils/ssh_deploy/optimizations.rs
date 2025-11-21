@@ -135,6 +135,9 @@ fn configure_file_limits(client: &mut SshClient) -> Result<(), DeploymentError> 
         limits_content
     ))?;
 
+    // Create service-specific drop-in directory
+    client.execute_command("sudo mkdir -p /etc/systemd/system/solana-validator.service.d")?;
+
     // Also add to specific service settings
     let service_limits = "[Service]\nLimitNOFILE=1000000\n";
     client.execute_command(&format!(

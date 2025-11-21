@@ -177,19 +177,35 @@ fn install_solana_cli(
 
             // Create symlink for Jito client
             client.execute_command(&format!(
-                "ln -sf /home/$(whoami)/.local/share/solana/install/releases/{}/bin /home/$(whoami)/.local/share/solana/install/active_release/",
+                "ln -sf ~/.local/share/solana/install/releases/{}/bin ~/.local/share/solana/install/active_release/",
                 jito_version
             ))?;
         }
         Some("agave") => {
-            // Install Agave client
-            let _agave_version = if version.contains("agave") {
-                version.to_string()
-            } else {
-                format!("{}-agave", version)
-            };
+            // Install latest Agave client from Anza (official Agave releases)
+            let agave_version = version;
 
-            client.execute_command("curl -sSf https://raw.githubusercontent.com/agave-blockchain/releases/main/install.sh | sh")?;
+            // Download and install Agave binaries directly
+            client.execute_command(&format!(
+                "curl -sSfL https://github.com/anza-xyz/agave/releases/download/{}/agave-release-x86_64-unknown-linux-gnu.tar.bz2 | tar xjf - -C /tmp",
+                agave_version
+            ))?;
+
+            // Install binaries
+            client.execute_command("sudo mkdir -p /opt/agave/bin")?;
+            client.execute_command("sudo cp /tmp/agave-release/bin/* /opt/agave/bin/")?;
+
+            // Create symlinks for compatibility
+            client.execute_command("sudo ln -sf /opt/agave/bin/agave-validator /usr/local/bin/agave-validator")?;
+            client.execute_command("sudo ln -sf /opt/agave/bin/solana-keygen /usr/local/bin/solana-keygen")?;
+            client.execute_command("sudo ln -sf /opt/agave/bin/solana /usr/local/bin/solana")?;
+
+            // Also update the Solana install location to point to Agave
+            client.execute_command("mkdir -p ~/.local/share/solana/install/active_release")?;
+            client.execute_command("ln -sf /opt/agave/bin ~/.local/share/solana/install/active_release/")?;
+
+            // Cleanup
+            client.execute_command("rm -rf /tmp/agave-release")?;
         }
         Some("firedancer") => {
             // Install Firedancer client
@@ -275,13 +291,14 @@ fn install_solana_cli(
     }
 
     // Add Solana to PATH
-    client.execute_command("echo 'export PATH=\"/home/$(whoami)/.local/share/solana/install/active_release/bin:$PATH\"' >> ~/.bashrc")?;
+    client.execute_command("echo 'export PATH=\"~/.local/share/solana/install/active_release/bin:$PATH\"' >> ~/.bashrc")?;
     client.execute_command(
-        "export PATH=\"/home/$(whoami)/.local/share/solana/install/active_release/bin:$PATH\"",
+        "export PATH=\"~/.local/share/solana/install/active_release/bin:$PATH\"",
     )?;
 
-    // Verify installation
-    let solana_version = client.execute_command("solana --version")?;
+    // Verify installation using full path (PATH may not be updated yet)
+    let solana_bin = "~/.local/share/solana/install/active_release/bin/solana";
+    let solana_version = client.execute_command(&format!("{} --version", solana_bin))?;
     println!("Installed Solana version: {}", solana_version);
 
     Ok(())
@@ -301,9 +318,10 @@ fn generate_solana_keypair(
 ) -> Result<String, DeploymentError> {
     let keypair_path = format!("{}/validator-keypair.json", solana_dir);
     if !client.file_exists(&keypair_path)? {
+        let keygen_bin = "~/.local/share/solana/install/active_release/bin/solana-keygen";
         client.execute_command(&format!(
-            "solana-keygen new -o {} --no-passphrase",
-            keypair_path
+            "{} new -o {} --no-passphrase",
+            keygen_bin, keypair_path
         ))?;
     }
 
@@ -328,7 +346,8 @@ fn configure_solana_network(
         NetworkType::Devnet => "--url https://api.devnet.solana.com",
     };
 
-    client.execute_command(&format!("solana config set {}", network_flag))?;
+    let solana_bin = "~/.local/share/solana/install/active_release/bin/solana";
+    client.execute_command(&format!("{} config set {}", solana_bin, network_flag))?;
 
     Ok(())
 }
@@ -357,10 +376,16 @@ async fn create_solana_service(
     // Get service arguments based on node type
     let args = get_solana_service_args(deployment_config, solana_dir, keypair_path);
 
+    // Determine home directory for the validator binary path (systemd needs absolute paths)
+    let home_output = client.execute_command("echo $HOME")?;
+    let home_dir = home_output.trim();
+    // Modern Solana installations use agave-validator, not solana-validator
+    let validator_bin = format!("{}/.local/share/solana/install/active_release/bin/agave-validator", home_dir);
+
     // Create service content
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let service_content = create_binary_service_content(
-        "/home/$(whoami)/.local/share/solana/install/active_release/bin/solana-validator",
+        &validator_bin,
         &args_ref,
         solana_dir,
         &format!("Solana {}", deployment_config.node_type.to_uppercase()),
@@ -390,23 +415,52 @@ fn get_solana_service_args<'a>(
     solana_dir: &'a str,
     keypair_path: &'a str,
 ) -> Vec<String> {
+    // Get network-specific configuration
+    let (entrypoint, genesis_hash) = match deployment_config.network {
+        NetworkType::Mainnet => (
+            "entrypoint.mainnet-beta.solana.com:8001",
+            "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d", // Mainnet genesis
+        ),
+        NetworkType::Devnet => (
+            "entrypoint.devnet.solana.com:8001",
+            "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG", // Devnet genesis
+        ),
+        NetworkType::Testnet => (
+            "entrypoint.testnet.solana.com:8001",
+            "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY", // Testnet genesis
+        ),
+    };
+
     let mut args = vec![
         format!("--identity {}", keypair_path),
         format!("--ledger {}/ledger", solana_dir),
+        format!("--accounts {}/accounts", solana_dir),
         "--rpc-port 8899".to_string(),
         "--dynamic-port-range 8000-8020".to_string(),
-        format!(
-            "--entrypoint entrypoint.{}.solana.com:8001",
-            deployment_config.network
-        ),
-        "--expected-genesis-hash GENESIS_HASH".to_string(),
+        format!("--entrypoint {}", entrypoint),
+        format!("--expected-genesis-hash {}", genesis_hash),
         "--wal-recovery-mode skip_any_corrupted_record".to_string(),
-        "--limit-ledger-size".to_string(),
+        "--limit-ledger-size 50000000".to_string(), // 50GB limit
+        // Add known validators for snapshot downloads
+        // Validator will automatically fetch snapshots from these via gossip
+        "--known-validator 7Np41oeYqPefeNQEHSv1UDhYrehxin3NStELsSKCT4K2".to_string(),
+        "--known-validator GdnSyH3YtwcxFvQrVVJMm1JhTS4QVX7MFsX56uJLUfiZ".to_string(),
+        "--known-validator DE1bawNcRJB9rVm3buyMVfr8mBEoyyu73NBovf2oXJsJ".to_string(),
+        "--known-validator CakcnaRDHka2gXyfbEd2d3xsvkJkqsLw2akB3zsN1D2S".to_string(),
+        // RPC-specific flags
+        "--no-port-check".to_string(), // Skip port checks
+        "--no-wait-for-vote-to-start-leader".to_string(), // RPC doesn't vote
+        // Increase retry attempts for snapshot download
+        "--maximum-snapshot-download-abort".to_string(),
+        "10".to_string(), // Retry up to 10 times
     ];
 
     if deployment_config.node_type == "rpc" {
-        args.push("--private-rpc".to_string());
+        args.push("--no-voting".to_string());
         args.push("--enable-rpc-transaction-history".to_string());
+        args.push("--full-rpc-api".to_string());
+        args.push("--rpc-bind-address".to_string());
+        args.push("0.0.0.0".to_string());
     }
 
     args

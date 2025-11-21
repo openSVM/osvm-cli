@@ -246,6 +246,14 @@ pub enum Error {
     #[error("User error: {0}")]
     UserError(String),
 
+    /// General runtime error
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
+
+    /// Compiler error
+    #[error("Compiler error: {0}")]
+    CompilerError(String),
+
     // Control flow (catch/throw)
     /// Throw value for non-local exit (not really an error, used for control flow)
     /// This is caught by matching catch blocks
@@ -270,6 +278,16 @@ pub enum ErrorSeverity {
 }
 
 impl Error {
+    /// Create a runtime error with a message
+    pub fn runtime(msg: impl Into<String>) -> Self {
+        Error::RuntimeError(msg.into())
+    }
+
+    /// Create a compiler error with a message
+    pub fn compiler(msg: impl Into<String>) -> Self {
+        Error::CompilerError(msg.into())
+    }
+
     /// Classify error severity
     pub fn classify(&self) -> ErrorSeverity {
         match self {

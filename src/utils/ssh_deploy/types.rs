@@ -106,6 +106,32 @@ impl Default for ServerConfig {
 }
 
 impl ServerConfig {
+    /// Detect available SSH key automatically
+    ///
+    /// # Returns
+    /// * `String` - Path to first available SSH key
+    fn detect_ssh_key() -> String {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+
+        // Try common SSH key types in order of preference (modern first)
+        let key_types = vec![
+            "id_ed25519",    // Ed25519 (modern, recommended)
+            "id_ecdsa",      // ECDSA
+            "id_rsa",        // RSA (legacy but common)
+            "id_dsa",        // DSA (deprecated)
+        ];
+
+        for key_type in key_types {
+            let key_path = format!("{}/.ssh/{}", home, key_type);
+            if std::path::Path::new(&key_path).exists() {
+                return format!("~/.ssh/{}", key_type);
+            }
+        }
+
+        // Default fallback to id_rsa (will fail if not present, but provides clear error)
+        "~/.ssh/id_rsa".to_string()
+    }
+
     /// Create a ServerConfig from a connection string (user@host[:port])
     ///
     /// # Arguments
@@ -160,7 +186,7 @@ impl ServerConfig {
             port,
             auth: AuthMethod::Key {
                 username,
-                key_path: "~/.ssh/id_rsa".to_string(),
+                key_path: Self::detect_ssh_key(),
                 passphrase: None,
             },
             install_dir: "/opt/osvm".to_string(),

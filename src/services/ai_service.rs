@@ -656,7 +656,16 @@ impl AiService {
                 if let Some(error) = ai_response.error {
                     anyhow::bail!("AI API returned error: {}", error);
                 }
-                Ok(ai_response.answer)
+                // If answer field is empty, return raw response (handles JSON without "answer" field)
+                if ai_response.answer.trim().is_empty() {
+                    if response_text.trim().is_empty() {
+                        Ok("No response from AI service".to_string())
+                    } else {
+                        Ok(response_text)
+                    }
+                } else {
+                    Ok(ai_response.answer)
+                }
             }
             Err(_) => {
                 // If JSON parsing fails, return the raw text as the answer

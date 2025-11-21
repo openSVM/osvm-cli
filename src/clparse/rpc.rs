@@ -6,6 +6,48 @@ pub fn build_rpc_command() -> Command {
         .about("Manage RPC nodes (local/remote)")
         .arg_required_else_help(true)
         .subcommand(
+            Command::new("solana")
+                .about("Deploy a Solana RPC node via SSH")
+                .arg(
+                    Arg::new("connection")
+                        .help("SSH connection string (format: user@host[:port])")
+                        .required(true)
+                        .index(1),
+                )
+                .arg(
+                    Arg::new("network")
+                        .long("network")
+                        .value_name("NETWORK")
+                        .value_parser(clap::builder::PossibleValuesParser::new([
+                            "mainnet", "testnet", "devnet",
+                        ]))
+                        .default_value("mainnet")
+                        .help("Network to deploy on"),
+                )
+                .arg(
+                    Arg::new("version")
+                        .long("version")
+                        .short('v')
+                        .value_name("VERSION")
+                        .help("Solana version to install (e.g., '1.18.0', 'stable', 'beta')"),
+                )
+                .arg(
+                    Arg::new("client-type")
+                        .long("client-type")
+                        .value_name("TYPE")
+                        .value_parser(clap::builder::PossibleValuesParser::new([
+                            "agave", "firedancer", "jito"
+                        ]))
+                        .help("Validator client type to use (default: agave)"),
+                )
+                .arg(
+                    Arg::new("hot-swap")
+                        .long("hot-swap")
+                        .action(ArgAction::SetTrue)
+                        .help("Enable zero-downtime hot-swap capability"),
+                ),
+        )
+        .subcommand(
             Command::new("sonic")
                 .about("Deploy a Sonic RPC node")
                 .arg(

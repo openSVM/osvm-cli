@@ -33,16 +33,16 @@ impl Tool for McpBridgeTool {
     fn execute(&self, args: &[OvsmValue]) -> OvsmResult<OvsmValue> {
         // 🔍 DETAILED DEBUG LOGGING AT BRIDGE LEVEL (only at Verbose level)
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("🌉 MCP BRIDGE TOOL CALL");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("📍 Tool Name: {}", self.name);
-            println!("📍 Args Count: {}", args.len());
-            println!("\n📦 Arguments Received (OVSM Values):");
+            crate::tui_log!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("🌉 MCP BRIDGE TOOL CALL");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("📍 Tool Name: {}", self.name);
+            crate::tui_log!("📍 Args Count: {}", args.len());
+            crate::tui_log!("\n📦 Arguments Received (OVSM Values):");
             for (i, arg) in args.iter().enumerate() {
-                println!("  [{}]: {} = {}", i, arg.type_name(), arg);
+                crate::tui_log!("  [{}]: {} = {}", i, arg.type_name(), arg);
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         // Lock the MCP service
@@ -110,39 +110,41 @@ impl Tool for McpBridgeTool {
         };
 
         if get_verbosity() >= VerbosityLevel::Verbose {
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("🔄 CONVERTED TO JSON-RPC");
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("📤 JSON Params ({} items):", params.len());
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("🔄 CONVERTED TO JSON-RPC");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("📤 JSON Params ({} items):", params.len());
             for (i, param) in params.iter().enumerate() {
-                println!(
+                crate::tui_log!(
                     "  [{}]: {}",
                     i,
                     serde_json::to_string_pretty(param).unwrap_or_else(|_| "<invalid>".to_string())
                 );
             }
-            println!("\n📤 Final Arguments for MCP:");
+            crate::tui_log!("\n📤 Final Arguments for MCP:");
             if let Some(ref args) = arguments {
-                println!(
+                crate::tui_log!(
                     "{}",
                     serde_json::to_string_pretty(args).unwrap_or_else(|_| "<invalid>".to_string())
                 );
             } else {
-                println!("  (none)");
+                crate::tui_log!("  (none)");
             }
-            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         // Execute the tool with correct server ID
         // Note: Using futures::executor::block_on because we may not be in a Tokio context
-        eprintln!("🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...", self.name, SERVER_ID);
+        crate::tui_log!("🔍 MCP BRIDGE: Calling tool '{}' on server '{}'...", self.name, SERVER_ID);
+        crate::tui_log!("🔍 MCP BRIDGE: Parameters: {}",
+                 arguments.as_ref().map(|a| serde_json::to_string(a).unwrap_or_else(|_| "null".to_string())).unwrap_or_else(|| "none".to_string()));
         let mut result_json = match futures::executor::block_on(svc.call_tool(SERVER_ID, &self.name, arguments.clone())) {
             Ok(json) => {
-                eprintln!("✅ MCP BRIDGE: Tool '{}' returned successfully", self.name);
+                crate::tui_log!("✅ MCP BRIDGE: Tool '{}' returned successfully", self.name);
                 json
             },
             Err(e) => {
-                eprintln!("⚠️  MCP BRIDGE: Tool '{}' failed: {}", self.name, e);
+                crate::tui_log!("⚠️  MCP BRIDGE: Tool '{}' failed: {}", self.name, e);
                 return Err(ovsm::error::Error::RpcError {
                     message: format!("MCP call_tool failed: {}", e),
                 });
@@ -152,7 +154,7 @@ impl Tool for McpBridgeTool {
         // Handle Brotli-compressed responses
         if let Some(compressed_marker) = result_json.get("_compressed") {
             if compressed_marker == "brotli" {
-                eprintln!("🗜️  MCP BRIDGE: Decompressing Brotli response...");
+                crate::tui_log!("🗜️  MCP BRIDGE: Decompressing Brotli response...");
 
                 // Extract base64-encoded compressed data
                 let compressed_b64 = result_json.get("data")
@@ -183,24 +185,24 @@ impl Tool for McpBridgeTool {
                         message: format!("Failed to parse decompressed JSON: {}", e),
                     })?;
 
-                eprintln!("✅ MCP BRIDGE: Decompression successful ({} bytes -> {} bytes)",
+                crate::tui_log!("✅ MCP BRIDGE: Decompression successful ({} bytes -> {} bytes)",
                          compressed.len(), decompressed.len());
             }
         }
 
         // 🔍 DEBUG: Log what MCP service returned
         if get_verbosity() >= VerbosityLevel::Verbose {
-            eprintln!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            eprintln!("🔍 MCP BRIDGE RECEIVED FROM MCP SERVICE");
-            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            eprintln!("Tool: {}", self.name);
-            eprintln!("Result JSON:");
-            eprintln!(
+            crate::tui_log!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("🔍 MCP BRIDGE RECEIVED FROM MCP SERVICE");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            crate::tui_log!("Tool: {}", self.name);
+            crate::tui_log!("Result JSON:");
+            crate::tui_log!(
                 "{}",
                 serde_json::to_string_pretty(&result_json)
                     .unwrap_or_else(|_| format!("{:?}", result_json))
             );
-            eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            crate::tui_log!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
         }
 
         // Convert JSON result back to OvsmValue
@@ -230,7 +232,7 @@ impl Tool for McpBridgeTool {
                     if let Some(error_msg) = obj.get("error") {
                         // Return null for errors - this allows the AI to check for null
                         // and handle appropriately without breaking type expectations
-                        eprintln!("⚠️  API returned error: {}", error_msg);
+                        crate::tui_log!("⚠️  API returned error: {}", error_msg);
                         return OvsmValue::Null;
                     }
 

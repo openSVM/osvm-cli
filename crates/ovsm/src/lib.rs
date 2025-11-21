@@ -283,6 +283,8 @@ pub mod lexer;
 pub mod parser;
 pub mod runtime;
 pub mod tools;
+pub mod compiler;
+pub mod decompiler;
 
 // Re-export main types
 pub use error::{Error, Result};

@@ -1113,7 +1113,7 @@ impl ResearchAgent {
     async fn generate_investigation_plan(&self) -> Result<Vec<InvestigationTodo>> {
         let state = self.state.lock().await.clone();
 
-        eprintln!("🔍 DEBUG: generate_investigation_plan started");
+        crate::tui_log!("🔍 DEBUG: generate_investigation_plan started");
         let planning_prompt = format!(r#"You are an expert blockchain investigator. Create a high-level investigation plan for wallet:
 {}
 
@@ -1139,14 +1139,14 @@ Generate 5-8 investigation tasks, prioritized 1-5 (5=highest).
 Return as JSON array:
 [{{"task": "...", "priority": 5, "reason": "..."}}, ...]"#, state.target_wallet);
 
-        eprintln!("🔍 DEBUG: Acquiring AI service lock for planning...");
+        crate::tui_log!("🔍 DEBUG: Acquiring AI service lock for planning...");
         let ai_service = self.ai_service.lock().await;
-        eprintln!("🔍 DEBUG: Calling AI service query_with_system_prompt...");
+        crate::tui_log!("🔍 DEBUG: Calling AI service query_with_system_prompt...");
         let plan_json = ai_service.query_with_system_prompt(
             "You are a blockchain investigation planner. Return ONLY valid JSON array, no markdown.",
             &planning_prompt
         ).await?;
-        eprintln!("🔍 DEBUG: AI service query returned successfully");
+        crate::tui_log!("🔍 DEBUG: AI service query returned successfully");
 
         // Parse AI response into TODO list
         let plan_json_clean = plan_json.trim()
@@ -1240,37 +1240,39 @@ Current State:
 - Findings so far: {}
 - Current TODOs: {:?}
 
-What is the single most valuable action to take next? Choose from:
-1. Analyze specific transactions with analyze_transaction
-2. Get DeFi overview with get_defi_overview
-3. Check current portfolio with get_account_portfolio
-4. Analyze trading patterns with get_dex_analytics
-5. **Investigate wallet relationships** - identify funding sources, round-trip transfers, wallet clusters
-6. Deep-dive into a specific finding
+What is the single most valuable MCP tool to call next? Choose from:
+1. analyze_transaction - Analyze specific transactions
+2. get_defi_overview - Get DeFi protocol interactions
+3. get_account_portfolio - Check current holdings
+4. get_dex_analytics - Analyze trading patterns
+5. get_account_transfers - **Investigate wallet relationships** (identify funding, round-trips, clusters)
+6. get_account_stats - Get account activity metrics
 
-**IMPORTANT: If you notice simple SOL/SPL transfers or funding patterns, prioritize wallet relationship analysis!**
+**IMPORTANT: If you notice simple SOL/SPL transfers or funding patterns, use get_account_transfers!**
 
-**REQUIRED: When using get_account_transfers, ALWAYS use these parameters:**
-- `address`: the wallet address (NOT "account")
-- `limit`: 500 (API maximum)
-- `compress`: true (enables Brotli compression)
+**REQUIRED JSON FIELDS:**
+- `mcp_tool`: MUST be one of the exact tool names above (NEVER empty!)
+- `parameters`: Tool parameters as object (use address, limit, compress for get_account_transfers)
 
-Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters": {{...}}}}
+**EXAMPLE for get_account_transfers:**
+{{"action": "Investigate funding sources", "reason": "...", "mcp_tool": "get_account_transfers", "parameters": {{"address": "WALLET_HERE", "limit": 500, "compress": true}}}}
+
+Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", "parameters": {{...}}}}
 "#, state.target_wallet, state.iteration, state.findings.len(), state.investigation_todos);
 
-        eprintln!("🔍 DEBUG: decide_next_action - Acquiring AI service lock...");
+        crate::tui_log!("🔍 DEBUG: decide_next_action - Acquiring AI service lock...");
         let ai_service = self.ai_service.lock().await;
-        eprintln!("🔍 DEBUG: decide_next_action - Calling AI query...");
+        crate::tui_log!("🔍 DEBUG: decide_next_action - Calling AI query...");
         let decision = match ai_service.query_with_system_prompt(
             "You are a strategic investigator. Return ONLY valid JSON object.",
             &decision_prompt
         ).await {
             Ok(decision) => {
-                eprintln!("🔍 DEBUG: decide_next_action - AI query succeeded");
+                crate::tui_log!("🔍 DEBUG: decide_next_action - AI query succeeded");
                 decision
             },
             Err(e) => {
-                eprintln!("⚠️  AI decision failed: {}. Using fallback action.", e);
+                crate::tui_log!("⚠️  AI decision failed: {}. Using fallback action.", e);
                 // Fallback: just query transfers on first iteration, then complete
                 if state.iteration == 0 {
                     r#"{"action": "get_account_transfers", "reason": "Get wallet transfer history", "mcp_tool": "get_account_transfers", "parameters": {"address": "6e1GCzyBewQdXqQQonLCt2YuMhur6DcyUy4acgymCFZH", "limit": 500, "compress": true}}"#.to_string()
@@ -1287,8 +1289,8 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
     pub async fn investigate_with_streaming(&self) -> Result<String> {
         use crate::services::realtime_graph_stream::{StreamingGraph, GraphUpdateEvent, NodeType};
 
-        println!("\n🔍 Starting Real-Time Blockchain Investigation...\n");
-        println!("Graph will update progressively as data arrives...\n");
+        crate::tui_log!("\n🔍 Starting Real-Time Blockchain Investigation...\n");
+        crate::tui_log!("Graph will update progressively as data arrives...\n");
 
         // Create streaming graph
         let (graph, event_rx) = StreamingGraph::new();
@@ -1297,7 +1299,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
         // Start rendering in background
         let render_handle = tokio::spawn(async move {
             if let Err(e) = graph.start_rendering(event_rx).await {
-                eprintln!("Rendering error: {}", e);
+                crate::tui_log!("Rendering error: {}", e);
             }
         });
 
@@ -1440,7 +1442,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
                 Ok(serde_json::to_string(&data)?)
             }
             Err(e) => {
-                eprintln!("⚠️  MCP query failed: {}", e);
+                crate::tui_log!("⚠️  MCP query failed: {}", e);
                 // Return error but don't abort
                 Ok(format!(r#"{{"wallet": "{}", "transfers": [], "error": "{}"}}"#, wallet, e))
             }
@@ -1449,19 +1451,19 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
     /// Main investigation loop with TRUE AGENTIC self-direction
     pub async fn investigate(&self) -> Result<String> {
-        println!("\n🔬 Initiating Agentic Wallet Investigation...\n");
+        crate::tui_log!("\n🔬 Initiating Agentic Wallet Investigation...\n");
 
         // Step 1: Generate initial investigation plan (TODO list)
-        eprintln!("🔍 DEBUG: About to call stream_thinking...");
+        crate::tui_log!("🔍 DEBUG: About to call stream_thinking...");
         self.stream_thinking("Creating investigation strategy...");
-        eprintln!("🔍 DEBUG: stream_thinking completed, calling generate_investigation_plan...");
+        crate::tui_log!("🔍 DEBUG: stream_thinking completed, calling generate_investigation_plan...");
         let investigation_plan = match self.generate_investigation_plan().await {
             Ok(plan) => {
-                eprintln!("🔍 DEBUG: generate_investigation_plan returned Ok with {} items", plan.len());
+                crate::tui_log!("🔍 DEBUG: generate_investigation_plan returned Ok with {} items", plan.len());
                 plan
             },
             Err(e) => {
-                eprintln!("⚠️  AI planning failed: {}. Using fallback plan with direct blockchain queries.", e);
+                crate::tui_log!("⚠️  AI planning failed: {}. Using fallback plan with direct blockchain queries.", e);
                 // Use fallback plan that focuses on actual blockchain data
                 vec![
                     InvestigationTodo {
@@ -1489,41 +1491,41 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
             }
         };
 
-        eprintln!("🔍 DEBUG: Storing investigation plan in state...");
+        crate::tui_log!("🔍 DEBUG: Storing investigation plan in state...");
         {
             let mut state = self.state.lock().await;
             state.investigation_todos = investigation_plan.clone();
         }
-        eprintln!("🔍 DEBUG: Plan stored, logging plan details...");
+        crate::tui_log!("🔍 DEBUG: Plan stored, logging plan details...");
 
         tracing::debug!("📋 Investigation Plan:");
         for (i, todo) in investigation_plan.iter().enumerate() {
             tracing::debug!("   {}. [Priority {}] {} - {}",
                      i + 1, todo.priority, todo.task, todo.reason);
         }
-        eprintln!("🔍 DEBUG: Plan logged, starting investigation loop with max {} iterations...", 15);
+        crate::tui_log!("🔍 DEBUG: Plan logged, starting investigation loop with max {} iterations...", 15);
 
         let max_iterations = 15;
 
         for iteration in 0..max_iterations {
-            eprintln!("🔍 DEBUG: ━━━ Iteration #{} ━━━", iteration + 1);
+            crate::tui_log!("🔍 DEBUG: ━━━ Iteration #{} ━━━", iteration + 1);
             tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             tracing::debug!("? Iteration #{}", iteration + 1);
             tracing::debug!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
             // 1. Decide next action based on current state
             self.stream_thinking("Analyzing current findings and deciding next action...");
-            eprintln!("🔍 DEBUG: Calling decide_next_action...");
+            crate::tui_log!("🔍 DEBUG: Calling decide_next_action...");
             let decision = self.decide_next_action().await?;
-            eprintln!("🔍 DEBUG: decide_next_action returned");
+            crate::tui_log!("🔍 DEBUG: decide_next_action returned");
 
             self.stream_thinking(&format!("Decision: {}", decision.lines().next().unwrap_or("Investigating...")));
 
             // 2. Execute the chosen action via OVSM + MCP
             self.stream_thinking("Executing investigation step via OVSM...");
-            eprintln!("🔍 DEBUG: Calling execute_dynamic_investigation with decision: {}", decision.lines().next().unwrap_or("?"));
+            crate::tui_log!("🔍 DEBUG: Calling execute_dynamic_investigation with decision: {}", decision.lines().next().unwrap_or("?"));
             let result = self.execute_dynamic_investigation(&decision).await?;
-            eprintln!("🔍 DEBUG: execute_dynamic_investigation returned");
+            crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation returned");
 
             // 2.5. Build knowledge graph if we got transfer data
             {
@@ -1542,7 +1544,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
                         // Display ASCII map immediately (no AI needed!)
                         let state = self.state.lock().await;
                         let ascii_graph = self.render_ascii_graph(&state).await;
-                        println!("{}", ascii_graph);
+                        crate::tui_log!("{}", ascii_graph);
                     }
                 }
             }
@@ -1599,7 +1601,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
         {
             let state = self.state.lock().await;
             let ascii_graph = self.render_ascii_graph(&state).await;
-            println!("{}", ascii_graph);
+            crate::tui_log!("{}", ascii_graph);
         }
 
         // Save knowledge graph to JSON-LD
@@ -1620,25 +1622,45 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
             .trim_end_matches("```")
             .trim();
 
+        crate::tui_log!("🔍 DEBUG: Attempting to parse decision_clean: {:?}", decision_clean);
         let decision: Result<serde_json::Value, _> = serde_json::from_str(decision_clean);
+
+        // Get state first (needed for wallet address in fallbacks)
+        let state = self.state.lock().await.clone();
 
         let (mcp_tool, params) = match decision {
             Ok(dec) => {
                 let tool = dec["mcp_tool"].as_str().unwrap_or("get_account_transfers").to_string();
                 let params = dec["parameters"].clone();
-                (tool, params)
+
+                // Check if tool name is empty
+                if tool.trim().is_empty() {
+                    crate::tui_log!("⚠️  DEBUG: AI returned empty mcp_tool, using fallback: get_account_transfers");
+                    ("get_account_transfers".to_string(), serde_json::json!({
+                        "address": state.target_wallet.clone(),
+                        "limit": 500,
+                        "compress": true
+                    }))
+                } else {
+                    crate::tui_log!("✅ DEBUG: Successfully parsed AI decision - tool: {}, params: {}", tool, params);
+                    (tool, params)
+                }
             }
-            Err(_) => {
+            Err(e) => {
                 // Fallback: use account transfers
+                crate::tui_log!("⚠️  DEBUG: Failed to parse AI decision: {}", e);
+                crate::tui_log!("⚠️  DEBUG: Cleaned string was: {:?}", decision_clean);
                 ("get_account_transfers".to_string(), serde_json::json!({}))
             }
         };
 
         // Generate OVSM script to call the chosen MCP tool
-        let state = self.state.lock().await.clone();
 
         // Convert params JSON to OVSM map syntax
-        let params_str = if params.is_object() {
+        crate::tui_log!("🔍 DEBUG: params type: {}, is_object: {}",
+                 if params.is_object() { "object" } else if params.is_null() { "null" } else { "other" },
+                 params.is_object());
+        let params_str = if params.is_object() && !params.as_object().unwrap().is_empty() {
             let mut pairs = Vec::new();
             for (key, value) in params.as_object().unwrap() {
                 let val_str = match value {
@@ -1649,8 +1671,11 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
                 };
                 pairs.push(format!(r#":{} {}"#, key, val_str));
             }
-            format!("{{{}}}", pairs.join(" "))
+            let result = format!("{{{}}}", pairs.join(" "));
+            crate::tui_log!("🔍 DEBUG: Generated params_str: {}", result);
+            result
         } else {
+            crate::tui_log!("🔍 DEBUG: Using fallback params with wallet address");
             format!(r#"{{:address "{}"}}"#, state.target_wallet)
         };
 
@@ -1668,14 +1693,34 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "...", "parameters"
 
         self.stream_thinking(&format!("Calling MCP tool: {}", mcp_tool));
 
-        eprintln!("🔍 DEBUG: execute_dynamic_investigation - Acquiring OVSM lock...");
-        eprintln!("🔍 DEBUG: Generated OVSM script:\n{}", ovsm_script);
-        // Execute OVSM script
-        let mut ovsm = self.ovsm_service.lock().await;
-        eprintln!("🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...", mcp_tool);
-        let result_value = ovsm.execute_code(&ovsm_script)
-            .context("Failed to execute dynamic investigation")?;
-        eprintln!("🔍 DEBUG: execute_dynamic_investigation - OVSM script executed successfully");
+        crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - Acquiring OVSM lock...");
+        crate::tui_log!("🔍 DEBUG: Generated OVSM script:\n{}", ovsm_script);
+        // Execute OVSM script with timeout (120s for large transfers)
+        crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - Executing OVSM script for tool '{}'...", mcp_tool);
+
+        let timeout_duration = std::time::Duration::from_secs(120);
+        let ovsm_clone = Arc::clone(&self.ovsm_service);
+        let script_clone = ovsm_script.clone();
+
+        let result_value = match tokio::time::timeout(timeout_duration, tokio::task::spawn_blocking(move || {
+            let mut ovsm = futures::executor::block_on(ovsm_clone.lock());
+            ovsm.execute_code(&script_clone)
+        })).await {
+            Ok(Ok(Ok(value))) => {
+                crate::tui_log!("🔍 DEBUG: execute_dynamic_investigation - OVSM script executed successfully");
+                value
+            },
+            Ok(Ok(Err(e))) => {
+                return Err(anyhow::anyhow!("OVSM execution failed: {}", e));
+            },
+            Ok(Err(e)) => {
+                return Err(anyhow::anyhow!("Spawn blocking failed: {}", e));
+            },
+            Err(_) => {
+                crate::tui_log!("⚠️  MCP tool '{}' timed out after {}s - continuing with fallback", mcp_tool, timeout_duration.as_secs());
+                return Err(anyhow::anyhow!("MCP tool '{}' execution timeout ({}s)", mcp_tool, timeout_duration.as_secs()));
+            }
+        };
 
         // Convert to JSON for analysis
         let result_json = self.value_to_json(result_value)?;
@@ -2388,7 +2433,7 @@ Generate the ASCII visualization ONLY (no explanations):"#,
         let json_ld = serde_json::to_string_pretty(&state.knowledge_graph)?;
         std::fs::write(&filename, json_ld)?;
 
-        println!("\n💾 Knowledge graph saved to: {}", filename);
+        crate::tui_log!("\n💾 Knowledge graph saved to: {}", filename);
         Ok(())
     }
 
@@ -2405,8 +2450,8 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             InvestigationPhase::Synthesis => self.generate_synthesis_script(&state),
         };
 
-        println!("? Executing OVSM script for phase: {:?}", state.phase);
-        println!("Script preview: {}", &ovsm_script[..ovsm_script.len().min(200)]);
+        crate::tui_log!("? Executing OVSM script for phase: {:?}", state.phase);
+        crate::tui_log!("Script preview: {}", &ovsm_script[..ovsm_script.len().min(200)]);
 
         // Execute OVSM script
         let mut ovsm = self.ovsm_service.lock().await;
@@ -2439,7 +2484,7 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             state.hypotheses
         );
 
-        println!("\n? Self-evaluating findings with AI...");
+        crate::tui_log!("\n? Self-evaluating findings with AI...");
 
         // Call AI with custom system prompt
         let ai_service = self.ai_service.lock().await;
@@ -2448,7 +2493,7 @@ Generate the ASCII visualization ONLY (no explanations):"#,
             &user_prompt
         ).await?;
 
-        println!("? AI Evaluation:\n{}", &evaluation[..evaluation.len().min(500)]);
+        crate::tui_log!("? AI Evaluation:\n{}", &evaluation[..evaluation.len().min(500)]);
 
         Ok(evaluation)
     }
@@ -2531,10 +2576,10 @@ Generate the ASCII visualization ONLY (no explanations):"#,
     async fn adapt_strategy(&self) -> Result<()> {
         let state = self.state.lock().await.clone();
 
-        println!("\n? Adapting investigation strategy...");
-        println!("  Current phase: {:?}", state.phase);
-        println!("  Next steps: {:?}", state.next_steps);
-        println!("  Confidence scores: {:?}", state.confidence_scores);
+        crate::tui_log!("\n? Adapting investigation strategy...");
+        crate::tui_log!("  Current phase: {:?}", state.phase);
+        crate::tui_log!("  Next steps: {:?}", state.next_steps);
+        crate::tui_log!("  Confidence scores: {:?}", state.confidence_scores);
 
         // Generate new hypotheses based on findings
         if state.findings.len() > 3 && state.hypotheses.is_empty() {
@@ -3687,7 +3732,7 @@ mod tests {
         assert!(output.contains("25,000.00"));       // Formatted outflow volume
         assert!(output.contains("Coordination Risk:"));
 
-        println!("\n{}", output); // Print for manual inspection
+        crate::tui_log!("\n{}", output); // Print for manual inspection
     }
 
     #[test]
@@ -3741,10 +3786,10 @@ mod tests {
         let output = graph.render_ascii();
 
         // Print first for debugging
-        println!("\n╔══════════════════════════════════════════════════════════════╗");
-        println!("║           COMPLEX SCENARIO VISUALIZATION DEMO                ║");
-        println!("╚══════════════════════════════════════════════════════════════╝\n");
-        println!("{}", output);
+        crate::tui_log!("\n╔══════════════════════════════════════════════════════════════╗");
+        crate::tui_log!("║           COMPLEX SCENARIO VISUALIZATION DEMO                ║");
+        crate::tui_log!("╚══════════════════════════════════════════════════════════════╝\n");
+        crate::tui_log!("{}", output);
 
         // Verify complex scenario elements
         assert!(output.contains("COMPLEX WALLET INVESTIGATION"));
@@ -3851,10 +3896,10 @@ mod tests {
 
         let output = graph.render_ascii();
 
-        println!("\n╔══════════════════════════════════════════════════════════════╗");
-        println!("║        VERY COMPLEX NETWORK VISUALIZATION DEMO               ║");
-        println!("╚══════════════════════════════════════════════════════════════╝\n");
-        println!("{}", output);
+        crate::tui_log!("\n╔══════════════════════════════════════════════════════════════╗");
+        crate::tui_log!("║        VERY COMPLEX NETWORK VISUALIZATION DEMO               ║");
+        crate::tui_log!("╚══════════════════════════════════════════════════════════════╝\n");
+        crate::tui_log!("{}", output);
 
         // Verify complex scenario elements
         assert!(output.contains("MULTI-LEVEL MONEY LAUNDERING NETWORK"));
@@ -3925,7 +3970,7 @@ mod tests {
         // Render horizontal pipeline
         let output = graph.render_horizontal_pipeline();
 
-        println!("\n{}", output);
+        crate::tui_log!("\n{}", output);
 
         // Assertions - Beautiful chart with continuous pipes!
         assert!(output.contains("│")); // Vertical pipes

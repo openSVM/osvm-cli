@@ -19,6 +19,7 @@ pub async fn handle_rpc_manager(matches: &clap::ArgMatches) -> Result<()> {
     };
 
     match rpc_sub_command {
+        "solana" => handle_solana(rpc_sub_matches).await,
         "devnet" => handle_devnet(rpc_sub_matches).await,
         "sonic" => handle_sonic(rpc_sub_matches).await,
         "query-solana" => handle_query_solana(rpc_sub_matches).await,
@@ -63,6 +64,79 @@ async fn handle_devnet(matches: &clap::ArgMatches) -> Result<()> {
             exit(1);
         }
     }
+}
+
+/// Handle Solana RPC deployment via SSH
+async fn handle_solana(matches: &clap::ArgMatches) -> Result<()> {
+    let connection_str = matches
+        .get_one::<String>("connection")
+        .map(|s| s.as_str())
+        .unwrap();
+    let network_str = matches
+        .get_one::<String>("network")
+        .map(|s| s.as_str())
+        .unwrap();
+    let version = matches.get_one::<String>("version").map(|s| s.as_str());
+    let client_type = matches
+        .get_one::<String>("client-type")
+        .map(|s| s.as_str());
+    let hot_swap_enabled = matches.get_flag("hot-swap");
+
+    // Parse connection string
+    let connection = match ssh_deploy::ServerConfig::from_connection_string(connection_str) {
+        Ok(conn) => conn,
+        Err(e) => {
+            eprintln!("Error parsing SSH connection string: {}", e);
+            exit(1);
+        }
+    };
+
+    // Parse network type
+    let network = match network_str.to_lowercase().as_str() {
+        "mainnet" => ssh_deploy::NetworkType::Mainnet,
+        "testnet" => ssh_deploy::NetworkType::Testnet,
+        "devnet" => ssh_deploy::NetworkType::Devnet,
+        _ => {
+            eprintln!("Invalid network: {}", network_str);
+            exit(1);
+        }
+    };
+
+    // Create deployment config
+    let deploy_config = ssh_deploy::DeploymentConfig {
+        svm_type: "solana".to_string(),
+        node_type: "rpc".to_string(),
+        network,
+        node_name: "solana-rpc".to_string(),
+        rpc_url: None,
+        additional_params: std::collections::HashMap::new(),
+        version: version.map(|v| v.to_string()),
+        client_type: client_type.map(|c| c.to_string()),
+        hot_swap_enabled,
+        metrics_config: None,
+        disk_config: None,
+    };
+
+    println!("🚀 Deploying Solana {} RPC node to {}...", network_str, connection_str);
+    if let Some(ver) = version {
+        println!("📦 Version: {}", ver);
+    }
+    if let Some(client) = client_type {
+        println!("🔧 Client: {}", client);
+    }
+    if hot_swap_enabled {
+        println!("♨️  Hot-swap: enabled (zero-downtime updates)");
+    }
+    println!();
+
+    if let Err(e) = ssh_deploy::deploy_svm_node(connection, deploy_config, None).await {
+        eprintln!("❌ Deployment error: {}", e);
+        exit(1);
+    }
+
+    println!("✅ Solana RPC node deployed successfully!");
+    println!("🔗 Your RPC endpoint: http://{}:8899", connection_str.split('@').nth(1).unwrap_or(connection_str));
+    Ok(())
 }
 
 /// Handle sonic RPC deployment

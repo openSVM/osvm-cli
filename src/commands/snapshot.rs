@@ -18,6 +18,7 @@ pub async fn execute_snapshot_command(matches: &ArgMatches) -> Result<()> {
         Some(("validate", sub_matches)) => validate_snapshot(sub_matches).await,
         Some(("find", sub_matches)) => find_account(sub_matches).await,
         Some(("interactive", sub_matches)) => interactive_mode(sub_matches).await,
+        Some(("download", sub_matches)) => download_snapshot(sub_matches).await,
         _ => {
             eprintln!("No snapshot subcommand provided. Use --help for usage information.");
             std::process::exit(1);
@@ -631,4 +632,100 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{}", bytes)
     }
+}
+
+/// Download snapshot to remote server via SSH
+async fn download_snapshot(matches: &ArgMatches) -> Result<()> {
+    use crate::utils::ssh_deploy::{SshClient, ServerConfig};
+
+    let connection = matches
+        .get_one::<String>("connection")
+        .context("Connection string required")?;
+
+    let network = matches
+        .get_one::<String>("network")
+        .map(|s| s.as_str())
+        .unwrap_or("mainnet");
+
+    let ledger_dir = matches
+        .get_one::<String>("ledger-dir")
+        .map(|s| s.as_str())
+        .unwrap_or("/opt/osvm/solana/ledger");
+
+    println!("📥 Downloading {} snapshot via SSH to {}...", network, connection);
+
+    // Parse connection string
+    let server_config = ServerConfig::from_connection_string(connection)
+        .context("Invalid connection string format (use user@host[:port])")?;
+
+    // Create and connect SSH client
+    let mut client = SshClient::new(server_config).map_err(|e| {
+        anyhow::anyhow!("Failed to create SSH client: {}", e)
+    })?;
+
+    client.connect().map_err(|e| {
+        anyhow::anyhow!("Failed to establish SSH connection: {}", e)
+    })?;
+
+    println!("✅ Connected to {}", connection);
+
+    // Ensure ledger directory exists
+    client.create_directory(ledger_dir).map_err(|e| {
+        anyhow::anyhow!("Failed to create ledger directory: {}", e)
+    })?;
+
+    println!("📂 Ledger directory: {}", ledger_dir);
+
+    // Download snapshot using agave-validator's built-in snapshot fetcher
+    println!("⏳ Downloading snapshot (this may take 10-30 minutes)...");
+
+    // Determine RPC URL based on network
+    let rpc_url = match network {
+        "mainnet" => "https://api.mainnet-beta.solana.com",
+        "devnet" => "https://api.devnet.solana.com",
+        "testnet" => "https://api.testnet.solana.com",
+        _ => "https://api.mainnet-beta.solana.com",
+    };
+
+    // Use agave-validator to fetch snapshot - it has built-in snapshot download capability
+    let download_cmd = format!(
+        "cd {} && ~/.local/share/solana/install/active_release/bin/agave-validator \
+        --ledger {} \
+        --rpc-port 9999 \
+        --snapshot-fetch-url {} \
+        --no-wait-for-vote-to-start-leader \
+        --no-voting \
+        --no-port-check \
+        --expected-genesis-hash {} \
+        --limit-ledger-size 50000000 > /tmp/snapshot-download.log 2>&1 & \
+        sleep 2 && VALIDATOR_PID=$! && echo \"Started validator PID: $VALIDATOR_PID\" && \
+        tail -f /tmp/snapshot-download.log & TAIL_PID=$! && \
+        while kill -0 $VALIDATOR_PID 2>/dev/null; do \
+          if grep -q 'Snapshot downloaded and unpacked' /tmp/snapshot-download.log; then \
+            echo 'Snapshot download complete!' && kill $VALIDATOR_PID $TAIL_PID 2>/dev/null && break; \
+          fi; \
+          sleep 5; \
+        done; \
+        wait $VALIDATOR_PID 2>/dev/null; \
+        kill $TAIL_PID 2>/dev/null; \
+        echo 'Download process finished'",
+        ledger_dir,
+        ledger_dir,
+        rpc_url,
+        match network {
+            "mainnet" => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+            "devnet" => "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+            "testnet" => "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY",
+            _ => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+        }
+    );
+
+    let result = client.execute_command(&download_cmd).map_err(|e| {
+        anyhow::anyhow!("Snapshot download failed: {}", e)
+    })?;
+
+    println!("✅ Snapshot downloaded successfully!");
+    println!("\n📊 Download result:\n{}", result);
+
+    Ok(())
 }
