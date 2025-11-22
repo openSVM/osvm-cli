@@ -578,7 +578,8 @@ impl OsvmApp {
     {
         enable_raw_mode()?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        // REMOVED EnableMouseCapture to allow terminal text selection and paste
+        execute!(stdout, EnterAlternateScreen)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
@@ -587,8 +588,7 @@ impl OsvmApp {
         disable_raw_mode()?;
         execute!(
             terminal.backend_mut(),
-            LeaveAlternateScreen,
-            DisableMouseCapture
+            LeaveAlternateScreen
         )?;
         terminal.show_cursor()?;
 
@@ -673,6 +673,16 @@ impl OsvmApp {
                                 self.update_search_suggestions();
                             } else if self.search_active && !self.search_query.is_empty() {
                                 self.search_query.pop();
+                            }
+                        }
+                        // Paste from clipboard (Ctrl+V) into search
+                        KeyCode::Char('v') if key.modifiers.contains(KeyModifiers::CONTROL) && self.global_search_active => {
+                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                if let Ok(text) = clipboard.get_text() {
+                                    self.global_search_query.push_str(&text);
+                                    self.update_search_suggestions();
+                                    self.add_log(format!("📋 Pasted {} chars from clipboard", text.len()));
+                                }
                             }
                         }
                         KeyCode::Char(c) if self.global_search_active => {
@@ -860,6 +870,45 @@ impl OsvmApp {
                             if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
                                     graph.handle_input(GraphInput::Copy);
+                                }
+                            } else if self.active_tab == TabIndex::SearchResults {
+                                // Copy all search results to clipboard
+                                let (output, total_matches) = {
+                                    let results = self.search_results_data.lock().unwrap();
+                                    let mut output = format!("Search Results for: {}\n", results.query);
+                                    output.push_str(&format!("Total Matches: {}\n", results.total_matches));
+                                    output.push_str(&format!("Timestamp: {}\n\n", results.search_timestamp));
+
+                                    if !results.wallets_found.is_empty() {
+                                        output.push_str(&format!("=== WALLETS ({}) ===\n", results.wallets_found.len()));
+                                        for w in &results.wallets_found {
+                                            output.push_str(&format!("{}\n  Balance: {:.4} SOL\n  Transfers: {}\n\n",
+                                                w.address, w.balance_sol, w.transfer_count));
+                                        }
+                                    }
+
+                                    if !results.tokens_found.is_empty() {
+                                        output.push_str(&format!("=== TOKENS ({}) ===\n", results.tokens_found.len()));
+                                        for t in &results.tokens_found {
+                                            output.push_str(&format!("{}\n  Volume: {:.2}\n\n", t.symbol, t.volume));
+                                        }
+                                    }
+
+                                    if !results.transactions_found.is_empty() {
+                                        output.push_str(&format!("=== TRANSACTIONS ({}) ===\n", results.transactions_found.len()));
+                                        for tx in &results.transactions_found {
+                                            output.push_str(&format!("{}\n  Time: {}\n  Amount: {:.4} SOL\n\n",
+                                                tx.signature, tx.timestamp, tx.amount_sol));
+                                        }
+                                    }
+
+                                    (output, results.total_matches)
+                                };
+
+                                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                    if clipboard.set_text(&output).is_ok() {
+                                        self.add_log(format!("📋 Copied {} search results to clipboard", total_matches));
+                                    }
                                 }
                             }
                         }
@@ -1760,6 +1809,7 @@ impl OsvmApp {
             Line::from("   ?/F1         Toggle this help"),
             Line::from("   q/Esc        Quit (or close help)"),
             Line::from("   Ctrl+C       Force quit"),
+            Line::from("   Ctrl+V       Paste from clipboard (in search modal)"),
             Line::from(""),
             Line::from(Span::styled(" ─── Graph View ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k/↑/↓      Select node up/down"),
@@ -1769,7 +1819,7 @@ impl OsvmApp {
             Line::from("   [/]          Decrease/increase BFS exploration depth"),
             Line::from("   /            Start search (ESC to cancel)"),
             Line::from("   n/N          Next/previous search result"),
-            Line::from("   y            Copy selected wallet address to clipboard"),
+            Line::from("   y            Copy to clipboard (wallet/search results)"),
             Line::from("   Enter        Center graph on selected wallet (hop)"),
             Line::from("   Space        Expand or collapse node"),
             Line::from(""),
