@@ -52,6 +52,7 @@ pub struct EdgeLabel {
     pub amount: f64,
     pub token: String,
     pub timestamp: Option<String>,
+    pub signature: Option<String>,  // Transaction signature for Solana Explorer
 }
 
 impl EdgeLabel {
@@ -116,6 +117,7 @@ pub enum GraphInput {
     SearchNext,
     SearchPrev,
     Copy,
+    HopToWallet,  // Re-center graph on selected wallet
 }
 
 impl WalletGraph {
@@ -318,6 +320,22 @@ impl WalletGraph {
                 }
                 None
             }
+            // Hop to wallet - re-center graph on selected wallet
+            GraphInput::HopToWallet => {
+                if let Some(idx) = self.selected_node {
+                    if let Some(pos) = self.node_positions.get(idx) {
+                        // Center viewport on selected wallet
+                        self.viewport.0 = pos.0;
+                        self.viewport.1 = pos.1;
+
+                        // Show confirmation toast
+                        if let Some((addr, _)) = self.nodes.get(idx) {
+                            self.show_toast(format!("Centered on: {}...{}", &addr[..8], &addr[addr.len()-8..]));
+                        }
+                    }
+                }
+                None
+            }
         }
     }
 
@@ -453,6 +471,7 @@ impl WalletGraph {
         amount: f64,
         token: String,
         timestamp: Option<String>,
+        signature: Option<String>,
     ) {
         let from_idx = self.nodes.iter().position(|(addr, _)| addr == from_address);
         let to_idx = self.nodes.iter().position(|(addr, _)| addr == to_address);
@@ -462,6 +481,7 @@ impl WalletGraph {
                 amount,
                 token,
                 timestamp,
+                signature,
             };
             self.connections.push((from, to, edge_label));
         }
@@ -543,6 +563,7 @@ impl WalletGraph {
         node_type_from: WalletNodeType,
         node_type_to: WalletNodeType,
         timestamp: Option<String>,
+        signature: Option<String>,
     ) {
         // Add nodes if they don't exist
         let from_label = format!("{} (Source)", &from[..8.min(from.len())]);
@@ -564,8 +585,8 @@ impl WalletGraph {
             Some(token.clone()),
         );
 
-        // Add connection with transfer info including timestamp
-        self.add_connection(&from, &to, amount, token, timestamp);
+        // Add connection with transfer info including timestamp and signature
+        self.add_connection(&from, &to, amount, token, timestamp, signature);
     }
 
     pub fn render(&mut self, f: &mut Frame, area: Rect) {
@@ -722,20 +743,23 @@ impl WalletGraph {
     }
 
     // Helper to build graph from research agent data
+    // ONLY shows direct SPL token transfers - filters out DeFi swaps/noise
     pub fn build_from_transfers(&mut self, transfers: &[TransferData]) {
         for transfer in transfers {
+            // CRITICAL: Skip DeFi transactions to reduce graph noise
+            // Only show wallet-to-wallet SPL token transfers
+            if transfer.is_defi {
+                continue;
+            }
+
             let node_type_from = if transfer.from == self.target_wallet {
                 WalletNodeType::Target
-            } else if transfer.is_defi {
-                WalletNodeType::DeFi
             } else {
                 WalletNodeType::Funding
             };
 
             let node_type_to = if transfer.to == self.target_wallet {
                 WalletNodeType::Target
-            } else if transfer.is_defi {
-                WalletNodeType::DeFi
             } else {
                 WalletNodeType::Recipient
             };
@@ -748,6 +772,7 @@ impl WalletGraph {
                 node_type_from,
                 node_type_to,
                 transfer.timestamp.clone(),
+                transfer.signature.clone(),
             );
         }
     }
@@ -763,6 +788,7 @@ pub struct TransferData {
     pub token: String,
     pub is_defi: bool,
     pub timestamp: Option<String>,
+    pub signature: Option<String>,  // Transaction signature
 }
 
 impl TransferData {
@@ -787,6 +813,12 @@ impl TransferData {
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string());
 
+                    let signature = item.get("signature")
+                        .or_else(|| item.get("txHash"))
+                        .or_else(|| item.get("transactionHash"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
                     transfers.push(TransferData {
                         from: from.to_string(),
                         to: to.to_string(),
@@ -794,6 +826,7 @@ impl TransferData {
                         token: token_symbol.to_string(),
                         is_defi,
                         timestamp,
+                        signature,
                     });
                 }
             }

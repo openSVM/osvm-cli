@@ -315,7 +315,14 @@ impl OsvmApp {
                                 self.log_scroll = self.log_scroll.saturating_sub(1);
                             }
                         }
-                        KeyCode::Enter | KeyCode::Char(' ') => {
+                        KeyCode::Enter => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::HopToWallet);
+                                }
+                            }
+                        }
+                        KeyCode::Char(' ') => {
                             if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
                                     graph.handle_input(GraphInput::Toggle);
@@ -1142,7 +1149,8 @@ impl OsvmApp {
             Line::from("   /            Start search (ESC to cancel)"),
             Line::from("   n/N          Next/previous search result"),
             Line::from("   y            Copy selected wallet address to clipboard"),
-            Line::from("   Enter/Space  Expand or collapse node"),
+            Line::from("   Enter        Center graph on selected wallet (hop)"),
+            Line::from("   Space        Expand or collapse node"),
             Line::from(""),
             Line::from(Span::styled(" ─── Logs View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k          Scroll line by line"),

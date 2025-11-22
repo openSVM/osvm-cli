@@ -30,7 +30,10 @@ solana-logger = "3.0.0"
 solana-remote-wallet = { version = "3.0.1", optional = true }
 solana-sdk = "3.0.0"
 tokio = { version = "1.47.1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs", "process", "signal"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-vsock = "0.4"
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors"] }
 vsock = "0.3"
 thiserror = "2.0.16"
 ssh2 = { version = "0.9.5", features = ["vendored-openssl"] }

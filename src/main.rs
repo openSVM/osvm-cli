@@ -53,6 +53,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "mcp"
             | "mount"
             | "snapshot"
+            | "stream"
             | "settings"
             | "db"
             | "realtime"
