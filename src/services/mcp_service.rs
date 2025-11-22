@@ -1319,6 +1319,20 @@ impl McpService {
         self.servers.iter().collect()
     }
 
+    /// Get first enabled server ID (prefers osvm-mcp)
+    pub fn get_first_enabled_server_id(&self) -> Option<String> {
+        // Prefer osvm-mcp if enabled
+        if let Some(config) = self.servers.get("osvm-mcp") {
+            if config.enabled {
+                return Some("osvm-mcp".to_string());
+            }
+        }
+        // Otherwise return first enabled server
+        self.servers.iter()
+            .find(|(_, config)| config.enabled)
+            .map(|(id, _)| id.clone())
+    }
+
     /// Get a specific MCP server configuration
     pub fn get_server(&self, server_id: &str) -> Option<&McpServerConfig> {
         self.servers.get(server_id)
@@ -2870,7 +2884,29 @@ impl McpService {
         }
 
         // Extract actual JSON from MCP content structure if present
-        let extracted_result = Self::extract_mcp_content(result);
+        let mut extracted_result = Self::extract_mcp_content(result);
+
+        // Handle Brotli-compressed responses
+        if let Some(compressed_marker) = extracted_result.get("_compressed") {
+            if compressed_marker == "brotli" {
+                crate::tui_log!("🗜️  MCP STDIO: Decompressing Brotli response...");
+
+                if let Some(compressed_b64) = extracted_result.get("data").and_then(|v| v.as_str()) {
+                    use base64::Engine;
+                    if let Ok(compressed) = base64::engine::general_purpose::STANDARD.decode(compressed_b64) {
+                        let mut decompressed = Vec::new();
+                        let mut decoder = brotli::Decompressor::new(&compressed[..], 4096);
+                        if std::io::Read::read_to_end(&mut decoder, &mut decompressed).is_ok() {
+                            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&decompressed) {
+                                crate::tui_log!("✅ MCP STDIO: Decompression successful ({} -> {} bytes)",
+                                         compressed.len(), decompressed.len());
+                                extracted_result = json;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(extracted_result)
     }

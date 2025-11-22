@@ -77,6 +77,7 @@ proptest = "1.4"
 criterion = "0.5"
 bolero = "0.10"
 tokio-test = "0.4"
+solana_rbpf = "0.8.5"
 
 [[bench]]
 name = "execution_bench"

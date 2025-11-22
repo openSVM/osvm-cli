@@ -26,15 +26,23 @@ pub enum TabIndex {
     Logs = 2,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum FilterMode {
+    All,
+    Errors,
+    Success,
+    Transfers,
+}
+
 /// Token volume entry for analytics
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct TokenVolume {
     pub symbol: String,
     pub amount: f64,
 }
 
 /// Transfer event for timeline
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct TransferEvent {
     pub timestamp: String,
     pub amount: f64,
@@ -73,6 +81,12 @@ pub struct OsvmApp {
     pub log_scroll: usize,
     pub output_scroll: usize,
     pub help_scroll: usize,
+    // AI insights
+    pub ai_insights: Arc<Mutex<Vec<String>>>,
+    // Search/Filter
+    pub search_active: bool,
+    pub search_query: String,
+    pub filter_mode: FilterMode,
 }
 
 impl OsvmApp {
@@ -104,6 +118,10 @@ impl OsvmApp {
             log_scroll: 0,
             output_scroll: 0,
             help_scroll: 0,
+            ai_insights: Arc::new(Mutex::new(Vec::new())),
+            search_active: false,
+            search_query: String::new(),
+            filter_mode: FilterMode::All,
         }
     }
 
@@ -115,6 +133,11 @@ impl OsvmApp {
     /// Get a clone of the wallet_graph Arc for sharing with background threads
     pub fn get_graph_handle(&self) -> Arc<Mutex<WalletGraph>> {
         Arc::clone(&self.wallet_graph)
+    }
+
+    /// Get AI insights handle for background thread updates
+    pub fn get_insights_handle(&self) -> Arc<Mutex<Vec<String>>> {
+        Arc::clone(&self.ai_insights)
     }
 
     pub fn set_status(&self, status: &str) {
@@ -200,12 +223,63 @@ impl OsvmApp {
                             if self.show_help {
                                 self.show_help = false;
                                 self.help_scroll = 0;  // Reset scroll when closing
+                            } else if self.active_tab == TabIndex::Graph {
+                                // Check if search is active in graph
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    if graph.search_active {
+                                        graph.search_active = false;
+                                        graph.search_query.clear();
+                                        graph.search_results.clear();
+                                    } else {
+                                        self.should_quit = true;
+                                    }
+                                } else {
+                                    self.should_quit = true;
+                                }
                             } else {
                                 self.should_quit = true;
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             self.should_quit = true;
+                        }
+                        KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            // Export investigation
+                            if let Err(e) = self.export_investigation() {
+                                self.add_log(format!("Export failed: {}", e));
+                            } else {
+                                self.add_log("Investigation exported successfully".to_string());
+                            }
+                        }
+                        KeyCode::Char('/') => {
+                            // Toggle search in Dashboard
+                            if self.active_tab == TabIndex::Dashboard {
+                                self.search_active = !self.search_active;
+                                if !self.search_active {
+                                    self.search_query.clear();
+                                }
+                            }
+                        }
+                        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            // Cycle filter mode
+                            if self.active_tab == TabIndex::Dashboard {
+                                self.filter_mode = match self.filter_mode {
+                                    FilterMode::All => FilterMode::Errors,
+                                    FilterMode::Errors => FilterMode::Success,
+                                    FilterMode::Success => FilterMode::Transfers,
+                                    FilterMode::Transfers => FilterMode::All,
+                                };
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if self.search_active && !self.search_query.is_empty() {
+                                self.search_query.pop();
+                            }
+                        }
+                        KeyCode::Char(c) if self.search_active => {
+                            if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                                self.search_query.push(c);
+                            }
                         }
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
@@ -332,6 +406,55 @@ impl OsvmApp {
                                 }
                             }
                         }
+                        // Search functionality
+                        KeyCode::Char('/') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::StartSearch);
+                                }
+                            }
+                        }
+                        KeyCode::Char('n') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::SearchNext);
+                                }
+                            }
+                        }
+                        KeyCode::Char('N') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::SearchPrev);
+                                }
+                            }
+                        }
+                        // Copy to clipboard
+                        KeyCode::Char('y') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::Copy);
+                                }
+                            }
+                        }
+                        // Handle typing in search mode
+                        KeyCode::Char(c) => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    if graph.search_active {
+                                        graph.handle_input(GraphInput::SearchChar(c));
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    if graph.search_active {
+                                        graph.handle_input(GraphInput::SearchBackspace);
+                                    }
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -342,6 +465,11 @@ impl OsvmApp {
             }
 
             on_tick(self);
+
+            // Update toast timer
+            if let Ok(mut graph) = self.wallet_graph.lock() {
+                graph.tick_toast();
+            }
         }
 
         Ok(())
@@ -410,19 +538,21 @@ impl OsvmApp {
         self.render_activity_feed(f, left_chunks[0]);
         self.render_mini_graph(f, left_chunks[1]);
 
-        // Right side: Stats + Metrics + Transfers
+        // Right side: Stats + Metrics + AI Insights + Transfers
         let right_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(7),   // Progress gauges (btop CPU style)
                 Constraint::Length(9),   // Token volumes with bars
+                Constraint::Length(6),   // AI insights
                 Constraint::Min(0),      // Transfer list
             ])
             .split(content_chunks[1]);
 
         self.render_progress_gauges(f, right_chunks[0]);
         self.render_volume_bars(f, right_chunks[1]);
-        self.render_transfer_feed(f, right_chunks[2]);
+        self.render_ai_insights(f, right_chunks[2]);
+        self.render_transfer_feed(f, right_chunks[3]);
 
         self.render_btop_statusbar(f, main_chunks[2]);
     }
@@ -556,10 +686,16 @@ impl OsvmApp {
     fn render_activity_feed(&self, f: &mut Frame, area: Rect) {
         let output = self.agent_output.lock().unwrap();
 
-        let items: Vec<ListItem> = output
+        // Apply filter and search
+        let filtered: Vec<&String> = output
+            .iter()
+            .filter(|line| self.matches_filter(line))
+            .collect();
+
+        let items: Vec<ListItem> = filtered
             .iter()
             .rev()
-            .take((area.height as usize).saturating_sub(2))
+            .take((area.height as usize).saturating_sub(if self.search_active { 3 } else { 2 }))
             .map(|line| {
                 let (icon, color) = if line.contains("✅") || line.contains("Found") || line.contains("SUCCESS") {
                     ("▶", Color::Green)
@@ -587,8 +723,18 @@ impl OsvmApp {
             })
             .collect();
 
+        // Title with filter mode indicator
+        let filter_indicator = match self.filter_mode {
+            FilterMode::All => "",
+            FilterMode::Errors => " [ERRORS]",
+            FilterMode::Success => " [SUCCESS]",
+            FilterMode::Transfers => " [TRANSFERS]",
+        };
+
+        let title = format!(" ◉ Activity{} ({}/{}) ", filter_indicator, filtered.len(), output.len());
+
         let block = Block::default()
-            .title(Span::styled(" ◉ Activity ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
             .title_alignment(Alignment::Left)
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
@@ -596,6 +742,21 @@ impl OsvmApp {
 
         let list = List::new(items).block(block);
         f.render_widget(list, area);
+
+        // Render search bar if active
+        if self.search_active {
+            let search_area = Rect {
+                x: area.x + 2,
+                y: area.y + area.height - 2,
+                width: area.width.saturating_sub(4),
+                height: 1,
+            };
+
+            let search_text = format!("Search: {}█", self.search_query);
+            let search_widget = Paragraph::new(search_text)
+                .style(Style::default().fg(Color::Yellow).bg(Color::DarkGray));
+            f.render_widget(search_widget, search_area);
+        }
     }
 
     /// Mini graph preview in dashboard (btop style overview)
@@ -978,6 +1139,9 @@ impl OsvmApp {
             Line::from("   W/A/S/D      Pan viewport up/left/down/right"),
             Line::from("   +/-          Zoom in/out"),
             Line::from("   [/]          Decrease/increase BFS exploration depth"),
+            Line::from("   /            Start search (ESC to cancel)"),
+            Line::from("   n/N          Next/previous search result"),
+            Line::from("   y            Copy selected wallet address to clipboard"),
             Line::from("   Enter/Space  Expand or collapse node"),
             Line::from(""),
             Line::from(Span::styled(" ─── Logs View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
@@ -1024,5 +1188,110 @@ impl OsvmApp {
             .style(Style::default().bg(Color::Black));
 
         f.render_widget(help, popup_area);
+    }
+
+    /// Render AI insights panel
+    fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
+        let insights = self.ai_insights.lock().ok();
+
+        let block = Block::default()
+            .title(Span::styled(" 💡 AI Insights ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::DarkGray));
+
+        let inner_area = block.inner(area);
+        f.render_widget(block, area);
+
+        let mut lines = Vec::new();
+
+        if let Some(insights_vec) = insights {
+            if insights_vec.is_empty() {
+                lines.push(Line::from(Span::styled("  Analyzing patterns...", Style::default().fg(Color::DarkGray))));
+            } else {
+                for (i, insight) in insights_vec.iter().rev().take((inner_area.height as usize).saturating_sub(1)).enumerate() {
+                    let color = if insight.contains("suspicious") || insight.contains("risk") {
+                        Color::Red
+                    } else if insight.contains("whale") || insight.contains("exchange") {
+                        Color::Yellow
+                    } else {
+                        Color::Cyan
+                    };
+
+                    let truncated = if insight.len() > (inner_area.width as usize).saturating_sub(4) {
+                        format!("{}…", &insight[..(inner_area.width as usize).saturating_sub(5)])
+                    } else {
+                        insight.clone()
+                    };
+
+                    lines.push(Line::from(vec![
+                        Span::styled(" • ", Style::default().fg(color)),
+                        Span::styled(truncated, Style::default().fg(color)),
+                    ]));
+                }
+            }
+        } else {
+            lines.push(Line::from(Span::styled("  Initializing...", Style::default().fg(Color::DarkGray))));
+        }
+
+        let widget = Paragraph::new(lines);
+        f.render_widget(widget, inner_area);
+    }
+
+    /// Export investigation to JSON file
+    fn export_investigation(&self) -> Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let filename = format!("investigation_{}_{}.json", self.target_wallet[..8].to_string(), timestamp);
+
+        let (nodes, edges) = self.wallet_graph.lock()
+            .map(|g| (g.node_count(), g.edge_count()))
+            .unwrap_or((0, 0));
+
+        let export_data = serde_json::json!({
+            "wallet": self.target_wallet,
+            "timestamp": timestamp.to_string(),
+            "duration_secs": self.start_time.elapsed().as_secs(),
+            "stats": {
+                "wallets_discovered": nodes,
+                "transfers_found": edges,
+                "depth_reached": self.depth_reached,
+                "total_sol_in": self.total_sol_in,
+                "total_sol_out": self.total_sol_out,
+            },
+            "insights": self.ai_insights.lock().ok().map(|i| i.clone()).unwrap_or_default(),
+            "activity": self.agent_output.lock().ok().map(|a| a.clone()).unwrap_or_default(),
+            "token_volumes": self.token_volumes.lock().ok().map(|t| t.clone()).unwrap_or_default(),
+            "transfers": self.transfer_events.lock().ok().map(|t| t.clone()).unwrap_or_default(),
+        });
+
+        let mut file = File::create(&filename)?;
+        file.write_all(serde_json::to_string_pretty(&export_data)?.as_bytes())?;
+
+        Ok(())
+    }
+
+    /// Check if a line matches the current filter/search
+    fn matches_filter(&self, line: &str) -> bool {
+        // Check filter mode
+        let filter_match = match self.filter_mode {
+            FilterMode::All => true,
+            FilterMode::Errors => line.contains("ERROR") || line.contains("error") || line.contains("⚠"),
+            FilterMode::Success => line.contains("✅") || line.contains("Found") || line.contains("SUCCESS"),
+            FilterMode::Transfers => line.contains("transfer") || line.contains("→"),
+        };
+
+        if !filter_match {
+            return false;
+        }
+
+        // Check search query
+        if !self.search_query.is_empty() {
+            line.to_lowercase().contains(&self.search_query.to_lowercase())
+        } else {
+            true
+        }
     }
 }

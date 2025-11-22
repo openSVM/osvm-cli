@@ -627,6 +627,7 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
                         token.to_string(),
                         WalletNodeType::Funding,
                         WalletNodeType::Recipient,
+                        Some(timestamp.to_string()),
                     );
                 }
 

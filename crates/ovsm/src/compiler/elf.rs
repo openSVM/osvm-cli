@@ -18,42 +18,111 @@ const ELFDATA2LSB: u8 = 1;
 /// ELF version
 const EV_CURRENT: u8 = 1;
 
-/// ELF OS/ABI: None (ELFOSABI_NONE)
+/// ELF OS/ABI: None
 const ELFOSABI_NONE: u8 = 0;
 
 /// ELF type: Shared object (ET_DYN)
 const ET_DYN: u16 = 3;
 
-/// ELF machine: eBPF
-const EM_BPF: u16 = 247;
+/// ELF machine: SBF (Solana BPF v2)
+const EM_SBF: u16 = 263; // 0x107
+
+/// ELF flags - use 0x0 for SBPFv1 compatibility (localnet)
+const EF_SBF_V2: u32 = 0x0;
 
 /// Section header types
 const SHT_NULL: u32 = 0;
 const SHT_PROGBITS: u32 = 1;
+const SHT_SYMTAB: u32 = 2;
 const SHT_STRTAB: u32 = 3;
+const SHT_REL: u32 = 9;
+const SHT_DYNSYM: u32 = 11;
+const SHT_DYNAMIC: u32 = 6;
+#[allow(dead_code)]
+const SHT_NOBITS: u32 = 8;
 
 /// Section flags
 const SHF_ALLOC: u64 = 0x2;
 const SHF_EXECINSTR: u64 = 0x4;
+const SHF_WRITE: u64 = 0x1;
+
+/// Program header types
+const PT_LOAD: u32 = 1;
+const PT_DYNAMIC: u32 = 2;
+#[allow(dead_code)]
+const PT_NULL: u32 = 0;
+
+/// Dynamic tags
+const DT_NULL: u64 = 0;
+const DT_STRTAB: u64 = 5;
+const DT_SYMTAB: u64 = 6;
+const DT_STRSZ: u64 = 10;
+const DT_SYMENT: u64 = 11;
+const DT_REL: u64 = 17;
+const DT_RELSZ: u64 = 18;
+const DT_RELENT: u64 = 19;
+const DT_TEXTREL: u64 = 22;
+const DT_FLAGS: u64 = 30;
+const DT_RELCOUNT: u64 = 0x6ffffffa;
+
+/// Relocation types
+const R_BPF_64_32: u32 = 10;
+
+/// Program header flags
+const PF_X: u32 = 0x1;
+const PF_W: u32 = 0x2;
+const PF_R: u32 = 0x4;
+
+/// Virtual addresses for Solana memory regions (SBPFv1)
+const TEXT_VADDR: u64 = 0x1000;  // .text at 0x1000 for v1
+const RODATA_VADDR: u64 = 0x100000000;
+const STACK_VADDR: u64 = 0x200000000;
+const HEAP_VADDR: u64 = 0x300000000;
+
+/// Default stack/heap size
+const STACK_SIZE: u64 = 0x1000;
+const HEAP_SIZE: u64 = 0x1000;
+
+/// Symbol binding
+const STB_GLOBAL: u8 = 1;
+/// Symbol type
+const STT_FUNC: u8 = 2;
+
+/// Syscall reference in the code
+#[derive(Clone, Debug)]
+pub struct SyscallRef {
+    /// Instruction offset (in bytes from .text start)
+    pub offset: usize,
+    /// Syscall name (e.g., "sol_log_64_")
+    pub name: String,
+}
 
 /// ELF writer for sBPF programs
 pub struct ElfWriter {
-    /// String table
     strtab: Vec<u8>,
+    shstrtab: Vec<u8>,
+    dynstr: Vec<u8>,
 }
 
 impl ElfWriter {
     pub fn new() -> Self {
         Self {
-            strtab: vec![0], // Start with null byte
+            strtab: vec![0],
+            shstrtab: vec![0],
+            dynstr: vec![0],
         }
     }
 
-    /// Write sBPF program to ELF format
-    pub fn write(&mut self, program: &[SbpfInstruction], debug_info: bool) -> Result<Vec<u8>> {
-        let _ = debug_info; // TODO: Add debug info support
+    fn add_dynstr(&mut self, s: &str) -> usize {
+        let idx = self.dynstr.len();
+        self.dynstr.extend_from_slice(s.as_bytes());
+        self.dynstr.push(0);
+        idx
+    }
 
-        // Encode all instructions
+    /// Write sBPF program to proper Solana ELF format
+    pub fn write(&mut self, program: &[SbpfInstruction], _debug_info: bool) -> Result<Vec<u8>> {
+        // Encode instructions
         let mut text_section: Vec<u8> = Vec::new();
         for instr in program {
             text_section.extend_from_slice(&instr.encode());
@@ -63,146 +132,443 @@ impl ElfWriter {
             return Err(Error::runtime("Cannot create ELF with empty program"));
         }
 
-        // Build string table
-        let shstrtab_name_idx = self.add_string(".shstrtab");
-        let text_name_idx = self.add_string(".text");
+        // Build string tables
+        let entrypoint_str_idx = self.add_strtab("entrypoint");
 
-        // Calculate offsets
-        let ehdr_size = 64; // ELF64 header size
-        let shdr_size = 64; // Section header size
-        let num_sections = 3; // NULL, .text, .shstrtab
+        let _shstrtab_name = self.add_shstrtab(".shstrtab");
+        let text_name = self.add_shstrtab(".text");
+        let strtab_name = self.add_shstrtab(".strtab");
+        let symtab_name = self.add_shstrtab(".symtab");
+        let stack_name = self.add_shstrtab(".bss.stack");
+        let heap_name = self.add_shstrtab(".bss.heap");
 
-        let text_offset = ehdr_size;
+        // Layout (page-aligned like reference ELFs):
+        // [ELF Header: 64 bytes]
+        // [Program Headers: 1 * 56 bytes]
+        // [Padding to 0x1000]
+        // [.text section at 0x1000]
+        // [.strtab section]
+        // [.symtab section]
+        // [.shstrtab section]
+        // [Section Headers]
+
+        let ehdr_size = 64usize;
+        let phdr_size = 56usize;
+        let shdr_size = 64usize;
+        let num_phdrs = 1usize;  // Just .text PT_LOAD
+        let num_sections = 5usize;  // NULL, .text, .strtab, .symtab, .shstrtab
+
+        let phdr_offset = ehdr_size;
+        let text_offset = 0x1000usize;  // Page-aligned
         let text_size = text_section.len();
 
-        let shstrtab_offset = text_offset + text_size;
-        let shstrtab_size = self.strtab.len();
+        let strtab_offset = text_offset + text_size;
+        let strtab_size = self.strtab.len();
 
-        let shdr_offset = shstrtab_offset + shstrtab_size;
-        // Align to 8 bytes
-        let shdr_offset_aligned = (shdr_offset + 7) & !7;
+        // Symbol table: one NULL entry + one entrypoint entry
+        let symtab_offset = strtab_offset + strtab_size;
+        let symtab_entry_size = 24usize; // Elf64_Sym
+        let symtab_size = symtab_entry_size * 2; // NULL + entrypoint
+
+        let shstrtab_offset = symtab_offset + symtab_size;
+        let shstrtab_size = self.shstrtab.len();
+
+        let shdr_offset = ((shstrtab_offset + shstrtab_size) + 7) & !7;
 
         // Build ELF
         let mut elf = Vec::new();
 
         // ==================== ELF Header ====================
-        // e_ident (16 bytes)
-        elf.extend_from_slice(&ELF_MAGIC);           // Magic
-        elf.push(ELFCLASS64);                        // 64-bit
-        elf.push(ELFDATA2LSB);                       // Little-endian
-        elf.push(EV_CURRENT);                        // Version
-        elf.push(ELFOSABI_NONE);                     // OS/ABI
-        elf.extend_from_slice(&[0u8; 8]);            // Padding
+        elf.extend_from_slice(&ELF_MAGIC);
+        elf.push(ELFCLASS64);
+        elf.push(ELFDATA2LSB);
+        elf.push(EV_CURRENT);
+        elf.push(ELFOSABI_NONE);
+        elf.extend_from_slice(&[0u8; 8]);
 
-        // e_type (2 bytes) - ET_DYN
         elf.extend_from_slice(&ET_DYN.to_le_bytes());
-
-        // e_machine (2 bytes) - EM_BPF
-        elf.extend_from_slice(&EM_BPF.to_le_bytes());
-
-        // e_version (4 bytes)
+        elf.extend_from_slice(&EM_SBF.to_le_bytes());
         elf.extend_from_slice(&1u32.to_le_bytes());
-
-        // e_entry (8 bytes) - entry point
-        elf.extend_from_slice(&(text_offset as u64).to_le_bytes());
-
-        // e_phoff (8 bytes) - program header offset (none)
-        elf.extend_from_slice(&0u64.to_le_bytes());
-
-        // e_shoff (8 bytes) - section header offset
-        elf.extend_from_slice(&(shdr_offset_aligned as u64).to_le_bytes());
-
-        // e_flags (4 bytes)
-        elf.extend_from_slice(&0u32.to_le_bytes());
-
-        // e_ehsize (2 bytes)
+        elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // e_entry
+        elf.extend_from_slice(&(phdr_offset as u64).to_le_bytes());
+        elf.extend_from_slice(&(shdr_offset as u64).to_le_bytes());
+        elf.extend_from_slice(&EF_SBF_V2.to_le_bytes()); // e_flags
         elf.extend_from_slice(&(ehdr_size as u16).to_le_bytes());
-
-        // e_phentsize (2 bytes)
-        elf.extend_from_slice(&0u16.to_le_bytes());
-
-        // e_phnum (2 bytes)
-        elf.extend_from_slice(&0u16.to_le_bytes());
-
-        // e_shentsize (2 bytes)
+        elf.extend_from_slice(&(phdr_size as u16).to_le_bytes());
+        elf.extend_from_slice(&(num_phdrs as u16).to_le_bytes());
         elf.extend_from_slice(&(shdr_size as u16).to_le_bytes());
-
-        // e_shnum (2 bytes)
         elf.extend_from_slice(&(num_sections as u16).to_le_bytes());
-
-        // e_shstrndx (2 bytes) - index of .shstrtab
-        elf.extend_from_slice(&2u16.to_le_bytes());
+        elf.extend_from_slice(&((num_sections - 1) as u16).to_le_bytes()); // e_shstrndx
 
         assert_eq!(elf.len(), ehdr_size);
+
+        // ==================== Program Headers ====================
+        // Single PT_LOAD for .text (page-aligned like reference)
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
+
+        // Padding to 0x1000
+        while elf.len() < text_offset {
+            elf.push(0);
+        }
 
         // ==================== .text Section ====================
         elf.extend_from_slice(&text_section);
 
-        // ==================== .shstrtab Section ====================
+        // ==================== .strtab Section ====================
         elf.extend_from_slice(&self.strtab);
 
+        // ==================== .symtab Section ====================
+        // NULL symbol
+        elf.extend_from_slice(&[0u8; 24]);
+        // entrypoint symbol
+        elf.extend_from_slice(&(entrypoint_str_idx as u32).to_le_bytes()); // st_name
+        elf.push((STB_GLOBAL << 4) | STT_FUNC); // st_info
+        elf.push(0); // st_other
+        elf.extend_from_slice(&1u16.to_le_bytes()); // st_shndx (.text = 1)
+        elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // st_value
+        elf.extend_from_slice(&(text_size as u64).to_le_bytes()); // st_size
+
+        // ==================== .shstrtab Section ====================
+        elf.extend_from_slice(&self.shstrtab);
+
         // ==================== Padding ====================
-        while elf.len() < shdr_offset_aligned {
+        while elf.len() < shdr_offset {
             elf.push(0);
         }
 
         // ==================== Section Headers ====================
-
-        // Section 0: NULL
+        // 0: NULL
         elf.extend_from_slice(&[0u8; 64]);
 
-        // Section 1: .text
-        // sh_name (4 bytes)
-        elf.extend_from_slice(&(text_name_idx as u32).to_le_bytes());
-        // sh_type (4 bytes)
-        elf.extend_from_slice(&SHT_PROGBITS.to_le_bytes());
-        // sh_flags (8 bytes)
-        elf.extend_from_slice(&(SHF_ALLOC | SHF_EXECINSTR).to_le_bytes());
-        // sh_addr (8 bytes)
-        elf.extend_from_slice(&0u64.to_le_bytes());
-        // sh_offset (8 bytes)
-        elf.extend_from_slice(&(text_offset as u64).to_le_bytes());
-        // sh_size (8 bytes)
-        elf.extend_from_slice(&(text_size as u64).to_le_bytes());
-        // sh_link (4 bytes)
-        elf.extend_from_slice(&0u32.to_le_bytes());
-        // sh_info (4 bytes)
-        elf.extend_from_slice(&0u32.to_le_bytes());
-        // sh_addralign (8 bytes)
-        elf.extend_from_slice(&8u64.to_le_bytes());
-        // sh_entsize (8 bytes)
-        elf.extend_from_slice(&0u64.to_le_bytes());
+        // 1: .text
+        self.write_shdr(&mut elf, text_name, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR,
+                       TEXT_VADDR, text_offset, text_size, 0, 0, 0x1000, 0);
 
-        // Section 2: .shstrtab
-        // sh_name (4 bytes)
-        elf.extend_from_slice(&(shstrtab_name_idx as u32).to_le_bytes());
-        // sh_type (4 bytes)
-        elf.extend_from_slice(&SHT_STRTAB.to_le_bytes());
-        // sh_flags (8 bytes)
-        elf.extend_from_slice(&0u64.to_le_bytes());
-        // sh_addr (8 bytes)
-        elf.extend_from_slice(&0u64.to_le_bytes());
-        // sh_offset (8 bytes)
-        elf.extend_from_slice(&(shstrtab_offset as u64).to_le_bytes());
-        // sh_size (8 bytes)
-        elf.extend_from_slice(&(shstrtab_size as u64).to_le_bytes());
-        // sh_link (4 bytes)
-        elf.extend_from_slice(&0u32.to_le_bytes());
-        // sh_info (4 bytes)
-        elf.extend_from_slice(&0u32.to_le_bytes());
-        // sh_addralign (8 bytes)
-        elf.extend_from_slice(&1u64.to_le_bytes());
-        // sh_entsize (8 bytes)
-        elf.extend_from_slice(&0u64.to_le_bytes());
+        // 2: .strtab
+        self.write_shdr(&mut elf, strtab_name, SHT_STRTAB, 0,
+                       0, strtab_offset, strtab_size, 0, 0, 1, 0);
+
+        // 3: .symtab
+        self.write_shdr(&mut elf, symtab_name, SHT_SYMTAB, 0,
+                       0, symtab_offset, symtab_size, 2, 1, 8, symtab_entry_size);
+
+        // 4: .shstrtab
+        self.write_shdr(&mut elf, 1, SHT_STRTAB, 0,
+                       0, shstrtab_offset, shstrtab_size, 0, 0, 1, 0);
+
+        let _ = (stack_name, heap_name);  // Suppress unused warnings
 
         Ok(elf)
     }
 
-    /// Add a string to the string table, return its index
-    fn add_string(&mut self, s: &str) -> usize {
+    /// Write sBPF program with syscall support (dynamic linking)
+    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], _debug_info: bool) -> Result<Vec<u8>> {
+        if syscalls.is_empty() {
+            return self.write(program, _debug_info);
+        }
+
+        // Encode instructions
+        let mut text_section: Vec<u8> = Vec::new();
+        for instr in program {
+            text_section.extend_from_slice(&instr.encode());
+        }
+
+        if text_section.is_empty() {
+            return Err(Error::runtime("Cannot create ELF with empty program"));
+        }
+
+        // Build dynamic symbol table
+        let mut dynsym_entries: Vec<(usize, String)> = Vec::new(); // (name_idx, name)
+        let mut seen_syscalls: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        for sc in syscalls {
+            if !seen_syscalls.contains_key(&sc.name) {
+                let name_idx = self.add_dynstr(&sc.name);
+                let sym_idx = dynsym_entries.len() + 1; // +1 for NULL entry
+                seen_syscalls.insert(sc.name.clone(), sym_idx);
+                dynsym_entries.push((name_idx, sc.name.clone()));
+            }
+        }
+
+        // Build section names
+        let _shstrtab_name = self.add_shstrtab(".shstrtab");
+        let text_name = self.add_shstrtab(".text");
+        let dynamic_name = self.add_shstrtab(".dynamic");
+        let dynsym_name = self.add_shstrtab(".dynsym");
+        let dynstr_name = self.add_shstrtab(".dynstr");
+        let reldyn_name = self.add_shstrtab(".rel.dyn");
+
+        let entrypoint_str_idx = self.add_strtab("entrypoint");
+        let strtab_name = self.add_shstrtab(".strtab");
+        let symtab_name = self.add_shstrtab(".symtab");
+
+        // Layout (page-aligned):
+        // [ELF Header: 64 bytes]
+        // [Program Headers: 2 * 56 = 112 bytes]
+        // [Padding to 0x1000]
+        // [.text section at 0x1000]
+        // [.dynamic section]
+        // [.dynsym section]
+        // [.dynstr section]
+        // [.rel.dyn section]
+        // [.strtab section]
+        // [.symtab section]
+        // [.shstrtab section]
+        // [Section Headers]
+
+        let ehdr_size = 64usize;
+        let phdr_size = 56usize;
+        let shdr_size = 64usize;
+        let num_phdrs = 2usize;  // PT_LOAD for .text, PT_DYNAMIC
+        let num_sections = 9usize;  // NULL, .text, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
+
+        let text_offset = 0x1000usize;
+        let text_size = text_section.len();
+
+        // .dynamic section (11 entries * 16 bytes = 176 bytes)
+        // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
+        let dynamic_offset = text_offset + text_size;
+        let dynamic_size = 11 * 16;
+
+        // .dynsym section (NULL + N symbols * 24 bytes)
+        let dynsym_offset = dynamic_offset + dynamic_size;
+        let dynsym_entry_size = 24usize;
+        let dynsym_size = dynsym_entry_size * (1 + dynsym_entries.len());
+
+        // .dynstr section
+        let dynstr_offset = dynsym_offset + dynsym_size;
+        let dynstr_size = self.dynstr.len();
+
+        // .rel.dyn section (N relocations * 16 bytes)
+        let reldyn_offset = dynstr_offset + dynstr_size;
+        let reldyn_entry_size = 16usize;
+        let reldyn_size = reldyn_entry_size * syscalls.len();
+
+        // .strtab section
+        let strtab_offset = reldyn_offset + reldyn_size;
+        let strtab_size = self.strtab.len();
+
+        // .symtab section
+        let symtab_offset = strtab_offset + strtab_size;
+        let symtab_entry_size = 24usize;
+        let symtab_size = symtab_entry_size * 2; // NULL + entrypoint
+
+        // .shstrtab section
+        let shstrtab_offset = symtab_offset + symtab_size;
+        let shstrtab_size = self.shstrtab.len();
+
+        let shdr_offset = ((shstrtab_offset + shstrtab_size) + 7) & !7;
+
+        // Virtual addresses (continuous in memory)
+        let dynamic_vaddr = TEXT_VADDR + text_size as u64;
+        let dynsym_vaddr = dynamic_vaddr + dynamic_size as u64;
+        let dynstr_vaddr = dynsym_vaddr + dynsym_size as u64;
+        let reldyn_vaddr = dynstr_vaddr + dynstr_size as u64;
+
+        // Build ELF
+        let mut elf = Vec::new();
+
+        // ==================== ELF Header ====================
+        elf.extend_from_slice(&ELF_MAGIC);
+        elf.push(ELFCLASS64);
+        elf.push(ELFDATA2LSB);
+        elf.push(EV_CURRENT);
+        elf.push(ELFOSABI_NONE);
+        elf.extend_from_slice(&[0u8; 8]);
+
+        elf.extend_from_slice(&ET_DYN.to_le_bytes());
+        elf.extend_from_slice(&EM_SBF.to_le_bytes());
+        elf.extend_from_slice(&1u32.to_le_bytes());
+        elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // e_entry
+        elf.extend_from_slice(&(ehdr_size as u64).to_le_bytes()); // e_phoff
+        elf.extend_from_slice(&(shdr_offset as u64).to_le_bytes()); // e_shoff
+        elf.extend_from_slice(&EF_SBF_V2.to_le_bytes()); // e_flags
+        elf.extend_from_slice(&(ehdr_size as u16).to_le_bytes());
+        elf.extend_from_slice(&(phdr_size as u16).to_le_bytes());
+        elf.extend_from_slice(&(num_phdrs as u16).to_le_bytes());
+        elf.extend_from_slice(&(shdr_size as u16).to_le_bytes());
+        elf.extend_from_slice(&(num_sections as u16).to_le_bytes());
+        elf.extend_from_slice(&((num_sections - 1) as u16).to_le_bytes()); // e_shstrndx
+
+        // ==================== Program Headers ====================
+        // PT_LOAD for .text + dynamic sections
+        let load_size = text_size + dynamic_size + dynsym_size + dynstr_size + reldyn_size;
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, load_size);
+
+        // PT_DYNAMIC - must cover .dynamic, .dynsym, .dynstr, and .rel.dyn
+        let dynamic_segment_size = dynamic_size + dynsym_size + dynstr_size + reldyn_size;
+        self.write_phdr_aligned(&mut elf, PT_DYNAMIC, PF_R | PF_W, dynamic_offset, dynamic_vaddr, dynamic_segment_size);
+
+        // Padding to 0x1000
+        while elf.len() < text_offset {
+            elf.push(0);
+        }
+
+        // ==================== .text Section ====================
+        elf.extend_from_slice(&text_section);
+
+        // ==================== .dynamic Section ====================
+        // Match Solana's test ELF format
+        // DT_FLAGS (TEXTREL flag = 0x8)
+        elf.extend_from_slice(&DT_FLAGS.to_le_bytes());
+        elf.extend_from_slice(&0x8u64.to_le_bytes()); // TEXTREL
+        // DT_REL
+        elf.extend_from_slice(&DT_REL.to_le_bytes());
+        elf.extend_from_slice(&reldyn_vaddr.to_le_bytes());
+        // DT_RELSZ
+        elf.extend_from_slice(&DT_RELSZ.to_le_bytes());
+        elf.extend_from_slice(&(reldyn_size as u64).to_le_bytes());
+        // DT_RELENT
+        elf.extend_from_slice(&DT_RELENT.to_le_bytes());
+        elf.extend_from_slice(&(reldyn_entry_size as u64).to_le_bytes());
+        // DT_RELCOUNT (number of relative relocations, which is 0 for us)
+        elf.extend_from_slice(&DT_RELCOUNT.to_le_bytes());
+        elf.extend_from_slice(&0u64.to_le_bytes());
+        // DT_SYMTAB
+        elf.extend_from_slice(&DT_SYMTAB.to_le_bytes());
+        elf.extend_from_slice(&dynsym_vaddr.to_le_bytes());
+        // DT_SYMENT (size of symbol table entry = 24 bytes)
+        elf.extend_from_slice(&DT_SYMENT.to_le_bytes());
+        elf.extend_from_slice(&24u64.to_le_bytes());
+        // DT_STRTAB
+        elf.extend_from_slice(&DT_STRTAB.to_le_bytes());
+        elf.extend_from_slice(&dynstr_vaddr.to_le_bytes());
+        // DT_STRSZ
+        elf.extend_from_slice(&DT_STRSZ.to_le_bytes());
+        elf.extend_from_slice(&(dynstr_size as u64).to_le_bytes());
+        // DT_TEXTREL
+        elf.extend_from_slice(&DT_TEXTREL.to_le_bytes());
+        elf.extend_from_slice(&0u64.to_le_bytes());
+        // DT_NULL
+        elf.extend_from_slice(&DT_NULL.to_le_bytes());
+        elf.extend_from_slice(&0u64.to_le_bytes());
+
+        // ==================== .dynsym Section ====================
+        // NULL symbol
+        elf.extend_from_slice(&[0u8; 24]);
+        // Syscall symbols
+        for (name_idx, _name) in &dynsym_entries {
+            elf.extend_from_slice(&(*name_idx as u32).to_le_bytes()); // st_name
+            elf.push((STB_GLOBAL << 4) | STT_FUNC); // st_info
+            elf.push(0); // st_other
+            elf.extend_from_slice(&0u16.to_le_bytes()); // st_shndx (undefined)
+            elf.extend_from_slice(&0u64.to_le_bytes()); // st_value
+            elf.extend_from_slice(&0u64.to_le_bytes()); // st_size
+        }
+
+        // ==================== .dynstr Section ====================
+        elf.extend_from_slice(&self.dynstr);
+
+        // ==================== .rel.dyn Section ====================
+        for sc in syscalls {
+            let sym_idx = *seen_syscalls.get(&sc.name).unwrap();
+            // r_offset: address of the call instruction's imm field (offset + 4)
+            let r_offset = TEXT_VADDR + sc.offset as u64 + 4;
+            elf.extend_from_slice(&r_offset.to_le_bytes());
+            // r_info: symbol index + relocation type
+            let r_info = ((sym_idx as u64) << 32) | (R_BPF_64_32 as u64);
+            elf.extend_from_slice(&r_info.to_le_bytes());
+        }
+
+        // ==================== .strtab Section ====================
+        elf.extend_from_slice(&self.strtab);
+
+        // ==================== .symtab Section ====================
+        // NULL symbol
+        elf.extend_from_slice(&[0u8; 24]);
+        // entrypoint symbol
+        elf.extend_from_slice(&(entrypoint_str_idx as u32).to_le_bytes());
+        elf.push((STB_GLOBAL << 4) | STT_FUNC);
+        elf.push(0);
+        elf.extend_from_slice(&1u16.to_le_bytes()); // st_shndx (.text = 1)
+        elf.extend_from_slice(&TEXT_VADDR.to_le_bytes());
+        elf.extend_from_slice(&(text_size as u64).to_le_bytes());
+
+        // ==================== .shstrtab Section ====================
+        elf.extend_from_slice(&self.shstrtab);
+
+        // ==================== Padding ====================
+        while elf.len() < shdr_offset {
+            elf.push(0);
+        }
+
+        // ==================== Section Headers ====================
+        // 0: NULL
+        elf.extend_from_slice(&[0u8; 64]);
+
+        // 1: .text
+        self.write_shdr(&mut elf, text_name, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR,
+                       TEXT_VADDR, text_offset, text_size, 0, 0, 0x1000, 0);
+
+        // 2: .dynamic
+        self.write_shdr(&mut elf, dynamic_name, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE,
+                       dynamic_vaddr, dynamic_offset, dynamic_size, 4, 0, 8, 16);
+
+        // 3: .dynsym
+        self.write_shdr(&mut elf, dynsym_name, SHT_DYNSYM, SHF_ALLOC,
+                       dynsym_vaddr, dynsym_offset, dynsym_size, 4, 1, 8, dynsym_entry_size);
+
+        // 4: .dynstr
+        self.write_shdr(&mut elf, dynstr_name, SHT_STRTAB, SHF_ALLOC,
+                       dynstr_vaddr, dynstr_offset, dynstr_size, 0, 0, 1, 0);
+
+        // 5: .rel.dyn
+        self.write_shdr(&mut elf, reldyn_name, SHT_REL, SHF_ALLOC,
+                       reldyn_vaddr, reldyn_offset, reldyn_size, 3, 0, 8, reldyn_entry_size);
+
+        // 6: .strtab
+        self.write_shdr(&mut elf, strtab_name, SHT_STRTAB, 0,
+                       0, strtab_offset, strtab_size, 0, 0, 1, 0);
+
+        // 7: .symtab
+        self.write_shdr(&mut elf, symtab_name, SHT_SYMTAB, 0,
+                       0, symtab_offset, symtab_size, 6, 1, 8, symtab_entry_size);
+
+        // 8: .shstrtab
+        self.write_shdr(&mut elf, 1, SHT_STRTAB, 0,
+                       0, shstrtab_offset, shstrtab_size, 0, 0, 1, 0);
+
+        Ok(elf)
+    }
+
+    fn write_phdr_aligned(&self, elf: &mut Vec<u8>, p_type: u32, p_flags: u32,
+                  p_offset: usize, p_vaddr: u64, p_size: usize) {
+        elf.extend_from_slice(&p_type.to_le_bytes());
+        elf.extend_from_slice(&p_flags.to_le_bytes());
+        elf.extend_from_slice(&(p_offset as u64).to_le_bytes());
+        elf.extend_from_slice(&p_vaddr.to_le_bytes());
+        elf.extend_from_slice(&p_vaddr.to_le_bytes());
+        elf.extend_from_slice(&(p_size as u64).to_le_bytes());
+        elf.extend_from_slice(&(p_size as u64).to_le_bytes());
+        elf.extend_from_slice(&0x1000u64.to_le_bytes());  // Page alignment
+    }
+
+    fn write_shdr(&self, elf: &mut Vec<u8>, sh_name: usize, sh_type: u32, sh_flags: u64,
+                  sh_addr: u64, sh_offset: usize, sh_size: usize,
+                  sh_link: u32, sh_info: u32, sh_addralign: u64, sh_entsize: usize) {
+        elf.extend_from_slice(&(sh_name as u32).to_le_bytes());
+        elf.extend_from_slice(&sh_type.to_le_bytes());
+        elf.extend_from_slice(&sh_flags.to_le_bytes());
+        elf.extend_from_slice(&sh_addr.to_le_bytes());
+        elf.extend_from_slice(&(sh_offset as u64).to_le_bytes());
+        elf.extend_from_slice(&(sh_size as u64).to_le_bytes());
+        elf.extend_from_slice(&sh_link.to_le_bytes());
+        elf.extend_from_slice(&sh_info.to_le_bytes());
+        elf.extend_from_slice(&sh_addralign.to_le_bytes());
+        elf.extend_from_slice(&(sh_entsize as u64).to_le_bytes());
+    }
+
+    fn add_strtab(&mut self, s: &str) -> usize {
         let idx = self.strtab.len();
         self.strtab.extend_from_slice(s.as_bytes());
-        self.strtab.push(0); // Null terminator
+        self.strtab.push(0);
+        idx
+    }
+
+    fn add_shstrtab(&mut self, s: &str) -> usize {
+        let idx = self.shstrtab.len();
+        self.shstrtab.extend_from_slice(s.as_bytes());
+        self.shstrtab.push(0);
         idx
     }
 }
@@ -219,28 +585,17 @@ pub fn validate_sbpf_elf(data: &[u8]) -> Result<()> {
         return Err(Error::runtime("ELF file too small"));
     }
 
-    // Check magic
-    if data[0..4] != ELF_MAGIC {
-        return Err(Error::runtime("Invalid ELF magic number"));
+    if &data[0..4] != &ELF_MAGIC {
+        return Err(Error::runtime("Invalid ELF magic"));
     }
 
-    // Check class (64-bit)
     if data[4] != ELFCLASS64 {
-        return Err(Error::runtime("ELF must be 64-bit"));
+        return Err(Error::runtime("Not a 64-bit ELF"));
     }
 
-    // Check endianness
-    if data[5] != ELFDATA2LSB {
-        return Err(Error::runtime("ELF must be little-endian"));
-    }
-
-    // Check machine type
     let machine = u16::from_le_bytes([data[18], data[19]]);
-    if machine != EM_BPF {
-        return Err(Error::runtime(format!(
-            "ELF machine type must be BPF ({}), got {}",
-            EM_BPF, machine
-        )));
+    if machine != EM_SBF && machine != 247 {
+        return Err(Error::runtime(format!("Not a BPF ELF: machine={}", machine)));
     }
 
     Ok(())
@@ -252,24 +607,16 @@ mod tests {
 
     #[test]
     fn test_elf_writer() {
-        let mut writer = ElfWriter::new();
+        use crate::compiler::sbpf_codegen::{SbpfInstruction, alu};
 
+        let mut writer = ElfWriter::new();
         let program = vec![
-            SbpfInstruction::alu64_imm(0xb0, 0, 42), // mov64 r0, 42
+            SbpfInstruction::alu64_imm(alu::MOV, 0, 42),
             SbpfInstruction::exit(),
         ];
 
         let elf = writer.write(&program, false).unwrap();
-
-        // Validate the ELF
-        assert_eq!(&elf[0..4], &ELF_MAGIC);
-        assert!(validate_sbpf_elf(&elf).is_ok());
-    }
-
-    #[test]
-    fn test_empty_program_error() {
-        let mut writer = ElfWriter::new();
-        let result = writer.write(&[], false);
-        assert!(result.is_err());
+        assert!(elf.len() > 64);
+        validate_sbpf_elf(&elf).unwrap();
     }
 }

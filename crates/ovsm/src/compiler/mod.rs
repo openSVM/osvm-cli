@@ -27,6 +27,7 @@ pub mod sbpf_codegen;
 pub mod elf;
 pub mod verifier;
 pub mod runtime;
+pub mod debug;
 
 pub use types::{OvsmType, TypeChecker, TypeEnv};
 pub use ir::{IrProgram, IrInstruction, IrReg, IrGenerator};
@@ -35,6 +36,7 @@ pub use sbpf_codegen::{SbpfCodegen, SbpfInstruction, SbpfReg, memory, syscall_ha
 pub use elf::ElfWriter;
 pub use verifier::{Verifier, VerifyResult, VerifyError};
 pub use runtime::{StackFrame, HeapAllocator, StringRuntime, ArrayRuntime};
+pub use debug::{dump_ir, disassemble_sbpf, validate_sbpf, debug_compile, extract_text_section};
 
 use crate::{SExprScanner as Scanner, SExprParser as Parser, Program, Result, Error};
 
@@ -133,7 +135,20 @@ impl Compiler {
 
         // Phase 7: Package as ELF
         let mut elf_writer = ElfWriter::new();
-        let elf_bytes = elf_writer.write(&sbpf_program, self.options.debug_info)?;
+
+        // Convert syscall call sites to ELF relocation format
+        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen.syscall_sites.iter()
+            .map(|site| crate::compiler::elf::SyscallRef {
+                offset: site.offset,
+                name: site.name.clone(),
+            })
+            .collect();
+
+        let elf_bytes = if syscall_refs.is_empty() {
+            elf_writer.write(&sbpf_program, self.options.debug_info)?
+        } else {
+            elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info)?
+        };
 
         // Combine warnings
         let mut warnings = type_checker.warnings().to_vec();

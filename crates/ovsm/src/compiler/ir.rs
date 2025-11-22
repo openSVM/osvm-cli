@@ -184,15 +184,20 @@ impl IrGenerator {
         // Entry point
         self.emit(IrInstruction::Label("entry".to_string()));
 
-        // Generate IR for each statement
+        // Generate IR for each statement, tracking last result
+        let mut last_result: Option<IrReg> = None;
         for typed_stmt in &program.statements {
-            self.generate_statement(&typed_stmt.statement)?;
+            last_result = self.generate_statement(&typed_stmt.statement)?;
         }
 
-        // Return null if no explicit return
-        let ret_reg = self.alloc_reg();
-        self.emit(IrInstruction::ConstNull(ret_reg));
-        self.emit(IrInstruction::Return(Some(ret_reg)));
+        // Return last expression result, or null if none
+        if let Some(ret_reg) = last_result {
+            self.emit(IrInstruction::Return(Some(ret_reg)));
+        } else {
+            let null_reg = self.alloc_reg();
+            self.emit(IrInstruction::ConstNull(null_reg));
+            self.emit(IrInstruction::Return(Some(null_reg)));
+        }
 
         Ok(IrProgram {
             instructions: std::mem::take(&mut self.instructions),
@@ -489,6 +494,47 @@ impl IrGenerator {
                         .ok_or_else(|| Error::runtime("mem-store value has no result"))?;
                     self.emit(IrInstruction::Store(base_reg, value_reg, offset));
                     return Ok(None); // Store has no result
+                }
+
+                // Handle (syscall "name" args...) - Solana syscall
+                if name == "syscall" && !args.is_empty() {
+                    // First arg must be the syscall name as a string literal
+                    let syscall_name = match &args[0].value {
+                        Expression::StringLiteral(s) => s.clone(),
+                        _ => return Err(Error::runtime("syscall first argument must be a string literal")),
+                    };
+
+                    // Evaluate remaining arguments
+                    let mut arg_regs = Vec::new();
+                    for arg in &args[1..] {
+                        if let Some(reg) = self.generate_expr(&arg.value)? {
+                            arg_regs.push(reg);
+                        }
+                    }
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(Some(dst), syscall_name, arg_regs));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (sol_log_ msg) - shorthand for logging syscall
+                if (name == "sol_log_" || name == "sol_log_64_") && args.len() == 1 {
+                    // Get message register
+                    let msg_reg = self.generate_expr(&args[0].value)?
+                        .ok_or_else(|| Error::runtime("log message has no result"))?;
+
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::Syscall(Some(dst), name.clone(), vec![msg_reg]));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (do expr1 expr2 ... exprN) - sequence of expressions, return last
+                if name == "do" {
+                    let mut last_reg = None;
+                    for arg in args {
+                        last_reg = self.generate_expr(&arg.value)?;
+                    }
+                    return Ok(last_reg);
                 }
 
                 // Generic tool call

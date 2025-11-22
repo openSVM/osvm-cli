@@ -31,7 +31,7 @@ mod class {
 }
 
 /// ALU operation codes (bits 4-7)
-mod alu {
+pub mod alu {
     pub const ADD: u8 = 0x00;
     pub const SUB: u8 = 0x10;
     pub const MUL: u8 = 0x20;
@@ -49,7 +49,7 @@ mod alu {
 }
 
 /// Jump operation codes
-mod jmp {
+pub mod jmp {
     pub const JA: u8 = 0x00;    // Unconditional
     pub const JEQ: u8 = 0x10;   // ==
     pub const JGT: u8 = 0x20;   // > unsigned
@@ -574,9 +574,18 @@ struct RegisterAllocator {
 
 impl RegisterAllocator {
     fn new() -> Self {
+        let mut alloc = HashMap::new();
+        // Pre-map IR virtual regs 1,2 to physical R1,R2 (Solana ABI: accounts, instruction-data)
+        alloc.insert(IrReg(1), SbpfReg::R1);
+        alloc.insert(IrReg(2), SbpfReg::R2);
+
         Self {
-            allocation: HashMap::new(),
-            available: vec![SbpfReg::R9, SbpfReg::R8, SbpfReg::R7, SbpfReg::R6],
+            allocation: alloc,
+            // Use R3-R9 for allocation (R0=return, R1-R2=reserved, R10=FP)
+            available: vec![
+                SbpfReg::R9, SbpfReg::R8, SbpfReg::R7, SbpfReg::R6,
+                SbpfReg::R5, SbpfReg::R4, SbpfReg::R3,
+            ],
             spills: HashMap::new(),
             next_spill: -8, // Grow downward from frame pointer
             used_callee_saved: Vec::new(),
@@ -584,6 +593,7 @@ impl RegisterAllocator {
     }
 
     /// Allocate a physical register for a virtual register
+    /// Returns (phys_reg, needs_reload) - if needs_reload, must emit ldx from stack
     fn allocate(&mut self, virt: IrReg) -> SbpfReg {
         // Already allocated?
         if let Some(&phys) = self.allocation.get(&virt) {
@@ -599,10 +609,16 @@ impl RegisterAllocator {
             return phys;
         }
 
-        // Must spill - use R1 as scratch and record spill location
-        self.spills.insert(virt, self.next_spill);
-        self.next_spill -= 8;
-        SbpfReg::R1 // Scratch register
+        // All registers used - need to spill
+        // Pick oldest allocation to evict (simple LRU approximation)
+        // For now, just assign a spill slot and return a scratch reg
+        if !self.spills.contains_key(&virt) {
+            self.spills.insert(virt, self.next_spill);
+            self.next_spill -= 8;
+        }
+
+        // Return R0 as scratch - caller must handle spill/reload
+        SbpfReg::R0
     }
 
     /// Check if a virtual register is spilled
@@ -625,6 +641,15 @@ impl RegisterAllocator {
 // CODE GENERATOR
 // =============================================================================
 
+/// Syscall call site info (for ELF relocation)
+#[derive(Clone, Debug)]
+pub struct SyscallCallSite {
+    /// Instruction offset in bytes
+    pub offset: usize,
+    /// Syscall name
+    pub name: String,
+}
+
 /// sBPF code generator
 pub struct SbpfCodegen {
     instructions: Vec<SbpfInstruction>,
@@ -633,6 +658,12 @@ pub struct SbpfCodegen {
     reg_alloc: RegisterAllocator,
     /// Syscall name -> hash cache
     syscall_cache: HashMap<String, u32>,
+    /// String literals for rodata section
+    pub rodata: Vec<u8>,
+    /// String offsets in rodata
+    string_offsets: Vec<usize>,
+    /// Syscall call sites for relocation
+    pub syscall_sites: Vec<SyscallCallSite>,
 }
 
 impl SbpfCodegen {
@@ -643,11 +674,48 @@ impl SbpfCodegen {
             pending_jumps: Vec::new(),
             reg_alloc: RegisterAllocator::new(),
             syscall_cache: HashMap::new(),
+            rodata: Vec::new(),
+            string_offsets: Vec::new(),
+            syscall_sites: Vec::new(),
         }
+    }
+
+    /// Add a string to rodata and return its index
+    pub fn add_string(&mut self, s: &str) -> usize {
+        let idx = self.string_offsets.len();
+        let offset = self.rodata.len();
+        self.string_offsets.push(offset);
+        self.rodata.extend_from_slice(s.as_bytes());
+        self.rodata.push(0); // null terminator
+        idx
+    }
+
+    /// Get offset for string index
+    pub fn string_offset(&self, idx: usize) -> usize {
+        self.string_offsets.get(idx).copied().unwrap_or(0)
+    }
+
+    /// Get string length (without null terminator)
+    pub fn string_len(&self, idx: usize) -> usize {
+        if idx >= self.string_offsets.len() {
+            return 0;
+        }
+        let start = self.string_offsets[idx];
+        let end = if idx + 1 < self.string_offsets.len() {
+            self.string_offsets[idx + 1] - 1 // exclude null
+        } else {
+            self.rodata.len() - 1 // exclude null
+        };
+        end - start
     }
 
     /// Generate sBPF from IR
     pub fn generate(&mut self, ir: &IrProgram) -> Result<Vec<SbpfInstruction>> {
+        // Copy string table from IR to rodata
+        for s in &ir.string_table {
+            self.add_string(s);
+        }
+
         for ir_instr in &ir.instructions {
             self.gen_instruction(ir_instr)?;
         }
@@ -658,39 +726,59 @@ impl SbpfCodegen {
 
     fn gen_instruction(&mut self, ir: &IrInstruction) -> Result<()> {
         match ir {
-            // Constants
+            // Constants - always allocate, then spill if needed
             IrInstruction::ConstI64(dst, value) => {
                 let dst_reg = self.reg_alloc.allocate(*dst);
+                let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
                 if *value >= i32::MIN as i64 && *value <= i32::MAX as i64 {
-                    // Fits in 32-bit immediate
-                    self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, *value as i32));
+                    self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual as u8, *value as i32));
                 } else {
-                    // Need lddw for full 64-bit
-                    self.emit(SbpfInstruction::lddw(dst_reg as u8, *value as u64));
+                    self.emit(SbpfInstruction::lddw(actual as u8, *value as u64));
                 }
+                self.store_if_spilled(*dst, actual);
             }
 
             IrInstruction::ConstF64(dst, bits) => {
                 let dst_reg = self.reg_alloc.allocate(*dst);
-                self.emit(SbpfInstruction::lddw(dst_reg as u8, *bits));
+                let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
+                self.emit(SbpfInstruction::lddw(actual as u8, *bits));
+                self.store_if_spilled(*dst, actual);
             }
 
             IrInstruction::ConstBool(dst, value) => {
                 let dst_reg = self.reg_alloc.allocate(*dst);
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, if *value { 1 } else { 0 }));
+                let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual as u8, if *value { 1 } else { 0 }));
+                self.store_if_spilled(*dst, actual);
             }
 
             IrInstruction::ConstNull(dst) => {
                 let dst_reg = self.reg_alloc.allocate(*dst);
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, 0));
+                let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual as u8, 0));
+                self.store_if_spilled(*dst, actual);
+            }
+
+            // String literal - load pointer to rodata
+            IrInstruction::ConstString(dst, str_idx) => {
+                let dst_reg = self.reg_alloc.allocate(*dst);
+                let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
+                // Calculate rodata address: RODATA_VADDR + string offset
+                // RODATA will be placed after .text, we use a placeholder offset
+                // The actual address will be: rodata_vaddr + string_offset
+                let str_offset = self.string_offset(*str_idx) as i32;
+                // Load low 32 bits first, then high bits
+                // For now, use immediate mov - rodata will be at known offset
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual as u8, str_offset));
+                self.store_if_spilled(*dst, actual);
             }
 
             // Binary arithmetic
             IrInstruction::Add(dst, src1, src2) => self.gen_binop(alu::ADD, *dst, *src1, *src2),
             IrInstruction::Sub(dst, src1, src2) => self.gen_binop(alu::SUB, *dst, *src1, *src2),
             IrInstruction::Mul(dst, src1, src2) => self.gen_binop(alu::MUL, *dst, *src1, *src2),
-            IrInstruction::Div(dst, src1, src2) => self.gen_binop(alu::DIV, *dst, *src1, *src2),
-            IrInstruction::Mod(dst, src1, src2) => self.gen_binop(alu::MOD, *dst, *src1, *src2),
+            IrInstruction::Div(dst, src1, src2) => self.gen_software_div(*dst, *src1, *src2, false),
+            IrInstruction::Mod(dst, src1, src2) => self.gen_software_div(*dst, *src1, *src2, true),
             IrInstruction::And(dst, src1, src2) => self.gen_binop(alu::AND, *dst, *src1, *src2),
             IrInstruction::Or(dst, src1, src2) => self.gen_binop(alu::OR, *dst, *src1, *src2),
 
@@ -704,26 +792,32 @@ impl SbpfCodegen {
 
             // Unary
             IrInstruction::Neg(dst, src) => {
-                let dst_reg = self.reg_alloc.allocate(*dst);
-                let src_reg = self.reg_alloc.allocate(*src);
+                let src_reg = self.get_reg(*src, SbpfReg::R5);
+                let dst_phys = self.reg_alloc.allocate(*dst);
+                let actual_dst = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_phys };
                 // neg = 0 - src
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, 0));
-                self.emit(SbpfInstruction::alu64_reg(alu::SUB, dst_reg as u8, src_reg as u8));
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual_dst as u8, 0));
+                self.emit(SbpfInstruction::alu64_reg(alu::SUB, actual_dst as u8, src_reg as u8));
+                self.store_if_spilled(*dst, actual_dst);
             }
 
             IrInstruction::Not(dst, src) => {
-                let dst_reg = self.reg_alloc.allocate(*dst);
-                let src_reg = self.reg_alloc.allocate(*src);
-                // not (bool) = 1 - src, or xor -1 for bitwise
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, 1));
-                self.emit(SbpfInstruction::alu64_reg(alu::SUB, dst_reg as u8, src_reg as u8));
+                let src_reg = self.get_reg(*src, SbpfReg::R5);
+                let dst_phys = self.reg_alloc.allocate(*dst);
+                let actual_dst = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_phys };
+                // not (bool) = 1 - src
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual_dst as u8, 1));
+                self.emit(SbpfInstruction::alu64_reg(alu::SUB, actual_dst as u8, src_reg as u8));
+                self.store_if_spilled(*dst, actual_dst);
             }
 
             // Move
             IrInstruction::Move(dst, src) => {
-                let dst_reg = self.reg_alloc.allocate(*dst);
-                let src_reg = self.reg_alloc.allocate(*src);
-                self.emit(SbpfInstruction::alu64_reg(alu::MOV, dst_reg as u8, src_reg as u8));
+                let src_reg = self.get_reg(*src, SbpfReg::R5);
+                let dst_phys = self.reg_alloc.allocate(*dst);
+                let actual_dst = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_phys };
+                self.emit(SbpfInstruction::alu64_reg(alu::MOV, actual_dst as u8, src_reg as u8));
+                self.store_if_spilled(*dst, actual_dst);
             }
 
             // Control flow
@@ -764,7 +858,7 @@ impl SbpfCodegen {
                     }
                 }
 
-                // Get syscall hash
+                // Emit regular call (not a syscall - just a helper function)
                 let hash = self.get_syscall_hash(name);
                 self.emit(SbpfInstruction::call_syscall(hash));
 
@@ -779,7 +873,8 @@ impl SbpfCodegen {
 
             IrInstruction::Return(value) => {
                 if let Some(val_reg) = value {
-                    let src_reg = self.reg_alloc.allocate(*val_reg);
+                    // Use get_reg to reload from stack if spilled
+                    let src_reg = self.get_reg(*val_reg, SbpfReg::R5);
                     if src_reg != SbpfReg::R0 {
                         self.emit(SbpfInstruction::alu64_reg(alu::MOV, SbpfReg::R0 as u8, src_reg as u8));
                     }
@@ -787,17 +882,47 @@ impl SbpfCodegen {
                 self.emit(SbpfInstruction::exit());
             }
 
-            // Memory
+            // Memory - with spill handling
             IrInstruction::Load(dst, base, offset) => {
-                let dst_reg = self.reg_alloc.allocate(*dst);
-                let base_reg = self.reg_alloc.allocate(*base);
-                self.emit(SbpfInstruction::ldx(size::DW, dst_reg as u8, base_reg as u8, *offset as i16));
+                let base_reg = self.get_reg(*base, SbpfReg::R5);
+                let dst_phys = self.reg_alloc.allocate(*dst);
+                let actual_dst = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_phys };
+                self.emit(SbpfInstruction::ldx(size::DW, actual_dst as u8, base_reg as u8, *offset as i16));
+                self.store_if_spilled(*dst, actual_dst);
             }
 
             IrInstruction::Store(base, src, offset) => {
-                let base_reg = self.reg_alloc.allocate(*base);
-                let src_reg = self.reg_alloc.allocate(*src);
+                let base_reg = self.get_reg(*base, SbpfReg::R5);
+                let src_reg = self.get_reg(*src, SbpfReg::R0);
                 self.emit(SbpfInstruction::stx(size::DW, base_reg as u8, src_reg as u8, *offset as i16));
+            }
+
+            // Log syscall: sol_log_(msg_ptr, msg_len)
+            IrInstruction::Log(msg_reg) => {
+                let msg = self.get_reg(*msg_reg, SbpfReg::R1);
+                // R1 = pointer to string, R2 = length
+                self.emit(SbpfInstruction::alu64_reg(alu::MOV, SbpfReg::R1 as u8, msg as u8));
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, SbpfReg::R2 as u8, 32));
+                self.emit_syscall("sol_log_");
+            }
+
+            // Syscall: dst = syscall(name, args...)
+            IrInstruction::Syscall(dst, name, args) => {
+                // Move args to R1-R5
+                for (i, arg) in args.iter().enumerate().take(5) {
+                    let arg_reg = self.reg_alloc.allocate(*arg);
+                    let target = (i + 1) as u8;
+                    if arg_reg as u8 != target {
+                        self.emit(SbpfInstruction::alu64_reg(alu::MOV, target, arg_reg as u8));
+                    }
+                }
+                self.emit_syscall(name);
+                if let Some(dst_ir) = dst {
+                    let dst_reg = self.reg_alloc.allocate(*dst_ir);
+                    if dst_reg != SbpfReg::R0 {
+                        self.emit(SbpfInstruction::alu64_reg(alu::MOV, dst_reg as u8, SbpfReg::R0 as u8));
+                    }
+                }
             }
 
             _ => {} // Unhandled
@@ -806,49 +931,169 @@ impl SbpfCodegen {
         Ok(())
     }
 
+    /// Get register, emitting reload from stack if spilled
+    fn get_reg(&mut self, virt: IrReg, scratch: SbpfReg) -> SbpfReg {
+        let phys = self.reg_alloc.allocate(virt);
+        if self.reg_alloc.is_spilled(virt) {
+            // Reload from stack into scratch register
+            let offset = self.reg_alloc.spill_offset(virt).unwrap();
+            self.emit(SbpfInstruction::ldx(size::DW, scratch as u8, SbpfReg::R10 as u8, offset));
+            scratch
+        } else {
+            phys
+        }
+    }
+
+    /// Store register to stack if spilled
+    fn store_if_spilled(&mut self, virt: IrReg, phys: SbpfReg) {
+        if self.reg_alloc.is_spilled(virt) {
+            let offset = self.reg_alloc.spill_offset(virt).unwrap();
+            self.emit(SbpfInstruction::stx(size::DW, SbpfReg::R10 as u8, phys as u8, offset));
+        }
+    }
+
     /// Generate binary operation: dst = src1 op src2
     fn gen_binop(&mut self, op: u8, dst: IrReg, src1: IrReg, src2: IrReg) {
+        // Load src1 into R0 (scratch) if spilled, else use its register
+        let src1_reg = self.get_reg(src1, SbpfReg::R0);
+        // Load src2 into R5 (scratch) if spilled, else use its register
+        let src2_reg = self.get_reg(src2, SbpfReg::R5);
+
+        // Get destination register
         let dst_reg = self.reg_alloc.allocate(dst);
-        let src1_reg = self.reg_alloc.allocate(src1);
-        let src2_reg = self.reg_alloc.allocate(src2);
+        let actual_dst = if self.reg_alloc.is_spilled(dst) { SbpfReg::R0 } else { dst_reg };
 
         // dst = src1
-        self.emit(SbpfInstruction::alu64_reg(alu::MOV, dst_reg as u8, src1_reg as u8));
+        if actual_dst != src1_reg {
+            self.emit(SbpfInstruction::alu64_reg(alu::MOV, actual_dst as u8, src1_reg as u8));
+        }
         // dst op= src2
-        self.emit(SbpfInstruction::alu64_reg(op, dst_reg as u8, src2_reg as u8));
+        self.emit(SbpfInstruction::alu64_reg(op, actual_dst as u8, src2_reg as u8));
+
+        // Store result to stack if dst is spilled
+        self.store_if_spilled(dst, actual_dst);
+    }
+
+    /// Generate software division/modulo (binary long division)
+    /// is_mod: false = quotient, true = remainder
+    fn gen_software_div(&mut self, dst: IrReg, src1: IrReg, src2: IrReg, is_mod: bool) {
+        // Load dividend and divisor
+        let dividend_reg = self.get_reg(src1, SbpfReg::R0);
+        let divisor_reg = self.get_reg(src2, SbpfReg::R5);
+
+        let dst_phys = self.reg_alloc.allocate(dst);
+        let actual_dst = if self.reg_alloc.is_spilled(dst) { SbpfReg::R0 } else { dst_phys };
+
+        // Use R6, R7, R8 as scratch (callee-saved, we'll restore via frame)
+        // R6 = quotient, R7 = remainder, R8 = bit counter
+        let quot = SbpfReg::R6;
+        let rem = SbpfReg::R7;
+        let bits = SbpfReg::R8;
+        let one = SbpfReg::R9;
+
+        // Save dividend/divisor in case they overlap with scratch regs
+        // Move dividend to R7 (remainder initially), divisor stays in its reg
+        self.emit(SbpfInstruction::alu64_reg(alu::MOV, rem as u8, dividend_reg as u8));
+
+        // Initialize: quotient = 0, bits = 64
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, quot as u8, 0));
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, bits as u8, 64));
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, one as u8, 1));
+
+        // Division loop (unrolled would be better, but loop is simpler)
+        // while bits > 0:
+        //   bits--
+        //   quotient <<= 1
+        //   if remainder >= (divisor << bits):
+        //     remainder -= (divisor << bits)
+        //     quotient |= 1
+
+        // Simplified: shift-subtract algorithm
+        // For each bit position (63 down to 0):
+        //   q <<= 1; r <<= 1; r |= ((dividend >> bit) & 1)
+        //   if r >= divisor: r -= divisor; q |= 1
+
+        // Simple iterative: q=0, r=0
+        // for i in 63..=0: r<<=1; r|=((n>>i)&1); if r>=d {r-=d; q|=1<<i}
+
+        // For sBPF with limited instructions, use subtraction loop:
+        // r = dividend, q = 0
+        // while r >= divisor: r -= divisor; q += 1
+        // This is O(n) but simple and correct
+
+        // Simple subtraction division: q = 0, r = dividend
+        // Loop: while r >= divisor { r -= divisor; q++ }
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, quot as u8, 0));
+        // rem already has dividend
+
+        // Loop start (offset will be patched)
+        let loop_start = self.instructions.len();
+
+        // if rem < divisor, jump to end (done)
+        self.emit(SbpfInstruction::jmp_reg(jmp::JLT, rem as u8, divisor_reg as u8, 3));
+
+        // rem -= divisor
+        self.emit(SbpfInstruction::alu64_reg(alu::SUB, rem as u8, divisor_reg as u8));
+        // quot++
+        self.emit(SbpfInstruction::alu64_reg(alu::ADD, quot as u8, one as u8));
+        // jump back to loop start
+        let jump_back = -(((self.instructions.len() - loop_start) + 1) as i16);
+        self.emit(SbpfInstruction::ja(jump_back));
+
+        // Result: quot = quotient, rem = remainder
+        if is_mod {
+            self.emit(SbpfInstruction::alu64_reg(alu::MOV, actual_dst as u8, rem as u8));
+        } else {
+            self.emit(SbpfInstruction::alu64_reg(alu::MOV, actual_dst as u8, quot as u8));
+        }
+
+        self.store_if_spilled(dst, actual_dst);
     }
 
     /// Generate comparison: dst = (src1 cmp src2) ? 1 : 0
     fn gen_compare(&mut self, cmp_op: u8, dst: IrReg, src1: IrReg, src2: IrReg) {
-        let dst_reg = self.reg_alloc.allocate(dst);
-        let src1_reg = self.reg_alloc.allocate(src1);
-        let src2_reg = self.reg_alloc.allocate(src2);
+        // Load operands with spill handling
+        let src1_reg = self.get_reg(src1, SbpfReg::R0);
+        let src2_reg = self.get_reg(src2, SbpfReg::R5);
+
+        let dst_phys = self.reg_alloc.allocate(dst);
+        let actual_dst = if self.reg_alloc.is_spilled(dst) { SbpfReg::R0 } else { dst_phys };
 
         // Strategy: dst = 0, then conditionally set to 1
-        // if (src1 cmp src2) { dst = 1 } else { dst = 0 }
-        //
-        // sBPF:
-        //   mov dst, 0          ; assume false
-        //   jxx src1, src2, +1  ; if condition TRUE, skip the jump-over
-        //   ja +1               ; skip the "set to 1" (condition was FALSE)
-        //   mov dst, 1          ; condition was TRUE
-
         // dst = 0 (default: false)
-        self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, 0));
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual_dst as u8, 0));
         // if condition is TRUE, jump over the unconditional jump
         self.emit(SbpfInstruction::jmp_reg(cmp_op, src1_reg as u8, src2_reg as u8, 1));
         // condition was FALSE, skip setting dst=1
         self.emit(SbpfInstruction::ja(1));
         // condition was TRUE, set dst=1
-        self.emit(SbpfInstruction::alu64_imm(alu::MOV, dst_reg as u8, 1));
+        self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual_dst as u8, 1));
+
+        // Store if spilled
+        self.store_if_spilled(dst, actual_dst);
     }
 
     fn emit(&mut self, instr: SbpfInstruction) {
         self.instructions.push(instr);
     }
 
+    /// Emit a syscall and record its location for relocation
+    fn emit_syscall(&mut self, name: &str) {
+        let offset = self.current_offset_bytes();
+        let hash = self.get_syscall_hash(name);
+        self.emit(SbpfInstruction::call_syscall(hash));
+        self.syscall_sites.push(SyscallCallSite {
+            offset,
+            name: name.to_string(),
+        });
+    }
+
     fn current_offset(&self) -> usize {
         self.instructions.iter().map(|i| i.size()).sum::<usize>() / 8
+    }
+
+    fn current_offset_bytes(&self) -> usize {
+        self.instructions.iter().map(|i| i.size()).sum()
     }
 
     fn get_syscall_hash(&mut self, name: &str) -> u32 {

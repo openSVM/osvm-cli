@@ -5,6 +5,7 @@ use ratatui::{
     Frame,
 };
 use std::collections::HashMap;
+use arboard::Clipboard;
 
 #[derive(Debug, Clone)]
 pub enum WalletNodeType {
@@ -45,9 +46,29 @@ pub struct WalletNode {
     pub token: Option<String>,
 }
 
+/// Edge label with transaction metadata
+#[derive(Debug, Clone)]
+pub struct EdgeLabel {
+    pub amount: f64,
+    pub token: String,
+    pub timestamp: Option<String>,
+}
+
+impl EdgeLabel {
+    pub fn format_short(&self) -> String {
+        if self.amount >= 1000.0 {
+            format!("{:.1}k {}", self.amount / 1000.0, self.token)
+        } else if self.amount >= 1.0 {
+            format!("{:.2} {}", self.amount, self.token)
+        } else {
+            format!("{:.4} {}", self.amount, self.token)
+        }
+    }
+}
+
 pub struct WalletGraph {
     nodes: Vec<(String, WalletNode)>, // (address, node_data)
-    connections: Vec<(usize, usize, String)>, // (from_idx, to_idx, label)
+    connections: Vec<(usize, usize, EdgeLabel)>, // (from_idx, to_idx, edge_data)
     target_wallet: String,
     /// Currently selected node index for keyboard navigation
     pub selected_node: Option<usize>,
@@ -61,10 +82,18 @@ pub struct WalletGraph {
     pub max_depth: usize,
     /// Current depth reached
     pub current_depth: usize,
+    /// Search query and results
+    pub search_query: String,
+    pub search_active: bool,
+    pub search_results: Vec<usize>,  // Node indices matching search
+    pub search_result_idx: usize,    // Current result position
+    /// Toast notification
+    pub toast_message: Option<String>,
+    pub toast_timer: u8,  // Frames remaining to show toast
 }
 
 /// Input event for graph navigation
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GraphInput {
     Up,
     Down,
@@ -81,6 +110,12 @@ pub enum GraphInput {
     PanRight,
     IncreaseDepth,
     DecreaseDepth,
+    StartSearch,
+    SearchChar(char),
+    SearchBackspace,
+    SearchNext,
+    SearchPrev,
+    Copy,
 }
 
 impl WalletGraph {
@@ -110,6 +145,12 @@ impl WalletGraph {
             viewport: (0.0, 0.0, 1.0), // (center_x, center_y, zoom=1.0)
             max_depth: 5, // Default BFS depth
             current_depth: 0,
+            search_query: String::new(),
+            search_active: false,
+            search_results: Vec::new(),
+            search_result_idx: 0,
+            toast_message: None,
+            toast_timer: 0,
         }
     }
 
@@ -211,6 +252,116 @@ impl WalletGraph {
                 }
                 None
             }
+            // Search functionality
+            GraphInput::StartSearch => {
+                self.search_active = true;
+                self.search_query.clear();
+                self.search_results.clear();
+                self.search_result_idx = 0;
+                None
+            }
+            GraphInput::SearchChar(c) => {
+                if self.search_active {
+                    self.search_query.push(c);
+                    self.perform_search();
+                }
+                None
+            }
+            GraphInput::SearchBackspace => {
+                if self.search_active {
+                    self.search_query.pop();
+                    self.perform_search();
+                }
+                None
+            }
+            GraphInput::SearchNext => {
+                if !self.search_results.is_empty() {
+                    self.search_result_idx = (self.search_result_idx + 1) % self.search_results.len();
+                    self.selected_node = Some(self.search_results[self.search_result_idx]);
+                    // Center viewport on result
+                    if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
+                        self.viewport.0 = pos.0;
+                        self.viewport.1 = pos.1;
+                    }
+                }
+                None
+            }
+            GraphInput::SearchPrev => {
+                if !self.search_results.is_empty() {
+                    self.search_result_idx = if self.search_result_idx == 0 {
+                        self.search_results.len() - 1
+                    } else {
+                        self.search_result_idx - 1
+                    };
+                    self.selected_node = Some(self.search_results[self.search_result_idx]);
+                    // Center viewport on result
+                    if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
+                        self.viewport.0 = pos.0;
+                        self.viewport.1 = pos.1;
+                    }
+                }
+                None
+            }
+            // Copy to clipboard
+            GraphInput::Copy => {
+                if let Some(idx) = self.selected_node {
+                    if let Some((addr, _)) = self.nodes.get(idx) {
+                        match Clipboard::new().and_then(|mut clip| clip.set_text(addr.clone())) {
+                            Ok(_) => {
+                                self.show_toast(format!("Copied: {}...{}", &addr[..8], &addr[addr.len()-8..]));
+                            }
+                            Err(e) => {
+                                self.show_toast(format!("Copy failed: {}", e));
+                            }
+                        }
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    /// Perform fuzzy search on wallet addresses and labels
+    fn perform_search(&mut self) {
+        self.search_results.clear();
+        let query = self.search_query.to_lowercase();
+
+        if query.is_empty() {
+            return;
+        }
+
+        for (idx, (addr, node)) in self.nodes.iter().enumerate() {
+            // Check if address or label contains query (case-insensitive)
+            if addr.to_lowercase().contains(&query) || node.label.to_lowercase().contains(&query) {
+                self.search_results.push(idx);
+            }
+        }
+
+        // Auto-select first result
+        if !self.search_results.is_empty() {
+            self.search_result_idx = 0;
+            self.selected_node = Some(self.search_results[0]);
+            // Center viewport on first result
+            if let Some(pos) = self.node_positions.get(self.search_results[0]) {
+                self.viewport.0 = pos.0;
+                self.viewport.1 = pos.1;
+            }
+        }
+    }
+
+    /// Show toast notification
+    fn show_toast(&mut self, message: String) {
+        self.toast_message = Some(message);
+        self.toast_timer = 120; // Show for ~2 seconds at 60 FPS
+    }
+
+    /// Update toast timer (call every frame)
+    pub fn tick_toast(&mut self) {
+        if self.toast_timer > 0 {
+            self.toast_timer -= 1;
+            if self.toast_timer == 0 {
+                self.toast_message = None;
+            }
         }
     }
 
@@ -299,13 +450,20 @@ impl WalletGraph {
         &mut self,
         from_address: &str,
         to_address: &str,
-        label: String,
+        amount: f64,
+        token: String,
+        timestamp: Option<String>,
     ) {
         let from_idx = self.nodes.iter().position(|(addr, _)| addr == from_address);
         let to_idx = self.nodes.iter().position(|(addr, _)| addr == to_address);
 
         if let (Some(from), Some(to)) = (from_idx, to_idx) {
-            self.connections.push((from, to, label));
+            let edge_label = EdgeLabel {
+                amount,
+                token,
+                timestamp,
+            };
+            self.connections.push((from, to, edge_label));
         }
     }
 
@@ -384,6 +542,7 @@ impl WalletGraph {
         token: String,
         node_type_from: WalletNodeType,
         node_type_to: WalletNodeType,
+        timestamp: Option<String>,
     ) {
         // Add nodes if they don't exist
         let from_label = format!("{} (Source)", &from[..8.min(from.len())]);
@@ -405,14 +564,8 @@ impl WalletGraph {
             Some(token.clone()),
         );
 
-        // Add connection with transfer info
-        let label = if amount > 1000.0 {
-            format!("{:.1}K {}", amount / 1000.0, token)
-        } else {
-            format!("{:.2} {}", amount, token)
-        };
-
-        self.add_connection(&from, &to, label);
+        // Add connection with transfer info including timestamp
+        self.add_connection(&from, &to, amount, token, timestamp);
     }
 
     pub fn render(&mut self, f: &mut Frame, area: Rect) {
@@ -449,7 +602,7 @@ impl WalletGraph {
             .y_bounds([cy - 50.0 / zoom, cy + 50.0 / zoom])
             .paint(|ctx| {
                 // Draw edges FIRST with HIGH VISIBILITY
-                for (from_idx, to_idx, _label) in &self.connections {
+                for (from_idx, to_idx, edge_label) in &self.connections {
                     if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
                         let (x1, y1) = self.node_positions[*from_idx];
                         let (x2, y2) = self.node_positions[*to_idx];
@@ -459,6 +612,14 @@ impl WalletGraph {
                             x1, y1, x2, y2,
                             color: Color::Cyan,
                         });
+
+                        // Draw edge label at midpoint (only if zoomed in enough)
+                        if zoom > 0.8 {
+                            let mid_x = (x1 + x2) / 2.0;
+                            let mid_y = (y1 + y2) / 2.0;
+                            let label_text = edge_label.format_short();
+                            ctx.print(mid_x, mid_y - 1.0, label_text);
+                        }
                     }
                 }
 
@@ -466,10 +627,14 @@ impl WalletGraph {
                 for (idx, (_, node)) in self.nodes.iter().enumerate() {
                     if idx < self.node_positions.len() {
                         let (x, y) = self.node_positions[idx];
+
+                        // Determine node color based on state
                         let color = if Some(idx) == self.selected_node {
-                            Color::White  // Highlight selected
+                            Color::White  // Selected node
+                        } else if self.search_results.contains(&idx) {
+                            Color::Yellow  // Search match
                         } else {
-                            node.node_type.color()
+                            node.node_type.color()  // Normal color
                         };
 
                         // Draw node as BIGGER circle (radius 3.0) for better visibility
@@ -487,6 +652,59 @@ impl WalletGraph {
             });
 
         f.render_widget(canvas, area);
+
+        // Render search bar if active
+        if self.search_active {
+            use ratatui::widgets::Paragraph;
+            let search_text = if self.search_results.is_empty() && !self.search_query.is_empty() {
+                format!("Search: {} (no results)", self.search_query)
+            } else if !self.search_results.is_empty() {
+                format!("Search: {} ({}/{} results)", self.search_query, self.search_result_idx + 1, self.search_results.len())
+            } else {
+                format!("Search: {}_", self.search_query)
+            };
+
+            let search_area = Rect {
+                x: area.x + 2,
+                y: area.y + area.height - 3,
+                width: area.width.saturating_sub(4),
+                height: 3,
+            };
+
+            let search_widget = Paragraph::new(search_text)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Yellow))
+                    .title(" Search (ESC to cancel, n/N for next/prev) "))
+                .style(Style::default().fg(Color::White));
+
+            f.render_widget(search_widget, search_area);
+        }
+
+        // Render toast notification if present
+        if let Some(ref toast_msg) = self.toast_message {
+            use ratatui::widgets::Paragraph;
+            use ratatui::text::Span;
+
+            let toast_area = Rect {
+                x: area.x + (area.width.saturating_sub(toast_msg.len() as u16 + 4)) / 2,
+                y: area.y + 2,
+                width: (toast_msg.len() as u16 + 4).min(area.width),
+                height: 3,
+            };
+
+            let toast_widget = Paragraph::new(vec![
+                ratatui::text::Line::from(Span::styled(
+                    toast_msg.as_str(),
+                    Style::default().fg(Color::Black).bg(Color::Green).add_modifier(Modifier::BOLD)
+                ))
+            ])
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Green)));
+
+            f.render_widget(toast_widget, toast_area);
+        }
     }
 
 
@@ -529,6 +747,7 @@ impl WalletGraph {
                 transfer.token.clone(),
                 node_type_from,
                 node_type_to,
+                transfer.timestamp.clone(),
             );
         }
     }
