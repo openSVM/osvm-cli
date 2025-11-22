@@ -287,9 +287,9 @@ impl StreamService {
         // Get recent block with transactions
         if let Ok(block) = client.get_block(slot) {
             for tx_with_meta in block.transactions.iter().take(10) {
-                if let Some(tx) = &tx_with_meta.transaction.decode() {
+                if let Some(transaction) = &tx_with_meta.transaction.decode() {
                     if let Some(meta) = &tx_with_meta.meta {
-                        let signature = tx.signatures[0].to_string();
+                        let signature = transaction.signatures[0].to_string();
 
                         let event = SolanaEvent::Transaction {
                             signature: signature.clone(),
@@ -297,7 +297,7 @@ impl StreamService {
                             timestamp: block.block_time.unwrap_or(0) as u64,
                             success: meta.status.is_ok(),
                             fee: meta.fee,
-                            signer: tx.message.account_keys[0].to_string(),
+                            signer: transaction.message.account_keys[0].to_string(),
                         };
 
                         stats.lock().unwrap().events_processed += 1;
