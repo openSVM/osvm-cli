@@ -398,8 +398,15 @@ impl ElfWriter {
         let dyn_sections_size = dynsym_size + dynstr_size + reldyn_size;
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
 
-        // PT_DYNAMIC: Just .dynamic section
-        self.write_phdr_aligned(&mut elf, PT_DYNAMIC, PF_R | PF_W, dynamic_offset, dynamic_vaddr, dynamic_size);
+        // PT_DYNAMIC: Just .dynamic section (needs 8-byte alignment, not page alignment)
+        elf.extend_from_slice(&PT_DYNAMIC.to_le_bytes());
+        elf.extend_from_slice(&(PF_R | PF_W).to_le_bytes());
+        elf.extend_from_slice(&(dynamic_offset as u64).to_le_bytes());
+        elf.extend_from_slice(&dynamic_vaddr.to_le_bytes());
+        elf.extend_from_slice(&dynamic_vaddr.to_le_bytes());
+        elf.extend_from_slice(&(dynamic_size as u64).to_le_bytes());
+        elf.extend_from_slice(&(dynamic_size as u64).to_le_bytes());
+        elf.extend_from_slice(&0x8u64.to_le_bytes());  // 8-byte alignment for dynamic entries
 
         // Padding to 0x1000
         while elf.len() < text_offset {

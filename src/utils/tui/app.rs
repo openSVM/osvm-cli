@@ -87,6 +87,52 @@ pub struct OsvmApp {
     pub search_active: bool,
     pub search_query: String,
     pub filter_mode: FilterMode,
+    // Global search modal
+    pub global_search_active: bool,
+    pub global_search_query: String,
+    pub search_history: Vec<String>,  // Last 5 searches
+    pub search_suggestions: Vec<SearchSuggestion>,
+    pub selected_suggestion: usize,
+    pub search_loading: bool,
+    pub search_result: Option<SearchResult>,
+    pub search_error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SearchSuggestion {
+    pub text: String,
+    pub entity_type: EntityType,
+    pub description: String,
+    pub match_score: u8,  // 0-100 relevance score
+}
+
+#[derive(Clone, Debug)]
+pub struct SearchResult {
+    pub entity_type: EntityType,
+    pub address: String,
+    pub preview_data: Vec<(String, String)>,  // Key-value pairs for preview
+    pub timestamp: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntityType {
+    Wallet,
+    Token,
+    Program,
+    Transaction,
+    Recent,  // From history
+}
+
+impl SearchSuggestion {
+    pub fn entity_type_str(&self) -> &str {
+        match self.entity_type {
+            EntityType::Wallet => "Wallet",
+            EntityType::Token => "Token",
+            EntityType::Program => "Program",
+            EntityType::Transaction => "Transaction",
+            EntityType::Recent => "Recent",
+        }
+    }
 }
 
 impl OsvmApp {
@@ -122,6 +168,14 @@ impl OsvmApp {
             search_active: false,
             search_query: String::new(),
             filter_mode: FilterMode::All,
+            global_search_active: false,
+            global_search_query: String::new(),
+            search_history: Self::load_search_history(),
+            search_suggestions: Vec::new(),
+            selected_suggestion: 0,
+            search_loading: false,
+            search_result: None,
+            search_error: None,
         }
     }
 
@@ -146,6 +200,217 @@ impl OsvmApp {
 
     pub fn set_phase(&self, phase: &str) {
         *self.phase.lock().unwrap() = phase.to_string();
+    }
+
+    /// Open global search modal
+    pub fn open_global_search(&mut self) {
+        self.global_search_active = true;
+        self.global_search_query.clear();
+        self.selected_suggestion = 0;
+        self.update_search_suggestions();
+    }
+
+    /// Update search suggestions based on query with scoring
+    pub fn update_search_suggestions(&mut self) {
+        self.search_suggestions.clear();
+        self.search_error = None;
+
+        let query = self.global_search_query.to_lowercase();
+
+        // If no query, show recent searches only
+        if query.is_empty() {
+            for search in self.search_history.iter().take(5) {
+                self.search_suggestions.push(SearchSuggestion {
+                    text: search.clone(),
+                    entity_type: EntityType::Recent,
+                    description: "Recent search".to_string(),
+                    match_score: 100,
+                });
+            }
+            return;
+        }
+
+        let mut suggestions = Vec::new();
+
+        // Recent searches with fuzzy matching
+        for search in &self.search_history {
+            if search.to_lowercase().contains(&query) {
+                let score = self.calculate_match_score(&query, &search.to_lowercase());
+                suggestions.push(SearchSuggestion {
+                    text: search.clone(),
+                    entity_type: EntityType::Recent,
+                    description: "Recent search".to_string(),
+                    match_score: score,
+                });
+            }
+        }
+
+        // Smart entity type detection
+        let query_original = &self.global_search_query;
+
+        // Wallet/Program address (32-44 chars, base58)
+        if query_original.len() >= 32 && query_original.chars().all(|c| c.is_alphanumeric()) {
+            let base_score = ((query_original.len() as f32 / 44.0) * 100.0) as u8;
+
+            suggestions.push(SearchSuggestion {
+                text: query_original.clone(),
+                entity_type: EntityType::Wallet,
+                description: format!("Wallet address • {} chars", query_original.len()),
+                match_score: base_score.min(95),
+            });
+
+            suggestions.push(SearchSuggestion {
+                text: query_original.clone(),
+                entity_type: EntityType::Program,
+                description: format!("Program ID • {} chars", query_original.len()),
+                match_score: (base_score - 5).min(90),
+            });
+
+            // Transaction signature (typically 87-88 chars)
+            if query_original.len() >= 80 {
+                suggestions.push(SearchSuggestion {
+                    text: query_original.clone(),
+                    entity_type: EntityType::Transaction,
+                    description: format!("Transaction signature • {} chars", query_original.len()),
+                    match_score: 98,
+                });
+            }
+        }
+
+        // Token symbol (short uppercase)
+        if query_original.len() <= 10 && query_original.chars().all(|c| c.is_ascii_uppercase() || c.is_numeric() || c == '-') {
+            let score = if query_original.len() >= 3 && query_original.len() <= 5 {
+                95  // Common token length
+            } else {
+                70
+            };
+
+            suggestions.push(SearchSuggestion {
+                text: query_original.clone(),
+                entity_type: EntityType::Token,
+                description: format!("Token symbol • Search DEXs & markets"),
+                match_score: score,
+            });
+        }
+
+        // Sort by score (highest first)
+        suggestions.sort_by(|a, b| b.match_score.cmp(&a.match_score));
+        self.search_suggestions = suggestions;
+
+        // Reset selection if out of bounds
+        if self.selected_suggestion >= self.search_suggestions.len() {
+            self.selected_suggestion = 0;
+        }
+    }
+
+    /// Calculate fuzzy match score (0-100)
+    fn calculate_match_score(&self, query: &str, target: &str) -> u8 {
+        if target == query {
+            return 100;
+        }
+        if target.starts_with(query) {
+            return 90;
+        }
+        if target.contains(query) {
+            return 70;
+        }
+
+        // Fuzzy matching - count matching chars
+        let matching_chars = query.chars()
+            .filter(|c| target.contains(*c))
+            .count();
+
+        let score = ((matching_chars as f32 / query.len() as f32) * 50.0) as u8;
+        score.max(10)
+    }
+
+    /// Execute search for selected suggestion
+    pub fn execute_search(&mut self) {
+        if self.search_suggestions.is_empty() {
+            return;
+        }
+
+        let suggestion = self.search_suggestions[self.selected_suggestion].clone();
+
+        // Add to history (max 5, avoid duplicates)
+        self.search_history.retain(|s| s != &suggestion.text);
+        self.search_history.insert(0, suggestion.text.clone());
+        if self.search_history.len() > 5 {
+            self.search_history.pop();
+        }
+
+        // Save history to disk
+        Self::save_search_history(&self.search_history);
+
+        // Set loading state
+        self.search_loading = true;
+        self.search_error = None;
+
+        // Execute based on entity type
+        let log_msg = match suggestion.entity_type {
+            EntityType::Wallet => {
+                self.target_wallet = suggestion.text.clone();
+                self.active_tab = TabIndex::Dashboard;
+                format!("🔍 Investigating wallet: {}", Self::truncate_address(&suggestion.text))
+            }
+            EntityType::Token => {
+                self.active_tab = TabIndex::Graph;
+                format!("🪙 Searching token: {} across DEXs", suggestion.text)
+            }
+            EntityType::Program => {
+                self.active_tab = TabIndex::Graph;
+                format!("⚙️  Analyzing program: {}", Self::truncate_address(&suggestion.text))
+            }
+            EntityType::Transaction => {
+                self.active_tab = TabIndex::Logs;
+                format!("📜 Loading transaction: {}", Self::truncate_address(&suggestion.text))
+            }
+            EntityType::Recent => {
+                format!("🕒 Re-executing: {}", Self::truncate_address(&suggestion.text))
+            }
+        };
+
+        self.add_log(log_msg);
+        self.set_status(&format!("Searching: {}", suggestion.entity_type_str()));
+
+        // Close modal
+        self.global_search_active = false;
+        self.search_loading = false;
+    }
+
+    /// Load search history from disk
+    fn load_search_history() -> Vec<String> {
+        let history_path = dirs::home_dir()
+            .map(|h| h.join(".osvm").join("search_history.json"))
+            .unwrap_or_default();
+
+        if let Ok(content) = std::fs::read_to_string(&history_path) {
+            serde_json::from_str(&content).unwrap_or_default()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Save search history to disk
+    fn save_search_history(history: &[String]) {
+        if let Some(home) = dirs::home_dir() {
+            let osvm_dir = home.join(".osvm");
+            let _ = std::fs::create_dir_all(&osvm_dir);
+
+            let history_path = osvm_dir.join("search_history.json");
+            if let Ok(json) = serde_json::to_string_pretty(history) {
+                let _ = std::fs::write(history_path, json);
+            }
+        }
+    }
+
+    /// Truncate address for display
+    fn truncate_address(addr: &str) -> String {
+        if addr.len() > 16 {
+            format!("{}...{}", &addr[..8], &addr[addr.len()-4..])
+        } else {
+            addr.to_string()
+        }
     }
 
     pub fn add_log(&mut self, message: String) {
@@ -220,7 +485,10 @@ impl OsvmApp {
                 if let Event::Key(key) = event::read()? {
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => {
-                            if self.show_help {
+                            // Priority: global search > help > graph search > quit
+                            if self.global_search_active {
+                                self.global_search_active = false;
+                            } else if self.show_help {
                                 self.show_help = false;
                                 self.help_scroll = 0;  // Reset scroll when closing
                             } else if self.active_tab == TabIndex::Graph {
@@ -238,6 +506,12 @@ impl OsvmApp {
                                 }
                             } else {
                                 self.should_quit = true;
+                            }
+                        }
+                        KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            // GLOBAL SEARCH MODAL - works everywhere
+                            if !self.global_search_active {
+                                self.open_global_search();
                             }
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -272,8 +546,17 @@ impl OsvmApp {
                             }
                         }
                         KeyCode::Backspace => {
-                            if self.search_active && !self.search_query.is_empty() {
+                            if self.global_search_active && !self.global_search_query.is_empty() {
+                                self.global_search_query.pop();
+                                self.update_search_suggestions();
+                            } else if self.search_active && !self.search_query.is_empty() {
                                 self.search_query.pop();
+                            }
+                        }
+                        KeyCode::Char(c) if self.global_search_active => {
+                            if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                                self.global_search_query.push(c);
+                                self.update_search_suggestions();
                             }
                         }
                         KeyCode::Char(c) if self.search_active => {
@@ -292,9 +575,13 @@ impl OsvmApp {
                         KeyCode::Char('1') => self.active_tab = TabIndex::Dashboard,
                         KeyCode::Char('2') => self.active_tab = TabIndex::Graph,
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
-                        // Graph navigation / Help scrolling
+                        // Graph navigation / Help scrolling / Search suggestions
                         KeyCode::Char('j') | KeyCode::Down => {
-                            if self.show_help {
+                            if self.global_search_active {
+                                if !self.search_suggestions.is_empty() {
+                                    self.selected_suggestion = (self.selected_suggestion + 1) % self.search_suggestions.len();
+                                }
+                            } else if self.show_help {
                                 self.help_scroll = self.help_scroll.saturating_add(1);
                             } else if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
@@ -305,7 +592,15 @@ impl OsvmApp {
                             }
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            if self.show_help {
+                            if self.global_search_active {
+                                if !self.search_suggestions.is_empty() {
+                                    self.selected_suggestion = if self.selected_suggestion == 0 {
+                                        self.search_suggestions.len() - 1
+                                    } else {
+                                        self.selected_suggestion - 1
+                                    };
+                                }
+                            } else if self.show_help {
                                 self.help_scroll = self.help_scroll.saturating_sub(1);
                             } else if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
@@ -316,7 +611,9 @@ impl OsvmApp {
                             }
                         }
                         KeyCode::Enter => {
-                            if self.active_tab == TabIndex::Graph {
+                            if self.global_search_active {
+                                self.execute_search();
+                            } else if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
                                     graph.handle_input(GraphInput::HopToWallet);
                                 }
@@ -510,6 +807,11 @@ impl OsvmApp {
         // Render help overlay if active
         if self.show_help {
             self.render_help_overlay(f, size);
+        }
+
+        // Render global search modal (HIGHEST PRIORITY - renders on top)
+        if self.global_search_active {
+            self.render_global_search(f, size);
         }
     }
 
@@ -1115,6 +1417,199 @@ impl OsvmApp {
         f.render_widget(list, chunks[1]);
 
         self.render_btop_statusbar(f, chunks[2]);
+    }
+
+    fn render_global_search(&mut self, f: &mut Frame, area: Rect) {
+        use ratatui::widgets::{Clear, Paragraph};
+
+        // BIG CENTERED MODAL (90 cols x 30 rows)
+        let width = 90.min(area.width.saturating_sub(4));
+        let height = 30.min(area.height.saturating_sub(4));
+        let x = (area.width.saturating_sub(width)) / 2;
+        let y = (area.height.saturating_sub(height)) / 2;
+        let modal_area = Rect::new(x, y, width, height);
+
+        // Semi-transparent background overlay
+        f.render_widget(Clear, modal_area);
+
+        let mut lines = Vec::new();
+        lines.push(Line::from(""));
+
+        // Header with gradient effect
+        lines.push(Line::from(vec![
+            Span::styled(" ⚡ ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled("GLOBAL BLOCKCHAIN SEARCH", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" ⚡", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+        ]));
+
+        lines.push(Line::from(Span::styled(
+            " Search wallets • tokens • programs • transactions across Solana ",
+            Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+        )));
+        lines.push(Line::from(""));
+
+        // Search input with animated cursor
+        let cursor_char = if (self.iteration / 10) % 2 == 0 { "█" } else { "▌" };
+        lines.push(Line::from(vec![
+            Span::styled(" 🔍 ", Style::default().fg(Color::Yellow)),
+            Span::styled(
+                if self.global_search_query.is_empty() {
+                    "Type wallet address, token symbol, program ID, or tx signature..."
+                } else {
+                    &self.global_search_query
+                },
+                Style::default()
+                    .fg(if self.global_search_query.is_empty() { Color::DarkGray } else { Color::White })
+                    .add_modifier(if !self.global_search_query.is_empty() { Modifier::BOLD } else { Modifier::ITALIC })
+            ),
+            Span::styled(cursor_char, Style::default().fg(Color::Cyan)),
+        ]));
+        lines.push(Line::from(""));
+
+        // Error display
+        if let Some(ref error) = self.search_error {
+            lines.push(Line::from(vec![
+                Span::styled(" ❌ Error: ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+                Span::styled(error, Style::default().fg(Color::LightRed)),
+            ]));
+            lines.push(Line::from(""));
+        }
+
+        // Loading indicator
+        if self.search_loading {
+            let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+            let spinner_char = spinner[(self.iteration / 5) % spinner.len()];
+            lines.push(Line::from(vec![
+                Span::styled(format!(" {} Searching blockchain...", spinner_char),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            ]));
+            lines.push(Line::from(""));
+        }
+
+        // Suggestions with scores
+        if !self.search_suggestions.is_empty() {
+            let results_text = if self.global_search_query.is_empty() {
+                " ━━━ Recent Searches ━━━".to_string()
+            } else {
+                format!(" ━━━ {} Smart Suggestions ━━━", self.search_suggestions.len())
+            };
+
+            lines.push(Line::from(Span::styled(
+                results_text,
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            )));
+            lines.push(Line::from(""));
+
+            // Show up to 10 suggestions
+            for (i, suggestion) in self.search_suggestions.iter().take(10).enumerate() {
+                let is_selected = i == self.selected_suggestion;
+                let prefix = if is_selected { " ❯ " } else { "   " };
+
+                let (icon, type_color) = match suggestion.entity_type {
+                    EntityType::Wallet => ("👛", Color::Green),
+                    EntityType::Token => ("🪙", Color::Yellow),
+                    EntityType::Program => ("⚙️ ", Color::Magenta),
+                    EntityType::Transaction => ("📜", Color::Cyan),
+                    EntityType::Recent => ("🕒", Color::Blue),
+                };
+
+                // Score bar visualization
+                let score_blocks = (suggestion.match_score as usize) / 10;
+                let score_bar = "█".repeat(score_blocks);
+                let score_empty = "░".repeat(10 - score_blocks);
+
+                // Main suggestion line with truncation for long addresses
+                let display_text = if suggestion.text.len() > 60 {
+                    format!("{}...{}", &suggestion.text[..28], &suggestion.text[suggestion.text.len()-28..])
+                } else {
+                    suggestion.text.clone()
+                };
+
+                lines.push(Line::from(vec![
+                    Span::styled(prefix, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::raw(icon),
+                    Span::raw(" "),
+                    Span::styled(
+                        display_text,
+                        Style::default()
+                            .fg(if is_selected { Color::White } else { Color::Gray })
+                            .add_modifier(if is_selected { Modifier::BOLD | Modifier::UNDERLINED } else { Modifier::empty() })
+                    ),
+                ]));
+
+                // Description with score
+                lines.push(Line::from(vec![
+                    Span::raw("     "),
+                    Span::styled(
+                        &suggestion.description,
+                        Style::default().fg(if is_selected { Color::White } else { Color::DarkGray })
+                    ),
+                    Span::raw("  "),
+                    Span::styled(score_bar, Style::default().fg(type_color)),
+                    Span::styled(score_empty, Style::default().fg(Color::DarkGray)),
+                    Span::styled(format!(" {}%", suggestion.match_score),
+                        Style::default().fg(Color::DarkGray)),
+                ]));
+                lines.push(Line::from(""));
+            }
+
+            if self.search_suggestions.len() > 10 {
+                lines.push(Line::from(Span::styled(
+                    format!(" ... and {} more results", self.search_suggestions.len() - 10),
+                    Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)
+                )));
+            }
+        } else if !self.global_search_query.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled(" 💡 ", Style::default().fg(Color::Yellow)),
+                Span::styled("No matches found. Try:", Style::default().fg(Color::White)),
+            ]));
+            lines.push(Line::from(Span::styled(
+                "    • Full wallet address (32-44 chars)",
+                Style::default().fg(Color::DarkGray)
+            )));
+            lines.push(Line::from(Span::styled(
+                "    • Token symbol (e.g., SOL, USDC, BONK)",
+                Style::default().fg(Color::DarkGray)
+            )));
+            lines.push(Line::from(Span::styled(
+                "    • Program ID or transaction signature",
+                Style::default().fg(Color::DarkGray)
+            )));
+        }
+
+        // Footer with keyboard shortcuts
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "────────────────────────────────────────────────────────────────────────────────────────",
+            Style::default().fg(Color::DarkGray)
+        )));
+        lines.push(Line::from(vec![
+            Span::styled(" ↑↓", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(" Navigate  ", Style::default().fg(Color::White)),
+            Span::styled("⏎", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(" Select  ", Style::default().fg(Color::White)),
+            Span::styled("ESC", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(" Close  ", Style::default().fg(Color::White)),
+            Span::styled("Ctrl+K", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(" Search Anywhere", Style::default().fg(Color::White)),
+        ]));
+
+        let search_widget = Paragraph::new(lines)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Double)
+                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                .title(vec![
+                    Span::raw(" "),
+                    Span::styled("⌕", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::raw(" "),
+                    Span::styled("OSVM Search", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                    Span::raw(" "),
+                ]))
+            .style(Style::default().bg(Color::Black));
+
+        f.render_widget(search_widget, modal_area);
     }
 
     fn render_help_overlay(&mut self, f: &mut Frame, area: Rect) {
