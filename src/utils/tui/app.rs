@@ -24,6 +24,7 @@ pub enum TabIndex {
     Dashboard = 0,
     Graph = 1,
     Logs = 2,
+    SearchResults = 3,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -96,6 +97,47 @@ pub struct OsvmApp {
     pub search_loading: bool,
     pub search_result: Option<SearchResult>,
     pub search_error: Option<String>,
+    // Search results tab data
+    pub search_results_data: Arc<Mutex<SearchResultsData>>,
+    pub search_results_scroll: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SearchResultsData {
+    pub query: String,
+    pub entity_type: String,
+    pub wallets_found: Vec<WalletMatch>,
+    pub transactions_found: Vec<TransactionMatch>,
+    pub tokens_found: Vec<TokenMatch>,
+    pub total_matches: usize,
+    pub search_timestamp: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct WalletMatch {
+    pub address: String,
+    pub balance_sol: f64,
+    pub transfer_count: usize,
+    pub last_activity: String,
+    pub match_reason: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct TransactionMatch {
+    pub signature: String,
+    pub timestamp: String,
+    pub amount_sol: f64,
+    pub from: String,
+    pub to: String,
+    pub match_reason: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct TokenMatch {
+    pub symbol: String,
+    pub volume: f64,
+    pub transfer_count: usize,
+    pub match_reason: String,
 }
 
 #[derive(Clone, Debug)]
@@ -176,6 +218,8 @@ impl OsvmApp {
             search_loading: false,
             search_result: None,
             search_error: None,
+            search_results_data: Arc::new(Mutex::new(SearchResultsData::default())),
+            search_results_scroll: 0,
         }
     }
 
@@ -324,7 +368,7 @@ impl OsvmApp {
         score.max(10)
     }
 
-    /// Execute search for selected suggestion
+    /// Execute search for selected suggestion - REAL SEARCH of indexed data
     pub fn execute_search(&mut self) {
         if self.search_suggestions.is_empty() {
             return;
@@ -346,36 +390,114 @@ impl OsvmApp {
         self.search_loading = true;
         self.search_error = None;
 
-        // Execute based on entity type
+        // ACTUALLY SEARCH THE INDEXED DATA
+        let search_results = self.search_indexed_data(&suggestion.text, &suggestion.entity_type);
+
+        // Update search results data
+        {
+            let mut results_data = self.search_results_data.lock().unwrap();
+            *results_data = search_results;
+        }
+
+        // Log and switch to search results tab
+        let total_matches = self.search_results_data.lock().unwrap().total_matches;
         let log_msg = match suggestion.entity_type {
             EntityType::Wallet => {
-                self.target_wallet = suggestion.text.clone();
-                self.active_tab = TabIndex::Dashboard;
-                format!("🔍 Investigating wallet: {}", Self::truncate_address(&suggestion.text))
+                format!("🔍 Found {} matches for wallet: {}", total_matches, Self::truncate_address(&suggestion.text))
             }
             EntityType::Token => {
-                self.active_tab = TabIndex::Graph;
-                format!("🪙 Searching token: {} across DEXs", suggestion.text)
+                format!("🪙 Found {} token matches for: {}", total_matches, suggestion.text)
             }
             EntityType::Program => {
-                self.active_tab = TabIndex::Graph;
-                format!("⚙️  Analyzing program: {}", Self::truncate_address(&suggestion.text))
+                format!("⚙️  Found {} program matches for: {}", total_matches, Self::truncate_address(&suggestion.text))
             }
             EntityType::Transaction => {
-                self.active_tab = TabIndex::Logs;
-                format!("📜 Loading transaction: {}", Self::truncate_address(&suggestion.text))
+                format!("📜 Found {} transaction matches for: {}", total_matches, Self::truncate_address(&suggestion.text))
             }
             EntityType::Recent => {
-                format!("🕒 Re-executing: {}", Self::truncate_address(&suggestion.text))
+                format!("🕒 Re-searching: {} matches found", total_matches)
             }
         };
 
         self.add_log(log_msg);
-        self.set_status(&format!("Searching: {}", suggestion.entity_type_str()));
+        self.set_status(&format!("Search complete: {} matches", total_matches));
+
+        // Switch to SearchResults tab to show findings
+        self.active_tab = TabIndex::SearchResults;
+        self.search_results_scroll = 0;
 
         // Close modal
         self.global_search_active = false;
         self.search_loading = false;
+    }
+
+    /// Search the indexed local data (WalletGraph, TransferEvents, TokenVolumes)
+    fn search_indexed_data(&self, query: &str, entity_type: &EntityType) -> SearchResultsData {
+        let mut results = SearchResultsData {
+            query: query.to_string(),
+            entity_type: format!("{:?}", entity_type),
+            search_timestamp: chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            ..Default::default()
+        };
+
+        let query_lower = query.to_lowercase();
+
+        // Search WalletGraph nodes
+        {
+            let graph = self.wallet_graph.lock().unwrap();
+            for (address, node) in graph.nodes_iter() {
+                if address.to_lowercase().contains(&query_lower) ||
+                   node.label.to_lowercase().contains(&query_lower) {
+                    results.wallets_found.push(WalletMatch {
+                        address: address.clone(),
+                        balance_sol: node.amount.unwrap_or(0.0),
+                        transfer_count: 0, // Simplified for now - would need connection counting
+                        last_activity: "Recent".to_string(),
+                        match_reason: format!("Address contains '{}'", query),
+                    });
+                }
+            }
+        }
+
+        // Search TransferEvents
+        {
+            let events = self.transfer_events.lock().unwrap();
+            for event in events.iter() {
+                if event.token.to_lowercase().contains(&query_lower) ||
+                   event.timestamp.contains(query) {
+                    // This is a simplified match - in real implementation, extract addresses
+                    results.transactions_found.push(TransactionMatch {
+                        signature: format!("tx_{}", results.transactions_found.len()),
+                        timestamp: event.timestamp.clone(),
+                        amount_sol: event.amount,
+                        from: "N/A".to_string(),
+                        to: "N/A".to_string(),
+                        match_reason: format!("Transfer of {} {}", event.amount, event.token),
+                    });
+                }
+            }
+        }
+
+        // Search TokenVolumes
+        {
+            let tokens = self.token_volumes.lock().unwrap();
+            for token in tokens.iter() {
+                if token.symbol.to_lowercase().contains(&query_lower) {
+                    results.tokens_found.push(TokenMatch {
+                        symbol: token.symbol.clone(),
+                        volume: token.amount,
+                        transfer_count: 0, // Would need to count from events
+                        match_reason: format!("Token symbol matches '{}'", query),
+                    });
+                }
+            }
+        }
+
+        results.total_matches = results.wallets_found.len() +
+                                results.transactions_found.len() +
+                                results.tokens_found.len();
+
+        results
     }
 
     /// Load search history from disk
@@ -575,6 +697,7 @@ impl OsvmApp {
                         KeyCode::Char('1') => self.active_tab = TabIndex::Dashboard,
                         KeyCode::Char('2') => self.active_tab = TabIndex::Graph,
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
+                        KeyCode::Char('4') => self.active_tab = TabIndex::SearchResults,
                         // Graph navigation / Help scrolling / Search suggestions
                         KeyCode::Char('j') | KeyCode::Down => {
                             if self.global_search_active {
@@ -783,15 +906,17 @@ impl OsvmApp {
         self.active_tab = match self.active_tab {
             TabIndex::Dashboard => TabIndex::Graph,
             TabIndex::Graph => TabIndex::Logs,
-            TabIndex::Logs => TabIndex::Dashboard,
+            TabIndex::Logs => TabIndex::SearchResults,
+            TabIndex::SearchResults => TabIndex::Dashboard,
         };
     }
 
     fn previous_tab(&mut self) {
         self.active_tab = match self.active_tab {
-            TabIndex::Dashboard => TabIndex::Logs,
+            TabIndex::Dashboard => TabIndex::SearchResults,
             TabIndex::Graph => TabIndex::Dashboard,
             TabIndex::Logs => TabIndex::Graph,
+            TabIndex::SearchResults => TabIndex::Logs,
         };
     }
 
@@ -802,6 +927,7 @@ impl OsvmApp {
             TabIndex::Dashboard => self.render_dashboard(f, size),
             TabIndex::Graph => self.render_full_graph(f, size),
             TabIndex::Logs => self.render_full_logs(f, size),
+            TabIndex::SearchResults => self.render_search_results_tab(f, size),
         }
 
         // Render help overlay if active
@@ -1629,7 +1755,7 @@ impl OsvmApp {
             Line::from(Span::styled(" Real-time blockchain investigation TUI ", Style::default().fg(Color::DarkGray))),
             Line::from(""),
             Line::from(Span::styled(" ─── Navigation ──────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
-            Line::from("   1/2/3        Switch views (Dashboard/Graph/Logs)"),
+            Line::from("   1/2/3/4      Switch views (Dashboard/Graph/Logs/Search)"),
             Line::from("   Tab          Cycle through views"),
             Line::from("   ?/F1         Toggle this help"),
             Line::from("   q/Esc        Quit (or close help)"),
@@ -1796,5 +1922,169 @@ impl OsvmApp {
         } else {
             true
         }
+    }
+
+    /// Render Search Results Tab - shows actual findings from indexed data
+    fn render_search_results_tab(&mut self, f: &mut Frame, area: Rect) {
+        let results_data = self.search_results_data.lock().unwrap().clone();
+
+        // Main layout: [Header][Results][Status]
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(4),  // Search info header
+                Constraint::Min(0),      // Results
+                Constraint::Length(2),   // Status bar
+            ])
+            .split(area);
+
+        // Search Info Header
+        let header_text = vec![
+            Line::from(vec![
+                Span::styled(" 🔍 Search Query: ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled(&results_data.query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled(" 📊 Type: ", Style::default().fg(Color::Cyan)),
+                Span::styled(&results_data.entity_type, Style::default().fg(Color::Green)),
+                Span::styled("  •  Matches: ", Style::default().fg(Color::Cyan)),
+                Span::styled(results_data.total_matches.to_string(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("  •  Time: ", Style::default().fg(Color::Cyan)),
+                Span::styled(&results_data.search_timestamp, Style::default().fg(Color::DarkGray)),
+            ]),
+        ];
+
+        let header = Paragraph::new(header_text)
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        f.render_widget(header, chunks[0]);
+
+        // Results sections
+        let mut result_lines = Vec::new();
+
+        if results_data.total_matches == 0 {
+            result_lines.push(Line::from(""));
+            result_lines.push(Line::from(Span::styled(
+                " No matches found in indexed data.",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::ITALIC)
+            )));
+            result_lines.push(Line::from(""));
+            result_lines.push(Line::from(Span::styled(
+                " Try:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+            )));
+            result_lines.push(Line::from(Span::styled(
+                "   • Wait for more data to be indexed from blockchain",
+                Style::default().fg(Color::DarkGray)
+            )));
+            result_lines.push(Line::from(Span::styled(
+                "   • Search for different terms (wallet address, token symbol)",
+                Style::default().fg(Color::DarkGray)
+            )));
+            result_lines.push(Line::from(Span::styled(
+                "   • Press Ctrl+K to open search again",
+                Style::default().fg(Color::DarkGray)
+            )));
+        } else {
+            // Wallets Section
+            if !results_data.wallets_found.is_empty() {
+                result_lines.push(Line::from(""));
+                result_lines.push(Line::from(Span::styled(
+                    format!(" ━━━ Wallets ({}) ━━━", results_data.wallets_found.len()),
+                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                )));
+                result_lines.push(Line::from(""));
+
+                for wallet in &results_data.wallets_found {
+                    result_lines.push(Line::from(vec![
+                        Span::styled(" 👛 ", Style::default().fg(Color::Green)),
+                        Span::styled(&wallet.address, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                    result_lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled("Balance: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("{:.4} SOL", wallet.balance_sol), Style::default().fg(Color::Yellow)),
+                        Span::raw("  •  "),
+                        Span::styled("Transfers: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(wallet.transfer_count.to_string(), Style::default().fg(Color::Cyan)),
+                    ]));
+                    result_lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(&wallet.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                    ]));
+                    result_lines.push(Line::from(""));
+                }
+            }
+
+            // Tokens Section
+            if !results_data.tokens_found.is_empty() {
+                result_lines.push(Line::from(Span::styled(
+                    format!(" ━━━ Tokens ({}) ━━━", results_data.tokens_found.len()),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                )));
+                result_lines.push(Line::from(""));
+
+                for token in &results_data.tokens_found {
+                    result_lines.push(Line::from(vec![
+                        Span::styled(" 🪙 ", Style::default().fg(Color::Yellow)),
+                        Span::styled(&token.symbol, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                    ]));
+                    result_lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled("Volume: ", Style::default().fg(Color::DarkGray)),
+                        Span::styled(format!("{:.2}", token.volume), Style::default().fg(Color::Cyan)),
+                        Span::raw("  •  "),
+                        Span::styled(&token.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                    ]));
+                    result_lines.push(Line::from(""));
+                }
+            }
+
+            // Transactions Section
+            if !results_data.transactions_found.is_empty() {
+                result_lines.push(Line::from(Span::styled(
+                    format!(" ━━━ Transactions ({}) ━━━", results_data.transactions_found.len()),
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                )));
+                result_lines.push(Line::from(""));
+
+                for tx in &results_data.transactions_found {
+                    result_lines.push(Line::from(vec![
+                        Span::styled(" 📜 ", Style::default().fg(Color::Cyan)),
+                        Span::styled(&tx.signature, Style::default().fg(Color::White)),
+                    ]));
+                    result_lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(&tx.timestamp, Style::default().fg(Color::DarkGray)),
+                        Span::raw("  •  "),
+                        Span::styled(format!("{:.4} SOL", tx.amount_sol), Style::default().fg(Color::Yellow)),
+                    ]));
+                    result_lines.push(Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(&tx.match_reason, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                    ]));
+                    result_lines.push(Line::from(""));
+                }
+            }
+        }
+
+        let results_paragraph = Paragraph::new(result_lines)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::White))
+                .title(Span::styled(" Search Results ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))))
+            .scroll((self.search_results_scroll as u16, 0));
+
+        f.render_widget(results_paragraph, chunks[1]);
+
+        // Status line (simplified)
+        let status_text = Line::from(vec![
+            Span::styled(" Search Results ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::raw(" | "),
+            Span::styled(format!("{} matches", results_data.total_matches), Style::default().fg(Color::Yellow)),
+            Span::raw(" | Press "),
+            Span::styled("Ctrl+K", Style::default().fg(Color::Green)),
+            Span::raw(" to search again"),
+        ]);
+        let status = Paragraph::new(status_text);
+        f.render_widget(status, chunks[2]);
     }
 }
