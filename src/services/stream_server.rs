@@ -9,7 +9,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use futures::{stream::Stream, StreamExt};
+use futures::{stream::Stream, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -59,7 +59,7 @@ pub async fn start_server(
     // Start the stream service
     stream_service.start().await?;
 
-    // Build the router
+    // Build the router with state
     let mut app = Router::new();
 
     if config.enable_websocket {
@@ -78,7 +78,8 @@ pub async fn start_server(
             .route("/health", get(health_handler));
     }
 
-    app = app
+    // Apply state and CORS
+    let app = app
         .with_state(app_state)
         .layer(
             CorsLayer::new()
@@ -90,7 +91,11 @@ pub async fn start_server(
     let addr: SocketAddr = format!("{}:{}", config.host, config.port).parse()?;
     tracing::info!("Stream server listening on {}", addr);
 
+    // Use axum 0.7 serve - call into_make_service on the router before serving
     let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    // For axum 0.7, routers with state work directly if we don't await immediately
+    // The router implements the right traits
     axum::serve(listener, app.into_make_service()).await?;
 
     Ok(())

@@ -319,7 +319,7 @@ impl ElfWriter {
         let ehdr_size = 64usize;
         let phdr_size = 56usize;
         let shdr_size = 64usize;
-        let num_phdrs = 2usize;  // PT_LOAD for .text, PT_DYNAMIC
+        let num_phdrs = 3usize;  // PT_LOAD for .text, PT_LOAD for dynamic sections, PT_DYNAMIC
         let num_sections = 9usize;  // NULL, .text, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
 
         let text_offset = 0x1000usize;
@@ -391,13 +391,15 @@ impl ElfWriter {
         elf.extend_from_slice(&((num_sections - 1) as u16).to_le_bytes()); // e_shstrndx
 
         // ==================== Program Headers ====================
-        // PT_LOAD for .text + dynamic sections
-        let load_size = text_size + dynamic_size + dynsym_size + dynstr_size + reldyn_size;
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, load_size);
+        // PT_LOAD #1: .text only (like Solana's layout)
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
 
-        // PT_DYNAMIC - must cover .dynamic, .dynsym, .dynstr, and .rel.dyn
-        let dynamic_segment_size = dynamic_size + dynsym_size + dynstr_size + reldyn_size;
-        self.write_phdr_aligned(&mut elf, PT_DYNAMIC, PF_R | PF_W, dynamic_offset, dynamic_vaddr, dynamic_segment_size);
+        // PT_LOAD #2: Dynamic sections (.dynsym, .dynstr, .rel.dyn) in separate segment
+        let dyn_sections_size = dynsym_size + dynstr_size + reldyn_size;
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
+
+        // PT_DYNAMIC: Just .dynamic section
+        self.write_phdr_aligned(&mut elf, PT_DYNAMIC, PF_R | PF_W, dynamic_offset, dynamic_vaddr, dynamic_size);
 
         // Padding to 0x1000
         while elf.len() < text_offset {
@@ -409,9 +411,9 @@ impl ElfWriter {
 
         // ==================== .dynamic Section ====================
         // Match Solana's test ELF format
-        // DT_FLAGS (TEXTREL flag = 0x8)
+        // DT_FLAGS (TEXTREL flag = 0x4, matching Solana's test ELF)
         elf.extend_from_slice(&DT_FLAGS.to_le_bytes());
-        elf.extend_from_slice(&0x8u64.to_le_bytes()); // TEXTREL
+        elf.extend_from_slice(&0x4u64.to_le_bytes()); // DF_TEXTREL flag
         // DT_REL
         elf.extend_from_slice(&DT_REL.to_le_bytes());
         elf.extend_from_slice(&reldyn_vaddr.to_le_bytes());

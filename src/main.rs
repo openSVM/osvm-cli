@@ -379,6 +379,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(|e| e.into());
     }
 
+    // Handle stream command early - it doesn't need keypair or Solana config, just RPC access
+    if sub_command == "stream" {
+        // StreamCommand has its own clap Parser, so we parse from args
+        // Skip "osvm stream" part and just pass the remaining args
+        use crate::commands::stream::StreamCommand;
+        use clap::Parser;
+
+        let args: Vec<String> = std::env::args().collect();
+        // Find "stream" and take everything after it
+        let stream_args: Vec<String> = std::iter::once("stream".to_string())
+            .chain(args.iter().skip_while(|arg| *arg != "stream").skip(1).cloned())
+            .collect();
+
+        let cmd = StreamCommand::parse_from(&stream_args);
+
+        return match crate::commands::stream::execute(cmd).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                eprintln!("❌ Stream server failed: {}", e);
+                std::process::exit(1);
+            }
+        };
+    }
+
     // Handle agent command for CLI-based agent execution
     if sub_command == "agent" {
         // Get prompt args (can be multiple words)

@@ -12,7 +12,7 @@ use crate::services::{
 #[command(about = "Start real-time event streaming server", long_about = None)]
 pub struct StreamCommand {
     /// RPC URL to connect to
-    #[arg(long, env = "SOLANA_RPC_URL", default_value = "https://api.mainnet-beta.solana.com")]
+    #[arg(long, default_value = "https://api.mainnet-beta.solana.com")]
     pub rpc_url: String,
 
     /// Server host to bind to
