@@ -249,6 +249,48 @@ impl StreamService {
         *self.running.lock().unwrap() = false;
     }
 
+    /// Parse SPL token transfer from transaction logs
+    /// Returns (from, to, amount, decimals) if found
+    fn parse_spl_transfer(logs: &[String]) -> Option<(String, String, f64, u8)> {
+        // SPL Token program log format:
+        // "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA invoke [1]"
+        // "Program log: Instruction: Transfer"
+        // Transfer format in logs varies, but we can extract from inner instructions or parse logs
+
+        // Look for transfer instruction
+        let mut found_transfer = false;
+        for log in logs {
+            if log.contains("Program log: Instruction: Transfer") {
+                found_transfer = true;
+                break;
+            }
+        }
+
+        if !found_transfer {
+            return None;
+        }
+
+        // Try to extract amount from logs
+        // Common patterns:
+        // "Program log: Transfer <amount> tokens"
+        // "Program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA consumed"
+        for log in logs {
+            if log.contains("Transfer") && log.contains("tokens") {
+                // Try to parse amount
+                // This is simplified - in production, parse from instruction data
+                // For now, return placeholder values
+                return Some((
+                    "unknown".to_string(),
+                    "unknown".to_string(),
+                    0.0,
+                    9, // Most SPL tokens use 9 decimals (like USDC)
+                ));
+            }
+        }
+
+        None
+    }
+
     /// Poll for new Solana events
     async fn poll_events(
         rpc_url: &str,
@@ -312,15 +354,80 @@ impl StreamService {
                             stats.lock().unwrap().events_filtered += 1;
                         }
 
-                        // Parse token transfers from logs if available
-                        // Note: In Solana SDK 3.0, log_messages uses OptionSerializer
-                        // For now, we skip log parsing to avoid OptionSerializer complexity
-                        // TODO: Properly handle OptionSerializer in future version
-                        // if let solana_transaction_status::option_serializer::OptionSerializer::Some(log_messages) = &meta.log_messages {
-                        //     for log in log_messages {
-                        //         ... process logs ...
-                        //     }
-                        // }
+                        // Parse token transfers from logs and inner instructions
+                        // In Solana SDK 3.0, log_messages uses OptionSerializer enum
+                        use solana_transaction_status::option_serializer::OptionSerializer;
+
+                        // Try to parse SPL token transfers from pre/post token balances
+                        if let (OptionSerializer::Some(pre_balances), OptionSerializer::Some(post_balances)) =
+                            (&meta.pre_token_balances, &meta.post_token_balances)
+                        {
+                            // Match pre and post balances to detect transfers
+                            for post in post_balances {
+                                if let Some(pre) = pre_balances.iter().find(|p| p.account_index == post.account_index) {
+                                    // Calculate change in balance
+                                    let pre_amount = pre.ui_token_amount.ui_amount.unwrap_or(0.0);
+                                    let post_amount = post.ui_token_amount.ui_amount.unwrap_or(0.0);
+                                    let change = post_amount - pre_amount;
+
+                                    if change.abs() > 0.0 {
+                                        let token_transfer = SolanaEvent::TokenTransfer {
+                                            signature: signature.clone(),
+                                            from: if change < 0.0 {
+                                                post.owner.clone().unwrap_or_else(|| "unknown".to_string())
+                                            } else {
+                                                "unknown".to_string()
+                                            },
+                                            to: if change > 0.0 {
+                                                post.owner.clone().unwrap_or_else(|| "unknown".to_string())
+                                            } else {
+                                                "unknown".to_string()
+                                            },
+                                            amount: change.abs(),
+                                            token: post.mint.clone(),
+                                            decimals: post.ui_token_amount.decimals,
+                                        };
+
+                                        stats.lock().unwrap().events_processed += 1;
+
+                                        let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&token_transfer));
+
+                                        if should_send {
+                                            let _ = tx.send(token_transfer);
+                                            stats.lock().unwrap().events_sent += 1;
+                                        } else {
+                                            stats.lock().unwrap().events_filtered += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Also emit log messages for transfer instructions
+                        if let OptionSerializer::Some(log_messages) = &meta.log_messages {
+                            let has_transfer = log_messages.iter().any(|log|
+                                log.contains("Program log: Instruction: Transfer")
+                            );
+
+                            if has_transfer {
+                                let log_event = SolanaEvent::LogMessage {
+                                    signature: signature.clone(),
+                                    logs: log_messages.clone(),
+                                    slot,
+                                };
+
+                                stats.lock().unwrap().events_processed += 1;
+
+                                let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&log_event));
+
+                                if should_send {
+                                    let _ = tx.send(log_event);
+                                    stats.lock().unwrap().events_sent += 1;
+                                } else {
+                                    stats.lock().unwrap().events_filtered += 1;
+                                }
+                            }
+                        }
                     }
                 }
             }

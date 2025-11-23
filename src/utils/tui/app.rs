@@ -104,6 +104,8 @@ pub struct OsvmApp {
     pub network_stats: Arc<Mutex<NetworkStats>>,
     pub live_transactions: Arc<Mutex<Vec<LiveTransaction>>>,
     pub last_refresh: std::time::Instant,
+    // RPC endpoint for live blockchain queries
+    pub rpc_url: Option<String>,
 }
 
 /// Real-time network statistics
@@ -249,6 +251,7 @@ impl OsvmApp {
             network_stats: Arc::new(Mutex::new(NetworkStats::default())),
             live_transactions: Arc::new(Mutex::new(Vec::new())),
             last_refresh: std::time::Instant::now(),
+            rpc_url: None,
         }
     }
 
@@ -277,10 +280,13 @@ impl OsvmApp {
         Arc::clone(&self.live_transactions)
     }
 
-    /// Start background thread to poll RPC for real-time network stats
-    pub fn start_network_stats_polling(&self, rpc_url: String) {
+    /// Start background thread to poll RPC for real-time network stats AND live transactions
+    pub fn start_network_stats_polling(&mut self, rpc_url: String) {
+        // Store RPC URL for later use in search
+        self.rpc_url = Some(rpc_url.clone());
+
         let stats_handle = Arc::clone(&self.network_stats);
-        let _tx_handle = Arc::clone(&self.live_transactions);
+        let tx_handle = Arc::clone(&self.live_transactions);
 
         std::thread::spawn(move || {
             use solana_client::rpc_client::RpcClient;
@@ -320,6 +326,48 @@ impl OsvmApp {
 
                 // Update shared state
                 *stats_handle.lock().unwrap() = updated_stats;
+
+                // Fetch recent transactions from latest block
+                if let Ok(current_slot) = client.get_slot() {
+                    if let Ok(block) = client.get_block(current_slot) {
+                        let mut live_txs = Vec::new();
+
+                        for tx_with_meta in block.transactions.iter().take(10) {
+                            if let Some(transaction) = &tx_with_meta.transaction.decode() {
+                                if let Some(meta) = &tx_with_meta.meta {
+                                    let sig = transaction.signatures.first()
+                                        .map(|s| s.to_string())
+                                        .unwrap_or_else(|| "unknown".to_string());
+
+                                    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+                                    let success = meta.status.is_ok();
+                                    let amount_sol = meta.post_balances.first()
+                                        .zip(meta.pre_balances.first())
+                                        .map(|(post, pre)| (*post as i64 - *pre as i64).abs() as f64 / 1_000_000_000.0)
+                                        .unwrap_or(0.0);
+
+                                    let tx_type = if transaction.message.instructions().is_empty() {
+                                        "Unknown"
+                                    } else if amount_sol > 0.0 {
+                                        "Transfer"
+                                    } else {
+                                        "Contract"
+                                    }.to_string();
+
+                                    live_txs.push(LiveTransaction {
+                                        signature: sig[..8].to_string(), // Truncate for display
+                                        timestamp,
+                                        amount_sol,
+                                        success,
+                                        tx_type,
+                                    });
+                                }
+                            }
+                        }
+
+                        *tx_handle.lock().unwrap() = live_txs;
+                    }
+                }
 
                 // Sleep 5 seconds before next poll
                 std::thread::sleep(std::time::Duration::from_secs(5));
@@ -521,6 +569,7 @@ impl OsvmApp {
     }
 
     /// Search the indexed local data (WalletGraph, TransferEvents, TokenVolumes)
+    /// AND fetch live data from blockchain for transaction signatures
     fn search_indexed_data(&self, query: &str, entity_type: &EntityType) -> SearchResultsData {
         let mut results = SearchResultsData {
             query: query.to_string(),
@@ -530,6 +579,16 @@ impl OsvmApp {
         };
 
         let query_lower = query.to_lowercase();
+
+        // 🔥 NEW: Check if query looks like a transaction signature (base58, 87-88 chars)
+        // If so, try to fetch it LIVE from blockchain
+        if query.len() >= 87 && query.len() <= 88 && query.chars().all(|c| c.is_alphanumeric()) {
+            if let Some(ref rpc_url) = self.rpc_url {
+                if let Some(tx_match) = self.fetch_transaction_from_blockchain(query, rpc_url) {
+                    results.transactions_found.push(tx_match);
+                }
+            }
+        }
 
         // Search WalletGraph nodes
         {
@@ -587,6 +646,71 @@ impl OsvmApp {
                                 results.tokens_found.len();
 
         results
+    }
+
+    /// Fetch transaction details from the blockchain via RPC
+    /// Returns TransactionMatch if found, None if not found or error
+    fn fetch_transaction_from_blockchain(&self, signature: &str, rpc_url: &str) -> Option<TransactionMatch> {
+        use solana_client::rpc_client::RpcClient;
+        use solana_commitment_config::CommitmentConfig;
+        use solana_sdk::signature::Signature;
+        use std::str::FromStr;
+
+        // Parse signature
+        let sig = Signature::from_str(signature).ok()?;
+
+        // Create RPC client
+        let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
+
+        // Fetch transaction details with full encoding
+        let tx = client.get_transaction(&sig, solana_transaction_status::UiTransactionEncoding::JsonParsed).ok()?;
+
+        // Extract transaction metadata
+        let meta = tx.transaction.meta?;
+        let transaction = tx.transaction.transaction.decode()?;
+
+        // Get timestamp (block time)
+        let timestamp = tx.block_time
+            .map(|bt| chrono::DateTime::from_timestamp(bt, 0)
+                .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                .unwrap_or_else(|| "Unknown".to_string()))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Get fee in SOL
+        let fee_lamports = meta.fee;
+        let fee_sol = fee_lamports as f64 / 1_000_000_000.0;
+
+        // Get signer (first account key)
+        let from = transaction.message.static_account_keys()
+            .get(0)
+            .map(|k| k.to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Try to detect recipient (simplified - would need full parsing for accuracy)
+        let to = transaction.message.static_account_keys()
+            .get(1)
+            .map(|k| k.to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        // Determine transaction status
+        let success = meta.status.is_ok();
+        let status_str = if success { "Success" } else { "Failed" };
+
+        // Calculate SOL amount transferred (simplified - sum of pre/post balance changes)
+        let mut amount_sol = 0.0;
+        if let (Some(pre_balances), Some(post_balances)) = (meta.pre_balances.first(), meta.post_balances.first()) {
+            let change = (*post_balances as i64 - *pre_balances as i64).abs() as f64 / 1_000_000_000.0;
+            amount_sol = change;
+        }
+
+        Some(TransactionMatch {
+            signature: signature.to_string(),
+            timestamp,
+            amount_sol,
+            from,
+            to,
+            match_reason: format!("Live blockchain fetch - {} - Fee: {:.6} SOL", status_str, fee_sol),
+        })
     }
 
     /// Load search history from disk
@@ -1528,40 +1652,49 @@ impl OsvmApp {
     }
 
     fn render_transfer_feed(&self, f: &mut Frame, area: Rect) {
-        let events = self.transfer_events.lock().ok();
+        // LIVE TRANSACTION FEED (updated every 5s from latest blocks)
+        let live_txs = self.live_transactions.lock().ok();
 
         let block = Block::default()
-            .title(Span::styled(" ↕ Transfers ", Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(" 🔴 LIVE Transactions ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(Color::DarkGray));
+            .border_style(Style::default().fg(Color::Red));
 
         let inner_area = block.inner(area);
         f.render_widget(block.clone(), area);
 
         let mut items: Vec<ListItem> = Vec::new();
 
-        if let Some(evts) = events {
-            if evts.is_empty() {
-                items.push(ListItem::new("  Waiting for transfers...").style(Style::default().fg(Color::DarkGray)));
+        if let Some(txs) = live_txs {
+            if txs.is_empty() {
+                items.push(ListItem::new("  🔄 Fetching live transactions...").style(Style::default().fg(Color::Yellow)));
             } else {
-                for evt in evts.iter().rev().take((inner_area.height as usize).saturating_sub(1)) {
-                    let (icon, color) = if evt.direction == "IN" {
-                        ("↓", Color::Green)
+                for tx in txs.iter().take((inner_area.height as usize).saturating_sub(1)) {
+                    let (icon, color) = if tx.success {
+                        ("✓", Color::Green)
                     } else {
-                        ("↑", Color::Red)
+                        ("✗", Color::Red)
                     };
-                    let amount_str = if evt.amount >= 1_000_000.0 {
-                        format!("{:.1}M", evt.amount / 1_000_000.0)
-                    } else if evt.amount >= 1_000.0 {
-                        format!("{:.1}K", evt.amount / 1_000.0)
-                    } else {
-                        format!("{:.2}", evt.amount)
+
+                    let type_icon = match tx.tx_type.as_str() {
+                        "Transfer" => "💸",
+                        "Contract" => "⚙️ ",
+                        _ => "📄",
                     };
-                    items.push(ListItem::new(format!(
-                        " {} {:>8} {:>8} {}",
-                        icon, evt.timestamp, amount_str, evt.token
-                    )).style(Style::default().fg(color)));
+
+                    items.push(ListItem::new(vec![
+                        Line::from(vec![
+                            Span::styled(format!(" {} ", icon), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                            Span::styled(type_icon, Style::default()),
+                            Span::styled(format!(" {}", tx.signature), Style::default().fg(Color::Cyan)),
+                        ]),
+                        Line::from(vec![
+                            Span::styled("    ", Style::default()),
+                            Span::styled(format!("{} • ", tx.timestamp), Style::default().fg(Color::DarkGray)),
+                            Span::styled(format!("{:.4} SOL", tx.amount_sol), Style::default().fg(Color::Yellow)),
+                        ]),
+                    ]));
                 }
             }
         }

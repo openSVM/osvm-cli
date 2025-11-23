@@ -319,7 +319,7 @@ impl ElfWriter {
         let ehdr_size = 64usize;
         let phdr_size = 56usize;
         let shdr_size = 64usize;
-        let num_phdrs = 3usize;  // PT_LOAD for .text, PT_LOAD for dynamic sections, PT_DYNAMIC
+        let num_phdrs = 4usize;  // PT_LOAD for .text, PT_LOAD for .dynamic, PT_LOAD for dynamic sections, PT_DYNAMIC
         let num_sections = 9usize;  // NULL, .text, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
 
         let text_offset = 0x1000usize;
@@ -394,11 +394,14 @@ impl ElfWriter {
         // PT_LOAD #1: .text only (like Solana's layout)
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
 
-        // PT_LOAD #2: Dynamic sections (.dynsym, .dynstr, .rel.dyn) in separate segment
+        // PT_LOAD #2: .dynamic section (must be covered by a PT_LOAD)
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynamic_offset, dynamic_vaddr, dynamic_size);
+
+        // PT_LOAD #3: Dynamic sections (.dynsym, .dynstr, .rel.dyn) in separate segment
         let dyn_sections_size = dynsym_size + dynstr_size + reldyn_size;
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
 
-        // PT_DYNAMIC: Just .dynamic section (needs 8-byte alignment, not page alignment)
+        // PT_DYNAMIC: Points to .dynamic section (needs 8-byte alignment, not page alignment)
         elf.extend_from_slice(&PT_DYNAMIC.to_le_bytes());
         elf.extend_from_slice(&(PF_R | PF_W).to_le_bytes());
         elf.extend_from_slice(&(dynamic_offset as u64).to_le_bytes());
