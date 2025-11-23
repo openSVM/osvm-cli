@@ -4,6 +4,7 @@
 //! for programs compiled to sBPF.
 
 use super::sbpf_codegen::{SbpfInstruction, SbpfReg, memory, syscall_hash, SolanaSymbols};
+use super::SbpfVersion;
 
 /// Stack frame layout for OVSM functions
 ///
@@ -131,7 +132,7 @@ impl HeapAllocator {
         instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R2 as u8, 0));
 
         // Call sol_alloc_free_
-        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash));
+        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash, SbpfVersion::V1));
 
         // Result is in R0
 
@@ -149,7 +150,7 @@ impl HeapAllocator {
         instrs.push(SbpfInstruction::alu64_imm(0xb0, SbpfReg::R2 as u8, 0));
 
         // Call sol_alloc_free_
-        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash));
+        instrs.push(SbpfInstruction::call_syscall(self.alloc_hash, SbpfVersion::V1));
 
         instrs
     }
@@ -217,14 +218,14 @@ impl StringRuntime {
     /// Generate memcpy call
     /// R1 = dst, R2 = src, R3 = len
     pub fn gen_memcpy(&self) -> Vec<SbpfInstruction> {
-        vec![SbpfInstruction::call_syscall(self.memcpy_hash)]
+        vec![SbpfInstruction::call_syscall(self.memcpy_hash, SbpfVersion::V1)]
     }
 
     /// Generate memcmp call
     /// R1 = s1, R2 = s2, R3 = len
     /// Returns comparison result in R0
     pub fn gen_memcmp(&self) -> Vec<SbpfInstruction> {
-        vec![SbpfInstruction::call_syscall(self.memcmp_hash)]
+        vec![SbpfInstruction::call_syscall(self.memcmp_hash, SbpfVersion::V1)]
     }
 }
 

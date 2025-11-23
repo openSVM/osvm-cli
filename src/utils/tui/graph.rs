@@ -1383,7 +1383,7 @@ impl WalletGraph {
                             else { 2.0 + (total_degree as f64).sqrt() * 0.5 };
                         let radius = base_radius.min(6.0); // Cap maximum size
 
-                        // Color intensity based on activity
+                        // Color determination with cluster support
                         let color = if is_selected {
                             Color::White  // Selected node
                         } else if is_mixer {
@@ -1392,6 +1392,9 @@ impl WalletGraph {
                             Color::Yellow  // Search match
                         } else if idx == 0 {
                             Color::Magenta  // Target wallet
+                        } else if let Some((r, g, b)) = self.get_cluster_color(&self.nodes[idx].0) {
+                            // Clustered wallet - use cluster color
+                            Color::Rgb(r, g, b)
                         } else {
                             // Use color based on flow direction
                             if in_degree > out_degree {

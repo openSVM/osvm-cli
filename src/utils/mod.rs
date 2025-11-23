@@ -28,6 +28,8 @@ pub mod crypto_security;
 pub mod forensics_config;
 /// Investigation database for persistent forensic tracking
 pub mod investigation_db;
+/// RocksDB snapshot storage for high-performance Solana queries
+pub mod snapshot_db;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
 /// Entity clustering for blockchain forensics

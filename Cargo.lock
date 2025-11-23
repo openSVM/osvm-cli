@@ -3879,6 +3879,7 @@ dependencies = [
  "glob",
  "libc",
  "libz-sys",
+ "lz4-sys",
 ]
 
 [[package]]
@@ -4805,6 +4806,7 @@ dependencies = [
  "dashmap",
  "futures-util",
  "hex",
+ "lazy_static",
  "lru",
  "proptest",
  "regex",

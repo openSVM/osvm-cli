@@ -49,6 +49,7 @@ solana-transaction-status = "3.0"
 # Data structures
 dashmap = "5.5"
 lru = "0.12"
+lazy_static = "1.4"
 
 # Time
 chrono = "0.4"

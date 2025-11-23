@@ -339,10 +339,18 @@ impl SbpfInstruction {
     }
 
     /// Call syscall (V2 uses src=0 for static syscalls)
-    pub fn call_syscall(hash: u32) -> Self {
-        // For V2, static syscalls use src=0 and hash in imm field
-        // src=0 indicates this is a static syscall, not a relative jump
-        Self::new(class::JMP | jmp::CALL, 0, 0, 0, hash as i32)
+    /// Call syscall - version-aware encoding
+    pub fn call_syscall(hash: u32, sbpf_version: super::SbpfVersion) -> Self {
+        match sbpf_version {
+            super::SbpfVersion::V1 => {
+                // V1: Use imm=-1, actual hash will be patched via relocations
+                Self::new(class::JMP | jmp::CALL, 0, 0, 0, -1)
+            }
+            super::SbpfVersion::V2 => {
+                // V2: Static syscalls use src=0 and hash in imm field
+                Self::new(class::JMP | jmp::CALL, 0, 0, 0, hash as i32)
+            }
+        }
     }
 
     /// Call internal function (relative offset)
@@ -666,10 +674,12 @@ pub struct SbpfCodegen {
     string_offsets: Vec<usize>,
     /// Syscall call sites for relocation
     pub syscall_sites: Vec<SyscallCallSite>,
+    /// SBPF version to generate
+    sbpf_version: super::SbpfVersion,
 }
 
 impl SbpfCodegen {
-    pub fn new() -> Self {
+    pub fn new(sbpf_version: super::SbpfVersion) -> Self {
         Self {
             instructions: Vec::new(),
             labels: HashMap::new(),
@@ -679,6 +689,7 @@ impl SbpfCodegen {
             rodata: Vec::new(),
             string_offsets: Vec::new(),
             syscall_sites: Vec::new(),
+            sbpf_version,
         }
     }
 
@@ -1081,11 +1092,10 @@ impl SbpfCodegen {
     /// Emit a syscall and record its location for relocation
     fn emit_syscall(&mut self, name: &str) {
         let offset = self.current_offset_bytes();
-        // For now, directly use the hash instead of relocation
-        // This avoids the complex ELF dynamic linking issues
+        // Use version-aware syscall encoding
         let hash = self.get_syscall_hash(name);
-        self.emit(SbpfInstruction::call_syscall(hash));
-        // Still record for potential future use
+        self.emit(SbpfInstruction::call_syscall(hash, self.sbpf_version));
+        // Record call sites for V1 relocations
         self.syscall_sites.push(SyscallCallSite {
             offset,
             name: name.to_string(),
@@ -1143,7 +1153,7 @@ impl SbpfCodegen {
 
 impl Default for SbpfCodegen {
     fn default() -> Self {
-        Self::new()
+        Self::new(super::SbpfVersion::V1)
     }
 }
 

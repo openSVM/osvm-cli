@@ -2208,6 +2208,36 @@ impl OsvmApp {
                 ),
             ]));
 
+            // Entity clustering info
+            if !graph.entity_clusters.is_empty() {
+                let total_clustered: usize = graph.entity_clusters.iter()
+                    .map(|c| c.wallet_addresses.len())
+                    .sum();
+
+                lines.push(Line::from(vec![
+                    Span::styled(" ", Style::default()),
+                    Span::styled(
+                        format!("🔗 {} entity clusters ({} wallets coordinated)",
+                            graph.entity_clusters.len(), total_clustered),
+                        Style::default().fg(Color::LightMagenta).add_modifier(Modifier::BOLD)
+                    ),
+                ]));
+
+                // Show top cluster if significant
+                if let Some(largest) = graph.entity_clusters.iter().max_by_key(|c| c.wallet_addresses.len()) {
+                    if largest.wallet_addresses.len() >= 3 {
+                        lines.push(Line::from(vec![
+                            Span::styled("   ", Style::default()),
+                            Span::styled(
+                                format!("Largest: {} wallets, {:.0}% confidence",
+                                    largest.wallet_addresses.len(), largest.confidence * 100.0),
+                                Style::default().fg(Color::DarkGray)
+                            ),
+                        ]));
+                    }
+                }
+            }
+
             // Investigation progress
             let progress_pct = if self.wallets_explored > 0 {
                 (self.wallets_explored as f64 / (self.wallets_explored + 10) as f64 * 100.0).min(100.0)

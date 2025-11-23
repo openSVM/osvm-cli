@@ -357,6 +357,11 @@ impl LispEvaluator {
                     "http-get" => self.eval_http_get(args),
                     "http-post" => self.eval_http_post(args),
                     "json-rpc" => self.eval_json_rpc(args),
+                    // Streaming operations (real-time blockchain events)
+                    "stream-connect" => crate::runtime::streaming::stream_connect(args),
+                    "stream-poll" => crate::runtime::streaming::stream_poll(args),
+                    "stream-wait" => crate::runtime::streaming::stream_wait(args),
+                    "stream-close" => crate::runtime::streaming::stream_close(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),

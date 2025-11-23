@@ -127,7 +127,7 @@ impl Compiler {
         }
 
         // Phase 5: Generate sBPF
-        let mut codegen = SbpfCodegen::new();
+        let mut codegen = SbpfCodegen::new(self.options.sbpf_version);
         let sbpf_program = codegen.generate(&ir_program)?;
 
         // Phase 6: Verify
@@ -195,7 +195,7 @@ impl Compiler {
             optimizer.optimize(&mut ir_program);
         }
 
-        let mut codegen = SbpfCodegen::new();
+        let mut codegen = SbpfCodegen::new(self.options.sbpf_version);
         let sbpf_program = codegen.generate(&ir_program)?;
 
         // Verify
