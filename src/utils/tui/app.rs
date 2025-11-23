@@ -277,6 +277,56 @@ impl OsvmApp {
         Arc::clone(&self.live_transactions)
     }
 
+    /// Start background thread to poll RPC for real-time network stats
+    pub fn start_network_stats_polling(&self, rpc_url: String) {
+        let stats_handle = Arc::clone(&self.network_stats);
+        let _tx_handle = Arc::clone(&self.live_transactions);
+
+        std::thread::spawn(move || {
+            use solana_client::rpc_client::RpcClient;
+            use solana_commitment_config::CommitmentConfig;
+
+            let client = RpcClient::new_with_commitment(rpc_url, CommitmentConfig::confirmed());
+
+            loop {
+                // Fetch network stats
+                let mut updated_stats = NetworkStats::default();
+
+                if let Ok(slot) = client.get_slot() {
+                    updated_stats.current_slot = slot;
+                }
+
+                if let Ok(epoch_info) = client.get_epoch_info() {
+                    updated_stats.current_epoch = epoch_info.epoch;
+                }
+
+                if let Ok(perf_samples) = client.get_recent_performance_samples(Some(1)) {
+                    if let Some(sample) = perf_samples.first() {
+                        updated_stats.tps = sample.num_transactions as f64 / sample.sample_period_secs as f64;
+                        updated_stats.block_time_ms = ((sample.sample_period_secs as u64 * 1000) / sample.num_slots.max(1) as u64);
+                        updated_stats.total_transactions = sample.num_transactions;
+                    }
+                }
+
+                if let Ok(vote_accounts) = client.get_vote_accounts() {
+                    updated_stats.active_validators = vote_accounts.current.len();
+                }
+
+                updated_stats.health = if client.get_health().is_ok() {
+                    "ok".to_string()
+                } else {
+                    "error".to_string()
+                };
+
+                // Update shared state
+                *stats_handle.lock().unwrap() = updated_stats;
+
+                // Sleep 5 seconds before next poll
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        });
+    }
+
     pub fn set_status(&self, status: &str) {
         *self.status.lock().unwrap() = status.to_string();
     }
