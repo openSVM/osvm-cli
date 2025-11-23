@@ -24,6 +24,8 @@ pub mod agent_cli;
 pub mod color;
 /// Cryptographic security utilities for key validation and secure storage
 pub mod crypto_security;
+/// Forensics configuration for blockchain analysis thresholds
+pub mod forensics_config;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
 /// Error boundary utilities for secure error handling and recovery

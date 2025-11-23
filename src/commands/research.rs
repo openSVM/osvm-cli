@@ -559,9 +559,9 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     let mut app = OsvmApp::new(wallet.to_string());
 
     // Set RPC URL for live blockchain queries (needed for transaction search)
-    // Default to public Solana mainnet (or use SOLANA_RPC_URL env var to override)
+    // Use OSVM proxy RPC endpoint (faster and more reliable than public mainnet)
     let rpc_url = std::env::var("SOLANA_RPC_URL")
-        .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
+        .unwrap_or_else(|_| "https://osvm.ai/api/proxy/rpc".to_string());
     app.rpc_url = Some(rpc_url);
 
     // (No network stats polling - we show wallet-specific analytics instead)

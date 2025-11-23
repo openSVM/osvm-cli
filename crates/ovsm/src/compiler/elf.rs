@@ -27,8 +27,9 @@ const ET_DYN: u16 = 3;
 /// ELF machine: SBF (Solana BPF v2)
 const EM_SBF: u16 = 263; // 0x107
 
-/// ELF flags - use 0x20 for SBPFv2 (on-chain compatibility)
-const EF_SBF_V2: u32 = 0x20;
+/// ELF flags for SBPF versions
+const EF_SBF_V1: u32 = 0x0;   // V1 with relocations
+const EF_SBF_V2: u32 = 0x20;  // V2 with static syscalls
 
 /// Section header types
 const SHT_NULL: u32 = 0;
@@ -121,7 +122,7 @@ impl ElfWriter {
     }
 
     /// Write sBPF program to proper Solana ELF format
-    pub fn write(&mut self, program: &[SbpfInstruction], _debug_info: bool) -> Result<Vec<u8>> {
+    pub fn write(&mut self, program: &[SbpfInstruction], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
         // Encode instructions
         let mut text_section: Vec<u8> = Vec::new();
         for instr in program {
@@ -192,7 +193,12 @@ impl ElfWriter {
         elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // e_entry
         elf.extend_from_slice(&(phdr_offset as u64).to_le_bytes());
         elf.extend_from_slice(&(shdr_offset as u64).to_le_bytes());
-        elf.extend_from_slice(&EF_SBF_V2.to_le_bytes()); // e_flags
+        // Use appropriate flags based on SBPF version
+        let ef_flags = match sbpf_version {
+            super::SbpfVersion::V1 => EF_SBF_V1,
+            super::SbpfVersion::V2 => EF_SBF_V2,
+        };
+        elf.extend_from_slice(&ef_flags.to_le_bytes()); // e_flags
         elf.extend_from_slice(&(ehdr_size as u16).to_le_bytes());
         elf.extend_from_slice(&(phdr_size as u16).to_le_bytes());
         elf.extend_from_slice(&(num_phdrs as u16).to_le_bytes());
@@ -262,9 +268,9 @@ impl ElfWriter {
     }
 
     /// Write sBPF program with syscall support (dynamic linking)
-    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], _debug_info: bool) -> Result<Vec<u8>> {
+    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
         if syscalls.is_empty() {
-            return self.write(program, _debug_info);
+            return self.write(program, _debug_info, sbpf_version);
         }
 
         // Encode instructions
@@ -319,7 +325,7 @@ impl ElfWriter {
         let ehdr_size = 64usize;
         let phdr_size = 56usize;
         let shdr_size = 64usize;
-        let num_phdrs = 4usize;  // PT_LOAD for .text, PT_LOAD for .dynamic, PT_LOAD for dynamic sections, PT_DYNAMIC
+        let num_phdrs = 3usize;  // PT_LOAD (.text), PT_LOAD (dynamic sections), PT_DYNAMIC
         let num_sections = 9usize;  // NULL, .text, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
 
         let text_offset = 0x120usize;  // Match Solana's working ELFs
@@ -328,7 +334,7 @@ impl ElfWriter {
         // .dynamic section (11 entries * 16 bytes = 176 bytes)
         // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
         let dynamic_offset = text_offset + text_size;
-        let dynamic_size = 10 * 16; // 10 entries now (removed DT_TEXTREL)
+        let dynamic_size = 11 * 16; // 11 entries (includes DT_TEXTREL required by Solana)
 
         // .dynsym section (NULL + N symbols * 24 bytes)
         let dynsym_offset = dynamic_offset + dynamic_size;
@@ -382,7 +388,12 @@ impl ElfWriter {
         elf.extend_from_slice(&TEXT_VADDR.to_le_bytes()); // e_entry
         elf.extend_from_slice(&(ehdr_size as u64).to_le_bytes()); // e_phoff
         elf.extend_from_slice(&(shdr_offset as u64).to_le_bytes()); // e_shoff
-        elf.extend_from_slice(&EF_SBF_V2.to_le_bytes()); // e_flags
+        // Use appropriate flags based on SBPF version
+        let ef_flags = match sbpf_version {
+            super::SbpfVersion::V1 => EF_SBF_V1,
+            super::SbpfVersion::V2 => EF_SBF_V2,
+        };
+        elf.extend_from_slice(&ef_flags.to_le_bytes()); // e_flags
         elf.extend_from_slice(&(ehdr_size as u16).to_le_bytes());
         elf.extend_from_slice(&(phdr_size as u16).to_le_bytes());
         elf.extend_from_slice(&(num_phdrs as u16).to_le_bytes());
@@ -391,15 +402,13 @@ impl ElfWriter {
         elf.extend_from_slice(&((num_sections - 1) as u16).to_le_bytes()); // e_shstrndx
 
         // ==================== Program Headers ====================
-        // PT_LOAD #1: .text only (like Solana's layout)
+        // PT_LOAD #1: .text only (R+X)
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
 
-        // PT_LOAD #2: .dynamic section (must be covered by a PT_LOAD)
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynamic_offset, dynamic_vaddr, dynamic_size);
-
-        // PT_LOAD #3: Dynamic sections (.dynsym, .dynstr, .rel.dyn) in separate segment
+        // PT_LOAD #2: Dynamic sections (.dynsym, .dynstr, .rel.dyn) - R+W like reference!
+        // This segment must be writable for relocation patching
         let dyn_sections_size = dynsym_size + dynstr_size + reldyn_size;
-        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R, dynsym_offset, dynsym_vaddr, dyn_sections_size);
+        self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_W, dynsym_offset, dynsym_vaddr, dyn_sections_size);
 
         // PT_DYNAMIC: Points to .dynamic section (needs 8-byte alignment, not page alignment)
         elf.extend_from_slice(&PT_DYNAMIC.to_le_bytes());
@@ -448,7 +457,10 @@ impl ElfWriter {
         // DT_STRSZ
         elf.extend_from_slice(&DT_STRSZ.to_le_bytes());
         elf.extend_from_slice(&(dynstr_size as u64).to_le_bytes());
-        // DT_NULL (no need for DT_TEXTREL - we have DT_FLAGS with DF_TEXTREL)
+        // DT_TEXTREL (required by Solana loader, even with DF_TEXTREL in FLAGS)
+        elf.extend_from_slice(&DT_TEXTREL.to_le_bytes());
+        elf.extend_from_slice(&0u64.to_le_bytes());
+        // DT_NULL
         elf.extend_from_slice(&DT_NULL.to_le_bytes());
         elf.extend_from_slice(&0u64.to_le_bytes());
 

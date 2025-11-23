@@ -994,3 +994,118 @@ osvm ovsm repl
 - `crates/ovsm/src/parser/sexpr_parser.rs` - S-expression parser
 - `crates/ovsm/src/runtime/lisp_evaluator.rs` - OVSM LISP evaluator
 - why BUILD  release? WE DEBUGGING
+---
+
+## 🚨 CURRENT KNOWN ISSUES & TECHNICAL DEBT
+
+### TUI Dashboard Issues (NEEDS IMMEDIATE ATTENTION)
+
+**Problem:** The TUI dashboard (research mode `--tui`) is not production-ready and lacks actionable insights.
+
+**Critical Issues:**
+
+1. **AI Insights Panel is Broken** (`src/utils/tui/app.rs:2132`)
+   - Currently just displays empty strings from `self.ai_insights` Vec
+   - Vec is never populated by research agent
+   - Shows "Analyzing patterns..." forever with no actual analysis
+   - **Fix Required:** Replace with real-time automated analysis:
+     - Network complexity metrics (edges/nodes ratio)
+     - Whale detection (>100 SOL inflows/outflows)
+     - Wallet behavior patterns (sink/source/throughput)
+     - Token diversity analysis
+     - Risk scoring based on graph structure
+     - Mixer detection alerts
+
+2. **Graph Visualization Recently Fixed** (`src/utils/tui/graph.rs`)
+   - ✅ FIXED: Columnar layout with inflows left, outflows right
+   - ✅ FIXED: Abbreviated addresses (first 3 + last 3 chars)
+   - ✅ FIXED: All nodes get positions for off-screen edge rendering
+   - ✅ FIXED: Edges draw to off-viewport nodes
+   - **Remaining:** Need better node label positioning at high zoom
+
+3. **MCP Compression Flag** (`src/services/research_agent.rs`)
+   - ✅ FIXED: All `get_account_transfers` calls now include `compress: true`
+   - Fixed lines: 1462, 1544, 1897, 1915
+   - Ensures MCP server returns compressed data to avoid huge JSON responses
+
+4. **Dashboard Widgets Need Enhancement**
+   - Token Holdings widget shows only top 2 tokens (should show top 5-10)
+   - Transfer Activity needs time-series visualization
+   - SOL Flow needs trend arrows and historical comparison
+   - No anomaly detection or pattern recognition
+
+### Implementation Priority for Dashboard
+
+**HIGH PRIORITY (Do This First):**
+```rust
+// src/utils/tui/app.rs - render_ai_insights()
+// Replace lines 2132-2177 with intelligent real-time analysis
+
+fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
+    // Calculate insights from actual graph data:
+    let graph = self.wallet_graph.lock().ok();
+    let transfers = self.transfer_events.lock().ok();
+    
+    // 1. Network Complexity: edges/nodes ratio
+    //    - > 5.0 = "HIGHLY CONNECTED - Potential mixer"
+    //    - 2.0-5.0 = "NORMAL - Typical patterns"
+    //    - < 2.0 = "LOW ACTIVITY"
+    
+    // 2. Whale Detection: Check self.total_sol_in/out
+    //    - > 100 SOL = "WHALE ACTIVITY DETECTED"
+    
+    // 3. Flow Pattern: inflows vs outflows ratio
+    //    - > 10 = "SINK WALLET - Accumulating funds"
+    //    - < 0.1 = "SOURCE WALLET - Distributing funds"
+    //    - ~1.0 = "THROUGHPUT - Pass-through wallet"
+    
+    // 4. Token Diversity: token_volumes count
+    //    - > 20 = "PORTFOLIO - Diversified"
+    //    - 5-20 = "TRADER - Active"
+    //    - 1-5 = "FOCUSED"
+    
+    // 5. Risk Score: Composite metric
+    //    - HIGH: complexity > 8.0 OR nodes > 100
+    //    - MEDIUM: complexity > 4.0 OR nodes > 50
+    //    - LOW: Otherwise
+    
+    // All insights should be color-coded and update in real-time
+}
+```
+
+**MEDIUM PRIORITY:**
+- Add time-series sparklines for transfer activity
+- Implement anomaly detection (unusual transfer sizes/patterns)
+- Add wallet labeling (DEX, CEX, known programs)
+- Show top counterparty wallets
+
+**LOW PRIORITY:**
+- Export functionality enhancement
+- Historical comparison features
+- Advanced filtering UI
+
+### Graph Layout Details (ALREADY FIXED)
+
+**Current Implementation:**
+- Columnar layout: `-X` = inflows, `+X` = outflows
+- Nodes sorted by transfer amount within columns
+- Spacing: 60 units between columns, 18 units between nodes
+- Center node always at (0,0), selected node becomes new center
+- All nodes get positions (no filtering) for edge rendering
+- Abbreviated labels: `APKhW` from `APKEC3RbiKmsDsg8YJc3b37ZnMZ13CyTVLG47GbSE5hW`
+
+### Testing the Dashboard
+
+```bash
+# Run research mode with TUI
+./target/release/osvm research <WALLET_ADDRESS> --tui
+
+# What to check:
+# 1. Does AI Insights show real analysis? (NO - needs fix)
+# 2. Do edges render to off-screen nodes? (YES - fixed)
+# 3. Is layout columnar with proper flow? (YES - fixed)
+# 4. Are addresses abbreviated? (YES - fixed)
+# 5. Are insights actionable? (NO - needs fix)
+```
+
+---

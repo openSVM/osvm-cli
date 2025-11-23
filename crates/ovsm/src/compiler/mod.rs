@@ -40,6 +40,15 @@ pub use debug::{dump_ir, disassemble_sbpf, validate_sbpf, debug_compile, extract
 
 use crate::{SExprScanner as Scanner, SExprParser as Parser, Program, Result, Error};
 
+/// SBPF bytecode version
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SbpfVersion {
+    /// V1 with relocations (devnet, current production)
+    V1,
+    /// V2 with static syscalls (future)
+    V2,
+}
+
 /// Compilation options
 #[derive(Debug, Clone)]
 pub struct CompileOptions {
@@ -51,6 +60,8 @@ pub struct CompileOptions {
     pub debug_info: bool,
     /// Generate source map
     pub source_map: bool,
+    /// SBPF version to generate (V1 with relocations or V2 with static calls)
+    pub sbpf_version: SbpfVersion,
 }
 
 impl Default for CompileOptions {
@@ -60,6 +71,7 @@ impl Default for CompileOptions {
             compute_budget: 200_000,
             debug_info: false,
             source_map: false,
+            sbpf_version: SbpfVersion::V1, // Default to V1 for current network compatibility
         }
     }
 }
@@ -144,8 +156,17 @@ impl Compiler {
             })
             .collect();
 
-        // Since we now embed syscall hashes directly, we don't need dynamic linking
-        let elf_bytes = elf_writer.write(&sbpf_program, self.options.debug_info)?;
+        // V1 requires relocations, V2 embeds syscall hashes statically
+        let elf_bytes = match self.options.sbpf_version {
+            SbpfVersion::V1 => {
+                // V1: Must use write_with_syscalls to generate relocations
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info, self.options.sbpf_version)?
+            }
+            SbpfVersion::V2 => {
+                // V2: No relocations needed, syscalls are embedded
+                elf_writer.write(&sbpf_program, self.options.debug_info, self.options.sbpf_version)?
+            }
+        };
 
         // Combine warnings
         let mut warnings = type_checker.warnings().to_vec();
@@ -191,8 +212,27 @@ impl Compiler {
             )));
         }
 
+        // Convert syscall call sites to ELF relocation format
+        let syscall_refs: Vec<crate::compiler::elf::SyscallRef> = codegen.syscall_sites.iter()
+            .map(|site| crate::compiler::elf::SyscallRef {
+                offset: site.offset,
+                name: site.name.clone(),
+            })
+            .collect();
+
         let mut elf_writer = ElfWriter::new();
-        let elf_bytes = elf_writer.write(&sbpf_program, self.options.debug_info)?;
+
+        // V1 requires relocations, V2 embeds syscall hashes statically
+        let elf_bytes = match self.options.sbpf_version {
+            SbpfVersion::V1 => {
+                // V1: Must use write_with_syscalls to generate relocations
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info, self.options.sbpf_version)?
+            }
+            SbpfVersion::V2 => {
+                // V2: No relocations needed, syscalls are embedded
+                elf_writer.write(&sbpf_program, self.options.debug_info, self.options.sbpf_version)?
+            }
+        };
 
         let mut warnings = type_checker.warnings().to_vec();
         warnings.extend(verification.warnings.clone());

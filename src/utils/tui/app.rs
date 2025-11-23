@@ -591,7 +591,14 @@ impl OsvmApp {
             eprintln!("🔍 Detected potential transaction signature: {} chars", query.len());
 
             if let Some(ref rpc_url) = self.rpc_url {
-                eprintln!("🌐 Fetching from RPC: {}", rpc_url);
+                // Extract domain from URL for cleaner logging
+                let domain = rpc_url
+                    .strip_prefix("https://")
+                    .or_else(|| rpc_url.strip_prefix("http://"))
+                    .and_then(|s| s.split('/').next())
+                    .unwrap_or(rpc_url);
+                eprintln!("🌐 Fetching from RPC: {}", domain);
+
                 match self.fetch_transaction_from_blockchain(query, rpc_url) {
                     Some(tx_match) => {
                         eprintln!("✅ Successfully fetched transaction from blockchain");
@@ -2123,8 +2130,6 @@ impl OsvmApp {
 
     /// Render AI insights panel
     fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
-        let insights = self.ai_insights.lock().ok();
-
         let block = Block::default()
             .title(Span::styled(" 💡 AI Insights ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)))
             .borders(Borders::ALL)
@@ -2136,36 +2141,98 @@ impl OsvmApp {
 
         let mut lines = Vec::new();
 
-        if let Some(insights_vec) = insights {
-            if insights_vec.is_empty() {
-                lines.push(Line::from(Span::styled("  Analyzing patterns...", Style::default().fg(Color::DarkGray))));
-            } else {
-                for (i, insight) in insights_vec.iter().rev().take((inner_area.height as usize).saturating_sub(1)).enumerate() {
-                    let color = if insight.contains("suspicious") || insight.contains("risk") {
-                        Color::Red
-                    } else if insight.contains("whale") || insight.contains("exchange") {
-                        Color::Yellow
-                    } else {
-                        Color::Cyan
-                    };
+        // Generate real-time automated analysis with explainable insights
+        if let Ok(graph) = self.wallet_graph.lock() {
+            // Use new explainable risk scoring system
+            let risk_explanation = graph.calculate_explainable_risk();
 
-                    let truncated = if insight.len() > (inner_area.width as usize).saturating_sub(4) {
-                        format!("{}…", &insight[..(inner_area.width as usize).saturating_sub(5)])
-                    } else {
-                        insight.clone()
-                    };
+            // Display critical alerts first (highest priority)
+            for alert in &risk_explanation.alerts {
+                let color = if alert.contains("CRITICAL") || alert.contains("🚨") || alert.contains("🔴") {
+                    Color::Red
+                } else if alert.contains("RAPID") || alert.contains("⚡") {
+                    Color::LightRed
+                } else if alert.contains("CIRCULAR") || alert.contains("🔄") {
+                    Color::Yellow
+                } else {
+                    Color::LightYellow
+                };
 
-                    lines.push(Line::from(vec![
-                        Span::styled(" • ", Style::default().fg(color)),
-                        Span::styled(truncated, Style::default().fg(color)),
-                    ]));
-                }
+                lines.push(Line::from(vec![
+                    Span::styled(" ", Style::default()),
+                    Span::styled(alert.clone(), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                ]));
             }
+
+            // Show overall risk score with level indicator
+            let (risk_color, risk_icon) = match risk_explanation.level {
+                crate::utils::tui::graph::RiskLevel::Critical => (Color::Red, "🔴"),
+                crate::utils::tui::graph::RiskLevel::High => (Color::LightRed, "🟠"),
+                crate::utils::tui::graph::RiskLevel::Medium => (Color::Yellow, "🟡"),
+                crate::utils::tui::graph::RiskLevel::Low => (Color::Green, "🟢"),
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    format!("{} Risk: {:.0}/100 ({:?})", risk_icon, risk_explanation.score, risk_explanation.level),
+                    Style::default().fg(risk_color).add_modifier(Modifier::BOLD)
+                ),
+            ]));
+
+            // Display detailed reasons (explanations)
+            for reason in risk_explanation.reasons.iter().take(5) {
+                lines.push(Line::from(vec![
+                    Span::styled("   • ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(reason.clone(), Style::default().fg(Color::Gray)),
+                ]));
+            }
+
+            // Wallet behavior classification for target
+            let behavior = graph.classify_wallet_behavior(0);
+            let (behavior_icon, behavior_color) = match behavior {
+                crate::utils::tui::graph::WalletBehaviorType::Bot => ("🤖", Color::Yellow),
+                crate::utils::tui::graph::WalletBehaviorType::Exchange => ("🏦", Color::Cyan),
+                crate::utils::tui::graph::WalletBehaviorType::Trader => ("📈", Color::Green),
+                crate::utils::tui::graph::WalletBehaviorType::Mixer => ("🌀", Color::Red),
+                crate::utils::tui::graph::WalletBehaviorType::EOA => ("👤", Color::Blue),
+                crate::utils::tui::graph::WalletBehaviorType::Contract => ("📜", Color::Magenta),
+                crate::utils::tui::graph::WalletBehaviorType::Dormant => ("💤", Color::DarkGray),
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    format!("{} Behavior: {:?}", behavior_icon, behavior),
+                    Style::default().fg(behavior_color)
+                ),
+            ]));
+
+            // Investigation progress
+            let progress_pct = if self.wallets_explored > 0 {
+                (self.wallets_explored as f64 / (self.wallets_explored + 10) as f64 * 100.0).min(100.0)
+            } else {
+                0.0
+            };
+            let elapsed = self.start_time.elapsed().as_secs();
+            lines.push(Line::from(vec![
+                Span::styled(" ", Style::default()),
+                Span::styled(
+                    format!("📊 {:.0}% | {} wallets | {} nodes | {}s",
+                        progress_pct, self.wallets_explored, graph.node_count(), elapsed),
+                    Style::default().fg(Color::DarkGray)
+                ),
+            ]));
         } else {
-            lines.push(Line::from(Span::styled("  Initializing...", Style::default().fg(Color::DarkGray))));
+            lines.push(Line::from(Span::styled("  Initializing graph analysis...", Style::default().fg(Color::DarkGray))));
         }
 
-        let widget = Paragraph::new(lines);
+        // Fill remaining space if needed
+        while lines.len() < (inner_area.height as usize).saturating_sub(1) {
+            lines.push(Line::from(""));
+        }
+
+        let widget = Paragraph::new(lines).wrap(Wrap { trim: false });
         f.render_widget(widget, inner_area);
     }
 
