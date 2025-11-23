@@ -162,6 +162,10 @@ pub struct WalletGraph {
     pub wallet_cache: HashMap<String, WalletCacheEntry>,
     /// Path-connected nodes (only nodes with paths to target)
     pub connected_nodes: std::collections::HashSet<usize>,
+    /// Entity clusters (wallets controlled by same entity)
+    pub entity_clusters: Vec<crate::utils::entity_clustering::EntityCluster>,
+    /// Wallet to cluster ID mapping
+    pub wallet_to_cluster: HashMap<String, usize>,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -249,6 +253,8 @@ impl WalletGraph {
             toast_timer: 0,
             wallet_cache: HashMap::new(),
             connected_nodes,
+            entity_clusters: Vec::new(),
+            wallet_to_cluster: HashMap::new(),
         }
     }
 
@@ -1999,6 +2005,63 @@ impl WalletGraph {
             reasons,
             alerts,
         }
+    }
+
+    /// Detect entity clusters in the wallet graph
+    pub fn detect_entity_clusters(&mut self) {
+        use crate::utils::entity_clustering::{EntityClusterer, WalletMetadata, TransferMetadata};
+
+        // Build metadata from graph
+        let wallets: Vec<(String, WalletMetadata)> = self.nodes.iter().map(|(addr, node)| {
+            (addr.clone(), WalletMetadata {
+                address: addr.clone(),
+                first_seen: None, // TODO: extract from timestamps
+                transaction_count: self.connections.iter().filter(|(from, to, _)| {
+                    self.nodes[*from].0 == *addr || self.nodes[*to].0 == *addr
+                }).count(),
+                behavior_type: Some(format!("{:?}", node.node_type)),
+            })
+        }).collect();
+
+        let connections: Vec<(usize, usize, TransferMetadata)> = self.connections.iter().map(|(from, to, label)| {
+            let timestamp = label.timestamp.as_ref()
+                .and_then(|ts| ts.parse::<u64>().ok());
+
+            // Heuristic for initial funding: first transfer or large amount
+            let is_initial_funding = label.amount > 1.0; // >1 SOL
+
+            (*from, *to, TransferMetadata {
+                amount: label.amount,
+                token: label.token.clone(),
+                timestamp,
+                is_initial_funding,
+                gas_price: None,
+            })
+        }).collect();
+
+        // Run clustering
+        let clusterer = EntityClusterer::default();
+        self.entity_clusters = clusterer.detect_clusters(&wallets, &connections);
+
+        // Build wallet-to-cluster mapping
+        self.wallet_to_cluster.clear();
+        for cluster in &self.entity_clusters {
+            for wallet in &cluster.wallet_addresses {
+                self.wallet_to_cluster.insert(wallet.clone(), cluster.cluster_id);
+            }
+        }
+    }
+
+    /// Get cluster info for a wallet
+    pub fn get_wallet_cluster(&self, wallet: &str) -> Option<&crate::utils::entity_clustering::EntityCluster> {
+        self.wallet_to_cluster.get(wallet)
+            .and_then(|cluster_id| self.entity_clusters.get(*cluster_id))
+    }
+
+    /// Get cluster color for visualization
+    pub fn get_cluster_color(&self, wallet: &str) -> Option<(u8, u8, u8)> {
+        self.wallet_to_cluster.get(wallet)
+            .map(|cluster_id| crate::utils::entity_clustering::EntityClusterer::get_cluster_color(*cluster_id))
     }
 
 }

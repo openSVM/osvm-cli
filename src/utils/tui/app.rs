@@ -2244,20 +2244,58 @@ impl OsvmApp {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
         let filename = format!("investigation_{}_{}.json", self.target_wallet[..8].to_string(), timestamp);
 
-        let (nodes, edges) = self.wallet_graph.lock()
-            .map(|g| (g.node_count(), g.edge_count()))
-            .unwrap_or((0, 0));
+        let (nodes, edges, risk_analysis, behavior) = self.wallet_graph.lock()
+            .map(|g| {
+                let risk = g.calculate_explainable_risk();
+                let behavior_type = g.classify_wallet_behavior(0);
+                (g.node_count(), g.edge_count(), risk, behavior_type)
+            })
+            .unwrap_or((0, 0, crate::utils::tui::graph::RiskExplanation {
+                score: 0.0,
+                level: crate::utils::tui::graph::RiskLevel::Low,
+                reasons: vec![],
+                alerts: vec![],
+            }, crate::utils::tui::graph::WalletBehaviorType::EOA));
+
+        // Save to database
+        if let Ok(mut db) = crate::utils::investigation_db::InvestigationDB::open() {
+            let inv = crate::utils::investigation_db::Investigation {
+                id: None,
+                wallet_address: self.target_wallet.clone(),
+                started_at: chrono::Utc::now() - chrono::Duration::seconds(self.start_time.elapsed().as_secs() as i64),
+                completed_at: Some(chrono::Utc::now()),
+                risk_score: risk_analysis.score,
+                risk_level: format!("{:?}", risk_analysis.level),
+                behavior_type: format!("{:?}", behavior),
+                node_count: nodes,
+                edge_count: edges,
+                depth_reached: self.depth_reached,
+                alerts: risk_analysis.alerts.clone(),
+                reasons: risk_analysis.reasons.clone(),
+                notes: Some(format!("API Calls: {}, SOL In: {:.2}, SOL Out: {:.2}",
+                    self.api_calls, self.total_sol_in, self.total_sol_out)),
+            };
+            let _ = db.save_investigation(&inv); // Ignore errors for now
+        }
 
         let export_data = serde_json::json!({
             "wallet": self.target_wallet,
             "timestamp": timestamp.to_string(),
             "duration_secs": self.start_time.elapsed().as_secs(),
+            "risk_analysis": {
+                "score": risk_analysis.score,
+                "level": format!("{:?}", risk_analysis.level),
+                "alerts": risk_analysis.alerts,
+                "reasons": risk_analysis.reasons,
+            },
+            "behavior_classification": format!("{:?}", behavior),
             "stats": {
                 "wallets_discovered": nodes,
                 "transfers_found": edges,
                 "depth_reached": self.depth_reached,
                 "total_sol_in": self.total_sol_in,
                 "total_sol_out": self.total_sol_out,
+                "api_calls": self.api_calls,
             },
             "insights": self.ai_insights.lock().ok().map(|i| i.clone()).unwrap_or_default(),
             "activity": self.agent_output.lock().ok().map(|a| a.clone()).unwrap_or_default(),

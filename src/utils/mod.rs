@@ -26,8 +26,12 @@ pub mod color;
 pub mod crypto_security;
 /// Forensics configuration for blockchain analysis thresholds
 pub mod forensics_config;
+/// Investigation database for persistent forensic tracking
+pub mod investigation_db;
 /// Dashboard utilities for interactive SVM monitoring
 pub mod dashboard;
+/// Entity clustering for blockchain forensics
+pub mod entity_clustering;
 /// Error boundary utilities for secure error handling and recovery
 pub mod error_boundary;
 /// Example command utilities for displaying usage examples
