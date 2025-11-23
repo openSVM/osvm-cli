@@ -100,6 +100,32 @@ pub struct OsvmApp {
     // Search results tab data
     pub search_results_data: Arc<Mutex<SearchResultsData>>,
     pub search_results_scroll: usize,
+    // Real-time network stats
+    pub network_stats: Arc<Mutex<NetworkStats>>,
+    pub live_transactions: Arc<Mutex<Vec<LiveTransaction>>>,
+    pub last_refresh: std::time::Instant,
+}
+
+/// Real-time network statistics
+#[derive(Clone, Debug, Default)]
+pub struct NetworkStats {
+    pub current_slot: u64,
+    pub current_epoch: u64,
+    pub tps: f64,
+    pub block_time_ms: u64,
+    pub total_transactions: u64,
+    pub active_validators: usize,
+    pub health: String,
+}
+
+/// Live transaction feed entry
+#[derive(Clone, Debug)]
+pub struct LiveTransaction {
+    pub signature: String,
+    pub timestamp: String,
+    pub amount_sol: f64,
+    pub success: bool,
+    pub tx_type: String, // "Transfer", "Swap", "NFT Mint", etc.
 }
 
 #[derive(Clone, Debug, Default)]
@@ -220,6 +246,9 @@ impl OsvmApp {
             search_error: None,
             search_results_data: Arc::new(Mutex::new(SearchResultsData::default())),
             search_results_scroll: 0,
+            network_stats: Arc::new(Mutex::new(NetworkStats::default())),
+            live_transactions: Arc::new(Mutex::new(Vec::new())),
+            last_refresh: std::time::Instant::now(),
         }
     }
 
@@ -992,23 +1021,25 @@ impl OsvmApp {
 
     /// btop-style dashboard with all panels visible
     fn render_dashboard(&mut self, f: &mut Frame, area: Rect) {
-        // Main vertical split: header bar, content, footer
+        // Main vertical split: header bar, network stats, content, footer
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),   // Header with tabs
+                Constraint::Length(5),   // Real-time network stats (NEW!)
                 Constraint::Min(0),      // Content
                 Constraint::Length(2),   // Status bar (btop style)
             ])
             .split(area);
 
         self.render_btop_header(f, main_chunks[0]);
+        self.render_network_stats_panel(f, main_chunks[1]);  // NEW!
 
         // Content area: left (50%) + right (50%)
         let content_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(main_chunks[1]);
+            .split(main_chunks[2]);
 
         // Left side: Activity feed + Mini graph
         let left_chunks = Layout::default()
@@ -1974,6 +2005,91 @@ impl OsvmApp {
         }
     }
 
+    /// Render real-time network statistics panel
+    fn render_network_stats_panel(&self, f: &mut Frame, area: Rect) {
+        let stats = self.network_stats.lock().unwrap();
+        
+        // Split into columns
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+            ])
+            .split(area);
+
+        // Slot & Epoch
+        let slot_text = vec![
+            Line::from(Span::styled(" 📍 NETWORK ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+            Line::from(vec![
+                Span::styled(" Slot: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", stats.current_slot), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled(" Epoch: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", stats.current_epoch), Style::default().fg(Color::Yellow)),
+            ]),
+        ];
+        let slot_widget = Paragraph::new(slot_text)
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        f.render_widget(slot_widget, chunks[0]);
+
+        // TPS
+        let tps_color = if stats.tps > 2000.0 { Color::Green } 
+                       else if stats.tps > 1000.0 { Color::Yellow } 
+                       else { Color::Red };
+        let tps_text = vec![
+            Line::from(Span::styled(" ⚡ PERFORMANCE ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+            Line::from(vec![
+                Span::styled(" TPS: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{:.0}", stats.tps), Style::default().fg(tps_color).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled(" Block: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}ms", stats.block_time_ms), Style::default().fg(Color::Cyan)),
+            ]),
+        ];
+        let tps_widget = Paragraph::new(tps_text)
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+        f.render_widget(tps_widget, chunks[1]);
+
+        // Transactions
+        let tx_text = vec![
+            Line::from(Span::styled(" 📊 ACTIVITY ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
+            Line::from(vec![
+                Span::styled(" Total TX: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", stats.total_transactions), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled(" Validators: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", stats.active_validators), Style::default().fg(Color::Green)),
+            ]),
+        ];
+        let tx_widget = Paragraph::new(tx_text)
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta)));
+        f.render_widget(tx_widget, chunks[2]);
+
+        // Health
+        let health_color = if stats.health == "ok" { Color::Green } else { Color::Red };
+        let health_status = stats.health.to_uppercase();
+        let refresh_secs = self.last_refresh.elapsed().as_secs();
+        let health_text = vec![
+            Line::from(Span::styled(" 🏥 HEALTH ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+            Line::from(vec![
+                Span::styled(" Status: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(health_status, Style::default().fg(health_color).add_modifier(Modifier::BOLD)),
+            ]),
+            Line::from(vec![
+                Span::styled(" Refresh: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}s ago", refresh_secs), Style::default().fg(Color::Cyan)),
+            ]),
+        ];
+        let health_widget = Paragraph::new(health_text)
+            .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Green)));
+        f.render_widget(health_widget, chunks[3]);
+    }
     /// Render Search Results Tab - shows actual findings from indexed data
     fn render_search_results_tab(&mut self, f: &mut Frame, area: Rect) {
         let results_data = self.search_results_data.lock().unwrap().clone();
