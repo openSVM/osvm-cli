@@ -48,8 +48,8 @@ pub struct StreamFilters {
     pub success_only: bool,
 }
 
-/// Global stream registry (stores active streams)
 lazy_static::lazy_static! {
+    /// Global stream registry (stores active streams)
     static ref STREAM_REGISTRY: Arc<Mutex<HashMap<String, StreamHandle>>> =
         Arc::new(Mutex::new(HashMap::new()));
 }
@@ -77,7 +77,7 @@ fn generate_stream_id() -> String {
 /// Returns: Stream ID string for use with other stream-* functions
 pub fn stream_connect(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::Runtime(
+        return Err(Error::runtime(
             "stream-connect requires at least URL argument".to_string(),
         ));
     }
@@ -85,7 +85,7 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
     // Extract URL
     let url = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::Runtime("stream-connect: URL must be a string".to_string())),
+        _ => return Err(Error::runtime("stream-connect: URL must be a string".to_string())),
     };
 
     // Parse keyword arguments
@@ -95,7 +95,7 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
         if let Value::String(key) = &args[i] {
             if key.starts_with(':') {
                 if i + 1 >= args.len() {
-                    return Err(Error::Runtime(format!(
+                    return Err(Error::runtime(format!(
                         "stream-connect: missing value for keyword argument {}",
                         key
                     )));
@@ -119,7 +119,7 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
                         filters.success_only = value.is_truthy();
                     }
                     _ => {
-                        return Err(Error::Runtime(format!(
+                        return Err(Error::runtime(format!(
                             "stream-connect: unknown keyword argument {}",
                             key
                         )))
@@ -164,12 +164,12 @@ pub fn stream_connect(args: &[Value]) -> Result<Value> {
 /// Returns: Array of event objects
 pub fn stream_poll(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::Runtime("stream-poll requires stream-id argument".to_string()));
+        return Err(Error::runtime("stream-poll requires stream-id argument".to_string()));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::Runtime("stream-poll: stream-id must be a string".to_string())),
+        _ => return Err(Error::runtime("stream-poll: stream-id must be a string".to_string())),
     };
 
     // Parse limit keyword argument
@@ -177,8 +177,10 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
     if args.len() >= 3 {
         if let Value::String(key) = &args[1] {
             if key == ":limit" {
-                if let Value::Number(n) = &args[2] {
-                    limit = *n as usize;
+                match &args[2] {
+                    Value::Int(n) => limit = *n as usize,
+                    Value::Float(f) => limit = *f as usize,
+                    _ => {}
                 }
             }
         }
@@ -190,7 +192,7 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
         registry
             .get(&stream_id)
             .cloned()
-            .ok_or_else(|| Error::Runtime(format!("stream-poll: stream not found: {}", stream_id)))?
+            .ok_or_else(|| Error::runtime(format!("stream-poll: stream not found: {}", stream_id)))?
     };
 
     // Poll HTTP endpoint
@@ -202,7 +204,7 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
         .map(|json_val| json_to_value(&json_val))
         .collect();
 
-    Ok(Value::Array(event_values))
+    Ok(Value::Array(Arc::new(event_values)))
 }
 
 /// Wait for next event (blocking with timeout)
@@ -216,12 +218,12 @@ pub fn stream_poll(args: &[Value]) -> Result<Value> {
 /// Returns: Event object or null if timeout
 pub fn stream_wait(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::Runtime("stream-wait requires stream-id argument".to_string()));
+        return Err(Error::runtime("stream-wait requires stream-id argument".to_string()));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::Runtime("stream-wait: stream-id must be a string".to_string())),
+        _ => return Err(Error::runtime("stream-wait: stream-id must be a string".to_string())),
     };
 
     // Parse timeout keyword argument
@@ -229,8 +231,10 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
     if args.len() >= 3 {
         if let Value::String(key) = &args[1] {
             if key == ":timeout" {
-                if let Value::Number(n) = &args[2] {
-                    timeout_secs = *n as u64;
+                match &args[2] {
+                    Value::Int(n) => timeout_secs = *n as u64,
+                    Value::Float(f) => timeout_secs = *f as u64,
+                    _ => {}
                 }
             }
         }
@@ -242,7 +246,7 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
         registry
             .get(&stream_id)
             .cloned()
-            .ok_or_else(|| Error::Runtime(format!("stream-wait: stream not found: {}", stream_id)))?
+            .ok_or_else(|| Error::runtime(format!("stream-wait: stream not found: {}", stream_id)))?
     };
 
     // Poll with retries until event or timeout
@@ -274,19 +278,19 @@ pub fn stream_wait(args: &[Value]) -> Result<Value> {
 /// Returns: true on success
 pub fn stream_close(args: &[Value]) -> Result<Value> {
     if args.is_empty() {
-        return Err(Error::Runtime("stream-close requires stream-id argument".to_string()));
+        return Err(Error::runtime("stream-close requires stream-id argument".to_string()));
     }
 
     let stream_id = match &args[0] {
         Value::String(s) => s.clone(),
-        _ => return Err(Error::Runtime("stream-close: stream-id must be a string".to_string())),
+        _ => return Err(Error::runtime("stream-close: stream-id must be a string".to_string())),
     };
 
     // Remove from registry
     let mut registry = STREAM_REGISTRY.lock().unwrap();
     registry.remove(&stream_id);
 
-    Ok(Value::Boolean(true))
+    Ok(Value::Bool(true))
 }
 
 /// Helper: Extract string array from Value
@@ -294,11 +298,11 @@ fn extract_string_array(value: &Value) -> Result<Vec<String>> {
     match value {
         Value::Array(arr) => {
             let mut strings = Vec::new();
-            for item in arr {
+            for item in arr.iter() {
                 match item {
                     Value::String(s) => strings.push(s.clone()),
                     _ => {
-                        return Err(Error::Runtime(
+                        return Err(Error::runtime(
                             "stream-connect: array elements must be strings".to_string(),
                         ))
                     }
@@ -306,7 +310,7 @@ fn extract_string_array(value: &Value) -> Result<Vec<String>> {
             }
             Ok(strings)
         }
-        _ => Err(Error::Runtime(
+        _ => Err(Error::runtime(
             "stream-connect: filter value must be an array".to_string(),
         )),
     }
@@ -317,21 +321,21 @@ fn poll_events_sync(handle: &StreamHandle, limit: usize) -> Result<Vec<JsonValue
     let client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
-        .map_err(|e| Error::Runtime(format!("Failed to create HTTP client: {}", e)))?;
+        .map_err(|e| Error::runtime(format!("Failed to create HTTP client: {}", e)))?;
 
     let url = format!("{}/events?limit={}", handle.url, limit);
 
     // Build runtime for sync reqwest call
     let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| Error::Runtime(format!("Failed to create tokio runtime: {}", e)))?;
+        .map_err(|e| Error::runtime(format!("Failed to create tokio runtime: {}", e)))?;
 
     let response = runtime
         .block_on(client.get(&url).send())
-        .map_err(|e| Error::Runtime(format!("HTTP request failed: {}", e)))?;
+        .map_err(|e| Error::runtime(format!("HTTP request failed: {}", e)))?;
 
     let events: Vec<JsonValue> = runtime
         .block_on(response.json())
-        .map_err(|e| Error::Runtime(format!("Failed to parse JSON response: {}", e)))?;
+        .map_err(|e| Error::runtime(format!("Failed to parse JSON response: {}", e)))?;
 
     // Apply filters if any
     let filtered = if handle.filters.programs.is_empty()
@@ -383,12 +387,12 @@ fn filter_event(event: &JsonValue, filters: &StreamFilters) -> bool {
 fn json_to_value(json: &JsonValue) -> Value {
     match json {
         JsonValue::Null => Value::Null,
-        JsonValue::Bool(b) => Value::Boolean(*b),
+        JsonValue::Bool(b) => Value::Bool(*b),
         JsonValue::Number(n) => {
             if let Some(i) = n.as_i64() {
-                Value::Number(i as f64)
+                Value::Int(i)
             } else if let Some(f) = n.as_f64() {
-                Value::Number(f)
+                Value::Float(f)
             } else {
                 Value::Null
             }
@@ -396,14 +400,14 @@ fn json_to_value(json: &JsonValue) -> Value {
         JsonValue::String(s) => Value::String(s.clone()),
         JsonValue::Array(arr) => {
             let values: Vec<Value> = arr.iter().map(json_to_value).collect();
-            Value::Array(values)
+            Value::Array(Arc::new(values))
         }
         JsonValue::Object(obj) => {
             let mut map = HashMap::new();
             for (k, v) in obj.iter() {
                 map.insert(k.clone(), json_to_value(v));
             }
-            Value::Object(map)
+            Value::Object(Arc::new(map))
         }
     }
 }

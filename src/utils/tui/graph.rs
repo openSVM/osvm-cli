@@ -134,6 +134,97 @@ pub enum RiskLevel {
     Low,       // 0-25
 }
 
+/// Investigation trail - breadcrumb navigation through the graph
+#[derive(Debug, Clone)]
+pub struct InvestigationTrail {
+    pub steps: Vec<TrailStep>,
+    pub current_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrailStep {
+    pub node_index: usize,
+    pub wallet_address: String,
+    pub risk_level: RiskLevel,
+    pub timestamp: std::time::Instant,
+    pub note: Option<String>,
+}
+
+impl InvestigationTrail {
+    pub fn new(start_node: usize, start_address: String, start_risk: RiskLevel) -> Self {
+        Self {
+            steps: vec![TrailStep {
+                node_index: start_node,
+                wallet_address: start_address,
+                risk_level: start_risk,
+                timestamp: std::time::Instant::now(),
+                note: Some("Investigation start".to_string()),
+            }],
+            current_index: 0,
+        }
+    }
+
+    pub fn add_step(&mut self, node_index: usize, address: String, risk: RiskLevel, note: Option<String>) {
+        // If we're not at the end of the trail, truncate forward history
+        if self.current_index < self.steps.len() - 1 {
+            self.steps.truncate(self.current_index + 1);
+        }
+
+        self.steps.push(TrailStep {
+            node_index,
+            wallet_address: address,
+            risk_level: risk,
+            timestamp: std::time::Instant::now(),
+            note,
+        });
+        self.current_index = self.steps.len() - 1;
+    }
+
+    pub fn go_back(&mut self) -> Option<usize> {
+        if self.current_index > 0 {
+            self.current_index -= 1;
+            Some(self.steps[self.current_index].node_index)
+        } else {
+            None
+        }
+    }
+
+    pub fn go_forward(&mut self) -> Option<usize> {
+        if self.current_index < self.steps.len() - 1 {
+            self.current_index += 1;
+            Some(self.steps[self.current_index].node_index)
+        } else {
+            None
+        }
+    }
+
+    pub fn current_step(&self) -> &TrailStep {
+        &self.steps[self.current_index]
+    }
+
+    pub fn export_summary(&self) -> String {
+        let mut summary = String::from("Investigation Trail:\n");
+        for (i, step) in self.steps.iter().enumerate() {
+            let marker = if i == self.current_index { "→" } else { " " };
+            let risk_icon = match step.risk_level {
+                RiskLevel::Critical => "🔴",
+                RiskLevel::High => "🟠",
+                RiskLevel::Medium => "🟡",
+                RiskLevel::Low => "🟢",
+            };
+            summary.push_str(&format!(
+                "{} {} {} - {:?} {}\n",
+                marker,
+                risk_icon,
+                step.wallet_address,
+                step.risk_level,
+                step.note.as_ref().map(|n| format!("({})", n)).unwrap_or_default()
+            ));
+        }
+        summary
+    }
+}
+
 pub struct WalletGraph {
     nodes: Vec<(String, WalletNode)>, // (address, node_data)
     connections: Vec<(usize, usize, EdgeLabel)>, // (from_idx, to_idx, edge_data)
@@ -166,6 +257,12 @@ pub struct WalletGraph {
     pub entity_clusters: Vec<crate::utils::entity_clustering::EntityCluster>,
     /// Wallet to cluster ID mapping
     pub wallet_to_cluster: HashMap<String, usize>,
+    /// Investigation trail (breadcrumb navigation)
+    pub investigation_trail: Option<InvestigationTrail>,
+    /// Show minimap in corner
+    pub show_minimap: bool,
+    /// Show investigation trail at bottom
+    pub show_trail: bool,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -238,7 +335,7 @@ impl WalletGraph {
         Self {
             nodes,
             connections: Vec::new(),
-            target_wallet,
+            target_wallet: target_wallet.clone(),
             selection: SelectionMode::Node(0), // Start with target wallet selected
             collapsed_nodes: std::collections::HashSet::new(),
             node_positions: vec![(0.0, 0.0)], // Target wallet at origin
@@ -255,6 +352,9 @@ impl WalletGraph {
             connected_nodes,
             entity_clusters: Vec::new(),
             wallet_to_cluster: HashMap::new(),
+            investigation_trail: Some(InvestigationTrail::new(0, target_wallet, RiskLevel::Low)),
+            show_minimap: true,
+            show_trail: true,
         }
     }
 
@@ -2065,6 +2165,64 @@ impl WalletGraph {
     pub fn get_cluster_color(&self, wallet: &str) -> Option<(u8, u8, u8)> {
         self.wallet_to_cluster.get(wallet)
             .map(|cluster_id| crate::utils::entity_clustering::EntityClusterer::get_cluster_color(*cluster_id))
+    }
+
+    /// Calculate risk level for a specific node (simplified for trail)
+    pub fn calculate_node_risk_level(&self, node_idx: usize) -> RiskLevel {
+        if node_idx >= self.nodes.len() {
+            return RiskLevel::Low;
+        }
+
+        let node = &self.nodes[node_idx].1;
+
+        // Quick heuristic-based risk assessment
+        match node.node_type {
+            WalletNodeType::Mixer => RiskLevel::Critical,
+            WalletNodeType::Target => RiskLevel::Low, // Target itself is neutral
+            _ => {
+                // Check transfer patterns
+                let in_degree = self.connections.iter().filter(|(_, to, _)| *to == node_idx).count();
+                let out_degree = self.connections.iter().filter(|(from, _, _)| *from == node_idx).count();
+                let total_degree = in_degree + out_degree;
+
+                // Check total volume
+                let total_volume: f64 = self.connections.iter()
+                    .filter(|(from, to, _)| *from == node_idx || *to == node_idx)
+                    .map(|(_, _, label)| label.amount)
+                    .sum();
+
+                // Risk based on activity level and volume
+                if total_volume > 1000.0 || total_degree > 20 {
+                    RiskLevel::High
+                } else if total_volume > 100.0 || total_degree > 10 {
+                    RiskLevel::Medium
+                } else {
+                    RiskLevel::Low
+                }
+            }
+        }
+    }
+
+    /// Update investigation trail when node is selected
+    pub fn update_trail_on_selection(&mut self, new_node_idx: usize) {
+        if let Some(ref mut trail) = self.investigation_trail {
+            // Only add if it's a different node than current
+            if trail.current_step().node_index != new_node_idx && new_node_idx < self.nodes.len() {
+                let address = self.nodes[new_node_idx].0.clone();
+                let risk_level = self.calculate_node_risk_level(new_node_idx);
+
+                // Generate contextual note
+                let note = if matches!(self.nodes[new_node_idx].1.node_type, WalletNodeType::Mixer) {
+                    Some("Mixer detected".to_string())
+                } else if let Some(cluster) = self.get_wallet_cluster(&address) {
+                    Some(format!("Cluster #{} ({} wallets)", cluster.cluster_id, cluster.wallet_addresses.len()))
+                } else {
+                    None
+                };
+
+                trail.add_step(new_node_idx, address, risk_level, note);
+            }
+        }
     }
 
 }

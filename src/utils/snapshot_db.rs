@@ -23,7 +23,7 @@ pub mod cf {
 }
 
 /// Account data stored in RocksDB
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct AccountRecord {
     pub address: String,
     pub lamports: u64,
@@ -35,7 +35,7 @@ pub struct AccountRecord {
 }
 
 /// Transaction record
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct TransactionRecord {
     pub signature: String,
     pub slot: u64,
@@ -46,7 +46,7 @@ pub struct TransactionRecord {
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct InstructionRecord {
     pub program_id: String,
     pub accounts: Vec<String>,
@@ -54,7 +54,7 @@ pub struct InstructionRecord {
 }
 
 /// Token account data
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct TokenAccountRecord {
     pub address: String,
     pub mint: String,
@@ -65,7 +65,7 @@ pub struct TokenAccountRecord {
 }
 
 /// Snapshot metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct SnapshotMetadata {
     pub slot: u64,
     pub hash: String,
@@ -136,7 +136,7 @@ impl SnapshotDB {
             .context("Accounts column family not found")?;
 
         let key = account.address.as_bytes();
-        let value = bincode::serialize(account)
+        let value = bincode::encode_to_vec(account, bincode::config::standard())
             .context("Failed to serialize account")?;
 
         self.db.put_cf(cf, key, value)
@@ -154,7 +154,7 @@ impl SnapshotDB {
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let account: AccountRecord = bincode::deserialize(&value)
+                let (account, _): (AccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                     .context("Failed to deserialize account")?;
                 Ok(Some(account))
             }
@@ -171,7 +171,7 @@ impl SnapshotDB {
 
         for account in accounts {
             let key = account.address.as_bytes();
-            let value = bincode::serialize(account)
+            let value = bincode::encode_to_vec(account, bincode::config::standard())
                 .context("Failed to serialize account")?;
             batch.put_cf(cf, key, value);
         }
@@ -188,7 +188,7 @@ impl SnapshotDB {
             .context("Transactions column family not found")?;
 
         let key = tx.signature.as_bytes();
-        let value = bincode::serialize(tx)
+        let value = bincode::encode_to_vec(tx, bincode::config::standard())
             .context("Failed to serialize transaction")?;
 
         self.db.put_cf(cf, key, value)
@@ -206,7 +206,7 @@ impl SnapshotDB {
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let tx: TransactionRecord = bincode::deserialize(&value)
+                let (tx, _): (TransactionRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                     .context("Failed to deserialize transaction")?;
                 Ok(Some(tx))
             }
@@ -220,7 +220,7 @@ impl SnapshotDB {
             .context("Token accounts column family not found")?;
 
         let key = token_account.address.as_bytes();
-        let value = bincode::serialize(token_account)
+        let value = bincode::encode_to_vec(token_account, bincode::config::standard())
             .context("Failed to serialize token account")?;
 
         self.db.put_cf(cf, key, value)
@@ -238,7 +238,7 @@ impl SnapshotDB {
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let token: TokenAccountRecord = bincode::deserialize(&value)
+                let (token, _): (TokenAccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                     .context("Failed to deserialize token account")?;
                 Ok(Some(token))
             }
@@ -256,7 +256,7 @@ impl SnapshotDB {
         let iter = self.db.iterator_cf(cf, IteratorMode::Start);
         for item in iter {
             let (_, value) = item?;
-            let token: TokenAccountRecord = bincode::deserialize(&value)
+            let (token, _): (TokenAccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                 .context("Failed to deserialize token account")?;
 
             if token.owner == owner {
@@ -277,7 +277,7 @@ impl SnapshotDB {
         let iter = self.db.iterator_cf(cf, IteratorMode::Start);
         for item in iter {
             let (_, value) = item?;
-            let account: AccountRecord = bincode::deserialize(&value)
+            let (account, _): (AccountRecord, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                 .context("Failed to deserialize account")?;
 
             if account.owner == program_id {
@@ -294,7 +294,7 @@ impl SnapshotDB {
             .context("Metadata column family not found")?;
 
         let key = b"current_snapshot";
-        let value = bincode::serialize(metadata)
+        let value = bincode::encode_to_vec(metadata, bincode::config::standard())
             .context("Failed to serialize metadata")?;
 
         self.db.put_cf(cf, key, value)
@@ -312,7 +312,7 @@ impl SnapshotDB {
 
         match self.db.get_cf(cf, key)? {
             Some(value) => {
-                let metadata: SnapshotMetadata = bincode::deserialize(&value)
+                let (metadata, _): (SnapshotMetadata, _) = bincode::decode_from_slice(&value, bincode::config::standard())
                     .context("Failed to deserialize metadata")?;
                 Ok(Some(metadata))
             }

@@ -358,10 +358,10 @@ impl LispEvaluator {
                     "http-post" => self.eval_http_post(args),
                     "json-rpc" => self.eval_json_rpc(args),
                     // Streaming operations (real-time blockchain events)
-                    "stream-connect" => crate::runtime::streaming::stream_connect(args),
-                    "stream-poll" => crate::runtime::streaming::stream_poll(args),
-                    "stream-wait" => crate::runtime::streaming::stream_wait(args),
-                    "stream-close" => crate::runtime::streaming::stream_close(args),
+                    "stream-connect" => self.eval_stream_connect(args),
+                    "stream-poll" => self.eval_stream_poll(args),
+                    "stream-wait" => self.eval_stream_wait(args),
+                    "stream-close" => self.eval_stream_close(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -8819,6 +8819,58 @@ impl LispEvaluator {
                 got: collection_val.type_name(),
             }),
         }
+    }
+
+    // =========================================================================
+    // STREAMING OPERATIONS (Real-time blockchain events)
+    // =========================================================================
+
+    /// (stream-connect url &key programs tokens accounts event-types success-only)
+    fn eval_stream_connect(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments to Values
+        let mut evaluated_args = Vec::new();
+        for arg in args {
+            evaluated_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call the streaming function with evaluated arguments
+        crate::runtime::streaming::stream_connect(&evaluated_args)
+    }
+
+    /// (stream-poll stream-id &key limit)
+    fn eval_stream_poll(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments to Values
+        let mut evaluated_args = Vec::new();
+        for arg in args {
+            evaluated_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call the streaming function with evaluated arguments
+        crate::runtime::streaming::stream_poll(&evaluated_args)
+    }
+
+    /// (stream-wait stream-id &key timeout)
+    fn eval_stream_wait(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments to Values
+        let mut evaluated_args = Vec::new();
+        for arg in args {
+            evaluated_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call the streaming function with evaluated arguments
+        crate::runtime::streaming::stream_wait(&evaluated_args)
+    }
+
+    /// (stream-close stream-id)
+    fn eval_stream_close(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments to Values
+        let mut evaluated_args = Vec::new();
+        for arg in args {
+            evaluated_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call the streaming function with evaluated arguments
+        crate::runtime::streaming::stream_close(&evaluated_args)
     }
 }
 

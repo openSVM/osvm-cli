@@ -1,0 +1,89 @@
+;;; Stream Pump.fun Events Example
+;;;
+;;; This script connects to the OSVM streaming server and monitors
+;;; real-time Pump.fun buy/sell activity on the Solana blockchain.
+;;;
+;;; Usage:
+;;;   1. Start streaming server: osvm stream --programs pumpfun --port 8080
+;;;   2. Run this script: osvm ovsm run stream_pumpfun.ovsm
+
+;; Connect to streaming server (local instance)
+(define stream-id (stream-connect "http://localhost:8080"
+                                  :programs ["pumpfun"]))
+
+(log :message "✅ Connected to Pump.fun event stream" :value stream-id)
+(log :message "🔍 Monitoring for Buy/Sell transactions...")
+(println "")
+
+;; Initialize counters
+(define buy-count 0)
+(define sell-count 0)
+(define graduation-count 0)
+
+;; Main event loop (run for 60 seconds)
+(define start-time (now))
+(define duration 60)
+
+(while (< (- (now) start-time) duration)
+  ;; Poll for new events (non-blocking, returns array)
+  (define events (stream-poll stream-id :limit 50))
+
+  ;; Process each event
+  (for (event events)
+    (define event-type (get event "type"))
+
+    ;; Only process log_message events
+    (if (= event-type "log_message")
+        (do
+          (define logs (get event "logs"))
+          (define signature (get event "signature"))
+          (define logs-text (str logs))
+
+          ;; Check for Buy transactions
+          (if (string-contains logs-text "Instruction: Buy")
+              (do
+                (set! buy-count (+ buy-count 1))
+                (println (format "📈 BUY  #{} | Signature: {}" buy-count signature)))
+              null)
+
+          ;; Check for Sell transactions
+          (if (string-contains logs-text "Instruction: Sell")
+              (do
+                (set! sell-count (+ sell-count 1))
+                (println (format "📉 SELL #{} | Signature: {}" sell-count signature)))
+              null)
+
+          ;; Check for Token Graduation (migration to Raydium)
+          (if (or (string-contains logs-text "raydium")
+                  (string-contains logs-text "Instruction: Graduate")
+                  (string-contains logs-text "bonding curve complete"))
+              (do
+                (set! graduation-count (+ graduation-count 1))
+                (println "")
+                (println (format "🎓 GRADUATION DETECTED #{} 🎓" graduation-count))
+                (println (format "   Signature: {}" signature))
+                (println "   Token has migrated to Raydium!")
+                (println ""))
+              null))
+        null))
+
+  ;; Sleep for 500ms before next poll
+  (if (= (length events) 0)
+      null  ;; Sleep handled by stream-wait if needed
+      null))
+
+;; Print summary statistics
+(println "")
+(println "═══════════════════════════════════")
+(println "📊 Streaming Summary")
+(println "═══════════════════════════════════")
+(println (format "Duration: {} seconds" duration))
+(println (format "📈 Buy Transactions:   {}" buy-count))
+(println (format "📉 Sell Transactions:  {}" sell-count))
+(println (format "🎓 Graduations:       {}" graduation-count))
+(println (format "📦 Total Events:      {}" (+ buy-count sell-count graduation-count)))
+(println "═══════════════════════════════════")
+
+;; Close stream
+(stream-close stream-id)
+(log :message "✅ Stream closed")

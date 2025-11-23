@@ -1,0 +1,100 @@
+;;; Whale Transaction Detector
+;;;
+;;; This script monitors multiple DEXes (Raydium, Orca, Jupiter) for large
+;;; transactions ("whale" activity) and generates alerts when whales trade.
+;;;
+;;; Usage:
+;;;   1. Start streaming server with multiple programs:
+;;;      osvm stream --programs "raydium,orca,jupiter" --port 8080
+;;;   2. Run this script: osvm ovsm run stream_whale_detector.ovsm
+
+;; Configuration
+(define WHALE_THRESHOLD_SOL 100)  ;; Transactions >= 100 SOL are "whale" activity
+(define ALERT_THRESHOLD_SOL 1000) ;; Transactions >= 1000 SOL trigger critical alert
+
+;; Connect to streaming server
+(define stream-id (stream-connect "http://localhost:8080"
+                                  :programs ["raydium" "orca" "jupiter"]
+                                  :success-only true))
+
+(println "🐋 WHALE TRANSACTION DETECTOR")
+(println "═══════════════════════════════════")
+(println (format "Monitoring: Raydium, Orca, Jupiter"))
+(println (format "Whale threshold:    {} SOL" WHALE_THRESHOLD_SOL))
+(println (format "Critical threshold: {} SOL" ALERT_THRESHOLD_SOL))
+(println "═══════════════════════════════════")
+(println "")
+
+;; Statistics
+(define total-txns 0)
+(define whale-txns 0)
+(define critical-txns 0)
+(define total-volume-sol 0.0)
+
+;; Monitor for 2 minutes
+(define start-time (now))
+(define duration 120)
+
+(while (< (- (now) start-time) duration)
+  ;; Wait for next event (blocks up to 5 seconds)
+  (define event (stream-wait stream-id :timeout 5))
+
+  (if (not (null? event))
+      (do
+        (set! total-txns (+ total-txns 1))
+
+        (define event-type (get event "type"))
+        (define signature (get event "signature"))
+        (define fee (get event "fee"))
+        (define signer (get event "signer"))
+
+        ;; Estimate transaction size from fee
+        ;; (Higher fees often correlate with larger transactions)
+        (define estimated-sol (/ fee 10000.0))
+
+        ;; Update total volume
+        (set! total-volume-sol (+ total-volume-sol estimated-sol))
+
+        ;; Check if whale transaction
+        (if (>= estimated-sol WHALE_THRESHOLD_SOL)
+            (do
+              (set! whale-txns (+ whale-txns 1))
+
+              ;; Critical alert for mega whales
+              (if (>= estimated-sol ALERT_THRESHOLD_SOL)
+                  (do
+                    (set! critical-txns (+ critical-txns 1))
+                    (println "")
+                    (println "🚨🚨🚨 CRITICAL WHALE ALERT 🚨🚨🚨")
+                    (println (format "Size: ~{} SOL | Signature: {}"
+                                   estimated-sol
+                                   signature))
+                    (println (format "Signer: {}" signer))
+                    (println ""))
+                  ;; Regular whale alert
+                  (do
+                    (println (format "🐋 Whale detected: ~{} SOL | {}"
+                                   estimated-sol
+                                   (slice signature 0 16)))))))
+        null)
+      null))
+
+;; Print final statistics
+(println "")
+(println "═══════════════════════════════════")
+(println "📊 Whale Detection Summary")
+(println "═══════════════════════════════════")
+(println (format "Duration:           {} seconds" duration))
+(println (format "Total Transactions: {}" total-txns))
+(println (format "🐋 Whale Txns:      {} (>= {} SOL)" whale-txns WHALE_THRESHOLD_SOL))
+(println (format "🚨 Critical Txns:   {} (>= {} SOL)" critical-txns ALERT_THRESHOLD_SOL))
+(println (format "📊 Est. Volume:     {:.2f} SOL" total-volume-sol))
+(if (> total-txns 0)
+    (println (format "📈 Whale Rate:      {:.1f}%"
+                   (* 100.0 (/ whale-txns total-txns))))
+    null)
+(println "═══════════════════════════════════")
+
+;; Close stream
+(stream-close stream-id)
+(log :message "✅ Whale detector stopped")
