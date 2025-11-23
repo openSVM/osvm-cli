@@ -1459,7 +1459,7 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
     /// Static helper for async spawning
     async fn decide_next_action_static(state: &Arc<Mutex<InvestigationState>>) -> Result<String> {
         let state = state.lock().await.clone();
-        Ok(format!("{{\"mcp_tool\": \"get_account_transfers\", \"parameters\": {{\"address\": \"{}\"}}}}", state.target_wallet))
+        Ok(format!("{{\"mcp_tool\": \"get_account_transfers\", \"parameters\": {{\"address\": \"{}\", \"limit\": 500, \"compress\": true}}}}", state.target_wallet))
     }
 
     /// Static helper for async spawning - Now uses actual MCP queries
@@ -1909,10 +1909,14 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 }
             }
             Err(e) => {
-                // Fallback: use account transfers
+                // Fallback: use account transfers with compress=true
                 crate::tui_log!("⚠️  DEBUG: Failed to parse AI decision: {}", e);
                 crate::tui_log!("⚠️  DEBUG: Cleaned string was: {:?}", decision_clean);
-                ("get_account_transfers".to_string(), serde_json::json!({}))
+                ("get_account_transfers".to_string(), serde_json::json!({
+                    "address": state.target_wallet.clone(),
+                    "limit": 500,
+                    "compress": true
+                }))
             }
         };
 

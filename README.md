@@ -763,3 +763,31 @@ Made with ❤️ by the OSVM Team
 **The Future of Blockchain Security + AI**
 
 </div>
+
+## 📡 Real-Time Event Streaming
+
+OSVM includes a powerful real-time streaming server for monitoring Solana blockchain events:
+
+```bash
+# Stream Pump.fun activity with friendly alias
+osvm stream --programs pumpfun
+
+# Monitor multiple DEXes
+osvm stream --programs "raydium,orca,jupiter"
+
+# Track token graduations
+osvm stream --programs pumpfun | grep -i "graduate"
+```
+
+**Features:**
+- ✅ **40+ Program Aliases**: Use `pumpfun`, `raydium`, `jupiter` instead of long IDs
+- ✅ **WebSocket/SSE/HTTP**: Three protocols for real-time streaming
+- ✅ **Hybrid Architecture**: WebSocket for programs, HTTP polling for general streams
+- ✅ **Token Graduation Detection**: Monitor Pump.fun bonding curve completions
+- ✅ **18+ events/sec**: Proven high-throughput performance
+
+**Documentation:**
+- 📖 [Streaming Guide](docs/STREAMING.md) - Complete documentation
+- 🎨 [Interactive Demo](docs/streaming-demo.html) - HTML visualization UI
+- 💻 [Program Aliases](src/utils/program_aliases.rs) - Full alias list
+

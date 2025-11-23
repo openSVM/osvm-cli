@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSVM Streaming Demo - Real-time Solana Events</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .controls {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #667eea;
+        }
+
+        input, select {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .events {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .event {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-type {
+            font-weight: 600;
+            color: #667eea;
+            text-transform: uppercase;
+            font-size: 0.9em;
+        }
+
+        .event-time {
+            color: #999;
+            font-size: 0.85em;
+        }
+
+        .event-content {
+            color: #333;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+
+        .status-dot.connected {
+            background: #4caf50;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .graduation {
+            border-left-color: #ffd700 !important;
+            background: #fffbea !important;
+        }
+
+        .graduation .event-type {
+            color: #ffa500;
+        }
+
+        .graduation::before {
+            content: "🎓 ";
+            font-size: 1.5em;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 OSVM Streaming Demo</h1>
+            <p class="subtitle">Real-time Solana blockchain events</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="server-url">Server URL</label>
+                <input type="text" id="server-url" value="http://localhost:8080" placeholder="http://localhost:8080">
+            </div>
+
+            <div class="control-group">
+                <label for="protocol">Protocol</label>
+                <select id="protocol">
+                    <option value="sse">Server-Sent Events (SSE)</option>
+                    <option value="ws">WebSocket</option>
+                    <option value="http">HTTP Polling</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="filter">Event Filter</label>
+                <select id="filter">
+                    <option value="all">All Events</option>
+                    <option value="transactions">Transactions Only</option>
+                    <option value="logs">Log Messages Only</option>
+                    <option value="graduations">Graduations Only</option>
+                    <option value="buys">Buys Only</option>
+                    <option value="sells">Sells Only</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button id="connect-btn" onclick="toggleConnection()">Connect</button>
+            </div>
+
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button onclick="clearEvents()">Clear Events</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="total-events">0</div>
+                <div class="stat-label">Total Events</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="buys">0</div>
+                <div class="stat-label">Buys</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="sells">0</div>
+                <div class="stat-label">Sells</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="graduations">0</div>
+                <div class="stat-label">Graduations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="rate">0.0</div>
+                <div class="stat-label">Events/sec</div>
+            </div>
+        </div>
+
+        <div class="events" id="events-container">
+            <p style="text-align: center; color: #999; padding: 40px;">
+                Click "Connect" to start streaming events...
+            </p>
+        </div>
+
+        <div class="status">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let ws = null;
+        let pollInterval = null;
+        let connected = false;
+        let stats = {
+            total: 0,
+            buys: 0,
+            sells: 0,
+            graduations: 0,
+            startTime: null
+        };
+
+        function updateStats() {
+            document.getElementById('total-events').textContent = stats.total;
+            document.getElementById('buys').textContent = stats.buys;
+            document.getElementById('sells').textContent = stats.sells;
+            document.getElementById('graduations').textContent = stats.graduations;
+
+            if (stats.startTime) {
+                const elapsed = (Date.now() - stats.startTime) / 1000;
+                const rate = stats.total / elapsed;
+                document.getElementById('rate').textContent = rate.toFixed(1);
+            }
+        }
+
+        function isGraduation(event) {
+            if (event.type !== 'log_message') return false;
+            const logsText = event.logs?.join(' ').toLowerCase() || '';
+            return logsText.includes('graduate') ||
+                   logsText.includes('raydium') ||
+                   logsText.includes('bonding curve complete');
+        }
+
+        function isBuy(event) {
+            if (event.type !== 'log_message') return false;
+            const logsText = event.logs?.join(' ').toLowerCase() || '';
+            return logsText.includes('instruction: buy');
+        }
+
+        function isSell(event) {
+            if (event.type !== 'log_message') return false;
+            const logsText = event.logs?.join(' ').toLowerCase() || '';
+            return logsText.includes('instruction: sell');
+        }
+
+        function shouldShowEvent(event) {
+            const filter = document.getElementById('filter').value;
+
+            switch (filter) {
+                case 'all':
+                    return true;
+                case 'transactions':
+                    return event.type === 'transaction';
+                case 'logs':
+                    return event.type === 'log_message';
+                case 'graduations':
+                    return isGraduation(event);
+                case 'buys':
+                    return isBuy(event);
+                case 'sells':
+                    return isSell(event);
+                default:
+                    return true;
+            }
+        }
+
+        function addEvent(event) {
+            if (!shouldShowEvent(event)) return;
+
+            stats.total++;
+
+            if (isGraduation(event)) {
+                stats.graduations++;
+            }
+            if (isBuy(event)) {
+                stats.buys++;
+            }
+            if (isSell(event)) {
+                stats.sells++;
+            }
+
+            updateStats();
+
+            const container = document.getElementById('events-container');
+            const eventDiv = document.createElement('div');
+            eventDiv.className = 'event' + (isGraduation(event) ? ' graduation' : '');
+
+            const now = new Date().toLocaleTimeString();
+            const content = JSON.stringify(event, null, 2);
+
+            eventDiv.innerHTML = `
+                <div class="event-header">
+                    <span class="event-type">${event.type || 'unknown'}</span>
+                    <span class="event-time">${now}</span>
+                </div>
+                <div class="event-content">${content}</div>
+            `;
+
+            container.insertBefore(eventDiv, container.firstChild);
+
+            // Keep only last 50 events
+            while (container.children.length > 50) {
+                container.removeChild(container.lastChild);
+            }
+        }
+
+        function connect() {
+            const serverUrl = document.getElementById('server-url').value;
+            const protocol = document.getElementById('protocol').value;
+
+            stats.startTime = Date.now();
+
+            if (protocol === 'sse') {
+                eventSource = new EventSource(serverUrl + '/stream');
+
+                eventSource.onopen = () => {
+                    connected = true;
+                    updateStatus('connected', 'Connected (SSE)');
+                };
+
+                eventSource.onmessage = (e) => {
+                    try {
+                        const event = JSON.parse(e.data);
+                        addEvent(event);
+                    } catch (err) {
+                        console.error('Parse error:', err);
+                    }
+                };
+
+                eventSource.onerror = () => {
+                    disconnect();
+                    updateStatus('disconnected', 'Connection error');
+                };
+            } else if (protocol === 'ws') {
+                const wsUrl = serverUrl.replace('http', 'ws') + '/ws';
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = () => {
+                    connected = true;
+                    updateStatus('connected', 'Connected (WebSocket)');
+                };
+
+                ws.onmessage = (e) => {
+                    try {
+                        const event = JSON.parse(e.data);
+                        addEvent(event);
+                    } catch (err) {
+                        console.error('Parse error:', err);
+                    }
+                };
+
+                ws.onerror = () => {
+                    disconnect();
+                    updateStatus('disconnected', 'Connection error');
+                };
+
+                ws.onclose = () => {
+                    disconnect();
+                };
+            } else { // http
+                pollInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch(serverUrl + '/events?limit=10');
+                        const events = await response.json();
+                        events.forEach(event => addEvent(event));
+
+                        if (!connected) {
+                            connected = true;
+                            updateStatus('connected', 'Connected (HTTP)');
+                        }
+                    } catch (err) {
+                        disconnect();
+                        updateStatus('disconnected', 'Connection error');
+                    }
+                }, 1000);
+
+                connected = true;
+                updateStatus('connected', 'Connected (HTTP)');
+            }
+        }
+
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+
+            connected = false;
+            updateStatus('disconnected', 'Disconnected');
+        }
+
+        function toggleConnection() {
+            if (connected) {
+                disconnect();
+            } else {
+                connect();
+            }
+
+            const btn = document.getElementById('connect-btn');
+            btn.textContent = connected ? 'Disconnect' : 'Connect';
+        }
+
+        function updateStatus(status, text) {
+            const dot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+
+            if (status === 'connected') {
+                dot.classList.add('connected');
+            } else {
+                dot.classList.remove('connected');
+            }
+
+            statusText.textContent = text;
+        }
+
+        function clearEvents() {
+            document.getElementById('events-container').innerHTML = '';
+            stats = {
+                total: 0,
+                buys: 0,
+                sells: 0,
+                graduations: 0,
+                startTime: stats.startTime
+            };
+            updateStats();
+        }
+    </script>
+</body>
+</html>

@@ -21,7 +21,6 @@ pub fn build_invoke_command() -> Command {
         .arg(
             Arg::new("accounts")
                 .long("account")
-                .short('a')
                 .value_name("ACCOUNT")
                 .action(ArgAction::Append)
                 .help("Account in format 'pubkey:is_signer:is_writable' (e.g., '5Ys...:false:true')"),

@@ -742,6 +742,7 @@ impl WalletGraph {
     }
 
     /// Compute hierarchical layout: inflows left, target center, outflows right
+    /// Uses columnar layout with BFS depth levels
     pub fn compute_hierarchical_layout(&mut self) {
         use std::collections::{HashMap, VecDeque};
 
@@ -749,70 +750,108 @@ impl WalletGraph {
             return;
         }
 
-        // Find target wallet index (should be index 0)
-        let target_idx = 0;
+        // Find selected node (or default to index 0)
+        let center_idx = self.selected_node().unwrap_or(0);
 
-        // BFS to compute distances from target for true layered layout
+        // BFS to compute distances and flow direction from center
         let mut distances: HashMap<usize, usize> = HashMap::new();
+        let mut flow_direction: HashMap<usize, i32> = HashMap::new(); // -1 = inflow, 1 = outflow
         let mut queue = VecDeque::new();
 
-        distances.insert(target_idx, 0);
-        queue.push_back(target_idx);
+        distances.insert(center_idx, 0);
+        flow_direction.insert(center_idx, 0);
+        queue.push_back(center_idx);
 
         while let Some(current) = queue.pop_front() {
             let current_dist = distances[&current];
+            let current_flow = flow_direction[&current];
 
             // Find all connected nodes
             for (from, to, _) in &self.connections {
-                let neighbor = if *from == current {
-                    Some(*to)
+                let (neighbor, is_inflow) = if *from == current {
+                    (Some(*to), false) // Current sends to neighbor (outflow)
                 } else if *to == current {
-                    Some(*from)
+                    (Some(*from), true) // Neighbor sends to current (inflow)
                 } else {
-                    None
+                    (None, false)
                 };
 
                 if let Some(n) = neighbor {
                     if !distances.contains_key(&n) {
                         distances.insert(n, current_dist + 1);
+
+                        // Determine flow: inherit from parent or determine from edge direction
+                        let node_flow = if current_flow != 0 {
+                            current_flow // Inherit parent's direction
+                        } else {
+                            if is_inflow { -1 } else { 1 } // First level: determine by edge
+                        };
+                        flow_direction.insert(n, node_flow);
                         queue.push_back(n);
                     }
                 }
             }
         }
 
-        // Group nodes by distance (layer)
-        let mut layers: HashMap<usize, Vec<usize>> = HashMap::new();
+        // Group nodes by (depth, flow_direction)
+        #[derive(Debug)]
+        struct ColumnGroup {
+            nodes: Vec<usize>,
+            total_amount: HashMap<usize, f64>, // For sorting by transfer amount
+        }
+
+        let mut columns: HashMap<(usize, i32), ColumnGroup> = HashMap::new();
+
         for (node_idx, dist) in &distances {
-            layers.entry(*dist).or_insert_with(Vec::new).push(*node_idx);
+            let flow = flow_direction.get(node_idx).copied().unwrap_or(0);
+            let key = (*dist, flow);
+
+            let group = columns.entry(key).or_insert_with(|| ColumnGroup {
+                nodes: Vec::new(),
+                total_amount: HashMap::new(),
+            });
+
+            // Calculate total transfer amount for this node
+            let total = self.connections.iter()
+                .filter(|(from, to, _)| *from == *node_idx || *to == *node_idx)
+                .map(|(_, _, edge)| edge.amount)
+                .sum::<f64>();
+
+            group.total_amount.insert(*node_idx, total);
+            group.nodes.push(*node_idx);
         }
 
         // Clear and rebuild positions
         self.node_positions.clear();
         self.node_positions.resize(self.nodes.len(), (0.0, 0.0));
 
-        // Position target at center (0, 0)
-        self.node_positions[target_idx] = (0.0, 0.0);
+        // Position center node at (0, 0)
+        self.node_positions[center_idx] = (0.0, 0.0);
 
-        // Place nodes in concentric circles
-        for (layer_dist, nodes) in layers.iter() {
-            if *layer_dist == 0 { continue; } // Skip target
+        // Column spacing
+        let column_width = 60.0;
+        let node_spacing = 18.0; // Vertical padding between nodes
 
-            // Adaptive radius based on layer and node count
-            let base_radius = 30.0 + (*layer_dist as f64) * 20.0;
-            let radius = base_radius + (nodes.len() as f64).sqrt() * 3.0;
-            let angle_step = std::f64::consts::TAU / nodes.len() as f64;
+        // Position nodes in columns
+        for ((depth, flow), mut group) in columns.into_iter() {
+            if depth == 0 { continue; } // Skip center
 
-            // Sort nodes for consistent positioning
-            let mut sorted_nodes = nodes.clone();
-            sorted_nodes.sort();
+            // Sort nodes by total transfer amount (descending)
+            group.nodes.sort_by(|a, b| {
+                let amount_a = group.total_amount.get(a).copied().unwrap_or(0.0);
+                let amount_b = group.total_amount.get(b).copied().unwrap_or(0.0);
+                amount_b.partial_cmp(&amount_a).unwrap()
+            });
 
-            for (i, &node_idx) in sorted_nodes.iter().enumerate() {
-                // Add slight variation to avoid perfect circles
-                let angle = i as f64 * angle_step;
-                let r = radius + ((node_idx * 7) % 11) as f64 - 5.0;
-                let x = r * angle.cos();
-                let y = r * angle.sin();
+            // Calculate X position (column)
+            let x = flow as f64 * column_width * depth as f64;
+
+            // Calculate Y positions (stack vertically with padding)
+            let total_height = group.nodes.len() as f64 * node_spacing;
+            let start_y = -total_height / 2.0;
+
+            for (i, &node_idx) in group.nodes.iter().enumerate() {
+                let y = start_y + i as f64 * node_spacing;
 
                 if node_idx < self.node_positions.len() {
                     self.node_positions[node_idx] = (x, y);
@@ -824,12 +863,9 @@ impl WalletGraph {
         let mut edge_count = 0;
         for i in 0..self.nodes.len() {
             if !distances.contains_key(&i) {
-                let angle = edge_count as f64 * 0.4;
-                let radius = 150.0 + (edge_count as f64) * 10.0;
-                self.node_positions[i] = (
-                    radius * angle.cos(),
-                    radius * angle.sin()
-                );
+                let x = if edge_count % 2 == 0 { -200.0 } else { 200.0 };
+                let y = (edge_count / 2) as f64 * node_spacing;
+                self.node_positions[i] = (x, y);
                 edge_count += 1;
             }
         }
@@ -1171,7 +1207,9 @@ impl WalletGraph {
                 };
 
                 // Draw ALL edges (even to off-screen nodes) with improved visual encoding
+                // This includes edges where one or both endpoints are outside the visible viewport
                 for (edge_idx, (from_idx, to_idx, edge_label)) in self.connections.iter().enumerate() {
+                    // Only check if positions exist, NOT if nodes are visible/filtered
                     if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
                         let (x1, y1) = self.node_positions[*from_idx];
                         let (x2, y2) = self.node_positions[*to_idx];
@@ -1332,14 +1370,27 @@ impl WalletGraph {
                             });
                         }
 
-                        // Only show text for selected node or when zoomed in significantly
-                        if is_selected || (zoom > 2.5 && total_degree > 5) {
-                            // Minimal label - just degree info for important nodes
-                            if is_mixer {
-                                ctx.print(x, y - radius - 2.0, format!("M:{}↔{}", in_degree, out_degree));
-                            } else if total_degree > 10 {
-                                ctx.print(x, y - radius - 2.0, format!("{}↔{}", in_degree, out_degree));
-                            }
+                        // Show abbreviated address (first 3 + last 3 chars)
+                        let (addr, _) = &self.nodes[idx];
+                        let short_addr = if addr.len() >= 6 {
+                            format!("{}{}", &addr[..3], &addr[addr.len()-3..])
+                        } else {
+                            addr.clone()
+                        };
+
+                        // Always show abbreviated address for all nodes
+                        if idx == 0 {
+                            // Target wallet - show with special marker
+                            ctx.print(x, y - radius - 2.0, format!("🎯{}", short_addr));
+                        } else if is_mixer {
+                            // Mixer - show with warning marker and degree
+                            ctx.print(x, y - radius - 2.0, format!("⚠{}:{}↔{}", short_addr, in_degree, out_degree));
+                        } else if is_selected {
+                            // Selected - highlight
+                            ctx.print(x, y - radius - 2.0, format!("▶{}", short_addr));
+                        } else {
+                            // Normal wallet - just address
+                            ctx.print(x, y - radius - 2.0, short_addr);
                         }
                     }
                 }

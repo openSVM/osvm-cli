@@ -27,8 +27,8 @@ const ET_DYN: u16 = 3;
 /// ELF machine: SBF (Solana BPF v2)
 const EM_SBF: u16 = 263; // 0x107
 
-/// ELF flags - use 0x0 for SBPFv1 compatibility (localnet)
-const EF_SBF_V2: u32 = 0x0;
+/// ELF flags - use 0x20 for SBPFv2 (on-chain compatibility)
+const EF_SBF_V2: u32 = 0x20;
 
 /// Section header types
 const SHT_NULL: u32 = 0;

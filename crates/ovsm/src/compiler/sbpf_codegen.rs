@@ -338,11 +338,11 @@ impl SbpfInstruction {
         Self::new(class::JMP | op | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Call syscall (V1 uses imm=-1 for external calls)
-    pub fn call_syscall(_hash: u32) -> Self {
-        // For V1, use imm=-1 to indicate external call
-        // The actual hash will be resolved via relocation
-        Self::new(class::JMP | jmp::CALL, 0, 0, 0, -1)
+    /// Call syscall (V2 uses src=0 for static syscalls)
+    pub fn call_syscall(hash: u32) -> Self {
+        // For V2, static syscalls use src=0 and hash in imm field
+        // src=0 indicates this is a static syscall, not a relative jump
+        Self::new(class::JMP | jmp::CALL, 0, 0, 0, hash as i32)
     }
 
     /// Call internal function (relative offset)

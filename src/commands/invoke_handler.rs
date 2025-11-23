@@ -38,11 +38,8 @@ pub async fn handle_invoke_command(
         Vec::new() // Empty data
     };
 
-    // Get RPC URL
-    let rpc_url = matches
-        .get_one::<String>("url")
-        .map(|s| s.as_str())
-        .unwrap_or(&config.json_rpc_url);
+    // Get RPC URL (use config's URL since --url is a global arg handled elsewhere)
+    let rpc_url = &config.json_rpc_url;
 
     // Parse accounts if provided
     let mut accounts = Vec::new();
