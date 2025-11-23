@@ -6,6 +6,7 @@ use crate::services::{
     stream_server::{start_server, StreamServerConfig},
     stream_service::{EventFilter, StreamService},
 };
+use crate::utils::program_aliases::{resolve_programs, resolve_token, list_program_aliases, list_token_symbols};
 
 #[derive(Parser, Debug)]
 #[command(name = "stream")]
@@ -35,13 +36,21 @@ pub struct StreamCommand {
     #[arg(long, default_value = "true")]
     pub http: bool,
 
-    /// Filter by program IDs (comma-separated)
+    /// Filter by program IDs or aliases (comma-separated, e.g. "pumpfun,raydium,jupiter")
     #[arg(long)]
     pub programs: Option<String>,
 
     /// Filter by account addresses (comma-separated)
     #[arg(long)]
     pub accounts: Option<String>,
+
+    /// Filter by token symbols or mint addresses (comma-separated, e.g. "USDC,BONK,SOL")
+    #[arg(long)]
+    pub tokens: Option<String>,
+
+    /// Filter by liquidity pools (comma-separated, e.g. "SOL-USDC,BONK-SOL")
+    #[arg(long)]
+    pub pools: Option<String>,
 
     /// Filter by event types (comma-separated: transaction,account_update,log_message,token_transfer,program_invocation,slot_update)
     #[arg(long)]
@@ -54,9 +63,36 @@ pub struct StreamCommand {
     /// Minimum transaction fee in lamports
     #[arg(long)]
     pub min_fee: Option<u64>,
+
+    /// List all available program aliases
+    #[arg(long)]
+    pub list_programs: bool,
+
+    /// List all available token symbols
+    #[arg(long)]
+    pub list_tokens: bool,
 }
 
 pub async fn execute(cmd: StreamCommand) -> Result<()> {
+    // Handle list commands first
+    if cmd.list_programs {
+        println!("📋 Available Program Aliases:");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        for (alias, program_id) in list_program_aliases() {
+            println!("  {:20} → {}", alias, program_id);
+        }
+        return Ok(());
+    }
+
+    if cmd.list_tokens {
+        println!("💰 Available Token Symbols:");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        for (symbol, mint) in list_token_symbols() {
+            println!("  {:10} → {}", symbol, mint);
+        }
+        return Ok(());
+    }
+
     println!("🚀 Starting OSVM Streaming Server");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!("RPC URL: {}", cmd.rpc_url);
@@ -66,15 +102,32 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
     // Create stream service
     let stream_service = Arc::new(StreamService::new(cmd.rpc_url.clone()));
 
+    // Resolve program aliases to IDs
+    let resolved_programs = cmd.programs.as_ref().map(|p| resolve_programs(p));
+
+    // Resolve token symbols to mint addresses
+    let resolved_tokens = cmd.tokens.as_ref().map(|t| {
+        t.split(',')
+            .filter_map(|s| {
+                let trimmed = s.trim();
+                // Try to resolve as symbol, otherwise use as-is (assume it's a mint address)
+                resolve_token(trimmed).or_else(|| Some(trimmed.to_string()))
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    });
+
     // Apply filters if specified
-    if cmd.programs.is_some()
+    if resolved_programs.is_some()
         || cmd.accounts.is_some()
+        || resolved_tokens.is_some()
+        || cmd.pools.is_some()
         || cmd.event_types.is_some()
         || cmd.success_only
         || cmd.min_fee.is_some()
     {
         let filter = EventFilter {
-            program_ids: cmd.programs.as_ref().map(|p| {
+            program_ids: resolved_programs.as_ref().map(|p| {
                 p.split(',')
                     .map(|s| s.trim().to_string())
                     .collect()
@@ -96,10 +149,20 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
         stream_service.add_filter(filter);
         println!("📋 Filters applied:");
         if let Some(ref programs) = cmd.programs {
-            println!("   Programs: {}", programs);
+            if let Some(ref resolved) = resolved_programs {
+                println!("   Programs: {} → {}", programs, resolved);
+            }
         }
         if let Some(ref accounts) = cmd.accounts {
             println!("   Accounts: {}", accounts);
+        }
+        if let Some(ref tokens) = cmd.tokens {
+            if let Some(ref resolved) = resolved_tokens {
+                println!("   Tokens: {} → {}", tokens, resolved);
+            }
+        }
+        if let Some(ref pools) = cmd.pools {
+            println!("   Pools: {} (pool filtering coming soon)", pools);
         }
         if let Some(ref event_types) = cmd.event_types {
             println!("   Event types: {}", event_types);
@@ -128,6 +191,16 @@ pub async fn execute(cmd: StreamCommand) -> Result<()> {
     println!("");
 
     println!("🎯 Usage examples:");
+    println!("");
+    println!("List available aliases:");
+    println!("  osvm stream --list-programs");
+    println!("  osvm stream --list-tokens");
+    println!("");
+    println!("Stream with friendly names:");
+    println!("  osvm stream --programs pumpfun");
+    println!("  osvm stream --programs \"raydium,orca,jupiter\"");
+    println!("  osvm stream --tokens \"USDC,BONK,SOL\"");
+    println!("  osvm stream --programs raydium --tokens BONK --success-only");
     println!("");
     println!("WebSocket (JavaScript):");
     println!("  const ws = new WebSocket('ws://{}:{}/ws');", cmd.host, cmd.port);

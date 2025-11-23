@@ -14,6 +14,7 @@ pub enum WalletNodeType {
     Recipient,   // Blue - wallets that received from target
     DeFi,        // Magenta - DEX/DeFi protocols
     Token,       // Yellow - token contracts
+    Mixer,       // DarkGray - detected mixing/tumbling node
 }
 
 impl WalletNodeType {
@@ -24,6 +25,7 @@ impl WalletNodeType {
             WalletNodeType::Recipient => Color::Blue,
             WalletNodeType::DeFi => Color::Magenta,
             WalletNodeType::Token => Color::Yellow,
+            WalletNodeType::Mixer => Color::DarkGray,
         }
     }
 
@@ -34,6 +36,7 @@ impl WalletNodeType {
             WalletNodeType::Recipient => "🔵",
             WalletNodeType::DeFi => "🟣",
             WalletNodeType::Token => "🟡",
+            WalletNodeType::Mixer => "⚫",
         }
     }
 }
@@ -67,19 +70,26 @@ impl EdgeLabel {
     }
 }
 
+/// Selection mode - navigating nodes vs edges
+#[derive(Debug, Clone, PartialEq)]
+pub enum SelectionMode {
+    Node(usize),  // Selected node index
+    Edge { edge_idx: usize, from_node: usize, to_node: usize },  // Selected edge with endpoints
+}
+
 pub struct WalletGraph {
     nodes: Vec<(String, WalletNode)>, // (address, node_data)
     connections: Vec<(usize, usize, EdgeLabel)>, // (from_idx, to_idx, edge_data)
     target_wallet: String,
-    /// Currently selected node index for keyboard navigation
-    pub selected_node: Option<usize>,
+    /// Current selection (node or edge)
+    pub selection: SelectionMode,
     /// Collapsed node indices (hidden children)
     pub collapsed_nodes: std::collections::HashSet<usize>,
     /// Node positions for canvas rendering (x, y) in graph space
     pub node_positions: Vec<(f64, f64)>,
     /// Viewport for large graphs (center_x, center_y, zoom_level)
     pub viewport: (f64, f64, f64),
-    /// Max depth for BFS exploration (default: 5)
+    /// Max depth for BFS exploration (increased to 15 for deep investigation)
     pub max_depth: usize,
     /// Current depth reached
     pub current_depth: usize,
@@ -91,6 +101,30 @@ pub struct WalletGraph {
     /// Toast notification
     pub toast_message: Option<String>,
     pub toast_timer: u8,  // Frames remaining to show toast
+    /// In-memory wallet cache for multi-hop discovery (address -> metadata)
+    pub wallet_cache: HashMap<String, WalletCacheEntry>,
+    /// Path-connected nodes (only nodes with paths to target)
+    pub connected_nodes: std::collections::HashSet<usize>,
+}
+
+/// Cached wallet data for multi-hop path discovery
+#[derive(Debug, Clone)]
+pub struct WalletCacheEntry {
+    pub address: String,
+    pub inflows: Vec<(String, f64, String)>,  // (from_address, amount, token)
+    pub outflows: Vec<(String, f64, String)>, // (to_address, amount, token)
+    pub discovered_at_depth: usize,
+    pub is_rendered: bool,  // false if not yet connected to target
+}
+
+/// Statistics for a mixer/tumbling node
+#[derive(Debug, Clone)]
+pub struct MixerStats {
+    pub sources: usize,       // Number of incoming wallets
+    pub destinations: usize,  // Number of outgoing wallets
+    pub total_in: f64,        // Total amount received
+    pub total_out: f64,       // Total amount sent
+    pub unique_tokens: usize, // Number of different tokens
 }
 
 /// Input event for graph navigation
@@ -137,15 +171,18 @@ impl WalletGraph {
             },
         ));
 
+        let mut connected_nodes = std::collections::HashSet::new();
+        connected_nodes.insert(0); // Target wallet is always connected
+
         Self {
             nodes,
             connections: Vec::new(),
             target_wallet,
-            selected_node: Some(0),
+            selection: SelectionMode::Node(0), // Start with target wallet selected
             collapsed_nodes: std::collections::HashSet::new(),
             node_positions: vec![(0.0, 0.0)], // Target wallet at origin
             viewport: (0.0, 0.0, 1.0), // (center_x, center_y, zoom=1.0)
-            max_depth: 5, // Default BFS depth
+            max_depth: 15, // Increased for deep blockchain investigation
             current_depth: 0,
             search_query: String::new(),
             search_active: false,
@@ -153,47 +190,180 @@ impl WalletGraph {
             search_result_idx: 0,
             toast_message: None,
             toast_timer: 0,
+            wallet_cache: HashMap::new(),
+            connected_nodes,
         }
+    }
+
+    /// Get selected node index (for backward compatibility)
+    fn selected_node(&self) -> Option<usize> {
+        match &self.selection {
+            SelectionMode::Node(idx) => Some(*idx),
+            SelectionMode::Edge { from_node, .. } => Some(*from_node),
+        }
+    }
+
+    /// Set selected node (for backward compatibility)
+    fn set_selected_node(&mut self, node_idx: Option<usize>) {
+        if let Some(idx) = node_idx {
+            self.selection = SelectionMode::Node(idx);
+            self.center_camera_on_selection();
+        }
+    }
+
+    /// Auto-center camera on current selection (node or edge midpoint)
+    fn center_camera_on_selection(&mut self) {
+        match &self.selection {
+            SelectionMode::Node(idx) => {
+                if let Some(pos) = self.node_positions.get(*idx) {
+                    self.viewport.0 = pos.0;
+                    self.viewport.1 = pos.1;
+                }
+            }
+            SelectionMode::Edge { from_node, to_node, .. } => {
+                // Center on edge midpoint
+                if let (Some(from_pos), Some(to_pos)) = (
+                    self.node_positions.get(*from_node),
+                    self.node_positions.get(*to_node)
+                ) {
+                    self.viewport.0 = (from_pos.0 + to_pos.0) / 2.0;
+                    self.viewport.1 = (from_pos.1 + to_pos.1) / 2.0;
+                }
+            }
+        }
+    }
+
+    /// Get outgoing edges from a node
+    fn outgoing_edges(&self, node_idx: usize) -> Vec<usize> {
+        self.connections
+            .iter()
+            .enumerate()
+            .filter_map(|(edge_idx, (from, _, _))| {
+                if *from == node_idx {
+                    Some(edge_idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// Get incoming edges to a node
+    fn incoming_edges(&self, node_idx: usize) -> Vec<usize> {
+        self.connections
+            .iter()
+            .enumerate()
+            .filter_map(|(edge_idx, (_, to, _))| {
+                if *to == node_idx {
+                    Some(edge_idx)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     /// Handle keyboard input for graph navigation
     pub fn handle_input(&mut self, input: GraphInput) -> Option<String> {
         match input {
-            // Node selection navigation
+            // EDGE-AWARE NAVIGATION (follows transaction flows)
             GraphInput::Up => {
-                if let Some(idx) = self.selected_node {
-                    if idx > 0 {
-                        self.selected_node = Some(idx - 1);
+                match &self.selection {
+                    SelectionMode::Node(node_idx) => {
+                        // When on node, up/down just moves in list (fallback)
+                        if *node_idx > 0 {
+                            self.selection = SelectionMode::Node(node_idx - 1);
+                        }
                     }
-                } else if !self.nodes.is_empty() {
-                    self.selected_node = Some(0);
+                    SelectionMode::Edge { edge_idx, from_node, to_node } => {
+                        // When on edge, up/down cycles through edges from same source
+                        let outgoing = self.outgoing_edges(*from_node);
+                        if let Some(pos) = outgoing.iter().position(|e| e == edge_idx) {
+                            if pos > 0 {
+                                let new_edge = outgoing[pos - 1];
+                                let (_, to, _) = self.connections[new_edge];
+                                self.selection = SelectionMode::Edge {
+                                    edge_idx: new_edge,
+                                    from_node: *from_node,
+                                    to_node: to,
+                                };
+                            }
+                        }
+                    }
                 }
+                self.center_camera_on_selection();
                 None
             }
             GraphInput::Down => {
-                if let Some(idx) = self.selected_node {
-                    if idx + 1 < self.nodes.len() {
-                        self.selected_node = Some(idx + 1);
+                match &self.selection {
+                    SelectionMode::Node(node_idx) => {
+                        if node_idx + 1 < self.nodes.len() {
+                            self.selection = SelectionMode::Node(node_idx + 1);
+                        }
                     }
-                } else if !self.nodes.is_empty() {
-                    self.selected_node = Some(0);
+                    SelectionMode::Edge { edge_idx, from_node, to_node } => {
+                        // Cycle through outgoing edges
+                        let outgoing = self.outgoing_edges(*from_node);
+                        if let Some(pos) = outgoing.iter().position(|e| e == edge_idx) {
+                            if pos + 1 < outgoing.len() {
+                                let new_edge = outgoing[pos + 1];
+                                let (_, to, _) = self.connections[new_edge];
+                                self.selection = SelectionMode::Edge {
+                                    edge_idx: new_edge,
+                                    from_node: *from_node,
+                                    to_node: to,
+                                };
+                            }
+                        }
+                    }
                 }
+                self.center_camera_on_selection();
                 None
             }
             GraphInput::Left => {
-                if let Some(idx) = self.selected_node {
-                    if idx > 0 {
-                        self.selected_node = Some(idx - 1);
+                match &self.selection {
+                    SelectionMode::Node(node_idx) => {
+                        // LEFT from node → select incoming edge
+                        let incoming = self.incoming_edges(*node_idx);
+                        if !incoming.is_empty() {
+                            let first_edge = incoming[0];
+                            let (from, _, _) = self.connections[first_edge];
+                            self.selection = SelectionMode::Edge {
+                                edge_idx: first_edge,
+                                from_node: from,
+                                to_node: *node_idx,
+                            };
+                        }
+                    }
+                    SelectionMode::Edge { from_node, .. } => {
+                        // LEFT from edge → go back to source wallet
+                        self.selection = SelectionMode::Node(*from_node);
                     }
                 }
+                self.center_camera_on_selection();
                 None
             }
             GraphInput::Right => {
-                if let Some(idx) = self.selected_node {
-                    if idx + 1 < self.nodes.len() {
-                        self.selected_node = Some(idx + 1);
+                match &self.selection {
+                    SelectionMode::Node(node_idx) => {
+                        // RIGHT from node → select outgoing edge
+                        let outgoing = self.outgoing_edges(*node_idx);
+                        if !outgoing.is_empty() {
+                            let first_edge = outgoing[0];
+                            let (_, to, _) = self.connections[first_edge];
+                            self.selection = SelectionMode::Edge {
+                                edge_idx: first_edge,
+                                from_node: *node_idx,
+                                to_node: to,
+                            };
+                        }
+                    }
+                    SelectionMode::Edge { to_node, .. } => {
+                        // RIGHT from edge → jump to destination wallet
+                        self.selection = SelectionMode::Node(*to_node);
                     }
                 }
+                self.center_camera_on_selection();
                 None
             }
             // Viewport panning (FASTER for better UX)
@@ -223,7 +393,7 @@ impl WalletGraph {
                 None
             }
             GraphInput::Toggle => {
-                if let Some(idx) = self.selected_node {
+                if let Some(idx) = self.selected_node() {
                     if self.collapsed_nodes.contains(&idx) {
                         self.collapsed_nodes.remove(&idx);
                     } else {
@@ -233,12 +403,13 @@ impl WalletGraph {
                 None
             }
             GraphInput::Select => {
-                self.selected_node
+                self.selected_node()
                     .and_then(|idx| self.nodes.get(idx))
                     .map(|(addr, _)| addr.clone())
             }
             GraphInput::Escape => {
-                self.selected_node = None;
+                // Escape deselects (go back to target wallet)
+                self.set_selected_node(Some(0));
                 None
             }
             // Depth control for BFS exploration
@@ -279,7 +450,7 @@ impl WalletGraph {
             GraphInput::SearchNext => {
                 if !self.search_results.is_empty() {
                     self.search_result_idx = (self.search_result_idx + 1) % self.search_results.len();
-                    self.selected_node = Some(self.search_results[self.search_result_idx]);
+                    self.set_selected_node(Some(self.search_results[self.search_result_idx]));
                     // Center viewport on result
                     if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
                         self.viewport.0 = pos.0;
@@ -295,7 +466,7 @@ impl WalletGraph {
                     } else {
                         self.search_result_idx - 1
                     };
-                    self.selected_node = Some(self.search_results[self.search_result_idx]);
+                    self.set_selected_node(Some(self.search_results[self.search_result_idx]));
                     // Center viewport on result
                     if let Some(pos) = self.node_positions.get(self.search_results[self.search_result_idx]) {
                         self.viewport.0 = pos.0;
@@ -306,9 +477,9 @@ impl WalletGraph {
             }
             // Copy to clipboard
             GraphInput::Copy => {
-                if let Some(idx) = self.selected_node {
+                if let Some(idx) = self.selected_node() {
                     if let Some((addr, _)) = self.nodes.get(idx) {
-                        match Clipboard::new().and_then(|mut clip| clip.set_text(addr.clone())) {
+                        match Clipboard::new().and_then(|mut clip| clip.set_text(addr.to_string())) {
                             Ok(_) => {
                                 self.show_toast(format!("Copied: {}...{}", &addr[..8], &addr[addr.len()-8..]));
                             }
@@ -322,7 +493,7 @@ impl WalletGraph {
             }
             // Hop to wallet - re-center graph on selected wallet
             GraphInput::HopToWallet => {
-                if let Some(idx) = self.selected_node {
+                if let Some(idx) = self.selected_node() {
                     if let Some(pos) = self.node_positions.get(idx) {
                         // Center viewport on selected wallet
                         self.viewport.0 = pos.0;
@@ -358,7 +529,7 @@ impl WalletGraph {
         // Auto-select first result
         if !self.search_results.is_empty() {
             self.search_result_idx = 0;
-            self.selected_node = Some(self.search_results[0]);
+            self.set_selected_node(Some(self.search_results[0]));
             // Center viewport on first result
             if let Some(pos) = self.node_positions.get(self.search_results[0]) {
                 self.viewport.0 = pos.0;
@@ -397,29 +568,77 @@ impl WalletGraph {
     }
 
     pub fn is_selected(&self, node_idx: usize) -> bool {
-        self.selected_node == Some(node_idx)
+        self.selected_node() == Some(node_idx)
     }
 
-    /// Get info about selected node
+    /// Get info about selected node or edge
     pub fn get_selected_info(&self) -> Option<String> {
-        self.selected_node.and_then(|idx| {
-            self.nodes.get(idx).map(|(addr, node)| {
-                let outgoing = self.get_outgoing(idx);
-                let incoming: Vec<_> = self.connections
-                    .iter()
-                    .filter(|(_, to, _)| *to == idx)
-                    .collect();
-                format!(
-                    "{} {}\nAddress: {}\nIn: {} | Out: {}{}",
-                    node.node_type.symbol(),
-                    node.label,
-                    addr,
-                    incoming.len(),
-                    outgoing.len(),
-                    if self.is_collapsed(idx) { " [▶]" } else { "" }
-                )
-            })
-        })
+        match &self.selection {
+            SelectionMode::Node(idx) => {
+                self.nodes.get(*idx).map(|(addr, node)| {
+                    let outgoing = self.get_outgoing(*idx);
+                    let incoming: Vec<_> = self.connections
+                        .iter()
+                        .filter(|(_, to, _)| *to == *idx)
+                        .collect();
+                    format!(
+                        "{} {}\nAddress: {}\nIn: {} | Out: {}{}",
+                        node.node_type.symbol(),
+                        node.label,
+                        addr,
+                        incoming.len(),
+                        outgoing.len(),
+                        if self.is_collapsed(*idx) { " [▶]" } else { "" }
+                    )
+                })
+            }
+            SelectionMode::Edge { edge_idx, from_node, to_node } => {
+                // Get edge metadata
+                if let Some((from_addr, to_addr, edge_data)) = self.connections.get(*edge_idx) {
+                    let from_label = self.nodes.get(*from_node)
+                        .map(|(_, n)| n.label.clone())
+                        .unwrap_or_else(|| "Unknown".to_string());
+                    let to_label = self.nodes.get(*to_node)
+                        .map(|(_, n)| n.label.clone())
+                        .unwrap_or_else(|| "Unknown".to_string());
+
+                    Some(format!(
+                        "🔄 TRANSFER DETAILS\n\
+                        ═══════════════════\n\
+                        From: {}\n\
+                        To: {}\n\
+                        Amount: {:.4} {}\n\
+                        Type: {}\n\
+                        Time: {}\n\
+                        Signature: {}\n\
+                        \n\
+                        📊 FLOW ANALYSIS\n\
+                        ═══════════════════\n\
+                        Token Path Depth: {} hops\n\
+                        Mixer Nodes: {} detected\n\
+                        Risk Score: {}",
+                        from_label,
+                        to_label,
+                        edge_data.amount,
+                        edge_data.token,
+                        "SPL Transfer",  // Default transfer type
+                        edge_data.timestamp.as_deref().unwrap_or("Unknown"),
+                        edge_data.signature.as_deref()
+                            .and_then(|s| if s.len() > 16 {
+                                Some(format!("{}...{}", &s[..8], &s[s.len()-8..]))
+                            } else {
+                                Some(s.to_string())
+                            })
+                            .unwrap_or_else(|| "N/A".to_string()),
+                        self.trace_token_path_depth(*from_node, *to_node, &edge_data.token),
+                        self.count_mixers_in_path(*from_node, *to_node),
+                        self.calculate_risk_score(*from_node, *to_node)
+                    ))
+                } else {
+                    Some("Edge data not found".to_string())
+                }
+            }
+        }
     }
 
     pub fn add_wallet(
@@ -452,16 +671,51 @@ impl WalletGraph {
             },
         ));
 
-        // Add initial random position for new node
+        // Add node with layered circular layout
         let idx = self.nodes.len() - 1;
-        let angle = (idx as f64) * 2.0 * std::f64::consts::PI / 20.0;
-        let radius = 10.0 + (idx as f64) * 2.0;
+        self.position_node_in_layer(idx);
+
+        // During bootstrap (no connections), add new nodes to connected set
+        if self.connections.is_empty() {
+            self.connected_nodes.insert(idx);
+        }
+
+        idx
+    }
+
+    /// Position node in concentric layers based on distance from center
+    fn position_node_in_layer(&mut self, idx: usize) {
+        // Calculate layer based on shortest path to target wallet
+        let layer = self.calculate_node_layer(idx);
+
+        // Count nodes in this layer
+        let nodes_in_layer = self.count_nodes_in_layer(layer);
+        let position_in_layer = nodes_in_layer; // This node's position
+
+        // Calculate position in a circle for this layer
+        let radius = 15.0 * (layer as f64 + 1.0); // Each layer 15 units apart
+        let angle = (position_in_layer as f64) * 2.0 * std::f64::consts::PI / (nodes_in_layer as f64 + 1.0).max(6.0);
+
         self.node_positions.push((
             radius * angle.cos(),
             radius * angle.sin(),
         ));
+    }
 
-        idx
+    fn calculate_node_layer(&self, idx: usize) -> usize {
+        // Target wallet is layer 0
+        if idx == 0 { return 0; }
+
+        // Calculate based on connection depth
+        // For now, use a simple heuristic based on node index
+        // TODO: Use BFS to calculate actual distance
+        ((idx as f64).log2() as usize).min(5)
+    }
+
+    fn count_nodes_in_layer(&self, layer: usize) -> usize {
+        self.nodes.iter().enumerate()
+            .filter(|(idx, _)| self.calculate_node_layer(*idx) == layer)
+            .count()
     }
 
     pub fn add_connection(
@@ -489,6 +743,8 @@ impl WalletGraph {
 
     /// Compute hierarchical layout: inflows left, target center, outflows right
     pub fn compute_hierarchical_layout(&mut self) {
+        use std::collections::{HashMap, VecDeque};
+
         if self.nodes.is_empty() {
             return;
         }
@@ -496,31 +752,39 @@ impl WalletGraph {
         // Find target wallet index (should be index 0)
         let target_idx = 0;
 
-        // Categorize nodes into inflows (send TO target) and outflows (receive FROM target)
-        let mut inflow_nodes = Vec::new();
-        let mut outflow_nodes = Vec::new();
-        let mut other_nodes = Vec::new();
+        // BFS to compute distances from target for true layered layout
+        let mut distances: HashMap<usize, usize> = HashMap::new();
+        let mut queue = VecDeque::new();
 
-        for (idx, (addr, _)) in self.nodes.iter().enumerate() {
-            if idx == target_idx {
-                continue; // Skip target itself
+        distances.insert(target_idx, 0);
+        queue.push_back(target_idx);
+
+        while let Some(current) = queue.pop_front() {
+            let current_dist = distances[&current];
+
+            // Find all connected nodes
+            for (from, to, _) in &self.connections {
+                let neighbor = if *from == current {
+                    Some(*to)
+                } else if *to == current {
+                    Some(*from)
+                } else {
+                    None
+                };
+
+                if let Some(n) = neighbor {
+                    if !distances.contains_key(&n) {
+                        distances.insert(n, current_dist + 1);
+                        queue.push_back(n);
+                    }
+                }
             }
+        }
 
-            // Check if this node sends to target (inflow)
-            let sends_to_target = self.connections.iter()
-                .any(|(from, to, _)| *from == idx && *to == target_idx);
-
-            // Check if this node receives from target (outflow)
-            let receives_from_target = self.connections.iter()
-                .any(|(from, to, _)| *from == target_idx && *to == idx);
-
-            if sends_to_target {
-                inflow_nodes.push(idx);
-            } else if receives_from_target {
-                outflow_nodes.push(idx);
-            } else {
-                other_nodes.push(idx);
-            }
+        // Group nodes by distance (layer)
+        let mut layers: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (node_idx, dist) in &distances {
+            layers.entry(*dist).or_insert_with(Vec::new).push(*node_idx);
         }
 
         // Clear and rebuild positions
@@ -530,27 +794,44 @@ impl WalletGraph {
         // Position target at center (0, 0)
         self.node_positions[target_idx] = (0.0, 0.0);
 
-        // Position inflows on the LEFT (negative X)
-        let inflow_count = inflow_nodes.len();
-        for (i, &idx) in inflow_nodes.iter().enumerate() {
-            let y_offset = (i as f64 - inflow_count as f64 / 2.0) * 15.0;
-            self.node_positions[idx] = (-50.0, y_offset);
+        // Place nodes in concentric circles
+        for (layer_dist, nodes) in layers.iter() {
+            if *layer_dist == 0 { continue; } // Skip target
+
+            // Adaptive radius based on layer and node count
+            let base_radius = 30.0 + (*layer_dist as f64) * 20.0;
+            let radius = base_radius + (nodes.len() as f64).sqrt() * 3.0;
+            let angle_step = std::f64::consts::TAU / nodes.len() as f64;
+
+            // Sort nodes for consistent positioning
+            let mut sorted_nodes = nodes.clone();
+            sorted_nodes.sort();
+
+            for (i, &node_idx) in sorted_nodes.iter().enumerate() {
+                // Add slight variation to avoid perfect circles
+                let angle = i as f64 * angle_step;
+                let r = radius + ((node_idx * 7) % 11) as f64 - 5.0;
+                let x = r * angle.cos();
+                let y = r * angle.sin();
+
+                if node_idx < self.node_positions.len() {
+                    self.node_positions[node_idx] = (x, y);
+                }
+            }
         }
 
-        // Position outflows on the RIGHT (positive X)
-        let outflow_count = outflow_nodes.len();
-        for (i, &idx) in outflow_nodes.iter().enumerate() {
-            let y_offset = (i as f64 - outflow_count as f64 / 2.0) * 15.0;
-            self.node_positions[idx] = (50.0, y_offset);
-        }
-
-        // Position other nodes (secondary connections) further out
-        let other_count = other_nodes.len();
-        for (i, &idx) in other_nodes.iter().enumerate() {
-            // Alternate between left and right
-            let side = if i % 2 == 0 { -1.0 } else { 1.0 };
-            let y_offset = (i as f64 / 2.0 - other_count as f64 / 4.0) * 15.0;
-            self.node_positions[idx] = (side * 80.0, y_offset);
+        // Handle disconnected nodes (place at far edges)
+        let mut edge_count = 0;
+        for i in 0..self.nodes.len() {
+            if !distances.contains_key(&i) {
+                let angle = edge_count as f64 * 0.4;
+                let radius = 150.0 + (edge_count as f64) * 10.0;
+                self.node_positions[i] = (
+                    radius * angle.cos(),
+                    radius * angle.sin()
+                );
+                edge_count += 1;
+            }
         }
     }
 
@@ -587,11 +868,261 @@ impl WalletGraph {
 
         // Add connection with transfer info including timestamp and signature
         self.add_connection(&from, &to, amount, token, timestamp, signature);
+
+        // Rebuild connected nodes after adding transfer
+        self.rebuild_connected_nodes();
+    }
+
+    /// Rebuild the set of path-connected nodes using BFS from target wallet
+    /// Only nodes reachable from target (via incoming OR outgoing edges) are marked connected
+    fn rebuild_connected_nodes(&mut self) {
+        use std::collections::VecDeque;
+
+        self.connected_nodes.clear();
+
+        // If no connections yet, mark ALL nodes as connected (bootstrap phase)
+        if self.connections.is_empty() {
+            for idx in 0..self.nodes.len() {
+                self.connected_nodes.insert(idx);
+            }
+            return;
+        }
+
+        // Find target wallet index (should be 0, but let's be safe)
+        let target_idx = self.nodes.iter()
+            .position(|(addr, _)| addr == &self.target_wallet)
+            .unwrap_or(0);
+
+        // BFS from target wallet (bidirectional - follow edges in BOTH directions)
+        let mut queue = VecDeque::new();
+        queue.push_back(target_idx);
+        self.connected_nodes.insert(target_idx);
+
+        while let Some(current_idx) = queue.pop_front() {
+            // Follow outgoing edges (money sent FROM current wallet)
+            for (from, to, _) in &self.connections {
+                if *from == current_idx && !self.connected_nodes.contains(to) {
+                    self.connected_nodes.insert(*to);
+                    queue.push_back(*to);
+                }
+            }
+
+            // Follow incoming edges (money sent TO current wallet)
+            for (from, to, _) in &self.connections {
+                if *to == current_idx && !self.connected_nodes.contains(from) {
+                    self.connected_nodes.insert(*from);
+                    queue.push_back(*from);
+                }
+            }
+        }
+    }
+
+    /// Check if a node should be rendered (must be path-connected to target)
+    fn should_render_node(&self, node_idx: usize) -> bool {
+        // DISABLE filtering if no connections yet (show everything during graph build)
+        if self.connections.is_empty() {
+            return true;
+        }
+
+        // Otherwise, only show path-connected nodes
+        self.connected_nodes.contains(&node_idx)
+    }
+
+    /// Trace token path depth (inflows and outflows up to 5 hops)
+    fn trace_token_path_depth(&self, from_idx: usize, to_idx: usize, token: &str) -> usize {
+        use std::collections::{HashSet, VecDeque};
+
+        let mut visited = HashSet::new();
+        let mut max_depth = 0;
+
+        // Trace backwards (inflows) up to 5 hops
+        let mut queue = VecDeque::new();
+        queue.push_back((from_idx, 0));
+        visited.insert(from_idx);
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= 5 { continue; }
+            max_depth = max_depth.max(depth);
+
+            for (idx, (from, to, data)) in self.connections.iter().enumerate() {
+                if *to == current && data.token == token && !visited.contains(from) {
+                    visited.insert(*from);
+                    queue.push_back((*from, depth + 1));
+                }
+            }
+        }
+
+        // Trace forwards (outflows) up to 5 hops
+        visited.clear();
+        queue.clear();
+        queue.push_back((to_idx, 0));
+        visited.insert(to_idx);
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= 5 { continue; }
+            max_depth = max_depth.max(depth);
+
+            for (idx, (from, to, data)) in self.connections.iter().enumerate() {
+                if *from == current && data.token == token && !visited.contains(to) {
+                    visited.insert(*to);
+                    queue.push_back((*to, depth + 1));
+                }
+            }
+        }
+
+        max_depth
+    }
+
+    /// Count mixer nodes in the path between two nodes
+    fn count_mixers_in_path(&self, from_idx: usize, to_idx: usize) -> usize {
+        let mixers = self.detect_mixer_nodes();
+        let mut count = 0;
+
+        // Simple heuristic: count mixers that are connected to both nodes
+        for mixer_idx in mixers {
+            let has_from_connection = self.connections.iter()
+                .any(|(f, t, _)| (*f == from_idx && *t == mixer_idx) || (*f == mixer_idx && *t == from_idx));
+            let has_to_connection = self.connections.iter()
+                .any(|(f, t, _)| (*f == to_idx && *t == mixer_idx) || (*f == mixer_idx && *t == to_idx));
+
+            if has_from_connection || has_to_connection {
+                count += 1;
+            }
+        }
+
+        count
+    }
+
+    /// Calculate risk score based on mixer involvement and path complexity
+    fn calculate_risk_score(&self, from_idx: usize, to_idx: usize) -> String {
+        let mixer_count = self.count_mixers_in_path(from_idx, to_idx);
+        let from_connections = self.connections.iter()
+            .filter(|(f, _, _)| *f == from_idx).count();
+        let to_connections = self.connections.iter()
+            .filter(|(_, t, _)| *t == to_idx).count();
+
+        let score = if mixer_count > 2 {
+            "HIGH ⚠️"
+        } else if mixer_count > 0 || (from_connections > 5 && to_connections > 5) {
+            "MEDIUM ⚡"
+        } else {
+            "LOW ✓"
+        };
+
+        score.to_string()
+    }
+
+    /// Trace complete token flow path (inflows and outflows) for highlighting
+    fn trace_token_flow_path(&self, from_idx: usize, to_idx: usize, token: &str, max_depth: usize) -> Vec<usize> {
+        use std::collections::{HashSet, VecDeque};
+
+        let mut path_edges = Vec::new();
+        let mut visited_nodes = HashSet::new();
+        let mixers = self.detect_mixer_nodes();
+
+        // Trace backwards (inflows) from source
+        let mut queue = VecDeque::new();
+        queue.push_back((from_idx, 0));
+        visited_nodes.insert(from_idx);
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= max_depth { continue; }
+
+            for (edge_idx, (from, to, data)) in self.connections.iter().enumerate() {
+                if *to == current && data.token == token && !visited_nodes.contains(from) {
+                    path_edges.push(edge_idx);
+                    visited_nodes.insert(*from);
+
+                    // Skip expanding through mixers to reduce complexity
+                    if !mixers.contains(from) {
+                        queue.push_back((*from, depth + 1));
+                    }
+                }
+            }
+        }
+
+        // Trace forwards (outflows) from destination
+        visited_nodes.clear();
+        queue.clear();
+        queue.push_back((to_idx, 0));
+        visited_nodes.insert(to_idx);
+
+        while let Some((current, depth)) = queue.pop_front() {
+            if depth >= max_depth { continue; }
+
+            for (edge_idx, (from, to, data)) in self.connections.iter().enumerate() {
+                if *from == current && data.token == token && !visited_nodes.contains(to) {
+                    path_edges.push(edge_idx);
+                    visited_nodes.insert(*to);
+
+                    // Skip expanding through mixers to reduce complexity
+                    if !mixers.contains(to) {
+                        queue.push_back((*to, depth + 1));
+                    }
+                }
+            }
+        }
+
+        path_edges
+    }
+
+    /// Detect mixing/laundering patterns and return list of mixer node indices
+    /// Pattern: high in-degree + high out-degree + rapid turnover
+    fn detect_mixer_nodes(&self) -> Vec<usize> {
+        let mut mixers = Vec::new();
+
+        for (idx, _) in self.nodes.iter().enumerate() {
+            let in_count = self.incoming_edges(idx).len();
+            let out_count = self.outgoing_edges(idx).len();
+
+            // Heuristic: Mixer if receives from 3+ sources AND sends to 3+ destinations
+            // This catches split→shuffle→consolidate patterns
+            if in_count >= 3 && out_count >= 3 {
+                mixers.push(idx);
+            }
+        }
+
+        mixers
+    }
+
+    /// Calculate mixer statistics (for collapsed visualization)
+    fn get_mixer_stats(&self, node_idx: usize) -> MixerStats {
+        let incoming = self.incoming_edges(node_idx);
+        let outgoing = self.outgoing_edges(node_idx);
+
+        let mut total_in = 0.0;
+        let mut total_out = 0.0;
+        let mut unique_tokens = std::collections::HashSet::new();
+
+        for edge_idx in &incoming {
+            if let Some((_, _, label)) = self.connections.get(*edge_idx) {
+                total_in += label.amount;
+                unique_tokens.insert(label.token.clone());
+            }
+        }
+
+        for edge_idx in &outgoing {
+            if let Some((_, _, label)) = self.connections.get(*edge_idx) {
+                total_out += label.amount;
+                unique_tokens.insert(label.token.clone());
+            }
+        }
+
+        MixerStats {
+            sources: incoming.len(),
+            destinations: outgoing.len(),
+            total_in,
+            total_out,
+            unique_tokens: unique_tokens.len(),
+        }
     }
 
     pub fn render(&mut self, f: &mut Frame, area: Rect) {
         use ratatui::widgets::{Paragraph, canvas::Canvas};
         use ratatui::text::{Line, Span};
+
+        // Detect mixer nodes for visualization
+        let mixer_nodes = self.detect_mixer_nodes();
 
         // Compute hierarchical layout on every render (cheap operation)
         if !self.nodes.is_empty() && !self.connections.is_empty() {
@@ -622,52 +1153,194 @@ impl WalletGraph {
             .x_bounds([cx - 100.0 / zoom, cx + 100.0 / zoom])
             .y_bounds([cy - 50.0 / zoom, cy + 50.0 / zoom])
             .paint(|ctx| {
-                // Draw edges FIRST with HIGH VISIBILITY
-                for (from_idx, to_idx, edge_label) in &self.connections {
+                // Collect selected edge info for path highlighting
+                let selected_edge_idx = match &self.selection {
+                    SelectionMode::Edge { edge_idx, .. } => Some(*edge_idx),
+                    _ => None,
+                };
+
+                // When an edge is selected, trace token flows
+                let highlighted_path = if let Some(edge_idx) = selected_edge_idx {
+                    if let Some((from, to, data)) = self.connections.get(edge_idx) {
+                        self.trace_token_flow_path(*from, *to, &data.token, 5)
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
+                };
+
+                // Draw ALL edges (even to off-screen nodes) with improved visual encoding
+                for (edge_idx, (from_idx, to_idx, edge_label)) in self.connections.iter().enumerate() {
                     if *from_idx < self.node_positions.len() && *to_idx < self.node_positions.len() {
                         let (x1, y1) = self.node_positions[*from_idx];
                         let (x2, y2) = self.node_positions[*to_idx];
 
-                        // Draw BRIGHT CYAN lines for maximum visibility
-                        ctx.draw(&CanvasLine {
-                            x1, y1, x2, y2,
-                            color: Color::Cyan,
-                        });
+                        // Calculate edge metrics
+                        let edge_length = ((x2 - x1).powi(2) + (y2 - y1).powi(2)).sqrt();
+                        let amount = edge_label.amount;
 
-                        // Draw edge label at midpoint (only if zoomed in enough)
-                        if zoom > 0.8 {
-                            let mid_x = (x1 + x2) / 2.0;
-                            let mid_y = (y1 + y2) / 2.0;
-                            let label_text = edge_label.format_short();
-                            ctx.print(mid_x, mid_y - 1.0, label_text);
+                        // Determine edge color and thickness based on state and amount
+                        let (edge_color, thickness) = if Some(edge_idx) == selected_edge_idx {
+                            (Color::Yellow, 3)  // Selected edge - bright and thick
+                        } else if highlighted_path.contains(&edge_idx) {
+                            (Color::LightYellow, 2)  // Related flow - medium
+                        } else {
+                            // Distance-based fade for unselected edges
+                            let dist_from_center = ((x1.powi(2) + y1.powi(2)).sqrt() +
+                                                   (x2.powi(2) + y2.powi(2)).sqrt()) / 2.0;
+
+                            // Color intensity based on transfer amount
+                            let color = if amount > 1000.0 {
+                                Color::Cyan  // Large transfer
+                            } else if amount > 100.0 {
+                                Color::Blue  // Medium transfer
+                            } else if dist_from_center < 50.0 {
+                                Color::LightBlue  // Close to center
+                            } else {
+                                Color::DarkGray  // Small/distant
+                            };
+
+                            // Thickness based on amount
+                            let edge_thickness = if amount > 1000.0 { 2 } else { 1 };
+                            (color, edge_thickness)
+                        };
+
+                        // Draw edge with appropriate thickness
+                        for i in 0..thickness {
+                            let offset = if thickness > 1 { (i as f64 - thickness as f64 / 2.0) * 0.3 } else { 0.0 };
+                            let dx = (y2 - y1) / edge_length * offset;
+                            let dy = (x1 - x2) / edge_length * offset;
+
+                            ctx.draw(&CanvasLine {
+                                x1: x1 + dx,
+                                y1: y1 + dy,
+                                x2: x2 + dx,
+                                y2: y2 + dy,
+                                color: edge_color,
+                            });
                         }
+
+                        // Add directional arrow for selected edge only
+                        if Some(edge_idx) == selected_edge_idx {
+                            let arrow_pos = 0.7; // Position along edge
+                            let ax = x1 + (x2 - x1) * arrow_pos;
+                            let ay = y1 + (y2 - y1) * arrow_pos;
+                            let arrow_size = 2.0;
+
+                            // Simple arrow using small lines
+                            let dx = x2 - x1;
+                            let dy = y2 - y1;
+                            let norm = (dx.powi(2) + dy.powi(2)).sqrt();
+                            if norm > 0.0 {
+                                let ux = dx / norm;
+                                let uy = dy / norm;
+
+                                ctx.draw(&CanvasLine {
+                                    x1: ax,
+                                    y1: ay,
+                                    x2: ax - ux * arrow_size + uy * arrow_size * 0.5,
+                                    y2: ay - uy * arrow_size - ux * arrow_size * 0.5,
+                                    color: Color::Yellow,
+                                });
+                                ctx.draw(&CanvasLine {
+                                    x1: ax,
+                                    y1: ay,
+                                    x2: ax - ux * arrow_size - uy * arrow_size * 0.5,
+                                    y2: ay - uy * arrow_size + ux * arrow_size * 0.5,
+                                    color: Color::Yellow,
+                                });
+                            }
+                        }
+
+                        // NO TEXT LABELS ON CANVAS - all details shown in side panel
                     }
                 }
 
-                // Draw nodes as LARGER circles
+                // Draw nodes with enhanced visual density
                 for (idx, (_, node)) in self.nodes.iter().enumerate() {
+                    // FILTER: Only render path-connected nodes
+                    if !self.should_render_node(idx) {
+                        continue;
+                    }
+
                     if idx < self.node_positions.len() {
                         let (x, y) = self.node_positions[idx];
 
-                        // Determine node color based on state
-                        let color = if Some(idx) == self.selected_node {
+                        // Check if this is a mixer node
+                        let is_mixer = mixer_nodes.contains(&idx);
+                        let is_selected = Some(idx) == self.selected_node();
+                        let is_search_match = self.search_results.contains(&idx);
+
+                        // Calculate node metrics for visual encoding
+                        let in_degree = self.connections.iter()
+                            .filter(|(_, to, _)| *to == idx).count();
+                        let out_degree = self.connections.iter()
+                            .filter(|(from, _, _)| *from == idx).count();
+                        let total_degree = in_degree + out_degree;
+
+                        // Size based on connection count (more connections = larger)
+                        let base_radius = if idx == 0 { 5.0 } // Target largest
+                            else if is_mixer { 4.5 }
+                            else { 2.0 + (total_degree as f64).sqrt() * 0.5 };
+                        let radius = base_radius.min(6.0); // Cap maximum size
+
+                        // Color intensity based on activity
+                        let color = if is_selected {
                             Color::White  // Selected node
-                        } else if self.search_results.contains(&idx) {
+                        } else if is_mixer {
+                            Color::Red  // MIXER - highlight in RED
+                        } else if is_search_match {
                             Color::Yellow  // Search match
+                        } else if idx == 0 {
+                            Color::Magenta  // Target wallet
                         } else {
-                            node.node_type.color()  // Normal color
+                            // Use color based on flow direction
+                            if in_degree > out_degree {
+                                Color::Green  // Net receiver
+                            } else if out_degree > in_degree {
+                                Color::Blue  // Net sender
+                            } else {
+                                Color::Cyan  // Balanced
+                            }
                         };
 
-                        // Draw node as BIGGER circle (radius 3.0) for better visibility
+                        // Draw main circle
                         ctx.draw(&Circle {
                             x, y,
-                            radius: 3.0,
+                            radius,
                             color,
                         });
 
-                        // Always show labels with more spacing
-                        let label = node.label.clone();
-                        ctx.print(x + 4.0, y, label);
+                        // Draw inner circle for visual depth
+                        if radius > 2.5 {
+                            ctx.draw(&Circle {
+                                x, y,
+                                radius: radius * 0.6,
+                                color: if is_selected { Color::Yellow }
+                                    else if is_mixer { Color::DarkGray }
+                                    else { Color::Black },
+                            });
+                        }
+
+                        // Add halo for selected/important nodes
+                        if is_selected || idx == 0 {
+                            ctx.draw(&Circle {
+                                x, y,
+                                radius: radius + 2.0,
+                                color: if is_selected { Color::Yellow } else { Color::Magenta },
+                            });
+                        }
+
+                        // Only show text for selected node or when zoomed in significantly
+                        if is_selected || (zoom > 2.5 && total_degree > 5) {
+                            // Minimal label - just degree info for important nodes
+                            if is_mixer {
+                                ctx.print(x, y - radius - 2.0, format!("M:{}↔{}", in_degree, out_degree));
+                            } else if total_degree > 10 {
+                                ctx.print(x, y - radius - 2.0, format!("{}↔{}", in_degree, out_degree));
+                            }
+                        }
                     }
                 }
             });

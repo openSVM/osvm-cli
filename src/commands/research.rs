@@ -558,10 +558,12 @@ async fn handle_tui_research(matches: &ArgMatches, wallet: &str) -> Result<()> {
     // Create TUI app
     let mut app = OsvmApp::new(wallet.to_string());
 
-    // Start real-time network stats polling (NEW!)
+    // Set RPC URL for live blockchain queries (needed for transaction search)
     let rpc_url = std::env::var("SOLANA_RPC_URL")
         .unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".to_string());
-    app.start_network_stats_polling(rpc_url);
+    app.rpc_url = Some(rpc_url);
+
+    // (No network stats polling - we show wallet-specific analytics instead)
 
     // Clone Arc references for background thread
     let agent_output = Arc::clone(&app.agent_output);

@@ -74,8 +74,8 @@ const PF_W: u32 = 0x2;
 const PF_R: u32 = 0x4;
 
 /// Virtual addresses for Solana memory regions (SBPFv1)
-const TEXT_VADDR: u64 = 0x1000;  // .text at 0x1000 for v1
-const RODATA_VADDR: u64 = 0x100000000;
+const TEXT_VADDR: u64 = 0x120;  // .text at 0x120 (matching Solana's working ELFs)
+const RODATA_VADDR: u64 = 0x150;  // .rodata follows .text
 const STACK_VADDR: u64 = 0x200000000;
 const HEAP_VADDR: u64 = 0x300000000;
 
@@ -142,11 +142,11 @@ impl ElfWriter {
         let stack_name = self.add_shstrtab(".bss.stack");
         let heap_name = self.add_shstrtab(".bss.heap");
 
-        // Layout (page-aligned like reference ELFs):
+        // Layout (matching Solana's working ELFs):
         // [ELF Header: 64 bytes]
         // [Program Headers: 1 * 56 bytes]
-        // [Padding to 0x1000]
-        // [.text section at 0x1000]
+        // [Padding to 0x120]
+        // [.text section at 0x120]
         // [.strtab section]
         // [.symtab section]
         // [.shstrtab section]
@@ -159,7 +159,7 @@ impl ElfWriter {
         let num_sections = 5usize;  // NULL, .text, .strtab, .symtab, .shstrtab
 
         let phdr_offset = ehdr_size;
-        let text_offset = 0x1000usize;  // Page-aligned
+        let text_offset = 0x120usize;  // Match Solana's working ELFs
         let text_size = text_section.len();
 
         let strtab_offset = text_offset + text_size;
@@ -206,7 +206,7 @@ impl ElfWriter {
         // Single PT_LOAD for .text (page-aligned like reference)
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
 
-        // Padding to 0x1000
+        // Padding to 0x120 for .text section
         while elf.len() < text_offset {
             elf.push(0);
         }
@@ -305,8 +305,8 @@ impl ElfWriter {
         // Layout (page-aligned):
         // [ELF Header: 64 bytes]
         // [Program Headers: 2 * 56 = 112 bytes]
-        // [Padding to 0x1000]
-        // [.text section at 0x1000]
+        // [Padding to 0x120]
+        // [.text section at 0x120]
         // [.dynamic section]
         // [.dynsym section]
         // [.dynstr section]
@@ -322,13 +322,13 @@ impl ElfWriter {
         let num_phdrs = 4usize;  // PT_LOAD for .text, PT_LOAD for .dynamic, PT_LOAD for dynamic sections, PT_DYNAMIC
         let num_sections = 9usize;  // NULL, .text, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
 
-        let text_offset = 0x1000usize;
+        let text_offset = 0x120usize;  // Match Solana's working ELFs
         let text_size = text_section.len();
 
         // .dynamic section (11 entries * 16 bytes = 176 bytes)
         // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
         let dynamic_offset = text_offset + text_size;
-        let dynamic_size = 11 * 16;
+        let dynamic_size = 10 * 16; // 10 entries now (removed DT_TEXTREL)
 
         // .dynsym section (NULL + N symbols * 24 bytes)
         let dynsym_offset = dynamic_offset + dynamic_size;
@@ -411,7 +411,7 @@ impl ElfWriter {
         elf.extend_from_slice(&(dynamic_size as u64).to_le_bytes());
         elf.extend_from_slice(&0x8u64.to_le_bytes());  // 8-byte alignment for dynamic entries
 
-        // Padding to 0x1000
+        // Padding to 0x120 for .text section
         while elf.len() < text_offset {
             elf.push(0);
         }
@@ -448,10 +448,7 @@ impl ElfWriter {
         // DT_STRSZ
         elf.extend_from_slice(&DT_STRSZ.to_le_bytes());
         elf.extend_from_slice(&(dynstr_size as u64).to_le_bytes());
-        // DT_TEXTREL
-        elf.extend_from_slice(&DT_TEXTREL.to_le_bytes());
-        elf.extend_from_slice(&0u64.to_le_bytes());
-        // DT_NULL
+        // DT_NULL (no need for DT_TEXTREL - we have DT_FLAGS with DF_TEXTREL)
         elf.extend_from_slice(&DT_NULL.to_le_bytes());
         elf.extend_from_slice(&0u64.to_le_bytes());
 

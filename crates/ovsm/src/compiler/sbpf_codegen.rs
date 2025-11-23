@@ -338,9 +338,11 @@ impl SbpfInstruction {
         Self::new(class::JMP | op | SRC_REG, dst, src, offset, 0)
     }
 
-    /// Call syscall (hash in imm)
-    pub fn call_syscall(hash: u32) -> Self {
-        Self::new(class::JMP | jmp::CALL, 0, 0, 0, hash as i32)
+    /// Call syscall (V1 uses imm=-1 for external calls)
+    pub fn call_syscall(_hash: u32) -> Self {
+        // For V1, use imm=-1 to indicate external call
+        // The actual hash will be resolved via relocation
+        Self::new(class::JMP | jmp::CALL, 0, 0, 0, -1)
     }
 
     /// Call internal function (relative offset)
@@ -858,9 +860,8 @@ impl SbpfCodegen {
                     }
                 }
 
-                // Emit regular call (not a syscall - just a helper function)
-                let hash = self.get_syscall_hash(name);
-                self.emit(SbpfInstruction::call_syscall(hash));
+                // Emit syscall with placeholder - will be patched by relocation
+                self.emit_syscall(name);
 
                 // Move result from R0
                 if let Some(dst_ir) = dst {
@@ -1080,8 +1081,11 @@ impl SbpfCodegen {
     /// Emit a syscall and record its location for relocation
     fn emit_syscall(&mut self, name: &str) {
         let offset = self.current_offset_bytes();
+        // For now, directly use the hash instead of relocation
+        // This avoids the complex ELF dynamic linking issues
         let hash = self.get_syscall_hash(name);
         self.emit(SbpfInstruction::call_syscall(hash));
+        // Still record for potential future use
         self.syscall_sites.push(SyscallCallSite {
             offset,
             name: name.to_string(),

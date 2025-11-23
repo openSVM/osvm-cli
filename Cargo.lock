@@ -4687,6 +4687,7 @@ dependencies = [
  "env_logger",
  "fs2",
  "futures",
+ "futures-util",
  "hex",
  "image",
  "imageproc",

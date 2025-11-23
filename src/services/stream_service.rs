@@ -1,6 +1,7 @@
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
+use solana_client::nonblocking::pubsub_client::PubsubClient;
 use solana_client::rpc_config::{RpcTransactionLogsConfig, RpcTransactionLogsFilter};
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::pubkey::Pubkey;
@@ -8,8 +9,10 @@ use solana_sdk::signature::Signature;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::str::FromStr;
 use tokio::sync::broadcast;
 use tokio::time;
+use futures_util::StreamExt;
 
 /// Event types that can be streamed
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -22,6 +25,8 @@ pub enum SolanaEvent {
         success: bool,
         fee: u64,
         signer: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        program_ids: Option<Vec<String>>,
     },
     AccountUpdate {
         pubkey: String,
@@ -142,10 +147,25 @@ impl EventFilter {
 
         // Check program_id filter
         if let Some(ref programs) = self.program_ids {
-            if let SolanaEvent::ProgramInvocation { program_id, .. } = event {
-                if !programs.contains(program_id) {
+            match event {
+                SolanaEvent::Transaction { program_ids: Some(tx_programs), .. } => {
+                    // Transaction must involve at least one of the filtered programs
+                    if !tx_programs.iter().any(|p| programs.contains(p)) {
+                        return false;
+                    }
+                }
+                SolanaEvent::Transaction { program_ids: None, .. } => {
+                    // Transaction without program_ids can't be filtered, skip it
                     return false;
                 }
+                SolanaEvent::ProgramInvocation { program_id, .. } => {
+                    if !programs.contains(program_id) {
+                        return false;
+                    }
+                }
+                // Allow SlotUpdate, AccountUpdate, and other events through
+                // They provide context for the filtered transactions
+                _ => {}
             }
         }
 
@@ -218,28 +238,46 @@ impl StreamService {
         let running = Arc::clone(&self.running);
         let stats = Arc::clone(&self.stats);
 
-        tokio::spawn(async move {
-            let start_time = SystemTime::now();
+        // Check if we have program filters - if so, use WebSocket subscriptions
+        let has_program_filters = {
+            let filters_vec = filters.lock().unwrap();
+            filters_vec.iter().any(|f| f.program_ids.is_some())
+        };
 
-            loop {
-                if !*running.lock().unwrap() {
-                    break;
+        if has_program_filters {
+            // Use WebSocket logsSubscribe for program-specific streaming
+            tracing::info!("Using WebSocket programSubscribe for program-specific streaming");
+            tokio::spawn(async move {
+                if let Err(e) = Self::subscribe_to_programs(&rpc_url, &tx, &filters, &running, &stats).await {
+                    tracing::error!("Program subscription error: {}", e);
                 }
+            });
+        } else {
+            // Use HTTP polling for general block streaming
+            tracing::info!("Using HTTP polling for general block streaming");
+            tokio::spawn(async move {
+                let start_time = SystemTime::now();
 
-                // Update uptime
-                if let Ok(elapsed) = start_time.elapsed() {
-                    stats.lock().unwrap().uptime_secs = elapsed.as_secs();
+                loop {
+                    if !*running.lock().unwrap() {
+                        break;
+                    }
+
+                    // Update uptime
+                    if let Ok(elapsed) = start_time.elapsed() {
+                        stats.lock().unwrap().uptime_secs = elapsed.as_secs();
+                    }
+
+                    // Poll for new events
+                    if let Err(e) = Self::poll_events(&rpc_url, &tx, &filters, &stats).await {
+                        tracing::error!("Error polling events: {}", e);
+                    }
+
+                    // Sleep to avoid overwhelming the RPC
+                    time::sleep(Duration::from_millis(100)).await;
                 }
-
-                // Poll for new events
-                if let Err(e) = Self::poll_events(&rpc_url, &tx, &filters, &stats).await {
-                    tracing::error!("Error polling events: {}", e);
-                }
-
-                // Sleep to avoid overwhelming the RPC
-                time::sleep(Duration::from_millis(100)).await;
-            }
-        });
+            });
+        }
 
         Ok(())
     }
@@ -247,6 +285,108 @@ impl StreamService {
     /// Stop the streaming service
     pub fn stop(&self) {
         *self.running.lock().unwrap() = false;
+    }
+
+    /// Subscribe to program-specific events using WebSocket
+    async fn subscribe_to_programs(
+        rpc_url: &str,
+        tx: &broadcast::Sender<SolanaEvent>,
+        filters: &Arc<Mutex<Vec<EventFilter>>>,
+        running: &Arc<Mutex<bool>>,
+        stats: &Arc<Mutex<StreamStats>>,
+    ) -> Result<()> {
+        // Convert HTTP URL to WebSocket URL
+        let ws_url = rpc_url.replace("https://", "wss://").replace("http://", "ws://");
+
+        // Get all program IDs from filters
+        let program_ids: Vec<String> = {
+            let filters_vec = filters.lock().unwrap();
+            filters_vec.iter()
+                .filter_map(|f| f.program_ids.as_ref())
+                .flatten()
+                .cloned()
+                .collect()
+        };
+
+        tracing::info!("Subscribing to {} programs via WebSocket: {}", program_ids.len(), ws_url);
+
+        // Subscribe to logs for each program
+        for program_id in program_ids {
+            tracing::info!("Subscribing to program: {}", program_id);
+
+            let tx_clone = tx.clone();
+            let running_clone = Arc::clone(running);
+            let stats_clone = Arc::clone(stats);
+            let filters_clone = Arc::clone(filters);
+            let ws_url_clone = ws_url.clone();
+
+            tokio::spawn(async move {
+                // Create new PubsubClient for each subscription
+                let pubsub = match PubsubClient::new(&ws_url_clone).await {
+                    Ok(client) => client,
+                    Err(e) => {
+                        tracing::error!("Failed to connect to WebSocket for {}: {}", program_id, e);
+                        return;
+                    }
+                };
+
+                let config = RpcTransactionLogsConfig {
+                    commitment: Some(CommitmentConfig::confirmed()),
+                };
+
+                let filter = RpcTransactionLogsFilter::Mentions(vec![program_id.clone()]);
+
+                let (mut stream, unsubscribe) = match pubsub.logs_subscribe(filter, config).await {
+                    Ok(result) => result,
+                    Err(e) => {
+                        tracing::error!("Failed to subscribe to program {}: {}", program_id, e);
+                        return;
+                    }
+                };
+
+                tracing::info!("Successfully subscribed to program: {}", program_id);
+
+                // Keep pubsub and unsubscribe alive for the duration
+                while *running_clone.lock().unwrap() {
+                    match stream.next().await {
+                        Some(response) => {
+                            // Process the log response
+                            let logs = response.value.logs;
+                            let signature = response.value.signature;
+
+                            // Create log message event
+                            let event = SolanaEvent::LogMessage {
+                                signature: signature.clone(),
+                                logs: logs.clone(),
+                                slot: 0, // Slot not provided in logs_subscribe
+                            };
+
+                            stats_clone.lock().unwrap().events_processed += 1;
+
+                            // Check filters
+                            let filters_vec = filters_clone.lock().unwrap();
+                            let should_send = filters_vec.is_empty() || filters_vec.iter().any(|f| f.matches(&event));
+
+                            if should_send {
+                                let _ = tx_clone.send(event);
+                                stats_clone.lock().unwrap().events_sent += 1;
+                            } else {
+                                stats_clone.lock().unwrap().events_filtered += 1;
+                            }
+
+                            tracing::debug!("Received log for signature: {}", signature);
+                        }
+                        None => {
+                            tracing::warn!("WebSocket stream ended for program: {}", program_id);
+                            break;
+                        }
+                    }
+                }
+                // pubsub and unsubscribe automatically kept alive while stream exists
+            });
+        }
+
+        Ok(())
     }
 
     /// Parse SPL token transfer from transaction logs
@@ -334,6 +474,17 @@ impl StreamService {
                         let signature = transaction.signatures.get(0).map(|s| s.to_string()).unwrap_or_default();
                         let signer = transaction.message.static_account_keys().get(0).map(|k| k.to_string()).unwrap_or_default();
 
+                        // Extract all program IDs from the transaction
+                        let program_ids: Vec<String> = transaction
+                            .message
+                            .instructions()
+                            .iter()
+                            .filter_map(|ix| {
+                                transaction.message.static_account_keys().get(ix.program_id_index as usize)
+                            })
+                            .map(|pubkey| pubkey.to_string())
+                            .collect();
+
                         let event = SolanaEvent::Transaction {
                             signature: signature.clone(),
                             slot,
@@ -341,6 +492,7 @@ impl StreamService {
                             success: meta.status.is_ok(),
                             fee: meta.fee,
                             signer,
+                            program_ids: if program_ids.is_empty() { None } else { Some(program_ids) },
                         };
 
                         stats.lock().unwrap().events_processed += 1;

@@ -580,13 +580,29 @@ impl OsvmApp {
 
         let query_lower = query.to_lowercase();
 
-        // 🔥 NEW: Check if query looks like a transaction signature (base58, 87-88 chars)
-        // If so, try to fetch it LIVE from blockchain
-        if query.len() >= 87 && query.len() <= 88 && query.chars().all(|c| c.is_alphanumeric()) {
+        // 🔥 LIVE BLOCKCHAIN FETCH: Check if query looks like a transaction signature
+        // Pattern: base58 encoded string, 87-88 characters (Solana transaction signature format)
+        // This works REGARDLESS of entity_type - we detect based on string pattern
+        let looks_like_signature = query.len() >= 87 && query.len() <= 88 &&
+                                   query.chars().all(|c| c.is_alphanumeric());
+
+        if looks_like_signature {
+            // Log attempt
+            eprintln!("🔍 Detected potential transaction signature: {} chars", query.len());
+
             if let Some(ref rpc_url) = self.rpc_url {
-                if let Some(tx_match) = self.fetch_transaction_from_blockchain(query, rpc_url) {
-                    results.transactions_found.push(tx_match);
+                eprintln!("🌐 Fetching from RPC: {}", rpc_url);
+                match self.fetch_transaction_from_blockchain(query, rpc_url) {
+                    Some(tx_match) => {
+                        eprintln!("✅ Successfully fetched transaction from blockchain");
+                        results.transactions_found.push(tx_match);
+                    }
+                    None => {
+                        eprintln!("❌ Failed to fetch transaction (may not exist or RPC error)");
+                    }
                 }
+            } else {
+                eprintln!("⚠️  No RPC URL configured - cannot fetch transaction");
             }
         }
 
@@ -657,13 +673,25 @@ impl OsvmApp {
         use std::str::FromStr;
 
         // Parse signature
-        let sig = Signature::from_str(signature).ok()?;
+        let sig = match Signature::from_str(signature) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("❌ Failed to parse signature: {}", e);
+                return None;
+            }
+        };
 
         // Create RPC client
         let client = RpcClient::new_with_commitment(rpc_url.to_string(), CommitmentConfig::confirmed());
 
         // Fetch transaction details with full encoding
-        let tx = client.get_transaction(&sig, solana_transaction_status::UiTransactionEncoding::JsonParsed).ok()?;
+        let tx = match client.get_transaction(&sig, solana_transaction_status::UiTransactionEncoding::JsonParsed) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("❌ RPC error fetching transaction: {}", e);
+                return None;
+            }
+        };
 
         // Extract transaction metadata
         let meta = tx.transaction.meta?;
@@ -2200,8 +2228,10 @@ impl OsvmApp {
 
     /// Render real-time network statistics panel
     fn render_network_stats_panel(&self, f: &mut Frame, area: Rect) {
-        let stats = self.network_stats.lock().unwrap();
-        
+        // WALLET-SPECIFIC ANALYTICS (not global network stats)
+        let token_vols = self.token_volumes.lock().unwrap();
+        let transfer_evts = self.transfer_events.lock().unwrap();
+
         // Split into columns
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -2213,75 +2243,91 @@ impl OsvmApp {
             ])
             .split(area);
 
-        // Slot & Epoch
-        let slot_text = vec![
-            Line::from(Span::styled(" 📍 NETWORK ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        // TARGET WALLET
+        let truncated_wallet = if self.target_wallet.len() > 12 {
+            format!("{}...{}", &self.target_wallet[..6], &self.target_wallet[self.target_wallet.len()-6..])
+        } else {
+            self.target_wallet.clone()
+        };
+        let wallet_text = vec![
+            Line::from(Span::styled(" 🎯 TARGET WALLET ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
             Line::from(vec![
-                Span::styled(" Slot: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", stats.current_slot), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(" Addr: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(truncated_wallet, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled(" Epoch: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", stats.current_epoch), Style::default().fg(Color::Yellow)),
+                Span::styled(" Nodes: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", self.wallets_explored), Style::default().fg(Color::Yellow)),
             ]),
         ];
-        let slot_widget = Paragraph::new(slot_text)
+        let wallet_widget = Paragraph::new(wallet_text)
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
-        f.render_widget(slot_widget, chunks[0]);
+        f.render_widget(wallet_widget, chunks[0]);
 
-        // TPS
-        let tps_color = if stats.tps > 2000.0 { Color::Green } 
-                       else if stats.tps > 1000.0 { Color::Yellow } 
-                       else { Color::Red };
-        let tps_text = vec![
-            Line::from(Span::styled(" ⚡ PERFORMANCE ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
-            Line::from(vec![
-                Span::styled(" TPS: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{:.0}", stats.tps), Style::default().fg(tps_color).add_modifier(Modifier::BOLD)),
-            ]),
-            Line::from(vec![
-                Span::styled(" Block: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}ms", stats.block_time_ms), Style::default().fg(Color::Cyan)),
-            ]),
+        // TOKEN HOLDINGS (top 2 tokens)
+        let top_tokens: Vec<_> = token_vols.iter().take(2).collect();
+        let mut token_lines = vec![
+            Line::from(Span::styled(" 💎 TOP TOKENS ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
         ];
-        let tps_widget = Paragraph::new(tps_text)
+        if top_tokens.is_empty() {
+            token_lines.push(Line::from(Span::styled(" No data", Style::default().fg(Color::DarkGray))));
+        } else {
+            for token in top_tokens {
+                token_lines.push(Line::from(vec![
+                    Span::styled(format!(" {}: ", token.symbol), Style::default().fg(Color::White)),
+                    Span::styled(format!("{:.2}", token.amount), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                ]));
+            }
+        }
+        let token_widget = Paragraph::new(token_lines)
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
-        f.render_widget(tps_widget, chunks[1]);
+        f.render_widget(token_widget, chunks[1]);
 
-        // Transactions
-        let tx_text = vec![
-            Line::from(Span::styled(" 📊 ACTIVITY ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
+        // TRANSFER ACTIVITY (in/out counts)
+        let inflow_count = transfer_evts.iter().filter(|e| e.direction == "IN").count();
+        let outflow_count = transfer_evts.iter().filter(|e| e.direction == "OUT").count();
+        let total_transfers = inflow_count + outflow_count;
+        let activity_text = vec![
+            Line::from(Span::styled(" 📊 TRANSFERS ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))),
             Line::from(vec![
-                Span::styled(" Total TX: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", stats.total_transactions), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                Span::styled(" Total: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{}", total_transfers), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled(" Validators: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}", stats.active_validators), Style::default().fg(Color::Green)),
+                Span::styled(" In: ", Style::default().fg(Color::Green)),
+                Span::styled(format!("{}", inflow_count), Style::default().fg(Color::Green)),
+                Span::styled(" Out: ", Style::default().fg(Color::Red)),
+                Span::styled(format!("{}", outflow_count), Style::default().fg(Color::Red)),
             ]),
         ];
-        let tx_widget = Paragraph::new(tx_text)
+        let activity_widget = Paragraph::new(activity_text)
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta)));
-        f.render_widget(tx_widget, chunks[2]);
+        f.render_widget(activity_widget, chunks[2]);
 
-        // Health
-        let health_color = if stats.health == "ok" { Color::Green } else { Color::Red };
-        let health_status = stats.health.to_uppercase();
-        let refresh_secs = self.last_refresh.elapsed().as_secs();
-        let health_text = vec![
-            Line::from(Span::styled(" 🏥 HEALTH ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
+        // SOL FLOW (in/out balance)
+        let net_flow = self.total_sol_in - self.total_sol_out;
+        let flow_color = if net_flow > 0.0 { Color::Green }
+                        else if net_flow < 0.0 { Color::Red }
+                        else { Color::Yellow };
+        let flow_symbol = if net_flow > 0.0 { "↑" }
+                         else if net_flow < 0.0 { "↓" }
+                         else { "=" };
+        let flow_text = vec![
+            Line::from(Span::styled(" 💸 SOL FLOW ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))),
             Line::from(vec![
-                Span::styled(" Status: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(health_status, Style::default().fg(health_color).add_modifier(Modifier::BOLD)),
+                Span::styled(" Net: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{} {:.4}", flow_symbol, net_flow.abs()), Style::default().fg(flow_color).add_modifier(Modifier::BOLD)),
             ]),
             Line::from(vec![
-                Span::styled(" Refresh: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("{}s ago", refresh_secs), Style::default().fg(Color::Cyan)),
+                Span::styled(" In: ", Style::default().fg(Color::Green)),
+                Span::styled(format!("{:.4}", self.total_sol_in), Style::default().fg(Color::Green)),
+                Span::styled(" Out: ", Style::default().fg(Color::Red)),
+                Span::styled(format!("{:.4}", self.total_sol_out), Style::default().fg(Color::Red)),
             ]),
         ];
-        let health_widget = Paragraph::new(health_text)
+        let flow_widget = Paragraph::new(flow_text)
             .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Green)));
-        f.render_widget(health_widget, chunks[3]);
+        f.render_widget(flow_widget, chunks[3]);
     }
     /// Render Search Results Tab - shows actual findings from indexed data
     fn render_search_results_tab(&mut self, f: &mut Frame, area: Rect) {

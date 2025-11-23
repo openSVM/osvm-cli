@@ -6,6 +6,7 @@ pub mod balance;
 pub mod database;
 pub mod deep_research;
 pub mod deploy_handler;
+pub mod invoke_handler;
 pub mod doctor_handler;
 pub mod mcp_handler;
 pub mod mcp_microvm;

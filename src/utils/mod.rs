@@ -168,3 +168,4 @@ where
         serde_yaml::from_reader(file).map_err(|err| io::Error::other(format!("{:?}", err)))?;
     Ok(config)
 }
+pub mod program_aliases;

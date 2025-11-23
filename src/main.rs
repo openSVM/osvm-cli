@@ -45,6 +45,7 @@ fn is_known_command(sub_command: &str) -> bool {
             | "examples"
             | "rpc"
             | "deploy"
+            | "invoke"
             | "doctor"
             | "tutorial"
             | "audit"
@@ -593,6 +594,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "deploy" => {
             commands::deploy_handler::handle_deploy_command(matches, &config).await?;
+        }
+        "invoke" => {
+            commands::invoke_handler::handle_invoke_command(matches, &config).await?;
         }
         "mcp" => {
             // Handle the MCP command for managing Model Context Protocol servers

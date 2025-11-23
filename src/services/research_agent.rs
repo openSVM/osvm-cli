@@ -1560,28 +1560,47 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
                 ).await
             };
 
-            self.stream_log(&format!("📥 Got response for {}", &wallet[..8]));
-
             let result = match result {
-                Ok(r) => r,
+                Ok(r) => {
+                    self.stream_log(&format!("📥 Got response for {}", &wallet[..8]));
+                    r
+                },
                 Err(_) => {
                     self.stream_log(&format!("⏱️ Timeout fetching {}", &wallet[..8]));
                     continue;
                 }
             };
 
-            if let Ok(data) = result {
-                // Process transfers and collect new wallets to explore
-                let new_wallets = self.process_transfers_for_expansion(&data, &wallet, &target).await;
+            match result {
+                Ok(data) => {
+                    // Debug log to see the structure
+                    self.stream_log(&format!("📦 Raw MCP response type: {}",
+                        if data.is_object() { "object" }
+                        else if data.is_array() { "array" }
+                        else if data.is_string() { "string" }
+                        else { "other" }
+                    ));
 
-                // Queue unvisited wallets for next depth level
-                if depth < max_depth {
-                    for new_wallet in new_wallets {
-                        if !visited.contains(&new_wallet) && visited.len() < max_wallets {
-                            visited.insert(new_wallet.clone());
-                            queue.push_back((new_wallet, depth + 1));
+                    if let Some(obj) = data.as_object() {
+                        self.stream_log(&format!("📦 Response keys: {:?}", obj.keys().collect::<Vec<_>>()));
+                    }
+
+                    self.stream_log(&format!("✅ Processing transfers for {}", &wallet[..8]));
+                    // Process transfers and collect new wallets to explore
+                    let new_wallets = self.process_transfers_for_expansion(&data, &wallet, &target).await;
+
+                    // Queue unvisited wallets for next depth level
+                    if depth < max_depth {
+                        for new_wallet in new_wallets {
+                            if !visited.contains(&new_wallet) && visited.len() < max_wallets {
+                                visited.insert(new_wallet.clone());
+                                queue.push_back((new_wallet, depth + 1));
+                            }
                         }
                     }
+                }
+                Err(e) => {
+                    self.stream_log(&format!("❌ Error fetching {}: {}", &wallet[..8], e));
                 }
             }
 
@@ -1605,26 +1624,18 @@ Return JSON: {{"action": "...", "reason": "...", "mcp_tool": "EXACT_TOOL_NAME", 
 
         // MCP returns: {content: [{type: "text", text: "{data: [...]}"}]}
         // Need to parse the nested JSON string
-        let transfers_array = if let Some(content) = data.get("content").and_then(|c| c.as_array()) {
-            if let Some(first) = content.first() {
-                if let Some(text) = first.get("text").and_then(|t| t.as_str()) {
-                    // Parse the JSON string inside text
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
-                        parsed.get("data").and_then(|d| d.as_array()).cloned()
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            // Fallback: try direct data.data path
-            data.get("data").and_then(|d| d.get("data")).and_then(|d| d.as_array()).cloned()
-                .or_else(|| data.get("data").and_then(|d| d.as_array()).cloned())
-        };
+        // MCP service already extracts content and decompresses
+        // Just get the "data" array directly
+        let transfers_array = data.get("data").and_then(|d| d.as_array()).cloned();
+
+        // Debug log to see what we got
+        if transfers_array.is_none() {
+            self.stream_log(&format!("⚠️ No transfers found. Data keys: {:?}",
+                data.as_object().map(|o| o.keys().collect::<Vec<_>>())
+            ));
+        } else if let Some(ref arr) = transfers_array {
+            self.stream_log(&format!("📊 Found {} transfers", arr.len()));
+        }
 
         if let Some(transfers) = transfers_array {
             for transfer in transfers {

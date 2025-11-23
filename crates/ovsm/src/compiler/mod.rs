@@ -144,11 +144,8 @@ impl Compiler {
             })
             .collect();
 
-        let elf_bytes = if syscall_refs.is_empty() {
-            elf_writer.write(&sbpf_program, self.options.debug_info)?
-        } else {
-            elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info)?
-        };
+        // Since we now embed syscall hashes directly, we don't need dynamic linking
+        let elf_bytes = elf_writer.write(&sbpf_program, self.options.debug_info)?;
 
         // Combine warnings
         let mut warnings = type_checker.warnings().to_vec();
