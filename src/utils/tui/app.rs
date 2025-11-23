@@ -267,6 +267,16 @@ impl OsvmApp {
         Arc::clone(&self.ai_insights)
     }
 
+    /// Get network stats handle for background thread updates
+    pub fn get_network_stats_handle(&self) -> Arc<Mutex<NetworkStats>> {
+        Arc::clone(&self.network_stats)
+    }
+
+    /// Get live transactions handle for background thread updates
+    pub fn get_live_tx_handle(&self) -> Arc<Mutex<Vec<LiveTransaction>>> {
+        Arc::clone(&self.live_transactions)
+    }
+
     pub fn set_status(&self, status: &str) {
         *self.status.lock().unwrap() = status.to_string();
     }
