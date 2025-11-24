@@ -87,8 +87,8 @@ pub enum IrInstruction {
     Syscall(Option<IrReg>, String, Vec<IrReg>),
 
     // Debug
-    /// Debug log (will be sol_log syscall)
-    Log(IrReg),
+    /// Debug log (will be sol_log syscall): Log(ptr_reg, length)
+    Log(IrReg, usize),
 
     // No-op (placeholder, removed by optimizer)
     Nop,

@@ -191,7 +191,7 @@ impl Optimizer {
                     used_regs.insert(*reg);
                 }
 
-                IrInstruction::Log(reg) => {
+                IrInstruction::Log(reg, _len) => {
                     used_regs.insert(*reg);
                 }
 

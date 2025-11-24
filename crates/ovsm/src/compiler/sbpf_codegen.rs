@@ -931,11 +931,11 @@ impl SbpfCodegen {
             }
 
             // Log syscall: sol_log_(msg_ptr, msg_len)
-            IrInstruction::Log(msg_reg) => {
+            IrInstruction::Log(msg_reg, msg_len) => {
                 let msg = self.get_reg(*msg_reg, SbpfReg::R1);
                 // R1 = pointer to string, R2 = length
                 self.emit(SbpfInstruction::alu64_reg(alu::MOV, SbpfReg::R1 as u8, msg as u8));
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, SbpfReg::R2 as u8, 32));
+                self.emit(SbpfInstruction::alu64_imm(alu::MOV, SbpfReg::R2 as u8, *msg_len as i32));
                 self.emit_syscall("sol_log_");
             }
 

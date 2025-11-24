@@ -1,0 +1,384 @@
+;;; OVSM V6.1: Whale Hunter with REAL RPC Calls
+;;;
+;;; Production version using actual Solana RPC calls
+;;;
+;;; Usage:
+;;;   osvm ovsm run whale_hunter_rpc.ovsm
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  🐋 WHALE HUNTER - Multi-Hop Discovery (RPC Version)")
+(println "  Target: 1000+ SOL or DEX Pool")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+;; ==================================================================
+;; CONFIGURATION
+;; ==================================================================
+
+(define seed-wallet "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+(define max-depth 5)   ;; Start with 5 hops for testing
+(define max-wallets-per-hop 10)  ;; Limit to 10 for RPC rate limits
+(define target-sol-balance 1000)  ;; 1000 SOL = ~$100k
+(define signatures-limit 50)  ;; Limit signatures per wallet
+
+;; Known DEX/Pool programs
+(define dex-programs [
+  "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"  ;; Raydium AMM
+  "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP"  ;; Orca Whirlpool
+  "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"  ;; Orca Whirlpool v2
+  "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S"  ;; Lifinity
+  "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY"  ;; Phoenix
+])
+
+(println (str "Seed Wallet: " seed-wallet))
+(println (str "Target: >= " target-sol-balance " SOL"))
+(println (str "Max Depth: " max-depth " hops"))
+(println (str "Max Wallets/Hop: " max-wallets-per-hop))
+(println (str "Tracking " (length dex-programs) " DEX programs"))
+(println "")
+
+;; ==================================================================
+;; DATA STRUCTURES
+;; ==================================================================
+
+(define visited-wallets [])
+(define found-whales [])
+(define found-pools [])
+(define hop-stats [])
+(define target-found false)
+(define cumulative-balance 0)
+
+;; ==================================================================
+;; HELPER FUNCTIONS
+;; ==================================================================
+
+(defun is-visited (wallet)
+  (do
+    (define found false)
+    (for (w visited-wallets)
+      (if (= w wallet)
+          (set! found true)
+          null))
+    found))
+
+(defun mark-visited (wallet)
+  (if (not (is-visited wallet))
+      (set! visited-wallets (append visited-wallets [wallet]))
+      null))
+
+(defun is-dex-program (program)
+  (do
+    (define found false)
+    (for (dex dex-programs)
+      (if (= dex program)
+          (set! found true)
+          null))
+    found))
+
+;; ==================================================================
+;; RPC WALLET CHECKER
+;; ==================================================================
+
+(defun check-wallet-async-rpc (wallet depth)
+  (do
+    ;; REAL RPC CALLS - Get balance
+    (define balance-lamports (getBalance wallet))
+    (define balance-sol (/ balance-lamports 1000000000))  ;; Convert lamports to SOL
+
+    ;; REAL RPC CALLS - Get account info to check for program ownership
+    (define account-info (getAccountInfo wallet))
+    (define program-owner null)
+    (define is-pool false)
+
+    ;; Check if account is owned by a DEX program
+    (if (not (null? account-info))
+        (do
+          (define owner (get account-info "owner"))
+          (if (is-dex-program owner)
+              (do
+                (set! is-pool true)
+                (set! program-owner owner))
+              null))
+        null)
+
+    ;; REAL RPC CALLS - Get signatures to find connected wallets
+    (define signatures (getSignaturesForAddress wallet :limit signatures-limit))
+    (define connected-wallets [])
+    (define unique-wallets [])
+
+    ;; Extract unique wallets from signatures
+    (if (not (null? signatures))
+        (for (sig signatures)
+          (do
+            ;; Get transaction details
+            (define tx-sig (get sig "signature"))
+            (define tx (getTransaction tx-sig))
+
+            (if (not (null? tx))
+                (do
+                  ;; Extract account keys from transaction
+                  (define tx-data (get tx "transaction"))
+                  (if (not (null? tx-data))
+                      (do
+                        (define message (get tx-data "message"))
+                        (if (not (null? message))
+                            (do
+                              (define account-keys (get message "accountKeys"))
+                              (if (not (null? account-keys))
+                                  (for (acc account-keys)
+                                    ;; Add to unique wallets if not seed and not visited
+                                    (if (and (not (= acc wallet)) (not (is-visited acc)))
+                                        (do
+                                          (define already-added false)
+                                          (for (uw unique-wallets)
+                                            (if (= uw acc)
+                                                (set! already-added true)
+                                                null))
+                                          (if (not already-added)
+                                              (set! unique-wallets (append unique-wallets [acc]))
+                                              null))
+                                        null))
+                                  null))
+                            null))
+                      null))
+                null)))
+        null)
+
+    ;; Limit connected wallets to top 10 (most frequent interactions)
+    (define children (take 10 unique-wallets))
+
+    ;; Return comprehensive wallet data
+    {:wallet wallet
+     :depth depth
+     :balance balance-sol
+     :is-pool is-pool
+     :program-owner program-owner
+     :children children}))
+
+;; ==================================================================
+;; HOP PROCESSOR WITH TARGET DETECTION
+;; ==================================================================
+
+(defun process-hop-rpc (wallets depth)
+  (do
+    ;; Limit wallets per hop
+    (define wallets-to-process wallets)
+    (if (> (length wallets-to-process) max-wallets-per-hop)
+        (do
+          (set! wallets-to-process (take max-wallets-per-hop wallets-to-process))
+          (println (str "  [Limiting to " max-wallets-per-hop " of " (length wallets) " wallets]")))
+        null)
+
+    (println "")
+    (println (str "🔍 HOP " depth ": Checking " (length wallets-to-process) " wallets..."))
+
+    ;; Launch async checks
+    (define handles [])
+    (for (w wallets-to-process)
+      (set! handles (append handles [(async check-wallet-async-rpc w depth)])))
+
+    ;; Await all results
+    (define results [])
+    (for (h handles)
+      (set! results (append results [(await h)])))
+
+    ;; Analyze results
+    (define next-gen [])
+    (define whales-found 0)
+    (define pools-found 0)
+    (define hop-total-balance 0)
+    (define hop-wallets [])
+
+    (for (r results)
+      (do
+        (define wallet (get r :wallet))
+        (define balance (get r :balance))
+        (define is-pool (get r :is-pool))
+        (define program-owner (get r :program-owner))
+        (define kids (get r :children))
+
+        (mark-visited wallet)
+
+        ;; Add to cumulative balance and hop wallets list
+        (set! hop-total-balance (+ hop-total-balance balance))
+        (set! cumulative-balance (+ cumulative-balance balance))
+        (set! hop-wallets (append hop-wallets [{:wallet wallet :balance balance}]))
+
+        ;; Check for whale (high balance)
+        (if (>= balance target-sol-balance)
+            (do
+              (set! whales-found (+ whales-found 1))
+              (set! found-whales (append found-whales [{
+                :wallet wallet
+                :balance balance
+                :depth depth
+              }]))
+              (println (str "  🐋 WHALE FOUND: " wallet " - " balance " SOL (Hop " depth ")"))
+              (set! target-found true))
+            null)
+
+        ;; Check for pool
+        (if is-pool
+            (do
+              (set! pools-found (+ pools-found 1))
+              (set! found-pools (append found-pools [{
+                :wallet wallet
+                :program program-owner
+                :depth depth
+              }]))
+              (println (str "  🏦 POOL FOUND: " wallet " - " program-owner " (Hop " depth ")"))
+              (set! target-found true))
+            null)
+
+        ;; Add children for next hop (only if target not found)
+        (if (not target-found)
+            (for (kid kids)
+              (if (not (is-visited kid))
+                  (set! next-gen (append next-gen [kid]))
+                  null))
+            null)))
+
+    (println (str "  → " whales-found " whales, " pools-found " pools, " (length next-gen) " new connections"))
+    (println (str "  💰 Hop balance: " hop-total-balance " SOL (Total: " cumulative-balance " SOL)"))
+
+    ;; Show top 3 wallets
+    (define sorted-wallets hop-wallets)
+    (define top-count (if (< (length sorted-wallets) 3) (length sorted-wallets) 3))
+    (define top-wallets [])
+    (define i 0)
+
+    (while (< i top-count)
+      (do
+        (define max-wallet null)
+        (define max-balance 0)
+        (for (w sorted-wallets)
+          (do
+            (define bal (get w :balance))
+            (if (> bal max-balance)
+                (do
+                  (set! max-balance bal)
+                  (set! max-wallet w))
+                null)))
+
+        (if (not (null? max-wallet))
+            (do
+              (set! top-wallets (append top-wallets [max-wallet]))
+              (define new-sorted [])
+              (for (w sorted-wallets)
+                (if (not (= (get w :wallet) (get max-wallet :wallet)))
+                    (set! new-sorted (append new-sorted [w]))
+                    null))
+              (set! sorted-wallets new-sorted))
+            null)
+
+        (set! i (+ i 1))))
+
+    (if (> (length top-wallets) 0)
+        (do
+          (println "  🏆 Top 3 wallets:")
+          (define rank 1)
+          (for (w top-wallets)
+            (do
+              (println (str "    " rank ". " (get w :wallet) " - " (get w :balance) " SOL"))
+              (set! rank (+ rank 1)))))
+        null)
+
+    (set! hop-stats (append hop-stats [{
+      :hop depth
+      :wallets (length wallets-to-process)
+      :whales whales-found
+      :pools pools-found
+      :next (length next-gen)
+      :balance hop-total-balance
+    }]))
+
+    next-gen))
+
+;; ==================================================================
+;; MAIN DISCOVERY LOOP
+;; ==================================================================
+
+(println "🚀 Starting whale hunt with REAL RPC calls...")
+(println "")
+
+(define current-gen [seed-wallet])
+(define hop 0)
+
+(while (and (< hop max-depth) (not target-found) (> (length current-gen) 0))
+  (do
+    (set! hop (+ hop 1))
+    (set! current-gen (process-hop-rpc current-gen hop))))
+
+;; ==================================================================
+;; RESULTS
+;; ==================================================================
+
+(println "")
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  🎯 WHALE HUNT RESULTS")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+(if target-found
+    (do
+      (println "✅ TARGET FOUND!")
+      (println ""))
+    (do
+      (println "⚠️  No target found within depth limit")
+      (println "")))
+
+(println (str "Hops Completed: " hop))
+(println (str "Wallets Visited: " (length visited-wallets)))
+(println (str "💰 Cumulative Balance: " cumulative-balance " SOL (~$" (* cumulative-balance 100) ")"))
+(println "")
+
+;; Display whale findings
+(if (> (length found-whales) 0)
+    (do
+      (println (str "🐋 WHALES DISCOVERED: " (length found-whales)))
+      (println "─────────────────────────────────────")
+      (for (whale found-whales)
+        (do
+          (println (str "  • " (get whale :wallet)))
+          (println (str "    Balance: " (get whale :balance) " SOL"))
+          (println (str "    Found at: Hop " (get whale :depth)))))
+      (println ""))
+    (println "🐋 No whales found\n"))
+
+;; Display pool findings
+(if (> (length found-pools) 0)
+    (do
+      (println (str "🏦 DEX POOLS DISCOVERED: " (length found-pools)))
+      (println "─────────────────────────────────────")
+      (for (pool found-pools)
+        (do
+          (println (str "  • " (get pool :wallet)))
+          (println (str "    Program: " (get pool :program)))
+          (println (str "    Found at: Hop " (get pool :depth)))))
+      (println ""))
+    (println "🏦 No pools found\n"))
+
+;; Per-hop breakdown
+(println "📊 HOP-BY-HOP BREAKDOWN:")
+(println "─────────────────────────────────────")
+(for (stat hop-stats)
+  (do
+    (define h (get stat :hop))
+    (define w (get stat :wallets))
+    (define whales (get stat :whales))
+    (define pools (get stat :pools))
+    (define next (get stat :next))
+    (define bal (get stat :balance))
+    (println (str "  Hop " h ": " w " wallets → " whales " whales, " pools " pools, " bal " SOL (" next " next)"))))
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+(if target-found
+    (println "🎉 Hunt successful! High-value target(s) located.")
+    (println "💡 Consider increasing max-depth or adjusting target criteria."))
+
+(println "")

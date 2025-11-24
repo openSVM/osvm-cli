@@ -21,10 +21,11 @@ use super::graph::{WalletGraph, GraphInput};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum TabIndex {
-    Dashboard = 0,
-    Graph = 1,
-    Logs = 2,
-    SearchResults = 3,
+    Chat = 0,           // NEW: Chat is now the default tab
+    Dashboard = 1,
+    Graph = 2,
+    Logs = 3,
+    SearchResults = 4,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -49,6 +50,24 @@ pub struct TransferEvent {
     pub amount: f64,
     pub token: String,
     pub direction: String, // "IN" or "OUT"
+}
+
+/// Chat message structure for AI conversation
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessage {
+    pub role: String,      // "user" or "assistant"
+    pub content: String,
+    pub timestamp: String,
+    pub status: MessageStatus,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum MessageStatus {
+    Sending,     // User message being sent
+    Delivered,   // Successfully delivered
+    Streaming,   // Assistant response streaming in
+    Complete,    // Assistant response finished
+    Error,       // Failed to send/receive
 }
 
 pub struct OsvmApp {
@@ -107,6 +126,12 @@ pub struct OsvmApp {
     pub last_refresh: std::time::Instant,
     // RPC endpoint for live blockchain queries
     pub rpc_url: Option<String>,
+    // Chat interface
+    pub chat_messages: Arc<Mutex<Vec<ChatMessage>>>,
+    pub chat_input: String,
+    pub chat_input_active: bool,
+    pub chat_scroll: usize,
+    pub chat_auto_scroll: bool,  // Auto-scroll to bottom on new messages
 }
 
 /// Real-time network statistics
@@ -254,7 +279,33 @@ impl OsvmApp {
             live_transactions: Arc::new(Mutex::new(Vec::new())),
             last_refresh: std::time::Instant::now(),
             rpc_url: None,
+            // Chat interface initialization
+            chat_messages: Arc::new(Mutex::new(Self::get_welcome_message())),
+            chat_input: String::new(),
+            chat_input_active: false,
+            chat_scroll: 0,
+            chat_auto_scroll: true,
         }
+    }
+
+    /// Create welcome message for chat
+    fn get_welcome_message() -> Vec<ChatMessage> {
+        vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "👋 Welcome to OSVM Research Chat!\n\n\
+                    I can help you investigate blockchain activity, analyze wallets, trace transactions, \
+                    and explore on-chain patterns.\n\n\
+                    Try asking:\n\
+                    • \"Analyze the activity of wallet X\"\n\
+                    • \"Show me recent DEX trades for token Y\"\n\
+                    • \"Find wallets connected to this address\"\n\
+                    • \"What are the top token holders?\"\n\n\
+                    Press 'i' to start typing your question.".to_string(),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                status: MessageStatus::Complete,
+            }
+        ]
     }
 
     /// Get handles for background thread to update analytics
@@ -793,6 +844,49 @@ impl OsvmApp {
         }
     }
 
+    /// Send a chat message to the AI
+    fn send_chat_message(&mut self) {
+        let user_message = self.chat_input.trim().to_string();
+        if user_message.is_empty() {
+            return;
+        }
+
+        // Add user message to chat history
+        if let Ok(mut messages) = self.chat_messages.lock() {
+            messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: user_message.clone(),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                status: MessageStatus::Delivered,
+            });
+
+            // Add placeholder for assistant response
+            messages.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: "Thinking...".to_string(),
+                timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                status: MessageStatus::Streaming,
+            });
+        }
+
+        // Clear input
+        self.chat_input.clear();
+
+        // Auto-scroll to bottom
+        self.chat_auto_scroll = true;
+        self.chat_scroll = 0;
+
+        // Log the query
+        self.add_log(format!("🤖 Processing query: {}", user_message));
+
+        // TODO: In the future, this will trigger the research agent to process the query
+        // For now, we'll just show a placeholder response
+        // The actual implementation will spawn a background task to:
+        // 1. Send query to research agent
+        // 2. Stream response back
+        // 3. Update the last message in chat_messages with the response
+    }
+
     /// Update activity sparkline - called on each tick
     pub fn tick(&mut self) {
         self.iteration += 1;
@@ -946,6 +1040,40 @@ impl OsvmApp {
                                 self.search_query.push(c);
                             }
                         }
+                        // CHAT INPUT HANDLING
+                        KeyCode::Char('i') if self.active_tab == TabIndex::Chat && !self.chat_input_active && !self.global_search_active => {
+                            // Activate chat input mode
+                            self.chat_input_active = true;
+                            self.add_log("Chat input activated (press Enter to send, Esc to cancel)".to_string());
+                        }
+                        KeyCode::Char(c) if self.chat_input_active => {
+                            if !key.modifiers.contains(KeyModifiers::CONTROL) {
+                                self.chat_input.push(c);
+                            }
+                        }
+                        KeyCode::Backspace if self.chat_input_active => {
+                            self.chat_input.pop();
+                        }
+                        KeyCode::Enter if self.chat_input_active => {
+                            // Send chat message
+                            if !self.chat_input.trim().is_empty() {
+                                self.send_chat_message();
+                            }
+                            self.chat_input_active = false;
+                        }
+                        KeyCode::Esc if self.chat_input_active => {
+                            // Cancel chat input
+                            self.chat_input.clear();
+                            self.chat_input_active = false;
+                            self.add_log("Chat input cancelled".to_string());
+                        }
+                        // Chat scrolling (j/k when not in input mode)
+                        KeyCode::Char('j') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
+                            self.chat_scroll = self.chat_scroll.saturating_add(1);
+                        }
+                        KeyCode::Char('k') if self.active_tab == TabIndex::Chat && !self.chat_input_active => {
+                            self.chat_scroll = self.chat_scroll.saturating_sub(1);
+                        }
                         KeyCode::Char('?') | KeyCode::F(1) => {
                             self.show_help = !self.show_help;
                             if !self.show_help {
@@ -954,6 +1082,7 @@ impl OsvmApp {
                         }
                         KeyCode::Tab => self.next_tab(),
                         KeyCode::BackTab => self.previous_tab(),
+                        KeyCode::Char('0') => self.active_tab = TabIndex::Chat,
                         KeyCode::Char('1') => self.active_tab = TabIndex::Dashboard,
                         KeyCode::Char('2') => self.active_tab = TabIndex::Graph,
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
@@ -1258,6 +1387,7 @@ impl OsvmApp {
         let size = f.area();
 
         match self.active_tab {
+            TabIndex::Chat => self.render_chat(f, size),
             TabIndex::Dashboard => self.render_dashboard(f, size),
             TabIndex::Graph => self.render_full_graph(f, size),
             TabIndex::Logs => self.render_full_logs(f, size),
@@ -1326,6 +1456,160 @@ impl OsvmApp {
         self.render_transfer_feed(f, right_chunks[3]);
 
         self.render_btop_statusbar(f, main_chunks[2]);
+    }
+
+    /// Render chat interface inspired by Tenere
+    fn render_chat(&mut self, f: &mut Frame, area: Rect) {
+        // Main layout: header, chat messages, input
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),   // Header with tabs
+                Constraint::Min(0),      // Chat messages area
+                Constraint::Length(3),   // Input box
+                Constraint::Length(2),   // Status bar
+            ])
+            .split(area);
+
+        // Render header
+        self.render_btop_header(f, chunks[0]);
+
+        // Render chat messages
+        self.render_chat_messages(f, chunks[1]);
+
+        // Render input box
+        self.render_chat_input(f, chunks[2]);
+
+        // Render status bar
+        self.render_btop_statusbar(f, chunks[3]);
+    }
+
+    /// Render chat messages with proper styling
+    fn render_chat_messages(&mut self, f: &mut Frame, area: Rect) {
+        let messages = self.chat_messages.lock().unwrap();
+
+        let mut lines: Vec<Line> = Vec::new();
+
+        for msg in messages.iter() {
+            // Message header with timestamp and role
+            let role_style = match msg.role.as_str() {
+                "user" => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                "assistant" => Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                _ => Style::default(),
+            };
+
+            let status_indicator = match msg.status {
+                MessageStatus::Sending => " ⏳",
+                MessageStatus::Delivered => " ✓",
+                MessageStatus::Streaming => " ⋯",
+                MessageStatus::Complete => "",
+                MessageStatus::Error => " ✗",
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("[{}] ", msg.timestamp),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(
+                    format!("{}{}", msg.role.to_uppercase(), status_indicator),
+                    role_style,
+                ),
+            ]));
+
+            // Message content with wrapping
+            for line in msg.content.lines() {
+                let content_style = match msg.role.as_str() {
+                    "user" => Style::default().fg(Color::White),
+                    "assistant" => Style::default().fg(Color::Gray),
+                    _ => Style::default(),
+                };
+                lines.push(Line::from(Span::styled(line.to_string(), content_style)));
+            }
+
+            // Add spacing between messages
+            lines.push(Line::from(""));
+        }
+
+        // Calculate scroll position
+        let total_lines = lines.len();
+        let visible_lines = area.height.saturating_sub(2) as usize; // Account for borders
+
+        // Auto-scroll to bottom if enabled
+        if self.chat_auto_scroll {
+            self.chat_scroll = total_lines.saturating_sub(visible_lines);
+        }
+
+        // Ensure scroll doesn't exceed bounds
+        let max_scroll = total_lines.saturating_sub(visible_lines);
+        self.chat_scroll = self.chat_scroll.min(max_scroll);
+
+        // Slice visible lines
+        let visible_lines_vec: Vec<Line> = lines
+            .into_iter()
+            .skip(self.chat_scroll)
+            .take(visible_lines)
+            .collect();
+
+        let scroll_indicator = if total_lines > visible_lines {
+            format!(" 📜 {}/{} ", self.chat_scroll + visible_lines, total_lines)
+        } else {
+            String::new()
+        };
+
+        let paragraph = Paragraph::new(visible_lines_vec)
+            .block(
+                Block::default()
+                    .title(Span::styled(
+                        format!(" 💬 AI Research Chat{} ", scroll_indicator),
+                        Style::default()
+                            .fg(Color::Cyan)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .border_type(BorderType::Rounded),
+            )
+            .wrap(Wrap { trim: false });
+
+        f.render_widget(paragraph, area);
+    }
+
+    /// Render chat input box
+    fn render_chat_input(&self, f: &mut Frame, area: Rect) {
+        let input_text = if self.chat_input_active {
+            format!("{}█", self.chat_input)  // Show cursor
+        } else {
+            if self.chat_input.is_empty() {
+                "Press 'i' to start typing...".to_string()
+            } else {
+                self.chat_input.clone()
+            }
+        };
+
+        let input_style = if self.chat_input_active {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        let border_style = if self.chat_input_active {
+            Style::default().fg(Color::Yellow)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        let paragraph = Paragraph::new(input_text)
+            .style(input_style)
+            .block(
+                Block::default()
+                    .title(" 📝 Input ")
+                    .borders(Borders::ALL)
+                    .border_style(border_style)
+                    .border_type(BorderType::Rounded),
+            );
+
+        f.render_widget(paragraph, area);
     }
 
     fn render_btop_header(&self, f: &mut Frame, area: Rect) {

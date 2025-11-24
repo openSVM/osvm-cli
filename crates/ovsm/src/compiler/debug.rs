@@ -79,7 +79,7 @@ pub fn format_ir_instr(instr: &IrInstruction) -> String {
                 None => format!("syscall {}({})", name, args_str.join(", ")),
             }
         }
-        IrInstruction::Log(reg) => format!("log r{}", reg.0),
+        IrInstruction::Log(reg, len) => format!("log r{}, len={}", reg.0, len),
     }
 }
 
