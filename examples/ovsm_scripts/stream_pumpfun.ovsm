@@ -1,20 +1,21 @@
-;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v2
+;;; Stream Pump.fun Events - PRODUCTION FORENSICS TOOL v3
 ;;;
-;;; Clean, professional output for blockchain investigation
+;;; REWRITTEN: Now uses TokenTransfer events (not logs!)
 ;;; - Full addresses (no truncation)
-;;; - Token mints and amounts
+;;; - Actual token mints from transfer events
+;;; - Real token amounts (not parsed from binary)
 ;;; - Clean single-line output format
 ;;;
 ;;; Usage:
 ;;;   1. Start: osvm stream --programs pumpfun --port 8080
-;;;   2. Run: osvm ovsm run stream_pumpfun_v2.ovsm
+;;;   2. Run: osvm ovsm run stream_pumpfun.ovsm
 
 (define stream-id (stream-connect "http://localhost:8080" :programs ["pumpfun"]))
 
 (println "")
 (println "═══════════════════════════════════════════════════════════════")
-(println "  OSVM PUMP.FUN FORENSICS MONITOR")
-(println "  Connected to event stream - monitoring transactions...")
+(println "  OSVM PUMP.FUN FORENSICS MONITOR V3")
+(println "  Using TokenTransfer events for accurate data")
 (println "═══════════════════════════════════════════════════════════════")
 (println "")
 
@@ -22,6 +23,7 @@
 (define buy-count 0)
 (define sell-count 0)
 (define graduation-count 0)
+(define transfer-count 0)
 
 ;; Main event loop (60 seconds)
 (define start-time (now))
@@ -33,6 +35,50 @@
   (for (event events)
     (define event-type (get event "type"))
 
+    ;; ═══════════════════════════════════════════════════════════
+    ;; PROCESS TOKEN TRANSFER EVENTS (BEST SOURCE OF DATA)
+    ;; ═══════════════════════════════════════════════════════════
+    (if (= event-type "token_transfer")
+        (do
+          (set! transfer-count (+ transfer-count 1))
+          (define signature (get event "signature"))
+          (define from-wallet (get event "from"))
+          (define to-wallet (get event "to"))
+          (define token-mint (get event "token"))
+          (define amount (get event "amount"))
+          (define decimals (get event "decimals"))
+
+          ;; Check if this is a Pump.fun token (ends with "pump")
+          (define is-pumpfun-token false)
+          (if (> (length token-mint) 4)
+              (do
+                (define mint-len (length token-mint))
+                (define last-4 (substring token-mint (- mint-len 4) mint-len))
+                (if (= last-4 "pump")
+                    (set! is-pumpfun-token true)
+                    null))
+              null)
+
+          ;; Only display Pump.fun token transfers
+          (if is-pumpfun-token
+              (do
+                (println "")
+                (println "═══════════════════════════════════════════════════════════════")
+                (println (str "💸 TOKEN TRANSFER #" transfer-count " | Time: " (now)))
+                (println "═══════════════════════════════════════════════════════════════")
+                (println (str "Signature:    " signature))
+                (println (str "From:         " from-wallet))
+                (println (str "To:           " to-wallet))
+                (println (str "Token Mint:   " token-mint))
+                (println (str "Amount:       " amount " (decimals: " decimals ")"))
+                (println (str "osvm.ai:      https://osvm.ai/tx/" signature))
+                (println "═══════════════════════════════════════════════════════════════"))
+              null))
+        null)
+
+    ;; ═══════════════════════════════════════════════════════════
+    ;; PROCESS LOG MESSAGES (FOR BUY/SELL/GRADUATION DETECTION)
+    ;; ═══════════════════════════════════════════════════════════
     (if (= event-type "log_message")
         (do
           (define logs (get event "logs"))
@@ -40,179 +86,15 @@
           (define slot (get event "slot"))
           (define logs-text (str logs))
 
-          ;; Extract wallet from first invoke [1]
-          (define wallet "Unknown")
-          (for (line logs)
-            (if (and (string-contains line "invoke [1]")
-                     (not (string-contains line "ComputeBudget"))
-                     (not (string-contains line "11111111")))
-                (do
-                  (define parts (split line " "))
-                  (if (>= (length parts) 2)
-                      (set! wallet (get parts 1))
-                      null))
-                null))
-
-          ;; Extract program ID
-          (define program-id "Unknown")
-          (define program-name "Unknown")
-          (for (line logs)
-            (if (and (string-contains line "invoke [1]")
-                     (not (string-contains line "ComputeBudget"))
-                     (not (string-contains line "11111111")))
-                (do
-                  (define parts (split line " "))
-                  (if (>= (length parts) 2)
-                      (do
-                        (set! program-id (get parts 1))
-                        (if (string-contains program-id "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
-                            (set! program-name "Pump.fun Core") null)
-                        (if (string-contains program-id "MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e")
-                            (set! program-name "Pump.fun Wrapper") null)
-                        (if (string-contains program-id "BLUR9cL8HqZzu5bSaC7VRX25RCG93Hv3T6NPyKxQhWUT")
-                            (set! program-name "BLUR Bot") null)
-                        (if (string-contains program-id "GMgnVFR8Jb39LoXsEVzb3DvBy3ywCmdmJquHUy1Lrkqb")
-                            (set! program-name "GMgn Bot") null))
-                      null))
-                null))
-
-          ;; Extract SOL amount
-          (define sol-amount "Unknown")
-          (for (line logs)
-            (if (string-contains line "sol_received:")
-                (do
-                  (define parts (split line ":"))
-                  (if (>= (length parts) 3)
-                      (do
-                        (define amount-str (get parts 2))
-                        (define amount-parts (split amount-str ","))
-                        (if (>= (length amount-parts) 1)
-                            (set! sol-amount (get amount-parts 0))
-                            null))
-                      null))
-                null))
-
-          ;; Extract token program
-          (define token-program "Unknown")
-          (for (line logs)
-            (if (string-contains line "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
-                (set! token-program "Token2022") null)
-            (if (string-contains line "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-                (set! token-program "SPL Token") null))
-
-          ;; Extract token mint and amount from logs
-          ;; PUMP.FUN TOKEN MINTS ALL END WITH "pump"!
-          (define token-mint "Unknown")
-          (define token-amount "Unknown")
-          (define program-data-b64 "")
-
-          ;; Strategy 1: Look for base58 addresses ending in "pump"
-          ;; These are Pump.fun token mints created via bonding curve
-          (for (line logs)
-            ;; Check ALL lines for addresses ending in "pump"
-            (define parts (split line " "))
-            (for (part parts)
-              ;; Check if this part is a long base58 address ending in "pump"
-              (if (and (> (length part) 32)
-                       (string-contains part "pump"))
-                  (do
-                    ;; Additional check: must END with "pump" not just contain it
-                    ;; Get last 4 chars
-                    (define part-len (length part))
-                    (if (>= part-len 4)
-                        (do
-                          (define last-4 (substring part (- part-len 4) part-len))
-                          (if (= last-4 "pump")
-                              (set! token-mint part)
-                              null))
-                        null))
-                  null))
-
-            ;; Strategy 2: Extract "Program data:" for amount decoding
-            (if (string-contains line "Program data:")
-                (do
-                  (define parts (split line ":"))
-                  (if (>= (length parts) 2)
-                      (do
-                        ;; Get the base64 part (after "Program data:")
-                        (define data-part (get parts 1))
-                        ;; MUST trim whitespace before base64-decode
-                        (set! program-data-b64 (trim data-part)))
-                      null))
-                null))
-
-          ;; Strategy 3: Decode Program data to extract token amount (Borsh format)
-          ;; Pump.fun Borsh structure:
-          ;;   - Bytes 0-7: Unknown/discriminator
-          ;;   - Bytes 8-15: Token amount (u64 little-endian)
-          ;;   - Bytes 16+: Other bonding curve state
-          (if (> (length program-data-b64) 0)
-              (do
-                ;; base64-decode-raw returns hex string (binary-safe)
-                (define hex-data (base64-decode-raw program-data-b64))
-
-                ;; Pump.fun Borsh layout - try common offsets
-                ;; Offset 8 = token amount (most common)
-                (if (>= (length hex-data) 32)  ;; 32 hex chars = 16 bytes minimum
-                    (do
-                      ;; Parse u64 at byte offset 8 (= hex offset 16)
-                      (define amount-raw (hex-to-u64-le hex-data 8))
-                      ;; Format with decimals (Pump.fun tokens usually have 6 decimals)
-                      (define amount-float (/ amount-raw 1000000.0))
-                      (set! token-amount (str amount-float " tokens (raw: " amount-raw ")")))
-                    (set! token-amount (str "Program data too short: " (length hex-data) " hex chars"))))
-              null)
-
-          ;; Try to find token_transfer event as fallback
-          (for (evt events)
-            (if (= (get evt "type") "token_transfer")
-                (do
-                  (if (= (get evt "signature") signature)
-                      (do
-                        (set! token-mint (get evt "token"))
-                        (set! token-amount (str (get evt "amount") " (decimals: " (get evt "decimals") ")")))
-                      null))
-                null))
-
-          ;; Display BUY transactions
+          ;; Detect transaction type from logs
           (if (string-contains logs-text "Instruction: Buy")
-              (do
-                (set! buy-count (+ buy-count 1))
-                (println "")
-                (println "═══════════════════════════════════════════════════════════════")
-                (println (str "📈 BUY #" buy-count " | Slot: " slot " | Time: " (now)))
-                (println "═══════════════════════════════════════════════════════════════")
-                (println (str "Signature:    " signature))
-                (println (str "Wallet:       " wallet))
-                (println (str "Program:      " program-name " (" program-id ")"))
-                (println (str "Token Std:    " token-program))
-                (println (str "Token Mint:   " token-mint))
-                (println (str "Token Amount: " token-amount))
-                (println (str "SOL Spent:    " sol-amount " lamports"))
-                (println (str "osvm.ai:      https://osvm.ai/tx/" signature))
-                (println "═══════════════════════════════════════════════════════════════"))
+              (set! buy-count (+ buy-count 1))
               null)
 
-          ;; Display SELL transactions
           (if (string-contains logs-text "Instruction: Sell")
-              (do
-                (set! sell-count (+ sell-count 1))
-                (println "")
-                (println "═══════════════════════════════════════════════════════════════")
-                (println (str "📉 SELL #" sell-count " | Slot: " slot " | Time: " (now)))
-                (println "═══════════════════════════════════════════════════════════════")
-                (println (str "Signature:    " signature))
-                (println (str "Wallet:       " wallet))
-                (println (str "Program:      " program-name " (" program-id ")"))
-                (println (str "Token Std:    " token-program))
-                (println (str "Token Mint:   " token-mint))
-                (println (str "Token Amount: " token-amount))
-                (println (str "SOL Received: " sol-amount " lamports"))
-                (println (str "osvm.ai:      https://osvm.ai/tx/" signature))
-                (println "═══════════════════════════════════════════════════════════════"))
+              (set! sell-count (+ sell-count 1))
               null)
 
-          ;; Display graduations
           (if (or (string-contains logs-text "raydium")
                   (string-contains logs-text "Instruction: Graduate"))
               (do
@@ -222,10 +104,19 @@
                 (println (str "🎓 TOKEN GRADUATION #" graduation-count " - MIGRATING TO RAYDIUM 🚀"))
                 (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
                 (println (str "Signature: " signature))
-                (println (str "Token:     " token-mint))
+                (println (str "Slot:      " slot))
                 (println (str "osvm.ai:   https://osvm.ai/tx/" signature))
                 (println "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓"))
               null))
+        null)
+
+    ;; ═══════════════════════════════════════════════════════════
+    ;; PROCESS TRANSACTION EVENTS (FOR WALLET/PROGRAM INFO)
+    ;; ═══════════════════════════════════════════════════════════
+    (if (= event-type "transaction")
+        (do
+          ;; Future enhancement: Extract signer, program_ids, fees
+          null)
         null)))
 
 ;; Summary
@@ -234,11 +125,12 @@
 (println "═══════════════════════════════════════════════════════════════")
 (println "  FORENSICS SUMMARY")
 (println "═══════════════════════════════════════════════════════════════")
-(println (str "Duration:      " duration " seconds"))
-(println (str "Buy Txs:       " buy-count))
-(println (str "Sell Txs:      " sell-count))
-(println (str "Graduations:   " graduation-count))
-(println (str "Total Events:  " (+ buy-count sell-count graduation-count)))
+(println (str "Duration:         " duration " seconds"))
+(println (str "Buy Txs:          " buy-count))
+(println (str "Sell Txs:         " sell-count))
+(println (str "Token Transfers:  " transfer-count))
+(println (str "Graduations:      " graduation-count))
+(println (str "Total Events:     " (+ buy-count sell-count graduation-count transfer-count)))
 (println "═══════════════════════════════════════════════════════════════")
 
 (stream-close stream-id)
