@@ -343,8 +343,8 @@ impl SbpfInstruction {
     pub fn call_syscall(hash: u32, sbpf_version: super::SbpfVersion) -> Self {
         match sbpf_version {
             super::SbpfVersion::V1 => {
-                // V1: Use imm=-1, actual hash will be patched via relocations
-                Self::new(class::JMP | jmp::CALL, 0, 0, 0, -1)
+                // V1: Use imm=-1, src=1 for syscalls (as per Rust compiler)
+                Self::new(class::JMP | jmp::CALL, 0, 1, 0, -1)
             }
             super::SbpfVersion::V2 => {
                 // V2: Static syscalls use src=0 and hash in imm field

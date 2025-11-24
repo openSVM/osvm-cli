@@ -518,13 +518,48 @@ impl IrGenerator {
                 }
 
                 // Handle (sol_log_ msg) - shorthand for logging syscall
-                if (name == "sol_log_" || name == "sol_log_64_") && args.len() == 1 {
-                    // Get message register
-                    let msg_reg = self.generate_expr(&args[0].value)?
-                        .ok_or_else(|| Error::runtime("log message has no result"))?;
+                if name == "sol_log_" && args.len() == 1 {
+                    // Check if the argument is a string literal
+                    if let Expression::StringLiteral(ref s) = args[0].value {
+                        // Get message pointer register
+                        let msg_reg = self.generate_expr(&args[0].value)?
+                            .ok_or_else(|| Error::runtime("log message has no result"))?;
+
+                        // sol_log_ requires: R1 = pointer, R2 = length
+                        // Generate length register
+                        let len_reg = self.alloc_reg();
+                        self.emit(IrInstruction::ConstI64(len_reg, s.len() as i64));
+
+                        let dst = self.alloc_reg();
+                        self.emit(IrInstruction::Syscall(Some(dst), name.clone(), vec![msg_reg, len_reg]));
+                        return Ok(Some(dst));
+                    } else {
+                        return Err(Error::runtime("sol_log_ requires a string literal argument"));
+                    }
+                }
+
+                // Handle (sol_log_64_ ...) - log up to 5 numeric values
+                if name == "sol_log_64_" && args.len() >= 1 && args.len() <= 5 {
+                    let mut arg_regs = Vec::new();
+                    for arg in args {
+                        let reg = self.generate_expr(&arg.value)?
+                            .ok_or_else(|| Error::runtime("log argument has no result"))?;
+                        arg_regs.push(reg);
+                    }
 
                     let dst = self.alloc_reg();
-                    self.emit(IrInstruction::Syscall(Some(dst), name.clone(), vec![msg_reg]));
+                    self.emit(IrInstruction::Syscall(Some(dst), name.clone(), arg_regs));
+                    return Ok(Some(dst));
+                }
+
+                // Handle (println msg) - no-op for local testing (just evaluate and discard)
+                if name == "println" && args.len() == 1 {
+                    // Evaluate the argument (so side effects happen) but discard the result
+                    let _result = self.generate_expr(&args[0].value)?;
+
+                    // Return success (0)
+                    let dst = self.alloc_reg();
+                    self.emit(IrInstruction::ConstI64(dst, 0));
                     return Ok(Some(dst));
                 }
 

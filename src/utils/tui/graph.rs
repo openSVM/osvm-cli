@@ -263,6 +263,12 @@ pub struct WalletGraph {
     pub show_minimap: bool,
     /// Show investigation trail at bottom
     pub show_trail: bool,
+    /// Detail panel scroll position
+    pub detail_scroll: usize,
+    /// Filtered nodes (nodes with only 1 inflow OR 1 outflow - hidden from display)
+    pub filtered_nodes: std::collections::HashSet<usize>,
+    /// Folded nodes by direction (depth, flow_direction) -> vec of filtered node indices
+    pub folded_groups: HashMap<(usize, i32), Vec<usize>>,
 }
 
 /// Cached wallet data for multi-hop path discovery
@@ -310,6 +316,8 @@ pub enum GraphInput {
     SearchPrev,
     Copy,
     HopToWallet,  // Re-center graph on selected wallet
+    ScrollDetailUp,   // Scroll detail panel up
+    ScrollDetailDown, // Scroll detail panel down
 }
 
 impl WalletGraph {
@@ -355,6 +363,9 @@ impl WalletGraph {
             investigation_trail: Some(InvestigationTrail::new(0, target_wallet, RiskLevel::Low)),
             show_minimap: true,
             show_trail: true,
+            detail_scroll: 0,
+            filtered_nodes: std::collections::HashSet::new(),
+            folded_groups: HashMap::new(),
         }
     }
 
@@ -370,6 +381,7 @@ impl WalletGraph {
     fn set_selected_node(&mut self, node_idx: Option<usize>) {
         if let Some(idx) = node_idx {
             self.selection = SelectionMode::Node(idx);
+            self.update_trail_on_selection(idx);
             self.center_camera_on_selection();
         }
     }
@@ -435,7 +447,9 @@ impl WalletGraph {
                     SelectionMode::Node(node_idx) => {
                         // When on node, up/down just moves in list (fallback)
                         if *node_idx > 0 {
-                            self.selection = SelectionMode::Node(node_idx - 1);
+                            let new_idx = node_idx - 1;
+                            self.selection = SelectionMode::Node(new_idx);
+                            self.update_trail_on_selection(new_idx);
                         }
                     }
                     SelectionMode::Edge { edge_idx, from_node, to_node } => {
@@ -461,7 +475,9 @@ impl WalletGraph {
                 match &self.selection {
                     SelectionMode::Node(node_idx) => {
                         if node_idx + 1 < self.nodes.len() {
-                            self.selection = SelectionMode::Node(node_idx + 1);
+                            let new_idx = node_idx + 1;
+                            self.selection = SelectionMode::Node(new_idx);
+                            self.update_trail_on_selection(new_idx);
                         }
                     }
                     SelectionMode::Edge { edge_idx, from_node, to_node } => {
@@ -500,7 +516,9 @@ impl WalletGraph {
                     }
                     SelectionMode::Edge { from_node, .. } => {
                         // LEFT from edge → go back to source wallet
-                        self.selection = SelectionMode::Node(*from_node);
+                        let node_idx = *from_node;
+                        self.selection = SelectionMode::Node(node_idx);
+                        self.update_trail_on_selection(node_idx);
                     }
                 }
                 self.center_camera_on_selection();
@@ -523,7 +541,9 @@ impl WalletGraph {
                     }
                     SelectionMode::Edge { to_node, .. } => {
                         // RIGHT from edge → jump to destination wallet
-                        self.selection = SelectionMode::Node(*to_node);
+                        let node_idx = *to_node;
+                        self.selection = SelectionMode::Node(node_idx);
+                        self.update_trail_on_selection(node_idx);
                     }
                 }
                 self.center_camera_on_selection();
@@ -670,6 +690,17 @@ impl WalletGraph {
                 }
                 None
             }
+            // Detail panel scrolling
+            GraphInput::ScrollDetailUp => {
+                if self.detail_scroll > 0 {
+                    self.detail_scroll -= 1;
+                }
+                None
+            }
+            GraphInput::ScrollDetailDown => {
+                self.detail_scroll += 1;
+                None
+            }
         }
     }
 
@@ -734,25 +765,112 @@ impl WalletGraph {
         self.selected_node() == Some(node_idx)
     }
 
-    /// Get info about selected node or edge
+    /// Get info about selected node or edge (with scrolling support)
     pub fn get_selected_info(&self) -> Option<String> {
         match &self.selection {
             SelectionMode::Node(idx) => {
                 self.nodes.get(*idx).map(|(addr, node)| {
-                    let outgoing = self.get_outgoing(*idx);
+                    let mut info = String::new();
+
+                    // Header
+                    info.push_str(&format!("{} WALLET DETAILS\n", node.node_type.symbol()));
+                    info.push_str(&format!("═══════════════════════════\n"));
+                    info.push_str(&format!("Address: {}\n", addr));
+                    info.push_str(&format!("Label: {}\n\n", node.label));
+
+                    // Get incoming and outgoing transfers
                     let incoming: Vec<_> = self.connections
                         .iter()
-                        .filter(|(_, to, _)| *to == *idx)
+                        .enumerate()
+                        .filter(|(_, (_, to, _))| *to == *idx)
                         .collect();
-                    format!(
-                        "{} {}\nAddress: {}\nIn: {} | Out: {}{}",
-                        node.node_type.symbol(),
-                        node.label,
-                        addr,
-                        incoming.len(),
-                        outgoing.len(),
-                        if self.is_collapsed(*idx) { " [▶]" } else { "" }
-                    )
+                    let outgoing: Vec<_> = self.connections
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, (from, _, _))| *from == *idx)
+                        .collect();
+
+                    info.push_str(&format!("📥 INFLOWS: {} transfers\n", incoming.len()));
+                    info.push_str("─────────────────────────\n");
+
+                    if incoming.is_empty() {
+                        info.push_str("  (none)\n");
+                    } else {
+                        // Show incoming transfers with scroll support
+                        for (i, (edge_idx, (from, _, label))) in incoming.iter().enumerate() {
+                            if i < self.detail_scroll {
+                                continue; // Skip scrolled-past items
+                            }
+                            if i >= self.detail_scroll + 10 {
+                                info.push_str(&format!("  ... and {} more (scroll down)\n", incoming.len() - i));
+                                break;
+                            }
+
+                            let from_addr = self.nodes.get(*from)
+                                .map(|(a, _)| if a.len() > 12 {
+                                    format!("{}...{}", &a[..6], &a[a.len()-4..])
+                                } else {
+                                    a.clone()
+                                })
+                                .unwrap_or_else(|| "Unknown".to_string());
+
+                            info.push_str(&format!(
+                                "  {}. {} - {:.4} {}\n",
+                                i + 1,
+                                from_addr,
+                                label.amount,
+                                label.token
+                            ));
+                            if let Some(ts) = &label.timestamp {
+                                info.push_str(&format!("      Time: {}\n", ts));
+                            }
+                        }
+                    }
+
+                    info.push_str(&format!("\n📤 OUTFLOWS: {} transfers\n", outgoing.len()));
+                    info.push_str("─────────────────────────\n");
+
+                    if outgoing.is_empty() {
+                        info.push_str("  (none)\n");
+                    } else {
+                        // Show outgoing transfers with scroll support
+                        let scroll_offset = self.detail_scroll.saturating_sub(incoming.len() + 3);
+                        for (i, (edge_idx, (_, to, label))) in outgoing.iter().enumerate() {
+                            if i < scroll_offset {
+                                continue;
+                            }
+                            if i >= scroll_offset + 10 {
+                                info.push_str(&format!("  ... and {} more (scroll down)\n", outgoing.len() - i));
+                                break;
+                            }
+
+                            let to_addr = self.nodes.get(*to)
+                                .map(|(a, _)| if a.len() > 12 {
+                                    format!("{}...{}", &a[..6], &a[a.len()-4..])
+                                } else {
+                                    a.clone()
+                                })
+                                .unwrap_or_else(|| "Unknown".to_string());
+
+                            info.push_str(&format!(
+                                "  {}. {} - {:.4} {}\n",
+                                i + 1,
+                                to_addr,
+                                label.amount,
+                                label.token
+                            ));
+                            if let Some(ts) = &label.timestamp {
+                                info.push_str(&format!("      Time: {}\n", ts));
+                            }
+                        }
+                    }
+
+                    info.push_str("\n[j/k to scroll]");
+                    if self.is_collapsed(*idx) {
+                        info.push_str(" [▶ Collapsed]");
+                    }
+
+                    info
                 })
             }
             SelectionMode::Edge { edge_idx, from_node, to_node } => {
@@ -991,11 +1109,11 @@ impl WalletGraph {
         // Position center node at (0, 0)
         self.node_positions[center_idx] = (0.0, 0.0);
 
-        // Column spacing
-        let column_width = 60.0;
-        let node_spacing = 18.0; // Vertical padding between nodes
+        // Row spacing (now vertical layout - inflows at top, outflows at bottom)
+        let row_height = 60.0;  // Was column_width, now controls Y spacing
+        let node_spacing = 18.0; // Horizontal padding between nodes
 
-        // Position nodes in columns
+        // Position nodes in rows (rotated 90 degrees)
         for ((depth, flow), mut group) in columns.into_iter() {
             if depth == 0 { continue; } // Skip center
 
@@ -1006,18 +1124,18 @@ impl WalletGraph {
                 amount_b.partial_cmp(&amount_a).unwrap()
             });
 
-            // Calculate X position (column)
-            let x = flow as f64 * column_width * depth as f64;
+            // Calculate Y position (row) - negative flow = inflows (top), positive = outflows (bottom)
+            let y = flow as f64 * row_height * depth as f64;
 
-            // Calculate Y positions (stack vertically with padding)
-            let total_height = group.nodes.len() as f64 * node_spacing;
-            let start_y = -total_height / 2.0;
+            // Calculate X positions (stack horizontally with padding)
+            let total_width = group.nodes.len() as f64 * node_spacing;
+            let start_x = -total_width / 2.0;
 
             for (i, &node_idx) in group.nodes.iter().enumerate() {
-                let y = start_y + i as f64 * node_spacing;
+                let x = start_x + i as f64 * node_spacing;
 
                 if node_idx < self.node_positions.len() {
-                    self.node_positions[node_idx] = (x, y);
+                    self.node_positions[node_idx] = (x, y);  // Swapped from (x,y) to maintain (x,y) format
                 }
             }
         }
@@ -1026,8 +1144,8 @@ impl WalletGraph {
         let mut edge_count = 0;
         for i in 0..self.nodes.len() {
             if !distances.contains_key(&i) {
-                let x = if edge_count % 2 == 0 { -200.0 } else { 200.0 };
-                let y = (edge_count / 2) as f64 * node_spacing;
+                let y = if edge_count % 2 == 0 { -200.0 } else { 200.0 };  // Swapped
+                let x = (edge_count / 2) as f64 * node_spacing;              // Swapped
                 self.node_positions[i] = (x, y);
                 edge_count += 1;
             }
@@ -1122,6 +1240,66 @@ impl WalletGraph {
         // so that edges can be drawn even to off-screen nodes
         // Visual filtering can happen later based on viewport, but positions must exist
         true
+    }
+
+    /// Update filtered nodes - hide wallets with exactly 1 inflow OR exactly 1 outflow
+    pub fn update_node_filtering(&mut self) {
+        self.filtered_nodes.clear();
+        self.folded_groups.clear();
+
+        // Identify nodes to filter (skip target wallet index 0)
+        for idx in 1..self.nodes.len() {
+            let in_count = self.connections.iter()
+                .filter(|(_, to, _)| *to == idx)
+                .count();
+            let out_count = self.connections.iter()
+                .filter(|(from, _, _)| *from == idx)
+                .count();
+
+            // Filter if has exactly 1 inflow OR exactly 1 outflow
+            // Keep if has 0 (isolated) or 2+ (significant hub)
+            if in_count == 1 || out_count == 1 {
+                self.filtered_nodes.insert(idx);
+            }
+        }
+    }
+
+    /// Get folded node info for a group (depth, direction)
+    pub fn get_folded_group_info(&self, depth: usize, flow: i32) -> Option<(usize, Vec<String>)> {
+        let filtered_in_group: Vec<_> = self.filtered_nodes.iter()
+            .filter(|&&idx| {
+                // Check if this node belongs to this depth/flow group
+                // This is a heuristic based on position
+                if idx >= self.node_positions.len() {
+                    return false;
+                }
+
+                // Simple heuristic: check if node is in approximately the right column
+                let (x, _) = self.node_positions[idx];
+                let expected_x_range = if flow < 0 {
+                    // Inflow: negative X
+                    (-(depth as f64 * 60.0 + 30.0), -(depth as f64 * 60.0 - 30.0))
+                } else if flow > 0 {
+                    // Outflow: positive X
+                    (depth as f64 * 60.0 - 30.0, depth as f64 * 60.0 + 30.0)
+                } else {
+                    return false;
+                };
+
+                x >= expected_x_range.0 && x <= expected_x_range.1
+            })
+            .copied()
+            .collect();
+
+        if filtered_in_group.is_empty() {
+            return None;
+        }
+
+        let addresses: Vec<String> = filtered_in_group.iter()
+            .filter_map(|&idx| self.nodes.get(idx).map(|(addr, _)| addr.clone()))
+            .collect();
+
+        Some((filtered_in_group.len(), addresses))
     }
 
     /// Trace token path depth (inflows and outflows up to 5 hops)
@@ -1337,6 +1515,7 @@ impl WalletGraph {
         // Compute hierarchical layout on every render (cheap operation)
         if !self.nodes.is_empty() && !self.connections.is_empty() {
             self.compute_hierarchical_layout();
+            self.update_node_filtering();  // Update filtering after layout
         }
 
         if self.nodes.is_empty() {
@@ -1481,6 +1660,11 @@ impl WalletGraph {
                         continue;
                     }
 
+                    // FILTER: Skip nodes with exactly 1 inflow OR 1 outflow (folded)
+                    if self.filtered_nodes.contains(&idx) {
+                        continue;
+                    }
+
                     if idx < self.node_positions.len() {
                         let (x, y) = self.node_positions[idx];
 
@@ -1575,6 +1759,60 @@ impl WalletGraph {
                             ctx.print(x, y - radius - 2.0, short_addr);
                         }
                     }
+                }
+
+                // Draw folded circles for filtered nodes (grouped by row)
+                // Group filtered nodes by their approximate row position (vertical layout)
+                use std::collections::HashMap;
+                let mut row_groups: HashMap<i32, Vec<usize>> = HashMap::new();
+
+                for &filtered_idx in &self.filtered_nodes {
+                    if filtered_idx >= self.node_positions.len() {
+                        continue;
+                    }
+
+                    let (_, y) = self.node_positions[filtered_idx];
+                    // Determine row based on Y position (now using Y for rows)
+                    let row = (y / 60.0).round() as i32;
+                    row_groups.entry(row).or_insert_with(Vec::new).push(filtered_idx);
+                }
+
+                // Draw one folded circle per row
+                for (row, nodes_in_row) in row_groups.iter() {
+                    if nodes_in_row.is_empty() {
+                        continue;
+                    }
+
+                    let count = nodes_in_row.len();
+                    // Calculate average X position for this group (horizontal now)
+                    let avg_x: f64 = nodes_in_row.iter()
+                        .filter_map(|&idx| self.node_positions.get(idx).map(|(x, _)| x))
+                        .sum::<f64>() / count as f64;
+
+                    let fold_x = avg_x;
+                    let fold_y = *row as f64 * 60.0;
+
+                    // Draw folded circle with count
+                    let fold_radius = 3.5;
+
+                    // Outer circle (gray, indicating folded/hidden nodes)
+                    ctx.draw(&Circle {
+                        x: fold_x,
+                        y: fold_y,
+                        radius: fold_radius,
+                        color: Color::DarkGray,
+                    });
+
+                    // Inner circle for depth
+                    ctx.draw(&Circle {
+                        x: fold_x,
+                        y: fold_y,
+                        radius: fold_radius * 0.6,
+                        color: Color::Black,
+                    });
+
+                    // Show count label
+                    ctx.print(fold_x, fold_y - fold_radius - 1.5, format!("📦{}", count));
                 }
             });
 

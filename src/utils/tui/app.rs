@@ -1064,6 +1064,20 @@ impl OsvmApp {
                                 }
                             }
                         }
+                        KeyCode::Char('j') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::ScrollDetailDown);
+                                }
+                            }
+                        }
+                        KeyCode::Char('k') => {
+                            if self.active_tab == TabIndex::Graph {
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.handle_input(GraphInput::ScrollDetailUp);
+                                }
+                            }
+                        }
                         KeyCode::PageUp => {
                             self.log_scroll = self.log_scroll.saturating_sub(10);
                         }
