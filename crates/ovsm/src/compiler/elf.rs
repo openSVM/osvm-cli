@@ -277,7 +277,7 @@ impl ElfWriter {
     }
 
     /// Write sBPF program with syscall support (dynamic linking)
-    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], rodata: &[u8], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
+    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], string_loads: &[StringLoadRef], rodata: &[u8], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
         if syscalls.is_empty() {
             return self.write(program, _debug_info, sbpf_version);
         }
@@ -385,6 +385,25 @@ impl ElfWriter {
         let dynstr_vaddr = dynsym_vaddr + dynsym_size as u64;
         // Must align to 8 bytes to match file offset alignment (for Elf64Rel)
         let reldyn_vaddr = ((dynstr_vaddr + dynstr_size as u64) + 7) & !7;
+
+        // Patch LDDW instructions that load string pointers
+        // LDDW is a 16-byte instruction: [8 bytes first half] [8 bytes second half]
+        // First half: opcode=0x18, dst, src=0, off=0, imm=low32
+        // Second half: opcode=0x00, dst=0, src=0, off=0, imm=high32
+        for load_site in string_loads {
+            let abs_addr = rodata_vaddr + load_site.rodata_offset as u64;
+            let low32 = (abs_addr & 0xFFFF_FFFF) as u32;
+            let high32 = (abs_addr >> 32) as u32;
+
+            // Patch the immediate fields in both halves of LDDW
+            let offset = load_site.offset;
+            if offset + 16 <= text_section.len() {
+                // First half: bytes 4-7 contain low32 immediate
+                text_section[offset + 4..offset + 8].copy_from_slice(&low32.to_le_bytes());
+                // Second half: bytes 12-15 contain high32 immediate
+                text_section[offset + 12..offset + 16].copy_from_slice(&high32.to_le_bytes());
+            }
+        }
 
         // Build ELF
         let mut elf = Vec::new();

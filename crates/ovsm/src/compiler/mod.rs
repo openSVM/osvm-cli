@@ -156,11 +156,19 @@ impl Compiler {
             })
             .collect();
 
+        // Convert string load sites to ELF format for patching
+        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen.string_load_sites.iter()
+            .map(|site| crate::compiler::elf::StringLoadRef {
+                offset: site.offset,
+                rodata_offset: site.rodata_offset,
+            })
+            .collect();
+
         // V1 requires relocations, V2 embeds syscall hashes statically
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &string_load_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded
@@ -220,13 +228,21 @@ impl Compiler {
             })
             .collect();
 
+        // Convert string load sites to ELF format for patching
+        let string_load_refs: Vec<crate::compiler::elf::StringLoadRef> = codegen.string_load_sites.iter()
+            .map(|site| crate::compiler::elf::StringLoadRef {
+                offset: site.offset,
+                rodata_offset: site.rodata_offset,
+            })
+            .collect();
+
         let mut elf_writer = ElfWriter::new();
 
         // V1 requires relocations, V2 embeds syscall hashes statically
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &string_load_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded

@@ -103,9 +103,10 @@
           ;; Extract token mint and amount from logs
           ;; PUMP.FUN TOKEN MINTS ALL END WITH "pump"!
           (define token-mint "Unknown")
-          (define token-amount "Check osvm.ai tx for amount")
+          (define token-amount "Unknown")
+          (define program-data-b64 "")
 
-          ;; Strategy: Look for base58 addresses ending in "pump"
+          ;; Strategy 1: Look for base58 addresses ending in "pump"
           ;; These are Pump.fun token mints created via bonding curve
           (for (line logs)
             ;; Check ALL lines for addresses ending in "pump"
@@ -125,7 +126,27 @@
                               (set! token-mint part)
                               null))
                         null))
-                  null)))
+                  null))
+
+            ;; Strategy 2: Extract "Program data:" for amount decoding
+            (if (string-contains line "Program data:")
+                (do
+                  (define parts (split line ":"))
+                  (if (>= (length parts) 2)
+                      (do
+                        ;; Get the base64 part (after "Program data:")
+                        (define data-part (get parts 1))
+                        ;; MUST trim whitespace before base64-decode
+                        (set! program-data-b64 (trim data-part)))
+                      null))
+                null))
+
+          ;; Strategy 3: Note if we have Program data (contains binary token amounts)
+          ;; Pump.fun encodes: bonding curve state, token amounts, etc.
+          ;; The data is binary (not UTF-8), so we can't decode it directly
+          (if (> (length program-data-b64) 0)
+              (set! token-amount (str "In Program data (base64 len:" (length program-data-b64) ")"))
+              null)
 
           ;; Try to find token_transfer event as fallback
           (for (evt events)
