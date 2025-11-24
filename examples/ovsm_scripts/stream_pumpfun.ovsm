@@ -100,9 +100,47 @@
             (if (string-contains line "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
                 (set! token-program "SPL Token") null))
 
-          ;; Find matching token_transfer event
-          (define token-mint "See osvm.ai")
-          (define token-amount "See osvm.ai")
+          ;; Extract token mint from logs
+          ;; Look for base58 addresses in lines near TransferChecked
+          (define token-mint "Unknown")
+          (define token-amount "Unknown")
+          (define found-transfer false)
+
+          ;; Strategy: Find TransferChecked, then look for addresses in nearby lines
+          (for (line logs)
+            (if (string-contains line "TransferChecked")
+                (set! found-transfer true)
+                null))
+
+          ;; If we found TransferChecked, look for potential token addresses
+          ;; Token addresses appear in lines like:
+          ;; "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [3]"
+          ;; Or in account references
+          (if found-transfer
+              (do
+                ;; Look for invoke [2] or [3] which are often token program calls
+                (for (line logs)
+                  (if (and (or (string-contains line "invoke [2]")
+                               (string-contains line "invoke [3]"))
+                           (not (string-contains line "TokenkegQ"))
+                           (not (string-contains line "TokenzQdBN"))
+                           (not (string-contains line "11111111"))
+                           (not (string-contains line "ComputeBudget")))
+                      (do
+                        ;; Extract potential mint address
+                        (define parts (split line " "))
+                        (if (>= (length parts) 2)
+                            (do
+                              (define potential-mint (get parts 1))
+                              ;; Check if it looks like a base58 address (32+ chars)
+                              (if (> (length potential-mint) 32)
+                                  (set! token-mint potential-mint)
+                                  null))
+                            null))
+                      null)))
+              null)
+
+          ;; Try to find token_transfer event as fallback
           (for (evt events)
             (if (= (get evt "type") "token_transfer")
                 (do
