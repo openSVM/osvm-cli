@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::error::{Error, Result};
 
 /// Runtime value representation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     // Primitives
     /// Null value
@@ -62,6 +62,14 @@ pub enum Value {
         /// Captured environment at macro definition time
         closure: Arc<HashMap<String, Value>>,
     },
+
+    /// Async task handle (returned by async, can be awaited for result)
+    AsyncHandle {
+        /// Unique task ID
+        id: String,
+        /// Receiver for result (can only be awaited once)
+        receiver: Arc<std::sync::Mutex<Option<tokio::sync::oneshot::Receiver<Value>>>>,
+    },
 }
 
 impl Value {
@@ -103,6 +111,7 @@ impl Value {
             Value::Function { .. } => "function".to_string(),
             Value::Multiple(_) => "multiple-values".to_string(),
             Value::Macro { .. } => "macro".to_string(),
+            Value::AsyncHandle { .. } => "async-handle".to_string(),
         }
     }
 
@@ -123,6 +132,7 @@ impl Value {
                 vals.first().map(|v| v.is_truthy()).unwrap_or(false)
             }
             Value::Macro { .. } => true, // Macros are always truthy
+            Value::AsyncHandle { .. } => true, // Handles are always truthy
         }
     }
 
@@ -206,6 +216,7 @@ impl Value {
                 }
             }
             Value::Macro { params, .. } => format!("<macro({} params)>", params.len()),
+            Value::AsyncHandle { id, .. } => format!("<async-handle:{}>", id),
         }
     }
 
@@ -340,6 +351,33 @@ impl fmt::Display for Value {
                 write!(f, ")")
             }
             Value::Macro { params, .. } => write!(f, "<macro({} params)>", params.len()),
+            Value::AsyncHandle { id, .. } => write!(f, "<async-handle:{}>", id),
+        }
+    }
+}
+
+// Implement equality manually (AsyncHandle doesn't support PartialEq)
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Null, Value::Null) => true,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Array(a), Value::Array(b)) => a == b,
+            (Value::Object(a), Value::Object(b)) => a == b,
+            (Value::Range { start: s1, end: e1 }, Value::Range { start: s2, end: e2 }) => {
+                s1 == s2 && e1 == e2
+            }
+            (Value::Multiple(a), Value::Multiple(b)) => a == b,
+            // Functions, macros, and async handles compared by identity (pointer equality)
+            (Value::Function { body: a, .. }, Value::Function { body: b, .. }) => {
+                Arc::ptr_eq(a, b)
+            }
+            (Value::Macro { body: a, .. }, Value::Macro { body: b, .. }) => Arc::ptr_eq(a, b),
+            (Value::AsyncHandle { id: a, .. }, Value::AsyncHandle { id: b, .. }) => a == b,
+            _ => false,
         }
     }
 }

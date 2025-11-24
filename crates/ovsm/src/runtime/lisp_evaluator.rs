@@ -372,7 +372,8 @@ impl LispEvaluator {
                     "stream-close" => self.eval_stream_close(args),
                     "osvm-stream" => self.eval_osvm_stream(args),
                     // Async execution
-                    "async-call" => self.eval_async_call(args),
+                    "async" => self.eval_async(args),
+                    "await" => self.eval_await(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -1688,6 +1689,7 @@ impl LispEvaluator {
             Value::Range { .. } => "range",
             Value::Multiple(_) => "multiple", // Common LISP multiple values
             Value::Macro { .. } => "macro",   // LISP macros
+            Value::AsyncHandle { .. } => "async-handle", // Async operation handle
         };
         Ok(Value::String(type_str.to_string()))
     }
@@ -1772,6 +1774,7 @@ impl LispEvaluator {
                 Value::Function { .. } => "function",
                 Value::Multiple(_) => "multiple-values",
                 Value::Macro { .. } => "macro",
+                Value::AsyncHandle { .. } => "async-handle",
             };
             return Err(Error::AssertionFailed {
                 message: format!(
@@ -5941,6 +5944,13 @@ impl LispEvaluator {
                     right_type: "json".to_string(),
                 })
             }
+            Value::AsyncHandle { id, .. } => {
+                // Serialize async handle as object with id field
+                let mut json_obj = serde_json::Map::new();
+                json_obj.insert("type".to_string(), JV::String("async-handle".to_string()));
+                json_obj.insert("id".to_string(), JV::String(id));
+                JV::Object(json_obj)
+            }
         })
     }
 
@@ -9126,28 +9136,33 @@ impl LispEvaluator {
         crate::runtime::streaming::osvm_stream(&evaluated_args)
     }
 
-    /// (async-call function arg1 arg2 ...) - Execute function in thread pool (fire-and-forget)
+    /// (async function arg1 arg2 ...) - Execute function in thread pool (returns AsyncHandle)
     ///
-    /// Dispatches function execution to the global thread pool for concurrent processing.
-    /// This enables parallel event handling without blocking the main thread.
+    /// Dispatches function execution to the global thread pool and returns an
+    /// AsyncHandle that can be awaited for the result.
     ///
-    /// **Fire-and-forget semantics**: Returns immediately (null), does not wait for completion
-    /// **Side-effects only**: Cannot return values to caller
-    /// **Isolated execution**: Each async call runs in its own evaluator instance
+    /// **Non-blocking**: Returns AsyncHandle immediately
+    /// **Awaitable**: Use `(await handle)` to get result
+    /// **Fire-and-forget**: Ignore handle if result not needed
     ///
     /// Example:
     /// ```lisp
-    /// (defun process-event (event)
-    ///   (println (str "Processing: " (get event "id"))))
+    /// ;; Fire-and-forget
+    /// (async println "Background task")
     ///
-    /// ;; Process events concurrently
-    /// (for (event events)
-    ///   (async-call process-event event))  ; Returns immediately, processes in background
+    /// ;; Await result
+    /// (define handle (async factorial 10))
+    /// (define result (await handle))
+    /// (println result)  ; → 3628800
+    ///
+    /// ;; Concurrent processing
+    /// (define handles (map [1 2 3 4 5] (lambda (n) (async factorial n))))
+    /// (define results (map handles await))
     /// ```
-    fn eval_async_call(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+    fn eval_async(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.is_empty() {
             return Err(Error::runtime(
-                "async-call requires at least a function argument".to_string(),
+                "async requires at least a function argument".to_string(),
             ));
         }
 
@@ -9161,7 +9176,33 @@ impl LispEvaluator {
         }
 
         // Delegate to streaming module for thread pool execution
-        crate::runtime::streaming::async_call(func_value, call_args)
+        crate::runtime::streaming::async_execute(func_value, call_args)
+    }
+
+    /// (await async-handle) - Wait for async task to complete and return result
+    ///
+    /// Blocks until the async task completes and returns its result.
+    /// Can only be called once per handle (receiver is consumed).
+    ///
+    /// Example:
+    /// ```lisp
+    /// (define handle (async factorial 10))
+    /// (println "Task running in background...")
+    /// (define result (await handle))  ; Blocks here
+    /// (println (str "Result: " result))
+    /// ```
+    fn eval_await(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::runtime(
+                "await requires exactly 1 argument: async-handle".to_string(),
+            ));
+        }
+
+        // Evaluate handle argument
+        let handle = self.evaluate_expression(&args[0].value)?;
+
+        // Delegate to streaming module
+        crate::runtime::streaming::await_async(handle)
     }
 }
 

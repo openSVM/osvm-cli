@@ -214,6 +214,9 @@ impl OvsmService {
             Value::Macro { params, .. } => {
                 format!("<macro({} params)>", params.len())
             }
+            Value::AsyncHandle { id, .. } => {
+                format!("<async-handle:{}>", id)
+            }
         }
     }
 
@@ -272,6 +275,13 @@ impl OvsmService {
                 Ok(serde_json::json!({
                     "type": "macro",
                     "params": params.len()
+                }))
+            }
+            Value::AsyncHandle { id, .. } => {
+                // Represent async handle as JSON object
+                Ok(serde_json::json!({
+                    "type": "async-handle",
+                    "id": id
                 }))
             }
         }

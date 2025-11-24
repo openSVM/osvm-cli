@@ -232,6 +232,10 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             // Macros cannot be serialized for RPC calls
             json!({"error": "Cannot serialize macro to JSON for RPC call"})
         }
+        OvsmValue::AsyncHandle { id, .. } => {
+            // Serialize async handle with its id
+            json!({"type": "async-handle", "id": id})
+        }
     }
 }
 

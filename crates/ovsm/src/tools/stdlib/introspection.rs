@@ -107,6 +107,7 @@ impl Tool for DescribeTool {
             Value::Function { .. } => println!("Function\n  Type: FUNCTION"),
             Value::Multiple(_) => println!("Multiple Values\n  Type: MULTIPLE"),
             Value::Macro { .. } => println!("Macro\n  Type: MACRO"),
+            Value::AsyncHandle { id, .. } => println!("AsyncHandle\n  Type: ASYNC-HANDLE\n  ID: {}", id),
         }
         Ok(Value::Null)
     }
@@ -144,6 +145,7 @@ impl Tool for DescribeObjectTool {
                 Value::Function { .. } => "FUNCTION",
                 Value::Multiple(_) => "MULTIPLE",
                 Value::Macro { .. } => "MACRO",
+                Value::AsyncHandle { .. } => "ASYNC-HANDLE",
             }
         );
         Ok(Value::Null)
@@ -187,6 +189,7 @@ impl Tool for InspectTool {
                 Value::Function { .. } => "FUNCTION",
                 Value::Multiple(_) => "MULTIPLE",
                 Value::Macro { .. } => "MACRO",
+                Value::AsyncHandle { .. } => "ASYNC-HANDLE",
             }
         );
         Ok(Value::Null)
@@ -223,6 +226,7 @@ impl Tool for ClassOfTool {
             Value::Function { .. } => "FUNCTION",
             Value::Multiple(_) => "MULTIPLE-VALUES",
             Value::Macro { .. } => "MACRO",
+            Value::AsyncHandle { .. } => "ASYNC-HANDLE",
         };
 
         Ok(Value::String(class_name.to_string()))

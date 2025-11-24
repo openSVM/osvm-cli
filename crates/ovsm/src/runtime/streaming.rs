@@ -658,39 +658,50 @@ fn spawn_internal_server(
     Ok(())
 }
 
-/// Execute function asynchronously in thread pool (fire-and-forget)
+/// Generate unique async task ID
+fn generate_async_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let id = COUNTER.fetch_add(1, Ordering::SeqCst);
+    format!("async_{}", id)
+}
+
+/// Execute function asynchronously in thread pool (returns awaitable handle)
 ///
-/// Syntax: `(async-call function arg1 arg2 ...)`
+/// Syntax: `(async function arg1 arg2 ...)`
 ///
-/// This enables concurrent event processing by dispatching function execution
-/// to the global thread pool. Each call runs in an isolated evaluator instance.
+/// This dispatches function execution to the global thread pool and returns
+/// an AsyncHandle that can be awaited for the result.
 ///
 /// **Key Characteristics:**
-/// - **Fire-and-forget**: Returns immediately with null, does not wait for completion
-/// - **Side-effects only**: Cannot return values to caller (prints, logs, I/O only)
-/// - **Isolated execution**: Each async call gets its own evaluator + environment
-/// - **Closure capture**: Lambda closures are properly preserved
-/// - **Thread-safe**: No shared state between async calls
+/// - **Non-blocking**: Returns AsyncHandle immediately
+/// - **Awaitable**: Use `(await handle)` to get result
+/// - **Fire-and-forget**: Ignore handle if result not needed
+/// - **Isolated execution**: Each async call gets its own evaluator
+/// - **Closure capture**: Lambda closures properly preserved
 ///
 /// **Performance:**
 /// - Utilizes all CPU cores (worker pool size = num_cpus)
-/// - No blocking on main thread
-/// - Ideal for I/O-heavy or CPU-intensive event handlers
+/// - No blocking on main thread until await
+/// - Ideal for I/O-heavy or CPU-intensive operations
 ///
 /// Example:
 /// ```lisp
-/// (defun process-transfer (event)
-///   (do
-///     (define amount (get event "amount"))
-///     (define token (get event "token"))
-///     (println (str "Processing: " amount " of " token))
-///     (http-post "https://api.example.com/notify" (str amount))))
+/// ;; Fire-and-forget (ignore handle)
+/// (async println "Background task")
 ///
-/// ;; Process 100 events concurrently
-/// (for (event events)
-///   (async-call process-transfer event))  ; Returns immediately, processes in parallel
+/// ;; Await result
+/// (define handle (async calculate-sum 10 20))
+/// (define result (await handle))  ; Blocks until complete
+/// (println result)  ; → 30
+///
+/// ;; Concurrent processing
+/// (define handles
+///   (map [1 2 3 4 5] (lambda (n) (async factorial n))))
+/// (define results (map handles await))
+/// (println results)  ; → [1, 2, 6, 24, 120]
 /// ```
-pub fn async_call(func: Value, args: Vec<Value>) -> Result<Value> {
+pub fn async_execute(func: Value, args: Vec<Value>) -> Result<Value> {
     match func {
         Value::Function {
             params,
@@ -701,11 +712,15 @@ pub fn async_call(func: Value, args: Vec<Value>) -> Result<Value> {
             // Validate arity
             if params.len() != args.len() {
                 return Err(Error::runtime(format!(
-                    "async-call: function expects {} arguments, got {}",
+                    "async: function expects {} arguments, got {}",
                     params.len(),
                     args.len()
                 )));
             }
+
+            // Create oneshot channel for result
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            let task_id = generate_async_id();
 
             // Clone everything for thread pool (must be Send + Sync)
             let params_clone = params.clone();
@@ -716,7 +731,6 @@ pub fn async_call(func: Value, args: Vec<Value>) -> Result<Value> {
             // Dispatch to thread pool
             THREAD_POOL.spawn(move || {
                 // Import here to avoid circular dependency in module-level use
-                use crate::runtime::Environment;
                 use crate::runtime::LispEvaluator;
 
                 // Create isolated evaluator for this thread
@@ -732,22 +746,79 @@ pub fn async_call(func: Value, args: Vec<Value>) -> Result<Value> {
                     evaluator.env.define(param_name.clone(), arg_value.clone());
                 }
 
-                // Execute function body (ignore result - fire and forget)
-                match evaluator.evaluate_expression(&body_clone) {
-                    Ok(_) => {} // Success - result discarded
+                // Execute function body and send result
+                let result = match evaluator.evaluate_expression(&body_clone) {
+                    Ok(val) => val,
                     Err(e) => {
-                        // Log error but don't propagate (fire-and-forget semantics)
-                        eprintln!("⚠️  async-call error: {}", e);
+                        eprintln!("⚠️  async task error: {}", e);
+                        Value::Null // Return null on error
                     }
-                }
+                };
+
+                // Send result (ignore error if receiver dropped)
+                let _ = tx.send(result);
             });
 
-            // Return immediately (null)
-            Ok(Value::Null)
+            // Return AsyncHandle immediately
+            Ok(Value::AsyncHandle {
+                id: task_id,
+                receiver: Arc::new(std::sync::Mutex::new(Some(rx))),
+            })
         }
         _ => Err(Error::runtime(format!(
-            "async-call: first argument must be a function, got {}",
+            "async: first argument must be a function, got {}",
             func.type_name()
+        ))),
+    }
+}
+
+/// Wait for async task to complete and return result
+///
+/// Syntax: `(await async-handle)`
+///
+/// Blocks until the async task completes and returns its result.
+/// Can only be called once per handle (receiver is consumed).
+///
+/// Example:
+/// ```lisp
+/// (define handle (async factorial 10))
+/// (println "Task running in background...")
+/// (define result (await handle))  ; Blocks here
+/// (println (str "Result: " result))  ; → Result: 3628800
+/// ```
+pub fn await_async(handle: Value) -> Result<Value> {
+    match handle {
+        Value::AsyncHandle { id, receiver } => {
+            // Try to take receiver (can only await once!)
+            let mut rx = receiver
+                .lock()
+                .unwrap()
+                .take()
+                .ok_or_else(|| {
+                    Error::runtime(format!("AsyncHandle {} already awaited", id))
+                })?;
+
+            // Block until result available (poll in busy-wait since blocking_recv
+            // doesn't work inside tokio runtime)
+            loop {
+                match rx.try_recv() {
+                    Ok(result) => return Ok(result),
+                    Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                        // Not ready yet, sleep briefly
+                        std::thread::sleep(std::time::Duration::from_micros(100));
+                    }
+                    Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
+                        return Err(Error::runtime(format!(
+                            "AsyncHandle {} task panicked or was cancelled",
+                            id
+                        )));
+                    }
+                }
+            }
+        }
+        _ => Err(Error::runtime(format!(
+            "await requires AsyncHandle, got {}",
+            handle.type_name()
         ))),
     }
 }

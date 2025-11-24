@@ -159,6 +159,10 @@ fn ovsm_value_to_json(val: &OvsmValue) -> Value {
             // Convert macro to JSON representation
             json!({"type": "macro", "params": params.len()})
         }
+        OvsmValue::AsyncHandle { id, .. } => {
+            // Convert async handle to JSON representation
+            json!({"type": "async-handle", "id": id})
+        }
     }
 }
 
@@ -508,6 +512,9 @@ fn format_value_multiline_impl(
         }
         OvsmValue::Macro { params, .. } => {
             vec![format!("<macro ({} params)>", params.len())]
+        }
+        OvsmValue::AsyncHandle { id, .. } => {
+            vec![format!("<async-handle:{}>", id)]
         }
     }
 }

@@ -1600,6 +1600,7 @@ impl Tool for FormatTool {
                 Value::Range { .. } => format!("{:?}", arg),
                 Value::Multiple(_) => format!("{:?}", arg),
                 Value::Macro { .. } => "<macro>".to_string(),
+                Value::AsyncHandle { id, .. } => format!("<async-handle:{}>", id),
             };
 
             // Replace first occurrence of {}

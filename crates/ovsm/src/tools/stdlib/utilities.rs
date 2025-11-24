@@ -132,6 +132,7 @@ impl Tool for TypeOfTool {
             Value::Range { .. } => "range",
             Value::Multiple(_) => "multiple",
             Value::Macro { .. } => "macro",
+            Value::AsyncHandle { .. } => "async-handle",
         };
 
         Ok(Value::String(type_str.to_string()))
