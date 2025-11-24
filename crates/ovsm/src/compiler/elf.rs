@@ -67,7 +67,8 @@ const DT_FLAGS: u64 = 30;
 const DT_RELCOUNT: u64 = 0x6ffffffa;
 
 /// Relocation types
-const R_BPF_64_32: u32 = 10;
+const R_BPF_64_64: u32 = 8;   // For 64-bit relocations (syscalls)
+const R_BPF_64_32: u32 = 10;  // For 32-bit relocations
 
 /// Program header flags
 const PF_X: u32 = 0x1;
@@ -381,7 +382,8 @@ impl ElfWriter {
         // Virtual addresses (continuous in memory)
         // Virtual addresses must not overlap
         let rodata_vaddr = TEXT_VADDR + text_size as u64;
-        let dynamic_vaddr = rodata_vaddr + rodata_size as u64;
+        // CRITICAL: .dynamic vaddr must also be 8-byte aligned like its file offset
+        let dynamic_vaddr = ((rodata_vaddr + rodata_size as u64) + 7) & !7;
         let dynsym_vaddr = dynamic_vaddr + dynamic_size as u64;
         let dynstr_vaddr = dynsym_vaddr + dynsym_size as u64;
         // Must align to 8 bytes to match file offset alignment (for Elf64Rel)
@@ -470,6 +472,12 @@ impl ElfWriter {
         // ==================== .rodata Section ====================
         elf.extend_from_slice(&rodata_data);
 
+        // Add padding to align .dynamic section to 8 bytes
+        let padding_needed = dynamic_offset - (rodata_offset + rodata_size);
+        for _ in 0..padding_needed {
+            elf.push(0);
+        }
+
         // ==================== .dynamic Section ====================
         // Match Solana's test ELF format
         // DT_FLAGS (TEXTREL flag = 0x4, matching Solana's test ELF)
@@ -535,7 +543,8 @@ impl ElfWriter {
             let r_offset = TEXT_VADDR + sc.offset as u64 + 4;
             elf.extend_from_slice(&r_offset.to_le_bytes());
             // r_info: symbol index + relocation type
-            let r_info = ((sym_idx as u64) << 32) | (R_BPF_64_32 as u64);
+            // Use R_BPF_64_64 for syscall relocations (matching official Solana programs)
+            let r_info = ((sym_idx as u64) << 32) | (R_BPF_64_64 as u64);
             elf.extend_from_slice(&r_info.to_le_bytes());
         }
 

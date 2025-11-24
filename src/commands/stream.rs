@@ -25,15 +25,15 @@ pub struct StreamCommand {
     pub port: u16,
 
     /// Enable WebSocket streaming
-    #[arg(long, default_value = "true")]
+    #[arg(long, default_value_t = true)]
     pub websocket: bool,
 
     /// Enable Server-Sent Events (SSE) streaming
-    #[arg(long, default_value = "true")]
+    #[arg(long, default_value_t = true)]
     pub sse: bool,
 
     /// Enable HTTP polling endpoints
-    #[arg(long, default_value = "true")]
+    #[arg(long, default_value_t = true)]
     pub http: bool,
 
     /// Filter by program IDs or aliases (comma-separated, e.g. "pumpfun,raydium,jupiter")
