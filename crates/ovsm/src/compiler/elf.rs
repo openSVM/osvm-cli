@@ -304,10 +304,7 @@ impl ElfWriter {
         let dynsym_name = self.add_shstrtab(".dynsym");
         let dynstr_name = self.add_shstrtab(".dynstr");
         let reldyn_name = self.add_shstrtab(".rel.dyn");
-
-        let entrypoint_str_idx = self.add_strtab("entrypoint");
-        let strtab_name = self.add_shstrtab(".strtab");
-        let symtab_name = self.add_shstrtab(".symtab");
+        // Removed .strtab and .symtab to match reference (not needed for deployment)
 
         // Layout (page-aligned):
         // [ELF Header: 64 bytes]
@@ -327,7 +324,7 @@ impl ElfWriter {
         let phdr_size = 56usize;
         let shdr_size = 64usize;
         let num_phdrs = 4usize;  // PT_LOAD (.text), PT_LOAD (.rodata), PT_LOAD (dynamic sections), PT_DYNAMIC
-        let num_sections = 10usize;  // NULL, .text, .rodata, .dynamic, .dynsym, .dynstr, .rel.dyn, .strtab, .symtab, .shstrtab
+        let num_sections = 8usize;  // NULL, .text, .rodata, .dynamic, .dynsym, .dynstr, .rel.dyn, .shstrtab (matching reference)
 
         let text_offset = 0x120usize;  // Match Solana's working ELFs
         let text_size = text_section.len();
@@ -356,23 +353,16 @@ impl ElfWriter {
         let reldyn_entry_size = 16usize;
         let reldyn_size = reldyn_entry_size * syscalls.len();
 
-        // .strtab section
-        let strtab_offset = reldyn_offset + reldyn_size;
-        let strtab_size = self.strtab.len();
-
-        // .symtab section
-        let symtab_offset = strtab_offset + strtab_size;
-        let symtab_entry_size = 24usize;
-        let symtab_size = symtab_entry_size * 2; // NULL + entrypoint
-
-        // .shstrtab section
-        let shstrtab_offset = symtab_offset + symtab_size;
+        // .shstrtab section (removed .strtab and .symtab to match reference)
+        let shstrtab_offset = reldyn_offset + reldyn_size;
         let shstrtab_size = self.shstrtab.len();
 
         let shdr_offset = ((shstrtab_offset + shstrtab_size) + 7) & !7;
 
         // Virtual addresses (continuous in memory)
-        let dynamic_vaddr = TEXT_VADDR + text_size as u64;
+        // Virtual addresses must not overlap
+        let rodata_vaddr = TEXT_VADDR + text_size as u64;
+        let dynamic_vaddr = rodata_vaddr + rodata_size as u64;
         let dynsym_vaddr = dynamic_vaddr + dynamic_size as u64;
         let dynstr_vaddr = dynsym_vaddr + dynsym_size as u64;
         let reldyn_vaddr = dynstr_vaddr + dynstr_size as u64;
@@ -412,7 +402,6 @@ impl ElfWriter {
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_X, text_offset, TEXT_VADDR, text_size);
 
         // PT_LOAD #2: .rodata (R+W) - matches reference structure
-        let rodata_vaddr = TEXT_VADDR + text_size as u64;
         self.write_phdr_aligned(&mut elf, PT_LOAD, PF_R | PF_W, rodata_offset, rodata_vaddr, rodata_size);
 
         // PT_LOAD #3: Dynamic sections (.dynsym, .dynstr, .rel.dyn) - READ-ONLY like reference!
@@ -504,21 +493,8 @@ impl ElfWriter {
             elf.extend_from_slice(&r_info.to_le_bytes());
         }
 
-        // ==================== .strtab Section ====================
-        elf.extend_from_slice(&self.strtab);
-
-        // ==================== .symtab Section ====================
-        // NULL symbol
-        elf.extend_from_slice(&[0u8; 24]);
-        // entrypoint symbol
-        elf.extend_from_slice(&(entrypoint_str_idx as u32).to_le_bytes());
-        elf.push((STB_GLOBAL << 4) | STT_FUNC);
-        elf.push(0);
-        elf.extend_from_slice(&1u16.to_le_bytes()); // st_shndx (.text = 1)
-        elf.extend_from_slice(&TEXT_VADDR.to_le_bytes());
-        elf.extend_from_slice(&(text_size as u64).to_le_bytes());
-
         // ==================== .shstrtab Section ====================
+        // (Removed .strtab and .symtab sections to match reference - not needed for deployment)
         elf.extend_from_slice(&self.shstrtab);
 
         // ==================== Padding ====================
@@ -554,15 +530,7 @@ impl ElfWriter {
         self.write_shdr(&mut elf, reldyn_name, SHT_REL, SHF_ALLOC,
                        reldyn_vaddr, reldyn_offset, reldyn_size, 4, 0, 8, reldyn_entry_size);
 
-        // 6: .strtab
-        self.write_shdr(&mut elf, strtab_name, SHT_STRTAB, 0,
-                       0, strtab_offset, strtab_size, 0, 0, 1, 0);
-
-        // 8: .symtab (Link=7 for .strtab)
-        self.write_shdr(&mut elf, symtab_name, SHT_SYMTAB, 0,
-                       0, symtab_offset, symtab_size, 7, 1, 8, symtab_entry_size);
-
-        // 8: .shstrtab
+        // 7: .shstrtab (removed .strtab and .symtab to match reference)
         self.write_shdr(&mut elf, 1, SHT_STRTAB, 0,
                        0, shstrtab_offset, shstrtab_size, 0, 0, 1, 0);
 
