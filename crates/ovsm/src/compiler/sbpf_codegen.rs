@@ -1092,13 +1092,15 @@ impl SbpfCodegen {
     /// Emit a syscall and record its location for relocation
     fn emit_syscall(&mut self, name: &str) {
         let offset = self.current_offset_bytes();
+        // Normalize OVSM function names to Solana syscall names
+        let solana_name = self.normalize_syscall_name(name);
         // Use version-aware syscall encoding
-        let hash = self.get_syscall_hash(name);
+        let hash = self.get_syscall_hash(&solana_name);
         self.emit(SbpfInstruction::call_syscall(hash, self.sbpf_version));
-        // Record call sites for V1 relocations
+        // Record call sites for V1 relocations with normalized name
         self.syscall_sites.push(SyscallCallSite {
             offset,
-            name: name.to_string(),
+            name: solana_name,
         });
     }
 
@@ -1110,19 +1112,59 @@ impl SbpfCodegen {
         self.instructions.iter().map(|i| i.size()).sum()
     }
 
+    /// Normalize OVSM function names to Solana syscall symbol names
+    /// This ensures the ELF contains the exact symbol names Solana expects
+    fn normalize_syscall_name(&self, name: &str) -> String {
+        match name {
+            // Common aliases
+            "log" => SolanaSymbols::SOL_LOG.to_string(),
+
+            // Syscalls that might be written without trailing underscore
+            "sol_log" => SolanaSymbols::SOL_LOG.to_string(),
+            "sol_log_64" => SolanaSymbols::SOL_LOG_64.to_string(),
+            "sol_log_compute_units" => SolanaSymbols::SOL_LOG_COMPUTE_UNITS.to_string(),
+            "sol_panic" => SolanaSymbols::SOL_PANIC.to_string(),
+            "sol_alloc_free" => SolanaSymbols::SOL_ALLOC_FREE.to_string(),
+            "sol_memcpy" => SolanaSymbols::SOL_MEMCPY.to_string(),
+            "sol_memmove" => SolanaSymbols::SOL_MEMMOVE.to_string(),
+            "sol_memcmp" => SolanaSymbols::SOL_MEMCMP.to_string(),
+            "sol_memset" => SolanaSymbols::SOL_MEMSET.to_string(),
+
+            // Syscalls that already have correct names (passthrough)
+            "sol_log_" => SolanaSymbols::SOL_LOG.to_string(),
+            "sol_log_64_" => SolanaSymbols::SOL_LOG_64.to_string(),
+            "sol_log_compute_units_" => SolanaSymbols::SOL_LOG_COMPUTE_UNITS.to_string(),
+            "sol_log_pubkey" => SolanaSymbols::SOL_LOG_PUBKEY.to_string(),
+            "sol_panic_" => SolanaSymbols::SOL_PANIC.to_string(),
+            "sol_sha256" => SolanaSymbols::SOL_SHA256.to_string(),
+            "sol_keccak256" => SolanaSymbols::SOL_KECCAK256.to_string(),
+            "sol_blake3" => SolanaSymbols::SOL_BLAKE3.to_string(),
+            "sol_secp256k1_recover" => SolanaSymbols::SOL_SECP256K1_RECOVER.to_string(),
+            "sol_create_program_address" => SolanaSymbols::SOL_CREATE_PROGRAM_ADDRESS.to_string(),
+            "sol_try_find_program_address" => SolanaSymbols::SOL_TRY_FIND_PROGRAM_ADDRESS.to_string(),
+            "sol_invoke_signed_c" => SolanaSymbols::SOL_INVOKE_SIGNED_C.to_string(),
+            "sol_invoke_signed_rust" => SolanaSymbols::SOL_INVOKE_SIGNED_RUST.to_string(),
+            "sol_alloc_free_" => SolanaSymbols::SOL_ALLOC_FREE.to_string(),
+            "sol_memcpy_" => SolanaSymbols::SOL_MEMCPY.to_string(),
+            "sol_memmove_" => SolanaSymbols::SOL_MEMMOVE.to_string(),
+            "sol_memcmp_" => SolanaSymbols::SOL_MEMCMP.to_string(),
+            "sol_memset_" => SolanaSymbols::SOL_MEMSET.to_string(),
+            "sol_get_clock_sysvar" => SolanaSymbols::SOL_GET_CLOCK_SYSVAR.to_string(),
+            "sol_get_rent_sysvar" => SolanaSymbols::SOL_GET_RENT_SYSVAR.to_string(),
+            "sol_get_epoch_schedule_sysvar" => SolanaSymbols::SOL_GET_EPOCH_SCHEDULE_SYSVAR.to_string(),
+
+            // Unknown syscall - assume it's already correct (for forward compatibility)
+            _ => name.to_string(),
+        }
+    }
+
     fn get_syscall_hash(&mut self, name: &str) -> u32 {
         if let Some(&hash) = self.syscall_cache.get(name) {
             return hash;
         }
 
-        // Map OVSM function names to Solana syscalls
-        let syscall_name = match name {
-            "log" => SolanaSymbols::SOL_LOG,
-            "length" | "len" => return 0, // Built-in, not syscall
-            _ => name,
-        };
-
-        let hash = syscall_hash(syscall_name);
+        // Name should already be normalized at this point
+        let hash = syscall_hash(name);
         self.syscall_cache.insert(name.to_string(), hash);
         hash
     }

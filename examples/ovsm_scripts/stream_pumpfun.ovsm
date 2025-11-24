@@ -36,11 +36,26 @@
   ;; Poll for new events (non-blocking, returns array)
   (define events (stream-poll stream-id :limit 50))
 
-  ;; Process each event
+  ;; Process each event (both Transaction and LogMessage)
   (for (event events)
     (define event-type (get event "type"))
 
-    ;; Only process log_message events
+    ;; Process Transaction events for wallet/signer info
+    (if (= event-type "transaction")
+        (do
+          (define signature (get event "signature"))
+          (define signer (get event "signer"))
+          (define slot (get event "slot"))
+          (define fee (get event "fee"))
+          (define timestamp (get event "timestamp"))
+          (define processing-time (now))
+
+          ;; For now, just log that we received it
+          ;; In full implementation, we'd correlate with LogMessage events
+          null)
+        null)
+
+    ;; Process log_message events for transaction details
     (if (= event-type "log_message")
         (do
           (define logs (get event "logs"))
@@ -50,6 +65,34 @@
 
           ;; Convert logs to searchable text
           (define logs-text (str logs))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT WALLET from logs (look for base58 addresses)
+          ;; ═══════════════════════════════════════════════════════════
+          (define wallet "View on osvm.ai")
+          ;; First log line often contains signer context
+          (if (> (length logs) 0)
+              (do
+                (define first-log (get logs 0))
+                ;; Look for addresses in invoke statements
+                (for (line logs)
+                  (if (and (string-contains line "invoke [1]")
+                           (not (string-contains line "ComputeBudget"))
+                           (not (string-contains line "11111111")))
+                      (do
+                        ;; The pattern is: "Program <ADDRESS> invoke [1]"
+                        (define parts (split line " "))
+                        (if (>= (length parts) 2)
+                            (do
+                              ;; parts[1] is the wallet/program that was invoked
+                              (define potential-wallet (get parts 1))
+                              ;; Only set if it looks like a base58 address (length check)
+                              (if (> (length potential-wallet) 32)
+                                  (set! wallet potential-wallet)
+                                  null))
+                            null))
+                      null)))
+              null)
 
           ;; ═══════════════════════════════════════════════════════════
           ;; EXTRACT PROGRAM ID (first non-system invoke [1])
@@ -80,20 +123,6 @@
                             null))
                       null))
                 null))
-
-          ;; ═══════════════════════════════════════════════════════════
-          ;; EXTRACT WALLET ADDRESS (from signer in logs or transaction data)
-          ;; ═══════════════════════════════════════════════════════════
-          (define wallet "Unknown")
-          ;; Look for base58 addresses in early log lines
-          ;; Solana addresses are 32-44 chars base58
-          (if (> (length logs) 0)
-              (do
-                ;; First log often contains caller context
-                (define first-log (get logs 0))
-                ;; For now, we'll mark it as "See Solscan" since parsing is complex
-                (set! wallet "See Solscan Link"))
-              null)
 
           ;; ═══════════════════════════════════════════════════════════
           ;; EXTRACT SOL AMOUNT from logs
@@ -144,7 +173,7 @@
           ;; Look for TransferChecked which includes mint
           (for (line logs)
             (if (string-contains line "TransferChecked")
-                (set! token-mint "In Transaction (see Solscan)")
+                (set! token-mint "View on osvm.ai")
                 null))
 
           ;; ═══════════════════════════════════════════════════════════
@@ -195,8 +224,7 @@
                 (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
                 (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
                 (log :message "───────────────────────────────────────────────────────────────")
-                (log :message "🔗 Solscan" :value (str "https://solscan.io/tx/" signature))
-                (log :message "🔗 Solana Explorer" :value (str "https://explorer.solana.com/tx/" signature))
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
                 (log :message "═══════════════════════════════════════════════════════════════"))
               null)
 
@@ -224,8 +252,7 @@
                 (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
                 (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
                 (log :message "───────────────────────────────────────────────────────────────")
-                (log :message "🔗 Solscan" :value (str "https://solscan.io/tx/" signature))
-                (log :message "🔗 Solana Explorer" :value (str "https://explorer.solana.com/tx/" signature))
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
                 (log :message "═══════════════════════════════════════════════════════════════"))
               null)
 
@@ -248,7 +275,7 @@
                 (log :message "🔧 Program" :value program-name)
                 (log :message "🎯 Token Mint" :value token-mint)
                 (log :message "───────────────────────────────────────────────────────────────")
-                (log :message "🔗 Solscan" :value (str "https://solscan.io/tx/" signature))
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
                 (log :message "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓"))
               null))
         null)))
@@ -273,9 +300,9 @@
 (log :message "🎓 Token Graduations" :value graduation-count)
 (log :message "📦 Total Events Processed" :value (+ buy-count sell-count graduation-count))
 (log :message "───────────────────────────────────────────────────────────────")
-(log :message "💡 Tip" :value "Use Solscan links for full transaction details")
-(log :message "💡 Note" :value "Wallet addresses require Solscan lookup")
-(log :message "💡 Analysis" :value "Token mints in transaction data (view on explorer)")
+(log :message "💡 Tip" :value "Click osvm.ai links for full transaction details")
+(log :message "💡 Note" :value "Wallet addresses extracted from first invoke [1]")
+(log :message "💡 Analysis" :value "Token mints in transaction data (view on osvm.ai)")
 (log :message "═══════════════════════════════════════════════════════════════")
 
 ;; Close stream
