@@ -353,7 +353,8 @@ impl ElfWriter {
 
         // .dynamic section (11 entries * 16 bytes = 176 bytes) - MUST be 8-byte aligned!
         // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
-        let dynamic_offset = rodata_offset + rodata_size;
+        // CRITICAL: Must align to 8 bytes because .dynamic entries are 16 bytes each
+        let dynamic_offset = ((rodata_offset + rodata_size) + 7) & !7;
         let dynamic_size = 11 * 16; // 11 entries (includes DT_TEXTREL required by Solana)
 
         // .dynsym section (NULL + N symbols * 24 bytes)
