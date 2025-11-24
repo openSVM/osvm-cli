@@ -71,7 +71,7 @@ impl Default for CompileOptions {
             compute_budget: 200_000,
             debug_info: false,
             source_map: false,
-            sbpf_version: SbpfVersion::V1, // V1 with src=1 in CALL (matches Rust compiler)
+            sbpf_version: SbpfVersion::V2, // V2 with static syscalls (NO relocations)
         }
     }
 }

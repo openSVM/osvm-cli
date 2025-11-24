@@ -189,7 +189,7 @@ pub async fn handle_ovsm_command(
                 compute_budget: 200_000,
                 debug_info: emit_ir,
                 source_map: false,
-                sbpf_version: ovsm::compiler::SbpfVersion::V1,  // V1 for devnet compatibility
+                sbpf_version: ovsm::compiler::SbpfVersion::V2,  // V2 with static syscalls (NO relocations)
             };
 
             let compiler = Compiler::new(options);

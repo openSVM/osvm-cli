@@ -66,8 +66,8 @@ const DT_TEXTREL: u64 = 22;
 const DT_FLAGS: u64 = 30;
 const DT_RELCOUNT: u64 = 0x6ffffffa;
 
-/// Relocation types
-const R_BPF_64_64: u32 = 8;   // For 64-bit relocations (syscalls)
+/// Relocation types (Solana BPF standard)
+const R_BPF_64_64: u32 = 1;   // For 64-bit absolute relocations (syscalls)
 const R_BPF_64_32: u32 = 10;  // For 32-bit relocations
 
 /// Program header flags
@@ -543,8 +543,8 @@ impl ElfWriter {
             let r_offset = TEXT_VADDR + sc.offset as u64 + 4;
             elf.extend_from_slice(&r_offset.to_le_bytes());
             // r_info: symbol index + relocation type
-            // Use R_BPF_64_64 for syscall relocations (matching official Solana programs)
-            let r_info = ((sym_idx as u64) << 32) | (R_BPF_64_64 as u64);
+            // Use R_BPF_64_32 for 32-bit immediate field relocations (syscalls)
+            let r_info = ((sym_idx as u64) << 32) | (R_BPF_64_32 as u64);
             elf.extend_from_slice(&r_info.to_le_bytes());
         }
 

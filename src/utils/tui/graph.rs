@@ -1501,7 +1501,7 @@ impl WalletGraph {
                 .direction(ratatui::layout::Direction::Vertical)
                 .constraints([
                     ratatui::layout::Constraint::Min(10),
-                    ratatui::layout::Constraint::Length(3),
+                    ratatui::layout::Constraint::Length(5),  // Increased from 3 to 5 for better visibility
                 ])
                 .split(area);
             (chunks[0], Some(chunks[1]))
@@ -1536,16 +1536,28 @@ impl WalletGraph {
 
         // Canvas-based graph for ANY size (scales to 10K+ nodes)
         let (cx, cy, zoom) = self.viewport;
+
+        // Add trail indicator to title if trail is active
+        let trail_indicator = if self.show_trail && self.investigation_trail.is_some() {
+            if let Some(ref trail) = self.investigation_trail {
+                format!(" 🔍 trail:{} ", trail.steps.len())
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
         let canvas = Canvas::default()
             .block(Block::default()
-                .title(format!(" Network Graph │ {}w {}tx │ depth:{}/{} │ zoom:{:.1}x │ ←↑↓→ pan, +/- zoom, [/] depth ",
+                .title(format!(" Network Graph │ {}w {}tx │ depth:{}/{} │ zoom:{:.1}x │{}←↑↓→ pan, +/- zoom, [/] depth, T=trail ",
                     self.nodes.len(), self.connections.len(),
-                    self.current_depth, self.max_depth, zoom))
+                    self.current_depth, self.max_depth, zoom, trail_indicator))
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
                 .border_style(Style::default().fg(Color::Green)))
-            .x_bounds([cx - 100.0 / zoom, cx + 100.0 / zoom])
-            .y_bounds([cy - 50.0 / zoom, cy + 50.0 / zoom])
+            .x_bounds([cx - 80.0 / zoom, cx + 80.0 / zoom])   // Narrower horizontal (nodes stack horizontally)
+            .y_bounds([cy - 100.0 / zoom, cy + 100.0 / zoom]) // Taller vertical (flows top-to-bottom)
             .paint(|ctx| {
                 // Collect selected edge info for path highlighting
                 let selected_edge_idx = match &self.selection {
@@ -2500,17 +2512,32 @@ impl WalletGraph {
         };
 
         let block = Block::default()
-            .title(" 🔍 Trail ")
+            .title(format!(" 🔍 Trail (step {}/{}) ", trail.current_index + 1, trail.steps.len()))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Blue));
 
         let inner = block.inner(area);
         f.render_widget(block, area);
 
+        // Smart truncation: show only last N steps that fit in available width
+        // Each step is ~15 chars (icon + 4...3 address + arrow)
+        // Leave 10 char safety margin for emoji width variance
+        let available_width = (inner.width as usize).saturating_sub(10);
+        let chars_per_step = 15;
+        let max_visible_steps = (available_width / chars_per_step).max(2).min(20); // Min 2, max 20
+
         // Build breadcrumb line
         let mut spans = Vec::new();
 
-        for (i, step) in trail.steps.iter().enumerate() {
+        // Show ellipsis if we're hiding steps
+        let start_idx = if trail.steps.len() > max_visible_steps {
+            spans.push(Span::styled("... → ", Style::default().fg(Color::DarkGray)));
+            trail.steps.len() - max_visible_steps
+        } else {
+            0
+        };
+
+        for (i, step) in trail.steps.iter().enumerate().skip(start_idx) {
             let is_current = i == trail.current_index;
 
             // Risk icon

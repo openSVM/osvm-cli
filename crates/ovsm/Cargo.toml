@@ -88,6 +88,10 @@ solana_rbpf = "0.8.5"
 name = "execution_bench"
 harness = false
 
+[[bench]]
+name = "async_bench"
+harness = false
+
 [features]
 default = ["stdlib", "agents"]
 stdlib = []

@@ -82,6 +82,7 @@ pub struct OsvmApp {
     pub log_scroll: usize,
     pub output_scroll: usize,
     pub help_scroll: usize,
+    pub ai_insights_scroll: usize,  // Scroll position for AI Insights panel
     // AI insights
     pub ai_insights: Arc<Mutex<Vec<String>>>,
     // Search/Filter
@@ -234,6 +235,7 @@ impl OsvmApp {
             log_scroll: 0,
             output_scroll: 0,
             help_scroll: 0,
+            ai_insights_scroll: 0,
             ai_insights: Arc::new(Mutex::new(Vec::new())),
             search_active: false,
             search_query: String::new(),
@@ -956,7 +958,22 @@ impl OsvmApp {
                         KeyCode::Char('2') => self.active_tab = TabIndex::Graph,
                         KeyCode::Char('3') => self.active_tab = TabIndex::Logs,
                         KeyCode::Char('4') => self.active_tab = TabIndex::SearchResults,
-                        // Graph navigation / Help scrolling / Search suggestions
+                        KeyCode::Char('t') | KeyCode::Char('T') => {
+                            // Toggle investigation trail visibility in graph view
+                            if self.active_tab == TabIndex::Graph {
+                                let mut log_message = String::new();
+                                if let Ok(mut graph) = self.wallet_graph.lock() {
+                                    graph.show_trail = !graph.show_trail;
+                                    // Prepare feedback message
+                                    let status = if graph.show_trail { "shown" } else { "hidden" };
+                                    log_message = format!("Investigation trail {}", status);
+                                }
+                                if !log_message.is_empty() {
+                                    self.add_log(log_message);
+                                }
+                            }
+                        }
+                        // Graph navigation / Help scrolling / Search suggestions / AI Insights scrolling
                         KeyCode::Char('j') | KeyCode::Down => {
                             if self.global_search_active {
                                 if !self.search_suggestions.is_empty() {
@@ -964,6 +981,9 @@ impl OsvmApp {
                                 }
                             } else if self.show_help {
                                 self.help_scroll = self.help_scroll.saturating_add(1);
+                            } else if self.active_tab == TabIndex::Dashboard {
+                                // Scroll AI Insights panel in dashboard
+                                self.ai_insights_scroll = self.ai_insights_scroll.saturating_add(1);
                             } else if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
                                     graph.handle_input(GraphInput::Down);
@@ -983,6 +1003,9 @@ impl OsvmApp {
                                 }
                             } else if self.show_help {
                                 self.help_scroll = self.help_scroll.saturating_sub(1);
+                            } else if self.active_tab == TabIndex::Dashboard {
+                                // Scroll AI Insights panel in dashboard
+                                self.ai_insights_scroll = self.ai_insights_scroll.saturating_sub(1);
                             } else if self.active_tab == TabIndex::Graph {
                                 if let Ok(mut graph) = self.wallet_graph.lock() {
                                     graph.handle_input(GraphInput::Up);
@@ -1292,8 +1315,8 @@ impl OsvmApp {
             .constraints([
                 Constraint::Length(7),   // Progress gauges (btop CPU style)
                 Constraint::Length(9),   // Token volumes with bars
-                Constraint::Length(6),   // AI insights
-                Constraint::Min(0),      // Transfer list
+                Constraint::Percentage(40), // AI insights - flexible but capped at 40% of available space
+                Constraint::Min(8),      // Transfer list - minimum 8 lines, takes remaining space
             ])
             .split(content_chunks[1]);
 
@@ -1669,7 +1692,8 @@ impl OsvmApp {
                 let max_vol = vols.iter().map(|v| v.amount).fold(0.0_f64, f64::max);
                 let bar_width = (inner_area.width as usize).saturating_sub(20);
 
-                for (i, vol) in vols.iter().take(6).enumerate() {
+                // Show up to 7 tokens (fits in 9-line panel with title/borders)
+                for (i, vol) in vols.iter().take(7).enumerate() {
                     let bar_len = if max_vol > 0.0 {
                         ((vol.amount / max_vol) * bar_width as f64) as usize
                     } else { 0 };
@@ -2090,16 +2114,18 @@ impl OsvmApp {
             Line::from("   W/A/S/D      Pan viewport up/left/down/right"),
             Line::from("   +/-          Zoom in/out"),
             Line::from("   [/]          Decrease/increase BFS exploration depth"),
+            Line::from("   T            Toggle investigation trail breadcrumb"),
             Line::from("   /            Start search (ESC to cancel)"),
             Line::from("   n/N          Next/previous search result"),
             Line::from("   y            Copy to clipboard (wallet/search results)"),
             Line::from("   Enter        Center graph on selected wallet (hop)"),
             Line::from("   Space        Expand or collapse node"),
             Line::from(""),
+            Line::from(Span::styled(" ─── Dashboard View ──────────────────────────────────────────", Style::default().fg(Color::Yellow))),
+            Line::from("   j/k          Scroll AI Insights panel"),
+            Line::from(""),
             Line::from(Span::styled(" ─── Logs View ───────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   j/k          Scroll line by line"),
-            Line::from("   PgUp/PgDn    Scroll by page"),
-            Line::from("   Home/End     Jump to start/end"),
             Line::from(""),
             Line::from(Span::styled(" ─── Legend ──────────────────────────────────────────────────", Style::default().fg(Color::Yellow))),
             Line::from("   🔴 Target    Red wallet being investigated"),
@@ -2144,8 +2170,18 @@ impl OsvmApp {
 
     /// Render AI insights panel
     fn render_ai_insights(&self, f: &mut Frame, area: Rect) {
+        // Calculate total lines for scroll indicator
         let block = Block::default()
-            .title(Span::styled(" 💡 AI Insights ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)))
+            .title(Span::styled(
+                format!(" 💡 AI Insights {} ",
+                    if self.ai_insights_scroll > 0 {
+                        format!("(scroll: {})", self.ai_insights_scroll)
+                    } else {
+                        String::new()
+                    }
+                ),
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+            ))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::DarkGray));
@@ -2178,7 +2214,14 @@ impl OsvmApp {
                 ]));
             }
 
-            // Show overall risk score with level indicator
+            // Add separator after alerts if there are any
+            if !risk_explanation.alerts.is_empty() {
+                lines.push(Line::from(vec![
+                    Span::styled(" ─────────────────────────────", Style::default().fg(Color::DarkGray)),
+                ]));
+            }
+
+            // Show overall risk score with level indicator (prominent)
             let (risk_color, risk_icon) = match risk_explanation.level {
                 crate::utils::tui::graph::RiskLevel::Critical => (Color::Red, "🔴"),
                 crate::utils::tui::graph::RiskLevel::High => (Color::LightRed, "🟠"),
@@ -2189,15 +2232,36 @@ impl OsvmApp {
             lines.push(Line::from(vec![
                 Span::styled(" ", Style::default()),
                 Span::styled(
-                    format!("{} Risk: {:.0}/100 ({:?})", risk_icon, risk_explanation.score, risk_explanation.level),
+                    format!("{} RISK SCORE: {:.0}/100 ({:?})", risk_icon, risk_explanation.score, risk_explanation.level),
                     Style::default().fg(risk_color).add_modifier(Modifier::BOLD)
                 ),
             ]));
 
-            // Display detailed reasons (explanations)
-            for reason in risk_explanation.reasons.iter().take(5) {
+            // Add actionable context for risk score interpretation
+            let risk_context = match risk_explanation.level {
+                crate::utils::tui::graph::RiskLevel::Critical => "  ⚠ Action: Review mixer patterns, verify source wallets, document chain",
+                crate::utils::tui::graph::RiskLevel::High => "  ⚠ Action: Verify counterparties, analyze timing patterns, export data",
+                crate::utils::tui::graph::RiskLevel::Medium => "  ℹ Action: Monitor for changes, track volume spikes, note patterns",
+                crate::utils::tui::graph::RiskLevel::Low => "  ✓ Status: Normal patterns observed, continue routine monitoring",
+            };
+            lines.push(Line::from(vec![
+                Span::styled(risk_context, Style::default().fg(Color::DarkGray)),
+            ]));
+
+            // Display detailed reasons (explanations) - increased to 10 for expanded panel
+            if !risk_explanation.reasons.is_empty() {
                 lines.push(Line::from(vec![
-                    Span::styled("   • ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("  Reasons:", Style::default().fg(Color::Cyan)),
+                ]));
+            }
+            for (idx, reason) in risk_explanation.reasons.iter().take(10).enumerate() {
+                let prefix = if idx == risk_explanation.reasons.len() - 1 || idx == 9 {
+                    "   └─ "  // Last item
+                } else {
+                    "   ├─ "  // Regular item
+                };
+                lines.push(Line::from(vec![
+                    Span::styled(prefix, Style::default().fg(Color::DarkGray)),
                     Span::styled(reason.clone(), Style::default().fg(Color::Gray)),
                 ]));
             }
@@ -2271,12 +2335,39 @@ impl OsvmApp {
             lines.push(Line::from(Span::styled("  Initializing graph analysis...", Style::default().fg(Color::DarkGray))));
         }
 
-        // Fill remaining space if needed
-        while lines.len() < (inner_area.height as usize).saturating_sub(1) {
-            lines.push(Line::from(""));
+        // Apply scroll offset and handle overflow
+        let available_height = inner_area.height as usize;
+        let total_lines = lines.len();
+        let max_scroll = total_lines.saturating_sub(available_height);
+        let actual_scroll = self.ai_insights_scroll.min(max_scroll);
+
+        // Skip lines based on scroll position
+        let visible_lines: Vec<Line> = lines
+            .into_iter()
+            .skip(actual_scroll)
+            .take(available_height)
+            .collect();
+
+        // Check if there's more content below
+        let has_more = actual_scroll + visible_lines.len() < total_lines;
+
+        let mut final_lines = visible_lines;
+        if has_more {
+            // Replace last line with "more content" indicator
+            if !final_lines.is_empty() {
+                final_lines.pop();
+            }
+            let remaining = total_lines - (actual_scroll + final_lines.len());
+            final_lines.push(Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!("⋮ {} more (j/k to scroll)", remaining),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                ),
+            ]));
         }
 
-        let widget = Paragraph::new(lines).wrap(Wrap { trim: false });
+        let widget = Paragraph::new(final_lines).wrap(Wrap { trim: false });
         f.render_widget(widget, inner_area);
     }
 

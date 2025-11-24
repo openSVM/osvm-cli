@@ -1,0 +1,95 @@
+;;; FULL 10-Hop Wallet Discovery - Limited Wallets Per Hop
+
+(println "🚀 10-HOP WALLET DISCOVERY FOR 5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+(println "  (Limited to 100 wallets per hop for performance)")
+(println "")
+
+(define seed-wallet "5rVDMMoBQs3zJQ9DT7oxsoNZfxptgLCKhuWqdwoX9q85")
+(define max-depth 10)
+(define max-wallets-per-hop 100)  ;; Limit to prevent exponential explosion
+
+(define all-wallets [])
+(define hop-stats [])
+(define global-counter 0)
+
+(defun discover-wallet-async (wallet depth counter-start)
+  (do
+    (define children [])
+    (define local-counter counter-start)
+    (define i 0)
+
+    (while (< i 3)
+      (do
+        (set! local-counter (+ local-counter 1))
+        (define prefix (substring wallet 0 (if (> (length wallet) 6) 6 (length wallet))))
+        (define new-wallet (str "W" local-counter "-from-" prefix))
+        (set! children (append children [new-wallet]))
+        (set! i (+ i 1))))
+
+    (sleep 20)  ;; Simulated API call
+
+    {:wallet wallet :children children :depth depth :counter-end local-counter}))
+
+(defun process-hop (wallets depth)
+  (do
+    ;; Limit wallets per hop
+    (define wallets-to-process wallets)
+    (if (> (length wallets-to-process) max-wallets-per-hop)
+        (do
+          (set! wallets-to-process (take max-wallets-per-hop wallets-to-process))
+          (println (str "  [Limiting to " max-wallets-per-hop " of " (length wallets) " available wallets]")))
+        null)
+
+    (println (str "HOP " depth ": Processing " (length wallets-to-process) " wallets in parallel..."))
+
+    ;; Launch all async tasks
+    (define handles [])
+    (define counter-offset 0)
+    (for (w wallets-to-process)
+      (do
+        (define start-counter (+ global-counter counter-offset))
+        (set! counter-offset (+ counter-offset 3))
+        (set! handles (append handles [(async discover-wallet-async w depth start-counter)]))))
+
+    (set! global-counter (+ global-counter counter-offset))
+
+    ;; Await all
+    (define results [])
+    (for (h handles)
+      (set! results (append results [(await h)])))
+
+    ;; Collect all children
+    (define next-gen [])
+    (for (r results)
+      (do
+        (set! all-wallets (append all-wallets [(get r :wallet)]))
+        (define kids (get r :children))
+        (for (kid kids)
+          (set! next-gen (append next-gen [kid])))))
+
+    (println (str "  → Discovered " (length next-gen) " new wallets"))
+
+    (set! hop-stats (append hop-stats [{:hop depth :count (length wallets-to-process) :children (length next-gen)}]))
+
+    next-gen))
+
+;; Execute 10 hops
+(define current-gen [seed-wallet])
+(define hop 0)
+
+(while (< hop max-depth)
+  (do
+    (set! hop (+ hop 1))
+    (set! current-gen (process-hop current-gen hop))))
+
+(println "")
+(println "═══════════════════════════════════════════════════════════")
+(println "RESULTS:")
+(println (str "Total Wallets Discovered: " (length all-wallets)))
+(println (str "Actual Hops Completed: " hop))
+(println (str "Max Wallets Per Hop: " max-wallets-per-hop))
+(println "")
+(println "Per-Hop Breakdown:")
+(for (stat hop-stats)
+  (println (str "  Hop " (get stat :hop) ": " (get stat :count) " wallets → " (get stat :children) " children")))
+(println "═══════════════════════════════════════════════════════════")

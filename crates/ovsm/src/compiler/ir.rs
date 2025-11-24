@@ -185,19 +185,18 @@ impl IrGenerator {
         self.emit(IrInstruction::Label("entry".to_string()));
 
         // Generate IR for each statement, tracking last result
-        let mut last_result: Option<IrReg> = None;
+        let mut _last_result: Option<IrReg> = None;
         for typed_stmt in &program.statements {
-            last_result = self.generate_statement(&typed_stmt.statement)?;
+            _last_result = self.generate_statement(&typed_stmt.statement)?;
         }
 
-        // Return last expression result, or null if none
-        if let Some(ret_reg) = last_result {
-            self.emit(IrInstruction::Return(Some(ret_reg)));
-        } else {
-            let null_reg = self.alloc_reg();
-            self.emit(IrInstruction::ConstNull(null_reg));
-            self.emit(IrInstruction::Return(Some(null_reg)));
-        }
+        // CRITICAL: For Solana BPF programs, always return 0 (success)
+        // R0 = 0 indicates successful execution
+        // The user's OVSM code runs for side effects (syscalls, state changes)
+        // but the entrypoint MUST return a proper Solana exit code
+        let success_reg = self.alloc_reg();
+        self.emit(IrInstruction::ConstI64(success_reg, 0));
+        self.emit(IrInstruction::Return(Some(success_reg)));
 
         Ok(IrProgram {
             instructions: std::mem::take(&mut self.instructions),

@@ -1,0 +1,150 @@
+;;; OVSM V6.1: Basic Async/Await Examples
+;;;
+;;; Usage:
+;;;   osvm ovsm run async_basics.ovsm
+;;;
+;;; Features demonstrated:
+;;;   ✅ Simple async/await
+;;;   ✅ Multiple concurrent tasks
+;;;   ✅ Fire-and-forget pattern
+;;;   ✅ Async with closures
+;;;   ✅ Error handling in async tasks
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  OVSM V6.1 - Async/Await Basics")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+;; ==================================================================
+;; EXAMPLE 1: Simple async/await
+;; ==================================================================
+
+(println "Example 1: Simple async/await")
+(println "─────────────────────────────────────")
+
+(defun compute (x y)
+  (do
+    (sleep 50)
+    (* x y)))
+
+(define handle (async compute 5 7))
+(println (str "Created handle: " handle))
+
+(define result (await handle))
+(println (str "Result: " result))
+(println "✅ Example 1 complete\n")
+
+;; ==================================================================
+;; EXAMPLE 2: Multiple concurrent tasks
+;; ==================================================================
+
+(println "Example 2: Multiple concurrent tasks")
+(println "─────────────────────────────────────")
+
+(defun factorial (n)
+  (if (<= n 1)
+      1
+      (* n (factorial (- n 1)))))
+
+;; Launch 5 concurrent factorial computations
+(define handles [])
+(define nums [5 6 7 8 9])
+
+(for (n nums)
+  (set! handles (append handles [(async factorial n)])))
+
+(println (str "Launched " (length handles) " concurrent tasks"))
+
+;; Collect results
+(define results [])
+(for (h handles)
+  (set! results (append results [(await h)])))
+
+(println (str "Results: " results))
+(println "✅ Example 2 complete\n")
+
+;; ==================================================================
+;; EXAMPLE 3: Fire-and-forget (no await)
+;; ==================================================================
+
+(println "Example 3: Fire-and-forget (no await)")
+(println "─────────────────────────────────────")
+
+(defun background-task (id)
+  (do
+    (sleep 100)
+    (println (str "  Background task " id " completed"))))
+
+;; Launch tasks without awaiting
+(async background-task 1)
+(async background-task 2)
+(async background-task 3)
+
+(println "Main thread continues immediately")
+(println "✅ Example 3 complete\n")
+
+;; ==================================================================
+;; EXAMPLE 4: Async with lambda/closures
+;; ==================================================================
+
+(println "Example 4: Async with lambda/closures")
+(println "─────────────────────────────────────")
+
+(define multiplier 10)
+
+(define process (lambda (x)
+  (do
+    (sleep 30)
+    (* x multiplier))))
+
+(define lambda-handles [])
+(for (i (range 1 6))
+  (set! lambda-handles (append lambda-handles [(async process i)])))
+
+(define lambda-results [])
+(for (h lambda-handles)
+  (set! lambda-results (append lambda-results [(await h)])))
+
+(println (str "Processed: " lambda-results))
+(println "✅ Example 4 complete\n")
+
+;; ==================================================================
+;; EXAMPLE 5: Error handling in async tasks
+;; ==================================================================
+
+(println "Example 5: Error handling in async tasks")
+(println "─────────────────────────────────────")
+
+(defun safe-divide (a b)
+  (if (= b 0)
+      (do
+        (println "  Division by zero!")
+        null)
+      (/ a b)))
+
+(define h1 (async safe-divide 10 2))
+(define h2 (async safe-divide 10 0))
+(define h3 (async safe-divide 20 4))
+
+(define r1 (await h1))
+(define r2 (await h2))
+(define r3 (await h3))
+
+(println (str "Results: [" r1 ", " r2 ", " r3 "]"))
+(println "✅ Example 5 complete\n")
+
+;; ==================================================================
+;; SUMMARY
+;; ==================================================================
+
+(println "═══════════════════════════════════════════════════════════════")
+(println "  All examples completed successfully!")
+(println "")
+(println "  Key takeaways:")
+(println "    • async returns an awaitable handle")
+(println "    • await blocks until the result is available")
+(println "    • Tasks can be fire-and-forget (don't await)")
+(println "    • Lambdas and closures work with async")
+(println "    • Error handling works as expected")
+(println "═══════════════════════════════════════════════════════════════")

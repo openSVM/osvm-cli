@@ -1,0 +1,172 @@
+;;; OVSM V6.1: Concurrent Batch Processing
+;;;
+;;; Demonstrates realistic concurrent data processing patterns
+;;;
+;;; Usage:
+;;;   osvm ovsm run async_batch_processing.ovsm
+
+(println "")
+(println "═══════════════════════════════════════════════════════════════")
+(println "  OVSM V6.1 - Concurrent Batch Processing")
+(println "═══════════════════════════════════════════════════════════════")
+(println "")
+
+;; ==================================================================
+;; Pattern 1: Batch Processing
+;; ==================================================================
+
+(println "Pattern 1: Batch Data Processing")
+(println "─────────────────────────────────────")
+
+(defun process-record (record)
+  (do
+    (sleep 20)  ;; Simulate I/O
+    {:id (get record :id)
+     :value (* (get record :value) 2)
+     :status "processed"}))
+
+(define records [
+  {:id 1 :value 10}
+  {:id 2 :value 20}
+  {:id 3 :value 30}
+  {:id 4 :value 40}
+  {:id 5 :value 50}
+])
+
+(println (str "Processing " (length records) " records concurrently..."))
+
+;; Launch all tasks
+(define handles [])
+(for (rec records)
+  (set! handles (append handles [(async process-record rec)])))
+
+;; Collect results
+(define results [])
+(for (h handles)
+  (set! results (append results [(await h)])))
+
+(println "Results:")
+(for (r results)
+  (println (str "  ID " (get r :id) ": " (get r :value) " (" (get r :status) ")")))
+
+(println "✅ Batch processing completed\n")
+
+;; ==================================================================
+;; Pattern 2: Map-Reduce
+;; ==================================================================
+
+(println "Pattern 2: Map-Reduce Pattern")
+(println "─────────────────────────────────────")
+
+(defun mapper (chunk-id data-chunk)
+  (do
+    (sleep 30)
+    (define sum 0)
+    (for (val data-chunk)
+      (set! sum (+ sum val)))
+    {:chunk-id chunk-id :sum sum}))
+
+;; Split data into chunks
+(define data (range 1 21))
+(define chunks [
+  (take 5 data)
+  (take 5 (drop 5 data))
+  (take 5 (drop 10 data))
+  (take 5 (drop 15 data))
+])
+
+(println "Map Phase: Processing chunks in parallel...")
+
+;; Map phase
+(define map-handles [])
+(define chunk-id 0)
+(for (chunk chunks)
+  (do
+    (set! map-handles (append map-handles [(async mapper chunk-id chunk)]))
+    (set! chunk-id (+ chunk-id 1))))
+
+(define map-results [])
+(for (h map-handles)
+  (set! map-results (append map-results [(await h)])))
+
+(println "Map results:")
+(for (r map-results)
+  (println (str "  Chunk " (get r :chunk-id) ": sum = " (get r :sum))))
+
+;; Reduce phase
+(println "\nReduce Phase: Computing total...")
+(define total 0)
+(for (r map-results)
+  (set! total (+ total (get r :sum))))
+
+(println (str "Total sum: " total))
+(println "✅ Map-Reduce completed\n")
+
+;; ==================================================================
+;; Pattern 3: Pipeline Processing
+;; ==================================================================
+
+(println "Pattern 3: Pipeline Processing")
+(println "─────────────────────────────────────")
+
+(defun stage1-fetch (id)
+  (do
+    (sleep 20)
+    {:id id :data (str "raw-" id)}))
+
+(defun stage2-transform (item)
+  (do
+    (sleep 15)
+    {:id (get item :id) :data (str "transformed-" (get item :data))}))
+
+(defun stage3-validate (item)
+  (do
+    (sleep 10)
+    {:id (get item :id) :data (get item :data) :valid true}))
+
+(define ids [1 2 3 4 5])
+
+;; Stage 1: Fetch (parallel)
+(println "Stage 1: Fetching data...")
+(define stage1-handles [])
+(for (id ids)
+  (set! stage1-handles (append stage1-handles [(async stage1-fetch id)])))
+
+(define stage1-results [])
+(for (h stage1-handles)
+  (set! stage1-results (append stage1-results [(await h)])))
+
+;; Stage 2: Transform (parallel)
+(println "Stage 2: Transforming data...")
+(define stage2-handles [])
+(for (item stage1-results)
+  (set! stage2-handles (append stage2-handles [(async stage2-transform item)])))
+
+(define stage2-results [])
+(for (h stage2-handles)
+  (set! stage2-results (append stage2-results [(await h)])))
+
+;; Stage 3: Validate (parallel)
+(println "Stage 3: Validating data...")
+(define stage3-handles [])
+(for (item stage2-results)
+  (set! stage3-handles (append stage3-handles [(async stage3-validate item)])))
+
+(define final-results [])
+(for (h stage3-handles)
+  (set! final-results (append final-results [(await h)])))
+
+(println "\nPipeline results:")
+(for (r final-results)
+  (println (str "  ID " (get r :id) ": " (get r :data) " (valid: " (get r :valid) ")")))
+
+(println "✅ Pipeline completed\n")
+
+(println "═══════════════════════════════════════════════════════════════")
+(println "  All patterns completed successfully!")
+(println "")
+(println "  Patterns demonstrated:")
+(println "    • Batch processing - process all items concurrently")
+(println "    • Map-Reduce - parallel map, sequential reduce")
+(println "    • Pipeline - multi-stage processing")
+(println "═══════════════════════════════════════════════════════════════")

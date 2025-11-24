@@ -1216,7 +1216,7 @@ impl SbpfCodegen {
 
 impl Default for SbpfCodegen {
     fn default() -> Self {
-        Self::new(super::SbpfVersion::V1)
+        Self::new(super::SbpfVersion::V2)
     }
 }
 
