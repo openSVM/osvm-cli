@@ -100,45 +100,32 @@
             (if (string-contains line "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
                 (set! token-program "SPL Token") null))
 
-          ;; Extract token mint from logs
-          ;; Look for base58 addresses in lines near TransferChecked
+          ;; Extract token mint and amount from logs
+          ;; PUMP.FUN TOKEN MINTS ALL END WITH "pump"!
           (define token-mint "Unknown")
-          (define token-amount "Unknown")
-          (define found-transfer false)
+          (define token-amount "Check osvm.ai tx for amount")
 
-          ;; Strategy: Find TransferChecked, then look for addresses in nearby lines
+          ;; Strategy: Look for base58 addresses ending in "pump"
+          ;; These are Pump.fun token mints created via bonding curve
           (for (line logs)
-            (if (string-contains line "TransferChecked")
-                (set! found-transfer true)
-                null))
-
-          ;; If we found TransferChecked, look for potential token addresses
-          ;; Token addresses appear in lines like:
-          ;; "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [3]"
-          ;; Or in account references
-          (if found-transfer
-              (do
-                ;; Look for invoke [2] or [3] which are often token program calls
-                (for (line logs)
-                  (if (and (or (string-contains line "invoke [2]")
-                               (string-contains line "invoke [3]"))
-                           (not (string-contains line "TokenkegQ"))
-                           (not (string-contains line "TokenzQdBN"))
-                           (not (string-contains line "11111111"))
-                           (not (string-contains line "ComputeBudget")))
-                      (do
-                        ;; Extract potential mint address
-                        (define parts (split line " "))
-                        (if (>= (length parts) 2)
-                            (do
-                              (define potential-mint (get parts 1))
-                              ;; Check if it looks like a base58 address (32+ chars)
-                              (if (> (length potential-mint) 32)
-                                  (set! token-mint potential-mint)
-                                  null))
-                            null))
-                      null)))
-              null)
+            ;; Check ALL lines for addresses ending in "pump"
+            (define parts (split line " "))
+            (for (part parts)
+              ;; Check if this part is a long base58 address ending in "pump"
+              (if (and (> (length part) 32)
+                       (string-contains part "pump"))
+                  (do
+                    ;; Additional check: must END with "pump" not just contain it
+                    ;; Get last 4 chars
+                    (define part-len (length part))
+                    (if (>= part-len 4)
+                        (do
+                          (define last-4 (substring part (- part-len 4) part-len))
+                          (if (= last-4 "pump")
+                              (set! token-mint part)
+                              null))
+                        null))
+                  null)))
 
           ;; Try to find token_transfer event as fallback
           (for (evt events)

@@ -660,6 +660,15 @@ pub struct SyscallCallSite {
     pub name: String,
 }
 
+/// String load site info (for rodata address patching)
+#[derive(Clone, Debug)]
+pub struct StringLoadSite {
+    /// Instruction offset in bytes (points to LDDW instruction)
+    pub offset: usize,
+    /// String offset within rodata section
+    pub rodata_offset: usize,
+}
+
 /// sBPF code generator
 pub struct SbpfCodegen {
     instructions: Vec<SbpfInstruction>,
@@ -674,6 +683,8 @@ pub struct SbpfCodegen {
     string_offsets: Vec<usize>,
     /// Syscall call sites for relocation
     pub syscall_sites: Vec<SyscallCallSite>,
+    /// String load sites for rodata address patching
+    pub string_load_sites: Vec<StringLoadSite>,
     /// SBPF version to generate
     sbpf_version: super::SbpfVersion,
 }
@@ -689,6 +700,7 @@ impl SbpfCodegen {
             rodata: Vec::new(),
             string_offsets: Vec::new(),
             syscall_sites: Vec::new(),
+            string_load_sites: Vec::new(),
             sbpf_version,
         }
     }
@@ -777,24 +789,20 @@ impl SbpfCodegen {
                 let dst_reg = self.reg_alloc.allocate(*dst);
                 let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
 
-                // Calculate rodata address: RODATA_VADDR + string offset
-                // RODATA section is placed after .text at a known virtual address
-                // We need to use LDDW (load double word) to load 64-bit address
-                let str_offset = self.string_offset(*str_idx) as u32;
+                // Get string offset in rodata
+                let rodata_offset = self.string_offset(*str_idx);
 
-                // LDDW is a 16-byte instruction (two 8-byte instructions)
-                // Format: lddw dst, imm64
-                // This loads a 64-bit immediate into a register
-                // First instruction: opcode=0x18 (LD + IMM + DW), dst=reg, src=0, imm=low32
-                // Second instruction: opcode=0x00, dst=0, src=0, off=0, imm=high32
+                // Record this load site for later patching by ELF writer
+                // The ELF writer will patch the LDDW immediate with (rodata_vaddr + offset)
+                let load_offset = self.current_offset_bytes();
+                self.string_load_sites.push(StringLoadSite {
+                    offset: load_offset,
+                    rodata_offset,
+                });
 
-                // For now, store the string offset as a marker
-                // The ELF writer will need to patch this with actual rodata vaddr
-                // We'll use a placeholder that the ELF writer can find and patch
-
-                // Emit LDDW instruction with offset as immediate
-                // The actual rodata virtual address will be calculated at link time
-                self.emit(SbpfInstruction::lddw(actual as u8, str_offset as u64));
+                // Emit LDDW instruction with offset as placeholder
+                // Will be patched to absolute address by ELF writer
+                self.emit(SbpfInstruction::lddw(actual as u8, rodata_offset as u64));
 
                 self.store_if_spilled(*dst, actual);
             }

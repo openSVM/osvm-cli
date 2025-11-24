@@ -160,7 +160,7 @@ impl Compiler {
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded
@@ -226,7 +226,7 @@ impl Compiler {
         let elf_bytes = match self.options.sbpf_version {
             SbpfVersion::V1 => {
                 // V1: Must use write_with_syscalls to generate relocations
-                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, self.options.debug_info, self.options.sbpf_version)?
+                elf_writer.write_with_syscalls(&sbpf_program, &syscall_refs, &codegen.rodata, self.options.debug_info, self.options.sbpf_version)?
             }
             SbpfVersion::V2 => {
                 // V2: No relocations needed, syscalls are embedded

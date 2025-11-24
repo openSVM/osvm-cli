@@ -98,6 +98,15 @@ pub struct SyscallRef {
     pub name: String,
 }
 
+/// String load site (for rodata address patching)
+#[derive(Clone, Debug)]
+pub struct StringLoadRef {
+    /// Instruction offset (in bytes from .text start, points to LDDW)
+    pub offset: usize,
+    /// String offset within rodata section
+    pub rodata_offset: usize,
+}
+
 /// ELF writer for sBPF programs
 pub struct ElfWriter {
     strtab: Vec<u8>,
@@ -268,7 +277,7 @@ impl ElfWriter {
     }
 
     /// Write sBPF program with syscall support (dynamic linking)
-    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
+    pub fn write_with_syscalls(&mut self, program: &[SbpfInstruction], syscalls: &[SyscallRef], rodata: &[u8], _debug_info: bool, sbpf_version: super::SbpfVersion) -> Result<Vec<u8>> {
         if syscalls.is_empty() {
             return self.write(program, _debug_info, sbpf_version);
         }
@@ -329,10 +338,18 @@ impl ElfWriter {
         let text_offset = 0x120usize;  // Match Solana's working ELFs
         let text_size = text_section.len();
 
-        // Minimal .rodata section (4 bytes) to match reference structure
+        // .rodata section with actual string literals
         let rodata_offset = text_offset + text_size;
-        let rodata_size = 8usize;  // 8 bytes to ensure .dynamic is 8-byte aligned (was 4)
-        let rodata_data = vec![0u8; rodata_size];
+        let rodata_size = if rodata.is_empty() {
+            8usize  // Minimum 8 bytes if no strings
+        } else {
+            rodata.len()
+        };
+        let rodata_data = if rodata.is_empty() {
+            vec![0u8; 8]  // Fallback to zeros if empty
+        } else {
+            rodata.to_vec()  // Use actual string data
+        };
 
         // .dynamic section (11 entries * 16 bytes = 176 bytes) - MUST be 8-byte aligned!
         // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
