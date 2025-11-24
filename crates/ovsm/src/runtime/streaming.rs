@@ -30,6 +30,14 @@ use std::thread;
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
+// Thread pool for concurrent event processing
+lazy_static::lazy_static! {
+    static ref THREAD_POOL: rayon::ThreadPool = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get())
+        .build()
+        .unwrap();
+}
+
 /// Stream connection handle
 #[derive(Clone, Debug)]
 pub struct StreamHandle {
