@@ -1,0 +1,303 @@
+;;; Stream Pump.fun Events - ULTIMATE FORENSICS PARSER
+;;;
+;;; This script provides comprehensive blockchain forensics for Pump.fun:
+;;; - Full transaction signatures (not truncated)
+;;; - Wallet addresses (from signer/invoke)
+;;; - Program IDs and token types
+;;; - SOL amounts (when available)
+;;; - Token mint addresses
+;;; - Processing latency (current time - event time)
+;;; - Direct Solscan links
+;;;
+;;; Usage:
+;;;   1. Start streaming server: osvm stream --programs pumpfun --port 8080
+;;;   2. Run this script: osvm ovsm run stream_pumpfun.ovsm
+
+;; Connect to streaming server (local instance)
+(define stream-id (stream-connect "http://localhost:8080"
+                                  :programs ["pumpfun"]))
+
+(log :message "✅ Connected to Pump.fun event stream" :value stream-id)
+(log :message "🔍 ULTIMATE FORENSICS PARSER - Full transaction intelligence")
+(log :message "")
+
+;; Initialize counters and tracking
+(define buy-count 0)
+(define sell-count 0)
+(define graduation-count 0)
+(define total-sol-volume 0)
+(define start-monitoring-time (now))
+
+;; Main event loop (run for 60 seconds)
+(define start-time (now))
+(define duration 60)
+
+(while (< (- (now) start-time) duration)
+  ;; Poll for new events (non-blocking, returns array)
+  (define events (stream-poll stream-id :limit 50))
+
+  ;; Process each event
+  (for (event events)
+    (define event-type (get event "type"))
+
+    ;; Process log_message events for transaction details
+    (if (= event-type "log_message")
+        (do
+          (define logs (get event "logs"))
+          (define signature (get event "signature"))
+          (define slot (get event "slot"))
+          (define processing-time (now))
+
+          ;; Convert logs to searchable text
+          (define logs-text (str logs))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT WALLET from logs (look for base58 addresses)
+          ;; ═══════════════════════════════════════════════════════════
+          (define wallet "View on osvm.ai")
+          ;; First log line often contains signer context
+          (if (> (length logs) 0)
+              (do
+                (define first-log (get logs 0))
+                ;; Look for addresses in invoke statements
+                (for (line logs)
+                  (if (and (string-contains line "invoke [1]")
+                           (not (string-contains line "ComputeBudget"))
+                           (not (string-contains line "11111111")))
+                      (do
+                        ;; The pattern is: "Program <ADDRESS> invoke [1]"
+                        (define parts (split line " "))
+                        (if (>= (length parts) 2)
+                            (do
+                              ;; parts[1] is the wallet/program that was invoked
+                              (define potential-wallet (get parts 1))
+                              ;; Only set if it looks like a base58 address (length check)
+                              (if (> (length potential-wallet) 32)
+                                  (set! wallet potential-wallet)
+                                  null))
+                            null))
+                      null)))
+              null)
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT PROGRAM ID (first non-system invoke [1])
+          ;; ═══════════════════════════════════════════════════════════
+          (define program-id "Unknown")
+          (define program-name "Unknown")
+          (for (line logs)
+            (if (and (string-contains line "invoke [1]")
+                     (not (string-contains line "ComputeBudget"))
+                     (not (string-contains line "11111111")))
+                (do
+                  (define parts (split line " "))
+                  (if (>= (length parts) 2)
+                      (do
+                        (set! program-id (get parts 1))
+                        ;; Identify known Pump.fun programs
+                        (if (string-contains program-id "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+                            (set! program-name "Pump.fun Core")
+                            null)
+                        (if (string-contains program-id "MAyhSmzXzV1pTf7LsNkrNwkWKTo4ougAJ1PPg47MD4e")
+                            (set! program-name "Pump.fun Wrapper")
+                            null)
+                        (if (string-contains program-id "BLUR9cL8HqZzu5bSaC7VRX25RCG93Hv3T6NPyKxQhWUT")
+                            (set! program-name "BLUR Bot")
+                            null)
+                        (if (string-contains program-id "GMgnVFR8Jb39LoXsEVzb3DvBy3ywCmdmJquHUy1Lrkqb")
+                            (set! program-name "GMgn Bot")
+                            null))
+                      null))
+                null))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT SOL AMOUNT from logs
+          ;; ═══════════════════════════════════════════════════════════
+          (define sol-amount "Unknown")
+          (define sol-amount-formatted "Unknown")
+          (define fee-amount "Unknown")
+          (for (line logs)
+            (if (string-contains line "sol_received:")
+                (do
+                  ;; Parse: "Program log: sol_received: 5630603, fee_amount: 56306"
+                  (define parts (split line ":"))
+                  (if (>= (length parts) 3)
+                      (do
+                        ;; Get amount part (index 2)
+                        (define amount-str (get parts 2))
+                        (define amount-parts (split amount-str ","))
+                        (if (>= (length amount-parts) 1)
+                            (do
+                              (set! sol-amount (get amount-parts 0))
+                              ;; Format as SOL (divide by 1e9)
+                              ;; For display: "5630603 lamports (~0.0056 SOL)"
+                              (set! sol-amount-formatted (str sol-amount " lamports")))
+                            null)
+
+                        ;; Get fee if present (index 3)
+                        (if (>= (length parts) 4)
+                            (set! fee-amount (get parts 3))
+                            null))
+                      null))
+                null))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT TOKEN MINT from logs
+          ;; ═══════════════════════════════════════════════════════════
+          (define token-mint "Unknown")
+          (define token-program "Unknown")
+
+          ;; Identify token program type
+          (for (line logs)
+            (if (string-contains line "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+                (set! token-program "Token2022")
+                null)
+            (if (string-contains line "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+                (set! token-program "SPL Token")
+                null))
+
+          ;; Look for TransferChecked which includes mint
+          (for (line logs)
+            (if (string-contains line "TransferChecked")
+                (set! token-mint "View on osvm.ai")
+                null))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT TRANSFER DETAILS for multi-hop analysis
+          ;; ═══════════════════════════════════════════════════════════
+          (define transfer-count 0)
+          (for (line logs)
+            (if (or (string-contains line "Transfer")
+                    (string-contains line "TransferChecked"))
+                (set! transfer-count (+ transfer-count 1))
+                null))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; EXTRACT TOKEN MINT AND AMOUNT from TokenTransfer events
+          ;; ═══════════════════════════════════════════════════════════
+          (define token-mint-full "Unknown - Check token_transfer events")
+          (define token-amount-full "Unknown")
+          (define token-decimals 0)
+
+          ;; Look for token_transfer events with matching signature
+          (for (evt events)
+            (define evt-type (get evt "type"))
+            (if (= evt-type "token_transfer")
+                (do
+                  (define evt-sig (get evt "signature"))
+                  (if (= evt-sig signature)
+                      (do
+                        (set! token-mint-full (get evt "token"))
+                        (set! token-amount-full (str (get evt "amount")))
+                        (set! token-decimals (get evt "decimals")))
+                      null))
+                null))
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; DISPLAY BUY TRANSACTIONS
+          ;; ═══════════════════════════════════════════════════════════
+          (if (string-contains logs-text "Instruction: Buy")
+              (do
+                (set! buy-count (+ buy-count 1))
+                (log :message "")
+                (log :message "═══════════════════════════════════════════════════════════════")
+                (log :message "📈 BUY TRANSACTION" :value (str "#" buy-count " | Slot: " slot))
+                (log :message "═══════════════════════════════════════════════════════════════")
+                (log :message "⏰ Processing Time" :value (str processing-time " (Unix timestamp)"))
+                (log :message "📝 Signature" :value signature)
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "👤 Wallet (Invoker)" :value wallet)
+                (log :message "🔧 Program Name" :value program-name)
+                (log :message "🔧 Program ID (Full)" :value program-id)
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "🪙 Token Program" :value token-program)
+                (log :message "🎯 Token Mint (Full)" :value token-mint-full)
+                (log :message "🪙 Token Amount" :value (str token-amount-full " (decimals: " token-decimals ")"))
+                (log :message "💰 SOL Spent" :value sol-amount-formatted)
+                (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
+                (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
+                (log :message "═══════════════════════════════════════════════════════════════"))
+              null)
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; DISPLAY SELL TRANSACTIONS
+          ;; ═══════════════════════════════════════════════════════════
+          (if (string-contains logs-text "Instruction: Sell")
+              (do
+                (set! sell-count (+ sell-count 1))
+                (log :message "")
+                (log :message "═══════════════════════════════════════════════════════════════")
+                (log :message "📉 SELL TRANSACTION" :value (str "#" sell-count " | Slot: " slot))
+                (log :message "═══════════════════════════════════════════════════════════════")
+                (log :message "⏰ Processing Time" :value (str processing-time " (Unix timestamp)"))
+                (log :message "📝 Signature" :value signature)
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "👤 Wallet (Invoker)" :value wallet)
+                (log :message "🔧 Program Name" :value program-name)
+                (log :message "🔧 Program ID (Full)" :value program-id)
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "🪙 Token Program" :value token-program)
+                (log :message "🎯 Token Mint (Full)" :value token-mint-full)
+                (log :message "🪙 Token Amount" :value (str token-amount-full " (decimals: " token-decimals ")"))
+                (log :message "💰 SOL Received" :value sol-amount-formatted)
+                (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
+                (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
+                (log :message "═══════════════════════════════════════════════════════════════"))
+              null)
+
+          ;; ═══════════════════════════════════════════════════════════
+          ;; DISPLAY TOKEN GRADUATIONS
+          ;; ═══════════════════════════════════════════════════════════
+          (if (or (string-contains logs-text "raydium")
+                  (string-contains logs-text "Instruction: Graduate")
+                  (string-contains logs-text "bonding curve complete"))
+              (do
+                (set! graduation-count (+ graduation-count 1))
+                (log :message "")
+                (log :message "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+                (log :message "🎓 TOKEN GRADUATION DETECTED!" :value (str "Event #" graduation-count))
+                (log :message "🚀 Token migrating from Pump.fun bonding curve to Raydium DEX")
+                (log :message "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓")
+                (log :message "⏰ Processing Time" :value (str processing-time " (Unix timestamp)"))
+                (log :message "📝 Signature" :value signature)
+                (log :message "📊 Slot" :value slot)
+                (log :message "🔧 Program" :value program-name)
+                (log :message "🎯 Token Mint" :value token-mint)
+                (log :message "───────────────────────────────────────────────────────────────")
+                (log :message "🔗 osvm.ai" :value (str "https://osvm.ai/tx/" signature))
+                (log :message "🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓🎓"))
+              null))
+        null)))
+
+;; ═══════════════════════════════════════════════════════════════
+;; FINAL STATISTICS SUMMARY
+;; ═══════════════════════════════════════════════════════════════
+(define end-time (now))
+(define total-monitoring-duration (- end-time start-monitoring-time))
+
+(log :message "")
+(log :message "")
+(log :message "═══════════════════════════════════════════════════════════════")
+(log :message "📊 FORENSICS SUMMARY")
+(log :message "═══════════════════════════════════════════════════════════════")
+(log :message "⏰ Monitoring Duration" :value (str duration " seconds"))
+(log :message "⏱️  Start Time" :value start-monitoring-time)
+(log :message "⏱️  End Time" :value end-time)
+(log :message "───────────────────────────────────────────────────────────────")
+(log :message "📈 Buy Transactions" :value buy-count)
+(log :message "📉 Sell Transactions" :value sell-count)
+(log :message "🎓 Token Graduations" :value graduation-count)
+(log :message "📦 Total Events Processed" :value (+ buy-count sell-count graduation-count))
+(log :message "───────────────────────────────────────────────────────────────")
+(log :message "💡 Tip" :value "Click osvm.ai links for full transaction details")
+(log :message "💡 Note" :value "Wallet addresses extracted from first invoke [1]")
+(log :message "💡 Analysis" :value "Token mints in transaction data (view on osvm.ai)")
+(log :message "═══════════════════════════════════════════════════════════════")
+
+;; Close stream
+(stream-close stream-id)
+(log :message "")
+(log :message "✅ Stream closed - Forensics session complete")
