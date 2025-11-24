@@ -320,6 +320,7 @@ impl LispEvaluator {
                     "clamp" => self.eval_clamp(args), // Clamp between min/max
                     "random" => self.eval_random(args), // Random number
                     "now" => self.eval_now(args),
+                    "sleep" => self.eval_sleep(args),
                     "log" => self.eval_log(args),
                     "print" => self.eval_print(args), // Python/JS-style output
                     "println" => self.eval_println(args), // Python/JS-style output with newline
@@ -4014,6 +4015,31 @@ impl LispEvaluator {
             .as_secs();
 
         Ok(Value::Int(timestamp as i64))
+    }
+
+    /// (sleep milliseconds) - Sleep for specified milliseconds
+    fn eval_sleep(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "sleep".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let ms = match val {
+            Value::Int(i) => i as u64,
+            Value::Float(f) => f as u64,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
+        };
+
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+        Ok(Value::Null)
     }
 
     /// (base58-encode string) - Encode string to base58

@@ -27,12 +27,17 @@
 (define graduation-count 0)
 (define transfer-count 0)
 
-;; Main event loop (60 seconds)
+;; Main event loop (60 seconds with sleep to avoid spinning CPU)
 (define start-time (now))
 (define duration 60)
+(define poll-count 0)
 
 (while (< (- (now) start-time) duration)
   (define events (stream-poll stream-id :limit 50))
+  (set! poll-count (+ poll-count 1))
+
+  ;; Sleep 100ms between polls to avoid tight loop
+  (sleep 100)
 
   (for (event events)
     (define event-type (get event "type"))
@@ -128,6 +133,7 @@
 (println "  FORENSICS SUMMARY")
 (println "═══════════════════════════════════════════════════════════════")
 (println (str "Duration:         " duration " seconds"))
+(println (str "Poll Count:       " poll-count " polls"))
 (println (str "Buy Txs:          " buy-count))
 (println (str "Sell Txs:         " sell-count))
 (println (str "Token Transfers:  " transfer-count))
