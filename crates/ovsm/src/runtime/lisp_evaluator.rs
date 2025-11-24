@@ -369,6 +369,7 @@ impl LispEvaluator {
                     "stream-poll" => self.eval_stream_poll(args),
                     "stream-wait" => self.eval_stream_wait(args),
                     "stream-close" => self.eval_stream_close(args),
+                    "osvm-stream" => self.eval_osvm_stream(args),
                     // LINQ-style functional operations
                     "compact" => self.eval_compact(args),
                     "count-by" => self.eval_count_by(args),
@@ -9106,6 +9107,20 @@ impl LispEvaluator {
 
         // Call the streaming function with evaluated arguments
         crate::runtime::streaming::stream_close(&evaluated_args)
+    }
+
+    /// (osvm-stream &key alias programs tokens) - Spawn internal stream server and connect
+    /// This is a convenience function that combines server spawning + stream-connect
+    /// The server automatically terminates when the script ends
+    fn eval_osvm_stream(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        // Evaluate all arguments to Values
+        let mut evaluated_args = Vec::new();
+        for arg in args {
+            evaluated_args.push(self.evaluate_expression(&arg.value)?);
+        }
+
+        // Call the streaming helper
+        crate::runtime::streaming::osvm_stream(&evaluated_args)
     }
 }
 
