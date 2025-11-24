@@ -331,10 +331,10 @@ impl ElfWriter {
 
         // Minimal .rodata section (4 bytes) to match reference structure
         let rodata_offset = text_offset + text_size;
-        let rodata_size = 4usize;  // Minimal size
+        let rodata_size = 8usize;  // 8 bytes to ensure .dynamic is 8-byte aligned (was 4)
         let rodata_data = vec![0u8; rodata_size];
 
-        // .dynamic section (11 entries * 16 bytes = 176 bytes)
+        // .dynamic section (11 entries * 16 bytes = 176 bytes) - MUST be 8-byte aligned!
         // FLAGS, REL, RELSZ, RELENT, RELCOUNT, SYMTAB, SYMENT, STRTAB, STRSZ, TEXTREL, NULL
         let dynamic_offset = rodata_offset + rodata_size;
         let dynamic_size = 11 * 16; // 11 entries (includes DT_TEXTREL required by Solana)

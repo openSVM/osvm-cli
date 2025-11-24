@@ -1260,7 +1260,11 @@ impl LispEvaluator {
         let body_args = &args[1..];
 
         let mut last_val = Value::Null;
-        let max_iterations = 100000; // Safety limit
+        // Get iteration limit from environment or use default (10M for streaming scripts)
+        let max_iterations = std::env::var("OVSM_MAX_ITERATIONS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(10_000_000); // Default: 10 million iterations
         let mut iterations = 0;
 
         loop {
