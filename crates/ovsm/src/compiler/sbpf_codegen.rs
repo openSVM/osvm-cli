@@ -776,13 +776,26 @@ impl SbpfCodegen {
             IrInstruction::ConstString(dst, str_idx) => {
                 let dst_reg = self.reg_alloc.allocate(*dst);
                 let actual = if self.reg_alloc.is_spilled(*dst) { SbpfReg::R0 } else { dst_reg };
+
                 // Calculate rodata address: RODATA_VADDR + string offset
-                // RODATA will be placed after .text, we use a placeholder offset
-                // The actual address will be: rodata_vaddr + string_offset
-                let str_offset = self.string_offset(*str_idx) as i32;
-                // Load low 32 bits first, then high bits
-                // For now, use immediate mov - rodata will be at known offset
-                self.emit(SbpfInstruction::alu64_imm(alu::MOV, actual as u8, str_offset));
+                // RODATA section is placed after .text at a known virtual address
+                // We need to use LDDW (load double word) to load 64-bit address
+                let str_offset = self.string_offset(*str_idx) as u32;
+
+                // LDDW is a 16-byte instruction (two 8-byte instructions)
+                // Format: lddw dst, imm64
+                // This loads a 64-bit immediate into a register
+                // First instruction: opcode=0x18 (LD + IMM + DW), dst=reg, src=0, imm=low32
+                // Second instruction: opcode=0x00, dst=0, src=0, off=0, imm=high32
+
+                // For now, store the string offset as a marker
+                // The ELF writer will need to patch this with actual rodata vaddr
+                // We'll use a placeholder that the ELF writer can find and patch
+
+                // Emit LDDW instruction with offset as immediate
+                // The actual rodata virtual address will be calculated at link time
+                self.emit(SbpfInstruction::lddw(actual as u8, str_offset as u64));
+
                 self.store_if_spilled(*dst, actual);
             }
 

@@ -36,24 +36,9 @@
   ;; Poll for new events (non-blocking, returns array)
   (define events (stream-poll stream-id :limit 50))
 
-  ;; Process each event (both Transaction and LogMessage)
+  ;; Process each event
   (for (event events)
     (define event-type (get event "type"))
-
-    ;; Process Transaction events for wallet/signer info
-    (if (= event-type "transaction")
-        (do
-          (define signature (get event "signature"))
-          (define signer (get event "signer"))
-          (define slot (get event "slot"))
-          (define fee (get event "fee"))
-          (define timestamp (get event "timestamp"))
-          (define processing-time (now))
-
-          ;; For now, just log that we received it
-          ;; In full implementation, we'd correlate with LogMessage events
-          null)
-        null)
 
     ;; Process log_message events for transaction details
     (if (= event-type "log_message")
@@ -187,18 +172,25 @@
                 null))
 
           ;; ═══════════════════════════════════════════════════════════
-          ;; FORMAT DISPLAY DATA
+          ;; EXTRACT TOKEN MINT AND AMOUNT from TokenTransfer events
           ;; ═══════════════════════════════════════════════════════════
+          (define token-mint-full "Unknown - Check token_transfer events")
+          (define token-amount-full "Unknown")
+          (define token-decimals 0)
 
-          ;; Abbreviate signature for compact display
-          (define sig-short (if (> (length signature) 16)
-                                (str (substring signature 0 8) "..." (substring signature (- (length signature) 8) (length signature)))
-                                signature))
-
-          ;; Abbreviate program ID
-          (define prog-short (if (> (length program-id) 16)
-                                 (str (substring program-id 0 6) "..." (substring program-id (- (length program-id) 6) (length program-id)))
-                                 program-id))
+          ;; Look for token_transfer events with matching signature
+          (for (evt events)
+            (define evt-type (get evt "type"))
+            (if (= evt-type "token_transfer")
+                (do
+                  (define evt-sig (get evt "signature"))
+                  (if (= evt-sig signature)
+                      (do
+                        (set! token-mint-full (get evt "token"))
+                        (set! token-amount-full (str (get evt "amount")))
+                        (set! token-decimals (get evt "decimals")))
+                      null))
+                null))
 
           ;; ═══════════════════════════════════════════════════════════
           ;; DISPLAY BUY TRANSACTIONS
@@ -211,15 +203,15 @@
                 (log :message "📈 BUY TRANSACTION" :value (str "#" buy-count " | Slot: " slot))
                 (log :message "═══════════════════════════════════════════════════════════════")
                 (log :message "⏰ Processing Time" :value (str processing-time " (Unix timestamp)"))
-                (log :message "📝 Signature (Full)" :value signature)
-                (log :message "📝 Signature (Short)" :value sig-short)
+                (log :message "📝 Signature" :value signature)
                 (log :message "───────────────────────────────────────────────────────────────")
-                (log :message "👤 Wallet" :value wallet)
-                (log :message "🔧 Program" :value program-name)
-                (log :message "🔧 Program ID" :value prog-short)
+                (log :message "👤 Wallet (Invoker)" :value wallet)
+                (log :message "🔧 Program Name" :value program-name)
+                (log :message "🔧 Program ID (Full)" :value program-id)
                 (log :message "───────────────────────────────────────────────────────────────")
                 (log :message "🪙 Token Program" :value token-program)
-                (log :message "🎯 Token Mint" :value token-mint)
+                (log :message "🎯 Token Mint (Full)" :value token-mint-full)
+                (log :message "🪙 Token Amount" :value (str token-amount-full " (decimals: " token-decimals ")"))
                 (log :message "💰 SOL Spent" :value sol-amount-formatted)
                 (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
                 (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
@@ -239,15 +231,15 @@
                 (log :message "📉 SELL TRANSACTION" :value (str "#" sell-count " | Slot: " slot))
                 (log :message "═══════════════════════════════════════════════════════════════")
                 (log :message "⏰ Processing Time" :value (str processing-time " (Unix timestamp)"))
-                (log :message "📝 Signature (Full)" :value signature)
-                (log :message "📝 Signature (Short)" :value sig-short)
+                (log :message "📝 Signature" :value signature)
                 (log :message "───────────────────────────────────────────────────────────────")
-                (log :message "👤 Wallet" :value wallet)
-                (log :message "🔧 Program" :value program-name)
-                (log :message "🔧 Program ID" :value prog-short)
+                (log :message "👤 Wallet (Invoker)" :value wallet)
+                (log :message "🔧 Program Name" :value program-name)
+                (log :message "🔧 Program ID (Full)" :value program-id)
                 (log :message "───────────────────────────────────────────────────────────────")
                 (log :message "🪙 Token Program" :value token-program)
-                (log :message "🎯 Token Mint" :value token-mint)
+                (log :message "🎯 Token Mint (Full)" :value token-mint-full)
+                (log :message "🪙 Token Amount" :value (str token-amount-full " (decimals: " token-decimals ")"))
                 (log :message "💰 SOL Received" :value sol-amount-formatted)
                 (log :message "💸 Fee Paid" :value (str fee-amount " lamports"))
                 (log :message "🔄 Transfers" :value (str transfer-count " transfers in tx"))
