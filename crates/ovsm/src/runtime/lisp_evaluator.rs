@@ -206,6 +206,7 @@ impl LispEvaluator {
                     "base58-decode" => self.eval_base58_decode(args),
                     "base58-encode" => self.eval_base58_encode(args),
                     "base64-decode" => self.eval_base64_decode(args),
+                    "base64-decode-raw" => self.eval_base64_decode_raw(args),
                     "base64-encode" => self.eval_base64_encode(args),
                     "hex-decode" => self.eval_hex_decode(args),
                     "hex-encode" => self.eval_hex_encode(args),
@@ -214,6 +215,7 @@ impl LispEvaluator {
                     // Binary/byte operations for Borsh decoding
                     "byte-at" => self.eval_byte_at(args),
                     "parse-u64-le" => self.eval_parse_u64_le(args),
+                    "hex-to-u64-le" => self.eval_hex_to_u64_le(args),
                     "bytes-to-hex" => self.eval_bytes_to_hex(args),
                     // Error handling
                     "try" => self.eval_try(args),
@@ -4122,6 +4124,36 @@ impl LispEvaluator {
         Ok(Value::String(result))
     }
 
+    /// (base64-decode-raw base64-string) - Decode base64 to hex string (for binary data)
+    /// Returns hex representation, avoiding UTF-8 validation issues with binary data
+    fn eval_base64_decode_raw(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArguments {
+                tool: "base64-decode-raw".to_string(),
+                reason: format!("Expected 1 argument, got {}", args.len()),
+            });
+        }
+
+        let val = self.evaluate_expression(&args[0].value)?;
+        let input = match val {
+            Value::String(s) => s,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: val.type_name().to_string(),
+                })
+            }
+        };
+
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(input)
+            .map_err(|e| Error::ParseError(format!("Invalid base64: {}", e)))?;
+
+        // Return as hex string to preserve binary data
+        let hex_string = hex::encode(decoded);
+        Ok(Value::String(hex_string))
+    }
+
     /// (hex-encode string) - Encode string to hexadecimal
     fn eval_hex_encode(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
         if args.len() != 1 {
@@ -4309,6 +4341,61 @@ impl LispEvaluator {
         if offset + 8 > bytes.len() {
             return Err(Error::RuntimeError(format!(
                 "parse-u64-le: offset {} + 8 exceeds byte length {}",
+                offset,
+                bytes.len()
+            )));
+        }
+
+        // Parse little-endian u64
+        let mut buf = [0u8; 8];
+        buf.copy_from_slice(&bytes[offset..offset + 8]);
+        let value = u64::from_le_bytes(buf);
+
+        Ok(Value::Int(value as i64))
+    }
+
+    /// (hex-to-u64-le hex-string offset) - Parse little-endian u64 from hex string
+    /// offset is in bytes (each byte = 2 hex chars)
+    fn eval_hex_to_u64_le(&mut self, args: &[crate::parser::Argument]) -> Result<Value> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArguments {
+                tool: "hex-to-u64-le".to_string(),
+                reason: format!("Expected 2 arguments, got {}", args.len()),
+            });
+        }
+
+        let hex_val = self.evaluate_expression(&args[0].value)?;
+        let offset_val = self.evaluate_expression(&args[1].value)?;
+
+        let hex_str = match hex_val {
+            Value::String(s) => s,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "string".to_string(),
+                    got: hex_val.type_name().to_string(),
+                })
+            }
+        };
+
+        let offset = match offset_val {
+            Value::Int(i) => i as usize,
+            Value::Float(f) => f as usize,
+            _ => {
+                return Err(Error::TypeError {
+                    expected: "number".to_string(),
+                    got: offset_val.type_name().to_string(),
+                })
+            }
+        };
+
+        // Decode hex to bytes
+        let bytes = hex::decode(&hex_str)
+            .map_err(|e| Error::ParseError(format!("Invalid hex: {}", e)))?;
+
+        // Check bounds (offset + 8 bytes)
+        if offset + 8 > bytes.len() {
+            return Err(Error::RuntimeError(format!(
+                "hex-to-u64-le: offset {} + 8 exceeds decoded byte length {}",
                 offset,
                 bytes.len()
             )));

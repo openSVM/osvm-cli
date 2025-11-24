@@ -141,11 +141,26 @@
                       null))
                 null))
 
-          ;; Strategy 3: Note if we have Program data (contains binary token amounts)
-          ;; Pump.fun encodes: bonding curve state, token amounts, etc.
-          ;; The data is binary (not UTF-8), so we can't decode it directly
+          ;; Strategy 3: Decode Program data to extract token amount (Borsh format)
+          ;; Pump.fun Borsh structure:
+          ;;   - Bytes 0-7: Unknown/discriminator
+          ;;   - Bytes 8-15: Token amount (u64 little-endian)
+          ;;   - Bytes 16+: Other bonding curve state
           (if (> (length program-data-b64) 0)
-              (set! token-amount (str "In Program data (base64 len:" (length program-data-b64) ")"))
+              (do
+                ;; base64-decode-raw returns hex string (binary-safe)
+                (define hex-data (base64-decode-raw program-data-b64))
+
+                ;; Pump.fun Borsh layout - try common offsets
+                ;; Offset 8 = token amount (most common)
+                (if (>= (length hex-data) 32)  ;; 32 hex chars = 16 bytes minimum
+                    (do
+                      ;; Parse u64 at byte offset 8 (= hex offset 16)
+                      (define amount-raw (hex-to-u64-le hex-data 8))
+                      ;; Format with decimals (Pump.fun tokens usually have 6 decimals)
+                      (define amount-float (/ amount-raw 1000000.0))
+                      (set! token-amount (str amount-float " tokens (raw: " amount-raw ")")))
+                    (set! token-amount (str "Program data too short: " (length hex-data) " hex chars"))))
               null)
 
           ;; Try to find token_transfer event as fallback
